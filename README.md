@@ -24,14 +24,16 @@ GDT/IDT/TSS, initializes the bitmap PMM, and switches to kernel-owned paging.
 Generic initialization then creates the VM allocator and TLSF heap, reports
 memory accounting and halts. There are no processes, devices beyond COM1, or shell.
 
-Bootstrap limits: 256 memory regions, usable RAM below 64 GiB, 256 VM range
+Bootstrap limits: 256 memory regions, usable RAM below 64 GiB, 256 kernel VM range
 records and 16 KiB TLSF control storage. Capacity failures are
 explicit. Bootloader-reclaimable and firmware memory stay reserved.
 The image remains at `0xffffffff80000000`; allocations use the 64 GiB range at
 `0xffff800000000000`. PMM metadata lives at `0xfffffe8000000000`; two scratch
-pages at `0xfffffe8040000000` zero physical frames without allocating tables.
+pages at `0xfffffe8040000000` access physical frames and inactive page tables.
 Slot 510 recursively exposes the new tables. After switching CR3 there is no
-HHDM or lower-half mapping. All leaves are 4 KiB with W^X permissions.
+HHDM; the initial kernel root has no lower-half mappings. All leaves are 4 KiB
+with W^X permissions. New VM spaces share the kernel mappings and own their user
+ranges; see `include/kernel/mm/vm.h` for creation, allocation and destruction.
 
 PMM returns physical addresses (zero on failure); frees require the exact owned
 extent. VM reservations allocate no frames; backed ranges own zeroed, individually
@@ -40,8 +42,9 @@ frames, remove those mappings before releasing, and release ranges whole. Low-le
 unmap never frees frames. VM errors use `mm_result`; invalid PMM frees panic.
 `kmalloc(0)` and exhaustion return NULL, allocations have 16-byte alignment, and
 `kfree(NULL)` is harmless. Requests above 2 GiB are rejected. Pools start at
-256 KiB and grow on demand; freed blocks are reused, while pools and empty page
-tables remain allocated. Interface headers document the full ownership contracts.
+256 KiB and grow on demand; freed blocks are reused, while pools remain allocated.
+Empty private page tables are reclaimed when their space is destroyed. Interface
+headers document the full ownership contracts.
 
 Maskable interrupts stay disabled; allocators run on one CPU and never in fault
 handlers. BIOS, physical hardware, concurrency and bootloader-memory reclamation

@@ -13,6 +13,11 @@ enum page_permissions {
   PAGE_USER = 4,
 };
 
+struct page_translation {
+  phys_addr_t physical; /* Includes the queried byte offset. */
+  unsigned permissions; /* Effective permissions across the mapping hierarchy. */
+};
+
 enum mm_result {
   MM_OK,
   MM_INVALID,
