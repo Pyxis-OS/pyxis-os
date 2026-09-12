@@ -25,7 +25,10 @@ static bool add_pool(size_t request)
   /* TLSF memalign needs room for a leading split; size-class search rounds up
    * by at most 1/32 of its adjusted size. A page plus 1/16 leaves room for both
    * and for the two pool headers, without requiring contiguous physical RAM. */
-  size_t overhead = tlsf_pool_overhead();
+  /* TLSF forms its first block header one word before the supplied pool. Keep
+   * that header address mapped and canonical even at the bottom of the higher
+   * half, although upstream never reads its first prev_phys_block field. */
+  size_t overhead = tlsf_pool_overhead() + HEAP_ALIGNMENT;
   if (request > SIZE_MAX - request / 16 ||
       request + request / 16 > SIZE_MAX - PAGE_SIZE - overhead) {
     return false;
@@ -45,7 +48,8 @@ static bool add_pool(size_t request)
   if (vm_alloc(bytes, PAGE_SIZE, PAGE_WRITE, &memory) != MM_OK) {
     return false;
   }
-  if (!tlsf_add_pool(allocator, memory, bytes)) {
+  if (!tlsf_add_pool(allocator, (unsigned char *)memory + HEAP_ALIGNMENT,
+                     bytes - HEAP_ALIGNMENT)) {
     KASSERT(vm_free(memory, bytes) == MM_OK);
     return false;
   }
@@ -102,7 +106,7 @@ void kfree(void *pointer)
   bool in_pool = false;
   for (size_t i = 0; i < stats.pools; ++i) {
     uintptr_t address = (uintptr_t)pointer;
-    if (address >= pools[i].base + tlsf_alloc_overhead() &&
+    if (address >= pools[i].base + HEAP_ALIGNMENT + tlsf_alloc_overhead() &&
         address < pools[i].base + pools[i].bytes - tlsf_alloc_overhead()) {
       in_pool = true;
       break;
