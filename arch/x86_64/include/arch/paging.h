@@ -17,7 +17,8 @@ size_t arch_vm_size(void);
  * Reserve a VM range before mapping caller-owned frames into it. Supplied data
  * frames remain caller-owned. Empty tables are retained for reuse;
  * failure may retain zeroed tables but never installs a partial data mapping. */
-enum mm_result arch_page_map(uintptr_t virtual, phys_addr_t physical, unsigned permissions);
+enum mm_result arch_page_map(uintptr_t virtual, phys_addr_t physical,
+                             unsigned permissions);
 enum mm_result arch_page_unmap(uintptr_t virtual, phys_addr_t *physical);
 enum mm_result arch_page_protect(uintptr_t virtual, unsigned permissions);
 enum mm_result arch_page_query(uintptr_t virtual, struct page_translation *result);
