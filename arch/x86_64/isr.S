@@ -1,10 +1,23 @@
+#include <arch/descriptors.h>
+
+.set STACK_ALIGNMENT, 16
+
 .section .text
 .altmacro
 .macro ISR number
 .type isr_\number, @function
 isr_\number:
   /* CPU supplies an error code for these exceptions, including #CP/#VC/#SX. */
-  .if !(\number == 8 || \number == 10 || \number == 11 || \number == 12 || \number == 13 || \number == 14 || \number == 17 || \number == 21 || \number == 29 || \number == 30)
+  .if !(\number == EXCEPTION_DOUBLE_FAULT || \
+        \number == EXCEPTION_INVALID_TSS || \
+        \number == EXCEPTION_SEGMENT_NOT_PRESENT || \
+        \number == EXCEPTION_STACK_FAULT || \
+        \number == EXCEPTION_GENERAL_PROTECTION || \
+        \number == EXCEPTION_PAGE_FAULT || \
+        \number == EXCEPTION_ALIGNMENT_CHECK || \
+        \number == EXCEPTION_CONTROL_PROTECTION || \
+        \number == EXCEPTION_VMM_COMMUNICATION || \
+        \number == EXCEPTION_SECURITY)
     pushq $0
   .endif
   pushq $\number
@@ -12,13 +25,15 @@ isr_\number:
 .size isr_\number, . - isr_\number
 .endm
 .set vector, 0
-.rept 256
+.rept IDT_VECTOR_COUNT
   ISR %vector
   .set vector, vector + 1
 .endr
 
 isr_common:
+  /* C assumes forward string operations, regardless of the interrupted DF. */
   cld
+  /* Keep this order paired with struct exception_frame. */
   push %rax
   push %rbx
   push %rcx
@@ -36,7 +51,7 @@ isr_common:
   push %r15
   mov %rsp, %rdi
   /* The interrupted RSP need not satisfy the SysV call-site alignment. */
-  and $-16, %rsp
+  and $-STACK_ALIGNMENT, %rsp
   call exception_handler
 1:
   cli
@@ -51,7 +66,7 @@ isr_table:
   .quad isr_\number
 .endm
 .set vector, 0
-.rept 256
+.rept IDT_VECTOR_COUNT
   ISR_POINTER %vector
   .set vector, vector + 1
 .endr
