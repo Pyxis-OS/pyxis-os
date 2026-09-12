@@ -15,7 +15,7 @@
   struct pmm_stats memory = pmm_get_stats();
   klog("PMM: total=%zu free=%zu allocated=%zu frames, metadata=%zu pages\n",
        memory.total_frames, memory.free_frames, memory.allocated_frames, memory.metadata_pages);
-  struct vm_stats virtual = vm_get_stats();
+  struct vm_stats virtual = vm_get_stats(vm_kernel_space());
   struct heap_stats heap = heap_get_stats();
   klog("VM: total=%zu reserved=%zu backed=%zu pages, records=%zu/%u\n",
        virtual.total_pages, virtual.reserved_pages, virtual.backed_pages,

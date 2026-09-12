@@ -47,8 +47,8 @@ static bool add_pool(size_t request)
     return false;
   }
 
-  void *memory;
-  if (vm_alloc(bytes, PAGE_SIZE, PAGE_WRITE, &memory) != MM_OK) {
+  uintptr_t memory;
+  if (vm_alloc(vm_kernel_space(), bytes, PAGE_SIZE, PAGE_WRITE, &memory) != MM_OK) {
     return false;
   }
 
@@ -56,7 +56,7 @@ static bool add_pool(size_t request)
    * that address mapped and canonical, even at the higher-half boundary. */
   void *pool = (unsigned char *)memory + HEAP_POOL_PREFIX_BYTES;
   if (!tlsf_add_pool(allocator, pool, bytes - HEAP_POOL_PREFIX_BYTES)) {
-    KASSERT(vm_free(memory, bytes) == MM_OK);
+    KASSERT(vm_free(vm_kernel_space(), memory, bytes) == MM_OK);
     return false;
   }
 
