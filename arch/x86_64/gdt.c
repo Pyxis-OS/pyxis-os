@@ -2,22 +2,14 @@
 #include <arch/layout.h>
 #include <stddef.h>
 
-/* Descriptor bits 47:40 form the access byte: P | DPL[1:0] | S | type[3:0].
- * S=1 selects code/data; S=0 selects a system descriptor such as the TSS.
- * Code here is nonconforming, data expands upward, and accessed starts clear. */
 #define GDT_PRESENT (UINT64_C(1) << 47)
-#define GDT_DPL_KERNEL (UINT64_C(0) << 45)
 #define GDT_CODE_OR_DATA (UINT64_C(1) << 44)
 #define GDT_EXECUTABLE (UINT64_C(1) << 43)
-#define GDT_CODE_READABLE (UINT64_C(1) << 41)
-#define GDT_DATA_WRITABLE (UINT64_C(1) << 41)
-#define GDT_TSS_AVAILABLE (UINT64_C(9) << 40)
-
-/* Bits 55:52 are G | D/B | L | AVL; bits 51:48 hold limit[19:16].
- * G scales the limit in pages. L selects 64-bit code and requires D=0. */
+#define GDT_READABLE_OR_WRITABLE (UINT64_C(1) << 41)
 #define GDT_LONG_MODE (UINT64_C(1) << 53)
 #define GDT_DEFAULT_32BIT (UINT64_C(1) << 54)
 #define GDT_PAGE_GRANULARITY (UINT64_C(1) << 55)
+#define GDT_TSS_AVAILABLE (UINT64_C(9) << 40)
 #define GDT_FLAT_LIMIT (UINT64_C(0xffff) | (UINT64_C(0xf) << 48))
 #define DOUBLE_FAULT_STACK_BYTES (16 * 1024)
 
@@ -56,10 +48,8 @@ static void install_tss_descriptor(void)
    * The next GDT entry holds base[63:32]; its upper half must stay zero. */
   uint64_t base_low24 = (base & UINT64_C(0xffffff)) << 16;
   uint64_t base_high8 = ((base >> 24) & UINT64_C(0xff)) << 56;
-  /* TSS limits count bytes (G=0). LTR changes the available type to busy,
-   * which is why the GDT itself must remain writable. */
   gdt[GDT_TSS_INDEX] = (sizeof(tss) - 1) | base_low24 | base_high8 |
-                       GDT_PRESENT | GDT_DPL_KERNEL | GDT_TSS_AVAILABLE;
+                       GDT_PRESENT | GDT_TSS_AVAILABLE;
   gdt[GDT_TSS_INDEX + 1] = base >> 32;
 }
 
@@ -94,14 +84,14 @@ static void load_gdt(void)
 void gdt_init(void)
 {
   prepare_tss();
-  /* Long mode ignores code/data base and limit, but still uses the access and
-   * privilege fields. Keep the flat limits and the data descriptor's D/B bit. */
-  gdt[GDT_KERNEL_CODE_INDEX] = GDT_FLAT_LIMIT | GDT_PRESENT | GDT_DPL_KERNEL |
-                               GDT_CODE_OR_DATA | GDT_EXECUTABLE | GDT_CODE_READABLE |
+  /* Ring zero, base zero. The code descriptor must have L=1 and D=0 for
+   * 64-bit execution. Retain flat limits and the data descriptor's D/B bit. */
+  gdt[GDT_KERNEL_CODE_INDEX] = GDT_FLAT_LIMIT | GDT_PRESENT | GDT_CODE_OR_DATA |
+                               GDT_EXECUTABLE | GDT_READABLE_OR_WRITABLE |
                                GDT_LONG_MODE | GDT_PAGE_GRANULARITY;
-  gdt[GDT_KERNEL_DATA_INDEX] = GDT_FLAT_LIMIT | GDT_PRESENT | GDT_DPL_KERNEL |
-                               GDT_CODE_OR_DATA | GDT_DATA_WRITABLE |
-                               GDT_DEFAULT_32BIT | GDT_PAGE_GRANULARITY;
+  gdt[GDT_KERNEL_DATA_INDEX] = GDT_FLAT_LIMIT | GDT_PRESENT | GDT_CODE_OR_DATA |
+                               GDT_READABLE_OR_WRITABLE | GDT_DEFAULT_32BIT |
+                               GDT_PAGE_GRANULARITY;
   install_tss_descriptor();
   load_gdt();
 }

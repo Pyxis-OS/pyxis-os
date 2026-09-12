@@ -5,16 +5,9 @@
 #define GDT_KERNEL_CODE_INDEX 1
 #define GDT_KERNEL_DATA_INDEX 2
 #define GDT_TSS_INDEX 3
-/* A selector contains index[15:3], table choice[2] (GDT=0), and requested
- * privilege[1:0]. Its RPL is distinct from the descriptor's DPL. */
-#define SELECTOR_TABLE_GDT 0
-#define SELECTOR_RPL_KERNEL 0
-#define GDT_KERNEL_CODE_SELECTOR \
-  (GDT_KERNEL_CODE_INDEX * GDT_ENTRY_BYTES | SELECTOR_TABLE_GDT | SELECTOR_RPL_KERNEL)
-#define GDT_KERNEL_DATA_SELECTOR \
-  (GDT_KERNEL_DATA_INDEX * GDT_ENTRY_BYTES | SELECTOR_TABLE_GDT | SELECTOR_RPL_KERNEL)
-#define GDT_TSS_SELECTOR \
-  (GDT_TSS_INDEX * GDT_ENTRY_BYTES | SELECTOR_TABLE_GDT | SELECTOR_RPL_KERNEL)
+#define GDT_KERNEL_CODE_SELECTOR (GDT_KERNEL_CODE_INDEX * GDT_ENTRY_BYTES)
+#define GDT_KERNEL_DATA_SELECTOR (GDT_KERNEL_DATA_INDEX * GDT_ENTRY_BYTES)
+#define GDT_TSS_SELECTOR (GDT_TSS_INDEX * GDT_ENTRY_BYTES)
 #define DOUBLE_FAULT_IST 1
 
 #define IDT_VECTOR_COUNT 256
@@ -33,7 +26,7 @@
 #include <stdint.h>
 
 struct descriptor_table_pointer {
-  uint16_t limit; /* Table byte size minus one, not an entry count. */
+  uint16_t limit;
   uint64_t base;
 } __attribute__((packed));
 
