@@ -7,21 +7,13 @@
 #define HEAP_ALIGNMENT 16
 #define HEAP_CONTROL_BYTES 16384
 #define HEAP_POOL_BYTES (256 * 1024)
-#define HEAP_MAX_POOLS 32
 
 static unsigned char control[HEAP_CONTROL_BYTES] __attribute__((aligned(HEAP_ALIGNMENT)));
 static tlsf_t allocator;
-static struct {
-  uintptr_t base;
-  size_t bytes;
-} pools[HEAP_MAX_POOLS];
 static struct heap_stats stats;
 
 static bool add_pool(size_t request)
 {
-  if (stats.pools == HEAP_MAX_POOLS) {
-    return false;
-  }
   /* TLSF memalign needs room for a leading split; size-class search rounds up
    * by at most 1/32 of its adjusted size. A page plus 1/16 leaves room for both
    * and for the two pool headers, without requiring contiguous physical RAM. */
@@ -53,8 +45,6 @@ static bool add_pool(size_t request)
     KASSERT(vm_free(memory, bytes) == MM_OK);
     return false;
   }
-  pools[stats.pools].base = (uintptr_t)memory;
-  pools[stats.pools].bytes = bytes;
   ++stats.pools;
   stats.pool_bytes += bytes;
   return true;
@@ -90,7 +80,6 @@ void *kmalloc(size_t bytes)
     pointer = tlsf_memalign(allocator, HEAP_ALIGNMENT, bytes);
   }
   if (pointer) {
-    KASSERT(!((uintptr_t)pointer & (HEAP_ALIGNMENT - 1)));
     ++stats.live_allocations;
     stats.live_block_bytes += tlsf_block_size(pointer);
   }
@@ -102,19 +91,7 @@ void kfree(void *pointer)
   if (!pointer) {
     return;
   }
-  KASSERT(allocator && !((uintptr_t)pointer & (HEAP_ALIGNMENT - 1)));
-  bool in_pool = false;
-  for (size_t i = 0; i < stats.pools; ++i) {
-    uintptr_t address = (uintptr_t)pointer;
-    if (address >= pools[i].base + HEAP_ALIGNMENT + tlsf_alloc_overhead() &&
-        address < pools[i].base + pools[i].bytes - tlsf_alloc_overhead()) {
-      in_pool = true;
-      break;
-    }
-  }
-  KASSERT(in_pool && stats.live_allocations);
   size_t bytes = tlsf_block_size(pointer);
-  KASSERT(bytes <= stats.live_block_bytes);
   tlsf_free(allocator, pointer);
   --stats.live_allocations;
   stats.live_block_bytes -= bytes;

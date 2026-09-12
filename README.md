@@ -25,7 +25,7 @@ Generic initialization then creates the VM allocator and TLSF heap, reports
 memory accounting and halts. There are no processes, devices beyond COM1, or shell.
 
 Bootstrap limits: 256 memory regions, usable RAM below 64 GiB, 256 VM range
-records, 16 KiB TLSF control storage and 32 heap pools. Capacity failures are
+records and 16 KiB TLSF control storage. Capacity failures are
 explicit. Bootloader-reclaimable and firmware memory stay reserved.
 The image remains at `0xffffffff80000000`; allocations use the 64 GiB range at
 `0xffff800000000000`. PMM metadata lives at `0xfffffe8000000000`; two scratch
