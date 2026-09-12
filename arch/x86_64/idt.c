@@ -4,6 +4,17 @@
 #include <kernel/panic.h>
 #include <stddef.h>
 
+#define IDT_GATE_PRESENT (1u << 7)
+#define IDT_GATE_INTERRUPT64 0xe
+
+#define PAGE_FAULT_PROTECTION (UINT64_C(1) << 0)
+#define PAGE_FAULT_WRITE (UINT64_C(1) << 1)
+#define PAGE_FAULT_USER (UINT64_C(1) << 2)
+#define PAGE_FAULT_RESERVED_BIT (UINT64_C(1) << 3)
+#define PAGE_FAULT_INSTRUCTION_FETCH (UINT64_C(1) << 4)
+#define PAGE_FAULT_PROTECTION_KEY (UINT64_C(1) << 5)
+#define PAGE_FAULT_SHADOW_STACK (UINT64_C(1) << 6)
+
 struct idt_gate {
   uint16_t offset_low, selector;
   uint8_t ist, attributes;
@@ -11,49 +22,65 @@ struct idt_gate {
   uint32_t offset_high, reserved;
 } __attribute__((packed));
 
-static struct idt_gate idt[256] __attribute__((aligned(16)));
-extern void (*const isr_table[256])(void);
+static struct idt_gate idt[IDT_VECTOR_COUNT] __attribute__((aligned(16)));
+extern void (*const isr_table[IDT_VECTOR_COUNT])(void);
 
 void idt_init(void)
 {
   _Static_assert(sizeof(struct idt_gate) == 16, "IDT gate hardware layout");
-  _Static_assert(offsetof(struct exception_frame, vector) == 15 * 8, "ISR frame");
-  for (size_t i = 0; i < 256; ++i) {
-    uintptr_t address = (uintptr_t)isr_table[i];
-    idt[i] = (struct idt_gate){
+  _Static_assert(offsetof(struct exception_frame, vector) == 15 * sizeof(uint64_t),
+                 "ISR frame follows 15 saved general-purpose registers");
+
+  for (size_t vector = 0; vector < IDT_VECTOR_COUNT; ++vector) {
+    uintptr_t address = (uintptr_t)isr_table[vector];
+    idt[vector] = (struct idt_gate){
       .offset_low = address,
-      .selector = 8,
-      .ist = i == 8 ? 1 : 0,
-      .attributes = 0x8e,
+      .selector = GDT_KERNEL_CODE_SELECTOR,
+      .ist = vector == EXCEPTION_DOUBLE_FAULT ? DOUBLE_FAULT_IST : 0,
+      /* Ring-zero interrupt gates clear IF on entry. */
+      .attributes = IDT_GATE_PRESENT | IDT_GATE_INTERRUPT64,
       .offset_mid = address >> 16,
       .offset_high = address >> 32,
     };
   }
-  const struct {
-    uint16_t limit;
-    uint64_t base;
-  } __attribute__((packed)) idtr = {sizeof(idt) - 1, (uintptr_t)idt};
+
+  const struct descriptor_table_pointer idtr = {
+    .limit = sizeof(idt) - 1,
+    .base = (uintptr_t)idt,
+  };
   __asm__ volatile("lidt %0" : : "m"(idtr) : "memory");
 }
 
-[[noreturn]] void exception_handler(const struct exception_frame *f)
+static void report_page_fault(uint64_t error, uint64_t address)
+{
+  klog("page fault: cr2=0x%lx %s %s %s reserved=%u fetch=%u pkey=%u shadow=%u\n",
+       address, error & PAGE_FAULT_PROTECTION ? "protection" : "not-present",
+       error & PAGE_FAULT_WRITE ? "write" : "read",
+       error & PAGE_FAULT_USER ? "user" : "supervisor",
+       (unsigned)((error & PAGE_FAULT_RESERVED_BIT) != 0),
+       (unsigned)((error & PAGE_FAULT_INSTRUCTION_FETCH) != 0),
+       (unsigned)((error & PAGE_FAULT_PROTECTION_KEY) != 0),
+       (unsigned)((error & PAGE_FAULT_SHADOW_STACK) != 0));
+}
+
+[[noreturn]] void exception_handler(const struct exception_frame *frame)
 {
   uint64_t fault_address = read_cr2();
+
   klog("\nCaelum exception: vector=%lu error=0x%lx rip=0x%lx\n",
-       f->vector, f->error, f->rip);
+       frame->vector, frame->error, frame->rip);
   klog("cs=0x%lx flags=0x%lx rsp=0x%lx ss=0x%lx rbp=0x%lx\n",
-       f->cs, f->rflags, f->rsp, f->ss, f->rbp);
+       frame->cs, frame->rflags, frame->rsp, frame->ss, frame->rbp);
   klog("rax=0x%lx rbx=0x%lx rcx=0x%lx rdx=0x%lx rsi=0x%lx rdi=0x%lx\n",
-       f->rax, f->rbx, f->rcx, f->rdx, f->rsi, f->rdi);
-  klog("r8=0x%lx r9=0x%lx r10=0x%lx r11=0x%lx\n", f->r8, f->r9, f->r10, f->r11);
+       frame->rax, frame->rbx, frame->rcx, frame->rdx, frame->rsi, frame->rdi);
+  klog("r8=0x%lx r9=0x%lx r10=0x%lx r11=0x%lx\n",
+       frame->r8, frame->r9, frame->r10, frame->r11);
   klog("r12=0x%lx r13=0x%lx r14=0x%lx r15=0x%lx cr3=0x%lx\n",
-       f->r12, f->r13, f->r14, f->r15, read_cr3());
-  if (f->vector == 14) {
-    klog("page fault: cr2=0x%lx %s %s %s reserved=%u fetch=%u pkey=%u shadow=%u\n",
-         fault_address, f->error & 1 ? "protection" : "not-present",
-         f->error & 2 ? "write" : "read", f->error & 4 ? "user" : "supervisor",
-         (unsigned)((f->error >> 3) & 1), (unsigned)((f->error >> 4) & 1),
-         (unsigned)((f->error >> 5) & 1), (unsigned)((f->error >> 6) & 1));
+       frame->r12, frame->r13, frame->r14, frame->r15, read_cr3());
+
+  if (frame->vector == EXCEPTION_PAGE_FAULT) {
+    report_page_fault(frame->error, fault_address);
   }
+
   panic("fatal exception");
 }
