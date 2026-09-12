@@ -46,6 +46,7 @@ static uint64_t page_up(uint64_t value)
 static uint64_t usable_memory_end(const struct boot_info *boot)
 {
   uint64_t limit = 0;
+
   for (size_t i = 0; i < boot->region_count; ++i) {
     const struct boot_region *region = &boot->regions[i];
     if (region->type == BOOT_USABLE) {
@@ -69,14 +70,17 @@ struct pmm_bootstrap pmm_plan(const struct boot_info *boot)
   if (!plan.frame_count) {
     panic("PMM: no usable physical pages");
   }
+
   size_t bytes = bitmap_size_for_frames(plan.frame_count);
   plan.metadata_pages = page_up(bytes * PMM_BITMAP_COUNT) / PAGE_SIZE;
   size_t storage_bytes = plan.metadata_pages * PAGE_SIZE;
+
   for (size_t i = 0; i < boot->region_count; ++i) {
     const struct boot_region *region = &boot->regions[i];
     if (region->type != BOOT_USABLE) {
       continue;
     }
+
     uint64_t start = page_up(region->base);
     uint64_t end = (region->base + region->length) & ~(PAGE_SIZE - 1);
     if (!start) {
@@ -87,12 +91,14 @@ struct pmm_bootstrap pmm_plan(const struct boot_info *boot)
       return plan;
     }
   }
+
   panic("PMM: no usable contiguous range for bitmap metadata");
 }
 
 void pmm_rebase(void *metadata)
 {
   KASSERT(metadata != NULL);
+
   unavailable_bitmap = metadata;
   allocatable_bitmap = unavailable_bitmap + bitmap_bytes;
 }
@@ -101,19 +107,23 @@ void pmm_init(const struct boot_info *boot, struct pmm_bootstrap plan,
               void *metadata)
 {
   KASSERT(!unavailable_bitmap);
+
   frame_count = plan.frame_count;
   bitmap_bytes = bitmap_size_for_frames(frame_count);
   pmm_rebase(metadata);
   memset(unavailable_bitmap, UINT8_MAX, bitmap_bytes);
   memset(allocatable_bitmap, 0, bitmap_bytes);
+
   stats.metadata_pages = plan.metadata_pages;
   uint64_t metadata_end = plan.metadata_phys + plan.metadata_pages * PAGE_SIZE;
   uint64_t kernel_end = boot->kernel_phys + boot->kernel_size;
+
   for (size_t i = 0; i < boot->region_count; ++i) {
     const struct boot_region *region = &boot->regions[i];
     if (region->type != BOOT_USABLE) {
       continue;
     }
+
     uint64_t end = (region->base + region->length) & ~(PAGE_SIZE - 1);
     for (uint64_t physical = page_up(region->base); physical < end;
          physical += PAGE_SIZE) {
@@ -122,6 +132,7 @@ void pmm_init(const struct boot_info *boot, struct pmm_bootstrap plan,
           (physical >= boot->kernel_phys && physical < kernel_end)) {
         continue;
       }
+
       size_t frame = physical / PAGE_SIZE;
       KASSERT(frame < frame_count);
       bit_set(allocatable_bitmap, frame, true);
@@ -129,6 +140,7 @@ void pmm_init(const struct boot_info *boot, struct pmm_bootstrap plan,
       ++stats.total_frames;
     }
   }
+
   stats.free_frames = stats.total_frames;
 }
 
@@ -138,18 +150,21 @@ phys_addr_t pmm_alloc(size_t pages)
   if (!pages || pages > stats.free_frames) {
     return 0;
   }
+
   size_t run = 0;
   for (size_t frame = 1; frame < frame_count; ++frame) {
     if (bit_get(unavailable_bitmap, frame)) {
       run = 0;
       continue;
     }
+
     ++run;
     if (run == pages) {
       size_t first = frame + 1 - pages;
       for (size_t i = first; i <= frame; ++i) {
         bit_set(unavailable_bitmap, i, true);
       }
+
       stats.free_frames -= pages;
       stats.allocated_frames += pages;
       return first * PAGE_SIZE;
@@ -165,6 +180,7 @@ void pmm_free(phys_addr_t physical, size_t pages)
       first >= frame_count || pages > frame_count - first) {
     panic("PMM: invalid free phys=0x%lx pages=%zu", physical, pages);
   }
+
   /* Validate the whole extent before changing anything. Eligibility is a second
    * bitmap so reserved and metadata frames cannot be freed as allocations. */
   for (size_t i = first; i < first + pages; ++i) {
@@ -172,9 +188,11 @@ void pmm_free(phys_addr_t physical, size_t pages)
       panic("PMM: reserved or already-free frame 0x%lx", i * PAGE_SIZE);
     }
   }
+
   for (size_t i = first; i < first + pages; ++i) {
     bit_set(unavailable_bitmap, i, false);
   }
+
   stats.free_frames += pages;
   stats.allocated_frames -= pages;
 }

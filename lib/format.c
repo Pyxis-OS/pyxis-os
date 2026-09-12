@@ -23,11 +23,13 @@ static void put_unsigned(uint64_t value, unsigned radix)
 {
   char digits[UINT64_DECIMAL_DIGITS];
   size_t count = 0;
+
   do {
     digits[count] = "0123456789abcdef"[value % radix];
     ++count;
     value /= radix;
   } while (value);
+
   while (count) {
     --count;
     console_putc(digits[count]);
@@ -70,6 +72,7 @@ void kvlog(const char *format, va_list args)
       ++format;
       continue;
     }
+
     ++format;
     enum integer_length length = LENGTH_INT;
     if (*format == 'l') {
@@ -83,11 +86,13 @@ void kvlog(const char *format, va_list args)
       length = LENGTH_SIZE;
       ++format;
     }
+
     char conversion = *format;
     if (!conversion) {
       return;
     }
     ++format;
+
     switch (conversion) {
     case '%':
       console_putc('%');
@@ -112,6 +117,7 @@ void kvlog(const char *format, va_list args)
         /* Unsigned negation also handles INT64_MIN without signed overflow. */
         magnitude = 0 - magnitude;
       }
+
       put_unsigned(magnitude, 10);
       break;
     }

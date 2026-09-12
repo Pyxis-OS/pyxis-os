@@ -24,10 +24,12 @@ static size_t pool_size_for_request(size_t request)
       request + size_class_slack > SIZE_MAX - PAGE_SIZE - overhead) {
     return 0;
   }
+
   size_t bytes = request + size_class_slack + PAGE_SIZE + overhead;
   if (bytes < HEAP_POOL_BYTES) {
     bytes = HEAP_POOL_BYTES;
   }
+
   if (bytes > SIZE_MAX - (PAGE_SIZE - 1)) {
     return 0;
   }
@@ -44,10 +46,12 @@ static bool add_pool(size_t request)
   if (!bytes) {
     return false;
   }
+
   void *memory;
   if (vm_alloc(bytes, PAGE_SIZE, PAGE_WRITE, &memory) != MM_OK) {
     return false;
   }
+
   /* TLSF forms its first header one word before the pool. The prefix keeps
    * that address mapped and canonical, even at the higher-half boundary. */
   void *pool = (unsigned char *)memory + HEAP_POOL_PREFIX_BYTES;
@@ -55,6 +59,7 @@ static bool add_pool(size_t request)
     KASSERT(vm_free(memory, bytes) == MM_OK);
     return false;
   }
+
   ++stats.pools;
   stats.pool_bytes += bytes;
   return true;
@@ -65,6 +70,7 @@ bool heap_init(void)
   KASSERT(!allocator);
   KASSERT(tlsf_size() <= sizeof(control));
   _Static_assert(_Alignof(max_align_t) <= HEAP_ALIGNMENT, "C allocation alignment");
+
   allocator = tlsf_create(control);
   KASSERT(allocator != NULL);
   if (!add_pool(0)) {
@@ -82,6 +88,7 @@ void *kmalloc(size_t bytes)
   if (!allocator || !bytes || bytes > tlsf_block_size_max() / 2) {
     return NULL;
   }
+
   void *pointer = tlsf_memalign(allocator, HEAP_ALIGNMENT, bytes);
   if (!pointer) {
     if (!add_pool(bytes)) {
@@ -89,6 +96,7 @@ void *kmalloc(size_t bytes)
     }
     pointer = tlsf_memalign(allocator, HEAP_ALIGNMENT, bytes);
   }
+
   if (pointer) {
     ++stats.live_allocations;
     stats.live_block_bytes += tlsf_block_size(pointer);
@@ -101,8 +109,10 @@ void kfree(void *pointer)
   if (!pointer) {
     return;
   }
+
   size_t bytes = tlsf_block_size(pointer);
   tlsf_free(allocator, pointer);
+
   --stats.live_allocations;
   stats.live_block_bytes -= bytes;
 }

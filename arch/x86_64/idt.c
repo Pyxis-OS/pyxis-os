@@ -30,6 +30,7 @@ void idt_init(void)
   _Static_assert(sizeof(struct idt_gate) == 16, "IDT gate hardware layout");
   _Static_assert(offsetof(struct exception_frame, vector) == 15 * sizeof(uint64_t),
                  "ISR frame follows 15 saved general-purpose registers");
+
   for (size_t vector = 0; vector < IDT_VECTOR_COUNT; ++vector) {
     uintptr_t address = (uintptr_t)isr_table[vector];
     idt[vector] = (struct idt_gate){
@@ -42,6 +43,7 @@ void idt_init(void)
       .offset_high = address >> 32,
     };
   }
+
   const struct descriptor_table_pointer idtr = {
     .limit = sizeof(idt) - 1,
     .base = (uintptr_t)idt,
@@ -64,6 +66,7 @@ static void report_page_fault(uint64_t error, uint64_t address)
 [[noreturn]] void exception_handler(const struct exception_frame *frame)
 {
   uint64_t fault_address = read_cr2();
+
   klog("\nCaelum exception: vector=%lu error=0x%lx rip=0x%lx\n",
        frame->vector, frame->error, frame->rip);
   klog("cs=0x%lx flags=0x%lx rsp=0x%lx ss=0x%lx rbp=0x%lx\n",
@@ -74,8 +77,10 @@ static void report_page_fault(uint64_t error, uint64_t address)
        frame->r8, frame->r9, frame->r10, frame->r11);
   klog("r12=0x%lx r13=0x%lx r14=0x%lx r15=0x%lx cr3=0x%lx\n",
        frame->r12, frame->r13, frame->r14, frame->r15, read_cr3());
+
   if (frame->vector == EXCEPTION_PAGE_FAULT) {
     report_page_fault(frame->error, fault_address);
   }
+
   panic("fatal exception");
 }

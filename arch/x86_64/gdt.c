@@ -33,10 +33,13 @@ extern char bootstrap_stack_top[];
 static void prepare_tss(void)
 {
   _Static_assert(sizeof(struct tss64) == 104, "TSS hardware layout");
+
   tss.rsp[0] = (uintptr_t)bootstrap_stack_top;
+
   /* IDT IST values are one-based; zero means no IST stack switch. */
   tss.ist[DOUBLE_FAULT_IST - 1] =
     (uintptr_t)(double_fault_stack + sizeof(double_fault_stack));
+
   /* Put the I/O bitmap beyond the TSS limit: this TSS contains no bitmap. */
   tss.iomap_base = sizeof(tss);
 }
@@ -44,10 +47,12 @@ static void prepare_tss(void)
 static void install_tss_descriptor(void)
 {
   uint64_t base = (uintptr_t)&tss;
+
   /* The low descriptor interleaves base[23:0] and base[31:24] with flags.
    * The next GDT entry holds base[63:32]; its upper half must stay zero. */
   uint64_t base_low24 = (base & UINT64_C(0xffffff)) << 16;
   uint64_t base_high8 = ((base >> 24) & UINT64_C(0xff)) << 56;
+
   gdt[GDT_TSS_INDEX] = (sizeof(tss) - 1) | base_low24 | base_high8 |
                        GDT_PRESENT | GDT_TSS_AVAILABLE;
   gdt[GDT_TSS_INDEX + 1] = base >> 32;
@@ -59,6 +64,7 @@ static void load_gdt(void)
     .limit = sizeof(gdt) - 1,
     .base = (uintptr_t)gdt,
   };
+
   /* LGDT alone does not reload cached segment descriptors. A far return loads
    * CS; reload the data selectors too, then LTR enables the TSS's IST stacks. */
   __asm__ volatile(
@@ -84,6 +90,7 @@ static void load_gdt(void)
 void gdt_init(void)
 {
   prepare_tss();
+
   /* Ring zero, base zero. The code descriptor must have L=1 and D=0 for
    * 64-bit execution. Retain flat limits and the data descriptor's D/B bit. */
   gdt[GDT_KERNEL_CODE_INDEX] = GDT_FLAT_LIMIT | GDT_PRESENT | GDT_CODE_OR_DATA |
@@ -92,6 +99,7 @@ void gdt_init(void)
   gdt[GDT_KERNEL_DATA_INDEX] = GDT_FLAT_LIMIT | GDT_PRESENT | GDT_CODE_OR_DATA |
                                GDT_READABLE_OR_WRITABLE | GDT_DEFAULT_32BIT |
                                GDT_PAGE_GRANULARITY;
+
   install_tss_descriptor();
   load_gdt();
 }
