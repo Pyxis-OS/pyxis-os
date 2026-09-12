@@ -5,43 +5,53 @@
 #include <stdint.h>
 
 #define HEAP_ALIGNMENT 16
-#define HEAP_CONTROL_BYTES 16384
+#define HEAP_CONTROL_BYTES (16 * 1024)
 #define HEAP_POOL_BYTES (256 * 1024)
+#define HEAP_POOL_PREFIX_BYTES HEAP_ALIGNMENT
 
 static unsigned char control[HEAP_CONTROL_BYTES] __attribute__((aligned(HEAP_ALIGNMENT)));
 static tlsf_t allocator;
 static struct heap_stats stats;
 
-static bool add_pool(size_t request)
+static size_t pool_size_for_request(size_t request)
 {
   /* TLSF memalign needs room for a leading split; size-class search rounds up
    * by at most 1/32 of its adjusted size. A page plus 1/16 leaves room for both
    * and for the two pool headers, without requiring contiguous physical RAM. */
-  /* TLSF forms its first block header one word before the supplied pool. Keep
-   * that header address mapped and canonical even at the bottom of the higher
-   * half, although upstream never reads its first prev_phys_block field. */
-  size_t overhead = tlsf_pool_overhead() + HEAP_ALIGNMENT;
-  if (request > SIZE_MAX - request / 16 ||
-      request + request / 16 > SIZE_MAX - PAGE_SIZE - overhead) {
-    return false;
+  size_t overhead = tlsf_pool_overhead() + HEAP_POOL_PREFIX_BYTES;
+  size_t size_class_slack = request / 16;
+  if (request > SIZE_MAX - size_class_slack ||
+      request + size_class_slack > SIZE_MAX - PAGE_SIZE - overhead) {
+    return 0;
   }
-  size_t bytes = request + request / 16 + PAGE_SIZE + overhead;
+  size_t bytes = request + size_class_slack + PAGE_SIZE + overhead;
   if (bytes < HEAP_POOL_BYTES) {
     bytes = HEAP_POOL_BYTES;
   }
   if (bytes > SIZE_MAX - (PAGE_SIZE - 1)) {
-    return false;
+    return 0;
   }
   bytes = (bytes + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
   if (bytes <= overhead || bytes - overhead >= tlsf_block_size_max()) {
+    return 0;
+  }
+  return bytes;
+}
+
+static bool add_pool(size_t request)
+{
+  size_t bytes = pool_size_for_request(request);
+  if (!bytes) {
     return false;
   }
   void *memory;
   if (vm_alloc(bytes, PAGE_SIZE, PAGE_WRITE, &memory) != MM_OK) {
     return false;
   }
-  if (!tlsf_add_pool(allocator, (unsigned char *)memory + HEAP_ALIGNMENT,
-                     bytes - HEAP_ALIGNMENT)) {
+  /* TLSF forms its first header one word before the pool. The prefix keeps
+   * that address mapped and canonical, even at the higher-half boundary. */
+  void *pool = (unsigned char *)memory + HEAP_POOL_PREFIX_BYTES;
+  if (!tlsf_add_pool(allocator, pool, bytes - HEAP_POOL_PREFIX_BYTES)) {
     KASSERT(vm_free(memory, bytes) == MM_OK);
     return false;
   }

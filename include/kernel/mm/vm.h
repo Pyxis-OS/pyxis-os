@@ -19,7 +19,8 @@ enum mm_result vm_release(void *base, size_t bytes);
 /* Backing is eager, zeroed and owned by VM. Failure leaves a bare reservation.
  * Do not mutate VM-owned mappings using the low-level arch interface. */
 enum mm_result vm_back(void *base, size_t bytes, unsigned permissions);
-enum mm_result vm_alloc(size_t bytes, size_t alignment, unsigned permissions, void **result);
+enum mm_result vm_alloc(size_t bytes, size_t alignment, unsigned permissions,
+                        void **result);
 enum mm_result vm_free(void *base, size_t bytes);
 struct vm_stats vm_get_stats(void);
 
