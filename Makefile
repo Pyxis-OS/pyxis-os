@@ -6,7 +6,7 @@ ACCEL ?= tcg
 OVMF_CODE ?= /usr/share/OVMF/OVMF_CODE.fd
 OVMF_VARS ?= /usr/share/OVMF/OVMF_VARS.fd
 
-CPPFLAGS := -Iinclude -Iarch/x86_64/include -Ithird_party/limine
+CPPFLAGS := -Iinclude -Iarch/x86_64/include -Ithird_party/limine -Ithird_party/tlsf
 CFLAGS := -std=gnu23 -O2 -g3 -ffreestanding -fno-stack-protector \
           -fno-pic -fno-pie -mno-red-zone -mgeneral-regs-only -mcmodel=kernel \
           -fno-omit-frame-pointer -Wall -Wextra -Wshadow -Wstrict-prototypes \
@@ -14,21 +14,27 @@ CFLAGS := -std=gnu23 -O2 -g3 -ffreestanding -fno-stack-protector \
 LDFLAGS := -nostdlib -static -no-pie -Wl,-T,arch/x86_64/linker.ld \
            -Wl,--build-id=none -Wl,-z,max-page-size=0x1000 -Wl,-Map,build/caelum.map
 
-C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/mm/*.c lib/*.c)
+C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/mm/*.c lib/*.c) \
+             third_party/tlsf/tlsf.c
 ASM_SOURCES := $(wildcard arch/x86_64/*.S)
 OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM_SOURCES))
 
-.PHONY: all image run debug clean
+.PHONY: all image run debug clean check-toolchain
 all: build/caelum.elf
+
+check-toolchain:
+	@command -v $(CC) >/dev/null 2>&1 || { \
+	  echo "Missing $(CC): add the cross-toolchain to PATH or set CROSS_COMPILE." >&2; \
+	  exit 1; }
 
 build/caelum.elf: $(OBJECTS) arch/x86_64/linker.ld
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS)
 
-build/%.o: %.c
+build/%.o: %.c | check-toolchain
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-build/%.o: %.S
+build/%.o: %.S | check-toolchain
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
