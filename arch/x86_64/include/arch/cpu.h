@@ -3,6 +3,23 @@
 
 #include <stdint.h>
 
+#define CPUID_EXTENDED_FEATURES 0x80000001
+#define CPUID_FEATURE_SYSCALL (1u << 11)
+#define CPUID_FEATURE_NX (1u << 20)
+
+#define IA32_EFER 0xc0000080
+#define IA32_STAR 0xc0000081
+#define EFER_SCE (UINT64_C(1) << 0)
+#define EFER_NXE (UINT64_C(1) << 11)
+
+static inline void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx,
+                         uint32_t *ecx, uint32_t *edx)
+{
+  __asm__ volatile("cpuid"
+                   : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx)
+                   : "a"(leaf), "c"(0));
+}
+
 static inline void cpu_disable_interrupts(void)
 {
   __asm__ volatile("cli" : : : "memory");

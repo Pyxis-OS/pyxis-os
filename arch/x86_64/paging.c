@@ -25,9 +25,7 @@
 #define HIGHER_HALF_SIGN_EXTENSION (~((UINT64_C(1) << VIRTUAL_ADDRESS_BITS) - 1))
 
 #define CPUID_EXTENDED_MAX 0x80000000
-#define CPUID_EXTENDED_FEATURES 0x80000001
 #define CPUID_ADDRESS_WIDTHS 0x80000008
-#define CPUID_FEATURE_NX (1u << 20)
 #define CPUID_ADDRESS_WIDTH_MASK 0xff
 #define CPUID_VIRTUAL_WIDTH_SHIFT 8
 #define MIN_PHYSICAL_ADDRESS_BITS 32
@@ -37,8 +35,6 @@
 #define CR4_GLOBAL_PAGES (UINT64_C(1) << 7)
 #define CR4_FIVE_LEVEL_PAGING (UINT64_C(1) << 12)
 #define CR4_PCID_ENABLE (UINT64_C(1) << 17)
-#define MSR_EFER 0xc0000080
-#define EFER_NX_ENABLE (UINT64_C(1) << 11)
 
 enum table_level {
   LEVEL_PT = 1,
@@ -208,14 +204,6 @@ static void map_kernel_section(const struct boot_info *boot, char *start, char *
   }
 }
 
-static void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx,
-                  uint32_t *ecx, uint32_t *edx)
-{
-  __asm__ volatile("cpuid"
-                   : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx)
-                   : "a"(leaf), "c"(0));
-}
-
 static unsigned detect_physical_address_width(void)
 {
   uint32_t eax, ebx, ecx, edx;
@@ -256,7 +244,7 @@ static void configure_cpu(void)
 
   /* NX must be enabled before publishing NX entries; WP makes read-only
    * kernel pages read-only even to supervisor writes. */
-  write_msr(MSR_EFER, read_msr(MSR_EFER) | EFER_NX_ENABLE);
+  write_msr(IA32_EFER, read_msr(IA32_EFER) | EFER_NXE);
   write_cr0(read_cr0() | CR0_WRITE_PROTECT);
 
   klog("x86_64: physical address width=%u, NX and supervisor write protection enabled\n",
