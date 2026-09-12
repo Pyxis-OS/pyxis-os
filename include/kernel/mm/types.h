@@ -6,10 +6,11 @@
 #define PAGE_SIZE UINT64_C(4096)
 typedef uint64_t phys_addr_t;
 
-/* Readable, supervisor-only mappings; absence of PAGE_EXEC means NX. */
+/* Readable mappings; absence of PAGE_EXEC means NX. */
 enum page_permissions {
   PAGE_WRITE = 1,
   PAGE_EXEC = 2,
+  PAGE_USER = 4,
 };
 
 enum mm_result {

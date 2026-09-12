@@ -53,7 +53,8 @@ enum scratch_slot {
   SCRATCH_SLOT_COUNT,
 };
 
-static phys_addr_t root_physical;
+static struct arch_address_space kernel_space;
+static struct arch_address_space *active_space;
 static uint64_t physical_limit;
 static uint64_t bootstrap_offset;
 static bool active;
@@ -115,19 +116,35 @@ static uint64_t leaf_flags(unsigned permissions)
   if (!(permissions & PAGE_EXEC)) {
     flags |= PTE_NX;
   }
+  if (permissions & PAGE_USER) {
+    flags |= PTE_USER;
+  }
   return flags;
 }
 
 static bool permissions_valid(unsigned permissions)
 {
-  return !(permissions & ~(PAGE_WRITE | PAGE_EXEC)) &&
-         permissions != (PAGE_WRITE | PAGE_EXEC);
+  return !(permissions & ~(PAGE_WRITE | PAGE_EXEC | PAGE_USER)) &&
+         (permissions & (PAGE_WRITE | PAGE_EXEC)) != (PAGE_WRITE | PAGE_EXEC);
 }
 
-static bool mutable_address(uintptr_t address)
+static bool space_valid(const struct arch_address_space *space)
 {
-  return active && !(address & (PAGE_SIZE - 1)) && canonical(address) &&
-         address >= KERNEL_VM_BASE && address - KERNEL_VM_BASE < KERNEL_VM_SIZE;
+  return active && space && space->root && physical_valid(space->root);
+}
+
+static bool mutable_address(const struct arch_address_space *space,
+                            uintptr_t address)
+{
+  if (!space_valid(space) || (address & (PAGE_SIZE - 1))) {
+    return false;
+  }
+
+  if (space == &kernel_space) {
+    return address >= KERNEL_VM_BASE &&
+           address - KERNEL_VM_BASE < KERNEL_VM_SIZE;
+  }
+  return address >= PAGE_SIZE && address <= LOWER_HALF_MAX;
 }
 
 static void *bootstrap_pointer(phys_addr_t physical, size_t bytes)
@@ -155,7 +172,7 @@ static phys_addr_t bootstrap_new_table(void)
 
 static uint64_t *bootstrap_leaf(uintptr_t address)
 {
-  uint64_t *table = bootstrap_pointer(root_physical, PAGE_SIZE);
+  uint64_t *table = bootstrap_pointer(kernel_space.root, PAGE_SIZE);
   for (unsigned level = LEVEL_PML4; level > LEVEL_PT; --level) {
     uint64_t *entry = &table[index_at(address, level)];
     if (!(*entry & PTE_PRESENT)) {
@@ -270,7 +287,7 @@ void paging_init(struct boot_info *boot)
   size_t metadata_bytes = plan.metadata_pages * PAGE_SIZE;
   pmm_init(boot, plan, bootstrap_pointer(plan.metadata_phys, metadata_bytes));
 
-  root_physical = bootstrap_new_table();
+  kernel_space.root = bootstrap_new_table();
   map_kernel_section(boot, __text_start, __text_end, PAGE_EXEC);
   map_kernel_section(boot, __rodata_start, __rodata_end, 0);
   map_kernel_section(boot, __data_start, __data_end, PAGE_WRITE);
@@ -284,14 +301,19 @@ void paging_init(struct boot_info *boot)
   KASSERT(!*bootstrap_leaf(TEMP_MAP_BASE + SCRATCH_TABLE * PAGE_SIZE));
   KASSERT(!*bootstrap_leaf(TEMP_MAP_BASE + SCRATCH_DATA * PAGE_SIZE));
 
-  uint64_t *root = bootstrap_pointer(root_physical, PAGE_SIZE);
+  /* Install the allocation area's ancestors before any roots can share them.
+   * This area fits entirely in one PML4 slot, so later growth stays shared. */
+  KASSERT(!*bootstrap_leaf(KERNEL_VM_BASE));
+
+  uint64_t *root = bootstrap_pointer(kernel_space.root, PAGE_SIZE);
   KASSERT(!root[RECURSIVE_SLOT]);
-  root[RECURSIVE_SLOT] = root_physical | PTE_PRESENT | PTE_WRITE | PTE_NX;
+  root[RECURSIVE_SLOT] = kernel_space.root | PTE_PRESENT | PTE_WRITE | PTE_NX;
 
   klog("paging: switching CR3 from 0x%lx to owned root 0x%lx\n",
-       read_cr3(), root_physical);
-  write_cr3(root_physical);
+       read_cr3(), kernel_space.root);
+  write_cr3(kernel_space.root);
   active = true;
+  active_space = &kernel_space;
   pmm_rebase((void *)PMM_METADATA_BASE);
   bootstrap_offset = 0;
   boot->bootstrap_direct_offset = 0;
@@ -300,7 +322,7 @@ void paging_init(struct boot_info *boot)
        read_cr3(), RECURSIVE_SLOT);
 }
 
-static void zero_via_scratch(phys_addr_t physical, unsigned slot)
+static void *map_scratch(phys_addr_t physical, unsigned slot)
 {
   KASSERT(active && physical_valid(physical) && slot < SCRATCH_SLOT_COUNT &&
           !scratch_busy[slot]);
@@ -313,32 +335,77 @@ static void zero_via_scratch(phys_addr_t physical, unsigned slot)
   scratch_busy[slot] = true;
   *entry = physical | PTE_PRESENT | PTE_WRITE | PTE_NX;
   invlpg(virtual);
+  return (void *)virtual;
+}
 
-  memset((void *)virtual, 0, PAGE_SIZE);
+static void unmap_scratch(unsigned slot)
+{
+  KASSERT(slot < SCRATCH_SLOT_COUNT && scratch_busy[slot]);
 
-  /* Keep the zeroing stores before withdrawal of the scratch mapping. */
+  uintptr_t virtual = TEMP_MAP_BASE + slot * PAGE_SIZE;
+  volatile uint64_t *table = active_table(virtual, LEVEL_PT);
+
+  /* Finish accesses through the slot before withdrawing its mapping. */
   __asm__ volatile("" : : : "memory");
-  *entry = 0;
+  table[index_at(virtual, LEVEL_PT)] = 0;
   invlpg(virtual);
   scratch_busy[slot] = false;
 }
 
 void arch_frame_zero(phys_addr_t physical)
 {
-  zero_via_scratch(physical, SCRATCH_DATA);
+  memset(map_scratch(physical, SCRATCH_DATA), 0, PAGE_SIZE);
+  unmap_scratch(SCRATCH_DATA);
 }
 
-/* All ordinary ancestors are supervisor RW and executable, with permission
- * restrictions at the leaves. Still accumulate effective restrictions for query
- * and reject attempts to exceed any ancestor's permissions on mutation. */
-static enum mm_result walk_to_leaf(uintptr_t virtual, bool create,
-                                   volatile uint64_t **leaf, unsigned *allowed)
+static uint64_t read_table_entry(phys_addr_t physical, unsigned index)
 {
-  *allowed = PAGE_WRITE | PAGE_EXEC;
+  volatile uint64_t *table = map_scratch(physical, SCRATCH_TABLE);
+  uint64_t value = table[index];
+  unmap_scratch(SCRATCH_TABLE);
+  return value;
+}
+
+static void write_table_entry(phys_addr_t physical, unsigned index, uint64_t value)
+{
+  volatile uint64_t *table = map_scratch(physical, SCRATCH_TABLE);
+  table[index] = value;
+  unmap_scratch(SCRATCH_TABLE);
+}
+
+static unsigned entry_permissions(uint64_t entry)
+{
+  unsigned permissions = 0;
+  if (entry & PTE_WRITE) {
+    permissions |= PAGE_WRITE;
+  }
+  if (!(entry & PTE_NX)) {
+    permissions |= PAGE_EXEC;
+  }
+  if (entry & PTE_USER) {
+    permissions |= PAGE_USER;
+  }
+  return permissions;
+}
+
+static bool affects_active_space(const struct arch_address_space *space,
+                                 uintptr_t virtual)
+{
+  return space == active_space || virtual >= HIGHER_HALF_BASE;
+}
+
+/* Scratch mappings reach either root without changing the executing address
+ * space. No scratch pointer survives a helper call or a descent to a child. */
+static enum mm_result walk_to_leaf(const struct arch_address_space *space,
+                                   uintptr_t virtual, bool create,
+                                   phys_addr_t *leaf_table, unsigned *allowed)
+{
+  phys_addr_t physical = space->root;
+  *allowed = PAGE_WRITE | PAGE_EXEC | PAGE_USER;
+
   for (unsigned level = LEVEL_PML4; level > LEVEL_PT; --level) {
-    volatile uint64_t *table = active_table(virtual, level);
-    volatile uint64_t *entry = &table[index_at(virtual, level)];
-    uint64_t value = *entry;
+    unsigned index = index_at(virtual, level);
+    uint64_t value = read_table_entry(physical, index);
     if (!(value & PTE_PRESENT)) {
       if (!create) {
         return MM_NOT_MAPPED;
@@ -349,136 +416,227 @@ static enum mm_result walk_to_leaf(uintptr_t virtual, bool create,
         return MM_NO_MEMORY;
       }
 
-      zero_via_scratch(child, SCRATCH_TABLE);
+      arch_frame_zero(child);
       value = child | PTE_PRESENT | PTE_WRITE;
-      *entry = value;
+      if (virtual <= LOWER_HALF_MAX) {
+        value |= PTE_USER;
+      }
+      write_table_entry(physical, index, value);
 
-      /* A parent change affects its recursive aliases as well as the target.
-       * With no PCID/global pages, CR3 reload flushes all such cached walks. */
-      write_cr3(root_physical);
+      /* New ancestors also change recursive aliases. Reload the actual active
+       * root, including when modifying kernel tables shared with that root. */
+      if (affects_active_space(space, virtual)) {
+        write_cr3(active_space->root);
+      }
     }
 
-    if ((value & (PTE_LARGE | PTE_USER)) ||
-        !physical_valid(value & PTE_ADDRESS_MASK)) {
+    if ((value & PTE_LARGE) || !physical_valid(value & PTE_ADDRESS_MASK)) {
       panic("corrupt or unsupported page-table ancestor at %p", (void *)virtual);
     }
 
-    if (!(value & PTE_WRITE)) {
-      *allowed &= ~PAGE_WRITE;
-    }
-    if (value & PTE_NX) {
-      *allowed &= ~PAGE_EXEC;
-    }
+    *allowed &= entry_permissions(value);
+    physical = value & PTE_ADDRESS_MASK;
   }
 
-  *leaf = &active_table(virtual, LEVEL_PT)[index_at(virtual, LEVEL_PT)];
+  *leaf_table = physical;
   return MM_OK;
 }
 
-enum mm_result arch_page_map(uintptr_t virtual, phys_addr_t physical,
+enum mm_result arch_page_map(struct arch_address_space *space,
+                             uintptr_t virtual, phys_addr_t physical,
                              unsigned permissions)
 {
-  if (!mutable_address(virtual) || !physical_valid(physical) ||
-      !permissions_valid(permissions)) {
+  if (!mutable_address(space, virtual) || !physical_valid(physical) ||
+      !permissions_valid(permissions) ||
+      (space == &kernel_space && (permissions & PAGE_USER))) {
     return MM_INVALID;
   }
 
-  volatile uint64_t *leaf;
+  phys_addr_t table;
   unsigned allowed;
-  enum mm_result result = walk_to_leaf(virtual, true, &leaf, &allowed);
+  enum mm_result result = walk_to_leaf(space, virtual, true, &table, &allowed);
   if (result != MM_OK) {
     return result;
   }
-  if (*leaf & PTE_PRESENT) {
+  unsigned index = index_at(virtual, LEVEL_PT);
+  if (read_table_entry(table, index) & PTE_PRESENT) {
     return MM_COLLISION;
   }
   if (permissions & ~allowed) {
     return MM_INVALID;
   }
 
-  *leaf = physical | leaf_flags(permissions);
-  invlpg(virtual);
+  write_table_entry(table, index, physical | leaf_flags(permissions));
+  if (affects_active_space(space, virtual)) {
+    invlpg(virtual);
+  }
   return MM_OK;
 }
 
-enum mm_result arch_page_unmap(uintptr_t virtual, phys_addr_t *physical)
+enum mm_result arch_page_unmap(struct arch_address_space *space,
+                               uintptr_t virtual, phys_addr_t *physical)
 {
-  if (!mutable_address(virtual) || !physical) {
+  if (!mutable_address(space, virtual) || !physical) {
     return MM_INVALID;
   }
 
-  volatile uint64_t *leaf;
+  phys_addr_t table;
   unsigned allowed;
-  enum mm_result result = walk_to_leaf(virtual, false, &leaf, &allowed);
+  enum mm_result result = walk_to_leaf(space, virtual, false, &table, &allowed);
   if (result != MM_OK) {
     return result;
   }
-  if (!(*leaf & PTE_PRESENT)) {
+  unsigned index = index_at(virtual, LEVEL_PT);
+  uint64_t value = read_table_entry(table, index);
+  if (!(value & PTE_PRESENT)) {
     return MM_NOT_MAPPED;
   }
 
-  *physical = *leaf & PTE_ADDRESS_MASK;
-  *leaf = 0;
-  invlpg(virtual);
+  *physical = value & PTE_ADDRESS_MASK;
+  write_table_entry(table, index, 0);
+  if (affects_active_space(space, virtual)) {
+    invlpg(virtual);
+  }
   return MM_OK;
 }
 
-enum mm_result arch_page_protect(uintptr_t virtual, unsigned permissions)
+enum mm_result arch_page_protect(struct arch_address_space *space,
+                                 uintptr_t virtual, unsigned permissions)
 {
-  if (!mutable_address(virtual) || !permissions_valid(permissions)) {
+  if (!mutable_address(space, virtual) || !permissions_valid(permissions) ||
+      (space == &kernel_space && (permissions & PAGE_USER))) {
     return MM_INVALID;
   }
 
-  volatile uint64_t *leaf;
+  phys_addr_t table;
   unsigned allowed;
-  enum mm_result result = walk_to_leaf(virtual, false, &leaf, &allowed);
+  enum mm_result result = walk_to_leaf(space, virtual, false, &table, &allowed);
   if (result != MM_OK) {
     return result;
   }
-  if (!(*leaf & PTE_PRESENT)) {
+  unsigned index = index_at(virtual, LEVEL_PT);
+  uint64_t value = read_table_entry(table, index);
+  if (!(value & PTE_PRESENT)) {
     return MM_NOT_MAPPED;
   }
   if (permissions & ~allowed) {
     return MM_INVALID;
   }
 
-  *leaf = (*leaf & PTE_ADDRESS_MASK) | leaf_flags(permissions);
-  invlpg(virtual);
+  write_table_entry(table, index,
+                    (value & PTE_ADDRESS_MASK) | leaf_flags(permissions));
+  if (affects_active_space(space, virtual)) {
+    invlpg(virtual);
+  }
   return MM_OK;
 }
 
-enum mm_result arch_page_query(uintptr_t virtual, struct page_translation *result)
+enum mm_result arch_page_query(const struct arch_address_space *space,
+                               uintptr_t virtual, struct page_translation *result)
 {
-  if (!active || !canonical(virtual) || !result) {
+  if (!space_valid(space) || !canonical(virtual) || !result) {
     return MM_INVALID;
   }
 
-  volatile uint64_t *leaf;
+  phys_addr_t table;
   unsigned allowed;
-  enum mm_result status = walk_to_leaf(virtual, false, &leaf, &allowed);
+  enum mm_result status = walk_to_leaf(space, virtual, false, &table, &allowed);
   if (status != MM_OK) {
     return status;
   }
 
-  uint64_t value = *leaf;
+  uint64_t value = read_table_entry(table, index_at(virtual, LEVEL_PT));
   if (!(value & PTE_PRESENT)) {
     return MM_NOT_MAPPED;
   }
-  if ((value & PTE_USER) || !physical_valid(value & PTE_ADDRESS_MASK)) {
+  if (!physical_valid(value & PTE_ADDRESS_MASK)) {
     panic("corrupt page-table leaf at %p", (void *)virtual);
-  }
-
-  if (!(value & PTE_WRITE)) {
-    allowed &= ~PAGE_WRITE;
-  }
-  if (value & PTE_NX) {
-    allowed &= ~PAGE_EXEC;
   }
 
   *result = (struct page_translation){
     .physical = (value & PTE_ADDRESS_MASK) | (virtual & (PAGE_SIZE - 1)),
-    .permissions = allowed,
+    .permissions = allowed & entry_permissions(value),
   };
+  return MM_OK;
+}
+
+struct arch_address_space *arch_kernel_space(void)
+{
+  return &kernel_space;
+}
+
+enum mm_result arch_space_create(struct arch_address_space *space)
+{
+  if (!active || !space || space->root) {
+    return MM_INVALID;
+  }
+
+  phys_addr_t root = pmm_alloc(1);
+  if (!root) {
+    return MM_NO_MEMORY;
+  }
+  arch_frame_zero(root);
+
+  volatile uint64_t *source = map_scratch(kernel_space.root, SCRATCH_TABLE);
+  volatile uint64_t *target = map_scratch(root, SCRATCH_DATA);
+  unsigned first_kernel_slot = index_at(HIGHER_HALF_BASE, LEVEL_PML4);
+  for (unsigned i = first_kernel_slot; i <= TABLE_INDEX_MASK; ++i) {
+    if (i != RECURSIVE_SLOT) {
+      target[i] = source[i];
+    }
+  }
+  target[RECURSIVE_SLOT] = root | PTE_PRESENT | PTE_WRITE | PTE_NX;
+  unmap_scratch(SCRATCH_DATA);
+  unmap_scratch(SCRATCH_TABLE);
+
+  space->root = root;
+  return MM_OK;
+}
+
+bool arch_space_active(const struct arch_address_space *space)
+{
+  return space && space == active_space;
+}
+
+enum mm_result arch_space_activate(struct arch_address_space *space)
+{
+  if (!space_valid(space)) {
+    return MM_INVALID;
+  }
+
+  KASSERT(!scratch_busy[SCRATCH_TABLE] && !scratch_busy[SCRATCH_DATA]);
+  /* Kernel mappings, including this stack, stay identical across the switch.
+   * PCID and global translations remain disabled, so CR3 flushes the old TLB. */
+  write_cr3(space->root);
+  active_space = space;
+  return MM_OK;
+}
+
+static void free_private_tables(phys_addr_t physical, unsigned level)
+{
+  if (level > LEVEL_PT) {
+    unsigned entries = level == LEVEL_PML4 ?
+      index_at(HIGHER_HALF_BASE, LEVEL_PML4) : TABLE_INDEX_MASK + 1;
+
+    for (unsigned i = 0; i < entries; ++i) {
+      uint64_t entry = read_table_entry(physical, i);
+      if (entry & PTE_PRESENT) {
+        KASSERT(!(entry & PTE_LARGE));
+        free_private_tables(entry & PTE_ADDRESS_MASK, level - 1);
+      }
+    }
+  }
+  pmm_free(physical, 1);
+}
+
+enum mm_result arch_space_destroy(struct arch_address_space *space)
+{
+  if (!space_valid(space) || space == &kernel_space || arch_space_active(space)) {
+    return MM_INVALID;
+  }
+
+  free_private_tables(space->root, LEVEL_PML4);
+  space->root = 0;
   return MM_OK;
 }
 
@@ -490,4 +648,14 @@ uintptr_t arch_vm_base(void)
 size_t arch_vm_size(void)
 {
   return KERNEL_VM_SIZE;
+}
+
+uintptr_t arch_user_vm_base(void)
+{
+  return PAGE_SIZE;
+}
+
+size_t arch_user_vm_size(void)
+{
+  return LOWER_HALF_MAX + 1 - PAGE_SIZE;
 }

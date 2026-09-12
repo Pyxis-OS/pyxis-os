@@ -195,7 +195,8 @@ static enum mm_result require_unmapped(const struct vm_range *range)
 {
   for (size_t i = 0; i < range->pages; ++i) {
     struct page_translation translation;
-    enum mm_result status = arch_page_query(range->base + i * PAGE_SIZE,
+    enum mm_result status = arch_page_query(arch_kernel_space(),
+                                            range->base + i * PAGE_SIZE,
                                             &translation);
     if (status == MM_OK) {
       return MM_COLLISION;
@@ -227,7 +228,8 @@ static void free_backing(const struct vm_range *range, size_t pages)
 {
   for (size_t i = 0; i < pages; ++i) {
     phys_addr_t physical;
-    KASSERT(arch_page_unmap(range->base + i * PAGE_SIZE, &physical) == MM_OK);
+    KASSERT(arch_page_unmap(arch_kernel_space(), range->base + i * PAGE_SIZE,
+                             &physical) == MM_OK);
     pmm_free(physical, 1);
   }
 }
@@ -255,7 +257,8 @@ enum mm_result vm_back(void *base, size_t bytes, unsigned permissions)
     }
 
     arch_frame_zero(physical);
-    status = arch_page_map(range->base + mapped_pages * PAGE_SIZE, physical,
+    status = arch_page_map(arch_kernel_space(),
+                           range->base + mapped_pages * PAGE_SIZE, physical,
                            permissions);
     if (status != MM_OK) {
       pmm_free(physical, 1);
