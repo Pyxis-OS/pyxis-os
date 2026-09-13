@@ -1,3 +1,4 @@
+#include <arch/apic.h>
 #include <arch/cpu.h>
 #include <arch/descriptors.h>
 #include <kernel/log.h>
@@ -61,6 +62,19 @@ static void report_page_fault(uint64_t error, uint64_t address)
        (unsigned)((error & PAGE_FAULT_INSTRUCTION_FETCH) != 0),
        (unsigned)((error & PAGE_FAULT_PROTECTION_KEY) != 0),
        (unsigned)((error & PAGE_FAULT_SHADOW_STACK) != 0));
+}
+
+void interrupt_handler(struct exception_frame *frame)
+{
+  if (frame->vector == APIC_TIMER_VECTOR) {
+    apic_end_interrupt();
+    return;
+  }
+  if (frame->vector == APIC_SPURIOUS_VECTOR) {
+    /* A spurious vector has no in-service bit, so it must not receive EOI. */
+    return;
+  }
+  exception_handler(frame);
 }
 
 [[noreturn]] void exception_handler(const struct exception_frame *frame)

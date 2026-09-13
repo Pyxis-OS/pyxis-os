@@ -1,3 +1,4 @@
+#include <arch/apic.h>
 #include <arch/cpu.h>
 #include <arch/layout.h>
 #include <arch/paging.h>
@@ -10,6 +11,7 @@
 #define PTE_WRITE (UINT64_C(1) << 1)
 #define PTE_USER (UINT64_C(1) << 2)
 #define PTE_WRITE_THROUGH (UINT64_C(1) << 3)
+#define PTE_CACHE_DISABLE (UINT64_C(1) << 4)
 #define PTE_LARGE (UINT64_C(1) << 7)
 /* Bit 7 selects PAT in a 4 KiB leaf; in higher-level entries it means large. */
 #define PTE_PAT_4K (UINT64_C(1) << 7)
@@ -19,6 +21,8 @@
 #define PAT_ENTRY_BITS 8
 #define PAT_TYPE_MASK UINT64_C(0xff)
 #define PAT_WRITE_COMBINING 1
+#define PAT_DEVICE_INDEX 3
+#define PAT_UNCACHEABLE 0
 
 /* Only bits 51:12 belong to the frame address; never carry NX into an address. */
 #define PTE_ADDRESS_MASK UINT64_C(0x000ffffffffff000)
@@ -306,6 +310,18 @@ static void map_framebuffer(struct boot_framebuffer *fb)
   fb->address = FRAMEBUFFER_BASE + page_offset;
 }
 
+static void map_local_apic(void)
+{
+  uint64_t pat = read_msr(IA32_PAT);
+  if (((pat >> (PAT_DEVICE_INDEX * PAT_ENTRY_BITS)) & PAT_TYPE_MASK) != PAT_UNCACHEABLE) {
+    panic("unexpected APIC PAT memory type");
+  }
+
+  bootstrap_map(APIC_BASE, apic_physical_address(), PAGE_WRITE);
+  /* PCD=1, PWT=1 select Limine's PAT entry 3: device registers must be UC. */
+  *bootstrap_leaf(APIC_BASE) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
+}
+
 void paging_init(struct boot_info *boot)
 {
   _Static_assert(ARCH_PAGE_SIZE == PAGE_SIZE, "page size interface");
@@ -323,6 +339,7 @@ void paging_init(struct boot_info *boot)
   map_kernel_section(boot, __rodata_start, __rodata_end, 0);
   map_kernel_section(boot, __data_start, __data_end, PAGE_WRITE);
   map_framebuffer(&boot->framebuffer);
+  map_local_apic();
 
   for (size_t offset = 0; offset < metadata_bytes; offset += PAGE_SIZE) {
     bootstrap_map(PMM_METADATA_BASE + offset, plan.metadata_phys + offset,

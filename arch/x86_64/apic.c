@@ -1,0 +1,144 @@
+#include <arch/apic.h>
+#include <arch/cpu.h>
+#include <arch/layout.h>
+#include <kernel/log.h>
+#include <kernel/panic.h>
+
+#define CPUID_FEATURE_APIC (1u << 9)
+#define IA32_APIC_BASE 0x1b
+#define APIC_BASE_ENABLED (UINT64_C(1) << 11)
+#define APIC_BASE_X2APIC (UINT64_C(1) << 10)
+#define APIC_BASE_ADDRESS_MASK UINT64_C(0x000ffffffffff000)
+
+#define APIC_VERSION 0x030
+#define APIC_TASK_PRIORITY 0x080
+#define APIC_EOI 0x0b0
+#define APIC_SPURIOUS 0x0f0
+#define APIC_LVT_CMCI 0x2f0
+#define APIC_LVT_TIMER 0x320
+#define APIC_LVT_THERMAL 0x330
+#define APIC_LVT_PERFORMANCE 0x340
+#define APIC_LVT_LINT0 0x350
+#define APIC_LVT_LINT1 0x360
+#define APIC_LVT_ERROR 0x370
+#define APIC_TIMER_INITIAL 0x380
+#define APIC_TIMER_CURRENT 0x390
+#define APIC_TIMER_DIVIDE 0x3e0
+#define APIC_MAX_LVT_SHIFT 16
+#define APIC_MAX_LVT_MASK 0xff
+#define APIC_SOFTWARE_ENABLED (1u << 8)
+#define APIC_LVT_MASKED (1u << 16)
+#define APIC_TIMER_PERIODIC (1u << 17)
+#define APIC_DIVIDE_BY_16 0x3
+
+#define PIC_MASTER_MASK 0x21
+#define PIC_SLAVE_MASK 0xa1
+#define PIC_MASK_ALL 0xff
+
+#define PIT_CHANNEL2_DATA 0x42
+#define PIT_COMMAND 0x43
+#define PIT_CHANNEL2_SELECT (2u << 6)
+#define PIT_ACCESS_LO_HI (3u << 4)
+#define PIT_MODE_TERMINAL_COUNT 0
+#define PIT_SPEAKER_CONTROL 0x61
+#define PIT_CHANNEL2_GATE (1u << 0)
+#define PIT_SPEAKER_ENABLE (1u << 1)
+#define PIT_CHANNEL2_OUTPUT (1u << 5)
+#define PIT_FREQUENCY 1193182u
+#define TIMER_FREQUENCY 100u
+#define PIT_CALIBRATION_COUNT ((PIT_FREQUENCY + TIMER_FREQUENCY - 1) / TIMER_FREQUENCY)
+#define PIT_POLL_LIMIT 10000000u
+
+static uint32_t timer_count;
+
+static uint32_t apic_read(unsigned offset)
+{
+  return *(volatile uint32_t *)(APIC_BASE + offset);
+}
+
+static void apic_write(unsigned offset, uint32_t value)
+{
+  *(volatile uint32_t *)(APIC_BASE + offset) = value;
+}
+
+uint64_t apic_physical_address(void)
+{
+  uint32_t eax, ebx, ecx, edx;
+  cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
+  if (!(edx & CPUID_FEATURE_APIC)) {
+    panic("CPU lacks a local APIC");
+  }
+
+  uint64_t base = read_msr(IA32_APIC_BASE);
+  if (base & APIC_BASE_X2APIC) {
+    panic("x2APIC boot mode is not supported");
+  }
+  return base & APIC_BASE_ADDRESS_MASK;
+}
+
+static uint32_t calibrate_timer(void)
+{
+  /* Channel 2 supplies a polling interval without enabling the PIC or speaker.
+   * The local timer counts down at divide-by-16 throughout that interval. */
+  uint8_t speaker = inb(PIT_SPEAKER_CONTROL);
+  uint8_t stopped = speaker & ~(PIT_CHANNEL2_GATE | PIT_SPEAKER_ENABLE);
+  outb(PIT_SPEAKER_CONTROL, stopped);
+  outb(PIT_COMMAND, PIT_CHANNEL2_SELECT | PIT_ACCESS_LO_HI | PIT_MODE_TERMINAL_COUNT);
+  outb(PIT_CHANNEL2_DATA, (uint8_t)PIT_CALIBRATION_COUNT);
+  outb(PIT_CHANNEL2_DATA, (uint8_t)(PIT_CALIBRATION_COUNT >> 8));
+
+  apic_write(APIC_TIMER_INITIAL, UINT32_MAX);
+  outb(PIT_SPEAKER_CONTROL, stopped | PIT_CHANNEL2_GATE);
+  unsigned remaining = PIT_POLL_LIMIT;
+  while (!(inb(PIT_SPEAKER_CONTROL) & PIT_CHANNEL2_OUTPUT) && remaining) {
+    --remaining;
+  }
+  uint32_t elapsed = UINT32_MAX - apic_read(APIC_TIMER_CURRENT);
+  apic_write(APIC_TIMER_INITIAL, 0);
+  outb(PIT_SPEAKER_CONTROL, stopped);
+
+  if (!remaining || !elapsed || elapsed == UINT32_MAX) {
+    panic("cannot calibrate the local APIC timer");
+  }
+  return elapsed;
+}
+
+void apic_init(void)
+{
+  outb(PIC_MASTER_MASK, PIC_MASK_ALL);
+  outb(PIC_SLAVE_MASK, PIC_MASK_ALL);
+  write_msr(IA32_APIC_BASE, read_msr(IA32_APIC_BASE) | APIC_BASE_ENABLED);
+
+  unsigned max_lvt = (apic_read(APIC_VERSION) >> APIC_MAX_LVT_SHIFT) & APIC_MAX_LVT_MASK;
+  if (max_lvt < 5) {
+    panic("unsupported local APIC version");
+  }
+
+  apic_write(APIC_LVT_TIMER, APIC_LVT_MASKED | APIC_TIMER_VECTOR);
+  apic_write(APIC_LVT_THERMAL, APIC_LVT_MASKED);
+  apic_write(APIC_LVT_PERFORMANCE, APIC_LVT_MASKED);
+  apic_write(APIC_LVT_LINT0, APIC_LVT_MASKED);
+  apic_write(APIC_LVT_LINT1, APIC_LVT_MASKED);
+  apic_write(APIC_LVT_ERROR, APIC_LVT_MASKED);
+  if (max_lvt >= 6) {
+    apic_write(APIC_LVT_CMCI, APIC_LVT_MASKED);
+  }
+  apic_write(APIC_TASK_PRIORITY, 0);
+  apic_write(APIC_SPURIOUS, APIC_SOFTWARE_ENABLED | APIC_SPURIOUS_VECTOR);
+  apic_write(APIC_TIMER_DIVIDE, APIC_DIVIDE_BY_16);
+
+  timer_count = calibrate_timer();
+  klog("x86_64: local APIC timer calibrated, %u counts per ~10 ms\n", timer_count);
+}
+
+void apic_timer_start(void)
+{
+  KASSERT(timer_count);
+  apic_write(APIC_LVT_TIMER, APIC_TIMER_PERIODIC | APIC_TIMER_VECTOR);
+  apic_write(APIC_TIMER_INITIAL, timer_count);
+}
+
+void apic_end_interrupt(void)
+{
+  apic_write(APIC_EOI, 0);
+}

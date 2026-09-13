@@ -54,5 +54,6 @@ struct exception_frame {
   uint64_t vector, error, rip, cs, rflags, rsp, ss;
 };
 [[noreturn]] void exception_handler(const struct exception_frame *frame);
+void interrupt_handler(struct exception_frame *frame);
 #endif
 #endif

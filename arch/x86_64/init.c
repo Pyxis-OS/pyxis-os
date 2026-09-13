@@ -1,3 +1,4 @@
+#include <arch/apic.h>
 #include <arch/console.h>
 #include <arch/cpu.h>
 #include <arch/descriptors.h>
@@ -54,5 +55,6 @@ void arch_init(struct boot_info *boot)
   idt_init();
   klog("x86_64: kernel GDT, IDT and double-fault IST installed; interrupts disabled\n");
   paging_init(boot);
+  apic_init();
   configure_syscall_msrs();
 }

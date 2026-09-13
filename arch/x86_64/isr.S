@@ -50,13 +50,29 @@ isr_common:
   push %r14
   push %r15
   mov %rsp, %rdi
+  mov %rsp, %rbx
   /* The interrupted RSP need not satisfy the SysV call-site alignment. */
   and $-STACK_ALIGNMENT, %rsp
-  call exception_handler
-1:
-  cli
-  hlt
-  jmp 1b
+  call interrupt_handler
+  mov %rbx, %rsp
+
+  pop %r15
+  pop %r14
+  pop %r13
+  pop %r12
+  pop %r11
+  pop %r10
+  pop %r9
+  pop %r8
+  pop %rdi
+  pop %rsi
+  pop %rbp
+  pop %rdx
+  pop %rcx
+  pop %rbx
+  pop %rax
+  add $16, %rsp /* Vector and error code precede the CPU's IRET frame. */
+  iretq
 
 .section .rodata
 .balign 8
