@@ -13,7 +13,7 @@
 #define STAR_KERNEL_CS_SHIFT 32
 #define STAR_SYSRET_BASE_SHIFT 48
 
-static void configure_syscall_msrs(void)
+void arch_syscall_init(void)
 {
   /* paging_init already checked that this extended CPUID leaf exists. */
   uint32_t eax, ebx, ecx, edx;
@@ -61,5 +61,5 @@ void arch_init(struct boot_info *boot)
   paging_init(boot);
   apic_init();
   arch_user_init();
-  configure_syscall_msrs();
+  arch_syscall_init();
 }

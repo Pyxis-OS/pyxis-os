@@ -5,9 +5,11 @@
 
 #define DOUBLE_FAULT_STACK_BYTES (16 * 1024)
 
+extern char bootstrap_stack_top[];
 static char bsp_double_fault_stack[DOUBLE_FAULT_STACK_BYTES]
   __attribute__((aligned(ARCH_PAGE_SIZE)));
 static struct cpu_local bsp_cpu = {
+  .stack_top = (uintptr_t)bootstrap_stack_top,
   .double_fault_stack_top = (uintptr_t)(bsp_double_fault_stack + sizeof(bsp_double_fault_stack)),
 };
 

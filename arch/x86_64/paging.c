@@ -241,11 +241,8 @@ static unsigned detect_physical_address_width(void)
   return physical_bits;
 }
 
-static void configure_cpu(void)
+static void configure_paging_cpu(void)
 {
-  unsigned physical_bits = detect_physical_address_width();
-  physical_limit = UINT64_C(1) << physical_bits;
-
   uint64_t cr4 = read_cr4();
   if (cr4 & CR4_FIVE_LEVEL_PAGING) {
     panic("five-level paging unexpectedly active");
@@ -258,9 +255,24 @@ static void configure_cpu(void)
    * kernel pages read-only even to supervisor writes. */
   write_msr(IA32_EFER, read_msr(IA32_EFER) | EFER_NXE);
   write_cr0(read_cr0() | CR0_WRITE_PROTECT);
+}
+
+static void configure_cpu(void)
+{
+  unsigned physical_bits = detect_physical_address_width();
+  physical_limit = UINT64_C(1) << physical_bits;
+  configure_paging_cpu();
 
   klog("x86_64: physical address width=%u, NX and supervisor write protection enabled\n",
        physical_bits);
+}
+
+void paging_prepare_ap(void)
+{
+  if ((UINT64_C(1) << detect_physical_address_width()) != physical_limit) {
+    panic("AP physical address width differs from BSP");
+  }
+  configure_paging_cpu();
 }
 
 static void validate_ram_address_width(const struct boot_info *boot)

@@ -10,6 +10,9 @@ struct arch_address_space {
 };
 
 void paging_init(struct boot_info *boot);
+/* Before the AP replaces its boot root, on the still-valid boot stack. Does
+ * not allocate or access CPU-local data; the kernel image is already mapped. */
+void paging_prepare_ap(void);
 uintptr_t arch_vm_base(void);
 size_t arch_vm_size(void);
 uintptr_t arch_user_vm_base(void);
