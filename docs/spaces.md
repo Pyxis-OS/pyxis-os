@@ -20,11 +20,12 @@ POSIX compatibility is not a requirement.
 The shared session interface could initially be a text display with a tab bar:
 
 ```text
-[shell] [editor] [desktop A] [desktop B] [+]
+[shell    ] [editor   ] [desktop A] [desktop B] [+]
 ```
 
-A global shortcut opens a run box. Entering a program name creates a space and
-launches that program without requiring an intermediate shell.
+Starting a new space begins with an empty tab. The user enters the program they
+want to run in that tab and presses Enter to launch it, without requiring an
+intermediate shell. Tabs have a fixed width to simplify the initial interface.
 
 A shell, editor, game or complete desktop environment is an ordinary application
 within a space. Multiple desktop instances can coexist. A desktop can manage
