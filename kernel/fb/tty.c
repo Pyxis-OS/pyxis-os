@@ -46,6 +46,17 @@ void tty_init(const struct boot_framebuffer *fb,
   get_tty()->initialized = true;
 }
 
+static uint32_t framebuffer_color(const struct boot_framebuffer *fb, uint32_t rgb)
+{
+  uint8_t red = rgb >> 16;
+  uint8_t green = rgb >> 8;
+  uint8_t blue = rgb;
+
+  return ((uint32_t)red << fb->red_shift) |
+         ((uint32_t)green << fb->green_shift) |
+         ((uint32_t)blue << fb->blue_shift);
+}
+
 void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
                uint32_t fg, uint32_t bg)
 {
@@ -59,6 +70,8 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
 
   const uint8_t *glyph =
       font->data + (size_t)(unsigned char)c * font->stride;
+  uint32_t foreground = framebuffer_color(tty->fb, fg);
+  uint32_t background = framebuffer_color(tty->fb, bg);
 
   for (size_t row = 0; row < font->height; ++row) {
     volatile uint32_t *pixel_row =
@@ -70,7 +83,7 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
           (glyph[row] >>
            (col % 8)) & 1;
 
-      pixel_row[x_dst + col] = bit ? fg : bg;
+      pixel_row[x_dst + col] = bit ? foreground : background;
     }
   }
 
