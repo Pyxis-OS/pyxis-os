@@ -11,6 +11,7 @@
 #define GDT_TSS_INDEX 5
 
 #define SELECTOR_RPL_USER 3
+#define SELECTOR_RPL_MASK 3
 
 #define GDT_KERNEL_CODE_SELECTOR (GDT_KERNEL_CODE_INDEX * GDT_ENTRY_BYTES)
 #define GDT_KERNEL_DATA_SELECTOR (GDT_KERNEL_DATA_INDEX * GDT_ENTRY_BYTES)
@@ -24,12 +25,15 @@
 #define DOUBLE_FAULT_IST 1
 
 #define IDT_VECTOR_COUNT 256
+#define EXCEPTION_VECTOR_COUNT 32
+#define EXCEPTION_NMI 2
 #define EXCEPTION_DOUBLE_FAULT 8
 #define EXCEPTION_INVALID_TSS 10
 #define EXCEPTION_SEGMENT_NOT_PRESENT 11
 #define EXCEPTION_STACK_FAULT 12
 #define EXCEPTION_GENERAL_PROTECTION 13
 #define EXCEPTION_PAGE_FAULT 14
+#define EXCEPTION_MACHINE_CHECK 18
 #define EXCEPTION_ALIGNMENT_CHECK 17
 #define EXCEPTION_CONTROL_PROTECTION 21
 #define EXCEPTION_VMM_COMMUNICATION 29
@@ -44,6 +48,7 @@ struct descriptor_table_pointer {
 } __attribute__((packed));
 
 void gdt_init(void);
+void gdt_set_kernel_stack(uintptr_t stack_top);
 void idt_init(void);
 
 /* Order matches isr_common's pushes, followed by the vector/error pair and

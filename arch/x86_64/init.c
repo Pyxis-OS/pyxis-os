@@ -5,6 +5,7 @@
 #include <arch/init.h>
 #include <arch/paging.h>
 #include <arch/syscall.h>
+#include <arch/user.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
 
@@ -56,5 +57,6 @@ void arch_init(struct boot_info *boot)
   klog("x86_64: kernel GDT, IDT and double-fault IST installed; interrupts disabled\n");
   paging_init(boot);
   apic_init();
+  arch_user_init();
   configure_syscall_msrs();
 }

@@ -3,6 +3,7 @@
 #include <arch/descriptors.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
+#include <kernel/user.h>
 #include <stddef.h>
 
 #define IDT_GATE_PRESENT (1u << 7)
@@ -68,6 +69,9 @@ void interrupt_handler(struct exception_frame *frame)
 {
   if (frame->vector == APIC_TIMER_VECTOR) {
     apic_end_interrupt();
+    if ((frame->cs & SELECTOR_RPL_MASK) == SELECTOR_RPL_USER) {
+      user_preempt();
+    }
     return;
   }
   if (frame->vector == APIC_SPURIOUS_VECTOR) {
@@ -96,5 +100,11 @@ void interrupt_handler(struct exception_frame *frame)
     report_page_fault(frame->error, fault_address);
   }
 
-  panic("fatal exception");
+  if ((frame->cs & SELECTOR_RPL_MASK) == SELECTOR_RPL_USER &&
+      frame->vector < EXCEPTION_VECTOR_COUNT &&
+      frame->vector != EXCEPTION_NMI && frame->vector != EXCEPTION_DOUBLE_FAULT &&
+      frame->vector != EXCEPTION_MACHINE_CHECK) {
+    user_fault();
+  }
+  panic("fatal kernel exception");
 }

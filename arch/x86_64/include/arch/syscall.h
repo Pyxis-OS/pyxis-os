@@ -15,12 +15,12 @@
 #define RFLAGS_ALIGNMENT_CHECK (1 << 18)
 
 /* Entry must not inherit user tracing, string direction, or alignment checks.
- * Interrupts stay disabled until the kernel has interrupt handling support. */
+ * Syscalls stay non-preemptible; return to userspace explicitly enables IF. */
 #define SYSCALL_ENTRY_FLAGS_MASK \
   (RFLAGS_TRAP | RFLAGS_INTERRUPT_ENABLE | RFLAGS_DIRECTION | \
    RFLAGS_NESTED_TASK | RFLAGS_ALIGNMENT_CHECK)
 
-/* Preserve arithmetic flags and user DF, but never restore IF or IOPL. */
+/* Preserve arithmetic flags and user DF. Return forces IF=1 and IOPL=0. */
 #define SYSCALL_RETURN_FLAGS_MASK \
   (RFLAGS_CARRY | RFLAGS_PARITY | RFLAGS_AUX_CARRY | RFLAGS_ZERO | \
    RFLAGS_SIGN | RFLAGS_DIRECTION | RFLAGS_OVERFLOW)
