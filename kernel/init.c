@@ -1,4 +1,5 @@
 #include <arch/cpu.h>
+#include <arch/smp.h>
 #include <kernel/init.h>
 #include <kernel/boot.h>
 #include <kernel/image.h>
@@ -62,7 +63,10 @@ static void queue_initial_image(const struct boot_info *boot)
   klog("userspace: P1F image=%zu bytes entry=%p stack=%p\n",
        boot->initial_image.size, (void *)entry,
        (void *)(INITIAL_STACK_BASE + INITIAL_STACK_SIZE));
-  status = user_task_create(space, entry, INITIAL_STACK_BASE + INITIAL_STACK_SIZE);
+  size_t cpu_index = arch_cpu_count() > 1 ? 1 : 0;
+  klog("userspace: initial task pinned to CPU %zu\n", cpu_index);
+  status = user_task_create_on(cpu_index, space, entry,
+                               INITIAL_STACK_BASE + INITIAL_STACK_SIZE);
   if (status != MM_OK) {
     KASSERT(vm_space_destroy(space) == MM_OK);
     panic("cannot create initial user task (error %u)", (unsigned)status);
@@ -78,6 +82,7 @@ static void queue_initial_image(const struct boot_info *boot)
 
   boot_start_cpus();
   tty_init(&boot->framebuffer, &aardvark_scheme, &bizcat);
+  user_init();
 
   struct pmm_stats memory = pmm_get_stats();
   klog("PMM: total=%zu free=%zu allocated=%zu frames, metadata=%zu pages\n",

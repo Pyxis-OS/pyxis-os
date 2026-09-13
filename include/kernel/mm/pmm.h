@@ -19,7 +19,8 @@ struct pmm_stats {
   size_t metadata_pages;
 };
 
-/* Plan reserves space conceptually; arch supplies a bootstrap-accessible pointer. */
+/* All PMM calls are BSP-only, IF=0, outside interrupt/fault handlers.
+ * Plan reserves space conceptually; arch supplies a bootstrap-accessible pointer. */
 struct pmm_bootstrap pmm_plan(const struct boot_info *boot);
 void pmm_init(const struct boot_info *boot, struct pmm_bootstrap plan,
               void *metadata);

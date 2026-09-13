@@ -385,6 +385,7 @@ void paging_init(struct boot_info *boot)
 
 static void *map_scratch(phys_addr_t physical, unsigned slot)
 {
+  KASSERT(cpu_current() == cpu_bsp());
   KASSERT(active && physical_valid(physical) && slot < SCRATCH_SLOT_COUNT &&
           !scratch_busy[slot]);
 
@@ -665,7 +666,11 @@ enum mm_result arch_space_activate(struct arch_address_space *space)
     return MM_INVALID;
   }
 
-  KASSERT(!scratch_busy[SCRATCH_TABLE] && !scratch_busy[SCRATCH_DATA]);
+  /* Only the BSP uses the shared scratch slots. AP activation must neither
+   * inspect that mutable bookkeeping nor wait for an unrelated BSP walk. */
+  if (cpu_current() == cpu_bsp()) {
+    KASSERT(!scratch_busy[SCRATCH_TABLE] && !scratch_busy[SCRATCH_DATA]);
+  }
   /* Kernel mappings, including this stack, stay identical across the switch.
    * PCID and global translations remain disabled, so CR3 flushes the old TLB. */
   write_cr3(space->root);

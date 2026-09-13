@@ -20,6 +20,8 @@ size_t arch_user_vm_size(void);
 struct arch_address_space *arch_kernel_space(void);
 /* Caller supplies zero-initialized storage that stays at a stable address. */
 enum mm_result arch_space_create(struct arch_address_space *space);
+/* Reports activation on this CPU only. Exclusive ownership is required to
+ * mutate/destroy a private space; callers must first retire it on its CPU. */
 bool arch_space_active(const struct arch_address_space *space);
 enum mm_result arch_space_activate(struct arch_address_space *space);
 /* Rejects the kernel/active space. Frees private tables, never leaf frames;
@@ -27,7 +29,10 @@ enum mm_result arch_space_activate(struct arch_address_space *space);
 enum mm_result arch_space_destroy(struct arch_address_space *space);
 
 /* Kernel mutations are limited to its shared allocation area; other spaces
- * permit lower-half mutations. Calls are BSP-only, IF=0; APs remain idle.
+ * permit lower-half mutations. Calls are BSP-only, IF=0. APs only activate
+ * task spaces and must not access the shared scratch mappings. Kernel ranges
+ * in use by another CPU must not be unmapped, remapped or protected. There
+ * are no remote TLB shootdowns; task ownership transfers flush CR3 locally.
  * Callers manage virtual reservations; supplied data frames remain caller-owned.
  * Empty tables are retained for reuse until their space is destroyed;
  * failure may retain zeroed tables but never installs a partial data mapping. */

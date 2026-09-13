@@ -24,6 +24,10 @@ struct ap_boot *arch_ap_prepare(uint32_t lapic_id);
 void arch_ap_wait(void);
 void arch_smp_finish(void);
 
+/* Stable dense indices after boot_start_cpus(): BSP is always index zero. */
+size_t arch_cpu_count(void);
+size_t arch_cpu_index(void);
+
 [[noreturn]] void arch_ap_entry(struct ap_boot *boot);
 [[noreturn]] void arch_ap_main(struct cpu_local *cpu);
 #endif
