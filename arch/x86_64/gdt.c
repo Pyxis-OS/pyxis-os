@@ -1,5 +1,6 @@
 #include <arch/descriptors.h>
 #include <arch/layout.h>
+#include <arch/user.h>
 #include <stddef.h>
 
 #define GDT_PRESENT (UINT64_C(1) << 47)
@@ -29,13 +30,14 @@ static struct tss64 tss;
 static uint64_t gdt[GDT_TSS_INDEX + 2] __attribute__((aligned(16)));
 static char double_fault_stack[DOUBLE_FAULT_STACK_BYTES]
   __attribute__((aligned(ARCH_PAGE_SIZE)));
-extern char bootstrap_stack_top[];
 
 static void prepare_tss(void)
 {
   _Static_assert(sizeof(struct tss64) == 104, "TSS hardware layout");
 
-  tss.rsp[0] = (uintptr_t)bootstrap_stack_top;
+  /* A user exception must not overwrite the kernel call waiting for exit.
+   * SYSCALL switches explicitly; privilege-changing IDT entry uses RSP0. */
+  tss.rsp[0] = (uintptr_t)user_entry_stack_top;
 
   /* IDT IST values are one-based; zero means no IST stack switch. */
   tss.ist[DOUBLE_FAULT_IST - 1] =
