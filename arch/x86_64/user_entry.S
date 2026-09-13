@@ -1,36 +1,19 @@
+#include <arch/descriptors.h>
 #include <arch/syscall.h>
 
-.set STACK_WORD_BYTES, 8
-
 .section .text
-.global arch_run_user
-.type arch_run_user, @function
-arch_run_user:
-  /* Preserve the SysV callee-saved registers on the suspended kernel stack.
-   * The original CALL already placed our return address above these words. */
+.global arch_context_switch
+.type arch_context_switch, @function
+arch_context_switch:
+  /* Pair with switch_frame. User registers are already on the IRQ stack. */
   push %rbx
   push %rbp
   push %r12
   push %r13
   push %r14
   push %r15
-  mov %rsp, saved_kernel_rsp(%rip)
-
-  mov %rdi, %rcx
-  mov $RFLAGS_FIXED, %r11
+  mov %rsp, (%rdi)
   mov %rsi, %rsp
-  sysretq
-.size arch_run_user, . - arch_run_user
-
-.global arch_return_from_user
-.type arch_return_from_user, @function
-arch_return_from_user:
-  /* Exit never unwinds the syscall frame or returns to user code. Shared
-   * kernel mappings let us restore this stack before the caller changes CR3. */
-  mov %edi, %eax
-  mov saved_kernel_rsp(%rip), %rsp
-  movq $0, saved_kernel_rsp(%rip)
-
   pop %r15
   pop %r14
   pop %r13
@@ -38,13 +21,34 @@ arch_return_from_user:
   pop %rbp
   pop %rbx
   ret
-.size arch_return_from_user, . - arch_return_from_user
+.size arch_context_switch, . - arch_context_switch
 
-.section .bss
-.balign STACK_WORD_BYTES
-.type saved_kernel_rsp, @object
-saved_kernel_rsp:
-  .skip STACK_WORD_BYTES
-.size saved_kernel_rsp, . - saved_kernel_rsp
+.global arch_enter_user
+.type arch_enter_user, @function
+arch_enter_user:
+  pushq $GDT_USER_DATA_SELECTOR
+  push %rsi
+  pushq $(RFLAGS_FIXED | RFLAGS_INTERRUPT_ENABLE)
+  pushq $GDT_USER_CODE_SELECTOR
+  push %rdi
+
+  /* No kernel register contents escape into a fresh user context. */
+  xor %eax, %eax
+  xor %ebx, %ebx
+  xor %ecx, %ecx
+  xor %edx, %edx
+  xor %ebp, %ebp
+  xor %esi, %esi
+  xor %edi, %edi
+  xor %r8d, %r8d
+  xor %r9d, %r9d
+  xor %r10d, %r10d
+  xor %r11d, %r11d
+  xor %r12d, %r12d
+  xor %r13d, %r13d
+  xor %r14d, %r14d
+  xor %r15d, %r15d
+  iretq
+.size arch_enter_user, . - arch_enter_user
 
 .section .note.GNU-stack,"",@progbits

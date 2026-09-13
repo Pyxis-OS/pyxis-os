@@ -23,8 +23,8 @@ GTK by default; `QEMU_DISPLAY=none` keeps a run headless.
 Boot installs serial and a kernel stack, copies boot information, installs
 GDT/IDT/TSS, initializes the bitmap PMM, and switches to kernel-owned paging.
 Generic initialization then creates the VM allocator and TLSF heap, reports
-memory accounting, draws a framebuffer pattern, runs the initial user image,
-and halts after its exit. There is no scheduler or shell.
+memory accounting, initializes framebuffer text output, and schedules the initial
+user image. A local APIC timer preempts userspace; the CPU idles after task exit.
 
 Bootstrap limits: 256 memory regions, usable RAM below 64 GiB, 256 kernel VM range
 records and 16 KiB TLSF control storage. Capacity failures are
@@ -48,6 +48,7 @@ unmap never frees frames. VM errors use `mm_result`; invalid PMM frees panic.
 Empty private page tables are reclaimed when their space is destroyed. Interface
 headers document the full ownership contracts.
 
-Maskable interrupts stay disabled; allocators run on one CPU and never in fault
-handlers. BIOS, physical hardware, concurrency and bootloader-memory reclamation
-are outside this milestone.
+Kernel execution stays non-preemptible; only userspace and idle enable maskable
+interrupts. Allocators run on one CPU, outside interrupt/fault handlers. Scheduling
+uses xAPIC and PIT calibration on QEMU; SMP, kernel threads, AVX, physical hardware
+and bootloader-memory reclamation remain unsupported. See `docs/userspace.md`.

@@ -43,7 +43,7 @@ static enum image_result load_initial_image(const struct boot_module *module,
   return result;
 }
 
-static void run_initial_image(const struct boot_info *boot)
+static void queue_initial_image(const struct boot_info *boot)
 {
   struct vm_space *space;
   uintptr_t entry;
@@ -62,9 +62,11 @@ static void run_initial_image(const struct boot_info *boot)
   klog("userspace: P1F image=%zu bytes entry=%p stack=%p\n",
        boot->initial_image.size, (void *)entry,
        (void *)(INITIAL_STACK_BASE + INITIAL_STACK_SIZE));
-  int exit_status = user_run(space, entry, INITIAL_STACK_BASE + INITIAL_STACK_SIZE);
-  KASSERT(vm_space_destroy(space) == MM_OK);
-  klog("userspace: exited with status %d; address space released\n", exit_status);
+  status = user_task_create(space, entry, INITIAL_STACK_BASE + INITIAL_STACK_SIZE);
+  if (status != MM_OK) {
+    KASSERT(vm_space_destroy(space) == MM_OK);
+    panic("cannot create initial user task (error %u)", (unsigned)status);
+  }
 }
 
 [[noreturn]] void kernel_init(const struct boot_info *boot)
@@ -89,7 +91,7 @@ static void run_initial_image(const struct boot_info *boot)
   klog("heap: TLSF pools=%zu bytes=%zu, alignment=16, live allocations=%zu\n",
        heap.pools, heap.pool_bytes, heap.live_allocations);
 
-  run_initial_image(boot);
-  klog("Caelum ready: kernel initialization complete, halting\n");
-  cpu_halt();
+  queue_initial_image(boot);
+  klog("Caelum ready: starting preemptive userspace\n");
+  user_schedule();
 }

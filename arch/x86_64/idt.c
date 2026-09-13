@@ -1,7 +1,9 @@
+#include <arch/apic.h>
 #include <arch/cpu.h>
 #include <arch/descriptors.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
+#include <kernel/user.h>
 #include <stddef.h>
 
 #define IDT_GATE_PRESENT (1u << 7)
@@ -63,6 +65,22 @@ static void report_page_fault(uint64_t error, uint64_t address)
        (unsigned)((error & PAGE_FAULT_SHADOW_STACK) != 0));
 }
 
+void interrupt_handler(struct exception_frame *frame)
+{
+  if (frame->vector == APIC_TIMER_VECTOR) {
+    apic_end_interrupt();
+    if ((frame->cs & SELECTOR_RPL_MASK) == SELECTOR_RPL_USER) {
+      user_preempt();
+    }
+    return;
+  }
+  if (frame->vector == APIC_SPURIOUS_VECTOR) {
+    /* A spurious vector has no in-service bit, so it must not receive EOI. */
+    return;
+  }
+  exception_handler(frame);
+}
+
 [[noreturn]] void exception_handler(const struct exception_frame *frame)
 {
   uint64_t fault_address = read_cr2();
@@ -82,5 +100,11 @@ static void report_page_fault(uint64_t error, uint64_t address)
     report_page_fault(frame->error, fault_address);
   }
 
-  panic("fatal exception");
+  if ((frame->cs & SELECTOR_RPL_MASK) == SELECTOR_RPL_USER &&
+      frame->vector < EXCEPTION_VECTOR_COUNT &&
+      frame->vector != EXCEPTION_NMI && frame->vector != EXCEPTION_DOUBLE_FAULT &&
+      frame->vector != EXCEPTION_MACHINE_CHECK) {
+    user_fault();
+  }
+  panic("fatal kernel exception");
 }

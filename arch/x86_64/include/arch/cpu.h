@@ -55,6 +55,13 @@ static inline uint8_t inb(uint16_t port)
   }
 }
 
+/* STI's interrupt shadow makes enabling interrupts and sleeping atomic.
+ * Return to the scheduler with IF=0 after the interrupt handler resumes us. */
+static inline void cpu_wait_interrupt(void)
+{
+  __asm__ volatile("sti; hlt; cli" : : : "memory");
+}
+
 static inline uint64_t read_cr0(void)
 {
   uint64_t value;

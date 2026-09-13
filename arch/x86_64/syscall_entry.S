@@ -3,7 +3,6 @@
 
 .set STACK_ALIGNMENT, 16
 .set STACK_WORD_BYTES, 8
-.set USER_ENTRY_STACK_BYTES, 16 * 1024
 .set USER_ADDRESS_SHIFT, VIRTUAL_ADDRESS_BITS - 1
 
 .section .text
@@ -14,7 +13,7 @@ syscall_entry:
    * Save it without a push or a scratch GPR. IF is already masked by FMASK;
    * one CPU and non-reentrant entry make this private slot sufficient. */
   mov %rsp, saved_user_rsp(%rip)
-  lea user_entry_stack_top(%rip), %rsp
+  mov syscall_stack_top(%rip), %rsp
 
   pushq saved_user_rsp(%rip)
   push %r11
@@ -71,33 +70,19 @@ syscall_entry:
 
   pop %r11
   and $SYSCALL_RETURN_FLAGS_MASK, %r11
-  or $RFLAGS_FIXED, %r11
+  or $(RFLAGS_FIXED | RFLAGS_INTERRUPT_ENABLE), %r11
   /* No stack access after this pop; execution resumes in the user space. */
   pop %rsp
   sysretq
 
 .Lbad_return:
   /* The two remaining words leave RSP aligned for this fatal C call. */
-  mov %rcx, %rsi
-  mov STACK_WORD_BYTES(%rsp), %rdx
-  lea bad_return_message(%rip), %rdi
-  xor %eax, %eax
-  call panic
+  mov %rcx, %rdi
+  mov STACK_WORD_BYTES(%rsp), %rsi
+  call arch_bad_user_return
 .size syscall_entry, . - syscall_entry
 
-.section .rodata
-bad_return_message:
-  .asciz "invalid syscall return rip=0x%lx rsp=0x%lx"
-
 .section .bss
-.balign STACK_ALIGNMENT
-.type user_entry_stack, @object
-user_entry_stack:
-  .skip USER_ENTRY_STACK_BYTES
-.global user_entry_stack_top
-user_entry_stack_top:
-.size user_entry_stack, . - user_entry_stack
-
 .balign STACK_WORD_BYTES
 .type saved_user_rsp, @object
 saved_user_rsp:
