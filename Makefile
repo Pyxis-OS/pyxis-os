@@ -19,8 +19,14 @@ C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/mm/*.c
 ASM_SOURCES := $(wildcard arch/x86_64/*.S)
 OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM_SOURCES))
 
-.PHONY: all image run debug clean check-toolchain
+.PHONY: all tools userspace image run debug clean check-toolchain
 all: build/caelum.elf
+
+tools:
+	$(MAKE) -C tools
+
+userspace:
+	$(MAKE) -C userspace
 
 check-toolchain:
 	@command -v $(CC) >/dev/null 2>&1 || { \
