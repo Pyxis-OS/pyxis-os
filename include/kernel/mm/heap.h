@@ -9,7 +9,7 @@ struct heap_stats {
 bool heap_init(void);
 /* At least 16-byte alignment. Zero size, oversized requests and exhaustion
  * return NULL. kfree(NULL) is harmless; other pointers must be live kmalloc
- * results. Pools stay VM-owned until shutdown. Single CPU, IF=0, no fault use. */
+ * results. Pools stay VM-owned until shutdown. BSP-only, IF=0, no fault use. */
 void *kmalloc(size_t bytes);
 void kfree(void *pointer);
 struct heap_stats heap_get_stats(void);

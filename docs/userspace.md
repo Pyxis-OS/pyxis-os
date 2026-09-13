@@ -71,6 +71,8 @@ Each task preserves x87/SSE state eagerly with FXSAVE64/FXRSTOR64, along with
 segment selectors and FS/GS bases. Fresh tasks receive empty x87 state, zeroed
 XMM registers and the default floating-point controls. AVX/XSAVE and user
 FS/GS-base instructions are disabled. Kernel builds continue to prohibit FP/SIMD.
+Kernel GS identifies the current CPU; SWAPGS separates it from the saved user
+GS base on entry and return.
 
 Exit abandons the current kernel-entry stack and resumes the scheduler. Only
 after returning to its own stack and activating the kernel space does the
@@ -85,4 +87,6 @@ The normal image still runs `hello`. Expected output includes its greeting,
 `userspace: exited with status 0; address space released`, then
 `userspace: no runnable tasks, idle`. With no ready task the scheduler waits
 using STI/HLT and returns to IF=0 after each interrupt. There are no kernel
-threads, blocking syscalls, priorities, process relationships or SMP support.
+threads, blocking syscalls, priorities or process relationships. Userspace
+scheduling remains BSP-only; additional CPUs are brought online and idle as
+described in [smp.md](smp.md).

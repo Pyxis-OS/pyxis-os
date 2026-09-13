@@ -27,7 +27,7 @@ enum mm_result arch_space_activate(struct arch_address_space *space);
 enum mm_result arch_space_destroy(struct arch_address_space *space);
 
 /* Kernel mutations are limited to its shared allocation area; other spaces
- * permit lower-half mutations. Calls are serialized by the single CPU, IF=0.
+ * permit lower-half mutations. Calls are BSP-only, IF=0; APs remain idle.
  * Callers manage virtual reservations; supplied data frames remain caller-owned.
  * Empty tables are retained for reuse until their space is destroyed;
  * failure may retain zeroed tables but never installs a partial data mapping. */
