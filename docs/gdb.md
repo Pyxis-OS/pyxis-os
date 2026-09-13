@@ -25,6 +25,9 @@ initialization, so their functions are ready to use.
 
 Keep interrupts disabled. Do not call allocators while stopped inside an
 allocator mutation or a fault handler; their normal invariants still apply.
+After scheduling starts, use a breakpoint in scheduler code with the kernel
+space active and IF=0 for these calls. An interrupt handler or a stopped user
+context is not a suitable place to invoke allocator or task-creation functions.
 
 ## Call functions and keep results
 

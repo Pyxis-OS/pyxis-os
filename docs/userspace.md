@@ -8,7 +8,7 @@ only `hello`. Pass `CROSS_COMPILE` as for the kernel. Outputs live under
 Each program has its own directory and an explicit target in
 `userspace/Makefile`. The initial program starts at a small assembly `_start`
 which calls `int main(void)`. The kernel supplies a 16-byte-aligned writable
-user stack with interrupts disabled; the call places a return address on that
+user stack with interrupts enabled; the call places a return address on that
 stack as required by the C ABI. Returning from `main` passes its result to
 `exit`, syscall 1. The status is a signed 32-bit value, carried in the low
 32 bits of RDI. There is no libc or argument vector.
@@ -47,21 +47,42 @@ temporary kernel mapping, and applies final segment permissions. It leaves the
 active address space unchanged and destroys partial allocations on failure.
 
 Kernel initialization releases the module's temporary mapping, allocates a
-one-page user stack at `0x800000`, and calls `user_run`. This activates the
-loaded space and enters its entry address with SYSRETQ. The architecture helper
-preserves the kernel caller's stack and callee-saved registers. TSS.RSP0 and
-SYSCALL use a separate entry stack, leaving that suspended call intact.
+one-page user stack at `0x800000`, and calls `user_task_create`. Success transfers
+ownership of the loaded space to the task and places it on the ready queue.
+Failure leaves the space owned by the caller. Each task owns one private space
+and a 16 KiB kernel stack; there is no shared-space ownership scheme yet.
+The kernel can queue additional loaded images through the same interface before
+entering `user_schedule`. There is no public task-creation syscall.
 
-Exit resumes the kernel call instead of returning through SYSRETQ. `user_run`
-switches back to the kernel address space and returns the status. Its caller
-then destroys the user space, releasing the image and stack frames, private
-page tables and VM metadata. The loader's original module frames remain
-boot-reserved; they are not returned to the PMM. The static kernel entry stack
-is reused, not freed.
+The scheduler uses the original kernel stack, separate from every task stack.
+It selects tasks round-robin and activates each task's address space, TSS.RSP0
+and syscall-entry stack. First entry uses IRETQ with zeroed general registers;
+subsequent timer returns restore the interrupted registers and instruction.
+The local APIC timer runs periodically at approximately 100 Hz, calibrated
+against PIT channel 2 without enabling the speaker or legacy PIC interrupts.
 
-Expected output is the greeting, `userspace: exited with status 0; address space
-released`, and the normal kernel initialization halt message. There is one
-active run at a time, with interrupts disabled and no scheduler. Exit has no
-cleanup callbacks or stream flushing; the caller owns the loaded space until
-it is destroyed. Exceptions remain fatal rather than terminating only the
-user program.
+Userspace runs with IF=1. Interrupt gates and SYSCALL clear IF on kernel entry;
+the kernel, including allocators and logging, remains non-preemptible. A long
+syscall therefore delays preemption. Timer handling acknowledges the interrupt
+before switching contexts and does not allocate, reclaim memory or print.
+Syscalls still return through SYSRETQ, explicitly enabling interrupts again.
+
+Each task preserves x87/SSE state eagerly with FXSAVE64/FXRSTOR64, along with
+segment selectors and FS/GS bases. Fresh tasks receive empty x87 state, zeroed
+XMM registers and the default floating-point controls. AVX/XSAVE and user
+FS/GS-base instructions are disabled. Kernel builds continue to prohibit FP/SIMD.
+
+Exit abandons the current kernel-entry stack and resumes the scheduler. Only
+after returning to its own stack and activating the kernel space does the
+scheduler free the task's image, user/kernel stacks, private page tables and VM
+metadata. Ordinary fatal user exceptions print diagnostics and terminate that
+task; kernel exceptions, NMI, double fault and machine check still panic. An
+invalid syscall return address also terminates the current task. No cleanup
+callbacks or stream flushing run on exit. Original boot-module frames remain
+reserved and are not returned to the PMM.
+
+The normal image still runs `hello`. Expected output includes its greeting,
+`userspace: exited with status 0; address space released`, then
+`userspace: no runnable tasks, idle`. With no ready task the scheduler waits
+using STI/HLT and returns to IF=0 after each interrupt. There are no kernel
+threads, blocking syscalls, priorities, process relationships or SMP support.
