@@ -9,10 +9,11 @@ Each program has its own directory and an explicit target in
 `userspace/Makefile`. The initial program starts at a small assembly `_start`
 which calls `int main(void)`. The kernel supplies a 16-byte-aligned writable
 user stack with interrupts disabled; the call places a return address on that
-stack as required by the C ABI. There is no libc, argument vector or exit
-syscall. Returning from `main` reaches HLT and the expected ring-3 #GP(0).
+stack as required by the C ABI. Returning from `main` passes its result to
+`exit`, syscall 1. The status is a signed 32-bit value, carried in the low
+32 bits of RDI. There is no libc or argument vector.
 
-`hello/main.c` prints `Hello from C!` using the unbuffered helpers in
+`hello/main.c` prints `Hello from C!` and a newline using the unbuffered helpers in
 `userspace/lib/io.c`. `putchar` invokes syscall 0 for one byte, and `print`
 walks a NUL-terminated string without adding a newline. The small x86_64
 `syscall1` wrapper declares RAX as the number/result, RDI as the argument,
@@ -46,9 +47,21 @@ temporary kernel mapping, and applies final segment permissions. It leaves the
 active address space unchanged and destroys partial allocations on failure.
 
 Kernel initialization releases the module's temporary mapping, allocates a
-one-page user stack at `0x800000`, activates the loaded space, and enters its
-entry address with SYSRETQ. Module frames remain boot-reserved; they are not
-returned to the PMM. The current kernel syscall logs each character separately:
-expect one `syscall0:` line per character of the greeting, followed by the
-deliberate HLT exception after `main` returns. There is no scheduler or process
-lifetime management.
+one-page user stack at `0x800000`, and calls `user_run`. This activates the
+loaded space and enters its entry address with SYSRETQ. The architecture helper
+preserves the kernel caller's stack and callee-saved registers. TSS.RSP0 and
+SYSCALL use a separate entry stack, leaving that suspended call intact.
+
+Exit resumes the kernel call instead of returning through SYSRETQ. `user_run`
+switches back to the kernel address space and returns the status. Its caller
+then destroys the user space, releasing the image and stack frames, private
+page tables and VM metadata. The loader's original module frames remain
+boot-reserved; they are not returned to the PMM. The static kernel entry stack
+is reused, not freed.
+
+Expected output is the greeting, `userspace: exited with status 0; address space
+released`, and the normal kernel initialization halt message. There is one
+active run at a time, with interrupts disabled and no scheduler. Exit has no
+cleanup callbacks or stream flushing; the caller owns the loaded space until
+it is destroyed. Exceptions remain fatal rather than terminating only the
+user program.

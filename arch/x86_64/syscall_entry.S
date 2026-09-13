@@ -3,7 +3,7 @@
 
 .set STACK_ALIGNMENT, 16
 .set STACK_WORD_BYTES, 8
-.set SYSCALL_STACK_BYTES, 16 * 1024
+.set USER_ENTRY_STACK_BYTES, 16 * 1024
 .set USER_ADDRESS_SHIFT, VIRTUAL_ADDRESS_BITS - 1
 
 .section .text
@@ -14,7 +14,7 @@ syscall_entry:
    * Save it without a push or a scratch GPR. IF is already masked by FMASK;
    * one CPU and non-reentrant entry make this private slot sufficient. */
   mov %rsp, saved_user_rsp(%rip)
-  lea syscall_stack_top(%rip), %rsp
+  lea user_entry_stack_top(%rip), %rsp
 
   pushq saved_user_rsp(%rip)
   push %r11
@@ -91,11 +91,12 @@ bad_return_message:
 
 .section .bss
 .balign STACK_ALIGNMENT
-.type syscall_stack, @object
-syscall_stack:
-  .skip SYSCALL_STACK_BYTES
-syscall_stack_top:
-.size syscall_stack, . - syscall_stack
+.type user_entry_stack, @object
+user_entry_stack:
+  .skip USER_ENTRY_STACK_BYTES
+.global user_entry_stack_top
+user_entry_stack_top:
+.size user_entry_stack, . - user_entry_stack
 
 .balign STACK_WORD_BYTES
 .type saved_user_rsp, @object
