@@ -1,4 +1,4 @@
-#include <arch/syscall.h>
+#include <arch/cpu.h>
 #include <kernel/init.h>
 #include <kernel/boot.h>
 #include <kernel/image.h>
@@ -7,6 +7,7 @@
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/user.h>
 
 #define INITIAL_STACK_BASE UINT64_C(0x800000)
 #define INITIAL_STACK_SIZE PAGE_SIZE
@@ -40,7 +41,7 @@ static enum image_result load_initial_image(const struct boot_module *module,
   return result;
 }
 
-[[noreturn]] static void start_initial_image(const struct boot_info *boot)
+static void run_initial_image(const struct boot_info *boot)
 {
   struct vm_space *space;
   uintptr_t entry;
@@ -59,21 +60,9 @@ static enum image_result load_initial_image(const struct boot_module *module,
   klog("userspace: P1F image=%zu bytes entry=%p stack=%p\n",
        boot->initial_image.size, (void *)entry,
        (void *)(INITIAL_STACK_BASE + INITIAL_STACK_SIZE));
-  KASSERT(vm_space_activate(space) == MM_OK);
-
-  /* This initial demonstration enters _start directly, without a call frame
-   * or runtime. STAR supplies the ring-3 selectors; IF stays clear. */
-  __asm__ volatile(
-    "mov %[flags], %%r11\n"
-    "mov %[stack], %%rsp\n"
-    "sysretq\n"
-    :
-    : "c" (entry),
-    [stack] "r"(INITIAL_STACK_BASE + INITIAL_STACK_SIZE),
-    [flags] "i"(RFLAGS_FIXED)
-    : "r11", "memory");
-
-  __builtin_unreachable();
+  int exit_status = user_run(space, entry, INITIAL_STACK_BASE + INITIAL_STACK_SIZE);
+  KASSERT(vm_space_destroy(space) == MM_OK);
+  klog("userspace: exited with status %d; address space released\n", exit_status);
 }
 
 [[noreturn]] void kernel_init(const struct boot_info *boot)
@@ -96,5 +85,7 @@ static enum image_result load_initial_image(const struct boot_module *module,
   klog("heap: TLSF pools=%zu bytes=%zu, alignment=16, live allocations=%zu\n",
        heap.pools, heap.pool_bytes, heap.live_allocations);
 
-  start_initial_image(boot);
+  run_initial_image(boot);
+  klog("Caelum ready: kernel initialization complete, halting\n");
+  cpu_halt();
 }

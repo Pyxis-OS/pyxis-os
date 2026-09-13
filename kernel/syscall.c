@@ -1,4 +1,5 @@
 #include <kernel/syscall.h>
+#include <kernel/user.h>
 
 #include "../include/kernel/log.h"
 
@@ -16,6 +17,8 @@ int64_t syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
   case 0:
     klog("%c", (char)arg1);
     return 0;
+  case SYSCALL_EXIT:
+    user_exit((int32_t)(uint32_t)arg1);
   default:
     return -1;
   }
