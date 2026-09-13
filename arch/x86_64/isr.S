@@ -1,6 +1,7 @@
 #include <arch/descriptors.h>
 
 .set STACK_ALIGNMENT, 16
+.set INTERRUPT_CS_OFFSET, 24
 
 .section .text
 .altmacro
@@ -31,6 +32,11 @@ isr_\number:
 .endr
 
 isr_common:
+  /* Kernel entries already have CPU-local GS; user entries still have user GS. */
+  testb $SELECTOR_RPL_MASK, INTERRUPT_CS_OFFSET(%rsp)
+  jz .Lkernel_entry
+  swapgs
+.Lkernel_entry:
   /* C assumes forward string operations, regardless of the interrupted DF. */
   cld
   /* Keep this order paired with struct exception_frame. */
@@ -71,6 +77,10 @@ isr_common:
   pop %rcx
   pop %rbx
   pop %rax
+  testb $SELECTOR_RPL_MASK, INTERRUPT_CS_OFFSET(%rsp)
+  jz .Lkernel_return
+  swapgs
+.Lkernel_return:
   add $16, %rsp /* Vector and error code precede the CPU's IRET frame. */
   iretq
 

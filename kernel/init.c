@@ -76,6 +76,7 @@ static void queue_initial_image(const struct boot_info *boot)
     panic("cannot initialize the TLSF heap");
   }
 
+  boot_start_cpus();
   tty_init(&boot->framebuffer, &aardvark_scheme, &bizcat);
 
   struct pmm_stats memory = pmm_get_stats();

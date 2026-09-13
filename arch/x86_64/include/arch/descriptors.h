@@ -47,9 +47,26 @@ struct descriptor_table_pointer {
   uint64_t base;
 } __attribute__((packed));
 
-void gdt_init(void);
-void gdt_set_kernel_stack(uintptr_t stack_top);
+struct tss64 {
+  uint32_t reserved0;
+  uint64_t rsp[3];
+  uint64_t reserved1;
+  uint64_t ist[7];
+  uint64_t reserved2;
+  uint16_t reserved3;
+  uint16_t iomap_base;
+} __attribute__((packed));
+
+struct cpu_descriptors {
+  struct tss64 tss;
+  /* A 64-bit TSS descriptor occupies two consecutive GDT entries. */
+  uint64_t gdt[GDT_TSS_INDEX + 2];
+};
+
+void gdt_init(struct cpu_descriptors *tables, uintptr_t double_fault_stack_top);
+void gdt_set_kernel_stack(struct cpu_descriptors *tables, uintptr_t stack_top);
 void idt_init(void);
+void idt_load(void);
 
 /* Order matches isr_common's pushes, followed by the vector/error pair and
  * the long-mode CPU frame. RSP and SS are saved even without a ring change. */

@@ -26,9 +26,10 @@
    RFLAGS_SIGN | RFLAGS_DIRECTION | RFLAGS_OVERFLOW)
 
 #ifndef __ASSEMBLER__
+void arch_syscall_init(void);
 /* User ABI: RAX = number; RDI, RSI, RDX, R10, R8, R9 = arguments.
  * RAX returns the result. RCX/R11 are clobbered; other GPRs are preserved.
- * Single CPU, non-reentrant; kernel code must not execute SYSCALL. */
+ * Workloads remain BSP-only and non-reentrant; kernel code must not execute SYSCALL. */
 void syscall_entry(void);
 #endif
 

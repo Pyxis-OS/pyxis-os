@@ -1,5 +1,6 @@
 #include <arch/apic.h>
 #include <arch/cpu.h>
+#include <arch/cpu_local.h>
 #include <arch/layout.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
@@ -10,6 +11,8 @@
 #define APIC_BASE_X2APIC (UINT64_C(1) << 10)
 #define APIC_BASE_ADDRESS_MASK UINT64_C(0x000ffffffffff000)
 
+#define APIC_ID 0x020
+#define APIC_ID_SHIFT 24
 #define APIC_VERSION 0x030
 #define APIC_TASK_PRIORITY 0x080
 #define APIC_EOI 0x0b0
@@ -48,8 +51,6 @@
 #define TIMER_FREQUENCY 100u
 #define PIT_CALIBRATION_COUNT ((PIT_FREQUENCY + TIMER_FREQUENCY - 1) / TIMER_FREQUENCY)
 #define PIT_POLL_LIMIT 10000000u
-
-static uint32_t timer_count;
 
 static uint32_t apic_read(unsigned offset)
 {
@@ -105,8 +106,10 @@ static uint32_t calibrate_timer(void)
 
 void apic_init(void)
 {
-  outb(PIC_MASTER_MASK, PIC_MASK_ALL);
-  outb(PIC_SLAVE_MASK, PIC_MASK_ALL);
+  if (cpu_current() == cpu_bsp()) {
+    outb(PIC_MASTER_MASK, PIC_MASK_ALL);
+    outb(PIC_SLAVE_MASK, PIC_MASK_ALL);
+  }
   write_msr(IA32_APIC_BASE, read_msr(IA32_APIC_BASE) | APIC_BASE_ENABLED);
 
   unsigned max_lvt = (apic_read(APIC_VERSION) >> APIC_MAX_LVT_SHIFT) & APIC_MAX_LVT_MASK;
@@ -127,15 +130,29 @@ void apic_init(void)
   apic_write(APIC_SPURIOUS, APIC_SOFTWARE_ENABLED | APIC_SPURIOUS_VECTOR);
   apic_write(APIC_TIMER_DIVIDE, APIC_DIVIDE_BY_16);
 
-  timer_count = calibrate_timer();
-  klog("x86_64: local APIC timer calibrated, %u counts per ~10 ms\n", timer_count);
+  cpu_current()->timer_count = calibrate_timer();
+  if (cpu_current() == cpu_bsp()) {
+    klog("x86_64: local APIC timer calibrated, %u counts per ~10 ms\n",
+         cpu_current()->timer_count);
+  }
 }
 
 void apic_timer_start(void)
 {
+  uint32_t timer_count = cpu_current()->timer_count;
   KASSERT(timer_count);
   apic_write(APIC_LVT_TIMER, APIC_TIMER_PERIODIC | APIC_TIMER_VECTOR);
   apic_write(APIC_TIMER_INITIAL, timer_count);
+}
+
+uint32_t apic_timer_remaining(void)
+{
+  return apic_read(APIC_TIMER_CURRENT);
+}
+
+uint32_t apic_id(void)
+{
+  return apic_read(APIC_ID) >> APIC_ID_SHIFT;
 }
 
 void apic_end_interrupt(void)

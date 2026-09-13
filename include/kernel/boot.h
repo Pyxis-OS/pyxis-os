@@ -56,4 +56,7 @@ struct boot_info {
   struct boot_region regions[BOOT_MAX_REGIONS];
 };
 
+/* BSP only, after VM/heap setup: finish the bootloader's AP handoff. */
+void boot_start_cpus(void);
+
 #endif

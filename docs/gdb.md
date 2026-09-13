@@ -25,9 +25,10 @@ initialization, so their functions are ready to use.
 
 Keep interrupts disabled. Do not call allocators while stopped inside an
 allocator mutation or a fault handler; their normal invariants still apply.
-After scheduling starts, use a breakpoint in scheduler code with the kernel
+After scheduling starts, use a breakpoint in BSP scheduler code with the kernel
 space active and IF=0 for these calls. An interrupt handler or a stopped user
 context is not a suitable place to invoke allocator or task-creation functions.
+APs currently only idle; do not invoke those functions on them either.
 
 ## Call functions and keep results
 
@@ -85,8 +86,9 @@ one instruction with `si`. If a breakpoint interrupts a debugger-initiated call,
 
 GDB restores saved execution context after an injected call; it does not undo
 memory changes. On the GDB/QEMU setup used here, that restoration included CR3.
-Consequently, calling `vm_space_activate()` changed the kernel's `active_space`
-pointer, but GDB restored the previous CR3 when the call returned.
+Consequently, calling `vm_space_activate()` changed the active-space bookkeeping,
+but GDB restored the previous CR3 when the call returned. That bookkeeping now
+lives in the CPU-local record, reached through GS while in kernel code.
 
 To observe the switch itself, stop immediately after the `mov` to CR3 inside
 `arch_space_activate()` and use `p/x $cr3`. After a successful completed manual
@@ -94,12 +96,13 @@ activation, reconcile CR3 with the kernel's bookkeeping before further calls,
 continuing, or destroying a space:
 
 ```gdb
-set $cr3 = (unsigned long)('arch/x86_64/paging.c'::active_space->root)
+set $cpu = (struct cpu_local *)$gs_base
+set $cr3 = (unsigned long)$cpu->active_space->root
 p/x $cr3
 ```
 
-The filename selects the paging module's static variable. The explicit cast
-avoids the register-assignment type error observed with a plain integer literal.
+These commands require a stopped kernel context with kernel GS active. The
+explicit cast avoids the register-assignment type error observed with a plain integer literal.
 Apply the same reconciliation if you manually activate the kernel space again.
 The allocation example above does not switch spaces and needs no such adjustment.
 

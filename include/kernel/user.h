@@ -9,7 +9,7 @@ struct vm_space;
  * ownership of the inactive space to the task; failure leaves it with the
  * caller. Entry must be executable and the writable user stack top aligned
  * to 16 bytes. One task owns one space for now; no sharing/refcounts.
- * Requires initialized VM/heap, one CPU, IF=0, outside interrupt/fault entry. */
+ * Requires initialized VM/heap, BSP execution, IF=0, outside interrupt/fault entry. */
 enum mm_result user_task_create(struct vm_space *space, uintptr_t entry,
                                 uintptr_t stack_top);
 

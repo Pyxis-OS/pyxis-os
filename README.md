@@ -1,7 +1,7 @@
 # Pyxis OS
 
-Caelum is the freestanding x86_64 kernel of Pyxis OS. Development targets one
-QEMU CPU booted through OVMF/UEFI and the vendored Limine v12.9.0.
+Caelum is the freestanding x86_64 kernel of Pyxis OS. Development targets
+QEMU booted through OVMF/UEFI and the vendored Limine v12.9.0.
 
 Requires GNU Make, an `x86_64-elf-` GCC/binutils toolchain supporting GNU C23,
 QEMU, xorriso, and a matching raw OVMF code/variables pair.
@@ -10,11 +10,12 @@ QEMU, xorriso, and a matching raw OVMF code/variables pair.
 make
 make image
 make run
+make run CPUS=4  # one socket, four cores, no SMT
 make debug  # paused; GDB: file build/caelum.elf, target remote :1234
 make clean
 ```
 
-Override `CROSS_COMPILE`, `QEMU`, `MEMORY` (default `256M`), `ACCEL` (default
+Override `CROSS_COMPILE`, `QEMU`, `CPUS` (default `1`), `MEMORY` (default `256M`), `ACCEL` (default
 `tcg`), `OVMF_CODE` and `OVMF_VARS` on the Make command line. Firmware defaults
 to `/usr/share/OVMF/{OVMF_CODE,OVMF_VARS}.fd`; variables are copied into build
 on each run. Serial uses the terminal; exit QEMU with Ctrl-a x. Graphics use
@@ -22,9 +23,10 @@ GTK by default; `QEMU_DISPLAY=none` keeps a run headless.
 
 Boot installs serial and a kernel stack, copies boot information, installs
 GDT/IDT/TSS, initializes the bitmap PMM, and switches to kernel-owned paging.
-Generic initialization then creates the VM allocator and TLSF heap, reports
-memory accounting, initializes framebuffer text output, and schedules the initial
-user image. A local APIC timer preempts userspace; the CPU idles after task exit.
+Generic initialization creates the VM allocator and TLSF heap, brings APs onto
+owned stacks and paging, initializes framebuffer text output, and schedules the
+initial user image on the BSP. Local APIC timers preempt userspace and wake idle
+CPUs. APs remain idle; see `docs/smp.md` for the startup boundary.
 
 Bootstrap limits: 256 memory regions, usable RAM below 64 GiB, 256 kernel VM range
 records and 16 KiB TLSF control storage. Capacity failures are
@@ -49,6 +51,6 @@ Empty private page tables are reclaimed when their space is destroyed. Interface
 headers document the full ownership contracts.
 
 Kernel execution stays non-preemptible; only userspace and idle enable maskable
-interrupts. Allocators run on one CPU, outside interrupt/fault handlers. Scheduling
-uses xAPIC and PIT calibration on QEMU; SMP, kernel threads, AVX, physical hardware
-and bootloader-memory reclamation remain unsupported. See `docs/userspace.md`.
+interrupts. Allocators and userspace scheduling remain BSP-only, outside interrupt/
+fault handlers. Concurrent workloads, kernel threads, AVX, physical hardware and
+bootloader-memory reclamation remain unsupported. See `docs/userspace.md`.

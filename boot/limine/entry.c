@@ -5,6 +5,7 @@
 #include <kernel/init.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
+#include "mp.h"
 
 #define REQUIRED_BASE_REVISION 6
 #define PAGING_REQUEST_MIN_MAX_REVISION 1
@@ -273,12 +274,14 @@ static void copy_framebuffer(void)
   copy_memory_map();
   copy_initial_image();
   copy_framebuffer();
+  limine_capture_cpus(&boot);
 
   klog("Limine: base revision %u, %zu memory regions, kernel phys=0x%lx virt=%p\n",
        REQUIRED_BASE_REVISION, boot.region_count, boot.kernel_phys,
        (void *)boot.kernel_virt);
 
-  /* Responses and their arrays are never consulted again. */
+  /* MP handoff records are borrowed through temporary mappings until AP
+   * startup completes. Other responses and arrays are never consulted again. */
   arch_init(&boot);
   kernel_init(&boot);
 }

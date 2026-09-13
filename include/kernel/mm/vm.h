@@ -15,7 +15,7 @@ struct vm_stats {
 void vm_init(void);
 struct vm_space *vm_kernel_space(void);
 /* Requires an initialized heap. New spaces share kernel mappings and start
- * with an empty user area. Failure sets *result to NULL. Single CPU, IF=0;
+ * with an empty user area. Failure sets *result to NULL. BSP-only, IF=0;
  * no VM operations or heap allocation from fault handlers. */
 enum mm_result vm_space_create(struct vm_space **result);
 enum mm_result vm_space_activate(struct vm_space *space);

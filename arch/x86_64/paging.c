@@ -1,5 +1,6 @@
 #include <arch/apic.h>
 #include <arch/cpu.h>
+#include <arch/cpu_local.h>
 #include <arch/layout.h>
 #include <arch/paging.h>
 #include <kernel/log.h>
@@ -62,7 +63,6 @@ enum scratch_slot {
 };
 
 static struct arch_address_space kernel_space;
-static struct arch_address_space *active_space;
 static uint64_t physical_limit;
 static uint64_t bootstrap_offset;
 static bool active;
@@ -241,11 +241,8 @@ static unsigned detect_physical_address_width(void)
   return physical_bits;
 }
 
-static void configure_cpu(void)
+static void configure_paging_cpu(void)
 {
-  unsigned physical_bits = detect_physical_address_width();
-  physical_limit = UINT64_C(1) << physical_bits;
-
   uint64_t cr4 = read_cr4();
   if (cr4 & CR4_FIVE_LEVEL_PAGING) {
     panic("five-level paging unexpectedly active");
@@ -258,9 +255,24 @@ static void configure_cpu(void)
    * kernel pages read-only even to supervisor writes. */
   write_msr(IA32_EFER, read_msr(IA32_EFER) | EFER_NXE);
   write_cr0(read_cr0() | CR0_WRITE_PROTECT);
+}
+
+static void configure_cpu(void)
+{
+  unsigned physical_bits = detect_physical_address_width();
+  physical_limit = UINT64_C(1) << physical_bits;
+  configure_paging_cpu();
 
   klog("x86_64: physical address width=%u, NX and supervisor write protection enabled\n",
        physical_bits);
+}
+
+void paging_prepare_ap(void)
+{
+  if ((UINT64_C(1) << detect_physical_address_width()) != physical_limit) {
+    panic("AP physical address width differs from BSP");
+  }
+  configure_paging_cpu();
 }
 
 static void validate_ram_address_width(const struct boot_info *boot)
@@ -362,7 +374,7 @@ void paging_init(struct boot_info *boot)
        read_cr3(), kernel_space.root);
   write_cr3(kernel_space.root);
   active = true;
-  active_space = &kernel_space;
+  cpu_current()->active_space = &kernel_space;
   pmm_rebase((void *)PMM_METADATA_BASE);
   bootstrap_offset = 0;
   boot->bootstrap_direct_offset = 0;
@@ -440,7 +452,7 @@ static unsigned entry_permissions(uint64_t entry)
 static bool affects_active_space(const struct arch_address_space *space,
                                  uintptr_t virtual)
 {
-  return space == active_space || virtual >= HIGHER_HALF_BASE;
+  return space == cpu_current()->active_space || virtual >= HIGHER_HALF_BASE;
 }
 
 /* Scratch mappings reach either root without changing the executing address
@@ -475,7 +487,7 @@ static enum mm_result walk_to_leaf(const struct arch_address_space *space,
       /* New ancestors also change recursive aliases. Reload the actual active
        * root, including when modifying kernel tables shared with that root. */
       if (affects_active_space(space, virtual)) {
-        write_cr3(active_space->root);
+        write_cr3(cpu_current()->active_space->root);
       }
     }
 
@@ -644,7 +656,7 @@ enum mm_result arch_space_create(struct arch_address_space *space)
 
 bool arch_space_active(const struct arch_address_space *space)
 {
-  return space && space == active_space;
+  return space && space == cpu_current()->active_space;
 }
 
 enum mm_result arch_space_activate(struct arch_address_space *space)
@@ -657,7 +669,7 @@ enum mm_result arch_space_activate(struct arch_address_space *space)
   /* Kernel mappings, including this stack, stay identical across the switch.
    * PCID and global translations remain disabled, so CR3 flushes the old TLB. */
   write_cr3(space->root);
-  active_space = space;
+  cpu_current()->active_space = space;
   return MM_OK;
 }
 
