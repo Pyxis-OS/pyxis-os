@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define CPUID_BASIC_FEATURES 1
+#define CPUID_FEATURE_PAT (1u << 16)
 #define CPUID_EXTENDED_FEATURES 0x80000001
 #define CPUID_FEATURE_SYSCALL (1u << 11)
 #define CPUID_FEATURE_NX (1u << 20)
@@ -11,6 +13,7 @@
 #define IA32_STAR 0xc0000081
 #define IA32_LSTAR 0xc0000082
 #define IA32_FMASK 0xc0000084
+#define IA32_PAT 0x277
 #define EFER_SCE (UINT64_C(1) << 0)
 #define EFER_NXE (UINT64_C(1) << 11)
 
@@ -25,6 +28,12 @@ static inline void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx,
 static inline void cpu_disable_interrupts(void)
 {
   __asm__ volatile("cli" : : : "memory");
+}
+
+/* Drain write-combining stores before reporting framebuffer writes complete. */
+static inline void cpu_store_fence(void)
+{
+  __asm__ volatile("sfence" : : : "memory");
 }
 
 static inline void outb(uint16_t port, uint8_t value)

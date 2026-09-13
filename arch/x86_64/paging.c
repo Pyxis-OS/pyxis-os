@@ -9,8 +9,16 @@
 #define PTE_PRESENT UINT64_C(1)
 #define PTE_WRITE (UINT64_C(1) << 1)
 #define PTE_USER (UINT64_C(1) << 2)
+#define PTE_WRITE_THROUGH (UINT64_C(1) << 3)
 #define PTE_LARGE (UINT64_C(1) << 7)
+/* Bit 7 selects PAT in a 4 KiB leaf; in higher-level entries it means large. */
+#define PTE_PAT_4K (UINT64_C(1) << 7)
 #define PTE_NX (UINT64_C(1) << 63)
+
+#define PAT_FRAMEBUFFER_INDEX 5
+#define PAT_ENTRY_BITS 8
+#define PAT_TYPE_MASK UINT64_C(0xff)
+#define PAT_WRITE_COMBINING 1
 
 /* Only bits 51:12 belong to the frame address; never carry NX into an address. */
 #define PTE_ADDRESS_MASK UINT64_C(0x000ffffffffff000)
@@ -263,6 +271,41 @@ static void validate_ram_address_width(const struct boot_info *boot)
   }
 }
 
+static void map_framebuffer(struct boot_framebuffer *fb)
+{
+  size_t page_offset = fb->physical & (PAGE_SIZE - 1);
+  phys_addr_t first_frame = fb->physical - page_offset;
+  if (!fb->size || fb->size > SIZE_MAX - page_offset - (PAGE_SIZE - 1)) {
+    panic("framebuffer mapping extent overflows");
+  }
+  size_t bytes = (page_offset + fb->size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  if (bytes > FRAMEBUFFER_END - FRAMEBUFFER_BASE || first_frame >= physical_limit ||
+      bytes > physical_limit - first_frame) {
+    panic("framebuffer outside supported address range");
+  }
+
+  uint32_t eax, ebx, ecx, edx;
+  cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
+  if (!(edx & CPUID_FEATURE_PAT)) {
+    panic("framebuffer mapping requires PAT support");
+  }
+  uint64_t pat = read_msr(IA32_PAT);
+  if (((pat >> (PAT_FRAMEBUFFER_INDEX * PAT_ENTRY_BITS)) & PAT_TYPE_MASK) !=
+      PAT_WRITE_COMBINING) {
+    panic("unexpected framebuffer PAT memory type");
+  }
+
+  /* Limine specifies PAT[5]=WC. Preserve that memory type across the CR3
+   * switch: 4 KiB leaves select index 5 with PAT=1, PCD=0, PWT=1. This avoids
+   * treating device memory as ordinary write-back RAM. No HHDM alias remains. */
+  for (size_t offset = 0; offset < bytes; offset += PAGE_SIZE) {
+    uintptr_t address = FRAMEBUFFER_BASE + offset;
+    bootstrap_map(address, first_frame + offset, PAGE_WRITE);
+    *bootstrap_leaf(address) |= PTE_PAT_4K | PTE_WRITE_THROUGH;
+  }
+  fb->address = FRAMEBUFFER_BASE + page_offset;
+}
+
 void paging_init(struct boot_info *boot)
 {
   _Static_assert(ARCH_PAGE_SIZE == PAGE_SIZE, "page size interface");
@@ -279,6 +322,7 @@ void paging_init(struct boot_info *boot)
   map_kernel_section(boot, __text_start, __text_end, PAGE_EXEC);
   map_kernel_section(boot, __rodata_start, __rodata_end, 0);
   map_kernel_section(boot, __data_start, __data_end, PAGE_WRITE);
+  map_framebuffer(&boot->framebuffer);
 
   for (size_t offset = 0; offset < metadata_bytes; offset += PAGE_SIZE) {
     bootstrap_map(PMM_METADATA_BASE + offset, plan.metadata_phys + offset,

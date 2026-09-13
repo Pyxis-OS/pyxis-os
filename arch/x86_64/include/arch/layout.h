@@ -10,11 +10,13 @@
 #define LOWER_HALF_MAX ((UINT64_C(1) << (VIRTUAL_ADDRESS_BITS - 1)) - 1)
 #define HIGHER_HALF_BASE (~LOWER_HALF_MAX)
 #define KERNEL_BASE UINT64_C(0xffffffff80000000)
-/* PML4 256: 64 GiB of virtual allocations; 509: metadata and scratch; 510: recursive. */
+/* PML4 256: virtual allocations; 509: metadata, scratch, framebuffer; 510: recursive. */
 #define KERNEL_VM_BASE HIGHER_HALF_BASE
 #define KERNEL_VM_SIZE (UINT64_C(64) << 30)
 #define PMM_METADATA_BASE UINT64_C(0xfffffe8000000000)
 #define TEMP_MAP_BASE UINT64_C(0xfffffe8040000000)
+#define FRAMEBUFFER_BASE UINT64_C(0xfffffe8080000000)
+#define FRAMEBUFFER_END UINT64_C(0xffffff0000000000) /* Start of recursive slot. */
 #define RECURSIVE_SLOT 510
 
 extern char __kernel_start[], __kernel_end[];
