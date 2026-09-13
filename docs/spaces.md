@@ -20,7 +20,7 @@ POSIX compatibility is not a requirement.
 The shared session interface could initially be a text display with a tab bar:
 
 ```text
-[shell    ] [editor   ] [desktop A] [desktop B] [+]
+[Caelum   ] [shell    ] [editor   ] [desktop A] [desktop B] [+]
 ```
 
 Starting a new space begins with an empty tab. The user enters the program they
@@ -35,6 +35,23 @@ interface remains independent of it.
 “Persistent” means the shared session interface outlives individual environments.
 Persistence across reboot has not been defined. A stopped or failed space could
 leave its tab visible for inspection or restart.
+
+## Pinned kernel tab
+
+The first tab would be pinned and reserved for the kernel, probably titled
+**Caelum**. Initially it would show the live kernel log. The proposed first
+placement is on the bootstrap processor (BSP), with no direct userspace access
+to or control over the tab. This kernel-owned view has a different role from
+the application environments described above.
+
+A later extension could add an interactive kernel monitor. A fixed input box
+at the bottom would accept commands while the log above continues updating
+independently. Command responses would be written into that same log. Possible
+commands include inspecting kernel state and spawning workloads; the command
+set and authority rules have not been designed.
+
+Log delivery from other cores, input handling and the relationship between this
+tab and the shared session interface remain open implementation questions.
 
 ## Kernel and supervisor responsibilities
 
@@ -57,10 +74,11 @@ The current prototype idea assigns each space exclusively to one core and keeps
 its execution on that core. This makes CPU ownership straightforward and bounds
 the number of simultaneously running spaces by the number of available cores.
 
-The meaning of “core” still needs clarification where SMT exposes multiple
-logical CPUs. Placement of the shared session interface and system services is
-also open. Reserving cores for those responsibilities would reduce the number
-available to spaces.
+The BSP would initially be reserved for the kernel tab, leaving the remaining
+cores available for user spaces. The meaning of “core” still needs clarification
+where SMT exposes multiple logical CPUs. Placement of the shared session
+interface and other system services remains open; additional reservations could
+further reduce the number of cores available to spaces.
 
 Core assignment provides CPU separation. Memory containment still requires
 protection and resource limits, and shared kernel resources still require
@@ -87,7 +105,8 @@ supervisor failure has not been specified.
 - How are authority, namespaces and explicit sharing expressed?
 - What IPC mechanism connects spaces, and how are shared costs attributed?
 - What display and input interfaces connect applications to the shared session?
-- Where do the session interface and shared services execute?
+- How does the pinned kernel tab receive logs and input across cores?
+- Where do the rest of the session interface and shared services execute?
 - What happens when a space exceeds a limit or its supervisor fails?
 - How do stopping, termination, inspection and restart affect resources and tabs?
 - What, if anything, persists across reboot?
@@ -95,6 +114,11 @@ supervisor failure has not been specified.
 IPC is undecided. No protocol or transport is selected by this draft.
 
 ## Scope boundary
+
+A potential next step to discuss is starting additional cores and launching
+workloads on them. That work needs its own scope, including per-CPU execution
+state and synchronization of shared kernel resources; this draft does not
+authorize starting it.
 
 This document records a design direction. It does not authorize implementing
 spaces, adding placeholder APIs or structures, or restructuring the current
