@@ -17,12 +17,14 @@ make clean
 Override `CROSS_COMPILE`, `QEMU`, `MEMORY` (default `256M`), `ACCEL` (default
 `tcg`), `OVMF_CODE` and `OVMF_VARS` on the Make command line. Firmware defaults
 to `/usr/share/OVMF/{OVMF_CODE,OVMF_VARS}.fd`; variables are copied into build
-on each run. Serial uses the terminal; exit QEMU with Ctrl-a x.
+on each run. Serial uses the terminal; exit QEMU with Ctrl-a x. Graphics use
+GTK by default; `QEMU_DISPLAY=none` keeps a run headless.
 
 Boot installs serial and a kernel stack, copies boot information, installs
 GDT/IDT/TSS, initializes the bitmap PMM, and switches to kernel-owned paging.
 Generic initialization then creates the VM allocator and TLSF heap, reports
-memory accounting and halts. There are no processes, devices beyond COM1, or shell.
+memory accounting, draws a framebuffer pattern, runs the initial user image,
+and halts after its exit. There is no scheduler or shell.
 
 Bootstrap limits: 256 memory regions, usable RAM below 64 GiB, 256 kernel VM range
 records and 16 KiB TLSF control storage. Capacity failures are

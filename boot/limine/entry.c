@@ -8,6 +8,8 @@
 
 #define REQUIRED_BASE_REVISION 6
 #define PAGING_REQUEST_MIN_MAX_REVISION 1
+#define FRAMEBUFFER_BITS_PER_PIXEL 32
+#define FRAMEBUFFER_CHANNEL_BITS 8
 
 __attribute__((used, section(".limine_requests_start")))
 static volatile uint64_t requests_start[] = LIMINE_REQUESTS_START_MARKER;
@@ -33,6 +35,11 @@ static volatile struct limine_executable_address_request address_request = {
 __attribute__((used, section(".limine_requests")))
 static volatile struct limine_module_request module_request = {
   .id = LIMINE_MODULE_REQUEST_ID,
+};
+
+__attribute__((used, section(".limine_requests")))
+static volatile struct limine_framebuffer_request framebuffer_request = {
+  .id = LIMINE_FRAMEBUFFER_REQUEST_ID,
 };
 
 __attribute__((used, section(".limine_requests")))
@@ -63,6 +70,8 @@ static enum boot_region_type region_type(uint64_t type)
     return BOOT_LOADER;
   case LIMINE_MEMMAP_EXECUTABLE_AND_MODULES:
     return BOOT_KERNEL;
+  case LIMINE_MEMMAP_FRAMEBUFFER:
+    return BOOT_FRAMEBUFFER;
   default:
     return BOOT_RESERVED;
   }
@@ -180,6 +189,79 @@ static void copy_initial_image(void)
   boot.initial_image = (struct boot_module){.physical = physical, .size = module->size};
 }
 
+static void copy_framebuffer(void)
+{
+  const struct limine_framebuffer_response *response = framebuffer_request.response;
+  if (!response || !response->framebuffer_count || !response->framebuffers ||
+      !response->framebuffers[0]) {
+    panic("missing Limine framebuffer");
+  }
+
+  const struct limine_framebuffer *source = response->framebuffers[0];
+  if (source->memory_model != LIMINE_FRAMEBUFFER_RGB ||
+      source->bpp != FRAMEBUFFER_BITS_PER_PIXEL ||
+      source->red_mask_size != FRAMEBUFFER_CHANNEL_BITS ||
+      source->green_mask_size != FRAMEBUFFER_CHANNEL_BITS ||
+      source->blue_mask_size != FRAMEBUFFER_CHANNEL_BITS ||
+      source->red_mask_shift > FRAMEBUFFER_BITS_PER_PIXEL - FRAMEBUFFER_CHANNEL_BITS ||
+      source->green_mask_shift > FRAMEBUFFER_BITS_PER_PIXEL - FRAMEBUFFER_CHANNEL_BITS ||
+      source->blue_mask_shift > FRAMEBUFFER_BITS_PER_PIXEL - FRAMEBUFFER_CHANNEL_BITS) {
+    panic("framebuffer requires 32-bit RGB with eight-bit channels");
+  }
+
+  uint32_t red_mask = UINT32_C(0xff) << source->red_mask_shift;
+  uint32_t green_mask = UINT32_C(0xff) << source->green_mask_shift;
+  uint32_t blue_mask = UINT32_C(0xff) << source->blue_mask_shift;
+  uintptr_t address = (uintptr_t)source->address;
+  if ((red_mask & green_mask) || (red_mask & blue_mask) || (green_mask & blue_mask) ||
+      !source->width || !source->height || source->width > SIZE_MAX / sizeof(uint32_t) ||
+      source->pitch < source->width * sizeof(uint32_t) ||
+      (source->pitch % sizeof(uint32_t)) || (address % sizeof(uint32_t)) ||
+      source->height > SIZE_MAX / source->pitch || address < boot.bootstrap_direct_offset) {
+    panic("invalid framebuffer layout");
+  }
+
+  size_t size = source->height * source->pitch;
+  if (size > UINTPTR_MAX - address) {
+    panic("framebuffer extent overflows");
+  }
+  uint64_t physical = address - boot.bootstrap_direct_offset;
+
+  /* The framebuffer response gives the address. The map only confirms these
+   * frames are unavailable to the PMM, including any partial boundary pages. */
+  uint64_t covered = physical & ~(ARCH_PAGE_SIZE - 1);
+  uint64_t end = physical + size;
+  if (end > UINT64_MAX - (ARCH_PAGE_SIZE - 1)) {
+    panic("framebuffer page extent overflows");
+  }
+  end = (end + ARCH_PAGE_SIZE - 1) & ~(ARCH_PAGE_SIZE - 1);
+  for (size_t i = 0; i < boot.region_count && covered < end; ++i) {
+    const struct boot_region *region = &boot.regions[i];
+    uint64_t region_end = region->base + region->length;
+    if (region_end <= covered) {
+      continue;
+    }
+    if (region->base > covered || region->type != BOOT_FRAMEBUFFER) {
+      break;
+    }
+    covered = region_end;
+  }
+  if (covered < end) {
+    panic("framebuffer is outside framebuffer reservations");
+  }
+
+  boot.framebuffer = (struct boot_framebuffer){
+    .physical = physical,
+    .size = size,
+    .width = source->width,
+    .height = source->height,
+    .pitch = source->pitch,
+    .red_shift = source->red_mask_shift,
+    .green_shift = source->green_mask_shift,
+    .blue_shift = source->blue_mask_shift,
+  };
+}
+
 [[noreturn]] void limine_entry(void);
 
 [[noreturn]] void limine_entry(void)
@@ -190,6 +272,7 @@ static void copy_initial_image(void)
   copy_executable_placement();
   copy_memory_map();
   copy_initial_image();
+  copy_framebuffer();
 
   klog("Limine: base revision %u, %zu memory regions, kernel phys=0x%lx virt=%p\n",
        REQUIRED_BASE_REVISION, boot.region_count, boot.kernel_phys,

@@ -13,6 +13,7 @@ enum boot_region_type {
   BOOT_BAD,
   BOOT_LOADER,
   BOOT_KERNEL,
+  BOOT_FRAMEBUFFER,
 };
 
 struct boot_region {
@@ -28,6 +29,21 @@ struct boot_module {
   size_t size;
 };
 
+/* One 32-bit RGB framebuffer with eight bits per channel. Physical storage is
+ * device-owned; address is filled by paging_init with a supervisor-only kernel
+ * mapping. Pitch includes row padding. No Limine pointers are retained. */
+struct boot_framebuffer {
+  uint64_t physical;
+  uintptr_t address;
+  size_t size;
+  size_t width;
+  size_t height;
+  size_t pitch;
+  uint8_t red_shift;
+  uint8_t green_shift;
+  uint8_t blue_shift;
+};
+
 /* All retained metadata is copied into the kernel image. No response pointers. */
 struct boot_info {
   uint64_t kernel_phys;
@@ -35,6 +51,7 @@ struct boot_info {
   size_t kernel_size;
   uint64_t bootstrap_direct_offset; /* Valid only before arch_init returns. */
   struct boot_module initial_image;
+  struct boot_framebuffer framebuffer;
   size_t region_count;
   struct boot_region regions[BOOT_MAX_REGIONS];
 };
