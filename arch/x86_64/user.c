@@ -1,5 +1,6 @@
 #include <arch/apic.h>
 #include <arch/cpu.h>
+#include <arch/cpu_local.h>
 #include <arch/descriptors.h>
 #include <arch/layout.h>
 #include <arch/user.h>
@@ -19,14 +20,9 @@
 #define CR4_OSXMMEXCPT (UINT64_C(1) << 10)
 #define CR4_FSGSBASE (UINT64_C(1) << 16)
 #define CR4_OSXSAVE (UINT64_C(1) << 18)
-#define IA32_FS_BASE 0xc0000100
-#define IA32_GS_BASE 0xc0000101
 #define X87_DEFAULT_CONTROL 0x037f
 #define MXCSR_DEFAULT 0x1f80
 #define USER_STACK_ALIGNMENT 16
-
-/* Read by syscall_entry before it can touch a stack. */
-uintptr_t syscall_stack_top;
 
 struct switch_frame {
   uint64_t r15, r14, r13, r12, rbp, rbx;
@@ -72,7 +68,7 @@ void arch_user_save(struct arch_user_state *state)
   __asm__ volatile("mov %%fs, %0" : "=rm"(state->fs));
   __asm__ volatile("mov %%gs, %0" : "=rm"(state->gs));
   state->fs_base = read_msr(IA32_FS_BASE);
-  state->gs_base = read_msr(IA32_GS_BASE);
+  state->gs_base = read_msr(IA32_KERNEL_GS_BASE);
 }
 
 void arch_user_restore(const struct arch_user_state *state)
@@ -81,10 +77,12 @@ void arch_user_restore(const struct arch_user_state *state)
   __asm__ volatile("mov %0, %%ds" : : "rm"(state->ds) : "memory");
   __asm__ volatile("mov %0, %%es" : : "rm"(state->es) : "memory");
   __asm__ volatile("mov %0, %%fs" : : "rm"(state->fs) : "memory");
+  uint64_t kernel_gs = (uintptr_t)cpu_current();
   __asm__ volatile("mov %0, %%gs" : : "rm"(state->gs) : "memory");
   /* Loading a selector may replace its hidden base; restore the MSRs last. */
   write_msr(IA32_FS_BASE, state->fs_base);
-  write_msr(IA32_GS_BASE, state->gs_base);
+  write_msr(IA32_GS_BASE, kernel_gs);
+  write_msr(IA32_KERNEL_GS_BASE, state->gs_base);
 }
 
 uintptr_t arch_context_prepare(uintptr_t stack_top, void (*entry)(void))
@@ -105,8 +103,9 @@ bool arch_user_entry_valid(uintptr_t entry, uintptr_t stack_top)
 
 void arch_user_set_kernel_stack(uintptr_t stack_top)
 {
-  syscall_stack_top = stack_top;
-  gdt_set_kernel_stack(stack_top);
+  struct cpu_local *cpu = cpu_current();
+  cpu->syscall_stack_top = stack_top;
+  gdt_set_kernel_stack(&cpu->descriptors, stack_top);
 }
 
 [[noreturn]] void arch_bad_user_return(uintptr_t entry, uintptr_t stack_top)

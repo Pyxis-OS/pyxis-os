@@ -1,6 +1,7 @@
 #include <arch/apic.h>
 #include <arch/console.h>
 #include <arch/cpu.h>
+#include <arch/cpu_local.h>
 #include <arch/descriptors.h>
 #include <arch/init.h>
 #include <arch/paging.h>
@@ -52,7 +53,9 @@ void early_init(void)
 
 void arch_init(struct boot_info *boot)
 {
-  gdt_init();
+  struct cpu_local *cpu = cpu_bsp();
+  gdt_init(&cpu->descriptors, cpu->double_fault_stack_top);
+  cpu_install_local(cpu);
   idt_init();
   klog("x86_64: kernel GDT, IDT and double-fault IST installed; interrupts disabled\n");
   paging_init(boot);

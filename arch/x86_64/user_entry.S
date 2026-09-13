@@ -48,6 +48,7 @@ arch_enter_user:
   xor %r13d, %r13d
   xor %r14d, %r14d
   xor %r15d, %r15d
+  swapgs
   iretq
 .size arch_enter_user, . - arch_enter_user
 

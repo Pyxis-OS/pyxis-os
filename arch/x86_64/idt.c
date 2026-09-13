@@ -1,5 +1,6 @@
 #include <arch/apic.h>
 #include <arch/cpu.h>
+#include <arch/cpu_local.h>
 #include <arch/descriptors.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
@@ -46,6 +47,11 @@ void idt_init(void)
     };
   }
 
+  idt_load();
+}
+
+void idt_load(void)
+{
   const struct descriptor_table_pointer idtr = {
     .limit = sizeof(idt) - 1,
     .base = (uintptr_t)idt,
@@ -68,6 +74,7 @@ static void report_page_fault(uint64_t error, uint64_t address)
 void interrupt_handler(struct exception_frame *frame)
 {
   if (frame->vector == APIC_TIMER_VECTOR) {
+    atomic_fetch_add_explicit(&cpu_current()->timer_interrupts, 1, memory_order_relaxed);
     apic_end_interrupt();
     if ((frame->cs & SELECTOR_RPL_MASK) == SELECTOR_RPL_USER) {
       user_preempt();

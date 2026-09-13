@@ -1,5 +1,6 @@
 #include <arch/layout.h>
 #include <arch/syscall.h>
+#include <arch/cpu_local.h>
 
 .set STACK_ALIGNMENT, 16
 .set STACK_WORD_BYTES, 8
@@ -11,11 +12,12 @@
 syscall_entry:
   /* SYSCALL leaves RSP pointing into user memory and does not use TSS.RSP0.
    * Save it without a push or a scratch GPR. IF is already masked by FMASK;
-   * one CPU and non-reentrant entry make this private slot sufficient. */
-  mov %rsp, saved_user_rsp(%rip)
-  mov syscall_stack_top(%rip), %rsp
+   * GS selects this CPU's entry storage after SWAPGS. */
+  swapgs
+  mov %rsp, %gs:CPU_USER_RSP_OFFSET
+  mov %gs:CPU_SYSCALL_STACK_OFFSET, %rsp
 
-  pushq saved_user_rsp(%rip)
+  pushq %gs:CPU_USER_RSP_OFFSET
   push %r11
   push %rcx
 
@@ -73,6 +75,7 @@ syscall_entry:
   or $(RFLAGS_FIXED | RFLAGS_INTERRUPT_ENABLE), %r11
   /* No stack access after this pop; execution resumes in the user space. */
   pop %rsp
+  swapgs
   sysretq
 
 .Lbad_return:
@@ -81,12 +84,5 @@ syscall_entry:
   mov STACK_WORD_BYTES(%rsp), %rsi
   call arch_bad_user_return
 .size syscall_entry, . - syscall_entry
-
-.section .bss
-.balign STACK_WORD_BYTES
-.type saved_user_rsp, @object
-saved_user_rsp:
-  .skip STACK_WORD_BYTES
-.size saved_user_rsp, . - saved_user_rsp
 
 .section .note.GNU-stack,"",@progbits
