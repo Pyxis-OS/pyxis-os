@@ -61,15 +61,16 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
                uint32_t fg, uint32_t bg)
 {
   const struct font *font = tty->font;
-  if (c < 0 || c > font->max_glyph) {
-    c = '?';
+  unsigned char glyph_index = (unsigned char)c;
+  if (glyph_index > font->max_glyph) {
+    glyph_index = '?';
   }
 
   uint16_t x_dst = x * font->width;
   uint16_t y_dst = y * font->height;
 
   const uint8_t *glyph =
-      font->data + (size_t)(unsigned char)c * font->stride;
+      font->data + (size_t)glyph_index * font->stride;
   uint32_t foreground = framebuffer_color(tty->fb, fg);
   uint32_t background = framebuffer_color(tty->fb, bg);
 
