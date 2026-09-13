@@ -9,6 +9,8 @@
 
 #define IA32_EFER 0xc0000080
 #define IA32_STAR 0xc0000081
+#define IA32_LSTAR 0xc0000082
+#define IA32_FMASK 0xc0000084
 #define EFER_SCE (UINT64_C(1) << 0)
 #define EFER_NXE (UINT64_C(1) << 11)
 
