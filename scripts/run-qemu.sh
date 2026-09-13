@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 : "${QEMU:=qemu-system-x86_64}"
+: "${QEMU_DISPLAY:=gtk}"
 : "${MEMORY:=256M}"
 : "${ACCEL:=tcg}"
 : "${OVMF_CODE:=/usr/share/OVMF/OVMF_CODE.fd}"
@@ -26,5 +27,5 @@ fi
 exec "$QEMU" -machine q35 -accel "$ACCEL" -cpu max -smp 1 -m "$MEMORY" \
   -drive "if=pflash,format=raw,unit=0,readonly=on,file=$OVMF_CODE" \
   -drive if=pflash,format=raw,unit=1,file=build/OVMF_VARS.fd \
-  -cdrom build/pyxis.iso -boot d -display none -serial mon:stdio \
+  -cdrom build/pyxis.iso -boot d -display "$QEMU_DISPLAY" -serial mon:stdio \
   -no-reboot -no-shutdown "$@"

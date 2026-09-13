@@ -1,6 +1,7 @@
 CROSS_COMPILE ?= x86_64-elf-
 CC := $(CROSS_COMPILE)gcc
 QEMU ?= qemu-system-x86_64
+QEMU_DISPLAY ?= gtk
 MEMORY ?= 256M
 ACCEL ?= tcg
 OVMF_CODE ?= /usr/share/OVMF/OVMF_CODE.fd
@@ -54,7 +55,7 @@ build/pyxis.iso: build/caelum.elf build/userspace/hello.pxe \
 	./scripts/make-image.sh
 
 run debug: image
-	QEMU="$(QEMU)" MEMORY="$(MEMORY)" ACCEL="$(ACCEL)" \
+	QEMU="$(QEMU)" QEMU_DISPLAY="$(QEMU_DISPLAY)" MEMORY="$(MEMORY)" ACCEL="$(ACCEL)" \
 	OVMF_CODE="$(OVMF_CODE)" OVMF_VARS="$(OVMF_VARS)" ./scripts/run-qemu.sh $@
 
 clean:

@@ -11,6 +11,52 @@
 
 #define INITIAL_STACK_BASE UINT64_C(0x800000)
 #define INITIAL_STACK_SIZE PAGE_SIZE
+#define FRAMEBUFFER_CHECKER_SIZE 32
+
+static uint32_t framebuffer_rgb(const struct boot_framebuffer *fb,
+                                 uint8_t red, uint8_t green, uint8_t blue)
+{
+  return ((uint32_t)red << fb->red_shift) |
+         ((uint32_t)green << fb->green_shift) |
+         ((uint32_t)blue << fb->blue_shift);
+}
+
+static void framebuffer_pattern(const struct boot_framebuffer *fb)
+{
+  const uint32_t bars[] = {
+    framebuffer_rgb(fb, 255, 255, 255),
+    framebuffer_rgb(fb, 255, 255, 0),
+    framebuffer_rgb(fb, 0, 255, 255),
+    framebuffer_rgb(fb, 0, 255, 0),
+    framebuffer_rgb(fb, 255, 0, 255),
+    framebuffer_rgb(fb, 255, 0, 0),
+    framebuffer_rgb(fb, 0, 0, 255),
+    framebuffer_rgb(fb, 0, 0, 0),
+  };
+  size_t bar_count = sizeof(bars) / sizeof(bars[0]);
+  size_t bar_width = (fb->width + bar_count - 1) / bar_count;
+  size_t checker_start = fb->height - fb->height / 4;
+  uint32_t light = framebuffer_rgb(fb, 192, 192, 192);
+  uint32_t dark = framebuffer_rgb(fb, 32, 32, 32);
+
+  for (size_t y = 0; y < fb->height; ++y) {
+    /* Scanlines may have padding; only visible pixels are written. */
+    volatile uint32_t *row = (void *)(fb->address + y * fb->pitch);
+    for (size_t x = 0; x < fb->width; ++x) {
+      uint32_t color = bars[x / bar_width];
+      if (y >= checker_start) {
+        bool alternate = ((x / FRAMEBUFFER_CHECKER_SIZE) +
+                          ((y - checker_start) / FRAMEBUFFER_CHECKER_SIZE)) & 1;
+        color = alternate ? light : dark;
+      }
+      row[x] = color;
+    }
+  }
+
+  cpu_store_fence();
+  klog("framebuffer: %zux%zu, pitch=%zu, color bars and checkerboard drawn\n",
+       fb->width, fb->height, fb->pitch);
+}
 
 static enum image_result load_initial_image(const struct boot_module *module,
                                             struct vm_space **space,
@@ -85,6 +131,7 @@ static void run_initial_image(const struct boot_info *boot)
   klog("heap: TLSF pools=%zu bytes=%zu, alignment=16, live allocations=%zu\n",
        heap.pools, heap.pool_bytes, heap.live_allocations);
 
+  framebuffer_pattern(&boot->framebuffer);
   run_initial_image(boot);
   klog("Caelum ready: kernel initialization complete, halting\n");
   cpu_halt();
