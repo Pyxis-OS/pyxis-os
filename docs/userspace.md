@@ -47,14 +47,16 @@ temporary kernel mapping, and applies final segment permissions. It leaves the
 active address space unchanged and destroys partial allocations on failure.
 
 Kernel initialization releases the module's temporary mapping, allocates a
-one-page user stack at `0x800000`, and calls `user_task_create`. Success transfers
-ownership of the loaded space to the task and places it on the ready queue.
+one-page user stack at `0x800000`, and calls `user_task_create_on`. It chooses
+CPU 1 when available and CPU 0 otherwise. Success transfers ownership of the
+loaded space to the task and places it on that CPU's ready queue.
 Failure leaves the space owned by the caller. Each task owns one private space
 and a 16 KiB kernel stack; there is no shared-space ownership scheme yet.
-The kernel can queue additional loaded images through the same interface before
-entering `user_schedule`. There is no public task-creation syscall.
+After `user_init()`, the BSP can queue additional loaded images through the same
+interface, including while APs run. `user_task_create()` selects CPU zero.
+There is no public task-creation syscall.
 
-The scheduler uses the original kernel stack, separate from every task stack.
+Each CPU's scheduler uses its permanent boot stack, separate from every task stack.
 It selects tasks round-robin and activates each task's address space, TSS.RSP0
 and syscall-entry stack. First entry uses IRETQ with zeroed general registers;
 subsequent timer returns restore the interrupted registers and instruction.
@@ -76,17 +78,19 @@ GS base on entry and return.
 
 Exit abandons the current kernel-entry stack and resumes the scheduler. Only
 after returning to its own stack and activating the kernel space does the
-scheduler free the task's image, user/kernel stacks, private page tables and VM
-metadata. Ordinary fatal user exceptions print diagnostics and terminate that
-task; kernel exceptions, NMI, double fault and machine check still panic. An
-invalid syscall return address also terminates the current task. No cleanup
+scheduler publish completion to the BSP. The BSP frees the task's image,
+user/kernel stacks, private page tables and VM metadata. Ordinary fatal user
+exceptions print diagnostics and terminate that task; kernel exceptions, NMI,
+double fault and machine check still panic. An invalid syscall return address
+also terminates the current task. No cleanup
 callbacks or stream flushing run on exit. Original boot-module frames remain
 reserved and are not returned to the PMM.
 
 The normal image still runs `hello`. Expected output includes its greeting,
-`userspace: exited with status 0; address space released`, then
-`userspace: no runnable tasks, idle`. With no ready task the scheduler waits
-using STI/HLT and returns to IF=0 after each interrupt. There are no kernel
-threads, blocking syscalls, priorities or process relationships. Userspace
-scheduling remains BSP-only; additional CPUs are brought online and idle as
-described in [smp.md](smp.md).
+`userspace: CPU 1 exited with status 0; address space released` on a multicore
+boot, plus per-CPU idle messages. On a single CPU the task runs on CPU 0.
+Cleanup and AP idle messages may arrive in either order. With no ready task the
+scheduler waits using STI/HLT and returns to IF=0 after each interrupt. There are
+no kernel threads, blocking syscalls, priorities or process relationships. Userspace
+tasks are pinned to their selected CPU; allocation, submission and reclamation
+remain BSP-only as described in [smp.md](smp.md).
