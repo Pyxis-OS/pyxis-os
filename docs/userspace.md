@@ -28,3 +28,16 @@ P1F's on-disk layout and segment invariants are defined in
 memory tails consume no file bytes. The userspace linker script puts permission
 boundaries on separate pages. Read-only, read/execute and read/write segments
 are supported; write/execute segments are rejected.
+
+`make image` builds `hello` and includes its `.pxe` as the single Limine module.
+The boot adapter retains its physical placement; after VM initialization the
+kernel maps those reserved frames read-only and passes the bytes to
+`image_load()`. The loader creates an inactive address space, copies through a
+temporary kernel mapping, and applies final segment permissions. It leaves the
+active address space unchanged and destroys partial allocations on failure.
+
+Kernel initialization releases the module's temporary mapping, allocates a
+one-page user stack at `0x800000`, activates the loaded space, and enters its
+entry address with SYSRETQ. Module frames remain boot-reserved; they are not
+returned to the PMM. Expected serial output is `syscall0: A`, followed by the
+deliberate HLT exception. There is no scheduler or process lifetime management.
