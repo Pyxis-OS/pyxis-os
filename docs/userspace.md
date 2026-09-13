@@ -6,10 +6,19 @@ only `hello`. Pass `CROSS_COMPILE` as for the kernel. Outputs live under
 `build/tools` and `build/userspace`, so the root `make clean` removes them too.
 
 Each program has its own directory and an explicit target in
-`userspace/Makefile`. The initial assembly program starts at `_start`, invokes
-syscall 0 with `'A'`, then executes HLT to produce the expected ring-3 #GP(0).
-It has no runtime, libc, argument vector or return path. Its caller supplies a
-16-byte-aligned writable user stack with interrupts disabled.
+`userspace/Makefile`. The initial program starts at a small assembly `_start`
+which calls `int main(void)`. The kernel supplies a 16-byte-aligned writable
+user stack with interrupts disabled; the call places a return address on that
+stack as required by the C ABI. There is no libc, argument vector or exit
+syscall. Returning from `main` reaches HLT and the expected ring-3 #GP(0).
+
+`hello/main.c` prints `Hello from C!` using the unbuffered helpers in
+`userspace/lib/io.c`. `putchar` invokes syscall 0 for one byte, and `print`
+walks a NUL-terminated string without adding a newline. The small x86_64
+`syscall1` wrapper declares RAX as the number/result, RDI as the argument,
+and RCX, R11, flags and memory as clobbered. These are local userspace helpers,
+not a libc implementation. The program and helpers use the same freestanding
+cross-compiler flags, and link without host libraries or startup objects.
 
 The converter accepts fixed-address, little-endian x86_64 ELF executables:
 
@@ -39,5 +48,7 @@ active address space unchanged and destroys partial allocations on failure.
 Kernel initialization releases the module's temporary mapping, allocates a
 one-page user stack at `0x800000`, activates the loaded space, and enters its
 entry address with SYSRETQ. Module frames remain boot-reserved; they are not
-returned to the PMM. Expected serial output is `syscall0: A`, followed by the
-deliberate HLT exception. There is no scheduler or process lifetime management.
+returned to the PMM. The current kernel syscall logs each character separately:
+expect one `syscall0:` line per character of the greeting, followed by the
+deliberate HLT exception after `main` returns. There is no scheduler or process
+lifetime management.
