@@ -77,18 +77,22 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
   cpu_store_fence();
 }
 
-void tty_advance_cursor(struct tty *tty)
+static void tty_newline(struct tty *tty)
 {
-  tty->x++;
-  if (tty->x >= tty->width) {
-    tty->x = 0;
-    tty->y++;
-  }
+  tty->x = 0;
+  tty->y++;
 
   if (tty->y >= tty->height) {
-    memcpy((void *)tty->fb->address, (void *)tty->fb->address + tty->fb->pitch * tty->height,
-           tty->fb->pitch * (tty->height - 1));
+    size_t row_bytes = tty->fb->pitch * tty->font->height;
+    void *pixels = (void *)tty->fb->address;
+
+    memmove(pixels, (uint8_t *)pixels + row_bytes,
+            row_bytes * (tty->height - 1));
     tty->y = tty->height - 1;
+
+    for (size_t x = 0; x < tty->width; ++x) {
+      tty_plot_char(tty, ' ', x, tty->y, tty->fg, tty->bg);
+    }
   }
 }
 
@@ -97,14 +101,16 @@ void tty_put_char(char c)
   struct tty *tty = get_tty();
 
   if (c == '\n') {
-    tty->x = 0;
-    tty->y++;
+    tty_newline(tty);
     return;
   }
 
   tty_plot_char(tty, c, tty->x, tty->y, tty->fg, tty->bg);
 
-  tty_advance_cursor(tty);
+  tty->x++;
+  if (tty->x >= tty->width) {
+    tty_newline(tty);
+  }
 }
 
 void tty_clear(void)
