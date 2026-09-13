@@ -18,6 +18,7 @@ struct tty
   uint16_t width;
   uint16_t height;
 
+  /* Colors use 0xRRGGBB, independent of the framebuffer channel layout. */
   uint32_t fg;
   uint32_t bg;
 
@@ -28,6 +29,7 @@ struct tty
   const struct boot_framebuffer *fb;
 };
 
+/* Scheme and drawing colors use 0xRRGGBB. */
 struct color_scheme
 {
   uint32_t palette[16];
