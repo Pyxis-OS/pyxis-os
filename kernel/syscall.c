@@ -14,7 +14,7 @@ int64_t syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
   
   switch (number) {
   case 0:
-    klog("syscall0: %c\n", (char)arg1);
+    klog("%c", (char)arg1);
     return 0;
   default:
     return -1;
