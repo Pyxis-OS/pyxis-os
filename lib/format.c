@@ -2,6 +2,7 @@
 #include <kernel/log.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <kernel/fb/tty.h>
 
 #define UINT64_DECIMAL_DIGITS 20
 
@@ -12,10 +13,17 @@ enum integer_length {
   LENGTH_SIZE,
 };
 
+static void put_char(char c)
+{
+  console_putc(c);
+  if (get_tty()->initialized)
+    tty_put_char(c);
+}
+
 static void put_string(const char *text)
 {
   for (; *text; ++text) {
-    console_putc(*text);
+    put_char(*text);
   }
 }
 
@@ -32,7 +40,7 @@ static void put_unsigned(uint64_t value, unsigned radix)
 
   while (count) {
     --count;
-    console_putc(digits[count]);
+    put_char(digits[count]);
   }
 }
 
@@ -68,7 +76,7 @@ void kvlog(const char *format, va_list args)
 {
   while (*format) {
     if (*format != '%') {
-      console_putc(*format);
+      put_char(*format);
       ++format;
       continue;
     }
@@ -95,7 +103,7 @@ void kvlog(const char *format, va_list args)
 
     switch (conversion) {
     case '%':
-      console_putc('%');
+      put_char('%');
       break;
     case 's': {
       const char *text = va_arg(args, const char *);
@@ -103,7 +111,7 @@ void kvlog(const char *format, va_list args)
       break;
     }
     case 'c':
-      console_putc((char)va_arg(args, int));
+      put_char((char)va_arg(args, int));
       break;
     case 'p':
       put_string("0x");
@@ -113,7 +121,7 @@ void kvlog(const char *format, va_list args)
       int64_t signed_value = next_signed_integer(args, length);
       uint64_t magnitude = (uint64_t)signed_value;
       if (signed_value < 0) {
-        console_putc('-');
+        put_char('-');
         /* Unsigned negation also handles INT64_MIN without signed overflow. */
         magnitude = 0 - magnitude;
       }
