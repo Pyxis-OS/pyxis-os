@@ -1,10 +1,20 @@
 #include <arch/cpu.h>
 #include <kernel/init.h>
+
+#include "kernel/memory.h"
+
 #include <kernel/log.h>
+#include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/vm.h>
-#include <kernel/mm/heap.h>
 #include <kernel/panic.h>
+
+static const uint8_t code[] = {
+  0x31, 0xc0,                   /* xor %eax, %eax: syscall 0 */
+  0xbf, 0x41, 0x00, 0x00, 0x00, /* mov edi, 'A' */
+  0x0f, 0x05,                   /* syscall */
+  0xf4,                         /* hlt */
+};
 
 [[noreturn]] void user_address_space_test(void)
 {
@@ -17,7 +27,7 @@
     PAGE_USER | PAGE_WRITE) == MM_OK);
 
   KASSERT(vm_space_activate(space) == MM_OK);
-  *(volatile uint8_t *)address = 0xf4;
+  memcpy((void *)address, code, sizeof(code));
   KASSERT(vm_protect(space, address, PAGE_USER | PAGE_EXEC) == MM_OK);
 
   uintptr_t stack_base = 0x800000;
