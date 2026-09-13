@@ -3,6 +3,7 @@
 #include <arch/descriptors.h>
 #include <arch/init.h>
 #include <arch/paging.h>
+#include <arch/syscall.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
 
@@ -33,8 +34,11 @@ static void configure_syscall_msrs(void)
   write_msr(IA32_STAR, (kernel_cs << STAR_KERNEL_CS_SHIFT) |
                        (sysret_base << STAR_SYSRET_BASE_SHIFT));
 
-  /* Preserve NX and long-mode state. SYSCALL entry still needs LSTAR, FMASK
-   * and assembly that saves user RSP and selects a kernel stack. */
+  write_msr(IA32_LSTAR, (uintptr_t)syscall_entry);
+  write_msr(IA32_FMASK, SYSCALL_ENTRY_FLAGS_MASK);
+
+  /* Publish the entry point and flag mask before enabling the instructions.
+   * Preserve the NX and long-mode state established by paging_init. */
   write_msr(IA32_EFER, read_msr(IA32_EFER) | EFER_SCE);
 }
 
