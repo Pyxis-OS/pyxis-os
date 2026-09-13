@@ -25,8 +25,10 @@ all: build/caelum.elf
 tools:
 	$(MAKE) -C tools
 
-userspace:
+userspace: tools
 	$(MAKE) -C userspace
+
+build/userspace/hello.pxe: userspace
 
 check-toolchain:
 	@command -v $(CC) >/dev/null 2>&1 || { \
@@ -46,7 +48,8 @@ build/%.o: %.S | check-toolchain
 
 image: build/pyxis.iso
 
-build/pyxis.iso: build/caelum.elf boot/limine/limine.conf scripts/make-image.sh \
+build/pyxis.iso: build/caelum.elf build/userspace/hello.pxe \
+                 boot/limine/limine.conf scripts/make-image.sh \
                  third_party/limine/BOOTX64.EFI third_party/limine/limine-uefi-cd.bin
 	./scripts/make-image.sh
 

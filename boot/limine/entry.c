@@ -31,6 +31,11 @@ static volatile struct limine_executable_address_request address_request = {
 };
 
 __attribute__((used, section(".limine_requests")))
+static volatile struct limine_module_request module_request = {
+  .id = LIMINE_MODULE_REQUEST_ID,
+};
+
+__attribute__((used, section(".limine_requests")))
 static volatile struct limine_paging_mode_request paging_request = {
   .id = LIMINE_PAGING_MODE_REQUEST_ID,
   .revision = PAGING_REQUEST_MIN_MAX_REVISION,
@@ -131,6 +136,50 @@ static void copy_memory_map(void)
   }
 }
 
+static void copy_initial_image(void)
+{
+  const struct limine_module_response *response = module_request.response;
+  if (!response || response->module_count != 1 || !response->modules ||
+      !response->modules[0]) {
+    panic("expected exactly one initial userspace image module");
+  }
+
+  const struct limine_file *module = response->modules[0];
+  uintptr_t address = (uintptr_t)module->address;
+  if (!module->size || address < boot.bootstrap_direct_offset ||
+      module->size > UINTPTR_MAX - address) {
+    panic("invalid initial image module extent");
+  }
+
+  uint64_t physical = address - boot.bootstrap_direct_offset;
+  uint64_t first_frame = physical & ~(ARCH_PAGE_SIZE - 1);
+  uint64_t end = physical + module->size;
+  if (end > UINT64_MAX - (ARCH_PAGE_SIZE - 1)) {
+    panic("initial image module extent overflows");
+  }
+  uint64_t frame_end = (end + ARCH_PAGE_SIZE - 1) & ~(ARCH_PAGE_SIZE - 1);
+
+  /* Check every frame we will map is reserved from the PMM. Only physical
+   * placement and byte size survive; never retain a Limine file structure. */
+  uint64_t covered = first_frame;
+  for (size_t i = 0; i < boot.region_count && covered < frame_end; ++i) {
+    const struct boot_region *region = &boot.regions[i];
+    uint64_t region_end = region->base + region->length;
+    if (region_end <= covered) {
+      continue;
+    }
+    if (region->base > covered || region->type != BOOT_KERNEL) {
+      break;
+    }
+    covered = region_end;
+  }
+  if (covered < frame_end) {
+    panic("initial image is outside executable/module reservations");
+  }
+
+  boot.initial_image = (struct boot_module){.physical = physical, .size = module->size};
+}
+
 [[noreturn]] void limine_entry(void);
 
 [[noreturn]] void limine_entry(void)
@@ -140,6 +189,7 @@ static void copy_memory_map(void)
   validate_responses();
   copy_executable_placement();
   copy_memory_map();
+  copy_initial_image();
 
   klog("Limine: base revision %u, %zu memory regions, kernel phys=0x%lx virt=%p\n",
        REQUIRED_BASE_REVISION, boot.region_count, boot.kernel_phys,
