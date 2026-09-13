@@ -1,55 +1,79 @@
-#include <arch/cpu.h>
+#include <arch/syscall.h>
 #include <kernel/init.h>
-
-#include "kernel/memory.h"
-
+#include <kernel/boot.h>
+#include <kernel/image.h>
 #include <kernel/log.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 
-static const uint8_t code[] = {
-  0x31, 0xc0,                   /* xor %eax, %eax: syscall 0 */
-  0xbf, 0x41, 0x00, 0x00, 0x00, /* mov edi, 'A' */
-  0x0f, 0x05,                   /* syscall */
-  0xf4,                         /* hlt */
-};
+#define INITIAL_STACK_BASE UINT64_C(0x800000)
+#define INITIAL_STACK_SIZE PAGE_SIZE
 
-[[noreturn]] void user_address_space_test(void)
+static enum image_result load_initial_image(const struct boot_module *module,
+                                            struct vm_space **space,
+                                            uintptr_t *entry)
+{
+  size_t page_offset = module->physical & (PAGE_SIZE - 1);
+  KASSERT(module->size && module->size <= SIZE_MAX - page_offset - (PAGE_SIZE - 1));
+  size_t mapped_size = (page_offset + module->size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  phys_addr_t first_frame = module->physical - page_offset;
+  uintptr_t mapping;
+  KASSERT(vm_reserve(vm_kernel_space(), mapped_size, PAGE_SIZE, &mapping) == MM_OK);
+
+  /* The boot module frames remain reserved, borrowed backing. Give them a
+   * read-only kernel mapping independent of the discarded Limine HHDM. */
+  for (size_t offset = 0; offset < mapped_size; offset += PAGE_SIZE) {
+    KASSERT(vm_map(vm_kernel_space(), mapping + offset, first_frame + offset, 0) == MM_OK);
+  }
+
+  enum image_result result = image_load((const void *)(mapping + page_offset),
+                                        module->size, space, entry);
+
+  for (size_t offset = 0; offset < mapped_size; offset += PAGE_SIZE) {
+    phys_addr_t physical;
+    KASSERT(vm_unmap(vm_kernel_space(), mapping + offset, &physical) == MM_OK);
+    KASSERT(physical == first_frame + offset);
+  }
+  KASSERT(vm_release(vm_kernel_space(), mapping, mapped_size) == MM_OK);
+  return result;
+}
+
+[[noreturn]] static void start_initial_image(const struct boot_info *boot)
 {
   struct vm_space *space;
-  uintptr_t address = 0x400000;
+  uintptr_t entry;
+  enum image_result result = load_initial_image(&boot->initial_image, &space, &entry);
+  if (result != IMAGE_OK) {
+    panic("cannot load initial userspace image (error %u)", (unsigned)result);
+  }
 
-  KASSERT(vm_space_create(&space) == MM_OK);
+  enum mm_result status = vm_alloc_at(space, INITIAL_STACK_BASE, INITIAL_STACK_SIZE,
+                                      PAGE_USER | PAGE_WRITE);
+  if (status != MM_OK) {
+    KASSERT(vm_space_destroy(space) == MM_OK);
+    panic("cannot allocate initial user stack (error %u)", (unsigned)status);
+  }
 
-  KASSERT(vm_alloc_at(space, address, PAGE_SIZE,
-    PAGE_USER | PAGE_WRITE) == MM_OK);
-
+  klog("userspace: P1F image=%zu bytes entry=%p stack=%p\n",
+       boot->initial_image.size, (void *)entry,
+       (void *)(INITIAL_STACK_BASE + INITIAL_STACK_SIZE));
   KASSERT(vm_space_activate(space) == MM_OK);
-  memcpy((void *)address, code, sizeof(code));
-  KASSERT(vm_protect(space, address, PAGE_USER | PAGE_EXEC) == MM_OK);
 
-  uintptr_t stack_base = 0x800000;
-
-  KASSERT(vm_alloc_at(space, stack_base, PAGE_SIZE,
-    PAGE_USER | PAGE_WRITE) == MM_OK);
-
+  /* This initial demonstration enters _start directly, without a call frame
+   * or runtime. STAR supplies the ring-3 selectors; IF stays clear. */
   __asm__ volatile(
     "mov %[flags], %%r11\n"
     "mov %[stack], %%rsp\n"
     "sysretq\n"
     :
-    : "c" (address),
-    [stack] "r"(stack_base + PAGE_SIZE),
-    [flags] "i"(UINT64_C(1) << 1)
+    : "c" (entry),
+    [stack] "r"(INITIAL_STACK_BASE + INITIAL_STACK_SIZE),
+    [flags] "i"(RFLAGS_FIXED)
     : "r11", "memory");
 
   __builtin_unreachable();
-
-  KASSERT(vm_space_activate(vm_kernel_space()) == MM_OK);
-
-  KASSERT(vm_space_destroy(space) == MM_OK);
 }
 
 [[noreturn]] void kernel_init(const struct boot_info *boot)
@@ -72,9 +96,5 @@ static const uint8_t code[] = {
   klog("heap: TLSF pools=%zu bytes=%zu, alignment=16, live allocations=%zu\n",
        heap.pools, heap.pool_bytes, heap.live_allocations);
 
-  user_address_space_test();
-
-  klog("Caelum ready: image=%zu bytes; kernel initialization complete, halting\n",
-       boot->kernel_size);
-  cpu_halt();
+  start_initial_image(boot);
 }
