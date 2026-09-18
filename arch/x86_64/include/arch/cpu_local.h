@@ -6,6 +6,7 @@
 #define CPU_USER_RSP_OFFSET 16
 
 #ifndef __ASSEMBLER__
+#include <kernel/space.h>
 #include <arch/descriptors.h>
 #include <stdatomic.h>
 #include <stddef.h>
@@ -25,6 +26,7 @@ struct cpu_local {
   _Atomic bool online;
   uintptr_t stack_top, double_fault_stack_top;
   struct cpu_descriptors descriptors;
+  struct space *space;
 };
 
 /* Kernel GS names this CPU. User entry/return exchanges it with the user base.

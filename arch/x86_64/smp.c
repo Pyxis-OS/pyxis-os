@@ -113,6 +113,12 @@ size_t arch_cpu_index(void)
   return cpu_current()->index;
 }
 
+struct cpu_local *arch_cpu_at(size_t index)
+{
+  KASSERT(index < cpu_count);
+  return cpus[index];
+}
+
 [[noreturn]] void arch_ap_main(struct cpu_local *cpu)
 {
   gdt_init(&cpu->descriptors, cpu->double_fault_stack_top);

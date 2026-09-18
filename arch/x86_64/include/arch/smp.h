@@ -28,6 +28,8 @@ void arch_smp_finish(void);
 size_t arch_cpu_count(void);
 size_t arch_cpu_index(void);
 
+struct cpu_local *arch_cpu_at(size_t index);
+
 [[noreturn]] void arch_ap_entry(struct ap_boot *boot);
 [[noreturn]] void arch_ap_main(struct cpu_local *cpu);
 #endif

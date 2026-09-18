@@ -10,6 +10,7 @@
 #include <kernel/panic.h>
 #include <kernel/user.h>
 #include <kernel/fb/tty.h>
+#include <kernel/space.h>
 
 #define INITIAL_STACK_BASE UINT64_C(0x800000)
 #define INITIAL_STACK_SIZE PAGE_SIZE
@@ -81,7 +82,10 @@ static void queue_initial_image(const struct boot_info *boot)
   }
 
   boot_start_cpus();
+
+  space_init_all(&boot->framebuffer);
   tty_init(&boot->framebuffer, &aardvark_scheme, &bizcat);
+
   user_init();
 
   struct pmm_stats memory = pmm_get_stats();
