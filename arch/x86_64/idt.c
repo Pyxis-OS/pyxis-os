@@ -91,6 +91,13 @@ void interrupt_handler(struct exception_frame *frame)
 [[noreturn]] void exception_handler(const struct exception_frame *frame)
 {
   uint64_t fault_address = read_cr2();
+  bool user_exception = (frame->cs & SELECTOR_RPL_MASK) == SELECTOR_RPL_USER &&
+    frame->vector < EXCEPTION_VECTOR_COUNT &&
+    frame->vector != EXCEPTION_NMI && frame->vector != EXCEPTION_DOUBLE_FAULT &&
+    frame->vector != EXCEPTION_MACHINE_CHECK;
+  if (!user_exception) {
+    klog_panic_begin();
+  }
 
   klog("\nCaelum exception: vector=%lu error=0x%lx rip=0x%lx\n",
        frame->vector, frame->error, frame->rip);
@@ -107,10 +114,7 @@ void interrupt_handler(struct exception_frame *frame)
     report_page_fault(frame->error, fault_address);
   }
 
-  if ((frame->cs & SELECTOR_RPL_MASK) == SELECTOR_RPL_USER &&
-      frame->vector < EXCEPTION_VECTOR_COUNT &&
-      frame->vector != EXCEPTION_NMI && frame->vector != EXCEPTION_DOUBLE_FAULT &&
-      frame->vector != EXCEPTION_MACHINE_CHECK) {
+  if (user_exception) {
     user_fault();
   }
   panic("fatal kernel exception");

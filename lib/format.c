@@ -1,8 +1,6 @@
-#include <arch/console.h>
 #include <kernel/log.h>
 #include <stdint.h>
 #include <stddef.h>
-#include <kernel/fb/tty.h>
 
 #define UINT64_DECIMAL_DIGITS 20
 
@@ -65,7 +63,7 @@ static uint64_t next_unsigned_integer(va_list args, enum integer_length length)
   }
 }
 
-void kvlog(const char *format, va_list args)
+static void format_log(const char *format, va_list args)
 {
   while (*format) {
     if (*format != '%') {
@@ -133,4 +131,11 @@ void kvlog(const char *format, va_list args)
       break;
     }
   }
+}
+
+void kvlog(const char *format, va_list args)
+{
+  bool locked = log_begin();
+  format_log(format, args);
+  log_end(locked);
 }

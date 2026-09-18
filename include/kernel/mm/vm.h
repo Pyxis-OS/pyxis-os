@@ -15,19 +15,26 @@ struct vm_stats {
 void vm_init(void);
 struct vm_space *vm_kernel_space(void);
 /* Requires an initialized heap. New spaces share kernel mappings and start
- * with an empty user area. Failure sets *result to NULL. BSP-only, IF=0;
- * no VM operations or heap allocation from fault handlers. */
+ * with an empty user area. Failure sets *result to NULL. Allocation, queries
+ * and mutation are BSP-only, IF=0; no VM operations or heap allocation from
+ * fault handlers. Do not mutate a space owned by a task. */
 enum mm_result vm_space_create(struct vm_space **result);
+/* Each CPU may activate the kernel space or a private space it exclusively
+ * owns. Always flushes that CPU's TLB, including shared kernel translations. */
 enum mm_result vm_space_activate(struct vm_space *space);
 /* Rejects kernel/active spaces and reservations with caller-owned mappings.
- * Frees VM-owned backing, private page tables and metadata on success. */
+ * Frees VM-owned backing, private page tables and metadata on success.
+ * The active check is local: a remote task must return ownership first. */
 enum mm_result vm_space_destroy(struct vm_space *space);
 
 /* Addresses belong to the target space, not necessarily the active one.
  * Sizes are nonzero, rounded up to pages; alignment is a power of two >= a page.
  * Ranges must be released whole with the same rounded size. Address outputs
  * are zero on failure. Metadata exhaustion returns MM_NO_MEMORY.
- * A reservation owns no frames. Caller mappings must be removed before release. */
+ * A reservation owns no frames. Caller mappings must be removed before release.
+ * Shared kernel mappings must remain stable while another CPU uses them.
+ * Publishing a new task and retiring an old one provide the required local
+ * TLB flushes for task stacks; arbitrary remote mapping changes are unsupported. */
 enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment,
                           uintptr_t *result);
 enum mm_result vm_reserve_at(struct vm_space *space, uintptr_t base, size_t bytes);

@@ -29,7 +29,8 @@
 void arch_syscall_init(void);
 /* User ABI: RAX = number; RDI, RSI, RDX, R10, R8, R9 = arguments.
  * RAX returns the result. RCX/R11 are clobbered; other GPRs are preserved.
- * Workloads remain BSP-only and non-reentrant; kernel code must not execute SYSCALL. */
+ * Entry is non-reentrant on each CPU, but handlers can run on different CPUs
+ * concurrently. Kernel code must not execute SYSCALL. */
 void syscall_entry(void);
 #endif
 

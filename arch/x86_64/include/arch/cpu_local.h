@@ -8,6 +8,7 @@
 #ifndef __ASSEMBLER__
 #include <arch/descriptors.h>
 #include <stdatomic.h>
+#include <stddef.h>
 #include <stdint.h>
 
 struct arch_address_space;
@@ -17,6 +18,7 @@ struct cpu_local {
   uintptr_t syscall_stack_top;
   uintptr_t saved_user_rsp;
   struct arch_address_space *active_space;
+  size_t index;
   uint32_t lapic_id;
   uint32_t timer_count;
   _Atomic uint64_t timer_interrupts;

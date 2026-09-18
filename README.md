@@ -25,8 +25,9 @@ Boot installs serial and a kernel stack, copies boot information, installs
 GDT/IDT/TSS, initializes the bitmap PMM, and switches to kernel-owned paging.
 Generic initialization creates the VM allocator and TLSF heap, brings APs onto
 owned stacks and paging, initializes framebuffer text output, and schedules the
-initial user image on the BSP. Local APIC timers preempt userspace and wake idle
-CPUs. APs remain idle; see `docs/smp.md` for the startup boundary.
+initial user image on CPU 1 when available, or the BSP on a single-CPU boot.
+Local APIC timers preempt each CPU's pinned tasks and wake idle CPUs. The BSP
+owns allocation and completed-task cleanup; see `docs/smp.md`.
 
 Bootstrap limits: 256 memory regions, usable RAM below 64 GiB, 256 kernel VM range
 records and 16 KiB TLSF control storage. Capacity failures are
@@ -51,6 +52,7 @@ Empty private page tables are reclaimed when their space is destroyed. Interface
 headers document the full ownership contracts.
 
 Kernel execution stays non-preemptible; only userspace and idle enable maskable
-interrupts. Allocators and userspace scheduling remain BSP-only, outside interrupt/
-fault handlers. Concurrent workloads, kernel threads, AVX, physical hardware and
-bootloader-memory reclamation remain unsupported. See `docs/userspace.md`.
+interrupts. Allocation and task submission remain BSP-only, outside interrupt/
+fault handlers. Task migration, shared-space execution, cross-CPU TLB shootdowns,
+kernel threads, AVX, physical hardware and bootloader-memory reclamation remain
+unsupported. See `docs/userspace.md`.

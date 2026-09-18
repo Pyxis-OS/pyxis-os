@@ -28,7 +28,12 @@ allocator mutation or a fault handler; their normal invariants still apply.
 After scheduling starts, use a breakpoint in BSP scheduler code with the kernel
 space active and IF=0 for these calls. An interrupt handler or a stopped user
 context is not a suitable place to invoke allocator or task-creation functions.
-APs currently only idle; do not invoke those functions on them either.
+APs may run userspace, but allocators and task submission remain BSP-only.
+For injected calls, use `set scheduler-locking on` after selecting the stopped
+BSP so other CPUs cannot run while GDB restores its context. First ensure no
+CPU is holding the scheduler queue or log lock; otherwise the call could wait
+forever on a stopped owner. Restore `set scheduler-locking off` before continuing
+normal execution. The pre-scheduling breakpoint above avoids those lock owners.
 
 ## Call functions and keep results
 

@@ -5,6 +5,7 @@
 [[noreturn]] void panic(const char *format, ...)
 {
   cpu_disable_interrupts();
+  klog_panic_begin();
   klog("\nCaelum panic: ");
   va_list args;
   va_start(args, format);

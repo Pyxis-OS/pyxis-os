@@ -10,6 +10,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/user.h>
 
 #define AP_STACK_BYTES (16 * 1024)
 #define AP_STARTUP_TIMER_PERIODS 500
@@ -64,6 +65,7 @@ struct ap_boot *arch_ap_prepare(uint32_t lapic_id)
     panic("cannot allocate AP stacks");
   }
   cpu->lapic_id = lapic_id;
+  cpu->index = cpu_count;
   cpu->stack_top = stacks + AP_STACK_BYTES;
   cpu->double_fault_stack_top = stacks + 2 * AP_STACK_BYTES;
   cpus[cpu_count++] = cpu;
@@ -98,7 +100,17 @@ void arch_ap_wait(void)
 void arch_smp_finish(void)
 {
   KASSERT(cpu_count == cpu_capacity);
-  klog("SMP: %zu CPU(s) online; APs idle, workloads remain on BSP\n", cpu_count);
+  klog("SMP: %zu CPU(s) online; APs waiting for scheduler startup\n", cpu_count);
+}
+
+size_t arch_cpu_count(void)
+{
+  return cpu_count;
+}
+
+size_t arch_cpu_index(void)
+{
+  return cpu_current()->index;
 }
 
 [[noreturn]] void arch_ap_main(struct cpu_local *cpu)
@@ -114,7 +126,5 @@ void arch_smp_finish(void)
   arch_syscall_init();
 
   atomic_store_explicit(&cpu->online, true, memory_order_release);
-  for (;;) {
-    cpu_wait_interrupt();
-  }
+  user_schedule();
 }

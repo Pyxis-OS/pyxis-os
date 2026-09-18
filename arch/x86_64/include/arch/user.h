@@ -26,7 +26,8 @@ void arch_user_save(struct arch_user_state *state);
 void arch_user_restore(const struct arch_user_state *state);
 bool arch_user_entry_valid(uintptr_t entry, uintptr_t stack_top);
 
-/* One CPU, IF=0. Both stacks must be mapped in every participating space.
+/* Stays on the calling CPU, IF=0. Both stacks must be mapped in every
+ * participating space.
  * Switch preserves C callee-saved registers; interrupt entry saves user GPRs. */
 void arch_context_switch(uintptr_t *old_stack, uintptr_t new_stack);
 uintptr_t arch_context_prepare(uintptr_t stack_top, void (*entry)(void));
