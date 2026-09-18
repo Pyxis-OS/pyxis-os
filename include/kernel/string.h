@@ -3,6 +3,12 @@
 
 #include <stddef.h>
 
+/* Byte count excluding the terminating NUL. Does not allocate. */
+size_t strlen(const char *text);
+/* Inspect at most max_length bytes; return max_length if none is NUL.
+ * A zero bound returns zero without reading text. Does not allocate. */
+size_t strnlen(const char *text, size_t max_length);
+
 /* Copy up to max_length bytes, stopping at the first NUL, and append a NUL.
  * Returns a heap-owned string (release with kfree), or NULL on allocation or
  * size overflow failure. A zero bound produces an allocated empty string.
