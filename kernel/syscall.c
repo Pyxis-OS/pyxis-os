@@ -1,6 +1,7 @@
 #include <kernel/syscall.h>
 #include <kernel/user.h>
 
+#include "../include/kernel/fb/tty.h"
 #include "../include/kernel/log.h"
 
 int64_t syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
@@ -14,8 +15,12 @@ int64_t syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
   (void)arg6;
   
   switch (number) {
-  case 0:
-    klog("%c", (char)arg1);
+  case SYSCALL_PUTCHAR:
+    if (get_tty()->initialized)
+      tty_put_char((char)arg1);
+    return 0;
+  case SYSCALL_LOG_PUTCHAR:
+    log_putc((char)arg1);
     return 0;
   case SYSCALL_EXIT:
     user_exit((int32_t)(uint32_t)arg1);

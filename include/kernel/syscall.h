@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
-#define SYSCALL_EXIT UINT64_C(1)
+#define SYSCALL_PUTCHAR UINT64_C(0)
+#define SYSCALL_LOG_PUTCHAR UINT64_C(1)
+#define SYSCALL_EXIT UINT64_C(-1)
 
 /* Called on the kernel syscall stack with interrupts disabled. Arguments are
  * untrusted user values; a pointer argument must not be blindly dereferenced.
