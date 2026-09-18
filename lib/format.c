@@ -13,17 +13,10 @@ enum integer_length {
   LENGTH_SIZE,
 };
 
-static void put_char(char c)
-{
-  console_putc(c);
-  if (get_tty()->initialized)
-    tty_put_char(c);
-}
-
 static void put_string(const char *text)
 {
   for (; *text; ++text) {
-    put_char(*text);
+    log_putc(*text);
   }
 }
 
@@ -40,7 +33,7 @@ static void put_unsigned(uint64_t value, unsigned radix)
 
   while (count) {
     --count;
-    put_char(digits[count]);
+    log_putc(digits[count]);
   }
 }
 
@@ -76,7 +69,7 @@ void kvlog(const char *format, va_list args)
 {
   while (*format) {
     if (*format != '%') {
-      put_char(*format);
+      log_putc(*format);
       ++format;
       continue;
     }
@@ -103,7 +96,7 @@ void kvlog(const char *format, va_list args)
 
     switch (conversion) {
     case '%':
-      put_char('%');
+      log_putc('%');
       break;
     case 's': {
       const char *text = va_arg(args, const char *);
@@ -111,7 +104,7 @@ void kvlog(const char *format, va_list args)
       break;
     }
     case 'c':
-      put_char((char)va_arg(args, int));
+      log_putc((char)va_arg(args, int));
       break;
     case 'p':
       put_string("0x");
@@ -121,7 +114,7 @@ void kvlog(const char *format, va_list args)
       int64_t signed_value = next_signed_integer(args, length);
       uint64_t magnitude = (uint64_t)signed_value;
       if (signed_value < 0) {
-        put_char('-');
+        log_putc('-');
         /* Unsigned negation also handles INT64_MIN without signed overflow. */
         magnitude = 0 - magnitude;
       }
