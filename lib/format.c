@@ -1,4 +1,6 @@
 #include <kernel/log.h>
+#include <kernel/format.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -11,14 +13,29 @@ enum integer_length {
   LENGTH_SIZE,
 };
 
-static void put_string(const char *text)
+struct format_output {
+  char *buffer;
+  size_t length;
+};
+
+static void put_char(struct format_output *output, char c)
+{
+  if (output->buffer) {
+    output->buffer[output->length] = c;
+  } else {
+    log_putc(c);
+  }
+  ++output->length;
+}
+
+static void put_string(struct format_output *output, const char *text)
 {
   for (; *text; ++text) {
-    log_putc(*text);
+    put_char(output, *text);
   }
 }
 
-static void put_unsigned(uint64_t value, unsigned radix)
+static void put_unsigned(struct format_output *output, uint64_t value, unsigned radix)
 {
   char digits[UINT64_DECIMAL_DIGITS];
   size_t count = 0;
@@ -31,7 +48,7 @@ static void put_unsigned(uint64_t value, unsigned radix)
 
   while (count) {
     --count;
-    log_putc(digits[count]);
+    put_char(output, digits[count]);
   }
 }
 
@@ -63,11 +80,12 @@ static uint64_t next_unsigned_integer(va_list args, enum integer_length length)
   }
 }
 
-static void format_log(const char *format, va_list args)
+static void format_output(struct format_output *output, const char *format,
+                           va_list args)
 {
   while (*format) {
     if (*format != '%') {
-      log_putc(*format);
+      put_char(output, *format);
       ++format;
       continue;
     }
@@ -94,40 +112,40 @@ static void format_log(const char *format, va_list args)
 
     switch (conversion) {
     case '%':
-      log_putc('%');
+      put_char(output, '%');
       break;
     case 's': {
       const char *text = va_arg(args, const char *);
-      put_string(text ? text : "(null)");
+      put_string(output, text ? text : "(null)");
       break;
     }
     case 'c':
-      log_putc((char)va_arg(args, int));
+      put_char(output, (char)va_arg(args, int));
       break;
     case 'p':
-      put_string("0x");
-      put_unsigned((uintptr_t)va_arg(args, void *), 16);
+      put_string(output, "0x");
+      put_unsigned(output, (uintptr_t)va_arg(args, void *), 16);
       break;
     case 'd': {
       int64_t signed_value = next_signed_integer(args, length);
       uint64_t magnitude = (uint64_t)signed_value;
       if (signed_value < 0) {
-        log_putc('-');
+        put_char(output, '-');
         /* Unsigned negation also handles INT64_MIN without signed overflow. */
         magnitude = 0 - magnitude;
       }
 
-      put_unsigned(magnitude, 10);
+      put_unsigned(output, magnitude, 10);
       break;
     }
     case 'u':
     case 'x': {
       uint64_t value = next_unsigned_integer(args, length);
-      put_unsigned(value, conversion == 'x' ? 16 : 10);
+      put_unsigned(output, value, conversion == 'x' ? 16 : 10);
       break;
     }
     default:
-      put_string("<format?>");
+      put_string(output, "<format?>");
       break;
     }
   }
@@ -136,6 +154,24 @@ static void format_log(const char *format, va_list args)
 void kvlog(const char *format, va_list args)
 {
   bool locked = log_begin();
-  format_log(format, args);
+  struct format_output output = {0};
+  format_output(&output, format, args);
   log_end(locked);
+}
+
+int vsprintf(char *buffer, const char *format, va_list args)
+{
+  struct format_output output = {.buffer = buffer};
+  format_output(&output, format, args);
+  buffer[output.length] = '\0';
+  return output.length > INT_MAX ? -1 : (int)output.length;
+}
+
+int sprintf(char *buffer, const char *format, ...)
+{
+  va_list args;
+  va_start(args, format);
+  int length = vsprintf(buffer, format, args);
+  va_end(args);
+  return length;
 }
