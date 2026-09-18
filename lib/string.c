@@ -3,12 +3,27 @@
 #include <kernel/mm/heap.h>
 #include <stdint.h>
 
-char *strndup(const char *text, size_t max_length)
+size_t strlen(const char *text)
+{
+  size_t length = 0;
+  while (text[length]) {
+    ++length;
+  }
+  return length;
+}
+
+size_t strnlen(const char *text, size_t max_length)
 {
   size_t length = 0;
   while (length < max_length && text[length]) {
     ++length;
   }
+  return length;
+}
+
+char *strndup(const char *text, size_t max_length)
+{
+  size_t length = strnlen(text, max_length);
   if (length == SIZE_MAX) {
     return NULL;
   }
