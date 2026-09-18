@@ -1,7 +1,7 @@
 #ifndef KERNEL_LOG_H
 #define KERNEL_LOG_H
 #include <stdarg.h>
-/* Supported: %s %c %p %d %u %x, with l/ll/z integer lengths and %%.
+/* Formatting subset is documented in <kernel/format.h>.
  * Normal calls are serialized per format invocation; callers keep IF=0.
  * Initialize/change the TTY on the BSP before releasing AP schedulers. */
 void kvlog(const char *format, va_list args);
