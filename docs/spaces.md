@@ -68,6 +68,9 @@ with explicit sharing where appropriate. The namespace and authority model,
 including the relationship between kernel ownership and supervisor policy,
 remains undecided.
 
+The [filesystem and namespace draft](vfs.md) explores a shared system base,
+per-space overlays, shared writable storage and URI-based namespace views.
+
 ## Prototype placement idea
 
 The current prototype idea assigns each space exclusively to one core and keeps
