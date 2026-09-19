@@ -12,6 +12,7 @@
 #include <arch/cpu_local.h>
 
 #define USER_KERNEL_STACK_SIZE (16 * 1024)
+#define PRESENT_INTERVAL_TICKS 2
 
 struct user_task {
   struct user_task *next;
@@ -35,6 +36,9 @@ static struct user_scheduler *schedulers;
 static struct user_task *completed_head;
 static atomic_bool started;
 static atomic_bool queues_locked;
+
+/* Only the BSP reads or updates this timestamp, with IF=0. */
+static uint64_t last_present_tick;
 
 /* IF=0 on every caller. Only list links cross CPUs; never allocate, log,
  * switch contexts or wait for another CPU while holding this lock. */
@@ -196,7 +200,6 @@ static void reap_completed(void)
 
   struct user_scheduler *scheduler = local_scheduler();
   bool idle_reported = false;
-  uint64_t last_present_tick = 0;
   for (;;) {
     if (cpu_index == 0) {
       reap_completed();
@@ -204,7 +207,7 @@ static void reap_completed(void)
       uint64_t ticks = atomic_load_explicit(
           &cpu_current()->timer_interrupts, memory_order_relaxed);
 
-      if (ticks - last_present_tick >= 2) {
+      if (ticks - last_present_tick >= PRESENT_INTERVAL_TICKS) {
         last_present_tick = ticks;
         space_present();
       }
@@ -250,8 +253,15 @@ void user_preempt(void)
   struct user_task *task = scheduler->current_task;
   KASSERT(task && !task->exited);
 
+  bool present_due = false;
+  if (arch_cpu_index() == 0) {
+    uint64_t ticks = atomic_load_explicit(
+        &cpu_current()->timer_interrupts, memory_order_relaxed);
+    present_due = ticks - last_present_tick >= PRESENT_INTERVAL_TICKS;
+  }
+
   lock_queues();
-  bool schedule_needed = scheduler->ready_head != NULL ||
+  bool schedule_needed = present_due || scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 && completed_head != NULL);
   unlock_queues();
   if (!schedule_needed) {
