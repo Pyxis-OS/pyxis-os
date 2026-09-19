@@ -93,6 +93,10 @@ so a busy task cannot prevent a sleeper from becoming runnable. Sleep requires
 interrupts enabled and no held locks. The [task header](../include/kernel/task.h)
 defines the calling contracts.
 
+Framebuffer presentation is the first BSP kernel task. It copies the active
+space and sleeps for two local timer ticks between copies. Rendering stays out
+of interrupt entry and the scheduler does not know about display timing.
+
 ## Memory and output boundaries
 
 Allocators, VM metadata, page-table mutation and the two scratch mappings remain

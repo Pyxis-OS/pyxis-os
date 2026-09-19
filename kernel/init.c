@@ -88,6 +88,11 @@ static void queue_initial_image(const struct boot_info *boot)
 
   task_init();
 
+  enum mm_result result = kernel_task_create(space_present_task, NULL);
+  if (result != MM_OK) {
+    panic("cannot create presentation task (error %u)", (unsigned)result);
+  }
+
   struct pmm_stats memory = pmm_get_stats();
   klog("PMM: total=%zu free=%zu allocated=%zu frames, metadata=%zu pages\n",
        memory.total_frames, memory.free_frames, memory.allocated_frames, memory.metadata_pages);

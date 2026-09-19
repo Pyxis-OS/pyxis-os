@@ -18,6 +18,9 @@
 #include <kernel/panic.h>
 #include <arch/cpu_local.h>
 #include <kernel/memory.h>
+#include <kernel/task.h>
+
+#define PRESENT_INTERVAL_TICKS 2
 
 static const struct boot_framebuffer *screen;
 static struct space *active_space;
@@ -111,6 +114,16 @@ void space_present()
       (const void *)active_space->fb->address,
       screen->size);
   cpu_store_fence();
+}
+
+void space_present_task(void *argument)
+{
+  (void)argument;
+
+  for (;;) {
+    space_present();
+    kernel_task_sleep(PRESENT_INTERVAL_TICKS);
+  }
 }
 
 void space_switch(size_t index)
