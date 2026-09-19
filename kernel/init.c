@@ -9,6 +9,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/user.h>
+#include <kernel/task.h>
 #include <kernel/fb/tty.h>
 #include <kernel/space.h>
 
@@ -85,7 +86,12 @@ static void queue_initial_image(const struct boot_info *boot)
 
   space_init_all(&boot->framebuffer);
 
-  user_init();
+  task_init();
+
+  enum mm_result result = kernel_task_create(space_present_task, NULL);
+  if (result != MM_OK) {
+    panic("cannot create presentation task (error %u)", (unsigned)result);
+  }
 
   struct pmm_stats memory = pmm_get_stats();
   klog("PMM: total=%zu free=%zu allocated=%zu frames, metadata=%zu pages\n",
@@ -102,5 +108,5 @@ static void queue_initial_image(const struct boot_info *boot)
 
   queue_initial_image(boot);
   klog("Caelum ready: starting preemptive userspace\n");
-  user_schedule();
+  task_schedule();
 }

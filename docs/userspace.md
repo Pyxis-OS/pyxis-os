@@ -51,8 +51,9 @@ syscall-entry stack. First entry uses IRETQ; a preempted task resumes through it
 saved interrupt frame. The local APIC timer selects runnable tasks round-robin.
 
 Userspace runs with interrupts enabled. Interrupt gates and SYSCALL disable
-them on kernel entry, so kernel execution is not preempted on its own CPU and
-a long syscall delays scheduling there. Other CPUs continue running. SYSCALL
+them on kernel entry, so syscall execution is not preempted on its own CPU and
+a long syscall delays scheduling there. Separate BSP kernel tasks run with
+interrupts enabled and can be preempted. Other CPUs continue running. SYSCALL
 needs an explicit kernel-stack switch; unlike an interrupt from userspace, it
 does not load the stack from the TSS. Kernel GS identifies the current CPU,
 with SWAPGS separating it from the user GS base on entry and return.

@@ -5,6 +5,7 @@
 #include <kernel/log.h>
 #include <kernel/panic.h>
 #include <kernel/user.h>
+#include <kernel/task.h>
 #include <stddef.h>
 
 #define IDT_GATE_PRESENT (1u << 7)
@@ -76,9 +77,7 @@ void interrupt_handler(struct exception_frame *frame)
   if (frame->vector == APIC_TIMER_VECTOR) {
     atomic_fetch_add_explicit(&cpu_current()->timer_interrupts, 1, memory_order_relaxed);
     apic_end_interrupt();
-    if ((frame->cs & SELECTOR_RPL_MASK) == SELECTOR_RPL_USER) {
-      user_preempt();
-    }
+    task_preempt((frame->cs & SELECTOR_RPL_MASK) == SELECTOR_RPL_USER);
     return;
   }
   if (frame->vector == APIC_SPURIOUS_VECTOR) {

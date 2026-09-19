@@ -10,7 +10,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
-#include <kernel/user.h>
+#include <kernel/task.h>
 
 #define AP_STACK_BYTES (16 * 1024)
 #define AP_STARTUP_TIMER_PERIODS 600
@@ -132,5 +132,5 @@ struct cpu_local *arch_cpu_at(size_t index)
   arch_syscall_init();
 
   atomic_store_explicit(&cpu->online, true, memory_order_release);
-  user_schedule();
+  task_schedule();
 }

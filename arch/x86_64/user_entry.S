@@ -5,7 +5,7 @@
 .global arch_context_switch
 .type arch_context_switch, @function
 arch_context_switch:
-  /* Pair with switch_frame. User registers are already on the IRQ stack. */
+  /* Pair with switch_frame. Preempted registers are already on the IRQ stack. */
   push %rbx
   push %rbp
   push %r12

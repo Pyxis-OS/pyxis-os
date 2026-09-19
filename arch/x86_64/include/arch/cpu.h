@@ -2,6 +2,7 @@
 #define ARCH_CPU_H
 
 #include <stdint.h>
+#include <arch/syscall.h>
 
 #define CPUID_BASIC_FEATURES 1
 #define CPUID_FEATURE_PAT (1u << 16)
@@ -31,6 +32,25 @@ static inline void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx,
 static inline void cpu_disable_interrupts(void)
 {
   __asm__ volatile("cli" : : : "memory");
+}
+
+static inline void cpu_enable_interrupts(void)
+{
+  __asm__ volatile("sti" : : : "memory");
+}
+
+static inline uint64_t cpu_save_interrupts(void)
+{
+  uint64_t flags;
+  __asm__ volatile("pushfq; popq %0; cli" : "=r"(flags) : : "memory");
+  return flags;
+}
+
+static inline void cpu_restore_interrupts(uint64_t flags)
+{
+  if (flags & RFLAGS_INTERRUPT_ENABLE) {
+    cpu_enable_interrupts();
+  }
 }
 
 /* Drain write-combining stores before reporting framebuffer writes complete. */
