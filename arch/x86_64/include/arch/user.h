@@ -28,7 +28,7 @@ bool arch_user_entry_valid(uintptr_t entry, uintptr_t stack_top);
 
 /* Stays on the calling CPU, IF=0. Both stacks must be mapped in every
  * participating space.
- * Switch preserves C callee-saved registers; interrupt entry saves user GPRs. */
+ * Switch preserves C callee-saved registers; interrupt entry saves task GPRs. */
 void arch_context_switch(uintptr_t *old_stack, uintptr_t new_stack);
 uintptr_t arch_context_prepare(uintptr_t stack_top, void (*entry)(void));
 

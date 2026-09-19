@@ -1,5 +1,6 @@
 #include <kernel/log.h>
 #include <kernel/format.h>
+#include <arch/cpu.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -153,10 +154,12 @@ static void format_output(struct format_output *output, const char *format,
 
 void kvlog(const char *format, va_list args)
 {
+  uint64_t flags = cpu_save_interrupts();
   bool locked = log_begin();
   struct format_output output = {0};
   format_output(&output, format, args);
   log_end(locked);
+  cpu_restore_interrupts(flags);
 }
 
 int vsprintf(char *buffer, const char *format, va_list args)

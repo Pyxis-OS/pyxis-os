@@ -9,7 +9,7 @@ struct tty;
 void log_set_tty(struct tty *tty);
 
 /* Formatting subset is documented in <kernel/format.h>.
- * Normal calls are serialized per format invocation; callers keep IF=0.
+ * Normal calls are serialized per format invocation and preserve caller IF.
  * Initialize/change the TTY on the BSP before releasing AP schedulers. */
 void kvlog(const char *format, va_list args);
 void klog(const char *format, ...) __attribute__((format(printf, 1, 2)));

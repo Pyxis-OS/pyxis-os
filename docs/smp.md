@@ -1,4 +1,4 @@
-# Pinned userspace on multiple CPUs
+# Pinned tasks on multiple CPUs
 
 `make run CPUS=4` boots one QEMU socket with four cores and one thread per core.
 `CPUS` defaults to one and also applies to `make debug`. With multiple CPUs the
@@ -48,8 +48,8 @@ to the CPU-local record; user entry and return use SWAPGS. Fatal NMI reporting
 does not depend on GS because an NMI can interrupt the entry/exit window.
 
 After bringing CPUs online, the BSP initializes the console and calls
-`user_init()` to allocate one scheduler per CPU. APs wait until the BSP enters
-`user_schedule()`, which publishes the initialized state with release ordering.
+`task_init()` to allocate one scheduler per CPU. APs wait until the BSP enters
+`task_schedule()`, which publishes the initialized state with release ordering.
 Each CPU then runs its own ready queue round-robin with local timer preemption.
 Its permanent boot stack becomes its scheduler stack. Tasks never migrate.
 
@@ -79,10 +79,27 @@ stacks, tables and metadata outside it. If the BSP itself runs userspace, a
 pending completion makes its next user timer interrupt return to the scheduler
 even when there is no second runnable BSP task.
 
+Kernel tasks share the BSP ready queue with any BSP userspace. Create one with
+`kernel_task_create(entry, argument)` after scheduler initialization, on the BSP
+with interrupts disabled. Its entry runs on a private stack in the kernel
+address space with interrupts enabled. The timer can preempt it; returning from
+entry retires its stack and metadata through the same scheduler cleanup path.
+The argument is borrowed, so its owner must keep it alive until entry returns.
+
+`kernel_task_sleep(ticks)` suspends the current kernel task until that many BSP
+timer interrupts have been delivered. Zero ticks yields to other ready tasks.
+Sleeping tasks are checked both by the BSP scheduler and by timer preemption,
+so a busy task cannot prevent a sleeper from becoming runnable. Sleep requires
+interrupts enabled and no held locks. The [task header](../include/kernel/task.h)
+defines the calling contracts.
+
 ## Memory and output boundaries
 
 Allocators, VM metadata, page-table mutation and the two scratch mappings remain
-BSP-only. AP syscalls currently print or exit; they cannot allocate memory.
+BSP-only and require interrupts disabled. A kernel task must save/disable
+interrupts around these calls and restore them afterward; being pinned to the
+BSP alone does not prevent same-CPU reentry. AP syscalls currently print or exit;
+they cannot allocate memory.
 Private spaces are built before publication and reclaimed only after retirement.
 Kernel code, CPU records, scheduler stacks, heap pools and framebuffer mappings
 remain mapped throughout AP execution. A shared kernel range must not be
@@ -96,15 +113,16 @@ access that task's stack or private mappings. This is a restricted ownership
 protocol, not general cross-CPU TLB invalidation; mutable shared mappings and
 concurrent allocator calls still require additional synchronization.
 
-Normal log calls serialize serial and framebuffer output per format invocation.
+Normal log calls save/disable interrupts while serializing serial and framebuffer
+output per format invocation, then restore the caller's interrupt state.
 Single-byte syscalls from different programs can still interleave their text.
 Fatal kernel diagnostics switch to unlocked serial-only output so an exception
 in the lock owner cannot deadlock reporting. Such output may interleave, and a
-kernel panic still halts only the faulting CPU. Direct TTY manipulation remains
-limited to BSP initialization before releasing AP schedulers.
+kernel panic still halts only the faulting CPU. Shared TTY mutation still needs
+serialization; the low-level log lock interface requires interrupts disabled.
 
-There are no spaces objects, migration, kernel threads, cross-CPU address-space
-sharing or new userspace syscalls in this milestone.
+Kernel tasks stay on the BSP. Task migration, shared user address spaces and
+kernel-task fault recovery are not supported; a kernel-task fault is fatal.
 
 ## Debugger inspection
 
@@ -117,7 +135,7 @@ thread apply all info registers rip rsp cr3 gs_base
 p 'arch/x86_64/smp.c'::cpu_count
 p 'arch/x86_64/smp.c'::cpus[1]->online
 p 'arch/x86_64/smp.c'::cpus[1]->timer_interrupts
-p 'kernel/user.c'::schedulers[1]
+p 'kernel/task.c'::schedulers[1]
 ```
 
 CPUs have distinct stack pointers and GS bases. An idle CPU uses the kernel
