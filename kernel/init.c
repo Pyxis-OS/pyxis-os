@@ -84,7 +84,7 @@ static void queue_initial_image(const struct boot_info *boot)
   boot_start_cpus();
 
   space_init_all(&boot->framebuffer);
-  tty_init(&boot->framebuffer, &aardvark_scheme, &bizcat);
+  //tty_init(&boot->framebuffer, &aardvark_scheme, &bizcat);
 
   user_init();
 

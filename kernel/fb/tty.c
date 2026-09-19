@@ -5,6 +5,7 @@
 #include <kernel/fb/tty.h>
 #include <kernel/memory.h>
 #include <arch/cpu.h>
+#include <arch/cpu_local.h>
 
 const struct color_scheme aardvark_scheme = {
     .palette = {0x222734, 0xc26265, 0x52aa60, 0xad9b49, 0x487fd4, 0xaf5bd1,
@@ -22,7 +23,7 @@ struct tty global_tty = {0};
 
 struct tty *get_tty(void)
 {
-  return &global_tty;
+  return cpu_current()->space->tty;
 }
 
 void tty_init(const struct boot_framebuffer *fb,

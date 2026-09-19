@@ -4,9 +4,9 @@ QEMU ?= qemu-system-x86_64
 QEMU_DISPLAY ?= gtk
 MEMORY ?= 256M
 CPUS ?= 1
-ACCEL ?= tcg
-OVMF_CODE ?= /usr/share/OVMF/OVMF_CODE.fd
-OVMF_VARS ?= /usr/share/OVMF/OVMF_VARS.fd
+ACCEL ?= kvm
+OVMF_CODE ?= /usr/share/OVMF/x64/OVMF_CODE.4m.fd
+OVMF_VARS ?= /usr/share/OVMF/x64/OVMF_VARS.4m.fd
 
 CPPFLAGS := -Iinclude -Iarch/x86_64/include -Ithird_party/limine -Ithird_party/tlsf
 CFLAGS := -std=gnu23 -O2 -g3 -ffreestanding -fno-stack-protector \
