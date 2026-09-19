@@ -6,9 +6,9 @@
 #define KERNEL_FB_TTY_H
 
 #include <stdint.h>
+#include <kernel/fb/fb.h>
 
 #include "font.h"
-#include "kernel/boot.h"
 
 struct tty
 {
@@ -26,7 +26,7 @@ struct tty
 
   const struct font *font;
   const struct color_scheme *scheme;
-  const struct boot_framebuffer *fb;
+  const struct framebuffer *fb;
 };
 
 /* Scheme and drawing colors use 0xRRGGBB. */
@@ -46,14 +46,11 @@ struct color_scheme
 
 extern const struct color_scheme aardvark_scheme;
 
-void tty_init(const struct boot_framebuffer *fb,
-  const struct color_scheme *scheme, const struct font *font);
-
 void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
   uint32_t fg, uint32_t bg);
 
 void tty_put_char(struct tty *tty, char c);
-void tty_clear(void);
+void tty_clear(struct tty *tty);
 
 struct tty *get_tty(void);
 

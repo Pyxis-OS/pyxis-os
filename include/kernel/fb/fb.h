@@ -11,7 +11,10 @@
 struct framebuffer
 {
   uintptr_t address;
+
   size_t size;
+  size_t pitch;
+  
   size_t width;
   size_t height;
 

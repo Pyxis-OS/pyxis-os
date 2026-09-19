@@ -26,28 +26,7 @@ struct tty *get_tty(void)
   return cpu_current()->space->tty;
 }
 
-void tty_init(const struct boot_framebuffer *fb,
-              const struct color_scheme *scheme, const struct font *font)
-{
-  get_tty()->x = 0;
-  get_tty()->y = 0;
-
-  get_tty()->width = fb->width / font->width;
-  get_tty()->height = fb->height / font->height;
-
-  get_tty()->fg = scheme->foreground;
-  get_tty()->bg = scheme->background;
-
-  get_tty()->font = font;
-  get_tty()->scheme = scheme;
-  get_tty()->fb = fb;
-
-  tty_clear();
-
-  get_tty()->initialized = true;
-}
-
-static uint32_t framebuffer_color(const struct boot_framebuffer *fb, uint32_t rgb)
+static uint32_t framebuffer_color(const struct framebuffer *fb, uint32_t rgb)
 {
   uint8_t red = rgb >> 16;
   uint8_t green = rgb >> 8;
@@ -126,9 +105,8 @@ void tty_put_char(struct tty *tty, char c)
   }
 }
 
-void tty_clear(void)
+void tty_clear(struct tty *tty)
 {
-  struct tty *tty = get_tty();
   for (size_t y = 0; y < tty->height; ++y) {
     for (size_t x = 0; x < tty->width; ++x) {
       tty_plot_char(tty, ' ', x, y, tty->fg, tty->bg);
