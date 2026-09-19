@@ -2,6 +2,7 @@
 // Created by chronium on 9/18/26.
 //
 
+#include "arch/cpu.h"
 #include "kernel/fb/font.h"
 #include "kernel/fb/tty.h"
 #include <kernel/mm/types.h>
@@ -16,6 +17,10 @@
 #include <kernel/mm/types.h>
 #include <kernel/panic.h>
 #include <arch/cpu_local.h>
+#include <kernel/memory.h>
+
+static const struct boot_framebuffer *screen;
+static struct space *active_space;
 
 static struct framebuffer *fb_alloc(const struct boot_framebuffer *boot_fb)
 {
@@ -71,6 +76,8 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
   char *name;
   struct space *space;
 
+  screen = boot_fb;
+
   for (size_t i = 0; i < arch_cpu_count(); ++i) {
     if (i == 0) {
       name = strndup(KERNEL_NAME, strlen(KERNEL_NAME));
@@ -93,6 +100,22 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
 
     if (i == 0) {
       log_set_tty(space->tty);
+      active_space = space;
     }
+  }
+}
+
+void space_present()
+{
+  memcpy((void *)screen->address,
+      (const void *)active_space->fb->address,
+      screen->size);
+  cpu_store_fence();
+}
+
+void space_switch(size_t index)
+{
+  if (index < arch_cpu_count()) {
+    active_space = arch_cpu_at(index)->space;
   }
 }

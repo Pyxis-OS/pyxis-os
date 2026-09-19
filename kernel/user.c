@@ -1,3 +1,4 @@
+#include "kernel/space.h"
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <arch/user.h>
@@ -8,6 +9,7 @@
 #include <kernel/panic.h>
 #include <kernel/user.h>
 #include <stdatomic.h>
+#include <arch/cpu_local.h>
 
 #define USER_KERNEL_STACK_SIZE (16 * 1024)
 
@@ -194,9 +196,18 @@ static void reap_completed(void)
 
   struct user_scheduler *scheduler = local_scheduler();
   bool idle_reported = false;
+  uint64_t last_present_tick = 0;
   for (;;) {
     if (cpu_index == 0) {
       reap_completed();
+
+      uint64_t ticks = atomic_load_explicit(
+          &cpu_current()->timer_interrupts, memory_order_relaxed);
+
+      if (ticks - last_present_tick >= 2) {
+        last_present_tick = ticks;
+        space_present();
+      }
     }
 
     struct user_task *task = dequeue(scheduler);

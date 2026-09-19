@@ -18,4 +18,7 @@ struct space
 
 void space_init_all(const struct boot_framebuffer *boot_fb);
 
+void space_present();
+void space_switch(size_t index);
+
 #endif // PYXIS_OS_SPACE_H
