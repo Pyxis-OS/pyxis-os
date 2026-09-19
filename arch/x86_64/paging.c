@@ -1,6 +1,7 @@
 #include <arch/apic.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
+#include <arch/io_apic.h>
 #include <arch/layout.h>
 #include <arch/paging.h>
 #include <kernel/log.h>
@@ -332,6 +333,15 @@ static void map_local_apic(void)
   bootstrap_map(APIC_BASE, apic_physical_address(), PAGE_WRITE);
   /* PCD=1, PWT=1 select Limine's PAT entry 3: device registers must be UC. */
   *bootstrap_leaf(APIC_BASE) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
+
+  phys_addr_t io_apic = io_apic_physical_address();
+  if (io_apic) {
+    if (!physical_valid(io_apic)) {
+      panic("invalid I/O APIC physical address");
+    }
+    bootstrap_map(IO_APIC_BASE, io_apic, PAGE_WRITE);
+    *bootstrap_leaf(IO_APIC_BASE) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
+  }
 }
 
 void paging_init(struct boot_info *boot)
