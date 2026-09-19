@@ -132,7 +132,7 @@ void apic_init(void)
 
   cpu_current()->timer_count = calibrate_timer();
   if (cpu_current() == cpu_bsp()) {
-    klog("x86_64: local APIC timer calibrated, %u counts per ~10 ms\n",
+    klog("x86_64: local APIC timer calibrated, %u counts per ~8.33 ms\n",
          cpu_current()->timer_count);
   }
 }

@@ -13,7 +13,7 @@
 #include <kernel/user.h>
 
 #define AP_STACK_BYTES (16 * 1024)
-#define AP_STARTUP_TIMER_PERIODS 500
+#define AP_STARTUP_TIMER_PERIODS 600
 #define XAPIC_MAX_ID 255
 
 static struct cpu_local *bsp_only[1];
@@ -93,7 +93,7 @@ void arch_ap_wait(void)
     previous = remaining;
     __asm__ volatile("pause");
   }
-  klog("SMP: APIC %u online, stack=%p, timer=%u counts per ~10 ms\n",
+  klog("SMP: APIC %u online, stack=%p, timer=%u counts per ~8.33 ms\n",
        cpu->lapic_id, (void *)cpu->stack_top, cpu->timer_count);
 }
 
