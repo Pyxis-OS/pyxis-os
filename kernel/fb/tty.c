@@ -111,10 +111,8 @@ static void tty_newline(struct tty *tty)
   }
 }
 
-void tty_put_char(char c)
+void tty_put_char(struct tty *tty, char c)
 {
-  struct tty *tty = get_tty();
-
   if (c == '\n') {
     tty_newline(tty);
     return;

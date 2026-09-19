@@ -6,6 +6,12 @@
 
 static atomic_bool log_locked;
 static atomic_bool panic_output;
+static struct tty *log_tty;
+
+void log_set_tty(struct tty *tty)
+{
+  log_tty = tty;
+}
 
 void klog_panic_begin(void)
 {
@@ -45,6 +51,6 @@ void log_putc(char c)
 {
   console_putc(c);
   if (!atomic_load_explicit(&panic_output, memory_order_relaxed) &&
-      get_tty()->initialized)
-    tty_put_char(c);
+      log_tty && log_tty->initialized)
+    tty_put_char(log_tty, c);
 }

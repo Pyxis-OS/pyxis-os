@@ -52,7 +52,7 @@ void tty_init(const struct boot_framebuffer *fb,
 void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
   uint32_t fg, uint32_t bg);
 
-void tty_put_char(char c);
+void tty_put_char(struct tty *tty, char c);
 void tty_clear(void);
 
 struct tty *get_tty(void);

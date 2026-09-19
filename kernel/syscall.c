@@ -18,7 +18,7 @@ int64_t syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
   case SYSCALL_PUTCHAR: {
     bool locked = log_begin();
     if (locked && get_tty()->initialized) {
-      tty_put_char((char)arg1);
+      tty_put_char(get_tty(), (char)arg1);
     }
     log_end(locked);
     return 0;

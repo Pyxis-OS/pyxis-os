@@ -1,6 +1,13 @@
 #ifndef KERNEL_LOG_H
 #define KERNEL_LOG_H
 #include <stdarg.h>
+
+struct tty;
+
+/* Select the log TTY on the BSP before releasing AP schedulers.
+ * Logging is serial-only until a TTY is assigned. */
+void log_set_tty(struct tty *tty);
+
 /* Formatting subset is documented in <kernel/format.h>.
  * Normal calls are serialized per format invocation; callers keep IF=0.
  * Initialize/change the TTY on the BSP before releasing AP schedulers. */

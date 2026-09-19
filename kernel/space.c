@@ -89,5 +89,9 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
     space->tty = tty_alloc(boot_fb);
 
     arch_cpu_at(i)->space = space;
+
+    if (i == 0) {
+      log_set_tty(space->tty);
+    }
   }
 }
