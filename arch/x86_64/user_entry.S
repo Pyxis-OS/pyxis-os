@@ -32,14 +32,15 @@ arch_enter_user:
   pushq $GDT_USER_CODE_SELECTOR
   push %rdi
 
-  /* No kernel register contents escape into a fresh user context. */
+  /* RDX is the startup record's user address, now delivered in RDI. Clear
+   * everything else so no kernel register contents escape to userspace. */
+  mov %rdx, %rdi
   xor %eax, %eax
   xor %ebx, %ebx
   xor %ecx, %ecx
   xor %edx, %edx
   xor %ebp, %ebp
   xor %esi, %esi
-  xor %edi, %edi
   xor %r8d, %r8d
   xor %r9d, %r9d
   xor %r10d, %r10d

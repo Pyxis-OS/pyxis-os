@@ -10,6 +10,7 @@ struct process;
  * caller. Entry must be executable and the writable user stack top aligned
  * to 16 bytes in the process's inactive address space. The target CPU must
  * host the process's owning space. No sharing, resubmission or migration.
+ * Requires process_prepare_startup(); its record is passed to the user entry.
  * Requires task_init(), BSP execution, IF=0, outside interrupt/fault entry.
  * This form pins the task to CPU zero (the BSP). */
 enum mm_result user_task_create(struct process *process, uintptr_t entry,

@@ -35,9 +35,11 @@ uintptr_t arch_context_prepare(uintptr_t stack_top, void (*entry)(void));
 /* Sets both TSS.RSP0 and SYSCALL's explicit stack target, with IF=0. */
 void arch_user_set_kernel_stack(uintptr_t stack_top);
 
-/* Starts a fresh user context with zeroed GPRs and IF=1. The caller already
+/* Starts a fresh user context with the startup pointer in RDI, other GPRs
+ * cleared (apart from RSP), and IF=1. The caller already
  * activated its space, restored extended state and selected its entry stack. */
-[[noreturn]] void arch_enter_user(uintptr_t entry, uintptr_t stack_top);
+[[noreturn]] void arch_enter_user(uintptr_t entry, uintptr_t stack_top,
+                                 uintptr_t startup);
 [[noreturn]] void arch_bad_user_return(uintptr_t entry, uintptr_t stack_top);
 
 #endif

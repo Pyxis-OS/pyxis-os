@@ -119,7 +119,7 @@ static struct task *dequeue(struct scheduler *scheduler)
 {
   struct task *task = local_scheduler()->current_task;
   if (task->kind == TASK_USER) {
-    arch_enter_user(task->entry, task->user_stack);
+    arch_enter_user(task->entry, task->user_stack, task->process->startup_address);
   }
 
   cpu_enable_interrupts();
@@ -176,6 +176,7 @@ enum mm_result user_task_create_on(size_t cpu_index, struct process *process,
 {
   KASSERT(arch_cpu_index() == 0);
   if (!schedulers || cpu_index >= arch_cpu_count() || !process ||
+      !process->startup_address ||
       process->space != arch_cpu_at(cpu_index)->space ||
       !arch_user_entry_valid(entry, stack_top)) {
     return MM_INVALID;
