@@ -12,7 +12,7 @@ The process draft holds the agreed design; this file tracks the work.
 
 ## Tasks
 
-- [ ] **1. Agree on the first ABI slice.** Documentation only. Choose handle
+- [x] **1. Agree on the first ABI slice.** Documentation only. Choose handle
   representation and reuse rules, startup-record layout and entry delivery,
   `call` request/result encoding, initial operations and rights, errors, and
   partial-transfer behavior. Include blob size alongside console write and
@@ -84,5 +84,11 @@ need document/link review and a clean diff, not another boot.
 
 ## Current handoff
 
-All tasks are pending. Task 1 is the next discussion; the existing process
-draft has not frozen a binary ABI. No code implementation is underway.
+Task 1 is complete: the project owner accepted the proposed first ABI slice.
+The accompanying process-ownership PR records its encodings, buffer and
+partial-transfer rules in the process draft. Documentation and links reviewed;
+these assignments do not change the running ABI or add placeholder headers.
+
+Task 2 is in progress (assistant), with no scope change. Process creation and
+reclamation stay on the BSP, one task owns one process, and current hello and
+syscalls remain unchanged. Capability tables begin in task 3.
