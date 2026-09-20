@@ -153,26 +153,26 @@ static void copy_memory_map(void)
   }
 }
 
-static void copy_initial_image(void)
+static void copy_initrd(void)
 {
   const struct limine_module_response *response = module_request.response;
   if (!response || response->module_count != 1 || !response->modules ||
       !response->modules[0]) {
-    panic("expected exactly one initial userspace image module");
+    panic("expected exactly one initrd module");
   }
 
   const struct limine_file *module = response->modules[0];
   uintptr_t address = (uintptr_t)module->address;
   if (!module->size || address < boot.bootstrap_direct_offset ||
       module->size > UINTPTR_MAX - address) {
-    panic("invalid initial image module extent");
+    panic("invalid initrd module extent");
   }
 
   uint64_t physical = address - boot.bootstrap_direct_offset;
   uint64_t first_frame = physical & ~(ARCH_PAGE_SIZE - 1);
   uint64_t end = physical + module->size;
   if (end > UINT64_MAX - (ARCH_PAGE_SIZE - 1)) {
-    panic("initial image module extent overflows");
+    panic("initrd module extent overflows");
   }
   uint64_t frame_end = (end + ARCH_PAGE_SIZE - 1) & ~(ARCH_PAGE_SIZE - 1);
 
@@ -191,10 +191,10 @@ static void copy_initial_image(void)
     covered = region_end;
   }
   if (covered < frame_end) {
-    panic("initial image is outside executable/module reservations");
+    panic("initrd is outside executable/module reservations");
   }
 
-  boot.initial_image = (struct boot_module){.physical = physical, .size = module->size};
+  boot.initrd = (struct boot_module){.physical = physical, .size = module->size};
 }
 
 static void copy_acpi_address(void)
@@ -294,7 +294,7 @@ static void copy_framebuffer(void)
   copy_executable_placement();
   copy_memory_map();
   copy_acpi_address();
-  copy_initial_image();
+  copy_initrd();
   copy_framebuffer();
   limine_capture_cpus(&boot);
 

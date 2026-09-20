@@ -24,10 +24,16 @@ See [gdb.md](gdb.md) for kernel debugger usage.
 
 ## Entry and loading
 
-The initial program is built into the boot image as a Limine module. The kernel
-loader creates an inactive private address space, copies the image into owned
-backing and applies its permissions. Failure releases partial allocations;
-loading does not change the caller's active address space.
+`make initrd` packages the initial program into `build/initrd.cpio`; `make image`
+includes that uncompressed `newc` archive as the sole Limine module. The kernel
+keeps the archive mapped read-only and uses `initrd_lookup()` to find the program
+by its exact archive name. See [the initrd interface](../include/kernel/initrd.h)
+for the supported records and borrowed-view lifetime. The archive provides raw
+file bytes, without extraction, a block device or VFS semantics.
+
+The image loader creates an inactive private address space, copies the program
+into owned backing and applies its permissions. Failure releases partial
+allocations; loading does not change the caller's active address space.
 
 The kernel supplies an executable entry point and a writable, 16-byte-aligned
 user stack. The program's assembly entry calls C `main`, then passes its return
