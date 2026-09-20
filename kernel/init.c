@@ -54,6 +54,12 @@ static void queue_initial_image(void)
     panic("cannot create initial process (error %u)", (unsigned)status);
   }
 
+  status = process_prepare_startup(process, HANDLE_INVALID, HANDLE_INVALID);
+  if (status != MM_OK) {
+    KASSERT(process_destroy(process) == MM_OK);
+    panic("cannot prepare initial startup record (error %u)", (unsigned)status);
+  }
+
   klog("userspace: initial task pinned to CPU %zu\n", cpu_index);
   status = user_task_create_on(cpu_index, process, entry,
                                INITIAL_STACK_BASE + INITIAL_STACK_SIZE);

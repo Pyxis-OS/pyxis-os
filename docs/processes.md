@@ -95,8 +95,16 @@ These are named roles, not assumptions that handles zero and one always mean
 particular resources. The content field is specific to the first example; it
 does not settle a general argument or resource-discovery scheme.
 
-Task 5 introduces this entry convention. Until then, the existing program
-entry remains unchanged; no startup-record headers are needed in advance.
+This entry convention is implemented. Kernel and userspace share the
+[startup header](../include/abi/startup.h) and opaque handle definition. The BSP
+prepares the record in a separately allocated, zeroed page before submitting
+the task. The user mapping is read-only and non-executable; a temporary kernel
+alias fills the record without activating the process's root. Process teardown
+reclaims the page with the rest of its address space.
+
+The freestanding entry preserves RDI when calling C main. Hello checks version
+and size, then continues using the existing character syscall. Both handles
+are currently invalid; task 6 supplies output and task 8 supplies content.
 
 ## First operation shapes
 

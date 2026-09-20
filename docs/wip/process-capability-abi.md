@@ -38,7 +38,7 @@ The process draft holds the agreed design; this file tracks the work.
   works on the process's executing CPU without moving allocator ownership or
   allowing concurrent mutation of an active address space.
 
-- [ ] **5. Deliver the startup record.** Pass the agreed versioned record to
+- [x] **5. Deliver the startup record.** Pass the agreed versioned record to
   the userspace entry point and expose it to the freestanding program. Support
   the output role first and fill it when the console capability lands in task
   6; until then use the agreed invalid-handle value. The content role remains
@@ -144,7 +144,24 @@ Ancestor permission checks and unsupported large entries were code-reviewed;
 no page tables were altered to force those cases. No tests, fault injection,
 temporary syscalls or boot automation were added.
 
-Task 5 is next: deliver the startup record. When object calls land, capture
-request metadata before interpreting it and validate every reply/data range
-before side effects. Map a false buffer result to the agreed invalid-buffer
-status; capability results also still need explicit syscall-status mapping.
+Task 5 is complete (assistant), commits `43db18f` and `f4715ea`. Kernel and
+userspace share the startup and opaque-handle headers. Before submission, the
+BSP prepares a record in a separately allocated read-only, non-executable user
+page, filled through a temporary kernel alias. Entry delivers its address in
+RDI and the freestanding stub preserves it for C main. Hello checks version
+and size, then uses the existing character syscall. Both roles remain invalid.
+
+Validation: ordinary `make image` completed without warnings and a normal
+four-CPU KVM boot ran hello on CPU 1 through successful exit and BSP cleanup.
+GDB inspection under four-CPU TCG confirmed version/size, invalid role handles,
+alignment, read-only/NX page permissions, RDI at user entry and main, and zeroed
+remaining general registers apart from the user stack pointer. User-buffer
+checks accepted reads and rejected writes. Following exit, heap live allocations
+and allocated-frame counts returned to their pre-launch values. Failure
+unwinding was code-reviewed; no tests, fault injection, temporary syscalls or
+boot automation were added.
+
+Task 6 is next: console WRITE through call, with its handle supplied as the
+output startup role. Content remains absent until task 8. Capture request
+metadata before interpreting it and validate every reply/data range before
+side effects. Buffer and capability results need explicit syscall-status mapping.

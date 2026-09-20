@@ -2,13 +2,10 @@
 #define KERNEL_CAPABILITY_H
 
 #include <stddef.h>
-#include <stdint.h>
+#include <abi/handle.h>
 
 struct kernel_object;
 struct capability_entry;
-
-typedef uint64_t handle_t;
-#define HANDLE_INVALID UINT64_C(0)
 
 #define CAP_READ (UINT64_C(1) << 0)
 #define CAP_WRITE (UINT64_C(1) << 1)

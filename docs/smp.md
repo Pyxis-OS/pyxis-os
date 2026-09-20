@@ -70,7 +70,10 @@ the process or its address space after transfer. There is one task per process.
 `process_create(owner, address_space, &process)` takes ownership of an inactive
 private address space only on success. `process_destroy(process)` releases an
 unsubmitted process and its address space if subsequent setup fails. Neither
-call owns or destroys the containing space or its TTY. See the
+call owns or destroys the containing space or its TTY. Before submission, call
+`process_prepare_startup()` with the process's initial resource handles (or
+`HANDLE_INVALID` for absent roles). Its read-only page belongs to the process's
+address space, and entry receives its address in RDI. See the
 [process interface](../include/kernel/process.h) for the full lifetime contract.
 
 A short lock protects ready-list and completion-list links. It is never held
