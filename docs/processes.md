@@ -213,6 +213,35 @@ kernel or process references keep shared resources alive. The
 [object lifetime interface](../include/kernel/object.h) define the contracts.
 Concrete console and blob objects remain tasks 6 and 8.
 
+### Implemented user-buffer access
+
+`user_buffer_check()` validates a readable or writable range belonging to the
+currently executing user process. `copy_from_user()` and `copy_to_user()` check
+the whole range before copying; a false result leaves the destination untouched
+and can become the ABI's invalid-buffer error. No byte of an empty range is
+accessed, regardless of its address. A current process and active private root
+are still required. Kernel source/destination buffers are trusted caller-owned
+storage and must not overlap or alias the user range.
+
+These helpers run with interrupts disabled on the process's CPU. The x86_64
+check reads the active root through recursive mappings, checking each ancestor
+before descending and requiring user access (and write access when requested)
+at every level. It rejects null-page, higher-half, noncanonical, overflowing,
+unmapped and insufficiently permitted ranges. It never uses shared scratch
+slots, VM range metadata, allocation, or an address-space switch.
+
+Validation remains valid through the copy because user backing is eager and
+the process has one executing task with stable, private mappings. Callers must
+not switch tasks between a check and its use. This path does not recover from
+kernel mapping corruption or invalid kernel buffers. Future shared user backing
+or concurrent unmapping would require revisiting that invariant.
+
+A future object call must capture request metadata into kernel storage and
+validate all reply/data buffers before producing side effects. A copy helper
+only validates its own range; it does not validate an entire operation. See the
+[user-memory interface](../include/kernel/user_memory.h). The current character
+syscalls remain unchanged and do not yet use these helpers.
+
 ## Later operations and open decisions
 
 The broader ABI vocabulary under discussion is `create`, `call`, `send`, `recv`,
@@ -234,9 +263,8 @@ Future IPC work must define synchronous reply association, blocking receive,
 queue-full results, waitable conditions and peer-closure wakeups. The namespace
 and named-endpoint ideas in the spaces draft do not choose those mechanisms.
 
-The safe-buffer implementation belongs to task 4 and must preserve the existing
-allocator and VM ownership rules. Convert hello when console calls land; retire
-legacy character syscalls separately once their callers have migrated.
+Convert hello when console calls land; retire legacy character syscalls
+separately once their callers have migrated.
 
 Only an explicitly selected worklist task is an implementation assignment.
 The later ideas here call for no placeholder APIs or object-manager framework.
