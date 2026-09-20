@@ -4,6 +4,17 @@
 
 #include <kernel/fb/fb.h>
 
+uint32_t framebuffer_color(const struct framebuffer *fb, uint32_t rgb)
+{
+  uint8_t red = rgb >> 16;
+  uint8_t green = rgb >> 8;
+  uint8_t blue = rgb;
+
+  return ((uint32_t)red << fb->red_shift) |
+         ((uint32_t)green << fb->green_shift) |
+         ((uint32_t)blue << fb->blue_shift);
+}
+
 void fb_rect(
     struct framebuffer *fb,
     size_t x,
@@ -24,6 +35,7 @@ void fb_rect(
     if (height > fb->height - y)
         height = fb->height - y;
 
+    color = framebuffer_color(fb, color);
     uint8_t *base = (uint8_t *)fb->address;
 
     uint32_t *top =
@@ -77,6 +89,7 @@ void fb_fill_rect(
     if (height > fb->height - y)
         height = fb->height - y;
 
+    color = framebuffer_color(fb, color);
     uint8_t *base = (uint8_t *)fb->address;
 
     for (size_t row = 0; row < height; ++row) {

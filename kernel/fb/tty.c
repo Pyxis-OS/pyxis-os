@@ -26,17 +26,6 @@ struct tty *get_tty(void)
   return cpu_current()->space->tty;
 }
 
-static uint32_t framebuffer_color(const struct framebuffer *fb, uint32_t rgb)
-{
-  uint8_t red = rgb >> 16;
-  uint8_t green = rgb >> 8;
-  uint8_t blue = rgb;
-
-  return ((uint32_t)red << fb->red_shift) |
-         ((uint32_t)green << fb->green_shift) |
-         ((uint32_t)blue << fb->blue_shift);
-}
-
 void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
     char c, size_t x, size_t y, uint32_t fg, uint32_t bg)
 {

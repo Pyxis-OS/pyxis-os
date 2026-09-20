@@ -23,6 +23,10 @@ struct framebuffer
   uint8_t blue_shift;
 };
 
+/* Pack 0xRRGGBB using the framebuffer's channel positions. */
+uint32_t framebuffer_color(const struct framebuffer *fb, uint32_t rgb);
+
+/* Rectangle colors are 0xRRGGBB, like TTY foreground/background colors. */
 void fb_rect(struct framebuffer *fb, size_t x, size_t y,
     size_t width, size_t height, uint32_t color);
 void fb_fill_rect(struct framebuffer *fb, size_t x, size_t y,
