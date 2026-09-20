@@ -22,19 +22,26 @@
 
 #define PRESENT_INTERVAL_TICKS 2
 
+#define SPACES_NAV_HEIGHT 32
+#define SPACES_NAV_COUNT 4
+
 static const struct boot_framebuffer *screen;
 static struct space *active_space;
 
-static struct framebuffer *fb_alloc(const struct boot_framebuffer *boot_fb)
+static struct framebuffer *spaces_nav_fb;
+
+static struct framebuffer *fb_alloc(const struct boot_framebuffer *boot_fb,
+    size_t width, size_t height)
 {
   struct framebuffer *fb;
   fb = (struct framebuffer *)kmalloc(sizeof(struct framebuffer));
 
-  fb->size = boot_fb->size;
   fb->pitch = boot_fb->pitch;
 
-  fb->width = boot_fb->width;
-  fb->height = boot_fb->height;
+  fb->width = width;
+  fb->height = height;
+
+  fb->size = fb->height * fb->pitch;
   
   fb->red_shift = boot_fb->red_shift;
   fb->green_shift = boot_fb->green_shift;
@@ -96,7 +103,8 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
 
     space->name = name;
 
-    space->fb = fb_alloc(boot_fb);
+    space->fb = fb_alloc(boot_fb, boot_fb->width, 
+        boot_fb->height - SPACES_NAV_HEIGHT);
     space->tty = tty_alloc(space->fb);
 
     arch_cpu_at(i)->space = space;
@@ -106,13 +114,52 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
       active_space = space;
     }
   }
+
+  spaces_nav_fb = fb_alloc(boot_fb, boot_fb->width, SPACES_NAV_HEIGHT);
+}
+
+static void draw_spaces_nav()
+{
+  const size_t tab_width = spaces_nav_fb->width / SPACES_NAV_COUNT;
+  const size_t max_len = (tab_width / bizcat.width) - 2;
+
+  for (size_t i = 0; i < SPACES_NAV_COUNT; i++) {
+    fb_fill_rect(spaces_nav_fb, tab_width * i, 0, tab_width, SPACES_NAV_HEIGHT,
+        aardvark_scheme.palette[0]);
+    fb_rect(spaces_nav_fb, tab_width * i, 0, tab_width, SPACES_NAV_HEIGHT,
+        aardvark_scheme.palette[8]);
+
+    if (i < arch_cpu_count()) {
+      const struct space *space = arch_cpu_at(i)->space;
+
+      size_t padding = bizcat.height / 2;
+      size_t len = MIN(strlen(space->name), max_len);
+
+      for (size_t j = 0; j < len; j++) {
+        tty_plot_char_raw(spaces_nav_fb, &bizcat, space->name[j],
+            tab_width * i + padding + j * bizcat.width, padding,
+            aardvark_scheme.foreground, aardvark_scheme.palette[0]);
+      }
+    }
+  }
 }
 
 void space_present()
 {
+  const size_t dst_offset = SPACES_NAV_HEIGHT * screen->pitch;
+
+  draw_spaces_nav();
+
+  // Copy Spaces nav framebuffer
   memcpy((void *)screen->address,
-      (const void *)active_space->fb->address,
-      screen->size);
+      (const void *)spaces_nav_fb->address,
+      spaces_nav_fb->size);
+
+  // Copy active space framebuffer
+  memcpy((void *)(screen->address + dst_offset),
+      (const void *)(active_space->fb->address),
+      active_space->fb->size);
+
   cpu_store_fence();
 }
 

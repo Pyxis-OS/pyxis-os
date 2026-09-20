@@ -46,6 +46,9 @@ struct color_scheme
 
 extern const struct color_scheme aardvark_scheme;
 
+void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
+    char c, size_t x, size_t y, uint32_t fg, uint32_t bg);
+
 void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
   uint32_t fg, uint32_t bg);
 

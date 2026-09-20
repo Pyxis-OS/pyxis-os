@@ -37,38 +37,45 @@ static uint32_t framebuffer_color(const struct framebuffer *fb, uint32_t rgb)
          ((uint32_t)blue << fb->blue_shift);
 }
 
-void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
-               uint32_t fg, uint32_t bg)
+void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
+    char c, size_t x, size_t y, uint32_t fg, uint32_t bg)
 {
-  const struct font *font = tty->font;
   unsigned char glyph_index = (unsigned char)c;
   if (glyph_index > font->max_glyph) {
     glyph_index = '?';
   }
 
-  uint16_t x_dst = x * font->width;
-  uint16_t y_dst = y * font->height;
-
   const uint8_t *glyph =
       font->data + (size_t)glyph_index * font->stride;
-  uint32_t foreground = framebuffer_color(tty->fb, fg);
-  uint32_t background = framebuffer_color(tty->fb, bg);
+  uint32_t foreground = framebuffer_color(fb, fg);
+  uint32_t background = framebuffer_color(fb, bg);
 
   for (size_t row = 0; row < font->height; ++row) {
     volatile uint32_t *pixel_row =
-        (volatile uint32_t *)((uint8_t *)tty->fb->address +
-                              (y_dst + row) * tty->fb->pitch);
+        (volatile uint32_t *)((uint8_t *)fb->address +
+                              (y + row) * fb->pitch);
 
     for (size_t col = 0; col < font->width; ++col) {
       bool bit =
           (glyph[row] >>
            (col % 8)) & 1;
 
-      pixel_row[x_dst + col] = bit ? foreground : background;
+      pixel_row[x + col] = bit ? foreground : background;
     }
   }
 
   cpu_store_fence();
+}
+
+void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
+               uint32_t fg, uint32_t bg)
+{
+  const struct font *font = tty->font;
+
+  uint16_t x_dst = x * font->width;
+  uint16_t y_dst = y * font->height;
+
+  tty_plot_char_raw(tty->fb, font, c, x_dst, y_dst, fg, bg);
 }
 
 static void tty_newline(struct tty *tty)

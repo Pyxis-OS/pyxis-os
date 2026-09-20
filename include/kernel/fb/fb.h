@@ -23,4 +23,12 @@ struct framebuffer
   uint8_t blue_shift;
 };
 
+void fb_rect(struct framebuffer *fb, size_t x, size_t y,
+    size_t width, size_t height, uint32_t color);
+void fb_fill_rect(struct framebuffer *fb, size_t x, size_t y,
+    size_t width, size_t height, uint32_t color);
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
 #endif // PYXIS_OS_FB_H
