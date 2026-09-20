@@ -2,9 +2,8 @@
 
 The PS/2 keyboard delivers physical key events through
 [`keyboard_read_event()`](../include/kernel/keyboard.h). One BSP kernel task
-should consume them; the call is nonblocking and preserves interrupt state.
-Drain pending events before sleeping for the next tick. This can live in the
-same task as presentation, with input handled before drawing.
+consumes them; the call is nonblocking and preserves interrupt state. The
+presentation task drains pending events before drawing and sleeping.
 
 Each event identifies a key, press/release/repeat action, and modifier state
 after that action. Key names describe PC key positions, not text: `KEY_A` does
@@ -24,6 +23,13 @@ or controller, or keyboard initialization fails. Serial input is separate.
 
 Space navigation, character mapping and userspace delivery belong to callers;
 the driver installs no bindings or consumer task.
+
+The presentation task binds Alt+Left and Alt+Right to the previous and next
+space in CPU order, wrapping at either end. The selected tab's name is underlined.
+Each arrow press switches once; releases and repeats do not switch. Either Alt
+key works, lock modifiers do not affect the shortcut, and adding Shift, Control
+or Super suppresses it. Other key events are consumed without an action until
+application input is defined.
 
 For manual inspection, QEMU's monitor accepts `sendkey left`, `sendkey shift-a`
 and similar commands while the VM runs. Enter the monitor with Ctrl-a c from

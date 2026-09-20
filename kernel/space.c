@@ -19,6 +19,7 @@
 #include <arch/cpu_local.h>
 #include <kernel/memory.h>
 #include <kernel/task.h>
+#include <kernel/keyboard.h>
 
 #define PRESENT_INTERVAL_TICKS 2
 
@@ -140,6 +141,12 @@ static void draw_spaces_nav()
             tab_width * i + padding + j * bizcat.width, padding,
             aardvark_scheme.foreground, aardvark_scheme.palette[0]);
       }
+
+      if (space == active_space) {
+        fb_fill_rect(spaces_nav_fb, tab_width * i + padding,
+            padding + bizcat.height + 1, len * bizcat.width, 1,
+            aardvark_scheme.foreground);
+      }
     }
   }
 }
@@ -163,11 +170,47 @@ void space_present()
   cpu_store_fence();
 }
 
+static void switch_adjacent_space(bool next)
+{
+  size_t count = arch_cpu_count();
+  for (size_t index = 0; index < count; ++index) {
+    if (arch_cpu_at(index)->space != active_space) {
+      continue;
+    }
+
+    if (next) {
+      space_switch(index + 1 == count ? 0 : index + 1);
+    } else {
+      space_switch(index == 0 ? count - 1 : index - 1);
+    }
+    return;
+  }
+}
+
+static void handle_space_shortcuts(void)
+{
+  struct key_event event;
+  const unsigned shortcut_modifiers =
+      KEY_MOD_SHIFT | KEY_MOD_CONTROL | KEY_MOD_ALT | KEY_MOD_SUPER;
+
+  while (keyboard_read_event(&event)) {
+    if (event.action != KEY_PRESS ||
+        (event.modifiers & shortcut_modifiers) != KEY_MOD_ALT) {
+      continue;
+    }
+
+    if (event.key == KEY_LEFT || event.key == KEY_RIGHT) {
+      switch_adjacent_space(event.key == KEY_RIGHT);
+    }
+  }
+}
+
 void space_present_task(void *argument)
 {
   (void)argument;
 
   for (;;) {
+    handle_space_shortcuts();
     space_present();
     kernel_task_sleep(PRESENT_INTERVAL_TICKS);
   }
