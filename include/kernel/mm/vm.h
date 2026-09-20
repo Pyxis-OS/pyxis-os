@@ -61,6 +61,14 @@ enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
                           unsigned permissions);
 enum mm_result vm_query(struct vm_space *space, uintptr_t address,
                         struct page_translation *result);
+
+/* Narrow exception to BSP-only queries: IF=0 on the CPU exclusively executing
+ * this private space, whose mappings must stay stable through access. Checks
+ * every page for user read/write access without touching VM metadata or shared
+ * scratch mappings. Zero bytes ignores address; the space must still be active. */
+bool vm_user_buffer_accessible(struct vm_space *space, uintptr_t address,
+                               size_t bytes, bool write);
+
 struct vm_stats vm_get_stats(const struct vm_space *space);
 
 #endif

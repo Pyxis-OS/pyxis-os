@@ -15,6 +15,11 @@ struct process {
   struct capability_table capabilities;
 };
 
+/* Borrow the executing user task's process; NULL for scheduler/kernel tasks.
+ * Scheduler must be initialized on this CPU. IF=0, kernel GS active, outside
+ * interrupt/fault entry. The pointer cannot outlive this execution context. */
+struct process *process_current(void);
+
 /* BSP, IF=0, after heap and space initialization. The caller exclusively owns
  * an inactive private address space. Success transfers it to the new process;
  * failure leaves it with the caller and clears *result when non-NULL. */

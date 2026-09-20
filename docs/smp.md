@@ -121,6 +121,12 @@ BSP-only and require interrupts disabled. A kernel task must save/disable
 interrupts around these calls and restore them afterward; being pinned to the
 BSP alone does not prevent same-CPU reentry. AP syscalls currently print or exit;
 they cannot allocate memory.
+
+User-buffer checks are a narrow exception to BSP-only queries: the executing
+CPU can inspect its active private root through recursive mappings, with IF=0
+and stable user mappings. They do not use shared scratch slots or VM metadata.
+General `vm_query()` and page-table mutation remain BSP-only.
+
 Private spaces are built before publication and reclaimed only after retirement.
 Kernel code, CPU records, scheduler stacks, heap pools and framebuffer mappings
 remain mapped throughout AP execution. A shared kernel range must not be

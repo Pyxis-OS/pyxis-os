@@ -45,6 +45,12 @@ enum mm_result arch_page_protect(struct arch_address_space *space,
                                  uintptr_t virtual, unsigned permissions);
 enum mm_result arch_page_query(const struct arch_address_space *space,
                                uintptr_t virtual, struct page_translation *result);
+/* IF=0 on the CPU exclusively executing this private space. Checks a lower-half
+ * user range through recursive mappings, without scratch slots or allocation.
+ * Zero bytes ignores the address but still requires the private root active.
+ * Mappings must remain stable through the subsequent access. */
+bool arch_user_buffer_accessible(const struct arch_address_space *space,
+                                 uintptr_t address, size_t bytes, bool write);
 /* Pre-established scratch slot, no allocations; never exposes a lasting pointer. */
 void arch_frame_zero(phys_addr_t physical);
 

@@ -69,6 +69,12 @@ static struct scheduler *local_scheduler(void)
   return &schedulers[arch_cpu_index()];
 }
 
+struct process *process_current(void)
+{
+  struct task *task = local_scheduler()->current_task;
+  return task && task->kind == TASK_USER ? task->process : NULL;
+}
+
 void task_init(void)
 {
   KASSERT(arch_cpu_index() == 0 && !schedulers);

@@ -32,7 +32,7 @@ The process draft holds the agreed design; this file tracks the work.
   remaining references during process cleanup. Complete when these kernel
   operations obey task 1's handle contract. No userspace operations yet.
 
-- [ ] **4. Implement safe user-buffer access.** Add the range, overflow and
+- [x] **4. Implement safe user-buffer access.** Add the range, overflow and
   permission checks and copying needed by syscall requests and replies.
   Invalid buffers return recoverable errors. Complete when the access path
   works on the process's executing CPU without moving allocator ownership or
@@ -125,6 +125,26 @@ No test code, fault injection or boot automation was added. Generation/count
 overflow, allocation failure, and the busy-BSP preemption condition were
 code-reviewed rather than forced at runtime.
 
-Task 4 is next: safe user-buffer access on the executing CPU. The kernel
-capability results are not syscall status values; map them explicitly when
-userspace operations land. Startup-record delivery remains task 5.
+Task 4 is complete (assistant), commits `90cea0e` and `51b9cf6`. Current-process
+buffer checks walk the active root's recursive mappings with IF=0 on the
+executing CPU. Copy helpers validate the whole range before touching either
+destination. They allocate nothing and do not use shared scratch mappings or
+VM range metadata. Existing syscalls and mapping ownership remain unchanged.
+
+Validation: ordinary `make image` completed without warnings; a normal four-CPU
+KVM boot ran hello through exit and BSP cleanup. Manual GDB calls on CPU 1 under
+four-CPU TCG verified a read across two mapped pages, a writable-buffer round
+trip, read-only write rejection, missing ancestors/leaves, null-page and kernel
+addresses, noncanonical and overflowing ranges, and zero-length copies with
+otherwise invalid pointers. Copies spanning a mapped page and an unmapped page
+returned false with their kernel/user destinations unchanged. Calls before task
+submission rejected the inactive root and absent current process. Heap/frame
+counts and CR3 were unchanged across AP calls, and hello resumed to normal exit.
+Ancestor permission checks and unsupported large entries were code-reviewed;
+no page tables were altered to force those cases. No tests, fault injection,
+temporary syscalls or boot automation were added.
+
+Task 5 is next: deliver the startup record. When object calls land, capture
+request metadata before interpreting it and validate every reply/data range
+before side effects. Map a false buffer result to the agreed invalid-buffer
+status; capability results also still need explicit syscall-status mapping.
