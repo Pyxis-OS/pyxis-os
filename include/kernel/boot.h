@@ -23,7 +23,7 @@ struct boot_region {
   enum boot_region_type type;
 };
 
-/* The initial image remains in boot-reserved physical frames. The kernel must
+/* The boot archive remains in boot-reserved physical frames. The kernel must
  * map them before reading; neither the Limine pointer nor its HHDM survives. */
 struct boot_module {
   uint64_t physical;
@@ -52,7 +52,7 @@ struct boot_info {
   size_t kernel_size;
   uint64_t bootstrap_direct_offset; /* Valid only before arch_init returns. */
   uint64_t acpi_rsdp; /* Physical; zero when the bootloader found no ACPI. */
-  struct boot_module initial_image;
+  struct boot_module initrd;
   struct boot_framebuffer framebuffer;
   size_t region_count;
   struct boot_region regions[BOOT_MAX_REGIONS];

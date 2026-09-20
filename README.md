@@ -4,7 +4,7 @@ Caelum is the freestanding x86_64 kernel of Pyxis OS. Development targets
 QEMU booted through OVMF/UEFI and the vendored Limine v12.9.0.
 
 Requires GNU Make, an `x86_64-elf-` GCC/binutils toolchain supporting GNU C23,
-QEMU, xorriso, and a matching raw OVMF code/variables pair.
+QEMU, GNU cpio, xorriso, and a matching raw OVMF code/variables pair.
 
 ```
 make

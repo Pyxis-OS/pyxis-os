@@ -3,6 +3,7 @@
 #include <kernel/init.h>
 #include <kernel/boot.h>
 #include <kernel/image.h>
+#include <kernel/initrd.h>
 #include <kernel/log.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
@@ -15,42 +16,20 @@
 
 #define INITIAL_STACK_BASE UINT64_C(0x800000)
 #define INITIAL_STACK_SIZE PAGE_SIZE
+#define INITIAL_IMAGE_NAME "hello.pxe"
 
-
-static enum image_result load_initial_image(const struct boot_module *module,
-                                            struct vm_space **space,
-                                            uintptr_t *entry)
+static void queue_initial_image(void)
 {
-  size_t page_offset = module->physical & (PAGE_SIZE - 1);
-  KASSERT(module->size && module->size <= SIZE_MAX - page_offset - (PAGE_SIZE - 1));
-  size_t mapped_size = (page_offset + module->size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-  phys_addr_t first_frame = module->physical - page_offset;
-  uintptr_t mapping;
-  KASSERT(vm_reserve(vm_kernel_space(), mapped_size, PAGE_SIZE, &mapping) == MM_OK);
-
-  /* The boot module frames remain reserved, borrowed backing. Give them a
-   * read-only kernel mapping independent of the discarded Limine HHDM. */
-  for (size_t offset = 0; offset < mapped_size; offset += PAGE_SIZE) {
-    KASSERT(vm_map(vm_kernel_space(), mapping + offset, first_frame + offset, 0) == MM_OK);
+  struct initrd_file image;
+  enum initrd_result archive_result = initrd_lookup(INITIAL_IMAGE_NAME, &image);
+  if (archive_result != INITRD_OK) {
+    panic("cannot find %s in initrd (error %u)", INITIAL_IMAGE_NAME,
+          (unsigned)archive_result);
   }
 
-  enum image_result result = image_load((const void *)(mapping + page_offset),
-                                        module->size, space, entry);
-
-  for (size_t offset = 0; offset < mapped_size; offset += PAGE_SIZE) {
-    phys_addr_t physical;
-    KASSERT(vm_unmap(vm_kernel_space(), mapping + offset, &physical) == MM_OK);
-    KASSERT(physical == first_frame + offset);
-  }
-  KASSERT(vm_release(vm_kernel_space(), mapping, mapped_size) == MM_OK);
-  return result;
-}
-
-static void queue_initial_image(const struct boot_info *boot)
-{
   struct vm_space *space;
   uintptr_t entry;
-  enum image_result result = load_initial_image(&boot->initial_image, &space, &entry);
+  enum image_result result = image_load(image.data, image.size, &space, &entry);
   if (result != IMAGE_OK) {
     panic("cannot load initial userspace image (error %u)", (unsigned)result);
   }
@@ -63,7 +42,7 @@ static void queue_initial_image(const struct boot_info *boot)
   }
 
   klog("userspace: P1F image=%zu bytes entry=%p stack=%p\n",
-       boot->initial_image.size, (void *)entry,
+       image.size, (void *)entry,
        (void *)(INITIAL_STACK_BASE + INITIAL_STACK_SIZE));
   size_t cpu_index = arch_cpu_count() > 1 ? 1 : 0;
   klog("userspace: initial task pinned to CPU %zu\n", cpu_index);
@@ -81,6 +60,12 @@ static void queue_initial_image(const struct boot_info *boot)
   if (!heap_init()) {
     panic("cannot initialize the TLSF heap");
   }
+
+  enum initrd_result archive_result = initrd_init(&boot->initrd);
+  if (archive_result != INITRD_OK) {
+    panic("cannot initialize boot archive (error %u)", (unsigned)archive_result);
+  }
+  klog("initrd: newc archive=%zu bytes, mapped read-only\n", boot->initrd.size);
 
   boot_start_cpus();
 
@@ -106,7 +91,7 @@ static void queue_initial_image(const struct boot_info *boot)
   klog("heap: TLSF pools=%zu bytes=%zu, alignment=16, live allocations=%zu\n",
        heap.pools, heap.pool_bytes, heap.live_allocations);
 
-  queue_initial_image(boot);
+  queue_initial_image();
   klog("Caelum ready: starting preemptive userspace\n");
   task_schedule();
 }

@@ -21,7 +21,7 @@ C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/mm/*.c
 ASM_SOURCES := $(wildcard boot/limine/*.S arch/x86_64/*.S)
 OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM_SOURCES))
 
-.PHONY: all tools userspace image run debug clean check-toolchain
+.PHONY: all tools userspace initrd image run debug clean check-toolchain
 all: build/caelum.elf
 
 tools:
@@ -31,6 +31,16 @@ userspace: tools
 	$(MAKE) -C userspace
 
 build/userspace/hello.pxe: userspace
+
+initrd: build/initrd.cpio
+
+build/initrd.cpio: build/userspace/hello.pxe Makefile
+	@command -v cpio >/dev/null 2>&1 || { \
+	  echo 'Missing GNU cpio: install it, then run make initrd.' >&2; \
+	  exit 1; }
+	cd build/userspace && printf '%s\n' hello.pxe | \
+	  cpio --create --format=newc --reproducible --owner=0:0 --quiet > ../initrd.cpio.tmp
+	mv build/initrd.cpio.tmp $@
 
 check-toolchain:
 	@command -v $(CC) >/dev/null 2>&1 || { \
@@ -50,7 +60,7 @@ build/%.o: %.S | check-toolchain
 
 image: build/pyxis.iso
 
-build/pyxis.iso: build/caelum.elf build/userspace/hello.pxe \
+build/pyxis.iso: build/caelum.elf build/initrd.cpio \
                  boot/limine/limine.conf scripts/make-image.sh \
                  third_party/limine/BOOTX64.EFI third_party/limine/limine-uefi-cd.bin
 	./scripts/make-image.sh
