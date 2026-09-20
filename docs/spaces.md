@@ -70,6 +70,8 @@ remains undecided.
 
 The [filesystem and namespace draft](vfs.md) explores a shared system base,
 per-space overlays, shared writable storage and URI-based namespace views.
+The [process and capability ABI draft](processes.md) works through explicit
+resource grants and process lifetime using a console and boot-archive blob.
 
 ## Named endpoints
 
