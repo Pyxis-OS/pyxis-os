@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #define APIC_TIMER_VECTOR 32
+#define APIC_KEYBOARD_VECTOR 33
 #define APIC_SPURIOUS_VECTOR 255
 
 /* xAPIC mode. Paging maps the device before setup. PIT calibration is shared:

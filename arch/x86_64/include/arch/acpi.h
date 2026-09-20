@@ -1,0 +1,19 @@
+#ifndef ARCH_ACPI_H
+#define ARCH_ACPI_H
+
+#include <kernel/boot.h>
+
+struct keyboard_irq_route {
+  uint64_t io_apic_physical;
+  uint32_t gsi_base;
+  uint32_t gsi;
+  bool active_low;
+  bool level_triggered;
+};
+
+/* BSP bootstrap only, before replacing Limine's root. Copies routing data;
+ * no ACPI pointer or direct-map alias survives this call. */
+bool acpi_keyboard_route(const struct boot_info *boot,
+                         struct keyboard_irq_route *route);
+
+#endif

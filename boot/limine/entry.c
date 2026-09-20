@@ -29,6 +29,11 @@ static volatile struct limine_hhdm_request hhdm_request = {
 };
 
 __attribute__((used, section(".limine_requests")))
+static volatile struct limine_rsdp_request rsdp_request = {
+  .id = LIMINE_RSDP_REQUEST_ID,
+};
+
+__attribute__((used, section(".limine_requests")))
 static volatile struct limine_executable_address_request address_request = {
   .id = LIMINE_EXECUTABLE_ADDRESS_REQUEST_ID,
 };
@@ -65,6 +70,8 @@ static enum boot_region_type region_type(uint64_t type)
   case LIMINE_MEMMAP_ACPI_RECLAIMABLE:
   case LIMINE_MEMMAP_ACPI_NVS:
     return BOOT_ACPI;
+  case LIMINE_MEMMAP_RESERVED_MAPPED:
+    return BOOT_FIRMWARE;
   case LIMINE_MEMMAP_BAD_MEMORY:
     return BOOT_BAD;
   case LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE:
@@ -190,6 +197,20 @@ static void copy_initial_image(void)
   boot.initial_image = (struct boot_module){.physical = physical, .size = module->size};
 }
 
+static void copy_acpi_address(void)
+{
+  if (!rsdp_request.response) {
+    return;
+  }
+
+  /* Base revision 6 returns the RSDP through the bootstrap direct map. */
+  uintptr_t address = (uintptr_t)rsdp_request.response->address;
+  if (address < boot.bootstrap_direct_offset) {
+    panic("invalid ACPI RSDP address");
+  }
+  boot.acpi_rsdp = address - boot.bootstrap_direct_offset;
+}
+
 static void copy_framebuffer(void)
 {
   const struct limine_framebuffer_response *response = framebuffer_request.response;
@@ -272,6 +293,7 @@ static void copy_framebuffer(void)
   validate_responses();
   copy_executable_placement();
   copy_memory_map();
+  copy_acpi_address();
   copy_initial_image();
   copy_framebuffer();
   limine_capture_cpus(&boot);

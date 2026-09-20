@@ -10,6 +10,7 @@ enum boot_region_type {
   BOOT_USABLE,
   BOOT_RESERVED,
   BOOT_ACPI,
+  BOOT_FIRMWARE,
   BOOT_BAD,
   BOOT_LOADER,
   BOOT_KERNEL,
@@ -50,6 +51,7 @@ struct boot_info {
   uintptr_t kernel_virt;
   size_t kernel_size;
   uint64_t bootstrap_direct_offset; /* Valid only before arch_init returns. */
+  uint64_t acpi_rsdp; /* Physical; zero when the bootloader found no ACPI. */
   struct boot_module initial_image;
   struct boot_framebuffer framebuffer;
   size_t region_count;
