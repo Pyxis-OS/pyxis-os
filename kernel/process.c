@@ -35,6 +35,7 @@ enum mm_result process_destroy(struct process *process)
   if (result != MM_OK) {
     return result;
   }
+  capability_table_destroy(&process->capabilities);
   kfree(process);
   return MM_OK;
 }
