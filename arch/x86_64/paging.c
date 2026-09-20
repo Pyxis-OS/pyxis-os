@@ -632,6 +632,42 @@ enum mm_result arch_page_query(const struct arch_address_space *space,
   return MM_OK;
 }
 
+bool arch_user_buffer_accessible(const struct arch_address_space *space,
+                                 uintptr_t address, size_t bytes, bool write)
+{
+  if (!space_valid(space) || space == &kernel_space || !arch_space_active(space)) {
+    return false;
+  }
+  if (!bytes) {
+    return true;
+  }
+  if (address < PAGE_SIZE || address > LOWER_HALF_MAX ||
+      bytes - 1 > LOWER_HALF_MAX - address) {
+    return false;
+  }
+
+  uintptr_t page = address & ~(PAGE_SIZE - 1);
+  uintptr_t last_page = (address + bytes - 1) & ~(PAGE_SIZE - 1);
+  uint64_t required = PTE_PRESENT | PTE_USER | (write ? PTE_WRITE : 0);
+
+  for (;;) {
+    /* Validate each ancestor before touching the next recursive alias.
+     * User and write access must be allowed at every level, not just PT. */
+    for (unsigned level = LEVEL_PML4; level >= LEVEL_PT; --level) {
+      uint64_t entry = active_table(page, level)[index_at(page, level)];
+      if ((entry & required) != required ||
+          !physical_valid(entry & PTE_ADDRESS_MASK) ||
+          (level > LEVEL_PT && (entry & PTE_LARGE))) {
+        return false;
+      }
+    }
+    if (page == last_page) {
+      return true;
+    }
+    page += PAGE_SIZE;
+  }
+}
+
 struct arch_address_space *arch_kernel_space(void)
 {
   return &kernel_space;

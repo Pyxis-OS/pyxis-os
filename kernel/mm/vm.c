@@ -551,3 +551,12 @@ enum mm_result vm_query(struct vm_space *space, uintptr_t address,
   }
   return arch_page_query(page_space(space), address, result);
 }
+
+bool vm_user_buffer_accessible(struct vm_space *space, uintptr_t address,
+                               size_t bytes, bool write)
+{
+  if (!space || space == &kernel_space) {
+    return false;
+  }
+  return arch_user_buffer_accessible(page_space(space), address, bytes, write);
+}
