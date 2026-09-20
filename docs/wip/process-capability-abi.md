@@ -26,7 +26,7 @@ The process draft holds the agreed design; this file tracks the work.
   Complete when launch, normal exit and fatal-user-fault cleanup follow the new
   ownership model while allocation and final reclamation remain on the BSP.
 
-- [ ] **3. Add process-local capability tables.** Support installing an object
+- [x] **3. Add process-local capability tables.** Support installing an object
   reference with rights, resolving a handle with required rights, and closing
   it. Define the release path when a close originates on an AP, and release all
   remaining references during process cleanup. Complete when these kernel
@@ -103,6 +103,28 @@ allocated-frame and heap live-allocation counts returning to pre-launch values.
 The fatal-user-fault path still reaches the same completion and reaping path;
 it and allocation-failure unwinding were code-reviewed, not fault-injected.
 
-Task 3 is next. Choose capability-table capacity/growth and the AP-to-BSP release
-path while preserving this ownership handoff. No capability table, startup
-record delivery or new syscall has been implemented yet.
+Task 3 is complete (assistant), commits `111b16d` and `7d2c8f7`: growable
+process-local slot tables, checked handle lookup and rights, and allocation-free
+retirement to the BSP on last object release. Installation stays on the BSP
+before process submission; resolution and close use the process's existing
+exclusive execution ownership. Process cleanup releases all remaining entries.
+No userspace operations or concrete console/blob objects were added.
+
+Validation: ordinary `make image` completed without warnings and a four-CPU KVM
+`make run` boot ran hello through normal exit and BSP cleanup. Manual GDB calls
+on a four-CPU TCG boot exercised installation, rights denial, invalid and stale
+handles, double close, slot reuse with a new generation, growth from eight to
+sixteen slots, and preservation of an earlier handle across growth. A last
+close on CPU 1 queued an object without heap activity; its destruction callback
+ran on the BSP with IF=0 and the retirement lock released. Process cleanup
+released nine remaining entries while preserving a separate kernel reference.
+After releasing that reference, heap live allocations and allocated physical
+frames returned to their pre-launch counts. These were debugger-created object
+headers using `kfree` as the destruction target, not console or blob objects.
+No test code, fault injection or boot automation was added. Generation/count
+overflow, allocation failure, and the busy-BSP preemption condition were
+code-reviewed rather than forced at runtime.
+
+Task 4 is next: safe user-buffer access on the executing CPU. The kernel
+capability results are not syscall status values; map them explicitly when
+userspace operations land. Startup-record delivery remains task 5.

@@ -54,9 +54,9 @@ For this slice, `handle_t` is an opaque `uint64_t`; zero is invalid. Internally,
 the low 32 bits identify a table slot and the high 32 bits hold its generation.
 Generations start at one. Closing an entry invalidates its handle; reuse gets
 a new generation. Retire a slot rather than wrap its generation and make a
-stale handle valid again. Table capacity and growth are task 3 decisions, not
-a fixed slot-count limit implied by this encoding. Userspace must not decode
-handles or use them as global object identifiers.
+stale handle valid again. Userspace must not decode handles or use them as
+global object identifiers. The table implementation below uses this encoding;
+no capability syscall is exposed yet.
 
 Each space would have a capability table describing resources available to its
 environment. A process would receive an explicit subset with equal or reduced
@@ -178,9 +178,40 @@ The ownership walkthrough for the example is:
 The space retains its console, and the boot archive retains its reserved backing
 and read-only kernel mapping. Closing these process handles does not free that
 backing. Objects remain alive while handles or other kernel owners retain them.
-How reference releases and handle-table changes on an AP reach the BSP reaper
-needs to be resolved before implementation; this draft does not relax the
-current concurrency restrictions.
+The table and reference implementation preserves the current concurrency
+restrictions as described below.
+
+### Implemented capability-table ownership
+
+Each process starts with an empty table. The BSP installs capabilities before
+task submission, adding a reference to each supplied object while the caller
+keeps its original reference. The first install allocates eight entries; later
+installs reuse vacant slots or double capacity, bounded by allocation success
+and the handle's index range. Growth preserves slot indices and generations.
+Allocation failure leaves existing handles and reference ownership intact.
+
+After submission, the process's single executing task owns the table. Resolve
+and close require interrupts disabled, do not allocate, and need no table lock.
+Resolve checks generation and every requested right, then returns a borrowed
+object valid until the entry closes. Close invalidates the handle immediately.
+There is no installation or table growth on an AP, nor launcher access to a
+submitted table before the task retires. The kernel result enum is separate from the
+planned syscall status encoding.
+
+Objects have an atomic reference count and a destruction callback, with no
+global object registry or operation dispatch. The last release links the object
+itself into a locked retirement list; it needs no queue allocation. The BSP
+scheduler detaches that list and invokes callbacks outside the lock with IF=0.
+A pending release also prompts timer preemption on a busy BSP. An object's
+payload still needs its own synchronization, and callbacks must not depend on
+a process or table entry that has already been reclaimed.
+
+Process destruction releases every remaining table reference and the table's
+storage. Object destruction may follow in the next reaping pass; independent
+kernel or process references keep shared resources alive. The
+[capability interface](../include/kernel/capability.h) and
+[object lifetime interface](../include/kernel/object.h) define the contracts.
+Concrete console and blob objects remain tasks 6 and 8.
 
 ## Later operations and open decisions
 
@@ -203,8 +234,7 @@ Future IPC work must define synchronous reply association, blocking receive,
 queue-full results, waitable conditions and peer-closure wakeups. The namespace
 and named-endpoint ideas in the spaces draft do not choose those mechanisms.
 
-Table capacity, growth and release scheduling remain task 3 decisions. The
-safe-buffer implementation belongs to task 4. Neither should relax the existing
+The safe-buffer implementation belongs to task 4 and must preserve the existing
 allocator and VM ownership rules. Convert hello when console calls land; retire
 legacy character syscalls separately once their callers have migrated.
 
