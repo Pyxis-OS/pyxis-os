@@ -1,8 +1,9 @@
 # Processes, capabilities and the first userspace ABI
 
-Status: working draft for discussion, not an approved specification or an
-implementation plan. Names, layouts and policies remain provisional. This
-develops the process and resource model alongside the [spaces draft](spaces.md).
+Status: the first console-and-blob ABI slice below is agreed for implementation.
+The broader process and resource model remains a working draft alongside the
+[spaces draft](spaces.md). The planned ABI is not yet the running kernel ABI;
+the existing hello program and syscalls remain usable during the migration.
 The [worklist](wip/process-capability-abi.md) tracks the focused tasks and
 handoffs for this first milestone.
 
@@ -45,9 +46,17 @@ table. The kernel entry holds the object reference and rights; userspace cannot
 gain rights by changing the handle value.
 
 Different processes may hold different handles and rights to the same object.
-Rights can be object-specific, such as `READ`, `WRITE`, `MAP` or `LOOKUP`.
-Permission to duplicate or transfer a capability may need separate rights;
-their representation and numeric assignments are not chosen here.
+The first rights are `READ` (bit 0) and `WRITE` (bit 1), stored in the kernel
+table. Other object-specific rights, such as `MAP` or `LOOKUP`, and permission
+to duplicate or transfer a capability remain later decisions.
+
+For this slice, `handle_t` is an opaque `uint64_t`; zero is invalid. Internally,
+the low 32 bits identify a table slot and the high 32 bits hold its generation.
+Generations start at one. Closing an entry invalidates its handle; reuse gets
+a new generation. Retire a slot rather than wrap its generation and make a
+stale handle valid again. Table capacity and growth are task 3 decisions, not
+a fixed slot-count limit implied by this encoding. Userspace must not decode
+handles or use them as global object identifiers.
 
 Each space would have a capability table describing resources available to its
 environment. A process would receive an explicit subset with equal or reduced
@@ -65,58 +74,85 @@ its space. This matters to the containment goals in the spaces draft.
 
 ## Startup record
 
-Propose a small startup record in user-readable memory, containing:
+The entry point receives a pointer in `RDI` to this record in user-readable,
+read-only memory, valid until process exit:
 
-| Field | Meaning |
-| --- | --- |
-| Version | Identifies the startup-record contract |
-| Byte size | Bounds the supplied record |
-| Output handle | Capability to the process's initial output resource |
-| Content handle | Capability to the blob used by this example |
+```c
+struct startup_info {
+  uint32_t version;
+  uint32_t size;
+  handle_t output;
+  handle_t content;
+};
+```
+
+Version 1 has size 24 bytes and alignment 8, with fields at offsets 0, 4, 8
+and 16. Fields use the current x86_64 little-endian representation. `size`
+bounds the supplied record; userspace checks version and size before reading
+the handles. An absent resource has the invalid handle, zero.
 
 These are named roles, not assumptions that handles zero and one always mean
 particular resources. The content field is specific to the first example; it
 does not settle a general argument or resource-discovery scheme.
 
-Exact field widths, alignment, invalid-handle representation, record lifetime
-and delivery to the entry point still need agreement. Passing a user pointer
-in an entry register is a candidate, not an assigned register convention.
-The existing program entry and syscall ABI remain unchanged by this draft.
+Task 5 introduces this entry convention. Until then, the existing program
+entry remains unchanged; no startup-record headers are needed in advance.
 
 ## First operation shapes
 
-These describe logical inputs and results, not C structure layouts or syscall
-numbers. Userspace wrappers could present `write`, `read_at`, `close` and `exit`.
+The initial object operations use one synchronous kernel call:
 
-| Operation | Authority | Request | Result |
+```c
+call(handle, operation, request, request_size, reply, reply_capacity)
+```
+
+Reserve syscall 2 for `call` and 3 for `close(handle)`. Existing character-output
+syscalls 0 and 1 remain during migration; exit keeps its current encoding.
+The x86_64 convention uses `RAX` for the syscall number and `RDI`, `RSI`, `RDX`,
+`R10`, `R8`, `R9` for arguments. Return `RAX` holds status and `RDX` the number
+of reply bytes written (zero on failure, and always zero for close). Exit does
+not return. These assignments take effect only as their worklist tasks land.
+
+Request and reply fields below are consecutive `uint64_t` values, including
+user addresses, offsets and byte counts. They do not embed C pointers, enums
+or `size_t`. Operation numbers are distinct across object types; using an
+operation on the wrong object returns an unsupported-operation error.
+
+| Operation | Authority | Request fields, in order | Reply field |
 | --- | --- | --- | --- |
-| Console write | Output handle with `WRITE` | Source user address, byte length | Status, bytes written |
-| Blob read at offset | Content handle with `READ` | Byte offset, destination user address, capacity | Status, bytes read |
-| Close | A valid handle in the calling process | Handle | Status |
-| Exit | The calling process | Exit status | Does not return |
+| 1: Console write | Output handle with `WRITE` | Source user address, byte length | Bytes written |
+| 2: Blob read at offset | Content handle with `READ` | Byte offset, destination user address, capacity | Bytes read |
+| 3: Blob size | Content handle with `READ` | Empty | Blob byte size |
+
+Request sizes must match exactly: 16, 24 and 0 bytes respectively. Each reply
+needs at least 8 bytes of capacity; success writes one 8-byte field and returns
+8 in `RDX`. The transferred data count is in that field, not in `RDX`.
+Close removes a valid handle from the caller's table and releases its reference.
 
 For a nonzero read capacity, successful zero-byte reads at or beyond the blob's
 end indicate EOF. Reads can return fewer bytes than requested. Writes report
-actual progress; a wrapper must handle partial writes and avoid retrying forever
-if a nonempty write succeeds with no progress. Zero-length requests transfer
-zero bytes. Exact rules for errors after partial progress remain to be settled.
+actual progress; a nonempty write cannot succeed with zero progress. A transfer
+with zero data length succeeds with a zero count and does not dereference its
+data address. Request and reply validation still apply. Partial progress is
+success with the actual count; errors report no transferred bytes.
 
-Failures need to distinguish invalid handles, insufficient rights, unsupported
-operations and invalid user buffers. Counts must stay within the supplied
-length or capacity. Error encodings and limits are still open.
+Status values for this slice are 0 for success, 1 for an invalid or stale handle,
+2 for denied rights, 3 for an unsupported operation, 4 for a malformed request
+or insufficient reply capacity, and 5 for an invalid user buffer. Counts must
+stay within the supplied length or capacity. Operations added later can define
+additional errors when needed.
 
-A small `call` entry accepting a handle, operation and request/reply buffers
-could carry the object operations above. Whether to use that form or dedicated
-syscalls is undecided. A kernel operation on a passive object does not itself
-require a message queue or a userspace server.
+These operations complete synchronously in the kernel. They require neither
+endpoint queues nor userspace servers. Userspace wrappers can expose convenient
+write, read-at-offset, size and close functions over the native ABI.
 
 User addresses refer to the calling process. The kernel must check range
 overflow, user accessibility and read/write permissions, and copy through a
 defined user-memory access path. Invalid buffers must produce an error rather
 than a fatal kernel exception. Request metadata must be captured before use;
-reply buffers must also be validated. The design must respect the kernel's
-current BSP-only VM operations and allocation/reclamation constraints when a
-syscall runs on an AP.
+request, reply and data buffers must all be validated before side effects.
+The implementation must respect the kernel's current BSP-only VM operations
+and allocation/reclamation constraints when a syscall runs on an AP.
 
 ## Kernel ownership and lifetime
 
@@ -167,10 +203,10 @@ Future IPC work must define synchronous reply association, blocking receive,
 queue-full results, waitable conditions and peer-closure wakeups. The namespace
 and named-endpoint ideas in the spaces draft do not choose those mechanisms.
 
-Before implementing the first example, settle the startup record and syscall
-encoding, handle reuse/stale-handle behavior, buffer-access rules, partial-result
-semantics, and the ownership path across process exit and BSP cleanup. Table
-capacity, growth and failure behavior also remain open.
+Table capacity, growth and release scheduling remain task 3 decisions. The
+safe-buffer implementation belongs to task 4. Neither should relax the existing
+allocator and VM ownership rules. Convert hello when console calls land; retire
+legacy character syscalls separately once their callers have migrated.
 
-This document authorizes no implementation, placeholder APIs, object-manager
-framework or changes to the scheduler, memory subsystem or existing ABI.
+Only an explicitly selected worklist task is an implementation assignment.
+The later ideas here call for no placeholder APIs or object-manager framework.

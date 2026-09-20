@@ -39,11 +39,13 @@ The kernel supplies an executable entry point and a writable, 16-byte-aligned
 user stack. The program's assembly entry calls C `main`, then passes its return
 value to `exit`. There is no libc or argument vector. The
 [syscall header](../userspace/include/syscall.h) defines syscall numbers and the
-register convention. Normal output targets the TTY; diagnostic output targets
-the kernel log, which also goes to serial. Both currently share the global TTY.
+register convention. Normal output targets the owning space's TTY; diagnostic
+output targets the kernel log, which goes to the Caelum TTY and serial.
 
-Task submission transfers sole ownership of the loaded address space on
-success; on failure it remains with the caller. Each task also owns a private
+The launcher creates a process that owns the loaded address space and belongs
+to the target CPU's space. Task submission transfers sole ownership of this
+process on success; on failure it remains with the caller for cleanup. There
+is initially one user task per process. Each task also owns a private
 kernel-entry stack. Allocation, submission and reclamation stay on the BSP,
 while tasks can run on their assigned AP. See the
 [task interface](../include/kernel/user.h) for the ownership contract and
@@ -52,9 +54,10 @@ while tasks can run on their assigned AP. See the
 ## Switching and cleanup
 
 Each CPU's scheduler runs on a permanent stack separate from task stacks. Before
-entering a task, it activates that task's address space and selects its TSS and
-syscall-entry stack. First entry uses IRETQ; a preempted task resumes through its
-saved interrupt frame. The local APIC timer selects runnable tasks round-robin.
+entering a user task, it activates the process's address space and selects its
+TSS and syscall-entry stack. First entry uses IRETQ; a preempted task resumes
+through its saved interrupt frame. The local APIC timer selects runnable tasks
+round-robin.
 
 Userspace runs with interrupts enabled. Interrupt gates and SYSCALL disable
 them on kernel entry, so syscall execution is not preempted on its own CPU and
@@ -71,6 +74,8 @@ stay within that supported feature set. Kernel code must not use FP/SIMD.
 Exit and ordinary fatal user exceptions abandon the task's entry stack and
 resume its scheduler. Only after switching to the permanent stack and kernel
 root can the CPU return ownership to the BSP for cleanup. This prevents freeing
-an executing stack or active page tables. The BSP then releases task-owned
-memory; original boot-module frames remain reserved. Fatal kernel exceptions
-still panic, and exit runs no cleanup callbacks or stream flushing.
+an executing stack or active page tables. The BSP then destroys the process
+and its private address space, followed by the task's kernel stack and metadata.
+The owning space and its TTY survive; original boot-module frames remain
+reserved. Fatal kernel exceptions still panic, and exit runs no cleanup
+callbacks or stream flushing.

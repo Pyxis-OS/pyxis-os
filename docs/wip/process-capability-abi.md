@@ -12,7 +12,7 @@ The process draft holds the agreed design; this file tracks the work.
 
 ## Tasks
 
-- [ ] **1. Agree on the first ABI slice.** Documentation only. Choose handle
+- [x] **1. Agree on the first ABI slice.** Documentation only. Choose handle
   representation and reuse rules, startup-record layout and entry delivery,
   `call` request/result encoding, initial operations and rights, errors, and
   partial-transfer behavior. Include blob size alongside console write and
@@ -20,7 +20,7 @@ The process draft holds the agreed design; this file tracks the work.
   creation and namespace operations open. Complete when the contract needed
   by the following tasks is explicit, without adding placeholder headers.
 
-- [ ] **2. Introduce process ownership.** A process owns its address space and
+- [x] **2. Introduce process ownership.** A process owns its address space and
   belongs to a space. The existing user task refers to the process, initially
   one task per process. Preserve the current hello program and syscalls.
   Complete when launch, normal exit and fatal-user-fault cleanup follow the new
@@ -84,5 +84,25 @@ need document/link review and a clean diff, not another boot.
 
 ## Current handoff
 
-All tasks are pending. Task 1 is the next discussion; the existing process
-draft has not frozen a binary ABI. No code implementation is underway.
+Task 1 is complete: the project owner accepted the proposed first ABI slice.
+Commit `e13deb3` records its encodings, buffer and partial-transfer rules in the
+process draft. Documentation and links reviewed; these assignments do not change
+the running ABI or add placeholder headers.
+
+Task 2 is complete (assistant), commit `666195c`. A process owns its private
+address space and borrows its containing space. Submission transfers the process
+to one user task and requires the target CPU to host that space. Process creation
+and reclamation remain on the BSP; the existing hello and syscalls are unchanged.
+
+Validation: ordinary `make image` completed without warnings; a four-CPU KVM
+`make run` boot ran hello on CPU 1 and reported normal exit and reclamation.
+A single-CPU KVM `make debug` boot ran hello on the BSP, with output visible in
+the framebuffer. GDB inspection confirmed process membership, destruction on
+the permanent scheduler stack with the kernel root active and IF=0, and PMM
+allocated-frame and heap live-allocation counts returning to pre-launch values.
+The fatal-user-fault path still reaches the same completion and reaping path;
+it and allocation-failure unwinding were code-reviewed, not fault-injected.
+
+Task 3 is next. Choose capability-table capacity/growth and the AP-to-BSP release
+path while preserving this ownership handoff. No capability table, startup
+record delivery or new syscall has been implemented yet.
