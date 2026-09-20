@@ -6,6 +6,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/process.h>
 #include <kernel/user.h>
 #include <kernel/task.h>
 #include <stdatomic.h>
@@ -21,7 +22,7 @@ enum task_kind {
 struct task {
   struct task *next;
   enum task_kind kind;
-  struct vm_space *space;
+  struct process *process; /* Owned by a user task; NULL for a kernel task. */
   uintptr_t kernel_stack;
   uintptr_t saved_stack;
   uintptr_t entry, user_stack;
@@ -157,25 +158,25 @@ enum mm_result kernel_task_create(void (*entry)(void *), void *argument)
   }
 
   task->kind = TASK_KERNEL;
-  task->space = vm_kernel_space();
   task->kernel_entry = entry;
   task->argument = argument;
   enqueue(&schedulers[0], task);
   return MM_OK;
 }
 
-enum mm_result user_task_create_on(size_t cpu_index, struct vm_space *space,
+enum mm_result user_task_create_on(size_t cpu_index, struct process *process,
                                    uintptr_t entry, uintptr_t stack_top)
 {
   KASSERT(arch_cpu_index() == 0);
-  if (!schedulers || cpu_index >= arch_cpu_count() || !space ||
-      space == vm_kernel_space() || !arch_user_entry_valid(entry, stack_top)) {
+  if (!schedulers || cpu_index >= arch_cpu_count() || !process ||
+      process->space != arch_cpu_at(cpu_index)->space ||
+      !arch_user_entry_valid(entry, stack_top)) {
     return MM_INVALID;
   }
 
   struct page_translation code, stack;
-  if (vm_query(space, entry, &code) != MM_OK ||
-      vm_query(space, stack_top - 1, &stack) != MM_OK ||
+  if (vm_query(process->address_space, entry, &code) != MM_OK ||
+      vm_query(process->address_space, stack_top - 1, &stack) != MM_OK ||
       (code.permissions & (PAGE_USER | PAGE_EXEC)) != (PAGE_USER | PAGE_EXEC) ||
       (stack.permissions & (PAGE_USER | PAGE_WRITE)) != (PAGE_USER | PAGE_WRITE)) {
     return MM_INVALID;
@@ -188,21 +189,21 @@ enum mm_result user_task_create_on(size_t cpu_index, struct vm_space *space,
   }
 
   task->kind = TASK_USER;
-  task->space = space;
+  task->process = process;
   task->entry = entry;
   task->user_stack = stack_top;
   task->cpu_index = cpu_index;
   arch_user_state_init(&task->cpu);
-  /* Publishing the queue link transfers ownership, including all mappings.
-   * The BSP must not touch the task or its space again until completion. */
+  /* Publishing the queue link transfers the process and all private mappings.
+   * The BSP must not touch the task or process again until completion. */
   enqueue(&schedulers[cpu_index], task);
   return MM_OK;
 }
 
-enum mm_result user_task_create(struct vm_space *space, uintptr_t entry,
+enum mm_result user_task_create(struct process *process, uintptr_t entry,
                                 uintptr_t stack_top)
 {
-  return user_task_create_on(0, space, entry, stack_top);
+  return user_task_create_on(0, process, entry, stack_top);
 }
 
 static void complete_task(struct task *task)
@@ -224,7 +225,7 @@ static void reap_completed(void)
   while (task) {
     struct task *next = task->next;
     if (task->kind == TASK_USER) {
-      KASSERT(vm_space_destroy(task->space) == MM_OK);
+      KASSERT(process_destroy(task->process) == MM_OK);
     }
     KASSERT(vm_free(vm_kernel_space(), task->kernel_stack, TASK_STACK_SIZE) == MM_OK);
     if (task->kind == TASK_USER) {
@@ -313,7 +314,9 @@ void kernel_task_sleep(uint64_t ticks)
 
     /* Reload CR3 before touching a newly published task stack. This also
      * discards translations from a previous use of its kernel virtual range. */
-    KASSERT(vm_space_activate(task->space) == MM_OK);
+    struct vm_space *address_space = task->kind == TASK_USER ?
+                                    task->process->address_space : vm_kernel_space();
+    KASSERT(vm_space_activate(address_space) == MM_OK);
     if (task->kind == TASK_USER) {
       arch_user_set_kernel_stack(task->kernel_stack + TASK_STACK_SIZE);
       arch_user_restore(&task->cpu);

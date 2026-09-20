@@ -53,17 +53,25 @@ After bringing CPUs online, the BSP initializes the console and calls
 Each CPU then runs its own ready queue round-robin with local timer preemption.
 Its permanent boot stack becomes its scheduler stack. Tasks never migrate.
 
-The BSP loads a private image and user stack, then submits it using:
+The BSP loads a private image and user stack, wraps that address space in a
+process belonging to the target CPU's space, then submits the process using:
 
 ```c
-enum mm_result result = user_task_create_on(cpu_index, space, entry, stack_top);
+enum mm_result result = user_task_create_on(cpu_index, process, entry, stack_top);
 ```
 
 `cpu_index` must be below `arch_cpu_count()`. `user_task_create()` remains a
 shorthand for CPU zero. Submission may occur before or after scheduling starts,
 but only on the BSP with IF=0 and outside interrupt/fault entry. Success transfers
-sole ownership of the space to the task; failure leaves it with the caller.
-Do not inspect or mutate the space after transfer. One task still owns one space.
+sole ownership of the process to the task; failure leaves it with the caller.
+The target CPU must host the process's owning space. Do not inspect or mutate
+the process or its address space after transfer. There is one task per process.
+
+`process_create(owner, address_space, &process)` takes ownership of an inactive
+private address space only on success. `process_destroy(process)` releases an
+unsubmitted process and its address space if subsequent setup fails. Neither
+call owns or destroys the containing space or its TTY. See the
+[process interface](../include/kernel/process.h) for the full lifetime contract.
 
 A short lock protects ready-list and completion-list links. It is never held
 across allocation, logging, a context switch or waiting for another CPU. The
@@ -74,9 +82,10 @@ completions, so these handoffs need no IPI and may wait about one timer period.
 Exit and ordinary user faults return to the local scheduler. After switching
 to its permanent stack and reloading the kernel root, the CPU clears its task
 entry-stack pointer and publishes completion. It must not touch the task afterward.
-The BSP detaches completed tasks under the lock and then frees their image,
-stacks, tables and metadata outside it. If the BSP itself runs userspace, a
-pending completion makes its next user timer interrupt return to the scheduler
+The BSP detaches completed tasks under the lock, destroys each user process and
+its private address space, then frees the task's kernel stack and metadata
+outside the lock. Kernel tasks have no process. If the BSP itself runs userspace,
+a pending completion makes its next user timer interrupt return to the scheduler
 even when there is no second runnable BSP task.
 
 Kernel tasks share the BSP ready queue with any BSP userspace. Create one with

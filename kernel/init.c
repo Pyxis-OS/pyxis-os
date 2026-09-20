@@ -1,4 +1,5 @@
 #include <arch/cpu.h>
+#include <arch/cpu_local.h>
 #include <arch/smp.h>
 #include <kernel/init.h>
 #include <kernel/boot.h>
@@ -9,6 +10,7 @@
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/process.h>
 #include <kernel/user.h>
 #include <kernel/task.h>
 #include <kernel/fb/tty.h>
@@ -45,11 +47,18 @@ static void queue_initial_image(void)
        image.size, (void *)entry,
        (void *)(INITIAL_STACK_BASE + INITIAL_STACK_SIZE));
   size_t cpu_index = arch_cpu_count() > 1 ? 1 : 0;
-  klog("userspace: initial task pinned to CPU %zu\n", cpu_index);
-  status = user_task_create_on(cpu_index, space, entry,
-                               INITIAL_STACK_BASE + INITIAL_STACK_SIZE);
+  struct process *process;
+  status = process_create(arch_cpu_at(cpu_index)->space, space, &process);
   if (status != MM_OK) {
     KASSERT(vm_space_destroy(space) == MM_OK);
+    panic("cannot create initial process (error %u)", (unsigned)status);
+  }
+
+  klog("userspace: initial task pinned to CPU %zu\n", cpu_index);
+  status = user_task_create_on(cpu_index, process, entry,
+                               INITIAL_STACK_BASE + INITIAL_STACK_SIZE);
+  if (status != MM_OK) {
+    KASSERT(process_destroy(process) == MM_OK);
     panic("cannot create initial user task (error %u)", (unsigned)status);
   }
 }
