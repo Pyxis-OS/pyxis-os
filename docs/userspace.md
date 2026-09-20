@@ -36,17 +36,27 @@ into owned backing and applies its permissions. Failure releases partial
 allocations; loading does not change the caller's active address space.
 
 The kernel supplies an executable entry point and a writable, 16-byte-aligned
-user stack. The program's assembly entry calls C `main`, then passes its return
-value to `exit`. There is no libc or argument vector. The
-[syscall header](../userspace/include/syscall.h) defines syscall numbers and the
-register convention. Normal output targets the owning space's TTY; diagnostic
-output targets the kernel log, which goes to the Caelum TTY and serial.
+user stack. Entry receives a pointer in `RDI` to the read-only
+[startup record](../include/abi/startup.h), which remains mapped until process
+exit. Its address is chosen by VM allocation; programs must use the pointer.
+The assembly entry preserves it as the argument to
+`main(const struct startup_info *startup)`, then passes main's return value to
+`exit`. Hello checks the record's version and size before continuing. Both
+resource roles currently contain `HANDLE_INVALID`; output and content will be
+filled when their capability operations land. There is no libc or argument
+vector. The [syscall header](../userspace/include/syscall.h) defines syscall
+numbers and the register convention. Normal output targets the owning space's
+TTY; diagnostic output targets the kernel log, which goes to the Caelum TTY and
+serial.
 
 The launcher creates a process that owns the loaded address space and belongs
-to the target CPU's space. Task submission transfers sole ownership of this
-process on success; on failure it remains with the caller for cleanup. There
-is initially one user task per process. Each task also owns a private
-kernel-entry stack. Allocation, submission and reclamation stay on the BSP,
+to the target CPU's space. Before submission, it calls
+`process_prepare_startup()` with the initial resource handles. This allocates
+a zeroed user page and fills the record through a temporary kernel alias,
+leaving the user mapping read-only and non-executable. Task submission transfers
+sole ownership of this process on success; on failure it remains with the caller
+for cleanup. There is initially one user task per process. Each task also owns
+a private kernel-entry stack. Allocation, submission and reclamation stay on the BSP,
 while tasks can run on their assigned AP. See the
 [task interface](../include/kernel/user.h) for the ownership contract and
 [smp.md](smp.md) for CPU selection and cross-CPU handoff rules.
