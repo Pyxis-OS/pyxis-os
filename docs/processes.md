@@ -3,6 +3,8 @@
 Status: working draft for discussion, not an approved specification or an
 implementation plan. Names, layouts and policies remain provisional. This
 develops the process and resource model alongside the [spaces draft](spaces.md).
+The [worklist](wip/process-capability-abi.md) tracks the focused tasks and
+handoffs for this first milestone.
 
 ## First program
 
