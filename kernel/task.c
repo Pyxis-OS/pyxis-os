@@ -5,6 +5,7 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
+#include <kernel/object.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/user.h>
@@ -293,6 +294,7 @@ void kernel_task_sleep(uint64_t ticks)
   for (;;) {
     if (cpu_index == 0) {
       reap_completed();
+      object_reap();
       wake_sleepers();
     }
 
@@ -368,6 +370,9 @@ void task_preempt(bool user_mode)
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 && completed_head != NULL);
   unlock_queues();
+  if (arch_cpu_index() == 0 && object_reap_pending()) {
+    schedule_needed = true;
+  }
   if (!schedule_needed) {
     return;
   }
