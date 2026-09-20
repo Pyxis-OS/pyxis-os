@@ -88,6 +88,14 @@ outside the lock. Kernel tasks have no process. If the BSP itself runs userspace
 a pending completion makes its next user timer interrupt return to the scheduler
 even when there is no second runnable BSP task.
 
+Capability tables follow that same exclusive process ownership. The BSP installs
+entries before submission; the executing CPU can resolve or close them with
+IF=0. A last object release queues its embedded retirement link without touching
+the heap. The BSP scheduler drains this separate list after task cleanup and
+runs destruction callbacks outside its lock. Pending objects also cause a busy
+BSP task to return to the scheduler on its next timer interrupt. No table grows
+on an AP; final releases never require an AP allocator call.
+
 Kernel tasks share the BSP ready queue with any BSP userspace. Create one with
 `kernel_task_create(entry, argument)` after scheduler initialization, on the BSP
 with interrupts disabled. Its entry runs on a private stack in the kernel
