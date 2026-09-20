@@ -71,6 +71,15 @@ remains undecided.
 The [filesystem and namespace draft](vfs.md) explores a shared system base,
 per-space overlays, shared writable storage and URI-based namespace views.
 
+## Named endpoints
+
+Spaces may advertise named endpoints for discovery by other spaces. An
+advertised endpoint may refer to kernel IPC, an internal network service, or
+another transport. The space namespace model defines naming, visibility, access
+policy, and resource-accounting responsibilities. Discovery does not itself
+grant access; each transport must preserve the applicable authority and
+accounting boundaries.
+
 ## Prototype placement idea
 
 The current prototype idea assigns each space exclusively to one core and keeps
