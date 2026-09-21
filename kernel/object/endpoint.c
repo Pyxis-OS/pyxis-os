@@ -4,11 +4,14 @@
 #include <kernel/mm/heap.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/panic.h>
+#include <kernel/process.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 struct endpoint_request {
   struct task_wait *wait;
+  struct kernel_object *grant; /* Borrowed from the blocked sender's handle. */
+  uint64_t grant_rights;
   struct endpoint_packet message, reply;
   enum call_status status;
   bool active, delivered;
@@ -66,6 +69,7 @@ static void destroy_endpoint(struct kernel_object *object)
   struct endpoint_request *request = &own->request;
   if (request->wait) {
     request->status = CALL_ENDPOINT_CLOSED;
+    request->grant = NULL;
     struct task_wait *wait = request->wait;
     request->wait = NULL;
     task_wait_wake(wait);
@@ -101,9 +105,38 @@ bool endpoint_pair_create(struct endpoint **first, struct endpoint **second)
   return true;
 }
 
+static enum call_status grant_status(enum capability_result result)
+{
+  switch (result) {
+  case CAP_OK:
+    return CALL_OK;
+  case CAP_BAD_HANDLE:
+    return CALL_BAD_HANDLE;
+  case CAP_DENIED:
+    return CALL_DENIED;
+  case CAP_NO_MEMORY:
+    return CALL_NO_MEMORY;
+  case CAP_LIMIT:
+    return CALL_LIMIT;
+  default:
+    panic("unexpected endpoint grant result %u", (unsigned)result);
+  }
+}
+
 static enum call_status call_peer(struct endpoint *endpoint,
     const union endpoint_payload *payload, struct endpoint_packet *reply)
 {
+  struct kernel_object *grant = NULL;
+  if (payload->call.grant.handle != HANDLE_INVALID) {
+    enum capability_result result = capability_resolve(&process_current()->capabilities,
+        payload->call.grant.handle, payload->call.grant.rights, &grant, NULL);
+    if (result != CAP_OK) {
+      return grant_status(result);
+    }
+  } else if (payload->call.grant.rights) {
+    return CALL_BAD_REQUEST;
+  }
+
   struct task_wait *wait = task_wait_prepare();
   struct endpoint_pair *pair = endpoint->pair;
   struct endpoint_state *peer = &pair->state[endpoint->side ^ 1];
@@ -122,7 +155,15 @@ static enum call_status call_peer(struct endpoint *endpoint,
     unlock_pair(pair);
     return CALL_UNAVAILABLE;
   }
-  *request = (struct endpoint_request){.wait = wait, .active = true};
+  /* The sender cannot close its source handle while this single task is
+   * blocked. Borrow it until delivery/closure; no extra transit reference can
+   * accidentally keep the receiving endpoint alive after its handles close. */
+  *request = (struct endpoint_request){
+    .wait = wait,
+    .grant = grant,
+    .grant_rights = payload->call.grant.rights,
+    .active = true,
+  };
   request->message.id = peer->next_id++;
   request->message.size = payload->call.size;
   memcpy(request->message.data, payload->call.data, payload->call.size);
@@ -161,8 +202,28 @@ static enum call_status receive_request(struct endpoint *endpoint,
         unlock_pair(pair);
         return CALL_BUSY;
       }
+      handle_t handle = HANDLE_INVALID;
+      if (request->grant) {
+        enum capability_result result = capability_insert(&process_current()->capabilities,
+            request->grant, request->grant_rights, &handle);
+        if (result == CAP_FULL) {
+          unlock_pair(pair);
+          result = task_grow_capabilities();
+          if (result != CAP_OK) {
+            return grant_status(result);
+          }
+          /* Another receiver may have consumed/replied while we grew. */
+          continue;
+        }
+        if (result != CAP_OK) {
+          unlock_pair(pair);
+          return grant_status(result);
+        }
+      }
       request->delivered = true;
       *reply = request->message;
+      reply->grant = (struct endpoint_grant){handle, request->grant_rights};
+      request->grant = NULL;
       unlock_pair(pair);
       return CALL_OK;
     }
@@ -177,7 +238,7 @@ static enum call_status receive_request(struct endpoint *endpoint,
 }
 
 static enum call_status reply_to_request(struct endpoint *endpoint,
-    const struct endpoint_packet *reply)
+    const union endpoint_payload *payload)
 {
   struct endpoint_pair *pair = endpoint->pair;
   struct endpoint_state *own = &pair->state[endpoint->side];
@@ -187,13 +248,13 @@ static enum call_status reply_to_request(struct endpoint *endpoint,
     return CALL_ENDPOINT_CLOSED;
   }
   struct endpoint_request *request = &own->request;
-  if (!request->wait || !request->delivered || reply->id != request->message.id) {
+  if (!request->wait || !request->delivered || payload->reply.id != request->message.id) {
     unlock_pair(pair);
     return CALL_BAD_REQUEST;
   }
-  request->reply.id = reply->id;
-  request->reply.size = reply->size;
-  memcpy(request->reply.data, reply->data, reply->size);
+  request->reply.id = payload->reply.id;
+  request->reply.size = payload->reply.size;
+  memcpy(request->reply.data, payload->reply.data, payload->reply.size);
   request->status = CALL_OK;
   struct task_wait *wait = request->wait;
   request->wait = NULL;
@@ -236,7 +297,7 @@ struct syscall_result endpoint_call(struct endpoint *endpoint, uint64_t rights,
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (operation == ENDPOINT_REPLY) {
-    return (struct syscall_result){reply_to_request(endpoint, &payload.reply), 0};
+    return (struct syscall_result){reply_to_request(endpoint, &payload), 0};
   }
 
   struct endpoint_packet reply = {0};
