@@ -58,9 +58,13 @@ The process draft holds the agreed design; this file tracks the work.
 
 - [ ] **8. Add the immutable blob object.** Wrap an existing boot-archive file,
   expose its size and offset reads through `call`, and grant its `READ`
-  capability through the content startup role. Complete when reads return the
-  expected bytes and EOF behavior, and releasing process references leaves
-  the archive's shared backing and mapping intact.
+  capability through the content startup role. Replace `call_object()`'s
+  console-only dispatch and unconditional WRITE requirement with handle lookup
+  and a small switch on object type. Use focused console/blob handlers to check
+  supported operations, required rights and request layouts, keeping the
+  userspace `call` ABI unchanged. Do not introduce a generic dispatch framework.
+  Complete when reads return the expected bytes and EOF behavior, and releasing
+  process references leaves the archive's shared backing and mapping intact.
 
 - [ ] **9. Complete the userspace example.** Package a small text asset with
   the program. Print a greeting, query the supplied blob's size, read it in
