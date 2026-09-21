@@ -49,9 +49,14 @@ table. The kernel entry holds the object reference and rights; userspace cannot
 gain rights by changing the handle value.
 
 Different processes may hold different handles and rights to the same object.
-The first rights are `READ` (bit 0) and `WRITE` (bit 1), stored in the kernel
-table. Other object-specific rights, such as `MAP` or `LOOKUP`, and permission
-to duplicate or transfer a capability remain later decisions.
+Rights are defined by the object's protocol: `CONSOLE_RIGHT_WRITE` authorizes
+console output; `BLOB_RIGHT_READ` authorizes blob reads and size queries. Both
+currently use bit 0, with different meanings. The capability table stores the
+mask without imposing global READ/WRITE meanings; installation rejects bits
+unsupported by the target object type. The message never supplies authority.
+Other rights and permission to duplicate or transfer a capability remain later
+decisions. Multiple operations may require the same right; split rights when
+one operation needs to be grantable without the others.
 
 For this slice, `handle_t` is an opaque `uint64_t`; zero is invalid. Internally,
 the low 32 bits identify a table slot and the high 32 bits hold its generation.
@@ -115,29 +120,37 @@ Content exposes the packaged text asset, separate from the executable image.
 The initial object operations use one synchronous kernel call:
 
 ```c
-call(handle, operation, request, request_size, reply, reply_capacity)
+call(handle, message, message_size, reply, reply_capacity)
 ```
 
 Syscall 2 implements `call`; 3 implements `close(handle)`. Existing
 character-output syscalls 0 and 1 remain during migration; exit keeps its encoding.
 The x86_64 convention uses `RAX` for the syscall number and `RDI`, `RSI`, `RDX`,
-`R10`, `R8`, `R9` for arguments. Return `RAX` holds status and `RDX` the number
+`R10`, `R8` for the five arguments. Return `RAX` holds status and `RDX` the number
 of reply bytes written (zero on failure, and always zero for close). Exit does
-not return. These assignments take effect only as their worklist tasks land.
+not return. This replaces the earlier six-argument CALL encoding; rebuild
+userspace images with the matching headers. Close and legacy syscalls retain
+their existing conventions.
 
 Request and reply fields below are consecutive `uint64_t` values, including
 user addresses, offsets and byte counts. They do not embed C pointers, enums
-or `size_t`. Operation numbers are distinct across object types; using an
-operation on the wrong object returns an unsupported-operation error.
+or `size_t`. Each message starts with a protocol/operation pair from the
+[message header](../include/abi/message.h), followed by its protocol's payload
+union. The handle selects the actual object type; a mismatched protocol is
+rejected. Operation numbers are local to each protocol and may overlap.
 
-| Operation | Authority | Request fields, in order | Reply field |
+| Operation | Authority | Payload fields, in order | Reply field |
 | --- | --- | --- | --- |
-| 1: Console write | Output handle with `WRITE` | Source user address, byte length | Bytes written |
-| 2: Blob read at offset | Content handle with `READ` | Byte offset, destination user address, capacity | Bytes read |
-| 3: Blob size | Content handle with `READ` | Empty | Blob byte size |
+| Console write | `CONSOLE_RIGHT_WRITE` | Source user address, byte length | Bytes written |
+| Blob read at offset | `BLOB_RIGHT_READ` | Byte offset, destination user address, capacity | Bytes read |
+| Blob size | `BLOB_RIGHT_READ` | Unused | Blob byte size |
 
-Request sizes must match exactly: 16, 24 and 0 bytes respectively. Each reply
-needs at least 8 bytes of capacity; success writes one 8-byte field and returns
+Send the complete protocol message structure, including unused union storage:
+`console_message` is 32 bytes and `blob_message` is 40 bytes. Both start with the
+16-byte tag. Sizes must match exactly. The blob size operation ignores payload
+fields, but the complete message must be readable. Initialize unused storage to
+zero; the wrappers do this. The shared headers assert sizes and payload offsets.
+Each reply needs at least 8 bytes of capacity; success writes one 8-byte field and returns
 8 in `RDX`. The transferred data count is in that field, not in `RDX`.
 Close removes a valid handle from the caller's table and releases its reference.
 It requires no access rights on that handle. Invalid and already-closed handles
@@ -153,8 +166,8 @@ data address. Request and reply validation still apply. Partial progress is
 success with the actual count; errors report no transferred bytes.
 
 Status values for this slice are 0 for success, 1 for an invalid or stale handle,
-2 for denied rights, 3 for an unsupported operation, 4 for a malformed request
-or insufficient reply capacity, and 5 for an invalid user buffer. Counts must
+2 for denied rights, 3 for an unsupported protocol or operation, 4 for a malformed
+request or insufficient reply capacity, and 5 for an invalid user buffer. Counts must
 stay within the supplied length or capacity. Operations added later can define
 additional errors when needed. Console output adds status 6, unavailable, when
 the TTY cannot be used (including panic mode); no output occurs on that error.
@@ -230,12 +243,19 @@ kernel or process references keep shared resources alive. The
 [object lifetime interface](../include/kernel/object/object.h) define the contracts.
 Both concrete console and blob objects use this lifetime model.
 
-CALL resolves the handle once and obtains the object and its granted rights.
-A small switch on object type selects the console or blob handler. Each handler
-checks supported operations, required rights and request layouts. Unsupported
-operations return BAD_OPERATION before rights or buffer checks; a supported
-operation with insufficient rights returns DENIED. No operation callback table
-or registration framework is involved.
+CALL resolves the handle once, obtains its object and rights, then captures the
+message tag from userspace. A small switch on object type checks the protocol
+and selects the console or blob handler. Each handler checks the operation,
+required rights, exact payload size and user buffers before acting. Tag reads
+can fail before operation/rights checks. A mismatched protocol or unsupported
+operation returns BAD_OPERATION; a supported operation with insufficient rights
+returns DENIED. No operation callback table or registration framework is involved.
+
+Object lifetime, capability tables and the concrete handlers live in
+`kernel/object/`, with corresponding headers under `include/kernel/object/`.
+Protocols stay in shared `include/abi/` headers. Calls remain synchronous kernel
+messages; queued endpoints, dynamic protocol discovery, file protocols and
+framebuffer protocols are separate future work.
 
 ### Implemented console calls
 
@@ -282,8 +302,8 @@ its temporary reference; close or process cleanup eventually frees the wrapper
 on the BSP. Neither path frees archive frames or removes the archive mapping.
 
 The [blob layouts](../include/abi/blob.h) define size and offset-read operations.
-Both require READ. Size has an empty request and does not dereference its request
-address. Reads capture the request and validate the full destination capacity
+Both require the blob's READ right. Size ignores payload fields after capturing
+the complete message. Reads validate the full destination capacity
 and the actual reply bytes before writing anything, including at EOF. Zero
 capacity ignores the destination address. Counts are clipped to the remaining
 blob bytes; offsets at or beyond the end return zero without forming a source

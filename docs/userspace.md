@@ -58,6 +58,12 @@ each kernel call renders a bounded chunk. Requests and replies have shared
 layouts, and CALL returns both status and reply byte count. Legacy character
 helpers and syscalls remain available during migration.
 
+CALL takes a handle, a tagged message and its size, then a reply buffer and
+capacity. Shared protocol headers define the tag and payload union. Rights are
+checked against the handle's object type, so the same bit may mean console
+WRITE or blob READ. Rebuild userspace images after this ABI change; earlier
+images passing a separate operation argument are not compatible.
+
 The [blob wrappers](../userspace/include/blob.h) query size and read at explicit
 offsets. They check reply lengths and counts; a short read is allowed and zero
 bytes with nonzero capacity means EOF. Hello uses a fixed stack buffer, so it
