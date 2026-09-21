@@ -3,7 +3,7 @@
 Status: the first console-and-blob ABI slice below is agreed for implementation.
 The broader process and resource model remains a working draft alongside the
 [spaces draft](spaces.md). Startup delivery, console and blob CALL operations,
-and handle close are implemented. The complete userspace example remains task 9.
+and handle close are implemented, including the complete userspace example.
 Legacy syscalls remain usable during the migration.
 The [worklist](wip/process-capability-abi.md) tracks the focused tasks and
 handoffs for this first milestone.
@@ -27,13 +27,15 @@ This example needs no filesystem root, path lookup operation or VFS semantics.
 The [filesystem draft](vfs.md) remains separate. The boot archive is a source of
 bytes, not a decision about how applications will eventually discover files.
 
-Conceptually, the program would:
+The hello program:
 
 1. Read its startup record and obtain the output and content handles.
 2. Write a greeting, handling errors and any partial write.
-3. Read a chunk at an explicit byte offset into a userspace buffer.
-4. Write the returned bytes, advance the offset, and repeat until EOF.
-5. Exit with a success or failure status; the kernel releases remaining handles.
+3. Query the blob size and read at explicit byte offsets into a stack buffer.
+4. Write the returned bytes, advance the offset, and repeat until EOF, checking
+   that the counts agree with the immutable blob's size.
+5. Attempt to close both handles even after an I/O error, then exit with a
+   success or failure status. The kernel releases any handles left open.
 
 An explicit read offset avoids introducing a shared seek position when handles
 are later duplicated or passed between processes.
@@ -106,8 +108,7 @@ reclaims the page with the rest of its address space.
 The freestanding entry preserves RDI when calling C main. Hello checks version
 and size, then prints through the output capability. The launcher grants WRITE
 on the owning space's console and READ on an archive-backed content blob.
-For now content exposes the existing hello.pxe entry; task 9 will supply a text
-asset and make hello read it.
+Content exposes the packaged text asset, separate from the executable image.
 
 ## First operation shapes
 
@@ -256,15 +257,16 @@ under the existing output lock, then writes the count reply last. This limits
 each rendering batch; validation still covers the full requested source range.
 The payload is captured before any overlapping reply is written. Callers that
 overlap reply and source storage must account for that overwrite before retrying.
-The userspace console wrapper checks status, reply size and progress, and its
-print helper repeats partial writes until the string is complete.
+The userspace console wrapper checks status, reply size and progress.
+`console_write_all()` repeats partial writes for an explicit byte count;
+`console_print()` uses it for strings.
 
 The [shared syscall header](../include/abi/syscall.h) and
 [console layouts](../include/abi/console.h) define the active slice. RDX carries
 reply length for CALL; legacy character calls preserve its previous value.
 No endpoint queues or general object-operation table are involved.
 
-Hello closes its output handle after printing through the
+Hello closes both supplied handles after printing through the
 [handle wrapper](../userspace/include/handle.h). The native close wrapper accounts
 for the RDX result; the legacy one-argument syscall wrapper cannot be used for
 close because it assumes RDX is preserved. Closing leaves the startup record
@@ -289,8 +291,10 @@ pointer. The reply is written last, so it overwrites any overlapping data bytes.
 Request storage may overlap destinations because its fields are captured first.
 
 The blob is not mapped directly into userspace, has no shared seek position,
-and supports no mutation or lookup operations. Task 9 adds userspace wrappers
-and the text-reading example; the current hello leaves content for exit cleanup.
+and supports no mutation or lookup operations. The
+[userspace wrappers](../userspace/include/blob.h) check status, reply size and
+read counts, clearing output values on failure. Hello uses these wrappers to
+read the text asset in chunks and the console helper to finish partial writes.
 
 ### Implemented user-buffer access
 
