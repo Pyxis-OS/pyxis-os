@@ -11,6 +11,21 @@
 
 #define CONSOLE_WRITE_CHUNK 256
 
+static struct syscall_result close_handle(handle_t handle)
+{
+  struct process *process = process_current();
+  if (!process) {
+    return (struct syscall_result){CALL_BAD_HANDLE, 0};
+  }
+
+  enum capability_result result = capability_close(&process->capabilities, handle);
+  if (result == CAP_BAD_HANDLE) {
+    return (struct syscall_result){CALL_BAD_HANDLE, 0};
+  }
+  KASSERT(result == CAP_OK);
+  return (struct syscall_result){CALL_OK, 0};
+}
+
 static struct syscall_result call_object(handle_t handle, uint64_t operation,
     uintptr_t request_address, size_t request_size, uintptr_t reply_address,
     size_t reply_capacity)
@@ -73,6 +88,8 @@ struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t 
   switch (number) {
   case SYSCALL_CALL:
     return call_object(arg1, arg2, arg3, arg4, arg5, arg6);
+  case SYSCALL_CLOSE:
+    return close_handle(arg1);
   case SYSCALL_PUTCHAR: {
     bool locked = log_begin();
     if (locked && get_tty()->initialized) {

@@ -6,6 +6,7 @@
 #define SYSCALL_PUTCHAR UINT64_C(0)
 #define SYSCALL_LOG_PUTCHAR UINT64_C(1)
 #define SYSCALL_CALL UINT64_C(2)
+#define SYSCALL_CLOSE UINT64_C(3)
 #define SYSCALL_EXIT UINT64_C(-1)
 
 enum call_status {
@@ -18,7 +19,8 @@ enum call_status {
   CALL_UNAVAILABLE = 6,
 };
 
-/* CALL returns status in RAX and reply bytes in RDX (zero on failure).
+/* CALL/CLOSE return status in RAX and reply bytes in RDX (zero on failure,
+ * always zero for CLOSE).
  * The C x86_64 ABI returns this two-word structure in those same registers. */
 struct syscall_result {
   uint64_t status;
