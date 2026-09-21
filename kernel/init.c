@@ -1,3 +1,5 @@
+#include <abi/blob.h>
+#include <abi/console.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/smp.h>
@@ -15,8 +17,8 @@
 #include <kernel/task.h>
 #include <kernel/fb/tty.h>
 #include <kernel/space.h>
-#include <kernel/console.h>
-#include <kernel/blob.h>
+#include <kernel/object/console.h>
+#include <kernel/object/blob.h>
 
 #define INITIAL_STACK_BASE UINT64_C(0x800000)
 #define INITIAL_STACK_SIZE PAGE_SIZE
@@ -66,7 +68,7 @@ static void queue_initial_image(void)
 
   handle_t output;
   enum capability_result grant = capability_install(&process->capabilities,
-      &process->space->console->object, CAP_WRITE, &output);
+      &process->space->console->object, CONSOLE_RIGHT_WRITE, &output);
   if (grant != CAP_OK) {
     KASSERT(process_destroy(process) == MM_OK);
     panic("cannot grant initial console (error %u)", (unsigned)grant);
@@ -78,7 +80,7 @@ static void queue_initial_image(void)
     panic("cannot create initial content blob");
   }
   handle_t content;
-  grant = capability_install(&process->capabilities, &blob->object, CAP_READ,
+  grant = capability_install(&process->capabilities, &blob->object, BLOB_RIGHT_READ,
       &content);
   object_release(&blob->object);
   if (grant != CAP_OK) {

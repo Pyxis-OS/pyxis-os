@@ -1,8 +1,8 @@
 #include <arch/smp.h>
-#include <kernel/capability.h>
+#include <kernel/object/capability.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
-#include <kernel/object.h>
+#include <kernel/object/object.h>
 #include <kernel/panic.h>
 
 #define INITIAL_CAPACITY 8
@@ -54,7 +54,7 @@ enum capability_result capability_install(struct capability_table *table,
   if (handle) {
     *handle = HANDLE_INVALID;
   }
-  if (!table || !object || !handle || (rights & ~(CAP_READ | CAP_WRITE))) {
+  if (!table || !object || !handle || !object_rights_valid(object->type, rights)) {
     return CAP_INVALID;
   }
 

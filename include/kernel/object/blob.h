@@ -2,7 +2,7 @@
 #define KERNEL_BLOB_H
 
 #include <abi/syscall.h>
-#include <kernel/object.h>
+#include <kernel/object/object.h>
 
 struct initrd_file;
 
@@ -19,7 +19,9 @@ struct blob_object {
 struct blob_object *blob_create(const struct initrd_file *file);
 
 /* Current process, IF=0. Caller holds a live reference and supplies its granted
- * rights. Captures requests and checks every user destination before copying;
+ * rights and operation from a checked protocol tag. request_address/size
+ * describe the payload after that tag. Captures requests and checks every
+ * user destination before copying;
  * writes the reply last if it overlaps the data destination. */
 struct syscall_result blob_call(struct blob_object *blob, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,

@@ -247,6 +247,27 @@ reference and archive bytes survived. Error unwinding, empty content and
 malformed-reply rejection were code-reviewed; no fault injection, tests or boot
 automation were added.
 
-All tasks in this milestone are complete. Next discussion, requested by the
-project owner: their more complex capability idea and its tradeoffs. No further
-implementation is assigned by this worklist.
+All tasks in this milestone are complete. The subsequent capability discussion
+led to the explicitly requested protocol pass below; this worklist assigns no
+further implementation.
+
+Follow-up protocol pass (assistant), commits `f213204`, `1bfbc15` and `5b62610`:
+object code and headers now live under `kernel/object/` and
+`include/kernel/object/`. Console WRITE and blob READ are separate protocol
+rights with overlapping bit values. Installation rejects unsupported bits.
+CALL carries a tagged protocol message and payload union; the operation is no
+longer a separate syscall argument. Userspace wrappers migrated together.
+This changes the native CALL ABI and requires rebuilding old userspace images.
+The updated process document describes the current contract; earlier task
+records above describe their original implementations.
+
+Validation: a clean `make image` completed without warnings, and normal one-
+and four-CPU KVM boots ran hello through exit 0. Manual GDB calls under four-CPU TCG
+confirmed unsupported grant-bit rejection, zero-rights grants with denied
+operations, mismatched protocol tags despite overlapping operation numbers,
+unknown operations, malformed message sizes, invalid tag buffers and invalid
+reply buffers. Checked reply/data sentinels survived rejected calls. Valid
+blob read, size and EOF messages succeeded. Hello resumed through its full
+example and exit; heap/frame counts returned to baseline and the space's
+console survived. Payload-boundary checks and unchanged allocation-failure
+paths were code-reviewed. No tests, fault injection or boot automation were added.
