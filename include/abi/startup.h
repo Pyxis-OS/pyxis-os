@@ -4,7 +4,7 @@
 #include <abi/handle.h>
 #include <stddef.h>
 
-#define STARTUP_VERSION 2
+#define STARTUP_VERSION 1
 
 /* x86_64 entry receives this user pointer in RDI. The record is read-only and
  * remains valid until process exit. Check version and size before reading

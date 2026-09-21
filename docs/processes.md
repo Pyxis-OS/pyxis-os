@@ -97,8 +97,8 @@ struct startup_info {
 };
 ```
 
-Version 2 has size 32 bytes and alignment 8, with fields at offsets 0, 4, 8,
-16 and 24. Fields use the current x86_64 little-endian representation. `size`
+The current version 1 record has size 32 bytes and alignment 8, with fields at
+offsets 0, 4, 8, 16 and 24. Fields use the current x86_64 little-endian representation. `size`
 bounds the supplied record; userspace checks version and size before reading
 the handles. An absent resource has the invalid handle, zero.
 

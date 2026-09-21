@@ -41,7 +41,7 @@ The kernel supplies an executable entry point and a writable, 16-byte-aligned
 user stack. Entry receives a pointer in `RDI` to the read-only
 [startup record](../include/abi/startup.h), which remains mapped until process
 exit. Its address is chosen by VM allocation; programs must use the pointer.
-Startup version 2 supplies output, content and endpoint roles; absent resources
+The startup record supplies output, content and endpoint roles; absent resources
 have invalid handles. Programs check the version and size before using them.
 The shared assembly entry preserves the pointer as the argument to
 `main(const struct startup_info *startup)`, then passes main's return value to

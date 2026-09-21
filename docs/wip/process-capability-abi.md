@@ -275,8 +275,8 @@ paths were code-reviewed. No tests, fault injection or boot automation were adde
 Follow-up request/reply milestone (assistant), commits `7a64a4d`, `5b39d17`,
 `0944042`, `e2a14b6` and `bd6de4c`: explicit attenuated grants between unsubmitted
 process tables, blocked-syscall parking, and paired endpoints using tagged
-CALL/RECEIVE/REPLY messages. Startup version 2 adds an endpoint role. A client
-and server run beside hello; the client requests a numeric transformation and
+CALL/RECEIVE/REPLY messages. The startup record adds an endpoint role and retains
+version 1. A client and server run beside hello; the client requests a numeric transformation and
 prints the reply, then the server observes peer closure. Boot program setup
 now lives in `kernel/user/`. See [the endpoint contract](../endpoints.md).
 
