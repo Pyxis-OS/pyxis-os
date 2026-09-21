@@ -51,7 +51,7 @@ The process draft holds the agreed design; this file tracks the work.
   Complete when output reaches the owning space's TTY and invalid handles,
   missing rights and invalid buffers are handled through the agreed errors.
 
-- [ ] **7. Expose handle close.** Add the userspace `close` operation and its
+- [x] **7. Expose handle close.** Add the userspace `close` operation and its
   wrapper. Complete when closing the output handle removes that process's
   access while the space retains its console, stale handles follow the agreed
   reuse rules, and exit releases handles left open.
@@ -185,6 +185,23 @@ Allocation failures, unavailable output, overlapping buffers and the userspace
 wrapper's long-string retry loop were code-reviewed rather than forced at
 runtime. No tests, fault injection or boot automation were added.
 
-Task 7 is next: expose userspace close using the existing capability release
-path. Closing the process grant must leave the space's console alive. Content
-remains absent until task 8.
+Task 7 is complete (assistant), commits `0081560` and `744ca64`. Syscall 3 closes
+a handle through the existing capability release path and returns status with
+zero reply bytes. No access rights are required to close an owned handle.
+The userspace wrapper accounts for RDX being overwritten; hello closes its
+output after printing. The space retains its console independently.
+
+Validation: ordinary `make image` completed without warnings. Normal one- and
+four-CPU KVM boots ran hello through close, exit 0 and cleanup. GDB inspection under
+four-CPU TCG confirmed rejection of absent-process, invalid, stale and already
+closed handles with no reference change. Closing a handle with no access rights
+on CPU 1 succeeded; reuse of its slot had already given it a new generation.
+After hello's actual close returned to userspace, RAX and RDX were both zero.
+Subsequent calls through that handle failed while another console grant remained
+valid. Exit released that deliberately open grant, leaving the space's console
+reference and initialized TTY alive. Heap and frame counts returned to their
+pre-launch values. Last-reference retirement is unchanged from task 3 and was
+code-reviewed here; no tests, fault injection or boot automation were added.
+
+Task 8 is next: immutable boot-archive blobs and the object dispatch split
+recorded above. The content startup role remains absent until then.

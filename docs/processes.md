@@ -2,8 +2,8 @@
 
 Status: the first console-and-blob ABI slice below is agreed for implementation.
 The broader process and resource model remains a working draft alongside the
-[spaces draft](spaces.md). Startup delivery and console CALL are implemented;
-close and blob operations remain planned. Legacy syscalls remain usable during
+[spaces draft](spaces.md). Startup delivery, console CALL and handle close are
+implemented; blob operations remain planned. Legacy syscalls remain usable during
 the migration.
 The [worklist](wip/process-capability-abi.md) tracks the focused tasks and
 handoffs for this first milestone.
@@ -56,8 +56,8 @@ the low 32 bits identify a table slot and the high 32 bits hold its generation.
 Generations start at one. Closing an entry invalidates its handle; reuse gets
 a new generation. Retire a slot rather than wrap its generation and make a
 stale handle valid again. Userspace must not decode handles or use them as
-global object identifiers. The table implementation and console call use this
-encoding; userspace close remains a later task.
+global object identifiers. The table implementation, console call and userspace
+close use this encoding.
 
 Each space would have a capability table describing resources available to its
 environment. A process would receive an explicit subset with equal or reduced
@@ -115,7 +115,7 @@ The initial object operations use one synchronous kernel call:
 call(handle, operation, request, request_size, reply, reply_capacity)
 ```
 
-Syscall 2 implements `call`; 3 is reserved for `close(handle)`. Existing
+Syscall 2 implements `call`; 3 implements `close(handle)`. Existing
 character-output syscalls 0 and 1 remain during migration; exit keeps its encoding.
 The x86_64 convention uses `RAX` for the syscall number and `RDI`, `RSI`, `RDX`,
 `R10`, `R8`, `R9` for arguments. Return `RAX` holds status and `RDX` the number
@@ -137,6 +137,10 @@ Request sizes must match exactly: 16, 24 and 0 bytes respectively. Each reply
 needs at least 8 bytes of capacity; success writes one 8-byte field and returns
 8 in `RDX`. The transferred data count is in that field, not in `RDX`.
 Close removes a valid handle from the caller's table and releases its reference.
+It requires no access rights on that handle. Invalid and already-closed handles
+return the invalid-handle status; both success and failure return zero in RDX.
+Other references to the object remain valid. A last release uses the existing
+BSP retirement path, so closing on an AP does not allocate or destroy objects.
 
 For a nonzero read capacity, successful zero-byte reads at or beyond the blob's
 end indicate EOF. Reads can return fewer bytes than requested. Writes report
@@ -250,6 +254,13 @@ The [shared syscall header](../include/abi/syscall.h) and
 [console layouts](../include/abi/console.h) define the active slice. RDX carries
 reply length for CALL; legacy character calls preserve its previous value.
 No endpoint queues or general object-operation table are involved.
+
+Hello closes its output handle after printing through the
+[handle wrapper](../userspace/include/handle.h). The native close wrapper accounts
+for the RDX result; the legacy one-argument syscall wrapper cannot be used for
+close because it assumes RDX is preserved. Closing leaves the startup record
+unchanged, so its output field then contains a stale handle. Exit releases any
+entries still open, while the space keeps its own console reference.
 
 ### Implemented user-buffer access
 
