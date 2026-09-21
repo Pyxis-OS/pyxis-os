@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-#define SYSCALL_PUTCHAR UINT64_C(0)
 #define SYSCALL_LOG_PUTCHAR UINT64_C(1)
 #define SYSCALL_CALL UINT64_C(2)
 #define SYSCALL_CLOSE UINT64_C(3)
@@ -17,6 +16,9 @@ enum call_status {
   CALL_BAD_REQUEST = 4,
   CALL_BAD_BUFFER = 5,
   CALL_UNAVAILABLE = 6,
+  CALL_QUEUE_FULL = 7,
+  CALL_ENDPOINT_CLOSED = 8,
+  CALL_BUSY = 9,
 };
 
 /* CALL/CLOSE return status in RAX and reply bytes in RDX (zero on failure,

@@ -271,3 +271,33 @@ blob read, size and EOF messages succeeded. Hello resumed through its full
 example and exit; heap/frame counts returned to baseline and the space's
 console survived. Payload-boundary checks and unchanged allocation-failure
 paths were code-reviewed. No tests, fault injection or boot automation were added.
+
+Follow-up request/reply milestone (assistant), commits `7a64a4d`, `5b39d17`,
+`0944042`, `e2a14b6` and `bd6de4c`: explicit attenuated grants between unsubmitted
+process tables, blocked-syscall parking, and paired endpoints using tagged
+CALL/RECEIVE/REPLY messages. The startup record adds an endpoint role and retains
+version 1. A client and server run beside hello; the client requests a numeric transformation and
+prints the reply, then the server observes peer closure. Boot program setup
+now lives in `kernel/user/`. See [the endpoint contract](../endpoints.md).
+
+Each direction has one outstanding request and bounded inline data. Shared
+message and wait records use stable heap mappings, preserving the current
+restriction against remote accesses to reclaimable task stacks. No userspace
+creation, capability transfer, asynchronous send or timeout is introduced.
+
+Validation: a clean `make image` completed without warnings. Normal one- and
+four-CPU KVM boots ran all three programs through exit 0. Manual four-CPU TCG/GDB
+inspection confirmed reduced-rights grants, rejected rights escalation,
+queue-full and busy results, stale-reply rejection, and denied operations.
+Closing the service handle through the syscall dispatcher while its client was
+blocked produced ENDPOINT_CLOSED and made that client runnable. Heap and frame
+counts returned to their pre-launch values after cleanup. The exact early-wake
+race, counter exhaustion and allocation-failure unwinding were code-reviewed;
+no tests, self-tests or boot automation were added.
+
+The compatibility-policy review removed the unused TTY character syscall and
+its putchar/print wrappers; all current programs use console capabilities.
+The separate diagnostic kernel-log syscall remains. AGENTS.md now requires a
+concrete reason for compatibility paths and version increases. A clean image
+build and normal four-CPU KVM boot passed after the removal, with all three
+programs exiting successfully.

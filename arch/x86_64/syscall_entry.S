@@ -53,8 +53,8 @@ syscall_entry:
   pop %r10
   pop %r9
   pop %r8
-  /* Keep the C result's second word in RDX. For legacy calls, dispatch
-   * returns the original user RDX here; CALL returns its reply byte count. */
+  /* Keep the C result's second word in RDX: CALL/CLOSE return reply bytes;
+   * log output and unknown calls return the original user RDX. */
   add $STACK_WORD_BYTES, %rsp
   pop %rsi
   pop %rdi

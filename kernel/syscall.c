@@ -2,7 +2,7 @@
 #include <kernel/object/blob.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/console.h>
-#include <kernel/fb/tty.h>
+#include <kernel/object/endpoint.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -67,6 +67,12 @@ static struct syscall_result call_object(handle_t handle,
     }
     return blob_call((struct blob_object *)object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_ENDPOINT:
+    if (header.protocol != PROTOCOL_ENDPOINT) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return endpoint_call((struct endpoint *)object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
@@ -82,14 +88,6 @@ struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t 
     return call_object(arg1, arg2, arg3, arg4, arg5);
   case SYSCALL_CLOSE:
     return close_handle(arg1);
-  case SYSCALL_PUTCHAR: {
-    bool locked = log_begin();
-    if (locked && get_tty()->initialized) {
-      tty_put_char(get_tty(), (char)arg1);
-    }
-    log_end(locked);
-    return (struct syscall_result){0, arg3};
-  }
   case SYSCALL_LOG_PUTCHAR: {
     bool locked = log_begin();
     log_putc((char)arg1);

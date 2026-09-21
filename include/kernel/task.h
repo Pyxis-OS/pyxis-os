@@ -3,6 +3,18 @@
 
 #include <kernel/mm/types.h>
 
+struct task_wait;
+
+/* Current user task, IF=0. Prepare its wait record before publishing. The
+ * record lives in task metadata, whose heap mapping survives stack reuse.
+ * Sleep only after releasing resource locks; an earlier wake is remembered.
+ * A resource must remove its wait pointer before waking and never use it after
+ * wake returns. No allocation or migration; one wait per task at a time. */
+struct task_wait *task_wait_prepare(void);
+void task_wait_sleep(struct task_wait *wait);
+/* Any CPU, IF=0, after detaching the record under its resource lock. */
+void task_wait_wake(struct task_wait *wait);
+
 /* BSP only, after boot_start_cpus(), VM and heap initialization. */
 void task_init(void);
 

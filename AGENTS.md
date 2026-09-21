@@ -13,3 +13,10 @@
   tests, self-tests, fault injection, CI or boot/output automation.
 - Make focused commits. Keep README short and practical; document interface
   invariants beside the code.
+- Do not preserve backwards compatibility unless requested. This project is
+  under active development with no external consumers. Prefer replacing obsolete
+  interfaces, formats and implementations outright; update in-tree consumers
+  together.
+- Do not increment schema or version fields merely because the implementation
+  changed. Introduce a new version only when multiple versions must intentionally
+  coexist or migration is required.

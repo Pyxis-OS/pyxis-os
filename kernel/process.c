@@ -27,7 +27,7 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
 }
 
 enum mm_result process_prepare_startup(struct process *process, handle_t output,
-                                       handle_t content)
+                                       handle_t content, handle_t endpoint)
 {
   KASSERT(arch_cpu_index() == 0);
   if (!process || process->startup_address) {
@@ -53,6 +53,7 @@ enum mm_result process_prepare_startup(struct process *process, handle_t output,
         .size = sizeof(struct startup_info),
         .output = output,
         .content = content,
+        .endpoint = endpoint,
       };
       /* Fill an inactive user page through a borrowed kernel alias. Its user
        * mapping is never writable, and VM zeroed the rest of the page. */

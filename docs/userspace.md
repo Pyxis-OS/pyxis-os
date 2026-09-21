@@ -24,8 +24,8 @@ See [gdb.md](gdb.md) for kernel debugger usage.
 
 ## Entry and loading
 
-`make initrd` packages the initial program and its text asset into
-`build/initrd.cpio`; `make image`
+`make initrd` packages hello and its text asset, plus the client and server
+programs, into `build/initrd.cpio`; `make image`
 includes that uncompressed `newc` archive as the sole Limine module. The kernel
 keeps the archive mapped read-only and uses `initrd_lookup()` to find the program
 and content by exact archive names. The text source lives beside hello in
@@ -41,7 +41,9 @@ The kernel supplies an executable entry point and a writable, 16-byte-aligned
 user stack. Entry receives a pointer in `RDI` to the read-only
 [startup record](../include/abi/startup.h), which remains mapped until process
 exit. Its address is chosen by VM allocation; programs must use the pointer.
-The assembly entry preserves it as the argument to
+The startup record supplies output, content and endpoint roles; absent resources
+have invalid handles. Programs check the version and size before using them.
+The shared assembly entry preserves the pointer as the argument to
 `main(const struct startup_info *startup)`, then passes main's return value to
 `exit`. Hello checks the record's version and size, prints a greeting, queries
 its content blob's size, and reads and prints the content in chunks. It attempts
@@ -55,14 +57,14 @@ serial.
 The [console wrapper](../userspace/include/console.h) uses the native CALL ABI
 and reports actual bytes written. Its byte-count and string helpers finish partial writes;
 each kernel call renders a bounded chunk. Requests and replies have shared
-layouts, and CALL returns both status and reply byte count. Legacy character
-helpers and syscalls remain available during migration.
+layouts, and CALL returns both status and reply byte count. All programs use
+console capabilities for TTY output.
 
 CALL takes a handle, a tagged message and its size, then a reply buffer and
 capacity. Shared protocol headers define the tag and payload union. Rights are
 checked against the handle's object type, so the same bit may mean console
-WRITE or blob READ. Rebuild userspace images after this ABI change; earlier
-images passing a separate operation argument are not compatible.
+WRITE or blob READ. Kernel and userspace are rebuilt together against the
+shared ABI headers. Older layouts are not supported.
 
 The [blob wrappers](../userspace/include/blob.h) query size and read at explicit
 offsets. They check reply lengths and counts; a short read is allowed and zero
@@ -75,8 +77,16 @@ reference. A closed handle is immediately stale; other owners, including the
 space that owns the console, retain their references. Process exit releases
 handles left open. The read-only startup record is not updated after close.
 
-The launcher creates a process that owns the loaded address space and belongs
-to the target CPU's space. Before submission, it calls
+The client and server use the [endpoint wrappers](../userspace/include/endpoint.h)
+to exchange a small structured application message. The client sends a number;
+the server doubles it and replies. The client prints the returned value, closes
+its handles and exits. The server then observes peer closure and exits. Both
+receive an output handle, but no content blob. Their endpoint grants differ:
+CALL for the client, RECEIVE and REPLY for the server. The
+[endpoint contract](endpoints.md) describes blocking and closure semantics.
+
+The [boot launcher](../kernel/user/launch.c) creates a process that owns the
+loaded address space and belongs to the target CPU's space. Before submission, it calls
 `process_prepare_startup()` with the initial resource handles. This allocates
 a zeroed user page and fills the record through a temporary kernel alias,
 leaving the user mapping read-only and non-executable. Task submission transfers
@@ -97,9 +107,11 @@ round-robin.
 
 Userspace runs with interrupts enabled. Interrupt gates and SYSCALL disable
 them on kernel entry, so syscall execution is not preempted on its own CPU and
-a long syscall delays scheduling there. Separate BSP kernel tasks run with
-interrupts enabled and can be preempted. Other CPUs continue running. SYSCALL
-needs an explicit kernel-stack switch; unlike an interrupt from userspace, it
+a long syscall delays scheduling there. Endpoint CALL and RECEIVE explicitly
+park the task while waiting; the scheduler resumes its private kernel stack and
+address space before the handler accesses user memory again. Separate BSP
+kernel tasks run with interrupts enabled and can be preempted. Other CPUs
+continue running. SYSCALL needs an explicit kernel-stack switch; unlike an interrupt from userspace, it
 does not load the stack from the TSS. Kernel GS identifies the current CPU,
 with SWAPGS separating it from the user GS base on entry and return.
 

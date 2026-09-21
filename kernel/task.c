@@ -20,6 +20,11 @@ enum task_kind {
   TASK_KERNEL,
 };
 
+struct task_wait {
+  struct task *task;
+  bool notified;
+};
+
 struct task {
   struct task *next;
   enum task_kind kind;
@@ -34,6 +39,9 @@ struct task {
   void (*kernel_entry)(void *);
   void *argument;
   uint64_t sleep_start, sleep_ticks;
+  struct task_wait wait_record;
+  struct task_wait *wait;
+  bool parked; /* queues_locked: stack saved and no CPU is executing this task. */
 };
 
 struct scheduler {
@@ -50,7 +58,7 @@ static atomic_bool queues_locked;
 /* Sleeping kernel tasks belong to the BSP and are accessed only with IF=0. */
 static struct task *sleeping_tasks;
 
-/* IF=0 on every caller. Only list links cross CPUs; never allocate, log,
+/* IF=0 on every caller. Protects queue links and wait state; never allocate, log,
  * switch contexts or wait for another CPU while holding this lock. */
 static void lock_queues(void)
 {
@@ -87,9 +95,8 @@ void task_init(void)
   memset(schedulers, 0, count * sizeof(*schedulers));
 }
 
-static void enqueue(struct scheduler *scheduler, struct task *task)
+static void enqueue_locked(struct scheduler *scheduler, struct task *task)
 {
-  lock_queues();
   task->next = NULL;
   if (scheduler->ready_tail) {
     scheduler->ready_tail->next = task;
@@ -97,6 +104,56 @@ static void enqueue(struct scheduler *scheduler, struct task *task)
     scheduler->ready_head = task;
   }
   scheduler->ready_tail = task;
+}
+
+static void enqueue(struct scheduler *scheduler, struct task *task)
+{
+  lock_queues();
+  enqueue_locked(scheduler, task);
+  unlock_queues();
+}
+
+struct task_wait *task_wait_prepare(void)
+{
+  struct task *task = local_scheduler()->current_task;
+  KASSERT(task && task->kind == TASK_USER && !task->exited);
+  KASSERT(!task->wait && !task->parked);
+  task->wait_record = (struct task_wait){.task = task};
+  return &task->wait_record;
+}
+
+void task_wait_sleep(struct task_wait *wait)
+{
+  struct scheduler *scheduler = local_scheduler();
+  struct task *task = scheduler->current_task;
+  KASSERT(task == wait->task && task->kind == TASK_USER);
+
+  lock_queues();
+  if (wait->notified) {
+    unlock_queues();
+    return;
+  }
+  KASSERT(!task->wait && !task->parked);
+  task->wait = wait;
+  unlock_queues();
+
+  arch_user_save(&task->cpu);
+  arch_context_switch(&task->saved_stack, scheduler->stack);
+}
+
+void task_wait_wake(struct task_wait *wait)
+{
+  lock_queues();
+  wait->notified = true;
+  struct task *task = wait->task;
+  if (task->parked) {
+    KASSERT(task->wait == wait && !task->exited);
+    task->parked = false;
+    task->wait = NULL;
+    enqueue_locked(&schedulers[task->cpu_index], task);
+  }
+  /* A wake before the switch only records notification. Enqueueing a task
+   * before its stack has been saved could run it on two contexts at once. */
   unlock_queues();
 }
 
@@ -339,6 +396,15 @@ void kernel_task_sleep(uint64_t ticks)
     scheduler->current_task = NULL;
     if (task->exited) {
       complete_task(task);
+    } else if (task->wait) {
+      lock_queues();
+      if (task->wait->notified) {
+        task->wait = NULL;
+        enqueue_locked(scheduler, task);
+      } else {
+        task->parked = true;
+      }
+      unlock_queues();
     } else if (task->sleep_ticks) {
       task->next = sleeping_tasks;
       sleeping_tasks = task;

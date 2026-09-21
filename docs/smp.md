@@ -1,9 +1,10 @@
 # Pinned tasks on multiple CPUs
 
 `make run CPUS=4` boots one QEMU socket with four cores and one thread per core.
-`CPUS` defaults to one and also applies to `make debug`. With multiple CPUs the
-initial userspace image runs on CPU 1, leaving CPU 0 (the BSP) to service cleanup.
-A single-CPU boot runs the image on the BSP. Other CPUs idle until given work.
+`CPUS` defaults to one and also applies to `make debug`. With multiple CPUs,
+hello and the request/reply client run on CPU 1, leaving CPU 0 (the BSP) to
+service cleanup. The server runs on CPU 2 when present, otherwise beside the
+client. A single-CPU boot runs all three on the BSP. Other CPUs idle until given work.
 CPU indices are dense, stable for the boot, and distinct from hardware APIC IDs.
 
 ## Boot handoff
@@ -82,6 +83,20 @@ current task and saved scheduler stack are local to their CPU. Local timer
 interrupts wake idle CPUs to check for submissions and wake the BSP to collect
 completions, so these handoffs need no IPI and may wait about one timer period.
 
+Blocking userspace syscalls use a wait record embedded in task metadata. The
+resource publishes it under its own lock and removes it before waking the task. The scheduler queue
+lock protects notification and parking: an early wake is remembered, and no task
+is enqueued until its context has been saved on the permanent scheduler stack.
+This prevents lost wakeups or resuming a stack still in use. The resource lock
+may nest the queue lock; the reverse order is forbidden. Neither is held across
+a context switch.
+
+Parking saves user CPU state just like timer preemption. Resume restores the
+same CPU, process root and private entry stack, with interrupts still disabled.
+The process remains alive while blocked; no other task can change its mappings
+or capability table. Remote wakeups use the existing timer-driven ready-queue
+check, with no IPI.
+
 Exit and ordinary user faults return to the local scheduler. After switching
 to its permanent stack and reloading the kernel root, the CPU clears its task
 entry-stack pointer and publishes completion. It must not touch the task afterward.
@@ -122,8 +137,8 @@ of interrupt entry and the scheduler does not know about display timing.
 Allocators, VM metadata, page-table mutation and the two scratch mappings remain
 BSP-only and require interrupts disabled. A kernel task must save/disable
 interrupts around these calls and restore them afterward; being pinned to the
-BSP alone does not prevent same-CPU reentry. AP syscalls currently print or exit;
-they cannot allocate memory.
+BSP alone does not prevent same-CPU reentry. AP syscalls may access their
+capabilities and block on endpoints, but cannot allocate memory.
 
 User-buffer checks are a narrow exception to BSP-only queries: the executing
 CPU can inspect its active private root through recursive mappings, with IF=0
@@ -139,9 +154,11 @@ Task activation reloads CR3 before accessing a newly published task stack. Task
 retirement reloads it after leaving that stack, before the BSP can reclaim the
 backing. With PCID and global pages disabled, these reloads invalidate the local
 translations, including those of reused kernel-stack ranges. Other CPUs never
-access that task's stack or private mappings. This is a restricted ownership
-protocol, not general cross-CPU TLB invalidation; mutable shared mappings and
-concurrent allocator calls still require additional synchronization.
+access that task's stack or private mappings. Endpoint messages and wait records
+use heap storage, whose mappings remain backed even after freeing the object.
+This is a restricted ownership protocol, not general cross-CPU TLB invalidation;
+mutable shared mappings and concurrent allocator calls still require additional
+synchronization.
 
 Normal log calls save/disable interrupts while serializing serial and framebuffer
 output per format invocation, then restore the caller's interrupt state.

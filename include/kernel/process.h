@@ -33,7 +33,7 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
  * Success stores its user address; failure releases partial backing and leaves
  * startup_address unchanged. The page lives until address-space destruction. */
 enum mm_result process_prepare_startup(struct process *process, handle_t output,
-                                       handle_t content);
+                                       handle_t content, handle_t endpoint);
 
 /* BSP, IF=0, with exclusive ownership of an unsubmitted or retired process.
  * A submitted process belongs to its task until the BSP reaper receives it
