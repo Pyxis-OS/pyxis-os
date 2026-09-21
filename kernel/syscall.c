@@ -1,3 +1,4 @@
+#include <kernel/blob.h>
 #include <kernel/capability.h>
 #include <kernel/console.h>
 #include <kernel/fb/tty.h>
@@ -42,6 +43,9 @@ static struct syscall_result call_object(handle_t handle, uint64_t operation,
   switch (object->type) {
   case OBJECT_CONSOLE:
     return console_call((struct console_object *)object, rights, operation,
+        request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_BLOB:
+    return blob_call((struct blob_object *)object, rights, operation,
         request_address, request_size, reply_address, reply_capacity);
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};

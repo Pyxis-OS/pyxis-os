@@ -16,6 +16,7 @@
 #include <kernel/fb/tty.h>
 #include <kernel/space.h>
 #include <kernel/console.h>
+#include <kernel/blob.h>
 
 #define INITIAL_STACK_BASE UINT64_C(0x800000)
 #define INITIAL_STACK_SIZE PAGE_SIZE
@@ -63,7 +64,23 @@ static void queue_initial_image(void)
     panic("cannot grant initial console (error %u)", (unsigned)grant);
   }
 
-  status = process_prepare_startup(process, output, HANDLE_INVALID);
+  /* Until the text asset lands, expose the same archive file as immutable
+   * content. The blob borrows its bytes independently of the loaded image. */
+  struct blob_object *blob = blob_create(&image);
+  if (!blob) {
+    KASSERT(process_destroy(process) == MM_OK);
+    panic("cannot create initial content blob");
+  }
+  handle_t content;
+  grant = capability_install(&process->capabilities, &blob->object, CAP_READ,
+      &content);
+  object_release(&blob->object);
+  if (grant != CAP_OK) {
+    KASSERT(process_destroy(process) == MM_OK);
+    panic("cannot grant initial content (error %u)", (unsigned)grant);
+  }
+
+  status = process_prepare_startup(process, output, content);
   if (status != MM_OK) {
     KASSERT(process_destroy(process) == MM_OK);
     panic("cannot prepare initial startup record (error %u)", (unsigned)status);
