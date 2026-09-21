@@ -88,6 +88,12 @@ void user_launch_initial(void)
     goto fail;
   }
 
+  result = capability_grant(&client->process->capabilities,
+      &hello->process->capabilities, hello->content, BLOB_RIGHT_READ, &client->content);
+  if (result != CAP_OK) {
+    goto fail;
+  }
+
   struct endpoint *caller, *service;
   if (!endpoint_pair_create(&caller, &service)) {
     goto fail;

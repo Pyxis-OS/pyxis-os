@@ -93,9 +93,9 @@ a context switch.
 
 Parking saves user CPU state just like timer preemption. Resume restores the
 same CPU, process root and private entry stack, with interrupts still disabled.
-The process remains alive while blocked; no other task can change its mappings
-or capability table. Remote wakeups use the existing timer-driven ready-queue
-check, with no IPI.
+The process remains alive while blocked and its user mappings stay stable.
+Only an explicit table-growth loan allows the BSP to modify its capability table.
+Remote wakeups use the existing timer-driven ready-queue check, with no IPI.
 
 Exit and ordinary user faults return to the local scheduler. After switching
 to its permanent stack and reloading the kernel root, the CPU clears its task
@@ -113,6 +113,19 @@ the heap. The BSP scheduler drains this separate list after task cleanup and
 runs destruction callbacks outside its lock. Pending objects also cause a busy
 BSP task to return to the scheduler on its next timer interrupt. No table grows
 on an AP; final releases never require an AP allocator call.
+
+When endpoint receipt needs a free capability slot, the task queues a specific
+capability-growth request and blocks. Its metadata contains the queue link,
+completion result and wait record, so submitting work never allocates on an AP.
+Publication lends exclusive table ownership to the BSP; the submitting task
+must not access the table again until completion. The BSP may complete before
+the task finishes parking, using the same early-wake handling as endpoint calls.
+
+The BSP scheduler detaches a batch of requests under the queue lock, grows each
+table with IF=0 outside the lock, and wakes its owner with the result. It does
+not touch that task again after wake. Pending growth also makes a busy BSP task
+return to its scheduler on the next timer interrupt. BSP userspace uses the
+same path; there is no special AP allocator or generic work-item framework.
 
 Kernel tasks share the BSP ready queue with any BSP userspace. Create one with
 `kernel_task_create(entry, argument)` after scheduler initialization, on the BSP

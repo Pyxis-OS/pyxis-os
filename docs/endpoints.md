@@ -9,7 +9,8 @@ No global endpoint name or implicit authority is involved.
 The launcher uses `capability_grant()` to copy an existing grant with reduced
 rights before either process runs. The source grant remains valid until closed;
 closing it does not revoke the destination. Grants currently require exclusive
-BSP ownership of both tables. There is no userspace grant or move operation.
+BSP ownership of both tables. Running processes can copy a capability through
+an endpoint request as described below; moving remains future work.
 
 ## Messages
 
@@ -25,9 +26,10 @@ wrap the existing native CALL syscall:
 
 Application data is opaque to the kernel and limited to 64 inline bytes per
 request or response. It may contain an application-defined tag and structure,
-as in [the number service](../userspace/include/number_service.h). Embedded
-pointers and handle numbers grant no authority in the receiving process; this
-transport does not copy pointed-to data or transfer capabilities.
+as in [the content service](../userspace/include/content_service.h). Embedded
+pointers and handle numbers in these ordinary bytes grant no authority in the
+receiving process. Capability transfer uses a separate explicit grant field;
+pointed-to data is never copied implicitly.
 
 There is one outstanding request per direction, including the time after
 RECEIVE until the caller consumes its reply or closure result. Another caller
@@ -44,15 +46,52 @@ stale or undelivered ID is `CALL_BAD_REQUEST`. IDs are never reused: exhausting
 the counter makes new calls unavailable. IDs correlate replies; they are not
 handles or separate authority.
 
+## Copying a capability
+
+`endpoint_request()` accepts an optional grant containing a source handle and
+selected rights. The rights must be a subset of the sender's grant, including
+the option of zero rights. Any held capability may be copied this way; there is
+no additional transfer permission. An absent grant is a zero handle with zero
+rights. A stale source returns BAD_HANDLE; added rights return DENIED. Both
+checks happen before publishing the request.
+
+RECEIVE installs an additional reference in the receiving process's table,
+then marks the request delivered and returns the new local handle and its
+rights in `packet.grant`. Numeric handle values may happen to match between
+tables; identity is always relative to the owning process. The sender retains
+its original handle. Closing either grant does not revoke the other. The
+recipient must close its handle or leave it for process teardown.
+
+The sender has one task and remains blocked in CALL, so its source handle
+keeps the object alive until delivery or peer closure. The queued request
+borrows that reference; it does not retain another one. This avoids an extra
+in-transit endpoint reference keeping a closed service alive. Delivery or
+closure clears the borrowed pointer before the sender can resume. Multithreaded
+processes, external revocation or cancellation must revisit this invariant.
+
+A full destination table suspends RECEIVE while the BSP grows the table.
+No endpoint lock is held during growth. On waking, RECEIVE rechecks the pending
+request because another receiver may have handled it in the meantime. Insertion
+into an available slot adds the reference before consuming the message.
+Allocation failure returns NO_MEMORY; handle-space or reference-count exhaustion
+returns LIMIT. Failure does not consume the pending request or change the
+sender's grant. The receiver may retry, or close its endpoint to wake the caller.
+Successful growth may remain even if another receiver wins delivery.
+
+Only requests carry a grant in this milestone. REPLY carries application bytes;
+CALL's returned packet has an absent grant. There are no moves or lists of
+attached capabilities. The shared layout changed in place; rebuild kernel and
+programs together. No version bump or old-layout path is needed.
+
 ## Blocking and lifetime
 
 The kernel captures request bytes and validates reply storage before publishing
 or consuming a request. Request and reply storage belong to the endpoint pair;
 wait records belong to task metadata. Both use heap mappings that remain backed
 until shutdown. No other CPU touches a blocked task's kernel stack: its mapping
-can later be freed and reused without a remote TLB shootdown. No allocation
-occurs in these operations. The process has one task and stable private
-mappings; its handle keeps the endpoint alive throughout the operation.
+can later be freed and reused without a remote TLB shootdown. Only destination
+table growth allocates, through the BSP scheduler. The process has one task
+and stable private mappings; its handle keeps the endpoint alive throughout the operation.
 After resuming, the task writes the reply under its own address-space root.
 
 The endpoint lock protects pending requests and receivers. It may nest the

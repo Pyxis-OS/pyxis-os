@@ -15,11 +15,13 @@ enum capability_result {
   CAP_INVALID,
   CAP_NO_MEMORY,
   CAP_LIMIT,
+  CAP_FULL,
 };
 
 /* Zero initialization creates an empty table. It has one exclusive owner:
  * the BSP before submission/after retirement, otherwise the executing user
- * task with IF=0. No concurrent lookup, close, install or teardown. */
+ * task with IF=0. During a growth request that task lends the table to the
+ * BSP until completion. No concurrent lookup, close, install or teardown. */
 struct capability_table {
   struct capability_entry *entries;
   size_t capacity;
@@ -33,10 +35,20 @@ struct capability_table {
 enum capability_result capability_install(struct capability_table *table,
     struct kernel_object *object, uint64_t rights, handle_t *handle);
 
+/* IF=0, exclusive table ownership on any CPU. Adds a reference without
+ * allocating; CAP_FULL leaves the message/owner free to request BSP growth.
+ * Other results and ownership match capability_install(). */
+enum capability_result capability_insert(struct capability_table *table,
+    struct kernel_object *object, uint64_t rights, handle_t *handle);
+
+/* BSP, IF=0, exclusive ownership (including a task's loan while growing).
+ * Preserves entries, generations and references; failure leaves them intact. */
+enum capability_result capability_grow(struct capability_table *table);
+
 /* BSP, IF=0, exclusive ownership of both unsubmitted process tables. Copies
- * a reference with equal or reduced rights; source remains valid. There is no
- * userspace grant operation yet. Failure clears *result and changes neither
- * table's entries nor object references. */
+ * a reference with equal or reduced rights; source remains valid. Running
+ * processes copy grants through endpoint requests instead. Failure clears
+ * the result handle and changes neither table's entries nor object references. */
 enum capability_result capability_grant(struct capability_table *destination,
     struct capability_table *source, handle_t handle, uint64_t rights,
     handle_t *result);

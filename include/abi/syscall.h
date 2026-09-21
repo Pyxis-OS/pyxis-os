@@ -19,6 +19,8 @@ enum call_status {
   CALL_QUEUE_FULL = 7,
   CALL_ENDPOINT_CLOSED = 8,
   CALL_BUSY = 9,
+  CALL_NO_MEMORY = 10,
+  CALL_LIMIT = 11,
 };
 
 /* CALL/CLOSE return status in RAX and reply bytes in RDX (zero on failure,

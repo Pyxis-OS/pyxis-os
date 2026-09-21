@@ -78,12 +78,14 @@ space that owns the console, retain their references. Process exit releases
 handles left open. The read-only startup record is not updated after close.
 
 The client and server use the [endpoint wrappers](../userspace/include/endpoint.h)
-to exchange a small structured application message. The client sends a number;
-the server doubles it and replies. The client prints the returned value, closes
-its handles and exits. The server then observes peer closure and exits. Both
-receive an output handle, but no content blob. Their endpoint grants differ:
-CALL for the client, RECEIVE and REPLY for the server. The
-[endpoint contract](endpoints.md) describes blocking and closure semantics.
+to exchange a structured request with an attached capability. The client receives
+a content blob at startup and copies a READ grant to the server. The server
+reads and prints its contents, closes its received handle, then replies with
+the byte count. The client prints the result and closes its own content grant,
+which remained valid. Closing its endpoint then lets the server exit.
+Both have output handles; the server has no startup content grant. Their
+endpoint rights are CALL for the client and RECEIVE | REPLY for the server.
+The [endpoint contract](endpoints.md) describes ownership, growth and errors.
 
 The [boot launcher](../kernel/user/launch.c) creates a process that owns the
 loaded address space and belongs to the target CPU's space. Before submission, it calls

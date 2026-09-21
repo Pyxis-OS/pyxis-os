@@ -301,3 +301,37 @@ The separate diagnostic kernel-log syscall remains. AGENTS.md now requires a
 concrete reason for compatibility paths and version increases. A clean image
 build and normal four-CPU KVM boot passed after the removal, with all three
 programs exiting successfully.
+
+Capability-copy follow-up (assistant), commits `38568f2`, `757c7b6`, `eef020b`
+and `ac37e27`: endpoint requests may carry one source capability with equal or
+reduced rights. RECEIVE installs a new recipient-local handle before marking
+the request delivered; the sender keeps its handle. Only the explicitly attached
+grant transfers authority. Replies and ordinary message bytes do not.
+
+Destination table insertion is local and allocation-free when a slot exists.
+Otherwise the task lends its table to the BSP through a task-owned growth
+request and blocks. The BSP scheduler grows it outside locks and wakes the
+owner. No fixed table limit or AP allocator is introduced. Growth failure
+leaves the pending endpoint message unconsumed. A queued grant borrows the
+blocked sender's live source reference until delivery or closure; this relies
+on the existing single-task/no-external-cancellation process contract.
+
+The client now copies its startup blob's READ grant to the server. The server
+reads and prints the content, closes its received handle, and replies with the
+byte count. The client closes its original independently. Shared endpoint
+layouts and wrappers change together, with no compatibility path or version
+bump. Moves, reply attachments and multiple grants remain outside this milestone.
+
+Validation: normal one- and four-CPU KVM boots completed with all programs
+exiting 0; framebuffer inspection showed the server's content and returned
+byte count. Under four-CPU TCG/GDB, filling the server's table with valid grants
+before submission made its AP receive request growth. The BSP grew capacity
+from eight to sixteen with IF=0 and the endpoint lock released; the message
+remained undelivered until insertion, preserving existing entries. The received
+handle referenced the same blob with READ rights, and closing it left the
+sender's grant intact. Manual handler calls rejected added rights, a stale
+source, an invalid absent grant, an invalid reply buffer and a full queue,
+without changing object references. All tasks then exited normally; heap/frame
+counts returned to pre-launch values and growth/retirement queues emptied.
+Allocation failure, counter exhaustion, closure before grant delivery, and the
+exact early-wake window were code-reviewed. No tests or boot automation added.

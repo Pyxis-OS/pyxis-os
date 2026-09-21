@@ -2,6 +2,7 @@
 #define KERNEL_TASK_H
 
 #include <kernel/mm/types.h>
+#include <kernel/object/capability.h>
 
 struct task_wait;
 
@@ -14,6 +15,11 @@ struct task_wait *task_wait_prepare(void);
 void task_wait_sleep(struct task_wait *wait);
 /* Any CPU, IF=0, after detaching the record under its resource lock. */
 void task_wait_wake(struct task_wait *wait);
+
+/* Current user task, IF=0, no held locks. Lends its capability table to the
+ * BSP and blocks until growth completes. No AP allocation or remote stack
+ * access. Existing handles/references survive even when allocation fails. */
+enum capability_result task_grow_capabilities(void);
 
 /* BSP only, after boot_start_cpus(), VM and heap initialization. */
 void task_init(void);
