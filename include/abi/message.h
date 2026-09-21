@@ -5,6 +5,7 @@
 
 #define PROTOCOL_CONSOLE UINT64_C(1)
 #define PROTOCOL_BLOB UINT64_C(2)
+#define PROTOCOL_ENDPOINT UINT64_C(3)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

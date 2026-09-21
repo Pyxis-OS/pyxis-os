@@ -17,6 +17,9 @@ enum call_status {
   CALL_BAD_REQUEST = 4,
   CALL_BAD_BUFFER = 5,
   CALL_UNAVAILABLE = 6,
+  CALL_QUEUE_FULL = 7,
+  CALL_ENDPOINT_CLOSED = 8,
+  CALL_BUSY = 9,
 };
 
 /* CALL/CLOSE return status in RAX and reply bytes in RDX (zero on failure,

@@ -2,6 +2,7 @@
 #include <kernel/object/blob.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/console.h>
+#include <kernel/object/endpoint.h>
 #include <kernel/fb/tty.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
@@ -66,6 +67,12 @@ static struct syscall_result call_object(handle_t handle,
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return blob_call((struct blob_object *)object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_ENDPOINT:
+    if (header.protocol != PROTOCOL_ENDPOINT) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return endpoint_call((struct endpoint *)object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
