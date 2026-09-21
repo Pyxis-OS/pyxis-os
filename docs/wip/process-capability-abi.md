@@ -294,3 +294,10 @@ blocked produced ENDPOINT_CLOSED and made that client runnable. Heap and frame
 counts returned to their pre-launch values after cleanup. The exact early-wake
 race, counter exhaustion and allocation-failure unwinding were code-reviewed;
 no tests, self-tests or boot automation were added.
+
+The compatibility-policy review removed the unused TTY character syscall and
+its putchar/print wrappers; all current programs use console capabilities.
+The separate diagnostic kernel-log syscall remains. AGENTS.md now requires a
+concrete reason for compatibility paths and version increases. A clean image
+build and normal four-CPU KVM boot passed after the removal, with all three
+programs exiting successfully.

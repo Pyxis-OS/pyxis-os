@@ -10,7 +10,7 @@
  * abandons the task stack and never returns here; its status is arg1's signed
  * low 32 bits.
  * CALL/CLOSE return status/reply bytes in RAX/RDX. CLOSE has no reply bytes.
- * Legacy calls preserve user RDX by returning arg3 in the second word.
+ * Log output and unknown calls preserve RDX by returning arg3 in the second word.
  * Unknown numbers return -1 in RAX. */
 struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
                          uint64_t arg3, uint64_t arg4, uint64_t arg5,

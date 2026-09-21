@@ -5,8 +5,8 @@ The broader process and resource model remains a working draft alongside the
 [spaces draft](spaces.md). Startup delivery, console and blob CALL operations,
 and handle close are implemented, including the complete userspace example.
 [Request/reply endpoints](endpoints.md) now connect separate client and server
-processes through the same tagged call ABI. Legacy syscalls remain usable during
-the migration.
+processes through the same tagged call ABI. Programs use console capabilities
+for TTY output; the separate kernel-log syscall remains available for diagnostics.
 The [worklist](wip/process-capability-abi.md) tracks the focused tasks and
 handoffs for this first milestone.
 
@@ -128,14 +128,13 @@ The initial object operations use one synchronous kernel call:
 call(handle, message, message_size, reply, reply_capacity)
 ```
 
-Syscall 2 implements `call`; 3 implements `close(handle)`. Existing
-character-output syscalls 0 and 1 remain during migration; exit keeps its encoding.
+Syscall 2 implements `call`; 3 implements `close(handle)`. The diagnostic
+character-output syscall targets the kernel log. TTY output uses console calls.
 The x86_64 convention uses `RAX` for the syscall number and `RDI`, `RSI`, `RDX`,
 `R10`, `R8` for the five arguments. Return `RAX` holds status and `RDX` the number
 of reply bytes written (zero on failure, and always zero for close). Exit does
-not return. This replaces the earlier six-argument CALL encoding; rebuild
-userspace images with the matching headers. Close and legacy syscalls retain
-their existing conventions.
+not return. Kernel and userspace are rebuilt together against the shared headers;
+there is no support for older CALL layouts.
 
 Request and reply fields below are consecutive `uint64_t` values, including
 user addresses, offsets and byte counts. They do not embed C pointers, enums
@@ -295,12 +294,12 @@ The userspace console wrapper checks status, reply size and progress.
 
 The [shared syscall header](../include/abi/syscall.h) and
 [console layouts](../include/abi/console.h) define the active slice. RDX carries
-reply length for CALL; legacy character calls preserve its previous value.
+reply length for CALL; the diagnostic log call preserves its previous value.
 No endpoint queues or general object-operation table are involved.
 
 Hello closes both supplied handles after printing through the
 [handle wrapper](../userspace/include/handle.h). The native close wrapper accounts
-for the RDX result; the legacy one-argument syscall wrapper cannot be used for
+for the RDX result; the one-argument syscall wrapper cannot be used for
 close because it assumes RDX is preserved. Closing leaves the startup record
 unchanged, so its output field then contains a stale handle. Exit releases any
 entries still open, while the space keeps its own console reference.
@@ -380,9 +379,6 @@ ownership or accounting for the underlying object.
 Future IPC work must define userspace grants and moves, waitable conditions,
 cancellation and resource accounting. The namespace and named-endpoint ideas
 in the spaces draft remain separate from the current transport.
-
-Hello now uses the console capability. Retire legacy character syscalls
-separately once their remaining callers have migrated.
 
 Only an explicitly selected worklist task is an implementation assignment.
 The later ideas here call for no placeholder APIs or object-manager framework.

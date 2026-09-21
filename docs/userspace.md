@@ -57,14 +57,14 @@ serial.
 The [console wrapper](../userspace/include/console.h) uses the native CALL ABI
 and reports actual bytes written. Its byte-count and string helpers finish partial writes;
 each kernel call renders a bounded chunk. Requests and replies have shared
-layouts, and CALL returns both status and reply byte count. Legacy character
-helpers and syscalls remain available during migration.
+layouts, and CALL returns both status and reply byte count. All programs use
+console capabilities for TTY output.
 
 CALL takes a handle, a tagged message and its size, then a reply buffer and
 capacity. Shared protocol headers define the tag and payload union. Rights are
 checked against the handle's object type, so the same bit may mean console
-WRITE or blob READ. Rebuild userspace images after this ABI change; earlier
-images passing a separate operation argument are not compatible.
+WRITE or blob READ. Kernel and userspace are rebuilt together against the
+shared ABI headers. Older layouts are not supported.
 
 The [blob wrappers](../userspace/include/blob.h) query size and read at explicit
 offsets. They check reply lengths and counts; a short read is allowed and zero

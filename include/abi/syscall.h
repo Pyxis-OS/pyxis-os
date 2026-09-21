@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-#define SYSCALL_PUTCHAR UINT64_C(0)
 #define SYSCALL_LOG_PUTCHAR UINT64_C(1)
 #define SYSCALL_CALL UINT64_C(2)
 #define SYSCALL_CLOSE UINT64_C(3)
