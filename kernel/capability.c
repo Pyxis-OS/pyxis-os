@@ -98,8 +98,12 @@ static struct capability_entry *find_entry(struct capability_table *table,
 }
 
 enum capability_result capability_resolve(struct capability_table *table,
-    handle_t handle, uint64_t required_rights, struct kernel_object **object)
+    handle_t handle, uint64_t required_rights, struct kernel_object **object,
+    uint64_t *rights)
 {
+  if (rights) {
+    *rights = 0;
+  }
   if (!object) {
     return CAP_INVALID;
   }
@@ -113,6 +117,9 @@ enum capability_result capability_resolve(struct capability_table *table,
     return CAP_DENIED;
   }
   *object = entry->object;
+  if (rights) {
+    *rights = entry->rights;
+  }
   return CAP_OK;
 }
 
