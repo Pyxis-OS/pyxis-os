@@ -1,7 +1,7 @@
 #include <abi/console.h>
 #include <arch/smp.h>
-#include <kernel/console.h>
-#include <kernel/capability.h>
+#include <kernel/object/console.h>
+#include <kernel/object/capability.h>
 #include <kernel/user_memory.h>
 #include <kernel/fb/tty.h>
 #include <kernel/log.h>

@@ -1,7 +1,7 @@
 #ifndef KERNEL_CONSOLE_H
 #define KERNEL_CONSOLE_H
 
-#include <kernel/object.h>
+#include <kernel/object/object.h>
 #include <abi/syscall.h>
 
 struct tty;

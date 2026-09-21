@@ -2,7 +2,7 @@
 #define KERNEL_BLOB_H
 
 #include <abi/syscall.h>
-#include <kernel/object.h>
+#include <kernel/object/object.h>
 
 struct initrd_file;
 

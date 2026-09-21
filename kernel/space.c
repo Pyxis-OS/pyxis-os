@@ -20,7 +20,7 @@
 #include <kernel/memory.h>
 #include <kernel/task.h>
 #include <kernel/keyboard.h>
-#include <kernel/console.h>
+#include <kernel/object/console.h>
 
 #define PRESENT_INTERVAL_TICKS 2
 

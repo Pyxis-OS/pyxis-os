@@ -1,7 +1,7 @@
 #include <abi/blob.h>
 #include <arch/smp.h>
-#include <kernel/blob.h>
-#include <kernel/capability.h>
+#include <kernel/object/blob.h>
+#include <kernel/object/capability.h>
 #include <kernel/initrd.h>
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>

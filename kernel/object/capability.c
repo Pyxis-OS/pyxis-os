@@ -1,8 +1,8 @@
 #include <arch/smp.h>
-#include <kernel/capability.h>
+#include <kernel/object/capability.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
-#include <kernel/object.h>
+#include <kernel/object/object.h>
 #include <kernel/panic.h>
 
 #define INITIAL_CAPACITY 8

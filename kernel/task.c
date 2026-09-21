@@ -5,7 +5,7 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
-#include <kernel/object.h>
+#include <kernel/object/object.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/user.h>

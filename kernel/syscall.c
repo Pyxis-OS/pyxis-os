@@ -1,6 +1,6 @@
-#include <kernel/blob.h>
-#include <kernel/capability.h>
-#include <kernel/console.h>
+#include <kernel/object/blob.h>
+#include <kernel/object/capability.h>
+#include <kernel/object/console.h>
 #include <kernel/fb/tty.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>

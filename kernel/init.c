@@ -15,8 +15,8 @@
 #include <kernel/task.h>
 #include <kernel/fb/tty.h>
 #include <kernel/space.h>
-#include <kernel/console.h>
-#include <kernel/blob.h>
+#include <kernel/object/console.h>
+#include <kernel/object/blob.h>
 
 #define INITIAL_STACK_BASE UINT64_C(0x800000)
 #define INITIAL_STACK_SIZE PAGE_SIZE

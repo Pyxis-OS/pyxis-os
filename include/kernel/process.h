@@ -2,7 +2,7 @@
 #define KERNEL_PROCESS_H
 
 #include <kernel/mm/types.h>
-#include <kernel/capability.h>
+#include <kernel/object/capability.h>
 
 struct space;
 struct vm_space;

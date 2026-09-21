@@ -226,8 +226,8 @@ a process or table entry that has already been reclaimed.
 Process destruction releases every remaining table reference and the table's
 storage. Object destruction may follow in the next reaping pass; independent
 kernel or process references keep shared resources alive. The
-[capability interface](../include/kernel/capability.h) and
-[object lifetime interface](../include/kernel/object.h) define the contracts.
+[capability interface](../include/kernel/object/capability.h) and
+[object lifetime interface](../include/kernel/object/object.h) define the contracts.
 Both concrete console and blob objects use this lifetime model.
 
 CALL resolves the handle once and obtains the object and its granted rights.
@@ -275,7 +275,7 @@ entries still open, while the space keeps its own console reference.
 
 ### Implemented blob calls
 
-The [blob object](../include/kernel/blob.h) copies an immutable archive-file
+The [blob object](../include/kernel/object/blob.h) copies an immutable archive-file
 view into a reference-counted wrapper. It borrows the bytes and the archive's
 kernel-lifetime mapping. The launcher installs a READ capability and releases
 its temporary reference; close or process cleanup eventually frees the wrapper

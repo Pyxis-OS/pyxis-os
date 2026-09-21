@@ -1,5 +1,5 @@
 #include <arch/smp.h>
-#include <kernel/object.h>
+#include <kernel/object/object.h>
 #include <kernel/panic.h>
 #include <stdint.h>
 
