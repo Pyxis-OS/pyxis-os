@@ -141,6 +141,24 @@ enum capability_result capability_close(struct capability_table *table,
   return CAP_OK;
 }
 
+enum capability_result capability_grant(struct capability_table *destination,
+    struct capability_table *source, handle_t handle, uint64_t rights,
+    handle_t *result)
+{
+  KASSERT(arch_cpu_index() == 0);
+  if (!result) {
+    return CAP_INVALID;
+  }
+  *result = HANDLE_INVALID;
+  struct kernel_object *object;
+  enum capability_result status = capability_resolve(source, handle, rights,
+      &object, NULL);
+  if (status != CAP_OK) {
+    return status;
+  }
+  return capability_install(destination, object, rights, result);
+}
+
 void capability_table_destroy(struct capability_table *table)
 {
   KASSERT(arch_cpu_index() == 0);

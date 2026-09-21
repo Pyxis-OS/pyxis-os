@@ -33,6 +33,14 @@ struct capability_table {
 enum capability_result capability_install(struct capability_table *table,
     struct kernel_object *object, uint64_t rights, handle_t *handle);
 
+/* BSP, IF=0, exclusive ownership of both unsubmitted process tables. Copies
+ * a reference with equal or reduced rights; source remains valid. There is no
+ * userspace grant operation yet. Failure clears *result and changes neither
+ * table's entries nor object references. */
+enum capability_result capability_grant(struct capability_table *destination,
+    struct capability_table *source, handle_t handle, uint64_t rights,
+    handle_t *result);
+
 /* IF=0 on the owning CPU. Resolve returns a borrowed object, valid only until
  * that entry closes or the table is destroyed; failure clears *object.
  * All required rights must be present. Optional rights receives the granted
