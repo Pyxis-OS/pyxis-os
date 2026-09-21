@@ -20,6 +20,7 @@ bool endpoint_pair_create(struct endpoint **first, struct endpoint **second);
 
 /* Current process, IF=0, with a live handle reference and a checked protocol
  * tag. May block on the task's kernel stack; no locks span a context switch.
+ * RECEIVE may request BSP capability-table growth outside the endpoint lock.
  * Each direction allows one outstanding request until its caller consumes
  * the reply or closure result. Shared request storage belongs to the pair. */
 struct syscall_result endpoint_call(struct endpoint *endpoint, uint64_t rights,

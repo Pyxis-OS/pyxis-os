@@ -56,9 +56,10 @@ console output; `BLOB_RIGHT_READ` authorizes blob reads and size queries. Both
 currently use bit 0, with different meanings. The capability table stores the
 mask without imposing global READ/WRITE meanings; installation rejects bits
 unsupported by the target object type. The message never supplies authority.
-Other rights and permission to duplicate or transfer a capability remain later
-decisions. Multiple operations may require the same right; split rights when
-one operation needs to be grantable without the others.
+A holder may copy a capability through an endpoint request with equal or
+reduced rights; no separate transfer permission is required. Multiple operations
+may require the same right; split rights when one operation needs to be
+grantable without the others.
 
 For this slice, `handle_t` is an opaque `uint64_t`; zero is invalid. Internally,
 the low 32 bits identify a table slot and the high 32 bits hold its generation.
@@ -234,9 +235,15 @@ After submission, the process's single executing task owns the table. Resolve
 and close require interrupts disabled, do not allocate, and need no table lock.
 Resolve checks generation and every requested right, then returns a borrowed
 object valid until the entry closes. Close invalidates the handle immediately.
-There is no installation or table growth on an AP, nor launcher access to a
-submitted table before the task retires. The kernel result enum is separate from the
-planned syscall status encoding.
+`capability_insert()` adds a received reference into an available slot on the
+owning CPU without allocating. A full table returns CAP_FULL. The executing
+task then lends its table to a BSP growth request and blocks; no other code
+may access it during that loan. The BSP grows it outside all queue/endpoint
+locks and returns ownership on wake. Existing handles, generations and object
+references survive growth. Allocation and handle-space exhaustion return
+errors without consuming the endpoint request. There is no general launcher
+access to submitted tables. The kernel result enum is separate from syscall
+status values.
 
 Objects have an atomic reference count and a destruction callback, with no
 global object registry or operation dispatch. The last release links the object
@@ -369,15 +376,16 @@ Endpoints now transport bounded opaque message bytes with synchronous reply
 association, blocking receive, queue-full results and peer-closure wakeups. See
 [the endpoint contract](endpoints.md) for the implemented limits. A raw handle
 value or pointer embedded in those bytes grants no authority in another process.
-Transporting capabilities explicitly remains future work.
+A request may explicitly copy one capability with equal or reduced rights;
+RECEIVE returns a handle installed in the recipient's table.
 
-Sharing a capability would create an additional reference with equal or reduced
+Copying a capability creates an additional reference with equal or reduced
 rights. Moving would remove the sender's reference only when the transfer
 commits; failure must not lose it. Neither operation automatically transfers
 ownership or accounting for the underlying object.
 
-Future IPC work must define userspace grants and moves, waitable conditions,
-cancellation and resource accounting. The namespace and named-endpoint ideas
+Future IPC work must define moves, waitable conditions, cancellation and
+resource accounting. The namespace and named-endpoint ideas
 in the spaces draft remain separate from the current transport.
 
 Only an explicitly selected worklist task is an implementation assignment.

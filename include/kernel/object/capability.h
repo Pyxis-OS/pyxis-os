@@ -46,9 +46,9 @@ enum capability_result capability_insert(struct capability_table *table,
 enum capability_result capability_grow(struct capability_table *table);
 
 /* BSP, IF=0, exclusive ownership of both unsubmitted process tables. Copies
- * a reference with equal or reduced rights; source remains valid. There is no
- * userspace grant operation yet. Failure clears *result and changes neither
- * table's entries nor object references. */
+ * a reference with equal or reduced rights; source remains valid. Running
+ * processes copy grants through endpoint requests instead. Failure clears
+ * the result handle and changes neither table's entries nor object references. */
 enum capability_result capability_grant(struct capability_table *destination,
     struct capability_table *source, handle_t handle, uint64_t rights,
     handle_t *result);
