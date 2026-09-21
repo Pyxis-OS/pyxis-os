@@ -41,13 +41,18 @@ user stack. Entry receives a pointer in `RDI` to the read-only
 exit. Its address is chosen by VM allocation; programs must use the pointer.
 The assembly entry preserves it as the argument to
 `main(const struct startup_info *startup)`, then passes main's return value to
-`exit`. Hello checks the record's version and size before continuing. Both
-resource roles currently contain `HANDLE_INVALID`; output and content will be
-filled when their capability operations land. There is no libc or argument
+`exit`. Hello checks the record's version and size, then prints using its output
+capability. Content is still `HANDLE_INVALID`. There is no libc or argument
 vector. The [syscall header](../userspace/include/syscall.h) defines syscall
 numbers and the register convention. Normal output targets the owning space's
 TTY; diagnostic output targets the kernel log, which goes to the Caelum TTY and
 serial.
+
+The [console wrapper](../userspace/include/console.h) uses the native CALL ABI
+and reports actual bytes written. Its print helper handles partial progress;
+each kernel call renders a bounded chunk. Requests and replies have shared
+layouts, and CALL returns both status and reply byte count. Legacy character
+helpers and syscalls remain available during migration.
 
 The launcher creates a process that owns the loaded address space and belongs
 to the target CPU's space. Before submission, it calls
