@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdatomic.h>
+#include <stdint.h>
 
 enum object_type {
   OBJECT_CONSOLE = 1,
@@ -25,6 +26,10 @@ struct kernel_object {
  * capability entry that may already have been destroyed. */
 void object_init(struct kernel_object *object, enum object_type type,
                  void (*destroy)(struct kernel_object *));
+
+/* Rights have meaning only within the object's protocol. Zero grants no
+ * operations; unknown types or bits are not valid grants. */
+bool object_rights_valid(enum object_type type, uint64_t rights);
 
 /* Caller owns a live reference throughout retain. False means count overflow;
  * no reference is acquired. Release consumes one owned reference. IF=0 for

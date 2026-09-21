@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define BLOB_RIGHT_READ (UINT64_C(1) << 0)
+
 #define BLOB_READ UINT64_C(2)
 #define BLOB_SIZE UINT64_C(3)
 

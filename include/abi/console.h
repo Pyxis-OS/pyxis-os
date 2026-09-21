@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define CONSOLE_RIGHT_WRITE (UINT64_C(1) << 0)
+
 #define CONSOLE_WRITE UINT64_C(1)
 
 struct console_write_request {

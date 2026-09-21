@@ -1,3 +1,5 @@
+#include <abi/blob.h>
+#include <abi/console.h>
 #include <arch/smp.h>
 #include <kernel/object/object.h>
 #include <kernel/panic.h>
@@ -5,6 +7,18 @@
 
 static struct kernel_object *retired_objects;
 static atomic_bool retired_locked;
+
+bool object_rights_valid(enum object_type type, uint64_t rights)
+{
+  switch (type) {
+  case OBJECT_CONSOLE:
+    return !(rights & ~CONSOLE_RIGHT_WRITE);
+  case OBJECT_BLOB:
+    return !(rights & ~BLOB_RIGHT_READ);
+  default:
+    return false;
+  }
+}
 
 static void lock_retired(void)
 {

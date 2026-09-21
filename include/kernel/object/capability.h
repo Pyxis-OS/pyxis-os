@@ -7,9 +7,6 @@
 struct kernel_object;
 struct capability_entry;
 
-#define CAP_READ (UINT64_C(1) << 0)
-#define CAP_WRITE (UINT64_C(1) << 1)
-
 /* Kernel results, not the syscall status encoding. */
 enum capability_result {
   CAP_OK,
@@ -30,7 +27,9 @@ struct capability_table {
 
 /* BSP, IF=0, before process submission. Adds a reference; the caller retains
  * its original one. Rights are an explicit kernel grant, not derived from
- * another handle. Failure clears *handle and leaves references unchanged. */
+ * another handle, and must use the target object's protocol-specific mask.
+ * Unsupported bits are rejected. Failure clears *handle and leaves references
+ * unchanged. */
 enum capability_result capability_install(struct capability_table *table,
     struct kernel_object *object, uint64_t rights, handle_t *handle);
 

@@ -54,7 +54,7 @@ enum capability_result capability_install(struct capability_table *table,
   if (handle) {
     *handle = HANDLE_INVALID;
   }
-  if (!table || !object || !handle || (rights & ~(CAP_READ | CAP_WRITE))) {
+  if (!table || !object || !handle || !object_rights_valid(object->type, rights)) {
     return CAP_INVALID;
   }
 

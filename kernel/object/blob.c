@@ -68,7 +68,7 @@ struct syscall_result blob_call(struct blob_object *blob, uint64_t rights,
   if (operation != BLOB_READ && operation != BLOB_SIZE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
-  if (!(rights & CAP_READ)) {
+  if (!(rights & BLOB_RIGHT_READ)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   if (operation == BLOB_READ) {

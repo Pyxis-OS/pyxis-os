@@ -53,7 +53,7 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   if (operation != CONSOLE_WRITE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
-  if (!(rights & CAP_WRITE)) {
+  if (!(rights & CONSOLE_RIGHT_WRITE)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
 
