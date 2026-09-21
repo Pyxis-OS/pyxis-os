@@ -15,6 +15,7 @@
 #include <kernel/task.h>
 #include <kernel/fb/tty.h>
 #include <kernel/space.h>
+#include <kernel/console.h>
 
 #define INITIAL_STACK_BASE UINT64_C(0x800000)
 #define INITIAL_STACK_SIZE PAGE_SIZE
@@ -54,7 +55,15 @@ static void queue_initial_image(void)
     panic("cannot create initial process (error %u)", (unsigned)status);
   }
 
-  status = process_prepare_startup(process, HANDLE_INVALID, HANDLE_INVALID);
+  handle_t output;
+  enum capability_result grant = capability_install(&process->capabilities,
+      &process->space->console->object, CAP_WRITE, &output);
+  if (grant != CAP_OK) {
+    KASSERT(process_destroy(process) == MM_OK);
+    panic("cannot grant initial console (error %u)", (unsigned)grant);
+  }
+
+  status = process_prepare_startup(process, output, HANDLE_INVALID);
   if (status != MM_OK) {
     KASSERT(process_destroy(process) == MM_OK);
     panic("cannot prepare initial startup record (error %u)", (unsigned)status);

@@ -4,10 +4,15 @@
 #include <stddef.h>
 #include <stdatomic.h>
 
+enum object_type {
+  OBJECT_CONSOLE = 1,
+};
+
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.
- * Only the reference count and retirement link cross CPUs. Payload access has
+ * The reference count and retirement link coordinate lifetime across CPUs. Payload access has
  * its own synchronization rules; reference ownership alone does not lock it. */
 struct kernel_object {
+  enum object_type type; /* Immutable after initialization. */
   atomic_size_t references;
   struct kernel_object *retired_next;
   void (*destroy)(struct kernel_object *);
@@ -17,7 +22,7 @@ struct kernel_object {
  * only on the BSP with IF=0, outside the retirement lock. It releases the
  * enclosing allocation and owned resources, and must not borrow a process or
  * capability entry that may already have been destroyed. */
-void object_init(struct kernel_object *object,
+void object_init(struct kernel_object *object, enum object_type type,
                  void (*destroy)(struct kernel_object *));
 
 /* Caller owns a live reference throughout retain. False means count overflow;

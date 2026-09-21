@@ -9,11 +9,14 @@
 #include <kernel/fb/tty.h>
 #include <kernel/boot.h>
 
+struct console_object;
+
 struct space
 {
   char *name;
   struct framebuffer *fb;
   struct tty *tty;
+  struct console_object *console; /* Space retains the initial reference. */
 };
 
 void space_init_all(const struct boot_framebuffer *boot_fb);
