@@ -30,15 +30,15 @@ tools:
 userspace: tools
 	$(MAKE) -C userspace
 
-build/userspace/hello.pxe: userspace
+build/userspace/hello.pxe build/userspace/hello.txt: userspace
 
 initrd: build/initrd.cpio
 
-build/initrd.cpio: build/userspace/hello.pxe Makefile
+build/initrd.cpio: build/userspace/hello.pxe build/userspace/hello.txt Makefile
 	@command -v cpio >/dev/null 2>&1 || { \
 	  echo 'Missing GNU cpio: install it, then run make initrd.' >&2; \
 	  exit 1; }
-	cd build/userspace && printf '%s\n' hello.pxe | \
+	cd build/userspace && printf '%s\n' hello.pxe hello.txt | \
 	  cpio --create --format=newc --reproducible --owner=0:0 --quiet > ../initrd.cpio.tmp
 	mv build/initrd.cpio.tmp $@
 
