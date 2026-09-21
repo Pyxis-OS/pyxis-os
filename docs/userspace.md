@@ -42,8 +42,10 @@ exit. Its address is chosen by VM allocation; programs must use the pointer.
 The assembly entry preserves it as the argument to
 `main(const struct startup_info *startup)`, then passes main's return value to
 `exit`. Hello checks the record's version and size, prints using its output
-capability, then closes that handle. Content is still `HANDLE_INVALID`. There is
-no libc or argument vector. The [syscall header](../userspace/include/syscall.h) defines syscall
+capability, then closes that handle. Content grants READ access to a blob of the
+existing hello.pxe archive entry; hello currently leaves it for exit cleanup.
+Task 9 will supply a text asset and read it through the blob ABI. There is no
+libc or argument vector. The [syscall header](../userspace/include/syscall.h) defines syscall
 numbers and the register convention. Normal output targets the owning space's
 TTY; diagnostic output targets the kernel log, which goes to the Caelum TTY and
 serial.

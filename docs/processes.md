@@ -2,9 +2,9 @@
 
 Status: the first console-and-blob ABI slice below is agreed for implementation.
 The broader process and resource model remains a working draft alongside the
-[spaces draft](spaces.md). Startup delivery, console CALL and handle close are
-implemented; blob operations remain planned. Legacy syscalls remain usable during
-the migration.
+[spaces draft](spaces.md). Startup delivery, console and blob CALL operations,
+and handle close are implemented. The complete userspace example remains task 9.
+Legacy syscalls remain usable during the migration.
 The [worklist](wip/process-capability-abi.md) tracks the focused tasks and
 handoffs for this first milestone.
 
@@ -14,9 +14,9 @@ Use one small program to work through the userspace interface and kernel
 ownership together: print a greeting, read the contents of a supplied file,
 write those contents to the console, then exit.
 
-The launcher would resolve the file through the existing boot-archive reader
-and grant a capability to an immutable blob containing its bytes. The program
-would receive these two resources:
+The launcher resolves the file through the existing boot-archive reader and
+grants a capability to an immutable blob containing its bytes. The program
+receives these two resources:
 
 | Startup role | Object | Rights |
 | --- | --- | --- |
@@ -105,7 +105,9 @@ reclaims the page with the rest of its address space.
 
 The freestanding entry preserves RDI when calling C main. Hello checks version
 and size, then prints through the output capability. The launcher grants WRITE
-on the owning space's console; content remains invalid until task 8.
+on the owning space's console and READ on an archive-backed content blob.
+For now content exposes the existing hello.pxe entry; task 9 will supply a text
+asset and make hello read it.
 
 ## First operation shapes
 
@@ -225,7 +227,14 @@ storage. Object destruction may follow in the next reaping pass; independent
 kernel or process references keep shared resources alive. The
 [capability interface](../include/kernel/capability.h) and
 [object lifetime interface](../include/kernel/object.h) define the contracts.
-The concrete console object is implemented; the blob remains task 8.
+Both concrete console and blob objects use this lifetime model.
+
+CALL resolves the handle once and obtains the object and its granted rights.
+A small switch on object type selects the console or blob handler. Each handler
+checks supported operations, required rights and request layouts. Unsupported
+operations return BAD_OPERATION before rights or buffer checks; a supported
+operation with insufficient rights returns DENIED. No operation callback table
+or registration framework is involved.
 
 ### Implemented console calls
 
@@ -235,9 +244,9 @@ startup role. Process cleanup releases its grant while the space retains the
 console, TTY and framebuffer. The object header's immutable type tag keeps an
 operation from treating another object kind as a console.
 
-CALL resolves the handle and WRITE right, checks the operation and object type,
-then captures the fixed request into kernel storage. It validates the entire
-source range and the eight reply bytes actually written before any output.
+The console handler requires WRITE and captures the fixed request into kernel
+storage. It validates the entire source range and the eight reply bytes actually
+written before any output.
 Extra reply capacity is unused. A zero-length source is not dereferenced, but
 still requires a valid capability, request and reply. Errors leave the reply
 and TTY untouched and return zero reply bytes.
@@ -261,6 +270,27 @@ for the RDX result; the legacy one-argument syscall wrapper cannot be used for
 close because it assumes RDX is preserved. Closing leaves the startup record
 unchanged, so its output field then contains a stale handle. Exit releases any
 entries still open, while the space keeps its own console reference.
+
+### Implemented blob calls
+
+The [blob object](../include/kernel/blob.h) copies an immutable archive-file
+view into a reference-counted wrapper. It borrows the bytes and the archive's
+kernel-lifetime mapping. The launcher installs a READ capability and releases
+its temporary reference; close or process cleanup eventually frees the wrapper
+on the BSP. Neither path frees archive frames or removes the archive mapping.
+
+The [blob layouts](../include/abi/blob.h) define size and offset-read operations.
+Both require READ. Size has an empty request and does not dereference its request
+address. Reads capture the request and validate the full destination capacity
+and the actual reply bytes before writing anything, including at EOF. Zero
+capacity ignores the destination address. Counts are clipped to the remaining
+blob bytes; offsets at or beyond the end return zero without forming a source
+pointer. The reply is written last, so it overwrites any overlapping data bytes.
+Request storage may overlap destinations because its fields are captured first.
+
+The blob is not mapped directly into userspace, has no shared seek position,
+and supports no mutation or lookup operations. Task 9 adds userspace wrappers
+and the text-reading example; the current hello leaves content for exit cleanup.
 
 ### Implemented user-buffer access
 

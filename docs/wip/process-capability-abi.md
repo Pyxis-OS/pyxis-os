@@ -56,7 +56,7 @@ The process draft holds the agreed design; this file tracks the work.
   access while the space retains its console, stale handles follow the agreed
   reuse rules, and exit releases handles left open.
 
-- [ ] **8. Add the immutable blob object.** Wrap an existing boot-archive file,
+- [x] **8. Add the immutable blob object.** Wrap an existing boot-archive file,
   expose its size and offset reads through `call`, and grant its `READ`
   capability through the content startup role. Replace `call_object()`'s
   console-only dispatch and unconditional WRITE requirement with handle lookup
@@ -203,5 +203,31 @@ reference and initialized TTY alive. Heap and frame counts returned to their
 pre-launch values. Last-reference retirement is unchanged from task 3 and was
 code-reviewed here; no tests, fault injection or boot automation were added.
 
-Task 8 is next: immutable boot-archive blobs and the object dispatch split
-recorded above. The content startup role remains absent until then.
+Task 8 is complete (assistant), commits `f58ca17` and `c9f5863`. CALL looks up
+the object and granted rights once, then selects a focused console/blob handler
+through a type switch. Handlers check supported operations before rights and
+request layouts. Capability resolution gained an optional granted-rights output;
+the userspace call convention and existing encodings are unchanged.
+
+The blob borrows an immutable archive view and frees only its wrapper. Size and
+offset reads require READ, validate destinations before copying, and report EOF
+without overflowing offset arithmetic. The launcher grants hello.pxe itself as
+the content role for now; hello leaves that grant for normal exit cleanup.
+
+Validation: ordinary `make image` completed without warnings and normal one-
+and four-CPU KVM boots ran hello through exit 0. Manual GDB calls on CPU 1 under
+four-CPU TCG verified startup delivery, blob size, matching archive bytes, a
+read clipped at EOF, EOF at the exact size and UINT64_MAX, zero capacity with
+an invalid destination address, and overlapping request/data/reply storage.
+Invalid/stale handles, denied rights, wrong-object operations, malformed sizes,
+read-only and unmapped buffers, and overflowing destination ranges returned
+the expected errors. Checked destination/reply sentinels survived errors.
+The last close on CPU 1 queued the wrapper; its destructor ran on the BSP with
+IF=0. Archive data, physical translation and read-only mapping survived wrapper
+destruction. After hello exited, heap/frame counts returned to baseline.
+Allocation-failure unwinding and empty-file reads were code-reviewed; no tests,
+fault injection or boot automation were added.
+
+Task 9 is next: package a text asset, add userspace blob wrappers, and have hello
+query its size, read/write it in chunks, close both handles and exit. Select the
+text entry for the content grant instead of reusing hello.pxe.
