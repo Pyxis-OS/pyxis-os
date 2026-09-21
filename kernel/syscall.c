@@ -1,4 +1,4 @@
-#include <abi/console.h>
+#include <kernel/blob.h>
 #include <kernel/capability.h>
 #include <kernel/console.h>
 #include <kernel/fb/tty.h>
@@ -7,9 +7,6 @@
 #include <kernel/process.h>
 #include <kernel/syscall.h>
 #include <kernel/user.h>
-#include <kernel/user_memory.h>
-
-#define CONSOLE_WRITE_CHUNK 256
 
 static struct syscall_result close_handle(handle_t handle)
 {
@@ -36,49 +33,23 @@ static struct syscall_result call_object(handle_t handle, uint64_t operation,
   }
 
   struct kernel_object *object;
+  uint64_t rights;
   enum capability_result lookup = capability_resolve(&process->capabilities,
-      handle, CAP_WRITE, &object);
+      handle, 0, &object, &rights);
   if (lookup == CAP_BAD_HANDLE) {
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
   }
-  if (lookup == CAP_DENIED) {
-    return (struct syscall_result){CALL_DENIED, 0};
-  }
   KASSERT(lookup == CAP_OK);
-  if (object->type != OBJECT_CONSOLE || operation != CONSOLE_WRITE) {
+  switch (object->type) {
+  case OBJECT_CONSOLE:
+    return console_call((struct console_object *)object, rights, operation,
+        request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_BLOB:
+    return blob_call((struct blob_object *)object, rights, operation,
+        request_address, request_size, reply_address, reply_capacity);
+  default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
-
-  struct console_write_request request;
-  struct console_write_reply reply;
-  if (request_size != sizeof(request) || reply_capacity < sizeof(reply)) {
-    return (struct syscall_result){CALL_BAD_REQUEST, 0};
-  }
-  if (!copy_from_user(&request, request_address, sizeof(request)) ||
-      !user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE) ||
-      !user_buffer_check(request.address, request.length, USER_BUFFER_READ)) {
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
-  }
-
-  /* Capture the payload before output and before writing a possibly aliased
-   * reply. Keep each TTY rendering batch small and report partial progress. */
-  char bytes[CONSOLE_WRITE_CHUNK];
-  size_t count = request.length;
-  if (count > sizeof(bytes)) {
-    count = sizeof(bytes);
-  }
-  if (!copy_from_user(bytes, request.address, count)) {
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
-  }
-  if (count && !console_write((struct console_object *)object, bytes, count)) {
-    return (struct syscall_result){CALL_UNAVAILABLE, 0};
-  }
-
-  reply.written = count;
-  /* IF=0, private stable mappings: the checked reply cannot become invalid
-   * after the console side effect. A failure here is a kernel invariant bug. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
-  return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
 struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,

@@ -6,6 +6,7 @@
 
 enum object_type {
   OBJECT_CONSOLE = 1,
+  OBJECT_BLOB = 2,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.

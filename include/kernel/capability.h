@@ -36,9 +36,11 @@ enum capability_result capability_install(struct capability_table *table,
 
 /* IF=0 on the owning CPU. Resolve returns a borrowed object, valid only until
  * that entry closes or the table is destroyed; failure clears *object.
- * All required rights must be present. A handle has meaning only in its table. */
+ * All required rights must be present. Optional rights receives the granted
+ * mask on success, zero on failure. A handle has meaning only in its table. */
 enum capability_result capability_resolve(struct capability_table *table,
-    handle_t handle, uint64_t required_rights, struct kernel_object **object);
+    handle_t handle, uint64_t required_rights, struct kernel_object **object,
+    uint64_t *rights);
 
 /* IF=0 on the owning CPU; no allocation or destruction. Immediately makes
  * the handle stale and releases its reference through BSP retirement. */
