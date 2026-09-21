@@ -4,7 +4,9 @@ Status: the first console-and-blob ABI slice below is agreed for implementation.
 The broader process and resource model remains a working draft alongside the
 [spaces draft](spaces.md). Startup delivery, console and blob CALL operations,
 and handle close are implemented, including the complete userspace example.
-Legacy syscalls remain usable during the migration.
+[Request/reply endpoints](endpoints.md) now connect separate client and server
+processes through the same tagged call ABI. Legacy syscalls remain usable during
+the migration.
 The [worklist](wip/process-capability-abi.md) tracks the focused tasks and
 handoffs for this first milestone.
 
@@ -91,17 +93,20 @@ struct startup_info {
   uint32_t size;
   handle_t output;
   handle_t content;
+  handle_t endpoint;
 };
 ```
 
-Version 1 has size 24 bytes and alignment 8, with fields at offsets 0, 4, 8
-and 16. Fields use the current x86_64 little-endian representation. `size`
+Version 2 has size 32 bytes and alignment 8, with fields at offsets 0, 4, 8,
+16 and 24. Fields use the current x86_64 little-endian representation. `size`
 bounds the supplied record; userspace checks version and size before reading
 the handles. An absent resource has the invalid handle, zero.
 
 These are named roles, not assumptions that handles zero and one always mean
 particular resources. The content field is specific to the first example; it
-does not settle a general argument or resource-discovery scheme.
+does not settle a general argument or resource-discovery scheme. The endpoint
+role supplies the client or service end for the request/reply programs; hello
+receives no endpoint. Rebuild programs against the matching startup version.
 
 This entry convention is implemented. Kernel and userspace share the
 [startup header](../include/abi/startup.h) and opaque handle definition. The BSP
@@ -220,6 +225,12 @@ installs reuse vacant slots or double capacity, bounded by allocation success
 and the handle's index range. Growth preserves slot indices and generations.
 Allocation failure leaves existing handles and reference ownership intact.
 
+`capability_grant()` copies a source grant into another exclusively owned table
+with equal or reduced rights. Both tables must still belong to the BSP launcher.
+The destination gains a reference; the source remains unchanged. Failure clears
+the output handle and leaves existing entries and references intact. This is a
+kernel setup operation, not a userspace transfer syscall.
+
 After submission, the process's single executing task owns the table. Resolve
 and close require interrupts disabled, do not allocate, and need no table lock.
 Resolve checks generation and every requested right, then returns a borrowed
@@ -245,7 +256,7 @@ Both concrete console and blob objects use this lifetime model.
 
 CALL resolves the handle once, obtains its object and rights, then captures the
 message tag from userspace. A small switch on object type checks the protocol
-and selects the console or blob handler. Each handler checks the operation,
+and selects the console, blob or endpoint handler. Each handler checks the operation,
 required rights, exact payload size and user buffers before acting. Tag reads
 can fail before operation/rights checks. A mismatched protocol or unsupported
 operation returns BAD_OPERATION; a supported operation with insufficient rights
@@ -253,9 +264,10 @@ returns DENIED. No operation callback table or registration framework is involve
 
 Object lifetime, capability tables and the concrete handlers live in
 `kernel/object/`, with corresponding headers under `include/kernel/object/`.
-Protocols stay in shared `include/abi/` headers. Calls remain synchronous kernel
-messages; queued endpoints, dynamic protocol discovery, file protocols and
-framebuffer protocols are separate future work.
+Protocols stay in shared `include/abi/` headers. Console and blob operations
+complete within the kernel; endpoint calls may suspend the task until a userspace
+peer replies. Dynamic protocol discovery, file protocols and framebuffer
+protocols remain separate future work.
 
 ### Implemented console calls
 
@@ -334,10 +346,12 @@ unmapped and insufficiently permitted ranges. It never uses shared scratch
 slots, VM range metadata, allocation, or an address-space switch.
 
 Validation remains valid through the copy because user backing is eager and
-the process has one executing task with stable, private mappings. Callers must
-not switch tasks between a check and its use. This path does not recover from
-kernel mapping corruption or invalid kernel buffers. Future shared user backing
-or concurrent unmapping would require revisiting that invariant.
+the process has one task with stable, private mappings. Copy helpers never
+schedule. A blocking endpoint operation captures input before sleeping and
+keeps its process alive; it resumes its original task and root before writing
+to the checked user destination. This path does not recover from kernel mapping
+corruption or invalid kernel buffers. Future shared user backing, concurrent
+unmapping or external task cancellation would require revisiting that invariant.
 
 Object calls must capture request metadata into kernel storage and
 validate all reply/data buffers before producing side effects. A copy helper
@@ -352,19 +366,20 @@ The broader ABI vocabulary under discussion is `create`, `call`, `send`, `recv`,
 Creation must be tied to authority and resource budgets; the ability to request
 an object type cannot alone authorize privileged resources.
 
-Endpoints would be objects receiving opaque message bytes and explicitly
-attached capabilities. A raw handle value or pointer embedded in those bytes
-has no meaning in another process. Syscall request layouts and transported
-messages therefore need separate contracts.
+Endpoints now transport bounded opaque message bytes with synchronous reply
+association, blocking receive, queue-full results and peer-closure wakeups. See
+[the endpoint contract](endpoints.md) for the implemented limits. A raw handle
+value or pointer embedded in those bytes grants no authority in another process.
+Transporting capabilities explicitly remains future work.
 
 Sharing a capability would create an additional reference with equal or reduced
 rights. Moving would remove the sender's reference only when the transfer
 commits; failure must not lose it. Neither operation automatically transfers
 ownership or accounting for the underlying object.
 
-Future IPC work must define synchronous reply association, blocking receive,
-queue-full results, waitable conditions and peer-closure wakeups. The namespace
-and named-endpoint ideas in the spaces draft do not choose those mechanisms.
+Future IPC work must define userspace grants and moves, waitable conditions,
+cancellation and resource accounting. The namespace and named-endpoint ideas
+in the spaces draft remain separate from the current transport.
 
 Hello now uses the console capability. Retire legacy character syscalls
 separately once their remaining callers have migrated.
