@@ -20,7 +20,8 @@ bool endpoint_pair_create(struct endpoint **first, struct endpoint **second);
 
 /* Current process, IF=0, with a live handle reference and a checked protocol
  * tag. May block on the task's kernel stack; no locks span a context switch.
- * Each direction allows one outstanding request until reply or peer closure. */
+ * Each direction allows one outstanding request until its caller consumes
+ * the reply or closure result. Shared request storage belongs to the pair. */
 struct syscall_result endpoint_call(struct endpoint *endpoint, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);

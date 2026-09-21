@@ -8,14 +8,14 @@
 #include <kernel/user_memory.h>
 
 struct endpoint_request {
-  struct task_wait wait;
+  struct task_wait *wait;
   struct endpoint_packet message, reply;
   enum call_status status;
-  bool delivered;
+  bool active, delivered;
 };
 
 struct endpoint_state {
-  struct endpoint_request *incoming; /* Borrowed from the blocked caller's stack. */
+  struct endpoint_request request;
   struct task_wait *receiver;
   uint64_t next_id;
   bool closed;
@@ -28,8 +28,9 @@ struct endpoint_pair {
 };
 
 /* IF=0. Lock order is endpoint -> scheduler queues. No allocation, user copy
- * or context switch while held. Each published stack pointer is removed before
- * wake, since another CPU can immediately resume and discard that stack frame. */
+ * or context switch while held. Shared records live in permanent heap mappings,
+ * never task stacks that can be unmapped/reused without a remote TLB shootdown.
+ * Detach each wait pointer before waking; its task may immediately retire. */
 static void lock_pair(struct endpoint_pair *pair)
 {
   while (atomic_exchange_explicit(&pair->locked, true, memory_order_acquire)) {
@@ -60,13 +61,14 @@ static void destroy_endpoint(struct kernel_object *object)
 
   lock_pair(pair);
   /* A blocked operation retains this end through its process's handle. */
-  KASSERT(!own->closed && !own->receiver && !peer->incoming);
+  KASSERT(!own->closed && !own->receiver && !peer->request.active);
   own->closed = true;
-  struct endpoint_request *request = own->incoming;
-  own->incoming = NULL;
-  if (request) {
+  struct endpoint_request *request = &own->request;
+  if (request->wait) {
     request->status = CALL_ENDPOINT_CLOSED;
-    task_wait_wake(&request->wait);
+    struct task_wait *wait = request->wait;
+    request->wait = NULL;
+    task_wait_wake(wait);
   }
   wake_receiver(peer);
   bool both_closed = peer->closed;
@@ -102,19 +104,17 @@ bool endpoint_pair_create(struct endpoint **first, struct endpoint **second)
 static enum call_status call_peer(struct endpoint *endpoint,
     const union endpoint_payload *payload, struct endpoint_packet *reply)
 {
-  struct endpoint_request request = {0};
-  request.message.size = payload->call.size;
-  memcpy(request.message.data, payload->call.data, payload->call.size);
-  task_wait_init(&request.wait);
+  struct task_wait *wait = task_wait_prepare();
   struct endpoint_pair *pair = endpoint->pair;
   struct endpoint_state *peer = &pair->state[endpoint->side ^ 1];
+  struct endpoint_request *request = &peer->request;
 
   lock_pair(pair);
   if (peer->closed) {
     unlock_pair(pair);
     return CALL_ENDPOINT_CLOSED;
   }
-  if (peer->incoming) {
+  if (request->active) {
     unlock_pair(pair);
     return CALL_QUEUE_FULL;
   }
@@ -122,19 +122,21 @@ static enum call_status call_peer(struct endpoint *endpoint,
     unlock_pair(pair);
     return CALL_UNAVAILABLE;
   }
-  request.message.id = peer->next_id++;
-  peer->incoming = &request;
+  *request = (struct endpoint_request){.wait = wait, .active = true};
+  request->message.id = peer->next_id++;
+  request->message.size = payload->call.size;
+  memcpy(request->message.data, payload->call.data, payload->call.size);
   wake_receiver(peer);
   unlock_pair(pair);
 
-  task_wait_sleep(&request.wait);
-  /* Reacquire the resource lock before reading the completed response. No
-   * peer touches request after detaching it and waking us under this lock. */
+  task_wait_sleep(wait);
   lock_pair(pair);
-  enum call_status status = request.status;
+  enum call_status status = request->status;
   if (status == CALL_OK) {
-    *reply = request.reply;
+    *reply = request->reply;
   }
+  /* Keep the slot occupied until its caller has consumed the response. */
+  request->active = false;
   unlock_pair(pair);
   return status;
 }
@@ -147,20 +149,20 @@ static enum call_status receive_request(struct endpoint *endpoint,
   struct endpoint_state *peer = &pair->state[endpoint->side ^ 1];
 
   for (;;) {
-    struct task_wait wait;
-    task_wait_init(&wait);
+    struct task_wait *wait = task_wait_prepare();
     lock_pair(pair);
     if (peer->closed) {
       unlock_pair(pair);
       return CALL_ENDPOINT_CLOSED;
     }
-    if (own->incoming) {
-      if (own->incoming->delivered) {
+    struct endpoint_request *request = &own->request;
+    if (request->wait) {
+      if (request->delivered) {
         unlock_pair(pair);
         return CALL_BUSY;
       }
-      own->incoming->delivered = true;
-      *reply = own->incoming->message;
+      request->delivered = true;
+      *reply = request->message;
       unlock_pair(pair);
       return CALL_OK;
     }
@@ -168,9 +170,9 @@ static enum call_status receive_request(struct endpoint *endpoint,
       unlock_pair(pair);
       return CALL_BUSY;
     }
-    own->receiver = &wait;
+    own->receiver = wait;
     unlock_pair(pair);
-    task_wait_sleep(&wait);
+    task_wait_sleep(wait);
   }
 }
 
@@ -184,8 +186,8 @@ static enum call_status reply_to_request(struct endpoint *endpoint,
     unlock_pair(pair);
     return CALL_ENDPOINT_CLOSED;
   }
-  struct endpoint_request *request = own->incoming;
-  if (!request || !request->delivered || reply->id != request->message.id) {
+  struct endpoint_request *request = &own->request;
+  if (!request->wait || !request->delivered || reply->id != request->message.id) {
     unlock_pair(pair);
     return CALL_BAD_REQUEST;
   }
@@ -193,8 +195,9 @@ static enum call_status reply_to_request(struct endpoint *endpoint,
   request->reply.size = reply->size;
   memcpy(request->reply.data, reply->data, reply->size);
   request->status = CALL_OK;
-  own->incoming = NULL;
-  task_wait_wake(&request->wait);
+  struct task_wait *wait = request->wait;
+  request->wait = NULL;
+  task_wait_wake(wait);
   unlock_pair(pair);
   return CALL_OK;
 }

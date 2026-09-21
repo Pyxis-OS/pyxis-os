@@ -20,6 +20,11 @@ enum task_kind {
   TASK_KERNEL,
 };
 
+struct task_wait {
+  struct task *task;
+  bool notified;
+};
+
 struct task {
   struct task *next;
   enum task_kind kind;
@@ -34,6 +39,7 @@ struct task {
   void (*kernel_entry)(void *);
   void *argument;
   uint64_t sleep_start, sleep_ticks;
+  struct task_wait wait_record;
   struct task_wait *wait;
   bool parked; /* queues_locked: stack saved and no CPU is executing this task. */
 };
@@ -52,7 +58,7 @@ static atomic_bool queues_locked;
 /* Sleeping kernel tasks belong to the BSP and are accessed only with IF=0. */
 static struct task *sleeping_tasks;
 
-/* IF=0 on every caller. Only list links cross CPUs; never allocate, log,
+/* IF=0 on every caller. Protects queue links and wait state; never allocate, log,
  * switch contexts or wait for another CPU while holding this lock. */
 static void lock_queues(void)
 {
@@ -107,11 +113,13 @@ static void enqueue(struct scheduler *scheduler, struct task *task)
   unlock_queues();
 }
 
-void task_wait_init(struct task_wait *wait)
+struct task_wait *task_wait_prepare(void)
 {
   struct task *task = local_scheduler()->current_task;
   KASSERT(task && task->kind == TASK_USER && !task->exited);
-  *wait = (struct task_wait){.task = task};
+  KASSERT(!task->wait && !task->parked);
+  task->wait_record = (struct task_wait){.task = task};
+  return &task->wait_record;
 }
 
 void task_wait_sleep(struct task_wait *wait)
