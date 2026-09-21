@@ -16,8 +16,9 @@ struct capability_entry {
   uint32_t generation; /* Zero retires the slot permanently after wrap. */
 };
 
-static enum capability_result grow_table(struct capability_table *table)
+enum capability_result capability_grow(struct capability_table *table)
 {
+  KASSERT(arch_cpu_index() == 0 && table);
   size_t limit = SIZE_MAX / sizeof(*table->entries);
   if (limit > HANDLE_SLOT_COUNT) {
     limit = HANDLE_SLOT_COUNT;
@@ -47,10 +48,9 @@ static enum capability_result grow_table(struct capability_table *table)
   return CAP_OK;
 }
 
-enum capability_result capability_install(struct capability_table *table,
+enum capability_result capability_insert(struct capability_table *table,
     struct kernel_object *object, uint64_t rights, handle_t *handle)
 {
-  KASSERT(arch_cpu_index() == 0);
   if (handle) {
     *handle = HANDLE_INVALID;
   }
@@ -65,10 +65,7 @@ enum capability_result capability_install(struct capability_table *table,
     }
   }
   if (index == table->capacity) {
-    enum capability_result result = grow_table(table);
-    if (result != CAP_OK) {
-      return result;
-    }
+    return CAP_FULL;
   }
   if (!object_retain(object)) {
     return CAP_LIMIT;
@@ -79,6 +76,21 @@ enum capability_result capability_install(struct capability_table *table,
   entry->rights = rights;
   *handle = ((uint64_t)entry->generation << HANDLE_INDEX_BITS) | index;
   return CAP_OK;
+}
+
+enum capability_result capability_install(struct capability_table *table,
+    struct kernel_object *object, uint64_t rights, handle_t *handle)
+{
+  KASSERT(arch_cpu_index() == 0);
+  enum capability_result result = capability_insert(table, object, rights, handle);
+  if (result != CAP_FULL) {
+    return result;
+  }
+  result = capability_grow(table);
+  if (result != CAP_OK) {
+    return result;
+  }
+  return capability_insert(table, object, rights, handle);
 }
 
 static struct capability_entry *find_entry(struct capability_table *table,

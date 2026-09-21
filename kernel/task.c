@@ -27,6 +27,8 @@ struct task_wait {
 
 struct task {
   struct task *next;
+  struct task *growth_next;
+  enum capability_result growth_result;
   enum task_kind kind;
   struct process *process; /* Owned by a user task; NULL for a kernel task. */
   uintptr_t kernel_stack;
@@ -52,6 +54,7 @@ struct scheduler {
 
 static struct scheduler *schedulers;
 static struct task *completed_head;
+static struct task *growth_head, *growth_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
 
@@ -155,6 +158,43 @@ void task_wait_wake(struct task_wait *wait)
   /* A wake before the switch only records notification. Enqueueing a task
    * before its stack has been saved could run it on two contexts at once. */
   unlock_queues();
+}
+
+enum capability_result task_grow_capabilities(void)
+{
+  struct task_wait *wait = task_wait_prepare();
+  struct task *task = wait->task;
+
+  lock_queues();
+  task->growth_next = NULL;
+  if (growth_tail) {
+    growth_tail->growth_next = task;
+  } else {
+    growth_head = task;
+  }
+  growth_tail = task;
+  unlock_queues();
+
+  /* Do not touch the table after publication. The BSP may finish before
+   * sleep; the wait record preserves that early completion. */
+  task_wait_sleep(wait);
+  return task->growth_result;
+}
+
+static void grow_requested_tables(void)
+{
+  lock_queues();
+  struct task *task = growth_head;
+  growth_head = growth_tail = NULL;
+  unlock_queues();
+
+  while (task) {
+    struct task *next = task->growth_next;
+    task->growth_result = capability_grow(&task->process->capabilities);
+    task_wait_wake(&task->wait_record);
+    /* Waking returns table ownership; the task may immediately exit. */
+    task = next;
+  }
 }
 
 static struct task *dequeue(struct scheduler *scheduler)
@@ -357,6 +397,7 @@ void kernel_task_sleep(uint64_t ticks)
   bool idle_reported = false;
   for (;;) {
     if (cpu_index == 0) {
+      grow_requested_tables();
       reap_completed();
       object_reap();
       wake_sleepers();
@@ -441,7 +482,7 @@ void task_preempt(bool user_mode)
 
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
-    (arch_cpu_index() == 0 && completed_head != NULL);
+    (arch_cpu_index() == 0 && (completed_head != NULL || growth_head != NULL));
   unlock_queues();
   if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;
