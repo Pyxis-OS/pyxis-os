@@ -13,13 +13,10 @@
   tests, self-tests, fault injection, CI or boot/output automation.
 - Make focused commits. Keep README short and practical; document interface
   invariants beside the code.
-- Evolve project-owned interfaces together with their in-tree consumers. Do not
-  preserve obsolete APIs, aliases, formats or fallback paths solely for backwards
-  compatibility. Keep compatibility only for an explicit requirement or a
-  concrete current consumer that cannot be updated; document that reason.
-- Do not bump API, ABI or format versions automatically when their layout or
-  behavior changes. Kernel, userspace and host tools are normally rebuilt
-  together. Bump only for an explicit need to distinguish supported contracts,
-  such as independently maintained consumers or stored data that must remain
-  readable, and state the reason. These rules do not weaken input validation or
-  override hardware, boot-protocol or third-party format requirements.
+- Do not preserve backwards compatibility unless requested. This project is
+  under active development with no external consumers. Prefer replacing obsolete
+  interfaces, formats and implementations outright; update in-tree consumers
+  together.
+- Do not increment schema or version fields merely because the implementation
+  changed. Introduce a new version only when multiple versions must intentionally
+  coexist or migration is required.
