@@ -2,8 +2,9 @@
 
 Status: the first console-and-blob ABI slice below is agreed for implementation.
 The broader process and resource model remains a working draft alongside the
-[spaces draft](spaces.md). The planned ABI is not yet the running kernel ABI;
-the existing hello program and syscalls remain usable during the migration.
+[spaces draft](spaces.md). Startup delivery and console CALL are implemented;
+close and blob operations remain planned. Legacy syscalls remain usable during
+the migration.
 The [worklist](wip/process-capability-abi.md) tracks the focused tasks and
 handoffs for this first milestone.
 
@@ -55,8 +56,8 @@ the low 32 bits identify a table slot and the high 32 bits hold its generation.
 Generations start at one. Closing an entry invalidates its handle; reuse gets
 a new generation. Retire a slot rather than wrap its generation and make a
 stale handle valid again. Userspace must not decode handles or use them as
-global object identifiers. The table implementation below uses this encoding;
-no capability syscall is exposed yet.
+global object identifiers. The table implementation and console call use this
+encoding; userspace close remains a later task.
 
 Each space would have a capability table describing resources available to its
 environment. A process would receive an explicit subset with equal or reduced
@@ -103,8 +104,8 @@ alias fills the record without activating the process's root. Process teardown
 reclaims the page with the rest of its address space.
 
 The freestanding entry preserves RDI when calling C main. Hello checks version
-and size, then continues using the existing character syscall. Both handles
-are currently invalid; task 6 supplies output and task 8 supplies content.
+and size, then prints through the output capability. The launcher grants WRITE
+on the owning space's console; content remains invalid until task 8.
 
 ## First operation shapes
 
@@ -114,8 +115,8 @@ The initial object operations use one synchronous kernel call:
 call(handle, operation, request, request_size, reply, reply_capacity)
 ```
 
-Reserve syscall 2 for `call` and 3 for `close(handle)`. Existing character-output
-syscalls 0 and 1 remain during migration; exit keeps its current encoding.
+Syscall 2 implements `call`; 3 is reserved for `close(handle)`. Existing
+character-output syscalls 0 and 1 remain during migration; exit keeps its encoding.
 The x86_64 convention uses `RAX` for the syscall number and `RDI`, `RSI`, `RDX`,
 `R10`, `R8`, `R9` for arguments. Return `RAX` holds status and `RDX` the number
 of reply bytes written (zero on failure, and always zero for close). Exit does
@@ -148,7 +149,8 @@ Status values for this slice are 0 for success, 1 for an invalid or stale handle
 2 for denied rights, 3 for an unsupported operation, 4 for a malformed request
 or insufficient reply capacity, and 5 for an invalid user buffer. Counts must
 stay within the supplied length or capacity. Operations added later can define
-additional errors when needed.
+additional errors when needed. Console output adds status 6, unavailable, when
+the TTY cannot be used (including panic mode); no output occurs on that error.
 
 These operations complete synchronously in the kernel. They require neither
 endpoint queues nor userspace servers. Userspace wrappers can expose convenient
@@ -219,7 +221,35 @@ storage. Object destruction may follow in the next reaping pass; independent
 kernel or process references keep shared resources alive. The
 [capability interface](../include/kernel/capability.h) and
 [object lifetime interface](../include/kernel/object.h) define the contracts.
-Concrete console and blob objects remain tasks 6 and 8.
+The concrete console object is implemented; the blob remains task 8.
+
+### Implemented console calls
+
+Each space retains a console wrapper around its existing TTY. The initial
+process receives an additional reference with WRITE rights, named by the output
+startup role. Process cleanup releases its grant while the space retains the
+console, TTY and framebuffer. The object header's immutable type tag keeps an
+operation from treating another object kind as a console.
+
+CALL resolves the handle and WRITE right, checks the operation and object type,
+then captures the fixed request into kernel storage. It validates the entire
+source range and the eight reply bytes actually written before any output.
+Extra reply capacity is unused. A zero-length source is not dereferenced, but
+still requires a valid capability, request and reply. Errors leave the reply
+and TTY untouched and return zero reply bytes.
+
+Each call stages at most 256 source bytes on the syscall stack and writes them
+under the existing output lock, then writes the count reply last. This limits
+each rendering batch; validation still covers the full requested source range.
+The payload is captured before any overlapping reply is written. Callers that
+overlap reply and source storage must account for that overwrite before retrying.
+The userspace console wrapper checks status, reply size and progress, and its
+print helper repeats partial writes until the string is complete.
+
+The [shared syscall header](../include/abi/syscall.h) and
+[console layouts](../include/abi/console.h) define the active slice. RDX carries
+reply length for CALL; legacy character calls preserve its previous value.
+No endpoint queues or general object-operation table are involved.
 
 ### Implemented user-buffer access
 
@@ -244,7 +274,7 @@ not switch tasks between a check and its use. This path does not recover from
 kernel mapping corruption or invalid kernel buffers. Future shared user backing
 or concurrent unmapping would require revisiting that invariant.
 
-A future object call must capture request metadata into kernel storage and
+Object calls must capture request metadata into kernel storage and
 validate all reply/data buffers before producing side effects. A copy helper
 only validates its own range; it does not validate an entire operation. See the
 [user-memory interface](../include/kernel/user_memory.h). The current character
@@ -271,8 +301,8 @@ Future IPC work must define synchronous reply association, blocking receive,
 queue-full results, waitable conditions and peer-closure wakeups. The namespace
 and named-endpoint ideas in the spaces draft do not choose those mechanisms.
 
-Convert hello when console calls land; retire legacy character syscalls
-separately once their callers have migrated.
+Hello now uses the console capability. Retire legacy character syscalls
+separately once their remaining callers have migrated.
 
 Only an explicitly selected worklist task is an implementation assignment.
 The later ideas here call for no placeholder APIs or object-manager framework.

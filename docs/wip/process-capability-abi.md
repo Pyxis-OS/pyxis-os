@@ -45,7 +45,7 @@ The process draft holds the agreed design; this file tracks the work.
   absent until task 8. Complete when the entry convention, record bounds and
   lifetime match task 1, with the existing hello path still usable.
 
-- [ ] **6. Add capability-based console output.** Implement the console
+- [x] **6. Add capability-based console output.** Implement the console
   object's `WRITE` operation through `call`, provide a small userspace wrapper,
   and grant the output capability at launch. Convert hello to use that handle.
   Complete when output reaches the owning space's TTY and invalid handles,
@@ -58,9 +58,13 @@ The process draft holds the agreed design; this file tracks the work.
 
 - [ ] **8. Add the immutable blob object.** Wrap an existing boot-archive file,
   expose its size and offset reads through `call`, and grant its `READ`
-  capability through the content startup role. Complete when reads return the
-  expected bytes and EOF behavior, and releasing process references leaves
-  the archive's shared backing and mapping intact.
+  capability through the content startup role. Replace `call_object()`'s
+  console-only dispatch and unconditional WRITE requirement with handle lookup
+  and a small switch on object type. Use focused console/blob handlers to check
+  supported operations, required rights and request layouts, keeping the
+  userspace `call` ABI unchanged. Do not introduce a generic dispatch framework.
+  Complete when reads return the expected bytes and EOF behavior, and releasing
+  process references leaves the archive's shared backing and mapping intact.
 
 - [ ] **9. Complete the userspace example.** Package a small text asset with
   the program. Print a greeting, query the supplied blob's size, read it in
@@ -161,7 +165,26 @@ and allocated-frame counts returned to their pre-launch values. Failure
 unwinding was code-reviewed; no tests, fault injection, temporary syscalls or
 boot automation were added.
 
-Task 6 is next: console WRITE through call, with its handle supplied as the
-output startup role. Content remains absent until task 8. Capture request
-metadata before interpreting it and validate every reply/data range before
-side effects. Buffer and capability results need explicit syscall-status mapping.
+Task 6 is complete (assistant), commits `2558ac7`, `67f61a5` and `338c6a7`.
+Each space owns a console object; the launcher grants its process WRITE access
+through the output startup role. CALL checks the handle, rights, operation and
+all request/reply/data ranges before output, then stages up to 256 bytes and
+reports partial progress. Hello uses the console wrapper. Legacy character
+syscalls remain. Status 6 reports unavailable console output without progress.
+
+Validation: ordinary `make image` completed without warnings. Normal one- and
+four-CPU KVM boots ran hello through successful exit and cleanup; framebuffer
+inspection confirmed its output in CPU 1's tab. Manual GDB calls on CPU 1 under
+four-CPU TCG verified invalid/stale handles, missing WRITE rights, unsupported
+operations, malformed requests and invalid buffers. Errors left the reply and
+TTY cursor unchanged. Zero-length output succeeded without reading its source;
+a 300-byte payload reported successive writes of 256 and 44 bytes. Unknown
+legacy calls preserved RDX. After hello resumed and exited, heap/frame counts
+returned to baseline and the console retained only its space-owned reference.
+Allocation failures, unavailable output, overlapping buffers and the userspace
+wrapper's long-string retry loop were code-reviewed rather than forced at
+runtime. No tests, fault injection or boot automation were added.
+
+Task 7 is next: expose userspace close using the existing capability release
+path. Closing the process grant must leave the space's console alive. Content
+remains absent until task 8.

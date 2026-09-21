@@ -18,10 +18,11 @@ static void unlock_retired(void)
   atomic_store_explicit(&retired_locked, false, memory_order_release);
 }
 
-void object_init(struct kernel_object *object,
+void object_init(struct kernel_object *object, enum object_type type,
                  void (*destroy)(struct kernel_object *))
 {
   KASSERT(object && destroy);
+  object->type = type;
   atomic_init(&object->references, 1);
   object->retired_next = NULL;
   object->destroy = destroy;

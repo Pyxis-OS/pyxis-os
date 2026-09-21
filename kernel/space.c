@@ -20,6 +20,7 @@
 #include <kernel/memory.h>
 #include <kernel/task.h>
 #include <kernel/keyboard.h>
+#include <kernel/console.h>
 
 #define PRESENT_INTERVAL_TICKS 2
 
@@ -107,6 +108,10 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
     space->fb = fb_alloc(boot_fb, boot_fb->width, 
         boot_fb->height - SPACES_NAV_HEIGHT);
     space->tty = tty_alloc(space->fb);
+    space->console = console_create(space->tty);
+    if (!space->console) {
+      panic("cannot allocate space console");
+    }
 
     arch_cpu_at(i)->space = space;
 
