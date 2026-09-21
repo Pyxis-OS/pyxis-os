@@ -24,10 +24,12 @@ See [gdb.md](gdb.md) for kernel debugger usage.
 
 ## Entry and loading
 
-`make initrd` packages the initial program into `build/initrd.cpio`; `make image`
+`make initrd` packages the initial program and its text asset into
+`build/initrd.cpio`; `make image`
 includes that uncompressed `newc` archive as the sole Limine module. The kernel
 keeps the archive mapped read-only and uses `initrd_lookup()` to find the program
-by its exact archive name. See [the initrd interface](../include/kernel/initrd.h)
+and content by exact archive names. The text source lives beside hello in
+[message.txt](../userspace/hello/message.txt). See [the initrd interface](../include/kernel/initrd.h)
 for the supported records and borrowed-view lifetime. The archive provides raw
 file bytes, without extraction, a block device or VFS semantics.
 
@@ -41,20 +43,26 @@ user stack. Entry receives a pointer in `RDI` to the read-only
 exit. Its address is chosen by VM allocation; programs must use the pointer.
 The assembly entry preserves it as the argument to
 `main(const struct startup_info *startup)`, then passes main's return value to
-`exit`. Hello checks the record's version and size, prints using its output
-capability, then closes that handle. Content grants READ access to a blob of the
-existing hello.pxe archive entry; hello currently leaves it for exit cleanup.
-Task 9 will supply a text asset and read it through the blob ABI. There is no
+`exit`. Hello checks the record's version and size, prints a greeting, queries
+its content blob's size, and reads and prints the content in chunks. It attempts
+to close both handles even after an I/O error, then returns success or failure.
+The content capability grants READ access to the packaged text asset. There is no
 libc or argument vector. The [syscall header](../userspace/include/syscall.h) defines syscall
 numbers and the register convention. Normal output targets the owning space's
 TTY; diagnostic output targets the kernel log, which goes to the Caelum TTY and
 serial.
 
 The [console wrapper](../userspace/include/console.h) uses the native CALL ABI
-and reports actual bytes written. Its print helper handles partial progress;
+and reports actual bytes written. Its byte-count and string helpers finish partial writes;
 each kernel call renders a bounded chunk. Requests and replies have shared
 layouts, and CALL returns both status and reply byte count. Legacy character
 helpers and syscalls remain available during migration.
+
+The [blob wrappers](../userspace/include/blob.h) query size and read at explicit
+offsets. They check reply lengths and counts; a short read is allowed and zero
+bytes with nonzero capacity means EOF. Hello uses a fixed stack buffer, so it
+does not allocate storage proportional to the blob size or require NUL-terminated
+content. It checks that EOF and transferred counts agree with the queried size.
 
 The [handle wrapper](../userspace/include/handle.h) releases the calling process's
 reference. A closed handle is immediately stale; other owners, including the

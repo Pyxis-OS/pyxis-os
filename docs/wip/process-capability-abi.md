@@ -66,7 +66,7 @@ The process draft holds the agreed design; this file tracks the work.
   Complete when reads return the expected bytes and EOF behavior, and releasing
   process references leaves the archive's shared backing and mapping intact.
 
-- [ ] **9. Complete the userspace example.** Package a small text asset with
+- [x] **9. Complete the userspace example.** Package a small text asset with
   the program. Print a greeting, query the supplied blob's size, read it in
   chunks, write its contents, close the handles and exit. Handle errors and
   partial progress in the wrappers. Complete when this runs through the native
@@ -228,6 +228,25 @@ destruction. After hello exited, heap/frame counts returned to baseline.
 Allocation-failure unwinding and empty-file reads were code-reviewed; no tests,
 fault injection or boot automation were added.
 
-Task 9 is next: package a text asset, add userspace blob wrappers, and have hello
-query its size, read/write it in chunks, close both handles and exit. Select the
-text entry for the content grant instead of reusing hello.pxe.
+Task 9 is complete (assistant), commits `fd06fc7` and `ac14c48`. The build
+packages a text asset beside hello, and the launcher grants it as content.
+Blob size/read wrappers check status, reply size and counts. The console's
+byte-count helper completes partial writes. Hello queries size, reads through
+a fixed stack buffer until EOF, checks counts against the immutable size,
+prints the bytes, attempts both closes even after I/O failure, and exits.
+
+Validation: ordinary `make image` completed without warnings; archive inspection
+showed the program and text entries. Normal one- and four-CPU KVM boots exited
+with status 0, and framebuffer inspection showed the greeting and full text in
+CPU 1's tab. GDB inspection of the actual userspace calls under four-CPU TCG
+observed reads of 512 bytes, 173 bytes, then EOF. The first output chunk required
+two successful 256-byte writes; the last required 173 bytes. Both closes
+returned success with zero reply bytes and cleared their table entries before
+exit 0. Heap/frame counts returned to pre-launch values; the space's console
+reference and archive bytes survived. Error unwinding, empty content and
+malformed-reply rejection were code-reviewed; no fault injection, tests or boot
+automation were added.
+
+All tasks in this milestone are complete. Next discussion, requested by the
+project owner: their more complex capability idea and its tradeoffs. No further
+implementation is assigned by this worklist.

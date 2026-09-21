@@ -21,6 +21,7 @@
 #define INITIAL_STACK_BASE UINT64_C(0x800000)
 #define INITIAL_STACK_SIZE PAGE_SIZE
 #define INITIAL_IMAGE_NAME "hello.pxe"
+#define INITIAL_CONTENT_NAME "hello.txt"
 
 static void queue_initial_image(void)
 {
@@ -28,6 +29,13 @@ static void queue_initial_image(void)
   enum initrd_result archive_result = initrd_lookup(INITIAL_IMAGE_NAME, &image);
   if (archive_result != INITRD_OK) {
     panic("cannot find %s in initrd (error %u)", INITIAL_IMAGE_NAME,
+          (unsigned)archive_result);
+  }
+
+  struct initrd_file content_file;
+  archive_result = initrd_lookup(INITIAL_CONTENT_NAME, &content_file);
+  if (archive_result != INITRD_OK) {
+    panic("cannot find %s in initrd (error %u)", INITIAL_CONTENT_NAME,
           (unsigned)archive_result);
   }
 
@@ -64,9 +72,7 @@ static void queue_initial_image(void)
     panic("cannot grant initial console (error %u)", (unsigned)grant);
   }
 
-  /* Until the text asset lands, expose the same archive file as immutable
-   * content. The blob borrows its bytes independently of the loaded image. */
-  struct blob_object *blob = blob_create(&image);
+  struct blob_object *blob = blob_create(&content_file);
   if (!blob) {
     KASSERT(process_destroy(process) == MM_OK);
     panic("cannot create initial content blob");
