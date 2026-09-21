@@ -3,6 +3,23 @@
 
 #include <kernel/mm/types.h>
 
+struct task;
+
+/* One blocked syscall's stack-owned wait record. Fields belong to the
+ * scheduler; the resource publishes/removes its pointer under its own lock. */
+struct task_wait {
+  struct task *task;
+  bool notified;
+};
+
+/* Current user task, IF=0. Initialize before publishing. Sleep only after
+ * releasing resource locks; an earlier wake is remembered. A resource must
+ * remove its wait pointer before waking and never use it after wake returns.
+ * The record remains live until sleep returns. No allocation or migration. */
+void task_wait_init(struct task_wait *wait);
+void task_wait_sleep(struct task_wait *wait);
+void task_wait_wake(struct task_wait *wait);
+
 /* BSP only, after boot_start_cpus(), VM and heap initialization. */
 void task_init(void);
 
