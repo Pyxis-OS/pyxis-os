@@ -1,7 +1,6 @@
 #include <abi/blob.h>
 #include <arch/smp.h>
 #include <kernel/object/blob.h>
-#include <kernel/object/capability.h>
 #include <kernel/initrd.h>
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
@@ -26,32 +25,30 @@ struct blob_object *blob_create(const struct initrd_file *file)
 }
 
 static struct syscall_result read_blob(struct blob_object *blob,
-    uintptr_t request_address, size_t request_size, uintptr_t reply_address,
+    const struct blob_read_request *request, uintptr_t reply_address,
     size_t reply_capacity)
 {
-  struct blob_read_request request;
   struct blob_read_reply reply;
-  if (request_size != sizeof(request) || reply_capacity < sizeof(reply)) {
+  if (reply_capacity < sizeof(reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!copy_from_user(&request, request_address, sizeof(request)) ||
-      !user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE) ||
-      !user_buffer_check(request.address, request.capacity, USER_BUFFER_WRITE)) {
+  if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE) ||
+      !user_buffer_check(request->address, request->capacity, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
   size_t count = 0;
-  if (request.offset < blob->size) {
-    count = blob->size - request.offset;
-    if (count > request.capacity) {
-      count = request.capacity;
+  if (request->offset < blob->size) {
+    count = blob->size - request->offset;
+    if (count > request->capacity) {
+      count = request->capacity;
     }
   }
   /* Compare before subtracting; never form data + offset for EOF or an empty
    * transfer. The immutable archive cannot alias writable user backing. */
   if (count) {
-    KASSERT(copy_to_user(request.address,
-        (const uint8_t *)blob->data + request.offset, count));
+    KASSERT(copy_to_user(request->address,
+        (const uint8_t *)blob->data + request->offset, count));
   }
 
   reply.read = count;
@@ -71,13 +68,20 @@ struct syscall_result blob_call(struct blob_object *blob, uint64_t rights,
   if (!(rights & BLOB_RIGHT_READ)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
+
+  struct blob_read_request request;
+  if (request_size != sizeof(request)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request, request_address, sizeof(request))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   if (operation == BLOB_READ) {
-    return read_blob(blob, request_address, request_size, reply_address,
-        reply_capacity);
+    return read_blob(blob, &request, reply_address, reply_capacity);
   }
 
   struct blob_size_reply reply = {.size = blob->size};
-  if (request_size != 0 || reply_capacity < sizeof(reply)) {
+  if (reply_capacity < sizeof(reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
