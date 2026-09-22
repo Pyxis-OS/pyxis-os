@@ -15,12 +15,14 @@
 #include <kernel/space.h>
 #include <kernel/user.h>
 #include <kernel/user/launch.h>
+#include <kernel/user/startup.h>
 
 #define INITIAL_STACK_BASE UINT64_C(0x800000)
 #define INITIAL_STACK_SIZE PAGE_SIZE
 
 struct initial_program {
   struct process *process;
+  const char *name;
   uintptr_t entry;
   size_t cpu_index;
   handle_t output, content, endpoint;
@@ -47,6 +49,7 @@ static bool load_program(const char *name, size_t cpu_index,
     KASSERT(vm_space_destroy(space) == MM_OK);
     return false;
   }
+  program->name = name;
   program->cpu_index = cpu_index;
   struct process *process = program->process;
   if (capability_install(&process->capabilities, &process->space->console->object,
@@ -124,8 +127,26 @@ void user_launch_initial(void)
 
   for (size_t i = 0; i < 3; ++i) {
     struct initial_program *program = &programs[i];
-    if (process_prepare_startup(program->process, program->output,
-          program->content, program->endpoint) != MM_OK) {
+    struct process_binding resources[3];
+    size_t count = 0;
+    resources[count++] = (struct process_binding){"output", program->output};
+    if (program->content != HANDLE_INVALID) {
+      resources[count++] = (struct process_binding){"content", program->content};
+    }
+    if (program->endpoint != HANDLE_INVALID) {
+      resources[count++] = (struct process_binding){"endpoint", program->endpoint};
+    }
+    const char *arguments[] = {program->name};
+    const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
+    const struct process_startup startup = {
+      .resources = resources,
+      .resource_count = count,
+      .environment = environment,
+      .environment_count = 1,
+      .argc = 1,
+      .argv = arguments,
+    };
+    if (process_prepare_startup(program->process, &startup) != MM_OK) {
       goto fail;
     }
   }

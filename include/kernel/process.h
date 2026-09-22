@@ -27,14 +27,6 @@ struct process *process_current(void);
 enum mm_result process_create(struct space *space, struct vm_space *address_space,
                               struct process **result);
 
-/* BSP, IF=0, with exclusive ownership of an unsubmitted, inactive process.
- * Create the startup record once, before task submission. Roles are handles
- * already installed in this process, or HANDLE_INVALID for absent resources.
- * Success stores its user address; failure releases partial backing and leaves
- * startup_address unchanged. The page lives until address-space destruction. */
-enum mm_result process_prepare_startup(struct process *process, handle_t output,
-                                       handle_t content, handle_t endpoint);
-
 /* BSP, IF=0, with exclusive ownership of an unsubmitted or retired process.
  * A submitted process belongs to its task until the BSP reaper receives it
  * after leaving the task stack and private root. Success frees the address

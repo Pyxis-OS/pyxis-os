@@ -5,25 +5,45 @@
 #include <stddef.h>
 
 #define STARTUP_VERSION 1
+#define STARTUP_MAX_SIZE UINT64_C(65536)
 
-/* x86_64 entry receives this user pointer in RDI. The record is read-only and
- * remains valid until process exit. Check version and size before reading
- * resource roles; an absent resource has HANDLE_INVALID. Fields are little
- * endian, with natural 8-byte alignment and no pointers into kernel memory. */
+struct startup_binding {
+  uint64_t name;
+  handle_t handle;
+};
+
+struct startup_variable {
+  uint64_t name;
+  uint64_t value;
+};
+
+/* RDI points to this kernel-prepared region. Addresses are child virtual
+ * addresses, not offsets or kernel pointers. All strings are NUL-terminated.
+ * size includes page padding; read_only_size separates metadata from writable
+ * argv pointers and strings. Both parts are NX and live until process exit.
+ * Counts bound arrays; empty metadata arrays have address zero. argv always
+ * includes a final NULL, even when argc is zero. Version 1 has no legacy layout. */
 struct startup_info {
   uint32_t version;
   uint32_t size;
-  handle_t output;
-  handle_t content;
-  handle_t endpoint;
+  uint64_t read_only_size;
+  uint64_t resources;
+  uint64_t resource_count;
+  uint64_t roots;
+  uint64_t root_count;
+  uint64_t working_directories; /* Boundary first, current directory last. */
+  uint64_t working_directory_count;
+  uint64_t working_path; /* Optional descriptive string, never authority. */
+  uint64_t environment;
+  uint64_t environment_count;
+  uint64_t argc;
+  uint64_t argv;
 };
 
-_Static_assert(sizeof(struct startup_info) == 32, "startup record size");
-_Static_assert(_Alignof(struct startup_info) == 8, "startup record alignment");
-_Static_assert(offsetof(struct startup_info, version) == 0, "startup version offset");
-_Static_assert(offsetof(struct startup_info, size) == 4, "startup size offset");
-_Static_assert(offsetof(struct startup_info, output) == 8, "startup output offset");
-_Static_assert(offsetof(struct startup_info, content) == 16, "startup content offset");
-_Static_assert(offsetof(struct startup_info, endpoint) == 24, "startup endpoint offset");
+_Static_assert(sizeof(struct startup_binding) == 16, "startup binding layout");
+_Static_assert(sizeof(struct startup_variable) == 16, "startup variable layout");
+_Static_assert(sizeof(struct startup_info) == 104, "startup record layout");
+_Static_assert(offsetof(struct startup_info, resources) == 16, "startup resources offset");
+_Static_assert(offsetof(struct startup_info, argv) == 96, "startup argv offset");
 
 #endif

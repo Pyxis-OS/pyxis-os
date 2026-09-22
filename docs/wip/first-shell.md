@@ -101,7 +101,9 @@ It includes directory capabilities, so a rename does not silently retarget
 relative access. A child changing its working directory does not change its
 parent's. Parent navigation uses retained or granted ancestor capabilities;
 `..` must not escape a standalone subtree grant. A displayed path is descriptive,
-not authority. The exact startup representation is left to task 2.
+not authority. Startup represents this context as a sequence of directory
+handles, boundary first and current directory last, with an optional display
+path. It remains empty until directory objects exist.
 
 ## Launch and startup contract
 
@@ -123,12 +125,15 @@ does not terminate the child.
 C startup consumes the native startup record, initializes runtime bindings,
 calls `main(argc, argv)`, and exits with its return value. Programs discover
 resources by their startup names through `libpyxis`, not fixed handle numbers.
-Replace the current example-specific startup roles and migrate in-tree programs
-together. Do not retain an old layout or bump its version just for this change.
+Named resources replace the example-specific startup fields; in-tree programs
+migrate together without retaining an old layout or bumping its version.
+Startup data has a 64 KiB total budget including page padding, allocating only
+the pages needed and rejecting oversized input explicitly.
 
 Environment entries are case-sensitive string names and values; empty values
 are allowed. The launcher supplies a copied snapshot alongside arguments.
-Initial startup data is read-only; the runtime owns later process-local changes.
+Startup metadata and the initial environment are read-only; argv and its strings
+occupy separate writable pages. The runtime owns later process-local changes.
 The shell normally copies its environment to children, with explicit overrides.
 There is no kernel-global environment or implicit inheritance.
 
@@ -193,7 +198,7 @@ not duplicated here as a second ABI definition.
   static-library build dependencies without creating unused library skeletons.
   Done when existing images build and behave as before using the shared library.
 
-- [ ] **2. Named startup resources, arguments and environment.** Replace fixed
+- [x] **2. Named startup resources, arguments and environment.** Replace fixed
   example roles with bounded, validated startup data for named grants, scheme
   roots, working-directory context, argument strings and environment entries.
   Add native accessors and the common C entry path to `main(argc, argv)`; migrate
@@ -354,5 +359,35 @@ referenced wrappers; hello no longer includes unused endpoint code. A repeated
 library build was up to date, and make dry runs showed header and startup changes
 triggering their dependent rebuilds. No tests or boot automation were added.
 
-Task 2 remains unstarted. Discuss its startup layout, resource naming and size
-limits before implementation.
+Task 2 is complete (assistant). Startup preparation now lives in `kernel/user/`
+and copies named resources, arguments and environment into a process-owned region
+bounded at 64 KiB including page padding. Metadata/environment are read-only;
+argv and argument strings occupy separate writable pages. Both parts are NX.
+Preparation validates inputs and installed handles, publishes only on success,
+and releases partial allocations on failure without changing handle ownership.
+
+Libpyxis initializes native accessors before `main(argc, argv)` and exits with
+its result, without a userspace allocator. Resource lookup borrows an existing
+handle; environment lookup distinguishes missing from empty values. All three
+programs migrated together with version 1 retained. Hello uses its argument and
+environment in its greeting. Scheme-root and working-directory fields/accessors
+exist, but preparation rejects nonempty directory context until directory
+objects and their type validation arrive. No path traversal is implemented.
+
+Validation: the ordinary image build completed without warnings; normal one-
+and four-CPU KVM boots ran all three programs through exit 0. Framebuffer
+inspection confirmed hello's argument/environment output and the existing blob
+and endpoint exchange. Manual four-CPU TCG/GDB inspection observed main receiving
+argc, its argument string and a final NULL pointer, plus empty directory context.
+Kernel calls rejected duplicate resource/environment names, invalid handles,
+invalid environment names and repeated preparation. Zero arguments with an empty
+environment value were accepted. An exact 64 KiB region succeeded and its final
+string terminator survived the multi-page copy; one extra argument byte failed
+without publishing a startup address. Page queries confirmed read-only metadata,
+writable arguments and NX on both. After temporary inspection allocations and
+all programs were released, heap usage and PMM frame counts returned to their
+pre-launch values. Allocation-failure unwinding was code-reviewed, not forced.
+No tests, fault injection or boot automation were added.
+
+Task 3 remains unstarted. Discuss the file protocol and its relationship to the
+existing immutable blob object before implementation.
