@@ -1,5 +1,6 @@
 #include <abi/message.h>
 #include <kernel/object/file.h>
+#include <kernel/object/directory.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/console.h>
 #include <kernel/object/endpoint.h>
@@ -66,6 +67,12 @@ static struct syscall_result call_object(handle_t handle,
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return file_call((struct file_object *)object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_DIRECTORY:
+    if (header.protocol != PROTOCOL_DIRECTORY) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return directory_call((struct directory_object *)object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
   case OBJECT_ENDPOINT:
     if (header.protocol != PROTOCOL_ENDPOINT) {

@@ -5,6 +5,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/object/directory.h>
 #include <kernel/string.h>
 #include <kernel/user/startup.h>
 
@@ -33,17 +34,41 @@ static bool same_name(const char *left, const char *right)
   return strlen(right) == length && memcmp(left, right, length) == 0;
 }
 
+static bool measure_bindings(struct process *process,
+    const struct process_binding *bindings, size_t count, bool directories,
+    size_t *size)
+{
+  for (size_t i = 0; i < count; ++i) {
+    const struct process_binding *binding = &bindings[i];
+    if (!add_string_size(binding->name, size) || !binding->name[0]) {
+      return false;
+    }
+    struct kernel_object *object;
+    if (capability_resolve(&process->capabilities, binding->handle, 0,
+          &object, NULL) != CAP_OK || (directories && object->type != OBJECT_DIRECTORY)) {
+      return false;
+    }
+    for (size_t j = 0; j < i; ++j) {
+      if (same_name(binding->name, bindings[j].name)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 static bool measure_startup(struct process *process,
                              const struct process_startup *source,
                              struct startup_sizes *sizes)
 {
-  /* Directory grants need type validation once that object type exists. */
-  if (!source || source->root_count || source->working_directory_count ||
+  if (!source || source->working_directory_count ||
       source->working_path ||
       source->resource_count > STARTUP_MAX_SIZE / sizeof(struct startup_binding) ||
+      source->root_count > STARTUP_MAX_SIZE / sizeof(struct startup_binding) ||
       source->environment_count > STARTUP_MAX_SIZE / sizeof(struct startup_variable) ||
       source->argc >= STARTUP_MAX_SIZE / sizeof(uint64_t) ||
       (source->resource_count && !source->resources) ||
+      (source->root_count && !source->roots) ||
       (source->environment_count && !source->environment) ||
       (source->argc && !source->argv)) {
     return false;
@@ -51,27 +76,17 @@ static bool measure_startup(struct process *process,
 
   sizes->metadata = sizeof(struct startup_info) +
                     source->resource_count * sizeof(struct startup_binding) +
+                    source->root_count * sizeof(struct startup_binding) +
                     source->environment_count * sizeof(struct startup_variable);
   sizes->arguments = (source->argc + 1) * sizeof(uint64_t);
   if (sizes->metadata > STARTUP_MAX_SIZE) {
     return false;
   }
 
-  for (size_t i = 0; i < source->resource_count; ++i) {
-    const struct process_binding *binding = &source->resources[i];
-    if (!add_string_size(binding->name, &sizes->metadata) || !binding->name[0]) {
-      return false;
-    }
-    struct kernel_object *object;
-    if (capability_resolve(&process->capabilities, binding->handle, 0,
-          &object, NULL) != CAP_OK) {
-      return false;
-    }
-    for (size_t j = 0; j < i; ++j) {
-      if (same_name(binding->name, source->resources[j].name)) {
-        return false;
-      }
-    }
+  if (!measure_bindings(process, source->resources, source->resource_count, false,
+        &sizes->metadata) ||
+      !measure_bindings(process, source->roots, source->root_count, true, &sizes->metadata)) {
+    return false;
   }
 
   for (size_t i = 0; i < source->environment_count; ++i) {
@@ -123,6 +138,7 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
     .size = sizes->metadata + sizes->arguments,
     .read_only_size = sizes->metadata,
     .resource_count = source->resource_count,
+    .root_count = source->root_count,
     .environment_count = source->environment_count,
     .argc = source->argc,
     .argv = address + sizes->metadata,
@@ -134,6 +150,11 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
     info->resources = address + offset;
     offset += source->resource_count * sizeof(*resources);
   }
+  struct startup_binding *roots = (struct startup_binding *)(buffer + offset);
+  if (source->root_count) {
+    info->roots = address + offset;
+    offset += source->root_count * sizeof(*roots);
+  }
   struct startup_variable *environment = (struct startup_variable *)(buffer + offset);
   if (source->environment_count) {
     info->environment = address + offset;
@@ -143,6 +164,10 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
   for (size_t i = 0; i < source->resource_count; ++i) {
     resources[i].name = copy_string(buffer, &offset, address, source->resources[i].name);
     resources[i].handle = source->resources[i].handle;
+  }
+  for (size_t i = 0; i < source->root_count; ++i) {
+    roots[i].name = copy_string(buffer, &offset, address, source->roots[i].name);
+    roots[i].handle = source->roots[i].handle;
   }
   for (size_t i = 0; i < source->environment_count; ++i) {
     environment[i].name = copy_string(buffer, &offset, address, source->environment[i].name);

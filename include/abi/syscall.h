@@ -21,6 +21,9 @@ enum call_status {
   CALL_BUSY = 9,
   CALL_NO_MEMORY = 10,
   CALL_LIMIT = 11,
+  CALL_NOT_FOUND = 12,
+  CALL_WRONG_TYPE = 13,
+  CALL_STATUS_COUNT, /* Validation bound, not a result. */
 };
 
 /* CALL/CLOSE return status in RAX and reply bytes in RDX (zero on failure,

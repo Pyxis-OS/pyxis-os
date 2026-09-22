@@ -9,6 +9,7 @@ enum object_type {
   OBJECT_CONSOLE = 1,
   OBJECT_FILE = 2,
   OBJECT_ENDPOINT = 3,
+  OBJECT_DIRECTORY = 4,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.

@@ -1,10 +1,13 @@
 #include <abi/file.h>
+#include <abi/directory.h>
 #include <abi/console.h>
 #include <abi/endpoint.h>
 #include <arch/cpu_local.h>
 #include <arch/smp.h>
 #include <kernel/image.h>
 #include <kernel/initrd.h>
+#include <kernel/fs/initrd_tree.h>
+#include <kernel/object/directory.h>
 #include <kernel/log.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/file.h>
@@ -25,8 +28,11 @@ struct initial_program {
   const char *name;
   uintptr_t entry;
   size_t cpu_index;
-  handle_t output, content, endpoint;
+  handle_t output, content, endpoint, application_root;
 };
+
+/* Shared read-only application namespace retains the tree across process exit. */
+static struct directory_object *application_root;
 
 static bool load_program(const char *name, size_t cpu_index,
                          struct initial_program *program)
@@ -70,6 +76,9 @@ void user_launch_initial(void)
   struct initial_program *server = &programs[1];
   struct initial_program *client = &programs[2];
 
+  if (initrd_tree_create(&application_root) != INITRD_OK) {
+    goto fail;
+  }
   if (!load_program("hello.pxe", client_cpu, hello) ||
       !load_program("server.pxe", server_cpu, server) ||
       !load_program("client.pxe", client_cpu, client)) {
@@ -77,22 +86,22 @@ void user_launch_initial(void)
   }
 
   struct initrd_file text;
-  if (initrd_lookup("hello.txt", &text) != INITRD_OK) {
+  if (initrd_lookup("share/hello.txt", &text) != INITRD_OK) {
     goto fail;
   }
   struct file_object *file = file_create_initrd(&text);
   if (!file) {
     goto fail;
   }
-  enum capability_result result = capability_install(&hello->process->capabilities,
-      &file->object, FILE_RIGHT_READ, &hello->content);
+  enum capability_result result = capability_install(&client->process->capabilities,
+      &file->object, FILE_RIGHT_READ, &client->content);
   object_release(&file->object);
   if (result != CAP_OK) {
     goto fail;
   }
-
-  result = capability_grant(&client->process->capabilities,
-      &hello->process->capabilities, hello->content, FILE_RIGHT_READ, &client->content);
+  result = capability_install(&hello->process->capabilities, &application_root->object,
+      DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES,
+      &hello->application_root);
   if (result != CAP_OK) {
     goto fail;
   }
@@ -136,11 +145,14 @@ void user_launch_initial(void)
     if (program->endpoint != HANDLE_INVALID) {
       resources[count++] = (struct process_binding){"endpoint", program->endpoint};
     }
+    const struct process_binding roots[] = {{"app", program->application_root}};
     const char *arguments[] = {program->name};
     const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
     const struct process_startup startup = {
       .resources = resources,
       .resource_count = count,
+      .roots = roots,
+      .root_count = program->application_root != HANDLE_INVALID ? 1 : 0,
       .environment = environment,
       .environment_count = 1,
       .argc = 1,
@@ -166,7 +178,13 @@ fail:
       KASSERT(process_destroy(programs[i].process) == MM_OK);
     }
   }
-  object_reap();
+  if (application_root) {
+    object_release(&application_root->object);
+    application_root = NULL;
+  }
+  while (object_reap_pending()) {
+    object_reap();
+  }
   /* Already submitted tasks remain owned by their queues. Scheduling has not
    * started; a boot failure halts without exposing a partially prepared peer. */
   panic("cannot prepare initial userspace programs");

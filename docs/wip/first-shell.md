@@ -103,7 +103,7 @@ parent's. Parent navigation uses retained or granted ancestor capabilities;
 `..` must not escape a standalone subtree grant. A displayed path is descriptive,
 not authority. Startup represents this context as a sequence of directory
 handles, boundary first and current directory last, with an optional display
-path. It remains empty until directory objects exist.
+path. The chain remains empty until task 5 adds working-directory helpers.
 
 ## Launch and startup contract
 
@@ -214,7 +214,7 @@ not duplicated here as a second ABI definition.
   existing blob implementation without keeping redundant interfaces merely for
   compatibility. Depends on 2. Done when a program reads a supplied file handle.
 
-- [ ] **4. Initrd directories, lookup and enumeration.** Expose the archive as
+- [x] **4. Initrd directories, lookup and enumeration.** Expose the archive as
   a read-only directory tree, grant an application root and implement attenuated
   child lookup plus enumeration. Specify iteration under mutation for the later
   RAM backing; no directory snapshots are required by this document. Handle
@@ -410,5 +410,37 @@ the file implementation and no remaining blob symbols. The retained EOF,
 short-read, buffer-validation and reference-lifetime paths were code-reviewed;
 error paths were not forced in this pass. No tests or boot automation were added.
 
-Task 4 remains unstarted. Discuss directory representation, lookup grants and
-enumeration under mutation before implementation.
+Task 4 is complete (assistant). The BSP imports the initrd into an immutable
+reference-owned directory tree before launch, inferring parents and accepting
+explicit empty directories. Files borrow the archive mapping. Typed component
+lookup returns an owned child handle with rights bounded by the parent;
+enumeration requires separate authority and grants no handles. Native wrappers
+need no allocator. Hello receives the `app` scheme root, lists it and `share`,
+then discovers and reads `share/hello.txt`. The endpoint example keeps its direct
+file grant. Startup validates scheme-root directory types; working-directory
+context remains pending task 5. No schema version changed.
+
+Enumeration returns one name/kind and an opaque cursor. A short name buffer
+reports required size without advancing; end is repeatable. A mismatched
+generation reports CHANGED and requires an explicit restart. The immutable
+backing never changes generation; task 6 must synchronize mutation and advance
+generation without reuse. Lookup uses the existing BSP table-growth request;
+its immutable parent keeps the child alive across the wait. Mutable backing
+must revisit this invariant. See [directories](../directories.md) for the contract.
+
+Validation: ordinary image builds passed without warnings. Normal one- and
+four-CPU KVM boots ran all three programs through exit 0 and address-space
+release; single-CPU framebuffer inspection showed both directory listings and
+the discovered file contents. Four-CPU TCG/GDB inspection observed short-buffer
+retry, repeatable end, mismatched-generation handling, invalid cursors, output
+buffer checks, rights attenuation, wrong-kind and missing-name errors. Filling
+hello's table through valid lookups made its normal AP lookup block while the
+BSP grew the table from eight to sixteen slots, preserving earlier grants.
+A retained child survived destruction of a separately constructed parent tree.
+After programs and debugger-owned objects were released, heap/frame counts
+returned to their pre-launch baseline and the retirement queue was empty.
+Archive conflict handling and allocation-failure unwinding were code-reviewed,
+not forced. No tests, fault injection or boot automation were added.
+
+Task 5 remains unstarted. Discuss exact path syntax, ownership of retained
+working-directory handles and allocation-free runtime storage before implementation.

@@ -240,3 +240,35 @@ enum initrd_result initrd_lookup(const char *name, struct initrd_file *file)
   }
   return INITRD_NOT_FOUND;
 }
+
+enum initrd_result initrd_next(size_t *offset, struct initrd_entry *entry)
+{
+  if (entry) {
+    *entry = (struct initrd_entry){0};
+  }
+  if (!archive_bytes || !offset || !entry || *offset > archive_size) {
+    return INITRD_INVALID;
+  }
+  if (*offset == archive_size) {
+    return INITRD_END;
+  }
+
+  struct cpio_entry parsed;
+  size_t next = *offset;
+  enum initrd_result result = read_entry(archive_bytes, archive_size, &next, &parsed);
+  if (result != INITRD_OK) {
+    return result;
+  }
+  if (parsed.trailer) {
+    *offset = archive_size;
+    return INITRD_END;
+  }
+  *entry = (struct initrd_entry){
+    .name = parsed.name,
+    .name_length = parsed.name_length,
+    .file = {parsed.data, parsed.size},
+    .directory = parsed.directory,
+  };
+  *offset = next;
+  return INITRD_OK;
+}

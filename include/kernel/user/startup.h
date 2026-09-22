@@ -34,8 +34,9 @@ struct process_startup {
  * kernel memory, stable throughout this call; it is copied, never retained.
  * Resource names are nonempty and unique; handles must already be installed in
  * this process. Environment names are nonempty, unique and contain no '='.
- * Roots and working-directory context must be empty until directory objects
- * exist. The 64 KiB budget includes both mappings' page padding. MM_INVALID
+ * Roots use their own unique names and must reference installed directories.
+ * Working-directory context remains empty pending path helpers. The 64 KiB
+ * budget includes both mappings' page padding. MM_INVALID
  * covers malformed/oversized data; MM_NO_MEMORY covers allocation exhaustion.
  * Success publishes startup_address once; failure frees partial backing and
  * changes neither startup_address nor capability ownership. */

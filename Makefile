@@ -16,7 +16,7 @@ CFLAGS := -std=gnu23 -O2 -g3 -ffreestanding -fno-stack-protector \
 LDFLAGS := -nostdlib -static -no-pie -Wl,-T,arch/x86_64/linker.ld \
            -Wl,--build-id=none -Wl,-z,max-page-size=0x1000 -Wl,-Map,build/caelum.map
 
-C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/user/*.c kernel/object/*.c kernel/mm/*.c kernel/fb/*.c lib/*.c) \
+C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/user/*.c kernel/object/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c lib/*.c) \
              third_party/tlsf/tlsf.c
 ASM_SOURCES := $(wildcard boot/limine/*.S arch/x86_64/*.S)
 OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM_SOURCES))
@@ -30,17 +30,17 @@ tools:
 userspace: tools
 	$(MAKE) -C userspace
 
-build/userspace/hello.pxe build/userspace/hello.txt \
+build/userspace/hello.pxe build/userspace/share/hello.txt \
     build/userspace/client.pxe build/userspace/server.pxe: userspace
 
 initrd: build/initrd.cpio
 
-build/initrd.cpio: build/userspace/hello.pxe build/userspace/hello.txt \
+build/initrd.cpio: build/userspace/hello.pxe build/userspace/share/hello.txt \
                   build/userspace/client.pxe build/userspace/server.pxe Makefile
 	@command -v cpio >/dev/null 2>&1 || { \
 	  echo 'Missing GNU cpio: install it, then run make initrd.' >&2; \
 	  exit 1; }
-	cd build/userspace && printf '%s\n' hello.pxe hello.txt client.pxe server.pxe | \
+	cd build/userspace && printf '%s\n' hello.pxe share share/hello.txt client.pxe server.pxe | \
 	  cpio --create --format=newc --reproducible --owner=0:0 --quiet > ../initrd.cpio.tmp
 	mv build/initrd.cpio.tmp $@
 
