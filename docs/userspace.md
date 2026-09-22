@@ -36,8 +36,10 @@ includes that uncompressed `newc` archive as the sole Limine module. The kernel
 keeps the archive mapped read-only and uses `initrd_lookup()` to find the program
 and content by exact archive names. The text source lives beside hello in
 [message.txt](../userspace/hello/message.txt). See [the initrd interface](../include/kernel/initrd.h)
-for the supported records and borrowed-view lifetime. The archive provides raw
-file bytes, without extraction, a block device or VFS semantics.
+for the supported records and borrowed-view lifetime. The archive reader provides raw entry views. A separate boot-time
+[tree builder](../include/kernel/fs/initrd_tree.h) exposes those entries as
+read-only directory/file objects without extracting file contents or adding a
+block device. The text asset is packaged at `share/hello.txt`.
 
 The image loader creates an inactive private address space, copies the program
 into owned backing and applies its permissions. Failure releases partial
@@ -58,12 +60,14 @@ then exits with main's return value. Use
 to find supplied handles and environment values. Lookup borrows an existing
 handle and never duplicates it. Missing resource names return HANDLE_INVALID;
 missing environment values return NULL, while an empty value is an empty string.
-The runtime requires no malloc or libc. Scheme roots and working-directory
-context are currently empty pending directory objects.
+The runtime requires no malloc or libc. Hello receives an `app` directory root;
+working-directory context remains empty pending path helpers.
 
-Hello obtains output and content by name, uses its argument vector and initial
-environment in its greeting, then reads and prints the packaged file in chunks.
-It attempts to close both handles even after an I/O error. The syscall register
+Hello obtains named output and its `app` scheme root, uses its argument vector
+and environment in its greeting, then enumerates the root and its `share` child.
+It looks up the text file with READ and prints it in chunks, closing each owned
+handle even after an I/O error. See [directories.md](directories.md) for the
+lookup and enumeration contract. The syscall register
 convention is defined in the [native wrapper](../userspace/include/syscall.h).
 Normal output targets the owning space's TTY; diagnostic output targets the
 kernel log, which goes to the Caelum TTY and serial.

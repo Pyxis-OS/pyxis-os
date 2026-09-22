@@ -1,6 +1,6 @@
 # Processes, capabilities and the first userspace ABI
 
-Status: the console-and-file ABI below is implemented.
+Status: console, file and read-only directory capabilities are implemented.
 The broader process and resource model remains a working draft alongside the
 [spaces draft](spaces.md). Startup delivery, console and file CALL operations,
 and handle close are implemented, including the complete userspace example.
@@ -10,42 +10,24 @@ for TTY output; the separate kernel-log syscall remains available for diagnostic
 The [worklist](wip/process-capability-abi.md) tracks the focused tasks and
 handoffs for this first milestone.
 
-## First program
+## Current programs
 
-Use one small program to work through the userspace interface and kernel
-ownership together: print a greeting, read the contents of a supplied file,
-write those contents to the console, then exit.
+Hello receives output through a named resource and an application directory
+through the `app` startup scheme binding. It lists that directory, looks up and
+lists `share`, then opens `hello.txt` with READ and prints it through the console.
+Lookup returns owned handles, which hello closes after use. File reads use
+explicit offsets and never introduce a shared seek position. See
+[the directory contract](directories.md) for rights, cursor behavior and lifetime.
 
-The launcher resolves the file through the existing boot-archive reader and
-grants a capability to an immutable file containing its bytes. The program
-receives these two resources:
-
-| Startup role | Object | Rights |
-| --- | --- | --- |
-| Output | The space's console | `WRITE` |
-| Content | A read-only initrd file | `READ` |
-
-This example needs no filesystem root, path lookup operation or VFS semantics.
-The [filesystem draft](vfs.md) remains separate. The boot archive is a source of
-bytes, not a decision about how applications will eventually discover files.
-
-The hello program:
-
-1. Look up its named output and content resources through libpyxis.
-2. Write a greeting, handling errors and any partial write.
-3. Query the file size and read at explicit byte offsets into a stack buffer.
-4. Write the returned bytes, advance the offset, and repeat until EOF, checking
-   that the counts agree with the immutable file's size.
-5. Attempt to close both handles even after an I/O error, then exit with a
-   success or failure status. The kernel releases any handles left open.
-
-An explicit read offset avoids introducing a shared seek position when handles
-are later duplicated or passed between processes.
+The endpoint example retains its directly supplied read-only content file. Its
+client copies that capability to the server, which prints the file and returns
+the byte count. These examples exercise directory discovery and explicit grant
+transfer independently; neither needs userspace path resolution yet.
 
 ## Objects, capabilities and handles
 
-An object is the underlying resource: a console, file, memory allocation or
-endpoint. A capability grants particular operations on that object. A handle
+An object is the underlying resource: a console, file, directory, memory
+allocation or endpoint. A capability grants particular operations on that object. A handle
 is an opaque, process-local value naming an entry in the process's capability
 table. The kernel entry holds the object reference and rights; userspace cannot
 gain rights by changing the handle value.
@@ -105,12 +87,11 @@ names may alias a handle; close each owned handle once. Missing resources are
 omitted, and lookup returns HANDLE_INVALID. Closing a handle does not update the
 immutable snapshot, so a later lookup can return its stale value.
 
-Scheme roots have their own name/handle table. The working-directory chain runs
-from the permitted navigation boundary to the current directory, optionally
-accompanied by a descriptive display path. Directory objects are not implemented
-yet: preparation currently rejects nonempty roots or working-directory context.
-The native accessors therefore return no directory resources for current programs.
-Actual directory type validation and traversal belong to the filesystem tasks.
+Scheme roots have their own name/handle table. Preparation checks that each root
+is an installed directory capability and that root names are nonempty and unique.
+Hello receives the read-only application root under `app`; other programs receive
+only their explicit named grants. No lookup right is added by the startup binding.
+The working-directory chain remains empty pending task 5's path helpers.
 
 The launcher supplies argument strings, including argv[0] when present; neither
 the kernel nor startup parses a command line. Zero arguments are valid and still
@@ -132,7 +113,8 @@ Its return value goes to exit. Programs use
 [the startup helpers](../userspace/include/startup.h) instead of decoding the
 record. The boot launcher supplies named output/content/endpoint grants as needed,
 each program's filename as argv[0], and an OS_NAME environment entry. Hello uses
-its arguments and environment in its greeting, then reads its content capability.
+its arguments and environment in its greeting, then discovers its content through
+its application directory.
 
 ## First operation shapes
 
@@ -212,8 +194,8 @@ a process are later decisions.
 The ownership walkthrough for the example is:
 
 1. The launcher creates a process in a space and loads its program and stack.
-2. It installs references to the space's console and the selected archive file,
-   restricted to the proposed rights, and fills the startup record.
+2. It installs references to the space's console and the selected directory,
+   file or endpoint, restricted to the requested rights, and fills startup data.
 3. Once setup succeeds, it makes the initial task runnable. Earlier failures
    unwind the new address space, table entries and references.
 4. Calls resolve handles through the current process, check object type and
@@ -271,12 +253,12 @@ storage. Object destruction may follow in the next reaping pass; independent
 kernel or process references keep shared resources alive. The
 [capability interface](../include/kernel/object/capability.h) and
 [object lifetime interface](../include/kernel/object/object.h) define the contracts.
-Both concrete console and file objects use this lifetime model.
+Console, file, directory and endpoint objects use this lifetime model.
 
 CALL resolves the handle once, obtains its object and rights, then captures the
 message tag from userspace. A small switch on object type checks the protocol
-and selects the console, file or endpoint handler. Each handler checks the operation,
-required rights, exact payload size and user buffers before acting. Tag reads
+and selects the console, file, directory or endpoint handler. Each handler checks
+the operation, required rights, exact payload size and user buffers before acting. Tag reads
 can fail before operation/rights checks. A mismatched protocol or unsupported
 operation returns BAD_OPERATION; a supported operation with insufficient rights
 returns DENIED. No operation callback table or registration framework is involved.
@@ -285,8 +267,8 @@ Object lifetime, capability tables and the concrete handlers live in
 `kernel/object/`, with corresponding headers under `include/kernel/object/`.
 Protocols stay in shared `include/abi/` headers. Console and file operations
 complete within the kernel; endpoint calls may suspend the task until a userspace
-peer replies. Dynamic protocol discovery, directory operations, file mutation
-and framebuffer protocols remain separate future work.
+peer replies. Directory lookup can block for capability-table growth. Dynamic
+protocol discovery, file mutation and framebuffer protocols remain later work.
 
 ### Implemented console calls
 
@@ -329,13 +311,14 @@ entries still open, while the space keeps its own console reference.
 The file object and protocol replace the previous immutable blob interface.
 The kernel and all userspace consumers use file names and rights directly;
 there is no second object type or compatibility wrapper. This slice provides
-only READ, size and explicit-offset reads, without directory lookup or mutation.
+only READ, size and explicit-offset reads. Discovery belongs to the directory
+protocol; file mutation remains later work.
 
 The [file object](../include/kernel/object/file.h) copies an immutable archive-file
 view into a reference-counted wrapper. It borrows the bytes and the archive's
-kernel-lifetime mapping. The launcher installs a READ capability and releases
-its temporary reference; close or process cleanup eventually frees the wrapper
-on the BSP. Neither path frees archive frames or removes the archive mapping.
+kernel-lifetime mapping. Directory entries and installed handles retain their own
+references; the launcher releases its temporary construction reference after
+installation. Last-reference retirement frees the wrapper on the BSP. Neither path frees archive frames or removes the archive mapping.
 
 The [file layouts](../include/abi/file.h) define size and offset-read operations.
 Both require the file's READ right. Size ignores payload fields after capturing
