@@ -22,16 +22,31 @@ static void destroy_directory(struct kernel_object *object)
   kfree(directory);
 }
 
-struct directory_object *directory_create(void)
+struct directory_object *directory_create(enum directory_backing backing)
 {
   KASSERT(arch_cpu_index() == 0);
+  KASSERT(backing == DIRECTORY_INITRD || backing == DIRECTORY_RAM);
   struct directory_object *directory = kmalloc(sizeof(*directory));
   if (!directory) {
     return NULL;
   }
-  *directory = (struct directory_object){.generation = 1};
+  *directory = (struct directory_object){.backing = backing, .generation = 1};
+  atomic_init(&directory->locked, false);
   object_init(&directory->object, OBJECT_DIRECTORY, destroy_directory);
   return directory;
+}
+
+/* IF=0. Never allocate, sleep or acquire scheduler locks while held. */
+static void lock_directory(struct directory_object *directory)
+{
+  while (atomic_exchange_explicit(&directory->locked, true, memory_order_acquire)) {
+    __asm__ volatile("pause");
+  }
+}
+
+static void unlock_directory(struct directory_object *directory)
+{
+  atomic_store_explicit(&directory->locked, false, memory_order_release);
 }
 
 static uint64_t entry_kind(const struct directory_entry *entry)
@@ -98,41 +113,34 @@ static struct directory_entry *find_user_entry(struct directory_object *director
   return NULL;
 }
 
-static struct syscall_result lookup(struct directory_object *directory, uint64_t rights,
-    const struct directory_lookup_request *request, uintptr_t reply_address,
+static enum call_status check_child_request(uint64_t rights,
+    const struct directory_child_request *request, uintptr_t reply_address,
     size_t reply_capacity)
 {
-  struct directory_lookup_reply reply;
-  if (reply_capacity < sizeof(reply) ||
+  if (reply_capacity < sizeof(struct directory_child_reply) ||
       (request->kind != DIRECTORY_KIND_FILE && request->kind != DIRECTORY_KIND_DIRECTORY)) {
-    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    return CALL_BAD_REQUEST;
   }
-  if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  if (!user_buffer_check(reply_address, sizeof(struct directory_child_reply), USER_BUFFER_WRITE)) {
+    return CALL_BAD_BUFFER;
   }
   uint64_t allowed = request->kind == DIRECTORY_KIND_DIRECTORY ? rights :
                      ((rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0);
   if (request->rights & ~allowed) {
-    return (struct syscall_result){CALL_DENIED, 0};
+    return CALL_DENIED;
   }
-  enum call_status status = check_name(request->name, request->name_length);
-  if (status != CALL_OK) {
-    return (struct syscall_result){status, 0};
-  }
-  struct directory_entry *entry = find_user_entry(directory, request->name, request->name_length);
-  if (!entry) {
-    return (struct syscall_result){CALL_NOT_FOUND, 0};
-  }
-  if (entry_kind(entry) != request->kind) {
-    return (struct syscall_result){CALL_WRONG_TYPE, 0};
-  }
+  return check_name(request->name, request->name_length);
+}
 
-  /* The immutable directory owns this child throughout table growth. No
-   * capability entry pointer or user-name pointer is kept across the loan. */
+/* Caller retains object while a table-growth loan may block. No directory
+ * lock or capability-entry pointer survives the wait. */
+static enum call_status install_child(struct kernel_object *object, uint64_t rights,
+                                       handle_t *handle)
+{
   struct capability_table *table = &process_current()->capabilities;
   enum capability_result result;
   for (;;) {
-    result = capability_insert(table, entry->object, request->rights, &reply.handle);
+    result = capability_insert(table, object, rights, handle);
     if (result != CAP_FULL) {
       break;
     }
@@ -141,12 +149,122 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
       break;
     }
   }
-  if (result != CAP_OK) {
-    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-    return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+  if (result == CAP_OK) {
+    return CALL_OK;
   }
-  /* All destinations were checked before insertion. Private mappings remain
-   * stable while blocked, and the task resumes on its own root before copying. */
+  KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
+  return result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+}
+
+static struct syscall_result lookup(struct directory_object *directory, uint64_t rights,
+    const struct directory_child_request *request, uintptr_t reply_address,
+    size_t reply_capacity)
+{
+  enum call_status status = check_child_request(rights, request, reply_address, reply_capacity);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+
+  struct kernel_object *object = NULL;
+  lock_directory(directory);
+  struct directory_entry *entry = find_user_entry(directory, request->name, request->name_length);
+  if (!entry) {
+    status = CALL_NOT_FOUND;
+  } else if (entry_kind(entry) != request->kind) {
+    status = CALL_WRONG_TYPE;
+  } else if (!object_retain(entry->object)) {
+    status = CALL_LIMIT;
+  } else {
+    object = entry->object;
+  }
+  unlock_directory(directory);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+
+  struct directory_child_reply reply;
+  status = install_child(object, request->rights, &reply.handle);
+  object_release(object);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  /* Checked private mappings stay writable while the sole task is blocked. */
+  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
+static bool name_exists(struct directory_object *directory, const struct directory_entry *candidate)
+{
+  for (struct directory_entry *entry = directory->first; entry; entry = entry->next) {
+    if (entry->name_length == candidate->name_length &&
+        !memcmp(entry->name, candidate->name, candidate->name_length)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static struct syscall_result create_child(struct directory_object *directory, uint64_t rights,
+    const struct directory_child_request *request, uintptr_t reply_address,
+    size_t reply_capacity)
+{
+  enum call_status status = check_child_request(rights, request, reply_address, reply_capacity);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  if (directory->backing != DIRECTORY_RAM) {
+    return (struct syscall_result){CALL_READ_ONLY, 0};
+  }
+  if (request->name_length > SIZE_MAX - sizeof(struct directory_entry) - 1) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+
+  lock_directory(directory);
+  bool exists = find_user_entry(directory, request->name, request->name_length) != NULL;
+  unlock_directory(directory);
+  if (exists) {
+    return (struct syscall_result){CALL_ALREADY_EXISTS, 0};
+  }
+
+  struct directory_entry *entry = task_allocate_directory_entry(request->kind, request->name_length);
+  if (!entry) {
+    return (struct syscall_result){CALL_NO_MEMORY, 0};
+  }
+  /* The BSP never reads an AP's user address or private syscall stack. Its
+   * allocation is unpublished; this task fills the already-validated name. */
+  KASSERT(copy_from_user(entry->name, request->name, request->name_length));
+  entry->name[entry->name_length] = 0;
+  struct directory_child_reply reply;
+  status = install_child(entry->object, request->rights, &reply.handle);
+  if (status != CALL_OK) {
+    task_discard_directory_entry(entry);
+    return (struct syscall_result){status, 0};
+  }
+
+  lock_directory(directory);
+  /* Another CPU may have created this name while allocation/table growth
+   * slept. Publish only after both the entry and returned handle are ready. */
+  if (name_exists(directory, entry)) {
+    status = CALL_ALREADY_EXISTS;
+  } else if (directory->generation == UINT64_MAX || directory->entry_count == SIZE_MAX) {
+    status = CALL_LIMIT;
+  } else {
+    if (directory->last) {
+      directory->last->next = entry;
+    } else {
+      directory->first = entry;
+    }
+    directory->last = entry;
+    ++directory->entry_count;
+    ++directory->generation;
+  }
+  unlock_directory(directory);
+
+  if (status != CALL_OK) {
+    KASSERT(capability_close(&process_current()->capabilities, reply.handle) == CAP_OK);
+    task_discard_directory_entry(entry);
+    return (struct syscall_result){status, 0};
+  }
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
@@ -171,13 +289,16 @@ static struct syscall_result enumerate(struct directory_object *directory,
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
 
+  struct directory_entry *entry = NULL;
+  lock_directory(directory);
   if (request->cursor.generation && request->cursor.generation != directory->generation) {
     reply.outcome = DIRECTORY_CHANGED;
   } else {
     if (request->cursor.position > directory->entry_count) {
+      unlock_directory(directory);
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
-    struct directory_entry *entry = directory->first;
+    entry = directory->first;
     for (size_t i = 0; i < request->cursor.position; ++i) {
       entry = entry->next;
     }
@@ -190,12 +311,18 @@ static struct syscall_result enumerate(struct directory_object *directory,
       if (request->capacity < reply.name_size) {
         reply.outcome = DIRECTORY_BUFFER_TOO_SMALL;
       } else {
-        KASSERT(copy_to_user(request->name, entry->name, reply.name_size));
         reply.outcome = DIRECTORY_ENTRY;
         reply.cursor.generation = directory->generation;
         ++reply.cursor.position;
       }
     }
+  }
+  unlock_directory(directory);
+  /* Entries cannot be removed yet. The caller's directory reference keeps the
+   * selected name alive after unlocking; a later mutation invalidates the next
+   * cursor rather than mixing two generations in this reply. */
+  if (reply.outcome == DIRECTORY_ENTRY) {
+    KASSERT(copy_to_user(request->name, entry->name, reply.name_size));
   }
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
@@ -213,6 +340,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   case DIRECTORY_ENUMERATE:
     required = DIRECTORY_RIGHT_ENUMERATE;
     break;
+  case DIRECTORY_CREATE:
+    required = DIRECTORY_RIGHT_CREATE;
+    break;
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
@@ -228,6 +358,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (operation == DIRECTORY_LOOKUP) {
     return lookup(directory, rights, &request.lookup, reply_address, reply_capacity);
+  }
+  if (operation == DIRECTORY_CREATE) {
+    return create_child(directory, rights, &request.create, reply_address, reply_capacity);
   }
   return enumerate(directory, &request.enumerate, reply_address, reply_capacity);
 }

@@ -28,11 +28,13 @@ struct initial_program {
   const char *name;
   uintptr_t entry;
   size_t cpu_index;
-  handle_t output, content, endpoint, application_root;
+  handle_t output, content, endpoint, application_root, home;
 };
 
 /* Shared read-only application namespace retains the tree across process exit. */
 static struct directory_object *application_root;
+/* One shared RAM namespace, retained until shutdown regardless of process exit. */
+static struct directory_object *home_root;
 
 static bool load_program(const char *name, size_t cpu_index,
                          struct initial_program *program)
@@ -77,6 +79,10 @@ void user_launch_initial(void)
   struct initial_program *client = &programs[2];
 
   if (initrd_tree_create(&application_root) != INITRD_OK) {
+    goto fail;
+  }
+  home_root = directory_create(DIRECTORY_RAM);
+  if (!home_root) {
     goto fail;
   }
   if (!load_program("hello.pxe", client_cpu, hello) ||
@@ -145,14 +151,25 @@ void user_launch_initial(void)
     if (program->endpoint != HANDLE_INVALID) {
       resources[count++] = (struct process_binding){"endpoint", program->endpoint};
     }
-    const struct process_binding roots[] = {{"app", program->application_root}};
+    result = capability_install(&program->process->capabilities, &home_root->object,
+        DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES |
+        DIRECTORY_RIGHT_CREATE, &program->home);
+    if (result != CAP_OK) {
+      goto fail;
+    }
+    struct process_binding roots[2];
+    size_t root_count = 0;
+    if (program->application_root != HANDLE_INVALID) {
+      roots[root_count++] = (struct process_binding){"app", program->application_root};
+    }
+    roots[root_count++] = (struct process_binding){"home", program->home};
     const char *arguments[] = {program->name};
     const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
     const struct process_startup startup = {
       .resources = resources,
       .resource_count = count,
       .roots = roots,
-      .root_count = program->application_root != HANDLE_INVALID ? 1 : 0,
+      .root_count = root_count,
       .working_directories = &program->application_root,
       .working_directory_count = program->application_root != HANDLE_INVALID ? 1 : 0,
       .working_path = program->application_root != HANDLE_INVALID ? "app://" : NULL,
@@ -184,6 +201,10 @@ fail:
   if (application_root) {
     object_release(&application_root->object);
     application_root = NULL;
+  }
+  if (home_root) {
+    object_release(&home_root->object);
+    home_root = NULL;
   }
   while (object_reap_pending()) {
     object_reap();

@@ -13,10 +13,11 @@ handoffs for this first milestone.
 ## Current programs
 
 Hello receives output through a named resource and an application directory
-through the `app` startup scheme binding. It lists that directory, looks up and
+through the `app` startup scheme binding, plus a shared RAM root under `home`. It lists that directory, looks up and
 lists `share`, then opens `hello.txt` with READ and prints it through the console.
 The [path helpers](paths.md) compose lookups and retain working-directory handles.
 Hello reads through an explicit scheme path and again after changing directory.
+It also creates and rediscovers a directory and empty file under `home`.
 Lookup returns owned handles, which hello closes after use. File reads use
 explicit offsets and never introduce a shared seek position. See
 [the directory contract](directories.md) for rights, cursor behavior and lifetime.
@@ -92,8 +93,8 @@ immutable snapshot, so a later lookup can return its stale value.
 Scheme roots have their own name/handle table. Preparation checks that each root
 is an installed directory capability and that root names are nonempty, unique
 and contain neither ':' nor '/'.
-Hello receives the read-only application root under `app`; other programs receive
-only their explicit named grants. No lookup right is added by the startup binding.
+Hello receives the read-only application root under `app`. All three boot
+programs receive explicit grants to the shared RAM root under `home`. No lookup right is added by the startup binding.
 Startup also copies a launcher-ordered chain of installed directory handles,
 boundary first and current last, plus an optional descriptive path. The kernel
 validates their types without inferring ancestry or granting parent access. Hello
@@ -276,7 +277,8 @@ Object lifetime, capability tables and the concrete handlers live in
 Protocols stay in shared `include/abi/` headers. Console and file operations
 complete within the kernel; endpoint calls may suspend the task until a userspace
 peer replies. Directory lookup can block for capability-table growth. Dynamic
-protocol discovery, file mutation and framebuffer protocols remain later work.
+protocol discovery, file writes and framebuffer protocols remain later work.
+Directory CREATE also waits for BSP entry allocation or disposal.
 
 ### Implemented console calls
 
@@ -307,7 +309,7 @@ The [shared syscall header](../include/abi/syscall.h) and
 reply length for CALL; the diagnostic log call preserves its previous value.
 No endpoint queues or general object-operation table are involved.
 
-Hello closes both supplied handles after printing through the
+Hello closes its startup grants after printing through the
 [handle wrapper](../userspace/include/handle.h). The native close wrapper accounts
 for the RDX result; the one-argument syscall wrapper cannot be used for
 close because it assumes RDX is preserved. Closing leaves the startup record
@@ -319,8 +321,8 @@ entries still open, while the space keeps its own console reference.
 The file object and protocol replace the previous immutable blob interface.
 The kernel and all userspace consumers use file names and rights directly;
 there is no second object type or compatibility wrapper. This slice provides
-only READ, size and explicit-offset reads. Discovery belongs to the directory
-protocol; file mutation remains later work.
+only READ, size and explicit-offset reads. Discovery and empty RAM file creation
+belong to the directory protocol; file writes and resizing remain later work.
 
 The [file object](../include/kernel/object/file.h) copies an immutable archive-file
 view into a reference-counted wrapper. It borrows the bytes and the archive's
@@ -336,6 +338,9 @@ capacity ignores the destination address. Counts are clipped to the remaining
 file bytes; offsets at or beyond the end return zero without forming a source
 pointer. The reply is written last, so it overwrites any overlapping data bytes.
 Request storage may overlap destinations because its fields are captured first.
+
+Empty RAM file wrappers use the same read/size handlers and return size zero
+and EOF without forming a data pointer. They have no data allocation yet.
 
 The file is not mapped directly into userspace, has no shared seek position,
 and supports no mutation or lookup operations. The

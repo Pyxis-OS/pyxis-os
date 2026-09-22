@@ -5,6 +5,7 @@
 #include <kernel/object/capability.h>
 
 struct task_wait;
+struct directory_entry;
 
 /* Current user task, IF=0. Prepare its wait record before publishing. The
  * record lives in task metadata, whose heap mapping survives stack reuse.
@@ -20,6 +21,13 @@ void task_wait_wake(struct task_wait *wait);
  * BSP and blocks until growth completes. No AP allocation or remote stack
  * access. Existing handles/references survive even when allocation fails. */
 enum capability_result task_grow_capabilities(void);
+
+/* Current user task, IF=0, no held locks. A focused BSP service allocates or
+ * discards an unpublished RAM entry. Requests live in task metadata, never on
+ * a remote private stack. Allocation returns NULL on exhaustion. The caller
+ * fills the name and either publishes the entry or returns it for disposal. */
+struct directory_entry *task_allocate_directory_entry(uint64_t kind, size_t name_length);
+void task_discard_directory_entry(struct directory_entry *entry);
 
 /* BSP only, after boot_start_cpus(), VM and heap initialization. */
 void task_init(void);

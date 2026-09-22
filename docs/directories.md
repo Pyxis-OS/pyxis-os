@@ -1,10 +1,12 @@
 # Directory capabilities
 
-The initial filesystem view is a read-only tree built from the boot initrd on
-the BSP before userspace starts. The launcher retains its root for the kernel
-lifetime and grants hello that directory as the startup scheme root `app`.
-The directory protocol uses the existing tagged CALL interface; it needs no
-userspace filesystem server, mount table or kernel path parser.
+The launcher retains two trees for the kernel lifetime: read-only `app`, built
+from the boot initrd, and initially empty `home`, backed by RAM. Hello receives
+both roots; client and server also receive explicit grants to the same `home`
+object. RAM contents survive process exit and disappear on reboot.
+
+Both use the existing tagged CALL interface. There is no userspace filesystem
+server, mount table, block device or kernel path parser.
 
 ## Tree and lifetime
 
@@ -27,10 +29,12 @@ the BSP and queues their children for retirement without recursive C calls.
 Failure during tree construction releases the unpublished root through this
 same path. The archive's bytes survive file-object destruction.
 
-The current tree is immutable after publication. Lookup can therefore retain a
-borrowed child pointer while its task blocks for capability-table growth: its
-live directory reference keeps the entry and child alive. Writable backings
-must revisit that synchronization before allowing concurrent entry changes.
+The initrd is immutable; RAM directories are append-only. A per-directory lock
+protects entry links, count and generation. Lookup acquires a child reference
+under that lock, then releases the lock before handle installation or BSP table
+growth. Destruction runs only after the last owner releases the directory.
+Names and child pointers never change once published. Removal and rename remain
+later work and must revisit enumeration's borrowed-name lifetime.
 
 ## Lookup
 
@@ -44,12 +48,13 @@ kernel compares bounded chunks without allocating on an AP.
 | --- | --- |
 | LOOKUP | Resolve a child name |
 | ENUMERATE | List names and kinds, without acquiring child handles |
-| READ_FILES | Grant READ on a file found through LOOKUP |
+| READ_FILES | Grant READ on a file found through LOOKUP or CREATE |
+| CREATE | Add a directory or empty file to RAM backing |
 
 Returned directory rights must be a subset of the parent's granted directory
 rights. Returned file READ requires READ_FILES. Zero-rights grants are allowed.
 Enumeration is not required to read a known name. The initial protocol exposes
-no creation, removal or write rights.
+no removal or file-write rights. CREATE is separate from LOOKUP and ENUMERATE.
 
 Successful lookup installs a new owned handle in the caller's table. Missing
 names return NOT_FOUND, an unexpected kind returns WRONG_TYPE, and excessive
@@ -79,11 +84,53 @@ inside a successful reply so a short buffer can carry its required size without
 changing the CALL error convention. Name and reply destinations must be disjoint;
 request storage may overlap outputs because the kernel captures the request first.
 
-The cursor includes a generation checked by the handler. The initrd never
-mutates; a mismatched generation reports CHANGED. A later writable backing must
-advance its generation without reuse when entries change and synchronize the
-check with enumeration. This contract provides no snapshot, and callers should
-not retry forever if another process keeps changing a directory.
+Generation checks and selection of one entry occur under the directory lock.
+The handler then copies the selected immutable name with the caller's directory
+reference keeping it alive. A successful creation increments the generation;
+mutation after selection affects the next enumeration call. Even an old END
+cursor reports CHANGED after a new entry is published. A short-buffer reply
+keeps the original cursor, including zero when no generation has been acquired.
+
+Generation never wraps: exhausted generation or entry-count space rejects
+creation with LIMIT. Failed creation does not advance it. This contract provides
+no snapshot, and callers should not retry forever if another process keeps
+changing a directory.
+
+## Exclusive creation
+
+CREATE takes the same counted single component, kind and requested rights as
+LOOKUP, and returns a newly owned handle. It requires CREATE on the parent.
+Returned directory rights are still a subset of the parent; file READ still
+requires READ_FILES. CREATE alone does not imply permission to read the child.
+Existing names return ALREADY_EXISTS, regardless of kind; nothing is opened,
+replaced or truncated. There is no recursive parent creation.
+
+The handler checks all user buffers and authority before staging an entry. An
+initrd directory rejects mutation with READ_ONLY even if its grant includes
+CREATE; a grant without CREATE fails the authority check with DENIED first.
+A new RAM file has no data allocation, size zero and immediate EOF through the
+existing file protocol. File writes and resizing are the next task.
+
+[RAM entry preparation](../include/kernel/fs/ramfs.h) runs on the BSP through a
+focused request recorded in task metadata. The requester waits with no directory
+lock held. The BSP allocates an unpublished entry and child; it never dereferences
+a remote private stack or user address. The resumed caller copies its validated
+name into that allocation and installs the provisional child handle, using the
+existing BSP table-growth request if needed.
+
+Under the directory lock, CREATE rechecks the name and generation capacity, then
+links the complete entry and increments the generation. That is the publication
+point. Nothing fallible remains afterward: the caller's sole task owns stable,
+already-validated reply mappings. A competing creator returns ALREADY_EXISTS,
+closes its provisional handle and asks the BSP to discard its unpublished entry.
+Failed staging also discards partial ownership. Existing handles and names remain
+valid; a failed request may have grown its own capability table.
+
+There is no allocator call or wait under a directory lock. The BSP request queue
+participates in scheduler wake/preemption decisions, including single-CPU use.
+Disposal releases the child through normal object retirement and frees the entry
+on the BSP. Closing a successful creation handle never deletes the name: its
+parent keeps an independent child reference.
 
 ## Userspace example
 
@@ -99,3 +146,8 @@ The endpoint client retains a directly supplied file capability for its existing
 transfer example. [Path helpers](paths.md) now compose these component operations
 for explicit schemes and relative paths, retaining working-directory handles
 without an ambient fallback root.
+
+Hello also creates `home://notes` and its empty file, then looks both up through
+independent grants and lists them. All creation and lookup handles are closed;
+the retained home tree owns the entries after the program exits. No file data is
+written yet.

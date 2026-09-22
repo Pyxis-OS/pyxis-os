@@ -2,6 +2,7 @@
 #include <arch/smp.h>
 #include <arch/user.h>
 #include <kernel/log.h>
+#include <kernel/fs/ramfs.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
@@ -29,6 +30,11 @@ struct task {
   struct task *next;
   struct task *growth_next;
   enum capability_result growth_result;
+  struct task *directory_next;
+  struct directory_entry *directory_entry;
+  uint64_t directory_kind;
+  size_t directory_name_length;
+  bool directory_discard;
   enum task_kind kind;
   struct process *process; /* Owned by a user task; NULL for a kernel task. */
   uintptr_t kernel_stack;
@@ -55,6 +61,7 @@ struct scheduler {
 static struct scheduler *schedulers;
 static struct task *completed_head;
 static struct task *growth_head, *growth_tail;
+static struct task *directory_head, *directory_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
 
@@ -193,6 +200,65 @@ static void grow_requested_tables(void)
     task->growth_result = capability_grow(&task->process->capabilities);
     task_wait_wake(&task->wait_record);
     /* Waking returns table ownership; the task may immediately exit. */
+    task = next;
+  }
+}
+
+static void queue_directory_request(struct task *task, struct task_wait *wait)
+{
+  lock_queues();
+  task->directory_next = NULL;
+  if (directory_tail) {
+    directory_tail->directory_next = task;
+  } else {
+    directory_head = task;
+  }
+  directory_tail = task;
+  unlock_queues();
+  task_wait_sleep(wait);
+}
+
+struct directory_entry *task_allocate_directory_entry(uint64_t kind, size_t name_length)
+{
+  struct task_wait *wait = task_wait_prepare();
+  struct task *task = wait->task;
+  task->directory_kind = kind;
+  task->directory_name_length = name_length;
+  task->directory_discard = false;
+  task->directory_entry = NULL;
+  queue_directory_request(task, wait);
+  struct directory_entry *entry = task->directory_entry;
+  task->directory_entry = NULL;
+  return entry;
+}
+
+void task_discard_directory_entry(struct directory_entry *entry)
+{
+  struct task_wait *wait = task_wait_prepare();
+  struct task *task = wait->task;
+  task->directory_discard = true;
+  task->directory_entry = entry;
+  queue_directory_request(task, wait);
+}
+
+static void service_directory_requests(void)
+{
+  lock_queues();
+  struct task *task = directory_head;
+  directory_head = directory_tail = NULL;
+  unlock_queues();
+
+  while (task) {
+    struct task *next = task->directory_next;
+    if (task->directory_discard) {
+      ramfs_discard_entry(task->directory_entry);
+      task->directory_entry = NULL;
+    } else {
+      task->directory_entry = ramfs_allocate_entry(task->directory_kind,
+          task->directory_name_length);
+    }
+    task_wait_wake(&task->wait_record);
+    /* All result storage is published before waking; task may now exit. */
     task = next;
   }
 }
@@ -398,6 +464,7 @@ void kernel_task_sleep(uint64_t ticks)
   for (;;) {
     if (cpu_index == 0) {
       grow_requested_tables();
+      service_directory_requests();
       reap_completed();
       object_reap();
       wake_sleepers();
@@ -482,7 +549,8 @@ void task_preempt(bool user_mode)
 
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
-    (arch_cpu_index() == 0 && (completed_head != NULL || growth_head != NULL));
+    (arch_cpu_index() == 0 &&
+     (completed_head != NULL || growth_head != NULL || directory_head != NULL));
   unlock_queues();
   if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;

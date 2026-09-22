@@ -6,10 +6,16 @@
 
 struct initrd_file;
 
-/* Initrd is the only backing currently supported. Reads use explicit offsets;
- * neither the object nor its capabilities carry a seek position. */
+enum file_backing {
+  FILE_INITRD,
+  FILE_RAM,
+};
+
+/* Reads use explicit offsets; neither objects nor handles carry a seek position.
+ * RAM files are empty until writes/resizing are implemented. */
 struct file_object {
   struct kernel_object object;
+  enum file_backing backing;
   const void *data;
   size_t size;
 };
@@ -19,6 +25,9 @@ struct file_object {
  * archive owns the backing for the kernel lifetime; destruction frees only
  * this wrapper, never the bytes, frames or mapping. */
 struct file_object *file_create_initrd(const struct initrd_file *view);
+
+/* BSP, IF=0. One owned reference to an empty RAM file, or NULL. */
+struct file_object *file_create_ram(void);
 
 /* Current process, IF=0. Caller holds a live reference and supplies its granted
  * rights and operation from a checked protocol tag. request_address/size

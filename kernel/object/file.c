@@ -19,8 +19,21 @@ struct file_object *file_create_initrd(const struct initrd_file *view)
     return NULL;
   }
   object_init(&file->object, OBJECT_FILE, destroy_file);
+  file->backing = FILE_INITRD;
   file->data = view->data;
   file->size = view->size;
+  return file;
+}
+
+struct file_object *file_create_ram(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  struct file_object *file = kmalloc(sizeof(*file));
+  if (!file) {
+    return NULL;
+  }
+  *file = (struct file_object){.backing = FILE_RAM};
+  object_init(&file->object, OBJECT_FILE, destroy_file);
   return file;
 }
 

@@ -74,6 +74,33 @@ Knowing a URI would not grant access. Namespace resolution and authorization
 must remain distinct, with the space's assigned resources determining access.
 Native relative paths, escaping and normalization rules remain open.
 
+## Application bundles
+
+A future application could be a bundle exposed as a directory under `app://`,
+containing its executable, private libraries, assets and defaults. The current
+use of `app://` for executable lookup could move to `bin://`, separating command
+names from installed application contents. These names remain provisional.
+
+For example, `app://editor/program.pxe` and `app://editor/assets/` could belong
+to one bundle, while `bin://editor` selects its declared entry point. A bundle
+could expose several commands. How those command names map to entry points is
+undecided; this does not require Unix symlinks or another executable copy.
+
+“Bundle” describes the application unit, not its storage format. It might be an
+archive, filesystem image or ordinary directory. The format, mounting/exposure
+mechanism and possible manifest remain open. The useful contract is a directory
+view with an identified entry point and application resources kept together.
+
+The launcher could grant the application a directory capability to its own
+bundle, so asset lookup would not depend on its installation name or working
+directory. Writable user data would live outside the read-only bundle view.
+Any manifest resource requests would remain subject to launcher authority;
+package metadata could not grant itself capabilities.
+
+This is a future direction, not a change to the first-shell milestone. Keep its
+current initrd tree and `app://` lookup while developing that milestone; no
+bundle format, namespace migration or packaging implementation is assigned here.
+
 ## Future compatibility subsystems
 
 Native Pyxis interfaces do not need POSIX semantics. In the distant future, a

@@ -24,6 +24,8 @@ enum call_status {
   CALL_LIMIT = 11,
   CALL_NOT_FOUND = 12,
   CALL_WRONG_TYPE = 13,
+  CALL_ALREADY_EXISTS = 14,
+  CALL_READ_ONLY = 15,
   CALL_STATUS_COUNT, /* Validation bound, not a result. */
 };
 

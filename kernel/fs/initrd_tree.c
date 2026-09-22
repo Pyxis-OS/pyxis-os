@@ -35,7 +35,7 @@ static enum initrd_result add_entry(struct directory_object *directory,
     struct file_object *child = file_create_initrd(file);
     object = child ? &child->object : NULL;
   } else {
-    struct directory_object *child = directory_create();
+    struct directory_object *child = directory_create(DIRECTORY_INITRD);
     object = child ? &child->object : NULL;
   }
   if (!object) {
@@ -121,7 +121,7 @@ enum initrd_result initrd_tree_create(struct directory_object **root)
     return INITRD_INVALID;
   }
   *root = NULL;
-  struct directory_object *directory = directory_create();
+  struct directory_object *directory = directory_create(DIRECTORY_INITRD);
   if (!directory) {
     return INITRD_NO_MEMORY;
   }
