@@ -11,12 +11,25 @@ enum initrd_result {
   INITRD_UNSUPPORTED,
   INITRD_NO_MEMORY,
   INITRD_NOT_FOUND,
+  INITRD_END,
 };
 
 struct initrd_file {
   const void *data;
   size_t size;
 };
+
+struct initrd_entry {
+  const char *name;
+  size_t name_length;
+  struct initrd_file file;
+  bool directory;
+};
+
+/* Start offset at zero; reuse only offsets returned by this iterator. All
+ * views borrow archive storage. Returns INITRD_END at/after the trailer.
+ * No allocation or path interpretation; clears *entry unless returning OK. */
+enum initrd_result initrd_next(size_t *offset, struct initrd_entry *entry);
 
 /* Once on the BSP, IF=0, after VM initialization and before AP startup.
  * Map and validate one uncompressed newc archive with a TRAILER!!! terminator.
