@@ -41,7 +41,7 @@ gain rights by changing the handle value.
 
 Different processes may hold different handles and rights to the same object.
 Rights are defined by the object's protocol: `CONSOLE_RIGHT_WRITE` authorizes
-console output; file READ authorizes reads, WRITE authorizes writes/resizing,
+console output and `CONSOLE_RIGHT_READ` authorizes terminal input; file READ authorizes reads, WRITE authorizes writes/resizing,
 and either permits size queries. Both
 currently use bit 0, with different meanings. The capability table stores the
 mask without imposing global READ/WRITE meanings; installation rejects bits
@@ -154,6 +154,8 @@ rejected. Operation numbers are local to each protocol and may overlap.
 | Operation | Authority | Payload fields, in order | Reply field |
 | --- | --- | --- | --- |
 | Console write | `CONSOLE_RIGHT_WRITE` | Source user address, byte length | Bytes written |
+| Console read | `CONSOLE_RIGHT_READ` | Destination user address, capacity | Bytes read |
+| Console size | Console READ or WRITE | Unused | Columns, rows |
 | File read at offset | `FILE_RIGHT_READ` | Byte offset, destination user address, capacity | Bytes read |
 | File size | File READ or WRITE | Unused | File byte size |
 | File write at offset | `FILE_RIGHT_WRITE` | Byte offset, source user address, length | Bytes written |
@@ -161,12 +163,13 @@ rejected. Operation numbers are local to each protocol and may overlap.
 
 Send the complete protocol message structure, including unused union storage:
 `console_message` is 32 bytes and `file_message` is 40 bytes. Both start with the
-16-byte tag. Sizes must match exactly. The file size operation ignores payload
+16-byte tag. Sizes must match exactly. The size operations ignore payload
 fields, but the complete message must be readable. Initialize unused storage to
 zero; the wrappers do this. The shared headers assert sizes and payload offsets.
-Operations with a reply need at least 8 bytes of capacity; success writes one
-8-byte field and returns 8 in `RDX`. The transferred data count is in that field,
-not in `RDX`. RESIZE returns zero reply bytes and ignores the reply buffer.
+Console SIZE needs a 16-byte reply for its two fields. The other replies above
+contain one 8-byte field. `RDX` reports reply bytes; the transferred data count
+is a field in the reply, not `RDX`. RESIZE returns zero reply bytes and ignores
+the reply buffer.
 Close removes a valid handle from the caller's table and releases its reference.
 It requires no access rights on that handle. Invalid and already-closed handles
 return the invalid-handle status; both success and failure return zero in RDX.
@@ -301,7 +304,7 @@ startup role. Process cleanup releases its grant while the space retains the
 console, TTY and framebuffer. The object header's immutable type tag keeps an
 operation from treating another object kind as a console.
 
-The console handler requires WRITE and captures the fixed request into kernel
+The WRITE handler requires WRITE and captures the fixed request into kernel
 storage. It validates the entire source range and the eight reply bytes actually
 written before any output.
 Extra reply capacity is unused. A zero-length source is not dereferenced, but
@@ -316,6 +319,28 @@ overlap reply and source storage must account for that overwrite before retrying
 The userspace console wrapper checks status, reply size and progress.
 `console_write_all()` repeats partial writes for an explicit byte count;
 `console_print()` uses it for strings.
+
+Hello also receives a separate READ-only grant named `input`, referring to the
+same space console. READ validates its entire destination and count reply before
+consuming bytes, then sleeps if input is empty. It returns up to 256 available
+bytes per call, without echo, editing or EOF. Zero capacity returns immediately,
+even without a keyboard, and does not acknowledge input loss. Nonempty reads
+return UNAVAILABLE if keyboard initialization failed. INPUT_LOST reports and
+acknowledges discarded input; no data or count reply is written on that result.
+See [keyboard input](keyboard.md) for mapping and overflow behavior.
+
+Readers share a stream and acquire read ownership FIFO. Ownership survives
+sleeping for input; later readers cannot steal a wakeup or overtake the owner.
+The short input lock protects the queue and wait links, with interrupts disabled;
+no user copy or sleep occurs under it. Wait records live in shared task metadata.
+The BSP input producer detaches a wait record before waking it. Read ownership
+is independent of the output lock. Foreground ownership is cooperative: a parent
+must stop reading while its child uses the same console.
+
+SIZE requires either READ or WRITE and returns current character columns/rows,
+excluding the session tab bar. Dimensions are fixed by the space's TTY at boot;
+there is no resize event. Libpyxis `console_read()` and `console_size()` preserve
+native call statuses. No ABI/schema version bump is needed.
 
 The [shared syscall header](../include/abi/syscall.h) and
 [console layouts](../include/abi/console.h) define the active slice. RDX carries
