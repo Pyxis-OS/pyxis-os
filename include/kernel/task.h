@@ -6,6 +6,8 @@
 
 struct task_wait;
 struct directory_entry;
+struct file_object;
+struct file_wait;
 
 /* Current user task, IF=0. Prepare its wait record before publishing. The
  * record lives in task metadata, whose heap mapping survives stack reuse.
@@ -28,6 +30,14 @@ enum capability_result task_grow_capabilities(void);
  * fills the name and either publishes the entry or returns it for disposal. */
 struct directory_entry *task_allocate_directory_entry(uint64_t kind, size_t name_length);
 void task_discard_directory_entry(struct directory_entry *entry);
+
+/* Current user task, IF=0. The file queue uses this task-owned record until it
+ * detaches and wakes the waiter. One wait per task; no private-stack pointers. */
+struct file_wait *task_prepare_file_wait(void);
+
+/* Current user task, IF=0, no spinlocks held. Lend exclusive file operation
+ * ownership to the BSP to replace/release backing; return it after completion. */
+bool task_replace_file_buffer(struct file_object *file, size_t capacity);
 
 /* BSP only, after boot_start_cpus(), VM and heap initialization. */
 void task_init(void);

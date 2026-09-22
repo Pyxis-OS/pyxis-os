@@ -49,12 +49,14 @@ kernel compares bounded chunks without allocating on an AP.
 | LOOKUP | Resolve a child name |
 | ENUMERATE | List names and kinds, without acquiring child handles |
 | READ_FILES | Grant READ on a file found through LOOKUP or CREATE |
+| WRITE_FILES | Grant WRITE on a file found through LOOKUP or CREATE |
 | CREATE | Add a directory or empty file to RAM backing |
 
 Returned directory rights must be a subset of the parent's granted directory
-rights. Returned file READ requires READ_FILES. Zero-rights grants are allowed.
-Enumeration is not required to read a known name. The initial protocol exposes
-no removal or file-write rights. CREATE is separate from LOOKUP and ENUMERATE.
+rights. Returned file READ requires READ_FILES; WRITE requires WRITE_FILES.
+Neither implies the other. Zero-rights grants are allowed. Enumeration is not
+required to read a known name. There is no removal operation. CREATE is separate
+from LOOKUP and ENUMERATE; granting WRITE cannot make initrd backing mutable.
 
 Successful lookup installs a new owned handle in the caller's table. Missing
 names return NOT_FOUND, an unexpected kind returns WRONG_TYPE, and excessive
@@ -101,7 +103,8 @@ changing a directory.
 CREATE takes the same counted single component, kind and requested rights as
 LOOKUP, and returns a newly owned handle. It requires CREATE on the parent.
 Returned directory rights are still a subset of the parent; file READ still
-requires READ_FILES. CREATE alone does not imply permission to read the child.
+requires READ_FILES, and WRITE requires WRITE_FILES. CREATE alone does not imply
+permission to read or modify the child.
 Existing names return ALREADY_EXISTS, regardless of kind; nothing is opened,
 replaced or truncated. There is no recursive parent creation.
 
@@ -109,7 +112,8 @@ The handler checks all user buffers and authority before staging an entry. An
 initrd directory rejects mutation with READ_ONLY even if its grant includes
 CREATE; a grant without CREATE fails the authority check with DENIED first.
 A new RAM file has no data allocation, size zero and immediate EOF through the
-existing file protocol. File writes and resizing are the next task.
+file protocol. A WRITE grant permits subsequent writes and resizing; see the
+[file contract](processes.md#implemented-file-calls).
 
 [RAM entry preparation](../include/kernel/fs/ramfs.h) runs on the BSP through a
 focused request recorded in task metadata. The requester waits with no directory
@@ -147,7 +151,8 @@ transfer example. [Path helpers](paths.md) now compose these component operation
 for explicit schemes and relative paths, retaining working-directory handles
 without an ambient fallback root.
 
-Hello also creates `home://notes` and its empty file, then looks both up through
-independent grants and lists them. All creation and lookup handles are closed;
-the retained home tree owns the entries after the program exits. No file data is
-written yet.
+Hello also creates a directory and file under `home`, then looks both up through
+independent grants and lists them. It writes and truncates through the creation
+handle, which has WRITE only, then reads through a READ-only lookup handle.
+All creation and lookup handles are closed; the retained home tree owns the
+entries and file contents after the program exits.

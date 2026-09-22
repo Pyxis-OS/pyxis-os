@@ -153,7 +153,7 @@ void user_launch_initial(void)
     }
     result = capability_install(&program->process->capabilities, &home_root->object,
         DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES |
-        DIRECTORY_RIGHT_CREATE, &program->home);
+        DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES, &program->home);
     if (result != CAP_OK) {
       goto fail;
     }

@@ -7,6 +7,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/object.h>
+#include <kernel/object/file.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/user.h>
@@ -35,6 +36,11 @@ struct task {
   uint64_t directory_kind;
   size_t directory_name_length;
   bool directory_discard;
+  struct file_wait file_wait;
+  struct task *file_next;
+  struct file_object *file;
+  size_t file_capacity;
+  bool file_result;
   enum task_kind kind;
   struct process *process; /* Owned by a user task; NULL for a kernel task. */
   uintptr_t kernel_stack;
@@ -62,6 +68,7 @@ static struct scheduler *schedulers;
 static struct task *completed_head;
 static struct task *growth_head, *growth_tail;
 static struct task *directory_head, *directory_tail;
+static struct task *file_head, *file_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
 
@@ -259,6 +266,52 @@ static void service_directory_requests(void)
     }
     task_wait_wake(&task->wait_record);
     /* All result storage is published before waking; task may now exit. */
+    task = next;
+  }
+}
+
+struct file_wait *task_prepare_file_wait(void)
+{
+  struct task_wait *wait = task_wait_prepare();
+  struct file_wait *record = &wait->task->file_wait;
+  *record = (struct file_wait){.wait = wait};
+  return record;
+}
+
+bool task_replace_file_buffer(struct file_object *file, size_t capacity)
+{
+  struct task_wait *wait = task_wait_prepare();
+  struct task *task = wait->task;
+  task->file = file;
+  task->file_capacity = capacity;
+
+  lock_queues();
+  task->file_next = NULL;
+  if (file_tail) {
+    file_tail->file_next = task;
+  } else {
+    file_head = task;
+  }
+  file_tail = task;
+  unlock_queues();
+
+  task_wait_sleep(wait);
+  task->file = NULL;
+  return task->file_result;
+}
+
+static void service_file_requests(void)
+{
+  lock_queues();
+  struct task *task = file_head;
+  file_head = file_tail = NULL;
+  unlock_queues();
+
+  while (task) {
+    struct task *next = task->file_next;
+    task->file_result = file_replace_buffer(task->file, task->file_capacity);
+    task_wait_wake(&task->wait_record);
+    /* The requester owns the file again and may immediately exit. */
     task = next;
   }
 }
@@ -465,6 +518,7 @@ void kernel_task_sleep(uint64_t ticks)
     if (cpu_index == 0) {
       grow_requested_tables();
       service_directory_requests();
+      service_file_requests();
       reap_completed();
       object_reap();
       wake_sleepers();
@@ -550,7 +604,8 @@ void task_preempt(bool user_mode)
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
-     (completed_head != NULL || growth_head != NULL || directory_head != NULL));
+     (completed_head != NULL || growth_head != NULL || directory_head != NULL ||
+      file_head != NULL));
   unlock_queues();
   if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;
