@@ -249,7 +249,7 @@ not duplicated here as a second ABI definition.
   redesign. Depends on 2. Done when a real userspace consumer obtains, uses and
   releases backing, and process exit reclaims any remaining regions.
 
-- [ ] **9. Allocation and foundational libc.** Build malloc/free and required
+- [x] **9. Allocation and foundational libc.** Build malloc/free and required
   allocation helpers over a suitable userspace allocator, recording dependency
   and license choices if reused. Add the C memory/string, formatting and
   environment functions actually needed by subsequent tasks. Keep runtime
@@ -603,5 +603,43 @@ baseline and memory/completion/retirement queues were empty. Physical-memory and
 metadata exhaustion unwinding were code-reviewed, not forced. No tests, fault
 injection or boot automation were added; no schema version changed.
 
-Task 9 remains unstarted. Discuss the userspace allocator choice, dependency and
-license if applicable, and the first libc functions before implementation.
+Task 9 is complete (assistant). The userspace library separately compiles the
+existing pinned BSD-3-Clause TLSF allocator. Each process retains a private
+memory-service handle and obtains pools lazily, with a 64 KiB minimum and no
+fixed pool-count limit. malloc/calloc/realloc preserve 16-byte alignment, check
+size arithmetic and report exhaustion through errno. Free blocks are reusable;
+pools remain mapped until exit. Failed realloc preserves the old block, and
+shrinking retains capacity. These tradeoffs are in `docs/technical-debt.md`.
+
+Libc owns C entry/exit and builds as a separate target archive. Native startup
+validation and binding initialization remain allocation-free; libpyxis retains
+native operations and their status results. The initial C subset provides memory
+operations, string lengths/comparisons/search/duplication, snprintf/vsnprintf,
+getenv over immutable startup values, and process-local errno. Formatting supports
+integer/string conversions, width, precision and integer length modifiers;
+unsupported formats fail explicitly. No streams, floating-point formatting,
+environment mutation or exit handlers yet. Runtime contracts live beside the
+headers and in `docs/userspace.md`.
+
+Hello now allocates file buffers through libc, frees them after use, formats its
+greeting and reads environment through getenv. Its path workspace remains live
+until exit. Client uses bounded integer formatting for the service reply count.
+The kernel ABI and schema versions are unchanged.
+
+Validation: ordinary image builds completed without warnings; one- and four-CPU
+KVM boots ran all three programs through exit 0 and address-space release.
+Framebuffer inspection showed file output and the formatted client byte count.
+Manual four-CPU TCG/GDB inspection confirmed aligned pool growth, calloc zeroing,
+moving realloc content preservation, overflow rejection with the old allocation
+intact, string duplication/search, overlapping memmove, environment lookup, and
+formatting truncation, integer extrema, width/precision and count overflow.
+Unsupported formatting returned EINVAL.
+
+Allocation still worked after hello closed its original memory grant. Exit
+reclaimed four retained pools, including a live allocation, and physical-frame
+usage returned to its pre-launch baseline. Request/completion queues and object
+retirement were empty. Physical-memory exhaustion and missing-grant handling were
+reviewed, not forced. No tests, fault injection or boot automation were added.
+
+Task 10 remains unstarted. Discuss completion result contents and the initial
+observation/wait authority before implementing process completion objects.

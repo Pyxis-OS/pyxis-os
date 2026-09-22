@@ -9,10 +9,11 @@ converter. Each program has a directory and an explicit target in the
 kernel builds and `HOSTCC` for the converter. Outputs live under `build/`.
 
 The native wrappers build into `build/userspace/libpyxis.a`; use
-`make -C userspace libpyxis` to build just the library. Every program links the
-shared startup object explicitly, then its own code and the archive. The linker
-selects the referenced library objects, including the native C startup routine.
-This library does not provide libc.
+`make -C userspace libpyxis` to build just the library. The target C library builds separately into
+`build/userspace/libc.a` (`make -C userspace libc`). Every program links libc
+startup explicitly, then its code and both archives; no host runtime is linked.
+Libpyxis owns native operations and startup accessors; libc owns C entry/exit,
+allocation and the initial C support routines.
 
 To convert an already linked executable:
 
@@ -54,13 +55,15 @@ context, within a 64 KiB budget including page padding. Resource/environment
 metadata is read-only; argv and its strings occupy separate writable pages.
 Neither part is executable.
 
-The shared entry initializes libpyxis and calls `main(int argc, char **argv)`,
+The libc entry validates and initializes the native startup snapshot without
+heap allocation, prepares the allocator, and calls `main(int argc, char **argv)`,
 then exits with main's return value. Use
 [startup_resource() and the other native accessors](../userspace/include/startup.h)
 to find supplied handles and environment values. Lookup borrows an existing
 handle and never duplicates it. Missing resource names return HANDLE_INVALID;
 missing environment values return NULL, while an empty value is an empty string.
-The runtime requires no malloc or libc. Hello receives an `app` directory root
+`getenv` borrows these same immutable values; environment mutation is not
+implemented. Hello receives an `app` directory root
 and a working-directory chain starting at that root. The
 [path context](paths.md) retains its own copies of these handles. All three
 programs also receive grants to one shared RAM-backed `home` root and the
@@ -95,8 +98,7 @@ The [file wrappers](../userspace/include/file.h) query size, read/write at expli
 offsets and resize RAM files. They preserve native error statuses and check reply
 lengths/counts. Writes complete in full or leave the file unchanged; gaps and
 newly grown ranges read as zero. A short read is allowed and zero bytes with
-nonzero capacity means EOF. Hello acquires a small read buffer through its memory
-capability and releases it after each file; buffer size does not depend on file
+nonzero capacity means EOF. Hello uses `malloc` for a small read buffer and `free` after each file; buffer size does not depend on file
 size, and content need not be NUL-terminated. It checks that EOF and transferred counts agree with the queried size.
 
 The [handle wrapper](../userspace/include/handle.h) releases the calling process's
@@ -127,6 +129,33 @@ a private kernel-entry stack. Allocation, submission and reclamation stay on the
 while tasks can run on their assigned AP. See the
 [task interface](../include/kernel/user.h) for the ownership contract and
 [smp.md](smp.md) for CPU selection and cross-CPU handoff rules.
+
+## Foundational libc
+
+Headers under [userspace/libc/include](../userspace/libc/include) define the
+implemented subset: allocation, byte memory operations, string length/comparison/
+search/duplication, bounded integer/string formatting and environment lookup.
+`snprintf`/`vsnprintf` report the full required length and terminate a nonempty
+destination even when truncated. Their header lists supported formats; floating
+point, wide characters, streams and locale support are not implemented.
+`errno` is process-local today because there is only one thread per process.
+Native libpyxis calls continue to return native statuses without setting it.
+
+The allocator separately compiles the project's pinned BSD-3-Clause TLSF source.
+It retains its own MANAGE copy of the named startup memory grant, independent of
+application handle close. A missing grant or failed copy leaves allocation
+unavailable (`ENOMEM`) but still permits a program that needs no heap to run.
+No backing is acquired until allocation needs it. Pools start at 64 KiB and grow
+to suit larger requests, without a fixed pool count. Allocations have at least
+16-byte alignment. Overflow/exhaustion return NULL; failed `realloc` preserves
+the old allocation. Zero-sized allocations return NULL, and this libc defines
+`realloc(p, 0)` to free p and return NULL.
+
+`free` returns blocks to TLSF. Pools remain mapped until kernel process cleanup;
+see [the retention tradeoff](technical-debt.md#retained-userspace-heap-pools).
+Hello leaves its path workspace live until exit, while reusing freed file
+buffers. Allocator assertions remain enabled and terminate the affected process
+after allocation-free diagnostic logging.
 
 ## Switching and cleanup
 
