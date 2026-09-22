@@ -57,7 +57,9 @@ kernel ABI. Scratch grants are released on every return.
 rights. This includes `.` and a bare scheme root. Existing ancestors are copied
 without widening their grants; new intermediate lookups request LOOKUP and only
 the rights needed to obtain the requested result. Reading a known file never
-requires ENUMERATE. Resolving a path does not change the context.
+requires ENUMERATE. READ and WRITE request independent READ_FILES/WRITE_FILES
+authority through intermediate directories. Resolving a path does not change
+the context.
 
 `path_change()` prepares an entire replacement chain in scratch storage before
 closing the old one. Missing names, denied rights, insufficient storage or a

@@ -236,7 +236,7 @@ not duplicated here as a second ABI definition.
   Depends on 4. Done when created entries are discoverable through another
   authorized handle and read-only backing rejects mutation.
 
-- [ ] **7. RAM file writes and resizing.** Add explicit-offset writes and resize,
+- [x] **7. RAM file writes and resizing.** Add explicit-offset writes and resize,
   define writes beyond EOF and contents of grown ranges, and handle partial
   progress and allocation failure. Serialize file mutation without holding locks
   across sleeping BSP allocation requests. Depends on 6. Done when userspace can
@@ -524,5 +524,41 @@ completion and retirement queues were empty. Concurrent-creator conflict handlin
 and allocation-failure unwinding were reviewed, not forced. No tests, fault
 injection or boot automation were added; no schema version changed.
 
-Task 7 remains unstarted. Discuss RAM file storage, growth/shrink behavior,
-writes beyond EOF and partial-write semantics before implementation.
+Task 7 is complete (assistant). RAM files support explicit-offset WRITE and
+RESIZE with independent WRITE authority; SIZE accepts READ or WRITE. Directory
+WRITE_FILES controls grants, including through native path resolution. Initrd
+backing remains immutable. Libpyxis preserves native file error statuses.
+
+Writes and resize are all-or-nothing. Gaps and grown ranges read as zero,
+truncated bytes cannot reappear, and zero-byte writes do not extend the file.
+Contiguous buffers grow geometrically with an exact-size fallback. Nonzero
+shrinks retain capacity; resize to zero releases it. The storage tradeoff is
+recorded in `docs/technical-debt.md`.
+
+Per-file FIFO operation ownership serializes readers and writers across BSP
+backing requests without a held spinlock. Request/wait records live in task
+metadata; user copies remain on the caller CPU. The normal hello consumer
+writes and truncates through a WRITE-only handle, then rereads through an
+independently looked-up READ grant. The home tree retains those contents after
+process exit.
+
+Validation: ordinary image builds completed without warnings. Normal one- and
+four-CPU KVM boots ran all three programs through exit 0 and address-space
+release; framebuffer inspection showed the RAM-file greeting after truncation.
+Manual four-CPU TCG/GDB inspection confirmed gap zeroing, shrink/regrowth within
+retained capacity, growth from empty, release on resize to zero, write-only SIZE,
+rights/buffer/overflow rejection and immutable initrd backing. A resize beyond
+the allocator's supported size returned NO_MEMORY with old contents, size and
+capacity intact. BSP replacement ran with the spinlock clear. GDB-held operation
+ownership let file calls from two CPUs queue and sleep; release handed ownership
+to each in FIFO order and normal program execution completed afterward.
+
+After process exit, physical-frame usage returned to its pre-launch baseline;
+request and retirement queues were empty. The home tree retained its file data
+with one parent-owned reference, no active operation and no waiters. Physical
+memory exhaustion and the exact-size allocation fallback were code-reviewed,
+not forced. No tests, fault injection or boot automation were added, and no
+schema version changed.
+
+Task 8 remains unstarted. Discuss the native memory authority, allocation/release
+contract and BSP VM ownership before implementing private userspace backing.

@@ -69,9 +69,10 @@ Hello obtains named output and its `app` scheme root, uses its argument vector
 and environment in its greeting, then enumerates the root and its `share` child.
 It reads the text file first through an explicit scheme path, then relatively
 after changing into `share`, closing each owned handle even after an I/O error.
-Hello then creates a RAM directory and empty file, rediscovers them through
-independent grants, and enumerates their names. See [directories.md](directories.md)
-for lookup, enumeration and exclusive creation.
+Hello then creates a RAM directory and file, rediscovers them through independent
+grants, and enumerates their names. It writes text and truncates an appended tail
+through a WRITE-only handle, then prints the contents through a READ-only handle.
+See [directories.md](directories.md) for lookup, enumeration and exclusive creation.
 The syscall register
 convention is defined in the [native wrapper](../userspace/include/syscall.h).
 Normal output targets the owning space's TTY; diagnostic output targets the
@@ -89,9 +90,11 @@ checked against the handle's object type, so the same bit may mean console
 WRITE or file READ. Kernel and userspace are rebuilt together against the
 shared ABI headers. Older layouts are not supported.
 
-The [file wrappers](../userspace/include/file.h) query size and read at explicit
-offsets. They check reply lengths and counts; a short read is allowed and zero
-bytes with nonzero capacity means EOF. Hello uses a fixed stack buffer, so it
+The [file wrappers](../userspace/include/file.h) query size, read/write at explicit
+offsets and resize RAM files. They preserve native error statuses and check reply
+lengths/counts. Writes complete in full or leave the file unchanged; gaps and
+newly grown ranges read as zero. A short read is allowed and zero bytes with
+nonzero capacity means EOF. Hello uses a fixed stack buffer, so it
 does not allocate storage proportional to the file size or require NUL-terminated
 content. It checks that EOF and transferred counts agree with the queried size.
 

@@ -1,6 +1,6 @@
 # Processes, capabilities and the first userspace ABI
 
-Status: console, file and read-only directory capabilities are implemented.
+Status: console, initrd/RAM file and directory capabilities are implemented.
 The broader process and resource model remains a working draft alongside the
 [spaces draft](spaces.md). Startup delivery, console and file CALL operations,
 and handle close are implemented, including the complete userspace example.
@@ -17,7 +17,8 @@ through the `app` startup scheme binding, plus a shared RAM root under `home`. I
 lists `share`, then opens `hello.txt` with READ and prints it through the console.
 The [path helpers](paths.md) compose lookups and retain working-directory handles.
 Hello reads through an explicit scheme path and again after changing directory.
-It also creates and rediscovers a directory and empty file under `home`.
+It also creates and rediscovers a directory and file under `home`, writes and
+truncates the file, then reads it through an independent grant.
 Lookup returns owned handles, which hello closes after use. File reads use
 explicit offsets and never introduce a shared seek position. See
 [the directory contract](directories.md) for rights, cursor behavior and lifetime.
@@ -37,7 +38,8 @@ gain rights by changing the handle value.
 
 Different processes may hold different handles and rights to the same object.
 Rights are defined by the object's protocol: `CONSOLE_RIGHT_WRITE` authorizes
-console output; `FILE_RIGHT_READ` authorizes file reads and size queries. Both
+console output; file READ authorizes reads, WRITE authorizes writes/resizing,
+and either permits size queries. Both
 currently use bit 0, with different meanings. The capability table stores the
 mask without imposing global READ/WRITE meanings; installation rejects bits
 unsupported by the target object type. The message never supplies authority.
@@ -150,15 +152,18 @@ rejected. Operation numbers are local to each protocol and may overlap.
 | --- | --- | --- | --- |
 | Console write | `CONSOLE_RIGHT_WRITE` | Source user address, byte length | Bytes written |
 | File read at offset | `FILE_RIGHT_READ` | Byte offset, destination user address, capacity | Bytes read |
-| File size | `FILE_RIGHT_READ` | Unused | File byte size |
+| File size | File READ or WRITE | Unused | File byte size |
+| File write at offset | `FILE_RIGHT_WRITE` | Byte offset, source user address, length | Bytes written |
+| File resize | `FILE_RIGHT_WRITE` | New byte size | None |
 
 Send the complete protocol message structure, including unused union storage:
 `console_message` is 32 bytes and `file_message` is 40 bytes. Both start with the
 16-byte tag. Sizes must match exactly. The file size operation ignores payload
 fields, but the complete message must be readable. Initialize unused storage to
 zero; the wrappers do this. The shared headers assert sizes and payload offsets.
-Each reply needs at least 8 bytes of capacity; success writes one 8-byte field and returns
-8 in `RDX`. The transferred data count is in that field, not in `RDX`.
+Operations with a reply need at least 8 bytes of capacity; success writes one
+8-byte field and returns 8 in `RDX`. The transferred data count is in that field,
+not in `RDX`. RESIZE returns zero reply bytes and ignores the reply buffer.
 Close removes a valid handle from the caller's table and releases its reference.
 It requires no access rights on that handle. Invalid and already-closed handles
 return the invalid-handle status; both success and failure return zero in RDX.
@@ -168,8 +173,9 @@ Other references to the object remain valid. A last release uses the existing
 BSP retirement path, so closing on an AP does not allocate or destroy objects.
 
 For a nonzero read capacity, successful zero-byte reads at or beyond the file's
-end indicate EOF. Reads can return fewer bytes than requested. Writes report
-actual progress; a nonempty write cannot succeed with zero progress. A transfer
+end indicate EOF. Reads can return fewer bytes than requested. Console writes
+report actual progress; a nonempty write cannot succeed with zero progress.
+RAM-file writes complete in full or leave the file unchanged. A transfer
 with zero data length succeeds with a zero count and does not dereference its
 data address. Request and reply validation still apply. Partial progress is
 success with the actual count; errors report no transferred bytes.
@@ -277,8 +283,9 @@ Object lifetime, capability tables and the concrete handlers live in
 Protocols stay in shared `include/abi/` headers. Console and file operations
 complete within the kernel; endpoint calls may suspend the task until a userspace
 peer replies. Directory lookup can block for capability-table growth. Dynamic
-protocol discovery, file writes and framebuffer protocols remain later work.
-Directory CREATE also waits for BSP entry allocation or disposal.
+protocol discovery and framebuffer protocols remain later work. Directory CREATE
+also waits for BSP entry allocation or disposal. File calls may wait behind
+another operation on the same file or for BSP backing allocation/release.
 
 ### Implemented console calls
 
@@ -318,35 +325,59 @@ entries still open, while the space keeps its own console reference.
 
 ### Implemented file calls
 
-The file object and protocol replace the previous immutable blob interface.
-The kernel and all userspace consumers use file names and rights directly;
-there is no second object type or compatibility wrapper. This slice provides
-only READ, size and explicit-offset reads. Discovery and empty RAM file creation
-belong to the directory protocol; file writes and resizing remain later work.
+The [file layouts](../include/abi/file.h) define SIZE, READ, WRITE and RESIZE.
+Reads and writes use explicit offsets; neither objects nor handles carry a seek
+position. READ requires READ authority; WRITE and RESIZE require WRITE without
+requiring READ. SIZE accepts either right. No lookup or append operation is
+implicit in a file call. Directory grants control which file rights can be
+obtained through LOOKUP/CREATE.
 
-The [file object](../include/kernel/object/file.h) copies an immutable archive-file
-view into a reference-counted wrapper. It borrows the bytes and the archive's
-kernel-lifetime mapping. Directory entries and installed handles retain their own
-references; the launcher releases its temporary construction reference after
-installation. Last-reference retirement frees the wrapper on the BSP. Neither path frees archive frames or removes the archive mapping.
+Initrd files borrow immutable archive bytes and their kernel-lifetime mapping.
+Last-reference retirement frees only their wrapper on the BSP. Mutation returns
+READ_ONLY even when a handle carries WRITE; lacking WRITE returns DENIED first.
+RAM files start empty and own their backing, which is freed with the wrapper on
+last-reference retirement. Directory entries and handles retain independent
+references, so closing all handles need not destroy a named RAM file.
 
-The [file layouts](../include/abi/file.h) define size and offset-read operations.
-Both require the file's READ right. Size ignores payload fields after capturing
-the complete message. Reads validate the full destination capacity
-and the actual reply bytes before writing anything, including at EOF. Zero
-capacity ignores the destination address. Counts are clipped to the remaining
-file bytes; offsets at or beyond the end return zero without forming a source
-pointer. The reply is written last, so it overwrites any overlapping data bytes.
-Request storage may overlap destinations because its fields are captured first.
+READ checks the full destination capacity and reply storage even at EOF. Zero
+capacity ignores the data address. Reads clip to the remaining bytes; offsets at
+or beyond EOF return zero without forming a data pointer. The reply is written
+last and wins over overlapping data. SIZE returns one serialized size observation,
+not a snapshot covering subsequent reads.
 
-Empty RAM file wrappers use the same read/size handlers and return size zero
-and EOF without forming a data pointer. They have no data allocation yet.
+WRITE checks offset/length overflow, the entire source and reply storage before
+mutation. Success reports the full requested count; failure leaves contents and
+logical size unchanged. A nonempty write beyond EOF zero-fills the gap. A
+zero-length write ignores the data address and does not extend the file, even
+at an offset beyond EOF. It still checks authority, backing and reply storage.
+RESIZE returns no reply bytes. Growth exposes zero-filled bytes; shrink discards
+the tail permanently, including when later growth reuses retained capacity.
 
-The file is not mapped directly into userspace, has no shared seek position,
-and supports no mutation or lookup operations. The
-[userspace wrappers](../userspace/include/file.h) check status, reply size and
-read counts, clearing output values on failure. Hello uses these wrappers to
-read the text asset in chunks and the console helper to finish partial writes.
+A RAM file uses one heap buffer, with geometric capacity growth and an exact-size
+retry if spare capacity cannot be allocated. Nonzero shrink retains capacity;
+resize to zero releases it. There is no protocol file-size ceiling beyond checked
+arithmetic and allocator limits. See [technical debt](technical-debt.md) for the
+memory-cost tradeoff.
+
+A short per-file spinlock protects operation ownership and a FIFO of waiters.
+Only the owner accesses bytes, size and capacity. It can lend that ownership to
+the BSP while blocked for backing replacement; no spinlock spans the wait.
+Other operations sleep and receive ownership directly in FIFO order. Waiters
+and allocation requests live in task metadata, never private syscall stacks.
+The BSP allocates, copies the old live prefix and frees the old buffer; failure
+keeps the old allocation. The requester then zeroes/copies bytes and publishes
+size before handing ownership on. Readers cannot observe an intermediate state.
+
+The current single-task/private-mapping contract keeps checked user sources and
+replies stable across waits. Only the resumed caller accesses them. Request
+metadata is captured before any data/reply write, including overlapping buffers.
+All fallible work precedes mutation. Shared user memory, task cancellation or
+multiple tasks per process would require revisiting these assumptions.
+
+[Libpyxis wrappers](../userspace/include/file.h) return native status for all four
+operations and validate reply sizes/counts; failure clears output values. Hello
+uses a WRITE-only creation grant and independently looks up a READ grant, writes
+text, appends then truncates a tail, and prints the retained contents.
 
 ### Implemented user-buffer access
 
