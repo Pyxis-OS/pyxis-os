@@ -1,7 +1,7 @@
 # Processes, capabilities and the first userspace ABI
 
-Status: console, initrd/RAM file, directory, private-memory and process-completion
-capabilities are implemented.
+Status: console, initrd/RAM file, directory, private-memory, process-completion
+and caller-scoped launcher capabilities are implemented.
 The broader process and resource model remains a working draft alongside the
 [spaces draft](spaces.md). Startup delivery, console and file CALL operations,
 and handle close are implemented, including the complete userspace example.
@@ -34,7 +34,7 @@ transfer independently. The endpoint exchange still uses directly supplied grant
 ## Objects, capabilities and handles
 
 An object is the underlying resource: a console, file, directory, memory
-service, process-control object or endpoint. A capability grants particular operations on that object. A handle
+service, launcher, process-control object or endpoint. A capability grants particular operations on that object. A handle
 is an opaque, process-local value naming an entry in the process's capability
 table. The kernel entry holds the object reference and rights; userspace cannot
 gain rights by changing the handle value.
@@ -239,7 +239,8 @@ and the handle's index range. Growth preserves slot indices and generations.
 Allocation failure leaves existing handles and reference ownership intact.
 
 `capability_grant()` copies a source grant into another exclusively owned table
-with equal or reduced rights. Both tables must still belong to the BSP launcher.
+with equal or reduced rights. BSP must exclusively own both tables, either
+during preparation or through a blocked caller's launch loan.
 The destination gains a reference; the source remains unchanged. Failure clears
 the output handle and leaves existing entries and references intact. This is a
 kernel setup operation, not a userspace transfer syscall.
@@ -254,9 +255,10 @@ task then lends its table to a BSP growth request and blocks; no other code
 may access it during that loan. The BSP grows it outside all queue/endpoint
 locks and returns ownership on wake. Existing handles, generations and object
 references survive growth. Allocation and handle-space exhaustion return
-errors without consuming the endpoint request. There is no general launcher
-access to submitted tables. The kernel result enum is separate from syscall
-status values.
+errors without consuming the endpoint request. Launch similarly lends only its
+caller's table for grant copying and installing the completion observer; no
+arbitrary access to another submitted process's table is permitted. The kernel
+result enum is separate from syscall status values.
 
 Objects have an atomic reference count and a destruction callback, with no
 global object registry or operation dispatch. The last release links the object
@@ -439,8 +441,8 @@ The control object contains no process pointer, so retaining a handle preserves
 only completion state, not execution memory. Closing the last observer before
 exit leaves execution alone. Unsubmitted preparation failures release their
 control object without a result; launch must not expose a live observer until
-preparation succeeds. There is no termination operation or userspace launcher
-in this task.
+preparation succeeds. There is no termination operation. The launcher below returns this same
+completion capability.
 
 Wait records live in permanent task metadata, never remote task stacks. The
 completion lock serializes registration and publication, with the lock order
@@ -449,10 +451,64 @@ detaches each waiter before waking it, and no lock spans a context switch.
 These rules depend on the existing one-task-per-process contract; external task
 cancellation would need to detach an outstanding wait before teardown.
 
-Client receives a named `server_process` grant. It finishes its endpoint exchange,
+Client receives a process-control handle from launching server. It finishes its endpoint exchange,
 closes the endpoint so server can exit, then waits and reports the result. A
 wait while retaining the open endpoint would leave server waiting for another
 request or closure.
+
+## Implemented userspace launch
+
+A launcher capability authorizes LAUNCH in the caller's space on its assigned
+CPU. It is a stateless caller-scoped service, like private-memory allocation;
+there is no target-space or CPU argument. Holding a launcher does not grant
+implicit access to files or other resources. A launcher can itself be delegated
+through an explicit grant, authorizing the recipient to launch in its own space.
+
+The [request](../include/abi/launcher.h) supplies a READ file handle for the P1F
+image, source-handle/right pairs, arguments, environment, named resources,
+scheme roots and working-directory context. Source grants are copied with equal
+or reduced rights. Bindings and working-directory entries refer to grant-list
+indices; repeated references share one child handle, while separate grant-list
+entries produce separate handles. No resources, roots, environment or launcher
+are inherited implicitly. The image handle is not passed unless listed.
+
+All nested addresses belong to the caller. Arrays, copied strings and alignment
+have a combined 64 KiB capture budget; the final startup region separately has
+the existing 64 KiB budget including page padding. Array counts and arithmetic
+are checked before copying. Names, duplicate bindings, directory types and
+startup layout use the existing startup validation. Empty arrays are ignored;
+working_path is optional and requires a nonempty directory chain. argv contains
+argc string addresses; the kernel adds the child's final NULL.
+
+The caller obtains staging storage from BSP, then captures all metadata on its
+own CPU/root. Source handles remain alive in its exclusively owned table while
+blocked. It acquires the file's existing operation ownership before lending the
+table and file to BSP. The image remains stable throughout validation and load:
+other reads/writes/resizes queue until loading releases ownership. No spinlock
+is held during loading, and no second whole-image snapshot is allocated. Later
+file changes cannot alter the child's copied image.
+
+BSP creates an inactive process and initial stack using the same helper as boot
+setup, installs explicit grants and prepares startup. It installs a WAIT observer
+in the parent's table before task submission; failure after installation closes
+that unpublished observer and destroys the child. Only successful submission
+makes the child runnable. The image operation is released before submission,
+and staging storage is freed before waking the caller. BSP never dereferences
+caller addresses or a remote task-stack request. Caller mappings are unchanged.
+
+Success returns one owned process-control handle. The child may run or exit
+before the parent resumes; the handle retains completion independently. Failure
+leaves no runnable child and preserves parent source grants. Handle-table growth
+may remain for reuse after failure. Invalid image/startup data uses BAD_REQUEST;
+invalid handles, denied rights, wrong image object type, bad user buffers and
+allocation exhaustion retain their native statuses.
+
+[Libpyxis](../userspace/include/launcher.h) exposes launcher_launch without heap
+allocation. The current client receives a launcher, a readable server image and
+both endpoint ends from boot setup. It launches server with output, endpoint
+and memory grants, closes its copies of preparation-only handles, then performs
+the existing exchange and completion wait. Server runs on client's CPU. Endpoint
+creation from userspace is separate work.
 
 ## Later operations and open decisions
 

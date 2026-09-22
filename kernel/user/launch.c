@@ -1,5 +1,5 @@
 #include <abi/file.h>
-#include <abi/process.h>
+#include <abi/launcher.h>
 #include <abi/memory.h>
 #include <abi/directory.h>
 #include <abi/console.h>
@@ -13,7 +13,7 @@
 #include <kernel/log.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/file.h>
-#include <kernel/object/process.h>
+#include <kernel/object/launcher.h>
 #include <kernel/object/memory.h>
 #include <kernel/object/console.h>
 #include <kernel/object/endpoint.h>
@@ -24,16 +24,13 @@
 #include <kernel/user/launch.h>
 #include <kernel/user/startup.h>
 
-#define INITIAL_STACK_BASE UINT64_C(0x800000)
-#define INITIAL_STACK_SIZE PAGE_SIZE
-
 struct initial_program {
   struct process *process;
   const char *name;
   uintptr_t entry;
   size_t cpu_index;
   handle_t output, content, endpoint, application_root, home, memory;
-  handle_t server_process;
+  handle_t launcher, server_image, server_endpoint;
 };
 
 /* Shared read-only application namespace retains the tree across process exit. */
@@ -48,18 +45,8 @@ static bool load_program(const char *name, size_t cpu_index,
   if (initrd_lookup(name, &image) != INITRD_OK) {
     return false;
   }
-  struct vm_space *space;
-  if (image_load(image.data, image.size, &space, &program->entry) != IMAGE_OK) {
-    return false;
-  }
-  if (vm_alloc_at(space, INITIAL_STACK_BASE, INITIAL_STACK_SIZE,
-        PAGE_USER | PAGE_WRITE) != MM_OK) {
-    KASSERT(vm_space_destroy(space) == MM_OK);
-    return false;
-  }
-  if (process_create(arch_cpu_at(cpu_index)->space, space,
-        &program->process) != MM_OK) {
-    KASSERT(vm_space_destroy(space) == MM_OK);
+  if (user_process_load(arch_cpu_at(cpu_index)->space, image.data, image.size,
+        &program->process, &program->entry) != MM_OK) {
     return false;
   }
   program->name = name;
@@ -77,12 +64,10 @@ void user_launch_initial(void)
 {
   KASSERT(arch_cpu_index() == 0);
   size_t client_cpu = arch_cpu_count() > 1 ? 1 : 0;
-  size_t server_cpu = arch_cpu_count() > 2 ? 2 : client_cpu;
-  struct initial_program programs[3] = {0};
-  struct kernel_object *memory = NULL;
+  struct initial_program programs[2] = {0};
+  struct kernel_object *memory = NULL, *launcher = NULL;
   struct initial_program *hello = &programs[0];
-  struct initial_program *server = &programs[1];
-  struct initial_program *client = &programs[2];
+  struct initial_program *client = &programs[1];
 
   if (initrd_tree_create(&application_root) != INITRD_OK) {
     goto fail;
@@ -96,7 +81,6 @@ void user_launch_initial(void)
     goto fail;
   }
   if (!load_program("hello.pxe", client_cpu, hello) ||
-      !load_program("server.pxe", server_cpu, server) ||
       !load_program("client.pxe", client_cpu, client)) {
     goto fail;
   }
@@ -128,11 +112,9 @@ void user_launch_initial(void)
   }
   result = capability_install(&client->process->capabilities, &caller->object,
       ENDPOINT_RIGHT_CALL, &client->endpoint);
-  handle_t service_grant = HANDLE_INVALID;
   if (result == CAP_OK) {
     result = capability_install(&client->process->capabilities, &service->object,
-        ENDPOINT_RIGHT_CALL | ENDPOINT_RIGHT_RECEIVE | ENDPOINT_RIGHT_REPLY,
-        &service_grant);
+        ENDPOINT_RIGHT_RECEIVE | ENDPOINT_RIGHT_REPLY, &client->server_endpoint);
   }
   object_release(&caller->object);
   object_release(&service->object);
@@ -140,30 +122,36 @@ void user_launch_initial(void)
     goto fail;
   }
 
-  /* Both tables are still private to the launcher. Attenuate a real source
-   * grant, then remove it before the client can run with service authority. */
-  result = capability_grant(&server->process->capabilities,
-      &client->process->capabilities, service_grant,
-      ENDPOINT_RIGHT_RECEIVE | ENDPOINT_RIGHT_REPLY, &server->endpoint);
-  KASSERT(capability_close(&client->process->capabilities, service_grant) == CAP_OK);
+  struct initrd_file server_image;
+  if (initrd_lookup("server.pxe", &server_image) != INITRD_OK) {
+    goto fail;
+  }
+  file = file_create_initrd(&server_image);
+  if (!file) {
+    goto fail;
+  }
+  result = capability_install(&client->process->capabilities, &file->object,
+      FILE_RIGHT_READ, &client->server_image);
+  object_release(&file->object);
   if (result != CAP_OK) {
     goto fail;
   }
-
-  result = capability_install(&client->process->capabilities, &server->process->control->object,
-      PROCESS_RIGHT_WAIT, &client->server_process);
-  if (result != CAP_OK) {
+  launcher = launcher_create();
+  if (!launcher || capability_install(&client->process->capabilities, launcher,
+        LAUNCHER_RIGHT_LAUNCH, &client->launcher) != CAP_OK) {
     goto fail;
   }
+  object_release(launcher);
+  launcher = NULL;
 
-  for (size_t i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < 2; ++i) {
     struct initial_program *program = &programs[i];
     result = capability_install(&program->process->capabilities, memory,
         MEMORY_RIGHT_MANAGE, &program->memory);
     if (result != CAP_OK) {
       goto fail;
     }
-    struct process_binding resources[5];
+    struct process_binding resources[7];
     size_t count = 0;
     resources[count++] = (struct process_binding){"output", program->output};
     resources[count++] = (struct process_binding){"memory", program->memory};
@@ -173,8 +161,10 @@ void user_launch_initial(void)
     if (program->endpoint != HANDLE_INVALID) {
       resources[count++] = (struct process_binding){"endpoint", program->endpoint};
     }
-    if (program->server_process != HANDLE_INVALID) {
-      resources[count++] = (struct process_binding){"server_process", program->server_process};
+    if (program->launcher != HANDLE_INVALID) {
+      resources[count++] = (struct process_binding){"launcher", program->launcher};
+      resources[count++] = (struct process_binding){"server_image", program->server_image};
+      resources[count++] = (struct process_binding){"server_endpoint", program->server_endpoint};
     }
     result = capability_install(&program->process->capabilities, &home_root->object,
         DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES |
@@ -209,10 +199,10 @@ void user_launch_initial(void)
   }
   object_release(memory);
   memory = NULL; /* Startup handles now own the stateless service. */
-  for (size_t i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < 2; ++i) {
     struct initial_program *program = &programs[i];
     if (user_task_create_on(program->cpu_index, program->process, program->entry,
-          INITIAL_STACK_BASE + INITIAL_STACK_SIZE) != MM_OK) {
+          USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE) != MM_OK) {
       goto fail;
     }
     program->process = NULL; /* Ownership transferred to its scheduler queue. */
@@ -220,10 +210,13 @@ void user_launch_initial(void)
   return;
 
 fail:
+  if (launcher) {
+    object_release(launcher);
+  }
   if (memory) {
     object_release(memory);
   }
-  for (size_t i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < 2; ++i) {
     if (programs[i].process) {
       KASSERT(process_destroy(programs[i].process) == MM_OK);
     }
