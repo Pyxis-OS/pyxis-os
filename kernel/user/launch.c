@@ -1,4 +1,4 @@
-#include <abi/blob.h>
+#include <abi/file.h>
 #include <abi/console.h>
 #include <abi/endpoint.h>
 #include <arch/cpu_local.h>
@@ -7,7 +7,7 @@
 #include <kernel/initrd.h>
 #include <kernel/log.h>
 #include <kernel/mm/vm.h>
-#include <kernel/object/blob.h>
+#include <kernel/object/file.h>
 #include <kernel/object/console.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/panic.h>
@@ -80,19 +80,19 @@ void user_launch_initial(void)
   if (initrd_lookup("hello.txt", &text) != INITRD_OK) {
     goto fail;
   }
-  struct blob_object *blob = blob_create(&text);
-  if (!blob) {
+  struct file_object *file = file_create_initrd(&text);
+  if (!file) {
     goto fail;
   }
   enum capability_result result = capability_install(&hello->process->capabilities,
-      &blob->object, BLOB_RIGHT_READ, &hello->content);
-  object_release(&blob->object);
+      &file->object, FILE_RIGHT_READ, &hello->content);
+  object_release(&file->object);
   if (result != CAP_OK) {
     goto fail;
   }
 
   result = capability_grant(&client->process->capabilities,
-      &hello->process->capabilities, hello->content, BLOB_RIGHT_READ, &client->content);
+      &hello->process->capabilities, hello->content, FILE_RIGHT_READ, &client->content);
   if (result != CAP_OK) {
     goto fail;
   }

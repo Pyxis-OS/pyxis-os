@@ -1,4 +1,4 @@
-#include <abi/blob.h>
+#include <abi/file.h>
 #include <abi/console.h>
 #include <abi/endpoint.h>
 #include <arch/smp.h>
@@ -14,8 +14,8 @@ bool object_rights_valid(enum object_type type, uint64_t rights)
   switch (type) {
   case OBJECT_CONSOLE:
     return !(rights & ~CONSOLE_RIGHT_WRITE);
-  case OBJECT_BLOB:
-    return !(rights & ~BLOB_RIGHT_READ);
+  case OBJECT_FILE:
+    return !(rights & ~FILE_RIGHT_READ);
   case OBJECT_ENDPOINT:
     return !(rights & ~(ENDPOINT_RIGHT_CALL | ENDPOINT_RIGHT_RECEIVE |
                        ENDPOINT_RIGHT_REPLY));

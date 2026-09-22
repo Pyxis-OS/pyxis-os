@@ -7,7 +7,7 @@
 
 enum object_type {
   OBJECT_CONSOLE = 1,
-  OBJECT_BLOB = 2,
+  OBJECT_FILE = 2,
   OBJECT_ENDPOINT = 3,
 };
 
