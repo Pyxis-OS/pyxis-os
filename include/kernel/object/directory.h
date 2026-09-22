@@ -4,6 +4,11 @@
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
 
+enum directory_backing {
+  DIRECTORY_INITRD,
+  DIRECTORY_RAM,
+};
+
 struct directory_entry {
   struct directory_entry *next;
   struct kernel_object *object; /* One owned child reference. */
@@ -11,11 +16,13 @@ struct directory_entry {
   char name[];
 };
 
-/* Constructed on the BSP and immutable once published. Entries own their child
- * objects; children do not reference parents. A child handle can outlive its
- * parent. Only the unpublished initrd tree builder modifies these fields. */
+/* Published trees are append-only. The lock protects links/count/generation;
+ * names and child pointers never change. Entries own child references; children
+ * do not retain parents. Only the unpublished initrd builder bypasses the lock. */
 struct directory_object {
   struct kernel_object object;
+  enum directory_backing backing;
+  atomic_bool locked;
   struct directory_entry *first, *last;
   size_t entry_count;
   uint64_t generation;
@@ -23,13 +30,15 @@ struct directory_object {
 
 /* BSP, IF=0. Return one owned reference to an empty directory, or NULL. Final
  * BSP destruction frees names/entries and retires owned children, without
- * recursing through the C stack. File bytes remain owned by the archive. */
-struct directory_object *directory_create(void);
+ * recursing through the C stack. Child files manage their own backing lifetime. */
+struct directory_object *directory_create(enum directory_backing backing);
 
 /* Current user task, IF=0, with a live reference and stable private mappings.
- * Lookup may block for BSP table growth, holding no locks. Immutable entries
- * and the caller's directory reference keep the selected child alive across
- * that wait. Revisit synchronization/lifetime before adding mutable backing. */
+ * Lookup retains the child before releasing the lock or waiting for BSP table
+ * growth. CREATE waits for BSP entry allocation/disposal with no locks held.
+ * Enumeration captures one result under the lock, then copies its immutable
+ * name while the caller's directory reference keeps the entry alive. Removal
+ * must revisit that name lifetime before allowing entries to be reclaimed. */
 struct syscall_result directory_call(struct directory_object *directory, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
