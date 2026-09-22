@@ -24,8 +24,9 @@ bool user_buffer_check(uintptr_t address, size_t bytes,
  * concurrent VM mutation. The copy itself never schedules. A blocking syscall
  * must keep the process alive, capture request metadata before side effects,
  * and resume its original task/root before copying checked sources/destinations.
- * Private input stays unchanged while its sole task sleeps. Keep IF=0 while
- * copying; other CPUs must never dereference these private user mappings.
+ * Private input stays unchanged while its sole task sleeps, except when that
+ * call explicitly releases its region. Such a call must not access it again.
+ * Keep IF=0 while copying; other CPUs must never dereference these mappings.
  * No fault recovery is attempted for broken kernel mapping/buffer invariants.
  * A syscall must check all request/reply/data buffers before its side effects;
  * capture request metadata with copy_from_user before interpreting it. */

@@ -1,3 +1,4 @@
+#include <abi/memory.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <arch/user.h>
@@ -5,6 +6,7 @@
 #include <kernel/fs/ramfs.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/mm/private.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/object.h>
 #include <kernel/object/file.h>
@@ -41,6 +43,11 @@ struct task {
   struct file_object *file;
   size_t file_capacity;
   bool file_result;
+  struct task *memory_next;
+  struct memory_region memory_region;
+  uint64_t memory_operation;
+  enum mm_result memory_result;
+  bool memory_pending; /* Awaiting scheduler publication after leaving the private root. */
   enum task_kind kind;
   struct process *process; /* Owned by a user task; NULL for a kernel task. */
   uintptr_t kernel_stack;
@@ -69,6 +76,7 @@ static struct task *completed_head;
 static struct task *growth_head, *growth_tail;
 static struct task *directory_head, *directory_tail;
 static struct task *file_head, *file_tail;
+static struct task *memory_head, *memory_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
 
@@ -316,6 +324,66 @@ static void service_file_requests(void)
   }
 }
 
+enum mm_result task_request_memory(uint64_t operation, struct memory_region *region)
+{
+  KASSERT(operation == MEMORY_ALLOCATE || operation == MEMORY_RELEASE);
+  struct task_wait *wait = task_wait_prepare();
+  struct task *task = wait->task;
+  KASSERT(!task->memory_pending);
+  task->memory_operation = operation;
+  task->memory_region = *region;
+  task->memory_pending = true;
+
+  /* Unlike heap requests, VM ownership cannot be lent while this CPU still
+   * runs on the private root. The scheduler publishes after the switch. */
+  task_wait_sleep(wait);
+  *region = task->memory_region;
+  return task->memory_result;
+}
+
+static void publish_memory_request(struct task *task)
+{
+  lock_queues();
+  KASSERT(task->wait == &task->wait_record && !task->wait->notified);
+  KASSERT(task->memory_pending && !task->parked);
+  task->memory_pending = false;
+  task->parked = true;
+  task->memory_next = NULL;
+  if (memory_tail) {
+    memory_tail->memory_next = task;
+  } else {
+    memory_head = task;
+  }
+  memory_tail = task;
+  unlock_queues();
+  /* Ownership is now with BSP; do not touch task or its private VM again. */
+}
+
+static void service_memory_requests(void)
+{
+  lock_queues();
+  struct task *task = memory_head;
+  memory_head = memory_tail = NULL;
+  unlock_queues();
+
+  while (task) {
+    struct task *next = task->memory_next;
+    KASSERT(task->parked && task->wait == &task->wait_record);
+    struct memory_region *region = &task->memory_region;
+    if (task->memory_operation == MEMORY_ALLOCATE) {
+      task->memory_result = private_memory_allocate(task->process, region->size,
+          &region->address);
+    } else {
+      KASSERT(task->memory_operation == MEMORY_RELEASE);
+      task->memory_result = private_memory_release(task->process, region->address,
+          region->size);
+    }
+    task_wait_wake(&task->wait_record);
+    /* Resumption reloads CR3 before returning to the private task stack. */
+    task = next;
+  }
+}
+
 static struct task *dequeue(struct scheduler *scheduler)
 {
   lock_queues();
@@ -519,6 +587,7 @@ void kernel_task_sleep(uint64_t ticks)
       grow_requested_tables();
       service_directory_requests();
       service_file_requests();
+      service_memory_requests();
       reap_completed();
       object_reap();
       wake_sleepers();
@@ -558,6 +627,8 @@ void kernel_task_sleep(uint64_t ticks)
     scheduler->current_task = NULL;
     if (task->exited) {
       complete_task(task);
+    } else if (task->memory_pending) {
+      publish_memory_request(task);
     } else if (task->wait) {
       lock_queues();
       if (task->wait->notified) {
@@ -605,7 +676,7 @@ void task_preempt(bool user_mode)
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
      (completed_head != NULL || growth_head != NULL || directory_head != NULL ||
-      file_head != NULL));
+      file_head != NULL || memory_head != NULL));
   unlock_queues();
   if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;
