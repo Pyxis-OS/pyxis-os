@@ -95,7 +95,8 @@ a context switch.
 
 Parking saves user CPU state just like timer preemption. Resume restores the
 same CPU, process root and private entry stack, with interrupts still disabled.
-The process remains alive while blocked and its user mappings stay stable.
+The process remains alive while blocked. User mappings stay stable except during
+an explicit private-memory loan after the task has left its address space.
 Only an explicit table-growth loan allows the BSP to modify its capability table.
 Remote wakeups use the existing timer-driven ready-queue check, with no IPI.
 
@@ -161,6 +162,11 @@ and stable user mappings. They do not use shared scratch slots or VM metadata.
 General `vm_query()` and page-table mutation remain BSP-only.
 
 Private spaces are built before publication and reclaimed only after retirement.
+The [memory service](memory.md) can also borrow a parked task's inactive space:
+its scheduler publishes the request only after leaving the task stack and
+reloading the kernel root. The BSP changes private mappings before waking the
+owner; normal resumption reloads CR3 before any task access. No other CPU uses
+that private root during the loan.
 Kernel code, CPU records, scheduler stacks, heap pools and framebuffer mappings
 remain mapped throughout AP execution. A shared kernel range must not be
 unmapped, remapped or protected while another CPU can use it.

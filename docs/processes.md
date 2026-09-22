@@ -1,6 +1,7 @@
 # Processes, capabilities and the first userspace ABI
 
-Status: console, initrd/RAM file and directory capabilities are implemented.
+Status: console, initrd/RAM file, directory and private-memory capabilities are
+implemented.
 The broader process and resource model remains a working draft alongside the
 [spaces draft](spaces.md). Startup delivery, console and file CALL operations,
 and handle close are implemented, including the complete userspace example.
@@ -18,7 +19,9 @@ lists `share`, then opens `hello.txt` with READ and prints it through the consol
 The [path helpers](paths.md) compose lookups and retain working-directory handles.
 Hello reads through an explicit scheme path and again after changing directory.
 It also creates and rediscovers a directory and file under `home`, writes and
-truncates the file, then reads it through an independent grant.
+truncates the file, then reads it through an independent grant. Its memory
+capability supplies temporary file-read buffers and a process-lifetime path
+workspace; see [private memory](memory.md) for allocation and release.
 Lookup returns owned handles, which hello closes after use. File reads use
 explicit offsets and never introduce a shared seek position. See
 [the directory contract](directories.md) for rights, cursor behavior and lifetime.
@@ -31,7 +34,7 @@ transfer independently. The endpoint exchange still uses directly supplied grant
 ## Objects, capabilities and handles
 
 An object is the underlying resource: a console, file, directory, memory
-allocation or endpoint. A capability grants particular operations on that object. A handle
+service or endpoint. A capability grants particular operations on that object. A handle
 is an opaque, process-local value naming an entry in the process's capability
 table. The kernel entry holds the object reference and rights; userspace cannot
 gain rights by changing the handle value.
@@ -268,11 +271,12 @@ storage. Object destruction may follow in the next reaping pass; independent
 kernel or process references keep shared resources alive. The
 [capability interface](../include/kernel/object/capability.h) and
 [object lifetime interface](../include/kernel/object/object.h) define the contracts.
-Console, file, directory and endpoint objects use this lifetime model.
+Console, file, directory, memory-service and endpoint objects use this lifetime
+model. Memory-service lifetime is independent of process-owned regions.
 
 CALL resolves the handle once, obtains its object and rights, then captures the
 message tag from userspace. A small switch on object type checks the protocol
-and selects the console, file, directory or endpoint handler. Each handler checks
+and selects the console, file, directory, memory or endpoint handler. Each checks
 the operation, required rights, exact payload size and user buffers before acting. Tag reads
 can fail before operation/rights checks. A mismatched protocol or unsupported
 operation returns BAD_OPERATION; a supported operation with insufficient rights
