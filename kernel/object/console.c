@@ -1,5 +1,8 @@
 #include <abi/console.h>
 #include <arch/smp.h>
+#include <arch/cpu.h>
+#include <kernel/keyboard.h>
+#include <kernel/task.h>
 #include <kernel/object/console.h>
 #include <kernel/user_memory.h>
 #include <kernel/fb/tty.h>
@@ -8,11 +11,14 @@
 #include <kernel/panic.h>
 
 #define CONSOLE_WRITE_CHUNK 256
+#define CONSOLE_READ_CHUNK 256
 
 static void destroy_console(struct kernel_object *object)
 {
   /* The reference header is the first member; only the wrapper is owned. */
-  kfree((struct console_object *)object);
+  struct console_object *console = (struct console_object *)object;
+  KASSERT(!console->reader_active && !console->first_reader && !console->input_wait);
+  kfree(console);
 }
 
 struct console_object *console_create(struct tty *tty)
@@ -22,8 +28,9 @@ struct console_object *console_create(struct tty *tty)
   if (!console) {
     return NULL;
   }
+  *console = (struct console_object){.tty = tty};
+  atomic_init(&console->input_locked, false);
   object_init(&console->object, OBJECT_CONSOLE, destroy_console);
-  console->tty = tty;
   return console;
 }
 
@@ -45,24 +52,16 @@ bool console_write(struct console_object *console, const char *bytes, size_t siz
   return true;
 }
 
-struct syscall_result console_call(struct console_object *console, uint64_t rights,
-    uint64_t operation, uintptr_t request_address, size_t request_size,
+static struct syscall_result write_console(struct console_object *console,
+    const struct console_write_request *payload,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation != CONSOLE_WRITE) {
-    return (struct syscall_result){CALL_BAD_OPERATION, 0};
-  }
-  if (!(rights & CONSOLE_RIGHT_WRITE)) {
-    return (struct syscall_result){CALL_DENIED, 0};
-  }
-
-  struct console_write_request request;
+  struct console_write_request request = *payload;
   struct console_write_reply reply;
-  if (request_size != sizeof(request) || reply_capacity < sizeof(reply)) {
+  if (reply_capacity < sizeof(reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!copy_from_user(&request, request_address, sizeof(request)) ||
-      !user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE) ||
+  if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE) ||
       !user_buffer_check(request.address, request.length, USER_BUFFER_READ)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
@@ -85,5 +84,216 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   /* IF=0, private stable mappings: the checked reply cannot become invalid
    * after the console side effect. A failure here is a kernel invariant bug. */
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
+/* IF=0; input lock -> scheduler queues. Never sleep or access user memory
+ * while locked. Output uses its existing independent rendering lock. */
+static void lock_input(struct console_object *console)
+{
+  while (atomic_exchange_explicit(&console->input_locked, true, memory_order_acquire)) {
+    __asm__ volatile("pause");
+  }
+}
+
+static void unlock_input(struct console_object *console)
+{
+  atomic_store_explicit(&console->input_locked, false, memory_order_release);
+}
+
+static void wake_input_reader(struct console_object *console)
+{
+  struct task_wait *wait = console->input_wait;
+  console->input_wait = NULL;
+  if (wait) {
+    task_wait_wake(wait);
+  }
+}
+
+static void lose_input(struct console_object *console)
+{
+  console->input_head = 0;
+  console->input_count = 0;
+  console->input_lost = true;
+  wake_input_reader(console);
+}
+
+void console_input_lost(struct console_object *console)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  lock_input(console);
+  lose_input(console);
+  unlock_input(console);
+  cpu_restore_interrupts(flags);
+}
+
+void console_input(struct console_object *console, const char *bytes, size_t size)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  lock_input(console);
+  if (!console->input_lost) {
+    if (size > CONSOLE_INPUT_CAPACITY - console->input_count) {
+      lose_input(console);
+    } else {
+      for (size_t i = 0; i < size; ++i) {
+        size_t tail = (console->input_head + console->input_count) % CONSOLE_INPUT_CAPACITY;
+        console->input[tail] = bytes[i];
+        ++console->input_count;
+      }
+      if (size) {
+        wake_input_reader(console);
+      }
+    }
+  }
+  unlock_input(console);
+  cpu_restore_interrupts(flags);
+}
+
+static void begin_read(struct console_object *console)
+{
+  lock_input(console);
+  if (!console->reader_active) {
+    console->reader_active = true;
+    unlock_input(console);
+    return;
+  }
+
+  struct console_wait *reader = task_prepare_console_wait();
+  struct task_wait *wait = reader->wait;
+  if (console->last_reader) {
+    console->last_reader->next = reader;
+  } else {
+    console->first_reader = reader;
+  }
+  console->last_reader = reader;
+  unlock_input(console);
+  task_wait_sleep(wait);
+  /* Read ownership is handed directly to us, so newcomers cannot overtake. */
+}
+
+static void end_read(struct console_object *console)
+{
+  lock_input(console);
+  struct console_wait *reader = console->first_reader;
+  if (reader) {
+    console->first_reader = reader->next;
+    if (!console->first_reader) {
+      console->last_reader = NULL;
+    }
+    struct task_wait *wait = reader->wait;
+    reader->next = NULL;
+    reader->wait = NULL;
+    task_wait_wake(wait);
+  } else {
+    console->reader_active = false;
+  }
+  unlock_input(console);
+}
+
+static struct syscall_result read_console(struct console_object *console,
+    const struct console_read_request *request, uintptr_t reply_address,
+    size_t reply_capacity)
+{
+  struct console_read_reply reply = {0};
+  if (reply_capacity < sizeof(reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE) ||
+      !user_buffer_check(request->address, request->capacity, USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (request->capacity) {
+    if (!keyboard_available()) {
+      return (struct syscall_result){CALL_UNAVAILABLE, 0};
+    }
+    begin_read(console);
+    lock_input(console);
+    while (!console->input_count && !console->input_lost) {
+      struct task_wait *wait = task_wait_prepare();
+      console->input_wait = wait;
+      unlock_input(console);
+      task_wait_sleep(wait);
+      lock_input(console);
+    }
+    if (console->input_lost) {
+      console->input_lost = false;
+      unlock_input(console);
+      end_read(console);
+      return (struct syscall_result){CALL_INPUT_LOST, 0};
+    }
+
+    char bytes[CONSOLE_READ_CHUNK];
+    size_t count = console->input_count;
+    if (count > request->capacity) {
+      count = request->capacity;
+    }
+    if (count > sizeof(bytes)) {
+      count = sizeof(bytes);
+    }
+    for (size_t i = 0; i < count; ++i) {
+      bytes[i] = console->input[console->input_head];
+      console->input_head = (console->input_head + 1) % CONSOLE_INPUT_CAPACITY;
+    }
+    console->input_count -= count;
+    unlock_input(console);
+    KASSERT(copy_to_user(request->address, bytes, count));
+    reply.read = count;
+    end_read(console);
+  }
+
+  /* The captured request and stable private mappings also permit overlapping
+   * data/reply destinations; the reply is written last. */
+  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
+struct syscall_result console_call(struct console_object *console, uint64_t rights,
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  uint64_t required;
+  switch (operation) {
+  case CONSOLE_WRITE:
+    required = CONSOLE_RIGHT_WRITE;
+    break;
+  case CONSOLE_READ:
+    required = CONSOLE_RIGHT_READ;
+    break;
+  case CONSOLE_SIZE:
+    required = CONSOLE_RIGHTS;
+    break;
+  default:
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (!(rights & required)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+
+  union console_payload request;
+  if (request_size != sizeof(request)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request, request_address, sizeof(request))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (operation == CONSOLE_WRITE) {
+    return write_console(console, &request.write, reply_address, reply_capacity);
+  }
+  if (operation == CONSOLE_READ) {
+    return read_console(console, &request.read, reply_address, reply_capacity);
+  }
+
+  struct console_size_reply reply = {
+    .columns = console->tty->width,
+    .rows = console->tty->height,
+  };
+  if (reply_capacity < sizeof(reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }

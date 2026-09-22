@@ -29,7 +29,7 @@ struct initial_program {
   const char *name;
   uintptr_t entry;
   size_t cpu_index;
-  handle_t output, content, endpoint, application_root, home, memory;
+  handle_t input, output, content, endpoint, application_root, home, memory;
   handle_t launcher, server_image, server_endpoint;
 };
 
@@ -82,6 +82,11 @@ void user_launch_initial(void)
   }
   if (!load_program("hello.pxe", client_cpu, hello) ||
       !load_program("client.pxe", client_cpu, client)) {
+    goto fail;
+  }
+
+  if (capability_install(&hello->process->capabilities, &hello->process->space->console->object,
+        CONSOLE_RIGHT_READ, &hello->input) != CAP_OK) {
     goto fail;
   }
 
@@ -154,6 +159,9 @@ void user_launch_initial(void)
     struct process_binding resources[7];
     size_t count = 0;
     resources[count++] = (struct process_binding){"output", program->output};
+    if (program->input != HANDLE_INVALID) {
+      resources[count++] = (struct process_binding){"input", program->input};
+    }
     resources[count++] = (struct process_binding){"memory", program->memory};
     if (program->content != HANDLE_INVALID) {
       resources[count++] = (struct process_binding){"content", program->content};

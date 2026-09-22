@@ -1,6 +1,7 @@
 #ifndef KERNEL_KEYBOARD_H
 #define KERNEL_KEYBOARD_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 /* Key positions use common PC legends; these are not characters or scan codes. */
@@ -63,5 +64,11 @@ bool keyboard_available(void);
  * On lost input, KEY_STATE_RESET with KEY_NONE clears held keys and modifiers;
  * the consumer must discard its held-key state too. Lock LEDs are not updated. */
 bool keyboard_read_event(struct key_event *event);
+
+/* Session-side US ASCII/terminal mapping, independent of the device decoder.
+ * Call after consuming global shortcuts. Returns 0 for keys without a binding;
+ * otherwise writes one complete sequence, without a string terminator. */
+#define KEY_TEXT_MAX 4
+size_t keyboard_text(const struct key_event *event, char bytes[KEY_TEXT_MAX]);
 
 #endif

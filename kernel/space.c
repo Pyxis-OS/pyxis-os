@@ -192,20 +192,36 @@ static void switch_adjacent_space(bool next)
   }
 }
 
-static void handle_space_shortcuts(void)
+static void handle_space_input(void)
 {
   struct key_event event;
   const unsigned shortcut_modifiers =
       KEY_MOD_SHIFT | KEY_MOD_CONTROL | KEY_MOD_ALT | KEY_MOD_SUPER;
 
   while (keyboard_read_event(&event)) {
-    if (event.action != KEY_PRESS ||
-        (event.modifiers & shortcut_modifiers) != KEY_MOD_ALT) {
+    if (event.action == KEY_STATE_RESET) {
+      /* Lost scan bytes can include a space shortcut, so no queued stream can
+       * be trusted to describe what the user meant to send. */
+      for (size_t i = arch_cpu_count() > 1 ? 1 : 0; i < arch_cpu_count(); ++i) {
+        console_input_lost(arch_cpu_at(i)->space->console);
+      }
+      continue;
+    }
+    if ((event.modifiers & shortcut_modifiers) == KEY_MOD_ALT &&
+        (event.key == KEY_LEFT || event.key == KEY_RIGHT)) {
+      if (event.action == KEY_PRESS) {
+        switch_adjacent_space(event.key == KEY_RIGHT);
+      }
+      continue;
+    }
+    if (arch_cpu_count() > 1 && active_space == arch_cpu_at(0)->space) {
       continue;
     }
 
-    if (event.key == KEY_LEFT || event.key == KEY_RIGHT) {
-      switch_adjacent_space(event.key == KEY_RIGHT);
+    char bytes[KEY_TEXT_MAX];
+    size_t size = keyboard_text(&event, bytes);
+    if (size) {
+      console_input(active_space->console, bytes, size);
     }
   }
 }
@@ -215,7 +231,7 @@ void space_present_task(void *argument)
   (void)argument;
 
   for (;;) {
-    handle_space_shortcuts();
+    handle_space_input();
     space_present();
     kernel_task_sleep(PRESENT_INTERVAL_TICKS);
   }

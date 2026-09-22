@@ -274,7 +274,7 @@ not duplicated here as a second ABI definition.
   parent launches a child in its space, waits and closes its control handle,
   with failure leaving no runnable partial child or lost parent resources.
 
-- [ ] **12. Terminal text input and dimensions.** Extend the current console
+- [x] **12. Terminal text input and dimensions.** Extend the current console
   object into the needed terminal contract, with input rights, blocking reads,
   size queries and per-space text queues. Route keyboard input to the active
   application space after session shortcuts; select and document the first
@@ -719,5 +719,36 @@ completion and retirement queues were empty. Mutable-image writer contention,
 physical allocation failure and late task-allocation failure were reviewed,
 not forced. No tests, fault injection or boot automation were added.
 
-Task 12 remains unstarted. Discuss terminal input layout, queue capacity/overflow
-and terminal dimension behavior before implementing text input and size queries.
+Task 12 is complete (assistant). Console READ and SIZE extend the existing tagged
+protocol without a version bump. Hello receives a separate READ-only input grant,
+queries dimensions, waits for one input chunk and echoes it before exiting.
+READ sleeps without echo/editing, permits short reads, and succeeds immediately
+for zero capacity. SIZE accepts READ or WRITE and reports character cells below
+the tab bar. Libpyxis preserves native statuses for both operations.
+
+Each space console owns a 4 KiB queue. The BSP session task consumes shortcuts
+before routing US ASCII text and navigation sequences to the active application
+space. Caelum discards text except in the single-CPU fallback. Shift, Caps Lock,
+repeat and Ctrl+letters are supported; navigation includes arrows, Home/End,
+Delete and Page Up/Down. Whole sequences enter atomically but can span reads.
+Overflow/device loss clears queued input and latches INPUT_LOST until a nonempty
+read acknowledges it. Device loss invalidates every application queue because a
+space shortcut may have been lost. Unavailable hardware returns UNAVAILABLE.
+Readers acquire ownership FIFO and sleep through the existing task wait mechanism.
+Cursor editing and history remain userspace work; see `docs/keyboard.md` and
+`docs/processes.md` for the contract.
+
+Validation: ordinary image builds passed without warnings. Normal one- and
+four-CPU KVM boots ran the existing programs; hello waited for input, echoed a
+key and exited with status 0. Four-CPU inspection confirmed Caelum discards text,
+Alt+Right selects the application space, and Shift+A wakes its reader. Dimensions
+matched the TTY area. Manual TCG/GDB inspection observed a parked reader with
+input/scheduler locks clear, wakeup and detached wait links, expected navigation
+sequences and Caps Lock/Shift/Control bytes. Zero-length reads succeeded; invalid
+rights, request sizes, operation tags and buffers were rejected. Frame usage
+returned to the pre-launch baseline after exit. Multiple-reader ordering,
+overflow/device-loss recovery and unavailable hardware were code-reviewed, not
+forced. No tests, fault injection or boot automation were added.
+
+Task 13 remains unstarted. Discuss line-input limits, control handling, Escape
+prefix decoding and editing scope before implementing libterm.
