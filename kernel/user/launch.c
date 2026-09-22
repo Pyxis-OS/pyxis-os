@@ -1,4 +1,5 @@
 #include <abi/file.h>
+#include <abi/process.h>
 #include <abi/memory.h>
 #include <abi/directory.h>
 #include <abi/console.h>
@@ -12,6 +13,7 @@
 #include <kernel/log.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/file.h>
+#include <kernel/object/process.h>
 #include <kernel/object/memory.h>
 #include <kernel/object/console.h>
 #include <kernel/object/endpoint.h>
@@ -31,6 +33,7 @@ struct initial_program {
   uintptr_t entry;
   size_t cpu_index;
   handle_t output, content, endpoint, application_root, home, memory;
+  handle_t server_process;
 };
 
 /* Shared read-only application namespace retains the tree across process exit. */
@@ -147,6 +150,12 @@ void user_launch_initial(void)
     goto fail;
   }
 
+  result = capability_install(&client->process->capabilities, &server->process->control->object,
+      PROCESS_RIGHT_WAIT, &client->server_process);
+  if (result != CAP_OK) {
+    goto fail;
+  }
+
   for (size_t i = 0; i < 3; ++i) {
     struct initial_program *program = &programs[i];
     result = capability_install(&program->process->capabilities, memory,
@@ -154,7 +163,7 @@ void user_launch_initial(void)
     if (result != CAP_OK) {
       goto fail;
     }
-    struct process_binding resources[4];
+    struct process_binding resources[5];
     size_t count = 0;
     resources[count++] = (struct process_binding){"output", program->output};
     resources[count++] = (struct process_binding){"memory", program->memory};
@@ -163,6 +172,9 @@ void user_launch_initial(void)
     }
     if (program->endpoint != HANDLE_INVALID) {
       resources[count++] = (struct process_binding){"endpoint", program->endpoint};
+    }
+    if (program->server_process != HANDLE_INVALID) {
+      resources[count++] = (struct process_binding){"server_process", program->server_process};
     }
     result = capability_install(&program->process->capabilities, &home_root->object,
         DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES |

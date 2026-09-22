@@ -257,7 +257,7 @@ not duplicated here as a second ABI definition.
   ordinary userspace consumers use the target libc and normal exit releases
   resources even when applications leave allocations live.
 
-- [ ] **10. Process completion objects.** Add an independently retained completion
+- [x] **10. Process completion objects.** Add an independently retained completion
   result and a wait operation using the existing blocked-task machinery. Connect
   ordinary exit and fatal user faults to it; initially grant observation of a
   boot-launched program to another program. Depends on 2. Done when waiting before
@@ -641,5 +641,40 @@ usage returned to its pre-launch baseline. Request/completion queues and object
 retirement were empty. Physical-memory exhaustion and missing-grant handling were
 reviewed, not forced. No tests, fault injection or boot automation were added.
 
-Task 10 remains unstarted. Discuss completion result contents and the initial
-observation/wait authority before implementing process completion objects.
+Task 10 is complete (assistant). A process-control object retains immutable
+completion separately from process execution state. Its single WAIT right
+authorizes a header-only tagged request. The result distinguishes EXITED with a
+signed 32-bit exit status from FAULTED; fault details remain in the kernel log.
+Libpyxis provides process_wait with native status results and reply validation.
+
+Observers may wait before or after completion, and repeated/concurrent waits
+receive the same result. Closing an observer does not stop execution. The BSP
+reaper takes the execution owner's control reference, reclaims the process,
+private mappings, capability table, task stack and metadata, then publishes and
+wakes observers. Capability object destruction follows normal deferred retirement.
+The retained control object has no process pointer. Wait records live in task
+metadata, with completion-to-scheduler lock ordering and wake-before-sleep
+handling. No remote task-stack pointers or allocation on the wait path.
+
+Client receives a named server_process grant. It closes its endpoint after the
+exchange, allowing server to exit, then waits, reports the result and closes the
+observer. There is no userspace launch or termination operation yet. See
+`docs/processes.md` for the completion contract; ABI/schema versions are unchanged.
+
+Validation: ordinary image builds passed without warnings. Normal one- and
+four-CPU KVM boots completed all three programs with status 0; framebuffer
+inspection showed client reporting server's completion after its cleanup log.
+Manual four-CPU TCG/GDB inspection observed two tasks parked on the same control
+object, publication from the BSP reaper after execution cleanup, both waiters
+being detached/woken, and the same result from a later wait. Invalid authority,
+request shape/operation, reply storage and stale handles were rejected. Closing
+the last observer before a program started did not prevent its normal execution.
+Closing the final retained observer after completion retired the control object.
+Physical-frame usage returned to the pre-launch baseline; request/completion and
+object-retirement queues were empty. Fatal-user-fault routing, nonzero status
+propagation and allocation-failure unwinding were code-reviewed, not forced.
+No tests, fault injection or boot automation were added.
+
+Task 11 remains unstarted. Discuss the concrete launch request, startup/grant
+bounds and policy for executable files being modified during loading before
+implementing userspace launch through a launcher capability.
