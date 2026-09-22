@@ -229,7 +229,7 @@ not duplicated here as a second ABI definition.
   preserve subtree confinement. Depends on 2 and 4. Done when supplied roots and
   relative paths reach the same files without ambient namespace authority.
 
-- [ ] **6. Writable RAM directories and file creation.** Supply the shared
+- [x] **6. Writable RAM directories and file creation.** Supply the shared
   `home://` root, implement CREATE for directories and empty files, and reuse
   lookup/enumeration contracts. Resolve concurrent mutation and BSP allocation
   service needs within existing ownership rules. No disk or overlay work.
@@ -482,5 +482,47 @@ its pre-launch baseline; heap usage retained only the existing kernel state and
 initrd tree, with an empty retirement queue. Allocation-failure unwinding was
 reviewed, not forced. No tests, fault injection or boot automation were added.
 
-Task 6 remains unstarted. Discuss RAM-tree ownership, creation semantics,
-mutation synchronization and BSP allocation requests before implementation.
+Task 6 is complete (assistant). One kernel-retained RAM tree supplies `home`
+through explicit startup grants to all three boot programs. CREATE accepts one
+name, kind and requested rights, returning an owned handle to a new directory or
+empty RAM file. CREATE is independent of LOOKUP/ENUMERATE; child grants remain
+bounded by the parent's directory or file-grant rights. Existing names return
+ALREADY_EXISTS without opening or replacing them. Initrd rejects mutation even
+if a grant carries CREATE. File writes, resizing, removal and rename remain out
+of scope; new files have size zero and return EOF through the file protocol.
+
+Per-directory locks protect links, counts and generations. Lookup retains the
+selected child under the lock before any table-growth wait. Enumeration captures
+one result under the lock, then copies its immutable name; the append-only tree
+and caller's directory reference preserve that name's lifetime. Successful
+creation advances the generation; an old cursor, including END, reports CHANGED.
+Generation never wraps. Removal must revisit name lifetime before reclaiming
+entries.
+
+A focused BSP service allocates and discards unpublished entries through requests
+in task metadata. The requester fills the name from its own validated mappings
+and prepares the returned handle before publishing under the directory lock.
+Publication rechecks name conflicts. Failure closes any provisional handle and
+returns the unused entry for BSP disposal. No directory lock spans allocation or
+waiting, and neither heap allocation nor reclamation runs on an AP. Hello creates
+`home://notes/empty.txt`, rediscovers both names through independent grants, lists
+them and reads the empty file. The tree retains entries after process exit.
+
+Validation: ordinary image builds passed without warnings. Normal one- and
+four-CPU KVM boots ran all three programs through exit 0 and address-space
+release; framebuffer inspection showed both RAM directory listings. Manual
+four-CPU TCG/GDB inspection observed an old END cursor becoming CHANGED after
+creation, duplicate-name rejection regardless of kind without advancing the
+generation, read-only backing and authority checks, invalid-buffer/name rejection,
+and zero-byte reads leaving the data buffer untouched. Entry allocation and
+disposal both ran through the BSP service. Filling the caller's table with valid
+grants made CREATE wait for growth from sixteen to thirty-two slots while both
+directory locks were clear. After exit, physical-frame usage returned to the
+pre-launch baseline; heap state retained only existing kernel objects and the
+two filesystem trees. Their references matched tree ownership, and request,
+completion and retirement queues were empty. Concurrent-creator conflict handling
+and allocation-failure unwinding were reviewed, not forced. No tests, fault
+injection or boot automation were added; no schema version changed.
+
+Task 7 remains unstarted. Discuss RAM file storage, growth/shrink behavior,
+writes beyond EOF and partial-write semantics before implementation.

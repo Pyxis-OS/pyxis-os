@@ -62,13 +62,16 @@ handle and never duplicates it. Missing resource names return HANDLE_INVALID;
 missing environment values return NULL, while an empty value is an empty string.
 The runtime requires no malloc or libc. Hello receives an `app` directory root
 and a working-directory chain starting at that root. The
-[path context](paths.md) retains its own copies of these handles.
+[path context](paths.md) retains its own copies of these handles. All three
+programs also receive grants to one shared RAM-backed `home` root.
 
 Hello obtains named output and its `app` scheme root, uses its argument vector
 and environment in its greeting, then enumerates the root and its `share` child.
 It reads the text file first through an explicit scheme path, then relatively
 after changing into `share`, closing each owned handle even after an I/O error.
-See [directories.md](directories.md) for the lookup and enumeration contract.
+Hello then creates a RAM directory and empty file, rediscovers them through
+independent grants, and enumerates their names. See [directories.md](directories.md)
+for lookup, enumeration and exclusive creation.
 The syscall register
 convention is defined in the [native wrapper](../userspace/include/syscall.h).
 Normal output targets the owning space's TTY; diagnostic output targets the
