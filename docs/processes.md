@@ -31,7 +31,7 @@ bytes, not a decision about how applications will eventually discover files.
 
 The hello program:
 
-1. Read its startup record and obtain the output and content handles.
+1. Look up its named output and content resources through libpyxis.
 2. Write a greeting, handling errors and any partial write.
 3. Query the blob size and read at explicit byte offsets into a stack buffer.
 4. Write the returned bytes, advance the offset, and repeat until EOF, checking
@@ -85,41 +85,54 @@ its space. This matters to the containment goals in the spaces draft.
 
 ## Startup record
 
-The entry point receives a pointer in `RDI` to this record in user-readable,
-read-only memory, valid until process exit:
+Entry receives a pointer in `RDI` to a process-owned startup region. The
+[shared header](../include/abi/startup.h) defines its layout; all embedded
+addresses refer to that child's virtual memory. The total budget is 64 KiB,
+including page padding. Only the required pages are allocated. Version remains
+1, with the old fixed-role layout replaced outright; rebuild in-tree programs
+together with the kernel.
 
-```c
-struct startup_info {
-  uint32_t version;
-  uint32_t size;
-  handle_t output;
-  handle_t content;
-  handle_t endpoint;
-};
-```
+The read-only portion contains the header, named resource bindings, scheme-root
+bindings, working-directory context and environment. The writable portion holds
+`argv`, its final NULL and argument strings. Both portions are non-executable
+and survive until address-space destruction. Read-only metadata records the
+argument count and writable-area address; no userspace heap is needed for entry.
 
-The current version 1 record has size 32 bytes and alignment 8, with fields at
-offsets 0, 4, 8, 16 and 24. Fields use the current x86_64 little-endian representation. `size`
-bounds the supplied record; userspace checks version and size before reading
-the handles. An absent resource has the invalid handle, zero.
+Resource names are nonempty, case-sensitive and unique within their table.
+Each binding names a handle already installed in the child's capability table.
+No new reference is acquired when recording or looking up a binding. Different
+names may alias a handle; close each owned handle once. Missing resources are
+omitted, and lookup returns HANDLE_INVALID. Closing a handle does not update the
+immutable snapshot, so a later lookup can return its stale value.
 
-These are named roles, not assumptions that handles zero and one always mean
-particular resources. The content field is specific to the first example; it
-does not settle a general argument or resource-discovery scheme. The endpoint
-role supplies the client or service end for the request/reply programs; hello
-receives no endpoint. Rebuild programs against the matching startup version.
+Scheme roots have their own name/handle table. The working-directory chain runs
+from the permitted navigation boundary to the current directory, optionally
+accompanied by a descriptive display path. Directory objects are not implemented
+yet: preparation currently rejects nonempty roots or working-directory context.
+The native accessors therefore return no directory resources for current programs.
+Actual directory type validation and traversal belong to the filesystem tasks.
 
-This entry convention is implemented. Kernel and userspace share the
-[startup header](../include/abi/startup.h) and opaque handle definition. The BSP
-prepares the record in a separately allocated, zeroed page before submitting
-the task. The user mapping is read-only and non-executable; a temporary kernel
-alias fills the record without activating the process's root. Process teardown
-reclaims the page with the rest of its address space.
+The launcher supplies argument strings, including argv[0] when present; neither
+the kernel nor startup parses a command line. Zero arguments are valid and still
+provide argv[0] == NULL. Environment names are nonempty, case-sensitive, unique
+and cannot contain '='; values may be empty. The initial environment is a copied,
+read-only snapshot with allocation-free lookup. Process-local mutation and libc
+getenv support remain later work. Environment strings confer no authority.
 
-The freestanding entry preserves RDI when calling C main. Hello checks version
-and size, then prints through the output capability. The launcher grants WRITE
-on the owning space's console and READ on an archive-backed content blob.
-Content exposes the packaged text asset, separate from the executable image.
+[Startup preparation](../include/kernel/user/startup.h) accepts stable, borrowed
+kernel inputs under exclusive ownership of an inactive process on the BSP.
+It validates names, installed handles and the total size, copies data through a
+borrowed kernel mapping, and publishes the startup address only after completion.
+Failure releases partial backing without changing capability ownership. Inputs
+are never retained; source storage may be released after the call.
+
+The shared assembly entry calls the native C startup routine, which checks the
+record's bounds and initializes accessors before invoking `main(argc, argv)`.
+Its return value goes to exit. Programs use
+[the startup helpers](../userspace/include/startup.h) instead of decoding the
+record. The boot launcher supplies named output/content/endpoint grants as needed,
+each program's filename as argv[0], and an OS_NAME environment entry. Hello uses
+its arguments and environment in its greeting, then reads its content capability.
 
 ## First operation shapes
 
@@ -308,7 +321,7 @@ Hello closes both supplied handles after printing through the
 [handle wrapper](../userspace/include/handle.h). The native close wrapper accounts
 for the RDX result; the one-argument syscall wrapper cannot be used for
 close because it assumes RDX is preserved. Closing leaves the startup record
-unchanged, so its output field then contains a stale handle. Exit releases any
+unchanged, so its output binding then contains a stale handle. Exit releases any
 entries still open, while the space keeps its own console reference.
 
 ### Implemented blob calls

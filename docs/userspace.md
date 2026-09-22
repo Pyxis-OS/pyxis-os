@@ -11,8 +11,8 @@ kernel builds and `HOSTCC` for the converter. Outputs live under `build/`.
 The native wrappers build into `build/userspace/libpyxis.a`; use
 `make -C userspace libpyxis` to build just the library. Every program links the
 shared startup object explicitly, then its own code and the archive. The linker
-selects the referenced library objects. Startup and native ABI behavior are
-unchanged; this library does not provide libc.
+selects the referenced library objects, including the native C startup routine.
+This library does not provide libc.
 
 To convert an already linked executable:
 
@@ -44,21 +44,29 @@ into owned backing and applies its permissions. Failure releases partial
 allocations; loading does not change the caller's active address space.
 
 The kernel supplies an executable entry point and a writable, 16-byte-aligned
-user stack. Entry receives a pointer in `RDI` to the read-only
-[startup record](../include/abi/startup.h), which remains mapped until process
+user stack. Entry receives a pointer in `RDI` to the
+[startup region](../include/abi/startup.h), which remains mapped until process
 exit. Its address is chosen by VM allocation; programs must use the pointer.
-The startup record supplies output, content and endpoint roles; absent resources
-have invalid handles. Programs check the version and size before using them.
-The shared assembly entry preserves the pointer as the argument to
-`main(const struct startup_info *startup)`, then passes main's return value to
-`exit`. Hello checks the record's version and size, prints a greeting, queries
-its content blob's size, and reads and prints the content in chunks. It attempts
-to close both handles even after an I/O error, then returns success or failure.
-The content capability grants READ access to the packaged text asset. There is no
-libc or argument vector. The [syscall header](../userspace/include/syscall.h) defines syscall
-numbers and the register convention. Normal output targets the owning space's
-TTY; diagnostic output targets the kernel log, which goes to the Caelum TTY and
-serial.
+The region carries named resources, environment, arguments and optional directory
+context, within a 64 KiB budget including page padding. Resource/environment
+metadata is read-only; argv and its strings occupy separate writable pages.
+Neither part is executable.
+
+The shared entry initializes libpyxis and calls `main(int argc, char **argv)`,
+then exits with main's return value. Use
+[startup_resource() and the other native accessors](../userspace/include/startup.h)
+to find supplied handles and environment values. Lookup borrows an existing
+handle and never duplicates it. Missing resource names return HANDLE_INVALID;
+missing environment values return NULL, while an empty value is an empty string.
+The runtime requires no malloc or libc. Scheme roots and working-directory
+context are currently empty pending directory objects.
+
+Hello obtains output and content by name, uses its argument vector and initial
+environment in its greeting, then reads and prints the packaged blob in chunks.
+It attempts to close both handles even after an I/O error. The syscall register
+convention is defined in the [native wrapper](../userspace/include/syscall.h).
+Normal output targets the owning space's TTY; diagnostic output targets the
+kernel log, which goes to the Caelum TTY and serial.
 
 The [console wrapper](../userspace/include/console.h) uses the native CALL ABI
 and reports actual bytes written. Its byte-count and string helpers finish partial writes;
@@ -95,9 +103,11 @@ The [endpoint contract](endpoints.md) describes ownership, growth and errors.
 
 The [boot launcher](../kernel/user/launch.c) creates a process that owns the
 loaded address space and belongs to the target CPU's space. Before submission, it calls
-`process_prepare_startup()` with the initial resource handles. This allocates
-a zeroed user page and fills the record through a temporary kernel alias,
-leaving the user mapping read-only and non-executable. Task submission transfers
+`process_prepare_startup()` with named bindings to already installed handles,
+arguments and environment. Preparation validates and copies the supplied kernel
+data into zeroed process-owned pages through a temporary alias, without activating
+the process root. It leaves metadata read-only and only arguments writable.
+Task submission transfers
 sole ownership of this process on success; on failure it remains with the caller
 for cleanup. There is initially one user task per process. Each task also owns
 a private kernel-entry stack. Allocation, submission and reclamation stay on the BSP,

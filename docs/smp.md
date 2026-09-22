@@ -72,10 +72,12 @@ the process or its address space after transfer. There is one task per process.
 private address space only on success. `process_destroy(process)` releases an
 unsubmitted process and its address space if subsequent setup fails. Neither
 call owns or destroys the containing space or its TTY. Before submission, call
-`process_prepare_startup()` with the process's initial resource handles (or
-`HANDLE_INVALID` for absent roles). Its read-only page belongs to the process's
-address space, and entry receives its address in RDI. See the
-[process interface](../include/kernel/process.h) for the full lifetime contract.
+`process_prepare_startup()` with named bindings to installed handles, arguments
+and environment; omit absent resources. The startup region belongs to the
+process's address space, with read-only metadata and writable argument pages.
+Entry receives its address in RDI. See the
+[startup interface](../include/kernel/user/startup.h) and
+[process interface](../include/kernel/process.h) for ownership contracts.
 
 A short lock protects ready-list and completion-list links. It is never held
 across allocation, logging, a context switch or waiting for another CPU. The
