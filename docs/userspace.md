@@ -111,7 +111,10 @@ to exchange a structured request with an attached capability. The client receive
 a content file at startup and copies a READ grant to the server. The server
 reads and prints its contents, closes its received handle, then replies with
 the byte count. The client prints the result and closes its own content grant,
-which remained valid. Closing its endpoint then lets the server exit.
+which remained valid. Closing its endpoint then lets the server exit. The client uses its named
+`server_process` capability to wait for server cleanup and report completion
+before closing that observer handle. See [process completion](processes.md#implemented-process-completion)
+for the lifetime and repeatable wait contract.
 Both have output handles; the server has no startup content grant. Their
 endpoint rights are CALL for the client and RECEIVE | REPLY for the server.
 The [endpoint contract](endpoints.md) describes ownership, growth and errors.

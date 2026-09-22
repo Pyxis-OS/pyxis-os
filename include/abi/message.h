@@ -8,6 +8,7 @@
 #define PROTOCOL_ENDPOINT UINT64_C(3)
 #define PROTOCOL_DIRECTORY UINT64_C(4)
 #define PROTOCOL_MEMORY UINT64_C(5)
+#define PROTOCOL_PROCESS UINT64_C(6)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

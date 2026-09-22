@@ -8,6 +8,7 @@ struct task_wait;
 struct directory_entry;
 struct file_object;
 struct file_wait;
+struct process_wait;
 struct memory_region;
 
 /* Current user task, IF=0. Prepare its wait record before publishing. The
@@ -35,6 +36,9 @@ void task_discard_directory_entry(struct directory_entry *entry);
 /* Current user task, IF=0. The file queue uses this task-owned record until it
  * detaches and wakes the waiter. One wait per task; no private-stack pointers. */
 struct file_wait *task_prepare_file_wait(void);
+
+/* Same lifetime as the file wait record, for process completion observers. */
+struct process_wait *task_prepare_process_wait(void);
 
 /* Current user task, IF=0, no spinlocks held. Lend exclusive file operation
  * ownership to the BSP to replace/release backing; return it after completion. */

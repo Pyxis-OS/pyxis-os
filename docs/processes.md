@@ -1,7 +1,7 @@
 # Processes, capabilities and the first userspace ABI
 
-Status: console, initrd/RAM file, directory and private-memory capabilities are
-implemented.
+Status: console, initrd/RAM file, directory, private-memory and process-completion
+capabilities are implemented.
 The broader process and resource model remains a working draft alongside the
 [spaces draft](spaces.md). Startup delivery, console and file CALL operations,
 and handle close are implemented, including the complete userspace example.
@@ -34,7 +34,7 @@ transfer independently. The endpoint exchange still uses directly supplied grant
 ## Objects, capabilities and handles
 
 An object is the underlying resource: a console, file, directory, memory
-service or endpoint. A capability grants particular operations on that object. A handle
+service, process-control object or endpoint. A capability grants particular operations on that object. A handle
 is an opaque, process-local value naming an entry in the process's capability
 table. The kernel entry holds the object reference and rights; userspace cannot
 gain rights by changing the handle value.
@@ -413,6 +413,46 @@ validate all reply/data buffers before producing side effects. A copy helper
 only validates its own range; it does not validate an entire operation. See the
 [user-memory interface](../include/kernel/user_memory.h). The current character
 syscalls remain unchanged and do not yet use these helpers.
+
+## Implemented process completion
+
+A process-control capability exposes WAIT through a tagged native CALL. Its
+[protocol](../include/abi/process.h) has one right, WAIT, and a header-only request.
+The [libpyxis wrapper](../userspace/include/process.h) preserves native errors and
+returns either EXITED with a signed exit status or FAULTED. Fault results carry
+no exit status; detailed architecture diagnostics remain in the kernel log.
+
+WAIT blocks until completion. The result is immutable and is not consumed:
+multiple observers and repeated waits receive the same result, including waits
+started after completion. Rights and writable reply storage are checked before
+sleeping. A short reply buffer or extra request payload is rejected. Only the
+resumed observer accesses its own user reply mapping.
+
+The execution owner retains one reference to the control object. After exit or
+an ordinary fatal user fault, the scheduler leaves the private root and task
+stack before handing the task to the BSP. The BSP releases the process address
+space, allocation records, capability table, kernel stack and task metadata
+before publishing completion and dropping that reference. Capability object
+retirement still follows its normal deferred destruction path.
+
+The control object contains no process pointer, so retaining a handle preserves
+only completion state, not execution memory. Closing the last observer before
+exit leaves execution alone. Unsubmitted preparation failures release their
+control object without a result; launch must not expose a live observer until
+preparation succeeds. There is no termination operation or userspace launcher
+in this task.
+
+Wait records live in permanent task metadata, never remote task stacks. The
+completion lock serializes registration and publication, with the lock order
+completion then scheduler queues. Wake-before-sleep is remembered. Publication
+detaches each waiter before waking it, and no lock spans a context switch.
+These rules depend on the existing one-task-per-process contract; external task
+cancellation would need to detach an outstanding wait before teardown.
+
+Client receives a named `server_process` grant. It finishes its endpoint exchange,
+closes the endpoint so server can exit, then waits and reports the result. A
+wait while retaining the open endpoint would leave server waiting for another
+request or closure.
 
 ## Later operations and open decisions
 
