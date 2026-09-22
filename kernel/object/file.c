@@ -61,7 +61,7 @@ static void unlock_file(struct file_object *file)
   atomic_store_explicit(&file->locked, false, memory_order_release);
 }
 
-static void begin_operation(struct file_object *file)
+void file_begin_operation(struct file_object *file)
 {
   lock_file(file);
   if (!file->busy) {
@@ -84,7 +84,7 @@ static void begin_operation(struct file_object *file)
    * retains the file throughout the wait, including while lending it to BSP. */
 }
 
-static void end_operation(struct file_object *file)
+void file_end_operation(struct file_object *file)
 {
   lock_file(file);
   struct file_wait *waiter = file->first_waiter;
@@ -153,7 +153,7 @@ static struct syscall_result read_file(struct file_object *file,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
-  begin_operation(file);
+  file_begin_operation(file);
   size_t count = 0;
   if (request->offset < file->size) {
     count = file->size - request->offset;
@@ -167,7 +167,7 @@ static struct syscall_result read_file(struct file_object *file,
     KASSERT(copy_to_user(request->address,
         (const uint8_t *)file->data + request->offset, count));
   }
-  end_operation(file);
+  file_end_operation(file);
 
   reply.read = count;
   /* Private mappings stay stable across waits. The captured request permits
@@ -189,11 +189,11 @@ static struct syscall_result write_file(struct file_object *file,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
-  begin_operation(file);
+  file_begin_operation(file);
   if (request->size) {
     size_t end = request->offset + request->size;
     if (!reserve_buffer(file, end)) {
-      end_operation(file);
+      file_end_operation(file);
       return (struct syscall_result){CALL_NO_MEMORY, 0};
     }
     uint8_t *data = (uint8_t *)file->data;
@@ -207,7 +207,7 @@ static struct syscall_result write_file(struct file_object *file,
       file->size = end;
     }
   }
-  end_operation(file);
+  file_end_operation(file);
 
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
@@ -215,18 +215,18 @@ static struct syscall_result write_file(struct file_object *file,
 
 static struct syscall_result resize_file(struct file_object *file, size_t size)
 {
-  begin_operation(file);
+  file_begin_operation(file);
   if (!size && file->capacity) {
     KASSERT(task_replace_file_buffer(file, 0));
   } else if (!reserve_buffer(file, size)) {
-    end_operation(file);
+    file_end_operation(file);
     return (struct syscall_result){CALL_NO_MEMORY, 0};
   } else if (size > file->size) {
     /* Also clear retained capacity: truncated contents must never reappear. */
     memset((uint8_t *)file->data + file->size, 0, size - file->size);
   }
   file->size = size;
-  end_operation(file);
+  file_end_operation(file);
   return (struct syscall_result){CALL_OK, 0};
 }
 
@@ -280,9 +280,9 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  begin_operation(file);
+  file_begin_operation(file);
   reply.size = file->size;
-  end_operation(file);
+  file_end_operation(file);
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }

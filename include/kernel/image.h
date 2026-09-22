@@ -16,7 +16,7 @@ enum image_result {
  * On success the caller owns a new, inactive space with shared kernel mappings
  * and an entry address. No stack is allocated and no code is executed.
  * On failure, allocations are unwound and both outputs are cleared.
- * The active space is unchanged. Single CPU, interrupts disabled. */
+ * The active space is unchanged. BSP only, interrupts disabled. */
 enum image_result image_load(const void *bytes, size_t size,
                              struct vm_space **space, uintptr_t *entry);
 
