@@ -5,6 +5,11 @@ This is a working handoff document, not a frozen ABI or authorization to impleme
 all tasks at once. Either collaborator can pick up the next assigned task; mark
 it complete and record its handoff in the implementing PR.
 
+Before implementing each task, discuss any unclear requirements or unresolved
+design choices with the owner. For example, settle the allocator choice before
+implementing malloc/free. Agreement on the milestone does not settle those
+remaining choices automatically.
+
 This narrows the candidates in [development paths](development-paths.md).
 The [filesystem draft](../vfs.md) describes the longer-term overlay and namespace
 model; [processes](../processes.md) and [endpoints](../endpoints.md) describe the
@@ -183,7 +188,7 @@ Each task should include its native wrappers and necessary in-tree consumer
 updates. Exact message layouts and status names belong beside the implementation,
 not duplicated here as a second ABI definition.
 
-- [ ] **1. Build a shared native userspace library.** Package existing wrappers
+- [x] **1. Build a shared native userspace library.** Package existing wrappers
   as `libpyxis` and share startup/link rules across current programs. Establish
   static-library build dependencies without creating unused library skeletons.
   Done when existing images build and behave as before using the shared library.
@@ -333,4 +338,21 @@ by the next task. Keep the checklist aligned with merged work. Implementation
 may reveal a better split; update this document rather than silently expanding
 a PR or treating every detail here as permanently fixed.
 
-No implementation tasks are complete yet.
+Task 1 is complete (assistant). The existing wrappers now build into the indexed
+static archive `build/userspace/libpyxis.a`, also available through
+`make -C userspace libpyxis`. All three programs use the shared link rule with
+an explicit startup object and the archive after program code. Native interfaces,
+startup behavior and program sources are unchanged. No additional libraries or
+runtime facilities were introduced.
+
+Validation: the library-only target and an ordinary parallel image build passed
+without warnings. Normal one- and four-CPU KVM boots ran hello, client and server
+through exit status 0 and address-space release. Single-CPU framebuffer
+inspection confirmed the greeting, archive content, client result and server
+closure message. Archive/symbol inspection confirmed an index and selection of
+referenced wrappers; hello no longer includes unused endpoint code. A repeated
+library build was up to date, and make dry runs showed header and startup changes
+triggering their dependent rebuilds. No tests or boot automation were added.
+
+Task 2 remains unstarted. Discuss its startup layout, resource naming and size
+limits before implementation.
