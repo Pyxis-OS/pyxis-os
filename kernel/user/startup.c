@@ -43,6 +43,13 @@ static bool measure_bindings(struct process *process,
     if (!add_string_size(binding->name, size) || !binding->name[0]) {
       return false;
     }
+    if (directories) {
+      for (const char *name = binding->name; *name; ++name) {
+        if (*name == ':' || *name == '/') {
+          return false;
+        }
+      }
+    }
     struct kernel_object *object;
     if (capability_resolve(&process->capabilities, binding->handle, 0,
           &object, NULL) != CAP_OK || (directories && object->type != OBJECT_DIRECTORY)) {
@@ -61,8 +68,10 @@ static bool measure_startup(struct process *process,
                              const struct process_startup *source,
                              struct startup_sizes *sizes)
 {
-  if (!source || source->working_directory_count ||
-      source->working_path ||
+  if (!source ||
+      source->working_directory_count > STARTUP_MAX_SIZE / sizeof(handle_t) ||
+      (source->working_directory_count && !source->working_directories) ||
+      (!source->working_directory_count && source->working_path) ||
       source->resource_count > STARTUP_MAX_SIZE / sizeof(struct startup_binding) ||
       source->root_count > STARTUP_MAX_SIZE / sizeof(struct startup_binding) ||
       source->environment_count > STARTUP_MAX_SIZE / sizeof(struct startup_variable) ||
@@ -77,6 +86,7 @@ static bool measure_startup(struct process *process,
   sizes->metadata = sizeof(struct startup_info) +
                     source->resource_count * sizeof(struct startup_binding) +
                     source->root_count * sizeof(struct startup_binding) +
+                    source->working_directory_count * sizeof(handle_t) +
                     source->environment_count * sizeof(struct startup_variable);
   sizes->arguments = (source->argc + 1) * sizeof(uint64_t);
   if (sizes->metadata > STARTUP_MAX_SIZE) {
@@ -86,6 +96,17 @@ static bool measure_startup(struct process *process,
   if (!measure_bindings(process, source->resources, source->resource_count, false,
         &sizes->metadata) ||
       !measure_bindings(process, source->roots, source->root_count, true, &sizes->metadata)) {
+    return false;
+  }
+
+  for (size_t i = 0; i < source->working_directory_count; ++i) {
+    struct kernel_object *object;
+    if (capability_resolve(&process->capabilities, source->working_directories[i],
+          0, &object, NULL) != CAP_OK || object->type != OBJECT_DIRECTORY) {
+      return false;
+    }
+  }
+  if (source->working_path && !add_string_size(source->working_path, &sizes->metadata)) {
     return false;
   }
 
@@ -139,6 +160,7 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
     .read_only_size = sizes->metadata,
     .resource_count = source->resource_count,
     .root_count = source->root_count,
+    .working_directory_count = source->working_directory_count,
     .environment_count = source->environment_count,
     .argc = source->argc,
     .argv = address + sizes->metadata,
@@ -155,6 +177,12 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
     info->roots = address + offset;
     offset += source->root_count * sizeof(*roots);
   }
+  if (source->working_directory_count) {
+    info->working_directories = address + offset;
+    size_t bytes = source->working_directory_count * sizeof(handle_t);
+    memcpy(buffer + offset, source->working_directories, bytes);
+    offset += bytes;
+  }
   struct startup_variable *environment = (struct startup_variable *)(buffer + offset);
   if (source->environment_count) {
     info->environment = address + offset;
@@ -168,6 +196,9 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
   for (size_t i = 0; i < source->root_count; ++i) {
     roots[i].name = copy_string(buffer, &offset, address, source->roots[i].name);
     roots[i].handle = source->roots[i].handle;
+  }
+  if (source->working_path) {
+    info->working_path = copy_string(buffer, &offset, address, source->working_path);
   }
   for (size_t i = 0; i < source->environment_count; ++i) {
     environment[i].name = copy_string(buffer, &offset, address, source->environment[i].name);
