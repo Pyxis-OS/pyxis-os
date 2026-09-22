@@ -1,5 +1,6 @@
 #include <abi/message.h>
 #include <kernel/object/file.h>
+#include <kernel/object/process.h>
 #include <kernel/object/memory.h>
 #include <kernel/object/directory.h>
 #include <kernel/object/capability.h>
@@ -131,6 +132,12 @@ static struct syscall_result call_object(handle_t handle,
     }
     return memory_call(rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
+  case OBJECT_PROCESS_CONTROL:
+    if (header.protocol != PROTOCOL_PROCESS) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return process_control_call((struct process_control *)object, rights,
+        header.operation, request_size, reply_address, reply_capacity);
   case OBJECT_ENDPOINT:
     if (header.protocol != PROTOCOL_ENDPOINT) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

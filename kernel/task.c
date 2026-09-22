@@ -10,6 +10,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/object/object.h>
 #include <kernel/object/file.h>
+#include <kernel/object/process.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/user.h>
@@ -39,6 +40,7 @@ struct task {
   size_t directory_name_length;
   bool directory_discard;
   struct file_wait file_wait;
+  struct process_wait process_wait;
   struct task *file_next;
   struct file_object *file;
   size_t file_capacity;
@@ -145,6 +147,14 @@ struct task_wait *task_wait_prepare(void)
   KASSERT(!task->wait && !task->parked);
   task->wait_record = (struct task_wait){.task = task};
   return &task->wait_record;
+}
+
+struct process_wait *task_prepare_process_wait(void)
+{
+  struct task_wait *wait = task_wait_prepare();
+  struct task *task = wait->task;
+  task->process_wait = (struct process_wait){.wait = wait};
+  return &task->process_wait;
 }
 
 void task_wait_sleep(struct task_wait *wait)
@@ -516,7 +526,14 @@ static void reap_completed(void)
 
   while (task) {
     struct task *next = task->next;
+    struct process_control *control = NULL;
+    struct process_result result = {0};
     if (task->kind == TASK_USER) {
+      /* Transfer the execution owner's reference before freeing the process. */
+      control = task->process->control;
+      task->process->control = NULL;
+      result.kind = task->faulted ? PROCESS_FAULTED : PROCESS_EXITED;
+      result.exit_status = task->faulted ? 0 : task->exit_status;
       KASSERT(process_destroy(task->process) == MM_OK);
     }
     KASSERT(vm_free(vm_kernel_space(), task->kernel_stack, TASK_STACK_SIZE) == MM_OK);
@@ -529,6 +546,10 @@ static void reap_completed(void)
       }
     }
     kfree(task);
+    if (control) {
+      process_control_complete(control, result);
+      object_release(&control->object);
+    }
     task = next;
   }
 }

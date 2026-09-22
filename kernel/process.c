@@ -3,6 +3,7 @@
 #include <kernel/mm/private.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/object/process.h>
 #include <kernel/process.h>
 
 enum mm_result process_create(struct space *space, struct vm_space *address_space,
@@ -21,6 +22,11 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
     return MM_NO_MEMORY;
   }
   *process = (struct process){.space = space, .address_space = address_space};
+  process->control = process_control_create();
+  if (!process->control) {
+    kfree(process);
+    return MM_NO_MEMORY;
+  }
   *result = process;
   return MM_OK;
 }
@@ -38,6 +44,9 @@ enum mm_result process_destroy(struct process *process)
   }
   private_memory_discard_records(process);
   capability_table_destroy(&process->capabilities);
+  if (process->control) {
+    object_release(&process->control->object);
+  }
   kfree(process);
   return MM_OK;
 }

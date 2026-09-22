@@ -11,6 +11,7 @@ enum object_type {
   OBJECT_ENDPOINT = 3,
   OBJECT_DIRECTORY = 4,
   OBJECT_MEMORY = 5,
+  OBJECT_PROCESS_CONTROL = 6,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.

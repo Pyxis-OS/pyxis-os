@@ -1,0 +1,39 @@
+#ifndef KERNEL_PROCESS_CONTROL_H
+#define KERNEL_PROCESS_CONTROL_H
+
+#include <abi/process.h>
+#include <abi/syscall.h>
+#include <kernel/object/object.h>
+
+struct task_wait;
+
+/* Embedded in task metadata; other CPUs must not follow private-stack links. */
+struct process_wait {
+  struct process_wait *next;
+  struct task_wait *wait;
+};
+
+/* Retains only a result and waiters, never the process or its address space. */
+struct process_control {
+  struct kernel_object object;
+  atomic_bool locked;
+  bool complete;
+  struct process_result result;
+  struct process_wait *waiters;
+};
+
+/* BSP, IF=0. Returns one owned reference or NULL. An unsubmitted process may
+ * release this without completing it; no observer may be running at that point. */
+struct process_control *process_control_create(void);
+
+/* BSP, IF=0, with an owned reference. Publish once, only after execution
+ * resources are reclaimed. Detaches and wakes every waiter. */
+void process_control_complete(struct process_control *control, struct process_result result);
+
+/* Current process, IF=0, with a live handle reference and checked protocol.
+ * WAIT may sleep; one task per process keeps its handle and mappings stable. */
+struct syscall_result process_control_call(struct process_control *control,
+    uint64_t rights, uint64_t operation, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity);
+
+#endif
