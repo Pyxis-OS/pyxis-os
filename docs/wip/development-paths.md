@@ -4,6 +4,10 @@ Status: working notes from discussion, not an approved design or ordered task
 list. These are candidates to revisit and split into focused milestones. No
 implementation is assigned by this document.
 
+The subsequent [first-shell milestone](first-shell.md) records the filesystem,
+application-runtime and library decisions selected from these candidates, with
+a focused PR worklist. The remaining paths below stay parked for later discussion.
+
 Request/reply endpoints, request-side capability copies and BSP-serviced
 capability-table growth are implemented. Their handoff is recorded in
 [the process/capability worklist](process-capability-abi.md).
@@ -59,8 +63,9 @@ supporting work; this list gives them concrete applications to serve.
 
    One proposal is to resolve a scheme to a directory capability in the
    process's namespace, with lookup returning further directory/file grants.
-   Names would not confer authority. Kernel versus userspace-service ownership
-   of lookup and namespace resolution is still undecided.
+   Names would not confer authority. The first-shell milestone selects
+   kernel-resident directory/file objects with path resolution in the native
+   userspace library.
 
    A first prototype could expose an initrd-backed read-only tree and a writable
    RAM-backed tree, enough for listing, reading, creating directories and saving
@@ -114,9 +119,9 @@ supporting work; this list gives them concrete applications to serve.
    configuration execution. The first Lua port and Neovim's Lua runtime
    requirements should be evaluated separately.
 
-The proposed next discussion is the filesystem and application-runtime contract
-needed by the first shell. Concrete interactions such as listing a directory,
-opening a file, launching a child and handing it a terminal can guide the design.
+The filesystem and application-runtime discussion is now recorded in the
+[first-shell worklist](first-shell.md). That milestone stops before editors and
+Lua, using a native shell and libc-backed utilities to exercise the interfaces.
 
 ## References for that discussion
 
