@@ -124,8 +124,11 @@ static enum call_status check_child_request(uint64_t rights,
   if (!user_buffer_check(reply_address, sizeof(struct directory_child_reply), USER_BUFFER_WRITE)) {
     return CALL_BAD_BUFFER;
   }
-  uint64_t allowed = request->kind == DIRECTORY_KIND_DIRECTORY ? rights :
-                     ((rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0);
+  uint64_t allowed = rights;
+  if (request->kind == DIRECTORY_KIND_FILE) {
+    allowed = ((rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0) |
+              ((rights & DIRECTORY_RIGHT_WRITE_FILES) ? FILE_RIGHT_WRITE : 0);
+  }
   if (request->rights & ~allowed) {
     return CALL_DENIED;
   }

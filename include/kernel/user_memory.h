@@ -22,8 +22,10 @@ bool user_buffer_check(uintptr_t address, size_t bytes,
  * alias the user range. Zero bytes touches neither buffer. Mappings remain
  * stable because this process has one task, no shared user backing and no
  * concurrent VM mutation. The copy itself never schedules. A blocking syscall
- * must keep the process alive, stage all input first, and resume its original
- * task/root before using checked destinations; keep IF=0 while copying.
+ * must keep the process alive, capture request metadata before side effects,
+ * and resume its original task/root before copying checked sources/destinations.
+ * Private input stays unchanged while its sole task sleeps. Keep IF=0 while
+ * copying; other CPUs must never dereference these private user mappings.
  * No fault recovery is attempted for broken kernel mapping/buffer invariants.
  * A syscall must check all request/reply/data buffers before its side effects;
  * capture request metadata with copy_from_user before interpreting it. */

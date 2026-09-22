@@ -16,7 +16,7 @@ bool object_rights_valid(enum object_type type, uint64_t rights)
   case OBJECT_CONSOLE:
     return !(rights & ~CONSOLE_RIGHT_WRITE);
   case OBJECT_FILE:
-    return !(rights & ~FILE_RIGHT_READ);
+    return !(rights & ~FILE_RIGHTS);
   case OBJECT_DIRECTORY:
     return !(rights & ~DIRECTORY_RIGHTS);
   case OBJECT_ENDPOINT:
