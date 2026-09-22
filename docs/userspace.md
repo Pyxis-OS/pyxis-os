@@ -62,7 +62,7 @@ The runtime requires no malloc or libc. Scheme roots and working-directory
 context are currently empty pending directory objects.
 
 Hello obtains output and content by name, uses its argument vector and initial
-environment in its greeting, then reads and prints the packaged blob in chunks.
+environment in its greeting, then reads and prints the packaged file in chunks.
 It attempts to close both handles even after an I/O error. The syscall register
 convention is defined in the [native wrapper](../userspace/include/syscall.h).
 Normal output targets the owning space's TTY; diagnostic output targets the
@@ -77,13 +77,13 @@ console capabilities for TTY output.
 CALL takes a handle, a tagged message and its size, then a reply buffer and
 capacity. Shared protocol headers define the tag and payload union. Rights are
 checked against the handle's object type, so the same bit may mean console
-WRITE or blob READ. Kernel and userspace are rebuilt together against the
+WRITE or file READ. Kernel and userspace are rebuilt together against the
 shared ABI headers. Older layouts are not supported.
 
-The [blob wrappers](../userspace/include/blob.h) query size and read at explicit
+The [file wrappers](../userspace/include/file.h) query size and read at explicit
 offsets. They check reply lengths and counts; a short read is allowed and zero
 bytes with nonzero capacity means EOF. Hello uses a fixed stack buffer, so it
-does not allocate storage proportional to the blob size or require NUL-terminated
+does not allocate storage proportional to the file size or require NUL-terminated
 content. It checks that EOF and transferred counts agree with the queried size.
 
 The [handle wrapper](../userspace/include/handle.h) releases the calling process's
@@ -93,7 +93,7 @@ handles left open. The read-only startup record is not updated after close.
 
 The client and server use the [endpoint wrappers](../userspace/include/endpoint.h)
 to exchange a structured request with an attached capability. The client receives
-a content blob at startup and copies a READ grant to the server. The server
+a content file at startup and copies a READ grant to the server. The server
 reads and prints its contents, closes its received handle, then replies with
 the byte count. The client prints the result and closes its own content grant,
 which remained valid. Closing its endpoint then lets the server exit.

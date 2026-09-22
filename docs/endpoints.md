@@ -26,7 +26,9 @@ wrap the existing native CALL syscall:
 
 Application data is opaque to the kernel and limited to 64 inline bytes per
 request or response. It may contain an application-defined tag and structure,
-as in [the content service](../userspace/include/content_service.h). Embedded
+as in [the content service](../userspace/include/content_service.h). That example
+copies a READ file capability; the server reads the initrd-backed file and
+closes its own handle before replying with the byte count. Embedded
 pointers and handle numbers in these ordinary bytes grant no authority in the
 receiving process. Capability transfer uses a separate explicit grant field;
 pointed-to data is never copied implicitly.

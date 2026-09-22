@@ -1,5 +1,10 @@
 # First process and capability ABI: worklist
 
+Historical worklist: the blob object and protocol described below were replaced
+by initrd-backed file objects in [first-shell task 3](first-shell.md). See
+[the current file contract](../processes.md#implemented-file-calls). Earlier
+handoffs retain the names used by their original commits.
+
 Working sequence for the console-and-blob milestone described in
 [the process draft](../processes.md). Tasks may be taken by either the project
 owner or an assistant in separate turns. No task is assigned or started by

@@ -207,7 +207,7 @@ not duplicated here as a second ABI definition.
   Depends on 1. Done when existing programs consume their named resources and
   arguments/environment are inspectable through the runtime.
 
-- [ ] **3. Initrd file objects and explicit-offset reads.** Expose immutable
+- [x] **3. Initrd file objects and explicit-offset reads.** Expose immutable
   archive content through the file protocol with READ and size operations,
   using a real packaged file and initial grant. Retain the backing safely and
   handle EOF, partial reads and invalid buffers. Decide the relationship to the
@@ -389,5 +389,26 @@ all programs were released, heap usage and PMM frame counts returned to their
 pre-launch values. Allocation-failure unwinding was code-reviewed, not forced.
 No tests, fault injection or boot automation were added.
 
-Task 3 remains unstarted. Discuss the file protocol and its relationship to the
-existing immutable blob object before implementation.
+Task 3 is complete (assistant). The immutable blob object and protocol were
+replaced outright by the file object, FILE_RIGHT_READ, size and explicit-offset
+read operations. `file_create_initrd()` creates the initial read-only backing;
+no seek position, directory lookup, mutation or backing-dispatch framework was
+introduced. The archive retains its bytes and mapping for the kernel lifetime;
+last-reference retirement frees only the file wrapper on the BSP.
+
+Hello and the endpoint example now use file capabilities and libpyxis file
+wrappers. The client copies a READ file grant to the server, which reads the
+content and closes its handle before replying. Old blob headers, implementations
+and library members are gone; protocol values remain unchanged with no version
+bump or compatibility layer.
+
+Validation: ordinary image builds completed without warnings. Normal one- and
+four-CPU KVM boots ran all three programs through exit 0 and address-space
+release. Single-CPU framebuffer inspection confirmed the packaged file contents,
+client byte-count response and endpoint closure. Archive/symbol inspection found
+the file implementation and no remaining blob symbols. The retained EOF,
+short-read, buffer-validation and reference-lifetime paths were code-reviewed;
+error paths were not forced in this pass. No tests or boot automation were added.
+
+Task 4 remains unstarted. Discuss directory representation, lookup grants and
+enumeration under mutation before implementation.

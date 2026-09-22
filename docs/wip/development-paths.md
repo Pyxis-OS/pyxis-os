@@ -16,7 +16,7 @@ capability-table growth are implemented. Their handoff is recorded in
 
 1. **Reply-side capability transfer.** Let a service return a newly granted
    resource. A small example could resolve an initrd filename and return a READ
-   blob capability. This supports resource discovery without first settling a
+   file capability. This supports resource discovery without first settling a
    complete VFS or naming model.
 
 2. **Userspace process launching.** An authorized program supplies an image

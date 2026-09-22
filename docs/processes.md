@@ -1,8 +1,8 @@
 # Processes, capabilities and the first userspace ABI
 
-Status: the first console-and-blob ABI slice below is agreed for implementation.
+Status: the console-and-file ABI below is implemented.
 The broader process and resource model remains a working draft alongside the
-[spaces draft](spaces.md). Startup delivery, console and blob CALL operations,
+[spaces draft](spaces.md). Startup delivery, console and file CALL operations,
 and handle close are implemented, including the complete userspace example.
 [Request/reply endpoints](endpoints.md) now connect separate client and server
 processes through the same tagged call ABI. Programs use console capabilities
@@ -17,13 +17,13 @@ ownership together: print a greeting, read the contents of a supplied file,
 write those contents to the console, then exit.
 
 The launcher resolves the file through the existing boot-archive reader and
-grants a capability to an immutable blob containing its bytes. The program
+grants a capability to an immutable file containing its bytes. The program
 receives these two resources:
 
 | Startup role | Object | Rights |
 | --- | --- | --- |
 | Output | The space's console | `WRITE` |
-| Content | An immutable blob backed by a boot-archive file | `READ` |
+| Content | A read-only initrd file | `READ` |
 
 This example needs no filesystem root, path lookup operation or VFS semantics.
 The [filesystem draft](vfs.md) remains separate. The boot archive is a source of
@@ -33,9 +33,9 @@ The hello program:
 
 1. Look up its named output and content resources through libpyxis.
 2. Write a greeting, handling errors and any partial write.
-3. Query the blob size and read at explicit byte offsets into a stack buffer.
+3. Query the file size and read at explicit byte offsets into a stack buffer.
 4. Write the returned bytes, advance the offset, and repeat until EOF, checking
-   that the counts agree with the immutable blob's size.
+   that the counts agree with the immutable file's size.
 5. Attempt to close both handles even after an I/O error, then exit with a
    success or failure status. The kernel releases any handles left open.
 
@@ -44,7 +44,7 @@ are later duplicated or passed between processes.
 
 ## Objects, capabilities and handles
 
-An object is the underlying resource: a console, blob, memory allocation or
+An object is the underlying resource: a console, file, memory allocation or
 endpoint. A capability grants particular operations on that object. A handle
 is an opaque, process-local value naming an entry in the process's capability
 table. The kernel entry holds the object reference and rights; userspace cannot
@@ -52,7 +52,7 @@ gain rights by changing the handle value.
 
 Different processes may hold different handles and rights to the same object.
 Rights are defined by the object's protocol: `CONSOLE_RIGHT_WRITE` authorizes
-console output; `BLOB_RIGHT_READ` authorizes blob reads and size queries. Both
+console output; `FILE_RIGHT_READ` authorizes file reads and size queries. Both
 currently use bit 0, with different meanings. The capability table stores the
 mask without imposing global READ/WRITE meanings; installation rejects bits
 unsupported by the target object type. The message never supplies authority.
@@ -80,7 +80,7 @@ their own rules. Whether a space also imposes an authority ceiling on incoming
 grants, and how cross-space admission works, remain open.
 
 Resource charges are distinct from access grants. Giving another process access
-to a blob should not silently transfer the memory charge to that process or
+to a file should not silently transfer the memory charge to that process or
 its space. This matters to the containment goals in the spaces draft.
 
 ## Startup record
@@ -160,12 +160,12 @@ rejected. Operation numbers are local to each protocol and may overlap.
 | Operation | Authority | Payload fields, in order | Reply field |
 | --- | --- | --- | --- |
 | Console write | `CONSOLE_RIGHT_WRITE` | Source user address, byte length | Bytes written |
-| Blob read at offset | `BLOB_RIGHT_READ` | Byte offset, destination user address, capacity | Bytes read |
-| Blob size | `BLOB_RIGHT_READ` | Unused | Blob byte size |
+| File read at offset | `FILE_RIGHT_READ` | Byte offset, destination user address, capacity | Bytes read |
+| File size | `FILE_RIGHT_READ` | Unused | File byte size |
 
 Send the complete protocol message structure, including unused union storage:
-`console_message` is 32 bytes and `blob_message` is 40 bytes. Both start with the
-16-byte tag. Sizes must match exactly. The blob size operation ignores payload
+`console_message` is 32 bytes and `file_message` is 40 bytes. Both start with the
+16-byte tag. Sizes must match exactly. The file size operation ignores payload
 fields, but the complete message must be readable. Initialize unused storage to
 zero; the wrappers do this. The shared headers assert sizes and payload offsets.
 Each reply needs at least 8 bytes of capacity; success writes one 8-byte field and returns
@@ -176,7 +176,7 @@ return the invalid-handle status; both success and failure return zero in RDX.
 Other references to the object remain valid. A last release uses the existing
 BSP retirement path, so closing on an AP does not allocate or destroy objects.
 
-For a nonzero read capacity, successful zero-byte reads at or beyond the blob's
+For a nonzero read capacity, successful zero-byte reads at or beyond the file's
 end indicate EOF. Reads can return fewer bytes than requested. Writes report
 actual progress; a nonempty write cannot succeed with zero progress. A transfer
 with zero data length succeeds with a zero count and does not dereference its
@@ -212,7 +212,7 @@ a process are later decisions.
 The ownership walkthrough for the example is:
 
 1. The launcher creates a process in a space and loads its program and stack.
-2. It installs references to the space's console and the selected archive blob,
+2. It installs references to the space's console and the selected archive file,
    restricted to the proposed rights, and fills the startup record.
 3. Once setup succeeds, it makes the initial task runnable. Earlier failures
    unwind the new address space, table entries and references.
@@ -271,11 +271,11 @@ storage. Object destruction may follow in the next reaping pass; independent
 kernel or process references keep shared resources alive. The
 [capability interface](../include/kernel/object/capability.h) and
 [object lifetime interface](../include/kernel/object/object.h) define the contracts.
-Both concrete console and blob objects use this lifetime model.
+Both concrete console and file objects use this lifetime model.
 
 CALL resolves the handle once, obtains its object and rights, then captures the
 message tag from userspace. A small switch on object type checks the protocol
-and selects the console, blob or endpoint handler. Each handler checks the operation,
+and selects the console, file or endpoint handler. Each handler checks the operation,
 required rights, exact payload size and user buffers before acting. Tag reads
 can fail before operation/rights checks. A mismatched protocol or unsupported
 operation returns BAD_OPERATION; a supported operation with insufficient rights
@@ -283,10 +283,10 @@ returns DENIED. No operation callback table or registration framework is involve
 
 Object lifetime, capability tables and the concrete handlers live in
 `kernel/object/`, with corresponding headers under `include/kernel/object/`.
-Protocols stay in shared `include/abi/` headers. Console and blob operations
+Protocols stay in shared `include/abi/` headers. Console and file operations
 complete within the kernel; endpoint calls may suspend the task until a userspace
-peer replies. Dynamic protocol discovery, file protocols and framebuffer
-protocols remain separate future work.
+peer replies. Dynamic protocol discovery, directory operations, file mutation
+and framebuffer protocols remain separate future work.
 
 ### Implemented console calls
 
@@ -324,26 +324,31 @@ close because it assumes RDX is preserved. Closing leaves the startup record
 unchanged, so its output binding then contains a stale handle. Exit releases any
 entries still open, while the space keeps its own console reference.
 
-### Implemented blob calls
+### Implemented file calls
 
-The [blob object](../include/kernel/object/blob.h) copies an immutable archive-file
+The file object and protocol replace the previous immutable blob interface.
+The kernel and all userspace consumers use file names and rights directly;
+there is no second object type or compatibility wrapper. This slice provides
+only READ, size and explicit-offset reads, without directory lookup or mutation.
+
+The [file object](../include/kernel/object/file.h) copies an immutable archive-file
 view into a reference-counted wrapper. It borrows the bytes and the archive's
 kernel-lifetime mapping. The launcher installs a READ capability and releases
 its temporary reference; close or process cleanup eventually frees the wrapper
 on the BSP. Neither path frees archive frames or removes the archive mapping.
 
-The [blob layouts](../include/abi/blob.h) define size and offset-read operations.
-Both require the blob's READ right. Size ignores payload fields after capturing
+The [file layouts](../include/abi/file.h) define size and offset-read operations.
+Both require the file's READ right. Size ignores payload fields after capturing
 the complete message. Reads validate the full destination capacity
 and the actual reply bytes before writing anything, including at EOF. Zero
 capacity ignores the destination address. Counts are clipped to the remaining
-blob bytes; offsets at or beyond the end return zero without forming a source
+file bytes; offsets at or beyond the end return zero without forming a source
 pointer. The reply is written last, so it overwrites any overlapping data bytes.
 Request storage may overlap destinations because its fields are captured first.
 
-The blob is not mapped directly into userspace, has no shared seek position,
+The file is not mapped directly into userspace, has no shared seek position,
 and supports no mutation or lookup operations. The
-[userspace wrappers](../userspace/include/blob.h) check status, reply size and
+[userspace wrappers](../userspace/include/file.h) check status, reply size and
 read counts, clearing output values on failure. Hello uses these wrappers to
 read the text asset in chunks and the console helper to finish partial writes.
 
