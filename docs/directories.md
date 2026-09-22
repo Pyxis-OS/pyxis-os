@@ -96,5 +96,6 @@ oversized entry as an error rather than silently truncating it.
 
 The sample text is packaged at `share/hello.txt`; the source remains beside hello.
 The endpoint client retains a directly supplied file capability for its existing
-transfer example. General URI/relative-path helpers and working-directory
-navigation are task 5; no ambient fallback root exists.
+transfer example. [Path helpers](paths.md) now compose these component operations
+for explicit schemes and relative paths, retaining working-directory handles
+without an ambient fallback root.

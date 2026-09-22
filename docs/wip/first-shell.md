@@ -103,7 +103,8 @@ parent's. Parent navigation uses retained or granted ancestor capabilities;
 `..` must not escape a standalone subtree grant. A displayed path is descriptive,
 not authority. Startup represents this context as a sequence of directory
 handles, boundary first and current directory last, with an optional display
-path. The chain remains empty until task 5 adds working-directory helpers.
+path. Task 5 supplies the initial chain and helpers that retain an independent
+working-directory context in caller-provided storage.
 
 ## Launch and startup contract
 
@@ -222,7 +223,7 @@ not duplicated here as a second ABI definition.
   references. Depends on 3. Done when a program discovers and reads a named file,
   and lists its containing directory through native calls.
 
-- [ ] **5. Native path resolution and working-directory helpers.** Resolve
+- [x] **5. Native path resolution and working-directory helpers.** Resolve
   schemes and relative paths, retain the required directory context and support
   changing that context. Define path syntax and component edge cases explicitly;
   preserve subtree confinement. Depends on 2 and 4. Done when supplied roots and
@@ -442,5 +443,44 @@ returned to their pre-launch baseline and the retirement queue was empty.
 Archive conflict handling and allocation-failure unwinding were code-reviewed,
 not forced. No tests, fault injection or boot automation were added.
 
-Task 5 remains unstarted. Discuss exact path syntax, ownership of retained
-working-directory handles and allocation-free runtime storage before implementation.
+Task 5 is complete (assistant). Libpyxis resolves explicit scheme paths and
+relative paths through directory calls. It accepts repeated separators and `.`,
+walks `..` through retained ancestors and rejects boundary escape, empty paths
+and leading `/`. Trailing `/` requires a directory. Names remain literal,
+case-sensitive bytes; no URL decoding, expansion or implicit application search.
+Components are walked in order, so `missing/..` cannot bypass a failed lookup.
+
+An explicit context owns directory handles in caller-provided storage. Scratch
+arrays and a component buffer bound each operation without imposing ABI-wide
+path/depth limits. Directory changes prepare the new chain before replacing the
+old one; failures unwind scratch references and preserve the current directory.
+Local handle copying supports preserved or reduced rights, uses existing BSP
+table growth, and makes every resolved result independently owned, including
+`.` and a bare scheme root. Startup now validates/copies directory chains and an
+optional descriptive path, without inferring ancestry or changing schema version.
+The runtime does not maintain a displayed path or mutate environment variables.
+See [paths](../paths.md) for ownership and errors.
+
+Hello starts at the application root, reads `app://share/hello.txt`, changes into
+`app://share`, and reads `hello.txt` relatively. It uses no allocator or libc.
+The endpoint example still uses direct grants. Bare-command resolution and
+executable launching remain later tasks.
+
+Validation: ordinary image builds passed without warnings. Normal one- and
+four-CPU KVM boots ran all three programs through exit 0 and address-space
+release. Framebuffer inspection showed the explicit and relative reads. Manual
+four-CPU TCG/GDB inspection covered parent navigation, boundary rejection,
+missing components, trailing-slash kind checks, unknown schemes, small caller
+buffers, preserved context after failure, exact result rights and reading a
+known filename without ENUMERATE. An independently retained subtree survived
+closing its source handle and could not navigate above its boundary. Startup
+rejected a non-directory chain and a display path without a chain. COPY rejected
+bad buffers/flags/handles and excess rights. Filling the table with valid copies
+made an AP's normal copy wait for BSP growth from eight to sixteen entries.
+After exit, including debugger-owned handles, physical-frame usage returned to
+its pre-launch baseline; heap usage retained only the existing kernel state and
+initrd tree, with an empty retirement queue. Allocation-failure unwinding was
+reviewed, not forced. No tests, fault injection or boot automation were added.
+
+Task 6 remains unstarted. Discuss RAM-tree ownership, creation semantics,
+mutation synchronization and BSP allocation requests before implementation.

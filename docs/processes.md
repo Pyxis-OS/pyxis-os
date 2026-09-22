@@ -15,6 +15,8 @@ handoffs for this first milestone.
 Hello receives output through a named resource and an application directory
 through the `app` startup scheme binding. It lists that directory, looks up and
 lists `share`, then opens `hello.txt` with READ and prints it through the console.
+The [path helpers](paths.md) compose lookups and retain working-directory handles.
+Hello reads through an explicit scheme path and again after changing directory.
 Lookup returns owned handles, which hello closes after use. File reads use
 explicit offsets and never introduce a shared seek position. See
 [the directory contract](directories.md) for rights, cursor behavior and lifetime.
@@ -22,7 +24,7 @@ explicit offsets and never introduce a shared seek position. See
 The endpoint example retains its directly supplied read-only content file. Its
 client copies that capability to the server, which prints the file and returns
 the byte count. These examples exercise directory discovery and explicit grant
-transfer independently; neither needs userspace path resolution yet.
+transfer independently. The endpoint exchange still uses directly supplied grants.
 
 ## Objects, capabilities and handles
 
@@ -88,10 +90,14 @@ omitted, and lookup returns HANDLE_INVALID. Closing a handle does not update the
 immutable snapshot, so a later lookup can return its stale value.
 
 Scheme roots have their own name/handle table. Preparation checks that each root
-is an installed directory capability and that root names are nonempty and unique.
+is an installed directory capability and that root names are nonempty, unique
+and contain neither ':' nor '/'.
 Hello receives the read-only application root under `app`; other programs receive
 only their explicit named grants. No lookup right is added by the startup binding.
-The working-directory chain remains empty pending task 5's path helpers.
+Startup also copies a launcher-ordered chain of installed directory handles,
+boundary first and current last, plus an optional descriptive path. The kernel
+validates their types without inferring ancestry or granting parent access. Hello
+starts at its application root; libpyxis retains an independently owned context.
 
 The launcher supplies argument strings, including argv[0] when present; neither
 the kernel nor startup parses a command line. Zero arguments are valid and still
@@ -155,6 +161,8 @@ Each reply needs at least 8 bytes of capacity; success writes one 8-byte field a
 Close removes a valid handle from the caller's table and releases its reference.
 It requires no access rights on that handle. Invalid and already-closed handles
 return the invalid-handle status; both success and failure return zero in RDX.
+[Local handle copying](paths.md#local-handle-copies) retains another reference
+with the same or reduced rights, without changing the source.
 Other references to the object remain valid. A last release uses the existing
 BSP retirement path, so closing on an AP does not allocate or destroy objects.
 
