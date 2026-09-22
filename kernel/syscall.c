@@ -8,6 +8,7 @@
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/syscall.h>
+#include <kernel/task.h>
 #include <kernel/user.h>
 #include <kernel/user_memory.h>
 
@@ -24,6 +25,55 @@ static struct syscall_result close_handle(handle_t handle)
   }
   KASSERT(result == CAP_OK);
   return (struct syscall_result){CALL_OK, 0};
+}
+
+static struct syscall_result copy_handle(handle_t source, uint64_t rights,
+    uint64_t flags, uintptr_t destination)
+{
+  struct process *process = process_current();
+  if (!process) {
+    return (struct syscall_result){CALL_BAD_HANDLE, 0};
+  }
+  if (flags & ~HANDLE_COPY_SAME_RIGHTS ||
+      ((flags & HANDLE_COPY_SAME_RIGHTS) && rights)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(destination, sizeof(handle_t), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+
+  struct kernel_object *object;
+  uint64_t granted;
+  enum capability_result result = capability_resolve(&process->capabilities,
+      source, rights, &object, &granted);
+  if (result != CAP_OK) {
+    KASSERT(result == CAP_BAD_HANDLE || result == CAP_DENIED);
+    return (struct syscall_result){result == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED, 0};
+  }
+  if (flags & HANDLE_COPY_SAME_RIGHTS) {
+    rights = granted;
+  }
+
+  /* The source slot keeps the object alive across a BSP table-growth loan.
+   * Keep no entry pointer: growth replaces the table's storage. */
+  handle_t handle;
+  for (;;) {
+    result = capability_insert(&process->capabilities, object, rights, &handle);
+    if (result != CAP_FULL) {
+      break;
+    }
+    result = task_grow_capabilities();
+    if (result != CAP_OK) {
+      break;
+    }
+  }
+  if (result != CAP_OK) {
+    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
+    return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+  }
+  /* Private mappings stay stable while the sole user task is blocked. */
+  KASSERT(copy_to_user(destination, &handle, sizeof(handle)));
+  return (struct syscall_result){CALL_OK, sizeof(handle)};
 }
 
 static struct syscall_result call_object(handle_t handle,
@@ -95,6 +145,8 @@ struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t 
     return call_object(arg1, arg2, arg3, arg4, arg5);
   case SYSCALL_CLOSE:
     return close_handle(arg1);
+  case SYSCALL_COPY:
+    return copy_handle(arg1, arg2, arg3, arg4);
   case SYSCALL_LOG_PUTCHAR: {
     bool locked = log_begin();
     log_putc((char)arg1);
