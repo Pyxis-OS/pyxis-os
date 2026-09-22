@@ -242,7 +242,7 @@ not duplicated here as a second ABI definition.
   across sleeping BSP allocation requests. Depends on 6. Done when userspace can
   write, reread and resize a RAM file through native operations.
 
-- [ ] **8. Private userspace memory backing.** Define the minimal native authority
+- [x] **8. Private userspace memory backing.** Define the minimal native authority
   and operations a process needs to acquire and release private backing memory.
   Service VM changes on the BSP with explicit address-space ownership while the
   caller is blocked. Do not introduce shared memory objects or a general VM
@@ -560,5 +560,48 @@ memory exhaustion and the exact-size allocation fallback were code-reviewed,
 not forced. No tests, fault injection or boot automation were added, and no
 schema version changed.
 
-Task 8 remains unstarted. Discuss the native memory authority, allocation/release
-contract and BSP VM ownership before implementing private userspace backing.
+Task 8 is complete (assistant). A named memory-service grant authorizes ALLOCATE
+and RELEASE through one MANAGE right. Authority applies to the calling process,
+even after handle transfer; the stateless service retains no process pointer.
+Allocation returns eager zeroed RW/NX backing at a kernel-chosen address, rounded
+to pages. Release requires one exact current service allocation and cannot free
+image, startup or initial stack mappings. Regions survive handle close and are
+reclaimed on process exit. No per-region handles or userspace allocator yet.
+
+The caller stages its request in task metadata and sleeps. Its scheduler leaves
+the private root and task stack before publishing the request and lending VM
+ownership to BSP. The BSP mutates the inactive space without a queue lock, then
+returns ownership on wake; resumption reloads CR3 before task access. The process
+owns a dynamically allocated record list, separate from the existing VM ranges.
+BSP process destruction reclaims backing through VM and then frees the records.
+See [private memory](../memory.md) for buffer lifetimes and errors.
+
+Libpyxis supplies allocation/release wrappers. Hello uses acquired backing for
+file-read buffers and releases it after each file, while its path workspace
+remains until exit. All boot programs receive explicit memory grants. Startup
+layouts and versions are unchanged.
+
+Validation: ordinary image builds passed without warnings. Normal one- and
+four-CPU KVM boots ran hello, client and server through exit 0 and address-space
+release; the single-CPU framebuffer retained the expected file output. Manual
+four-CPU TCG/GDB inspection observed an AP requester parked, its CPU on the kernel
+root and the queue lock clear before BSP allocation. A 4,097-byte request returned
+8,192 zeroed bytes with user/writable/NX permissions; resumption restored the
+private root.
+
+GDB calls rejected missing authority, malformed messages, zero/overflowing sizes,
+read-only replies, partial/repeated release and image/stack/startup release.
+Virtual-range exhaustion returned NO_MEMORY without a published allocation.
+RELEASE accepted a request residing in the released region and did not touch
+that user memory afterward. Two programs held the same service object: a call
+from the server could not release a region belonging to hello, and the server
+could allocate/use/release its own region through its actual capability.
+
+Hello's final workspace remained mapped after closing its memory handle. Exit
+freed its backing and allocation record; frame usage returned to the pre-launch
+baseline and memory/completion/retirement queues were empty. Physical-memory and
+metadata exhaustion unwinding were code-reviewed, not forced. No tests, fault
+injection or boot automation were added; no schema version changed.
+
+Task 9 remains unstarted. Discuss the userspace allocator choice, dependency and
+license if applicable, and the first libc functions before implementation.

@@ -63,7 +63,8 @@ missing environment values return NULL, while an empty value is an empty string.
 The runtime requires no malloc or libc. Hello receives an `app` directory root
 and a working-directory chain starting at that root. The
 [path context](paths.md) retains its own copies of these handles. All three
-programs also receive grants to one shared RAM-backed `home` root.
+programs also receive grants to one shared RAM-backed `home` root and the
+caller-scoped [private-memory service](memory.md).
 
 Hello obtains named output and its `app` scheme root, uses its argument vector
 and environment in its greeting, then enumerates the root and its `share` child.
@@ -94,9 +95,9 @@ The [file wrappers](../userspace/include/file.h) query size, read/write at expli
 offsets and resize RAM files. They preserve native error statuses and check reply
 lengths/counts. Writes complete in full or leave the file unchanged; gaps and
 newly grown ranges read as zero. A short read is allowed and zero bytes with
-nonzero capacity means EOF. Hello uses a fixed stack buffer, so it
-does not allocate storage proportional to the file size or require NUL-terminated
-content. It checks that EOF and transferred counts agree with the queried size.
+nonzero capacity means EOF. Hello acquires a small read buffer through its memory
+capability and releases it after each file; buffer size does not depend on file
+size, and content need not be NUL-terminated. It checks that EOF and transferred counts agree with the queried size.
 
 The [handle wrapper](../userspace/include/handle.h) releases the calling process's
 reference. A closed handle is immediately stale; other owners, including the
@@ -139,7 +140,9 @@ Userspace runs with interrupts enabled. Interrupt gates and SYSCALL disable
 them on kernel entry, so syscall execution is not preempted on its own CPU and
 a long syscall delays scheduling there. Endpoint CALL and RECEIVE explicitly
 park the task while waiting; the scheduler resumes its private kernel stack and
-address space before the handler accesses user memory again. Separate BSP
+address space before the handler accesses user memory again. Memory calls lend
+the inactive private address space to the BSP for allocation/release; their
+requests are published only after the caller has left its private root. Separate BSP
 kernel tasks run with interrupts enabled and can be preempted. Other CPUs
 continue running. SYSCALL needs an explicit kernel-stack switch; unlike an interrupt from userspace, it
 does not load the stack from the TSS. Kernel GS identifies the current CPU,

@@ -1,5 +1,6 @@
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
+#include <kernel/mm/private.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -35,6 +36,7 @@ enum mm_result process_destroy(struct process *process)
   if (result != MM_OK) {
     return result;
   }
+  private_memory_discard_records(process);
   capability_table_destroy(&process->capabilities);
   kfree(process);
   return MM_OK;

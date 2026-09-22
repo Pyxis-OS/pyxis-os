@@ -8,6 +8,7 @@ struct task_wait;
 struct directory_entry;
 struct file_object;
 struct file_wait;
+struct memory_region;
 
 /* Current user task, IF=0. Prepare its wait record before publishing. The
  * record lives in task metadata, whose heap mapping survives stack reuse.
@@ -38,6 +39,12 @@ struct file_wait *task_prepare_file_wait(void);
 /* Current user task, IF=0, no spinlocks held. Lend exclusive file operation
  * ownership to the BSP to replace/release backing; return it after completion. */
 bool task_replace_file_buffer(struct file_object *file, size_t capacity);
+
+/* Current user task, IF=0, no held locks. Copies the checked operation/region
+ * into task metadata and blocks. The scheduler publishes only after leaving
+ * the private root and task stack; BSP returns ownership through wakeup.
+ * region is local caller storage, never dereferenced remotely. */
+enum mm_result task_request_memory(uint64_t operation, struct memory_region *region);
 
 /* BSP only, after boot_start_cpus(), VM and heap initialization. */
 void task_init(void);

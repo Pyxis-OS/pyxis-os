@@ -1,4 +1,5 @@
 #include <abi/file.h>
+#include <abi/memory.h>
 #include <abi/directory.h>
 #include <abi/console.h>
 #include <abi/endpoint.h>
@@ -19,6 +20,8 @@ bool object_rights_valid(enum object_type type, uint64_t rights)
     return !(rights & ~FILE_RIGHTS);
   case OBJECT_DIRECTORY:
     return !(rights & ~DIRECTORY_RIGHTS);
+  case OBJECT_MEMORY:
+    return !(rights & ~MEMORY_RIGHT_MANAGE);
   case OBJECT_ENDPOINT:
     return !(rights & ~(ENDPOINT_RIGHT_CALL | ENDPOINT_RIGHT_RECEIVE |
                        ENDPOINT_RIGHT_REPLY));

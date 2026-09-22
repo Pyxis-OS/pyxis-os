@@ -1,4 +1,5 @@
 #include <abi/file.h>
+#include <abi/memory.h>
 #include <abi/directory.h>
 #include <abi/console.h>
 #include <abi/endpoint.h>
@@ -11,6 +12,7 @@
 #include <kernel/log.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/file.h>
+#include <kernel/object/memory.h>
 #include <kernel/object/console.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/panic.h>
@@ -28,7 +30,7 @@ struct initial_program {
   const char *name;
   uintptr_t entry;
   size_t cpu_index;
-  handle_t output, content, endpoint, application_root, home;
+  handle_t output, content, endpoint, application_root, home, memory;
 };
 
 /* Shared read-only application namespace retains the tree across process exit. */
@@ -74,6 +76,7 @@ void user_launch_initial(void)
   size_t client_cpu = arch_cpu_count() > 1 ? 1 : 0;
   size_t server_cpu = arch_cpu_count() > 2 ? 2 : client_cpu;
   struct initial_program programs[3] = {0};
+  struct kernel_object *memory = NULL;
   struct initial_program *hello = &programs[0];
   struct initial_program *server = &programs[1];
   struct initial_program *client = &programs[2];
@@ -83,6 +86,10 @@ void user_launch_initial(void)
   }
   home_root = directory_create(DIRECTORY_RAM);
   if (!home_root) {
+    goto fail;
+  }
+  memory = memory_create();
+  if (!memory) {
     goto fail;
   }
   if (!load_program("hello.pxe", client_cpu, hello) ||
@@ -142,9 +149,15 @@ void user_launch_initial(void)
 
   for (size_t i = 0; i < 3; ++i) {
     struct initial_program *program = &programs[i];
-    struct process_binding resources[3];
+    result = capability_install(&program->process->capabilities, memory,
+        MEMORY_RIGHT_MANAGE, &program->memory);
+    if (result != CAP_OK) {
+      goto fail;
+    }
+    struct process_binding resources[4];
     size_t count = 0;
     resources[count++] = (struct process_binding){"output", program->output};
+    resources[count++] = (struct process_binding){"memory", program->memory};
     if (program->content != HANDLE_INVALID) {
       resources[count++] = (struct process_binding){"content", program->content};
     }
@@ -182,6 +195,8 @@ void user_launch_initial(void)
       goto fail;
     }
   }
+  object_release(memory);
+  memory = NULL; /* Startup handles now own the stateless service. */
   for (size_t i = 0; i < 3; ++i) {
     struct initial_program *program = &programs[i];
     if (user_task_create_on(program->cpu_index, program->process, program->entry,
@@ -193,6 +208,9 @@ void user_launch_initial(void)
   return;
 
 fail:
+  if (memory) {
+    object_release(memory);
+  }
   for (size_t i = 0; i < 3; ++i) {
     if (programs[i].process) {
       KASSERT(process_destroy(programs[i].process) == MM_OK);

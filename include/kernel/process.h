@@ -6,13 +6,16 @@
 
 struct space;
 struct vm_space;
+struct private_allocation;
 
-/* One user task per process. The process owns address_space and capabilities;
- * space is borrowed from the initialized set and must outlive the process. */
+/* One user task per process. Owns address_space, private allocation records and
+ * capabilities. space is borrowed from the initialized set and must outlive
+ * the process. */
 struct process {
   struct space *space;
   struct vm_space *address_space;
   struct capability_table capabilities;
+  struct private_allocation *allocations; /* Private-memory service regions only. */
   uintptr_t startup_address; /* Read-only record in address_space; zero until prepared. */
 };
 
@@ -30,8 +33,9 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
 /* BSP, IF=0, with exclusive ownership of an unsubmitted or retired process.
  * A submitted process belongs to its task until the BSP reaper receives it
  * after leaving the task stack and private root. Success frees the address
- * space, capability table and process; failure leaves them intact. Object
- * references are released for BSP reaping. The owning space survives. */
+ * space, private allocation records, capability table and process; failure
+ * leaves them intact. Object references are released for BSP reaping. The
+ * owning space survives. */
 enum mm_result process_destroy(struct process *process);
 
 #endif
