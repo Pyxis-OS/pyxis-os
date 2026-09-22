@@ -8,6 +8,12 @@ converter. Each program has a directory and an explicit target in the
 `make -C userspace hello` builds just that program. Pass `CROSS_COMPILE` as for
 kernel builds and `HOSTCC` for the converter. Outputs live under `build/`.
 
+The native wrappers build into `build/userspace/libpyxis.a`; use
+`make -C userspace libpyxis` to build just the library. Every program links the
+shared startup object explicitly, then its own code and the archive. The linker
+selects the referenced library objects. Startup and native ABI behavior are
+unchanged; this library does not provide libc.
+
 To convert an already linked executable:
 
 ```sh
