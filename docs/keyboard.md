@@ -28,8 +28,36 @@ The presentation task binds Alt+Left and Alt+Right to the previous and next
 space in CPU order, wrapping at either end. The selected tab's name is underlined.
 Each arrow press switches once; releases and repeats do not switch. Either Alt
 key works, lock modifiers do not affect the shortcut, and adding Shift, Control
-or Super suppresses it. Other key events are consumed without an action until
-application input is defined.
+or Super suppresses it. Remaining input goes to the selected space's console.
+Caelum discards application input on multicore boots; the single-CPU development
+fallback shares its console with userspace.
+
+The session maps US ASCII key positions, with Shift, Caps Lock and typematic
+repeat. Enter yields newline, Backspace `\b`, Tab `\t`, and Escape `0x1b`.
+Ctrl+letters yield control bytes without signal or EOF meaning. Alt/Super chords,
+modified navigation, function keys and the numeric keypad (except Enter) have no
+text binding yet. Physical key events remain separate from this text mapping.
+
+Unmodified navigation keys produce terminal sequences:
+
+| Key | Bytes |
+| --- | --- |
+| Up / Down | `ESC [ A` / `ESC [ B` |
+| Right / Left | `ESC [ C` / `ESC [ D` |
+| Home / End | `ESC [ H` / `ESC [ F` |
+| Delete | `ESC [ 3 ~` |
+| Page Up / Page Down | `ESC [ 5 ~` / `ESC [ 6 ~` |
+
+Each console retains a 4 KiB byte queue, including while its space is inactive.
+A sequence is enqueued whole or rejected whole. Reads can split sequences; a
+userspace terminal decoder must retain partial sequences. Standalone Escape is
+ambiguous with a sequence prefix. Cursor editing and history are userspace work.
+
+Overflow clears the queue and latches `CALL_INPUT_LOST`. Further input is
+discarded until a nonempty read acknowledges the loss by returning that status.
+A device `KEY_STATE_RESET` applies the same policy to every application console:
+lost scan bytes may include a space switch, so the intended destination is
+unknown. No kernel echo or line editing is performed.
 
 For manual inspection, QEMU's monitor accepts `sendkey left`, `sendkey shift-a`
 and similar commands while the VM runs. Enter the monitor with Ctrl-a c from

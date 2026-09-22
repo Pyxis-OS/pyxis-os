@@ -26,6 +26,7 @@ enum call_status {
   CALL_WRONG_TYPE = 13,
   CALL_ALREADY_EXISTS = 14,
   CALL_READ_ONLY = 15,
+  CALL_INPUT_LOST = 16,
   CALL_STATUS_COUNT, /* Validation bound, not a result. */
 };
 

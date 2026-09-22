@@ -10,6 +10,7 @@ struct directory_entry;
 struct file_object;
 struct file_wait;
 struct process_wait;
+struct console_wait;
 struct memory_region;
 struct launch_capture;
 
@@ -39,8 +40,9 @@ void task_discard_directory_entry(struct directory_entry *entry);
  * detaches and wakes the waiter. One wait per task; no private-stack pointers. */
 struct file_wait *task_prepare_file_wait(void);
 
-/* Same lifetime as the file wait record, for process completion observers. */
+/* Same lifetime as the file wait record, for completion observers and readers. */
 struct process_wait *task_prepare_process_wait(void);
+struct console_wait *task_prepare_console_wait(void);
 
 /* Current user task, IF=0, no spinlocks held. Lend exclusive file operation
  * ownership to the BSP to replace/release backing; return it after completion. */

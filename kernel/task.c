@@ -10,6 +10,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/object/object.h>
 #include <kernel/object/file.h>
+#include <kernel/object/console.h>
 #include <kernel/object/process.h>
 #include <kernel/object/launcher.h>
 #include <kernel/panic.h>
@@ -43,6 +44,7 @@ struct task {
   size_t directory_name_length;
   bool directory_discard;
   struct file_wait file_wait;
+  struct console_wait console_wait;
   struct process_wait process_wait;
   struct task *file_next;
   struct file_object *file;
@@ -164,6 +166,14 @@ struct process_wait *task_prepare_process_wait(void)
   struct task *task = wait->task;
   task->process_wait = (struct process_wait){.wait = wait};
   return &task->process_wait;
+}
+
+struct console_wait *task_prepare_console_wait(void)
+{
+  struct task_wait *wait = task_wait_prepare();
+  struct console_wait *record = &wait->task->console_wait;
+  *record = (struct console_wait){.wait = wait};
+  return record;
 }
 
 void task_wait_sleep(struct task_wait *wait)
