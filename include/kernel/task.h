@@ -2,6 +2,7 @@
 #define KERNEL_TASK_H
 
 #include <kernel/mm/types.h>
+#include <abi/syscall.h>
 #include <kernel/object/capability.h>
 
 struct task_wait;
@@ -10,6 +11,7 @@ struct file_object;
 struct file_wait;
 struct process_wait;
 struct memory_region;
+struct launch_capture;
 
 /* Current user task, IF=0. Prepare its wait record before publishing. The
  * record lives in task metadata, whose heap mapping survives stack reuse.
@@ -49,6 +51,13 @@ bool task_replace_file_buffer(struct file_object *file, size_t capacity);
  * the private root and task stack; BSP returns ownership through wakeup.
  * region is local caller storage, never dereferenced remotely. */
 enum mm_result task_request_memory(uint64_t operation, struct memory_region *region);
+
+/* Current user task, IF=0, no spinlocks. Staging allocation/disposal runs on
+ * BSP. Launch consumes capture, borrows the caller's table and image operation,
+ * and returns only after BSP releases both. No remote user/stack access. */
+struct launch_capture *task_allocate_launch_capture(void);
+void task_discard_launch_capture(struct launch_capture *capture);
+enum call_status task_launch_process(struct launch_capture *capture, handle_t *child);
 
 /* BSP only, after boot_start_cpus(), VM and heap initialization. */
 void task_init(void);

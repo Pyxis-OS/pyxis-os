@@ -36,3 +36,17 @@ allocations. Reconsider empty-pool release and in-place aligned growth when
 long-lived applications make retained capacity or copying material. The current
 allocator and errno assume one thread per process; add synchronization and
 thread-local errno when introducing userspace threads.
+
+## Synchronous launch preparation
+
+Each in-flight launch reserves a full 64 KiB metadata capture buffer plus a
+small header from the kernel heap, even for short argument lists. BSP performs
+child preparation with interrupts disabled, as for existing VM/heap services.
+The executable file's operation ownership serializes reads, writes and resizes
+through image validation/loading, avoiding another whole-image copy. Large
+images therefore delay both BSP work and callers using that file.
+
+Revisit staging size and preparation scheduling when larger applications or
+concurrent launches make these costs material. A snapshot or immutable backing
+could shorten file ownership, at a memory/complexity cost. No such mechanism or
+asynchronous launch protocol is introduced now.

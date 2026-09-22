@@ -41,6 +41,12 @@ struct file_object *file_create_initrd(const struct initrd_file *view);
 /* BSP, IF=0. One owned reference to an empty RAM file, or NULL. */
 struct file_object *file_create_ram(void);
 
+/* IF=0, with an owned/borrowed live reference. Begin runs on a user task and
+ * may sleep; end can run on BSP after a loan. Ownership keeps data/size stable
+ * without a held spinlock, including while loading an executable. */
+void file_begin_operation(struct file_object *file);
+void file_end_operation(struct file_object *file);
+
 /* BSP, IF=0. Requester lends exclusive operation ownership while blocked.
  * Capacity must cover the live prefix, or be zero to release the buffer.
  * Failure leaves the old buffer/capacity intact. Does not change logical size. */

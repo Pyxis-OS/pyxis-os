@@ -11,6 +11,7 @@
 #include <kernel/object/object.h>
 #include <kernel/object/file.h>
 #include <kernel/object/process.h>
+#include <kernel/object/launcher.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/user.h>
@@ -30,6 +31,8 @@ struct task_wait {
   bool notified;
 };
 
+enum launch_action { LAUNCH_ALLOCATE, LAUNCH_DISCARD, LAUNCH_START };
+
 struct task {
   struct task *next;
   struct task *growth_next;
@@ -45,6 +48,11 @@ struct task {
   struct file_object *file;
   size_t file_capacity;
   bool file_result;
+  struct task *launch_next;
+  enum launch_action launch_action;
+  struct launch_capture *launch_capture;
+  enum call_status launch_result;
+  handle_t launch_child;
   struct task *memory_next;
   struct memory_region memory_region;
   uint64_t memory_operation;
@@ -79,6 +87,7 @@ static struct task *growth_head, *growth_tail;
 static struct task *directory_head, *directory_tail;
 static struct task *file_head, *file_tail;
 static struct task *memory_head, *memory_tail;
+static struct task *launch_head, *launch_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
 
@@ -394,6 +403,78 @@ static void service_memory_requests(void)
   }
 }
 
+static struct task *request_launch_service(enum launch_action action,
+                                            struct launch_capture *capture)
+{
+  struct task_wait *wait = task_wait_prepare();
+  struct task *task = wait->task;
+  task->launch_action = action;
+  task->launch_capture = capture;
+  task->launch_child = HANDLE_INVALID;
+
+  lock_queues();
+  task->launch_next = NULL;
+  if (launch_tail) {
+    launch_tail->launch_next = task;
+  } else {
+    launch_head = task;
+  }
+  launch_tail = task;
+  unlock_queues();
+  task_wait_sleep(wait);
+  return task;
+}
+
+struct launch_capture *task_allocate_launch_capture(void)
+{
+  struct task *task = request_launch_service(LAUNCH_ALLOCATE, NULL);
+  struct launch_capture *capture = task->launch_capture;
+  task->launch_capture = NULL;
+  return capture;
+}
+
+void task_discard_launch_capture(struct launch_capture *capture)
+{
+  request_launch_service(LAUNCH_DISCARD, capture);
+}
+
+enum call_status task_launch_process(struct launch_capture *capture, handle_t *child)
+{
+  struct task *task = request_launch_service(LAUNCH_START, capture);
+  *child = task->launch_child;
+  return task->launch_result;
+}
+
+static void service_launch_requests(void)
+{
+  lock_queues();
+  struct task *task = launch_head;
+  launch_head = launch_tail = NULL;
+  unlock_queues();
+
+  while (task) {
+    struct task *next = task->launch_next;
+    if (task->launch_action == LAUNCH_ALLOCATE) {
+      task->launch_capture = kmalloc(sizeof(*task->launch_capture));
+      if (task->launch_capture) {
+        memset(task->launch_capture, 0, sizeof(*task->launch_capture));
+      }
+    } else {
+      if (task->launch_action == LAUNCH_START) {
+        task->launch_result = launcher_start(task->launch_capture, task->process,
+            task->cpu_index, &task->launch_child);
+      } else {
+        KASSERT(task->launch_action == LAUNCH_DISCARD);
+      }
+      kfree(task->launch_capture);
+      task->launch_capture = NULL;
+    }
+    task_wait_wake(&task->wait_record);
+    /* Caller regains its table and may immediately exit; do not touch task. */
+    task = next;
+  }
+}
+
 static struct task *dequeue(struct scheduler *scheduler)
 {
   lock_queues();
@@ -609,6 +690,7 @@ void kernel_task_sleep(uint64_t ticks)
       service_directory_requests();
       service_file_requests();
       service_memory_requests();
+      service_launch_requests();
       reap_completed();
       object_reap();
       wake_sleepers();
@@ -697,7 +779,7 @@ void task_preempt(bool user_mode)
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
      (completed_head != NULL || growth_head != NULL || directory_head != NULL ||
-      file_head != NULL || memory_head != NULL));
+      file_head != NULL || memory_head != NULL || launch_head != NULL));
   unlock_queues();
   if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;

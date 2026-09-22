@@ -65,9 +65,9 @@ missing environment values return NULL, while an empty value is an empty string.
 `getenv` borrows these same immutable values; environment mutation is not
 implemented. Hello receives an `app` directory root
 and a working-directory chain starting at that root. The
-[path context](paths.md) retains its own copies of these handles. All three
-programs also receive grants to one shared RAM-backed `home` root and the
-caller-scoped [private-memory service](memory.md).
+[path context](paths.md) retains its own copies of these handles. Boot-launched hello and client also receive grants to one shared RAM-backed
+`home` root and the caller-scoped [private-memory service](memory.md). Client
+explicitly passes memory authority when it launches server.
 
 Hello obtains named output and its `app` scheme root, uses its argument vector
 and environment in its greeting, then enumerates the root and its `share` child.
@@ -106,20 +106,27 @@ reference. A closed handle is immediately stale; other owners, including the
 space that owns the console, retain their references. Process exit releases
 handles left open. The read-only startup record is not updated after close.
 
+Client launches server through a granted launcher and a readable image handle.
+It explicitly supplies output, endpoint and memory grants, plus the child argv.
+No roots or environment are inherited. See [launch](processes.md#implemented-userspace-launch)
+for request bounds, source-grant ownership and mutable-image behavior.
+
 The client and server use the [endpoint wrappers](../userspace/include/endpoint.h)
 to exchange a structured request with an attached capability. The client receives
 a content file at startup and copies a READ grant to the server. The server
 reads and prints its contents, closes its received handle, then replies with
 the byte count. The client prints the result and closes its own content grant,
-which remained valid. Closing its endpoint then lets the server exit. The client uses its named
-`server_process` capability to wait for server cleanup and report completion
+which remained valid. Closing its endpoint then lets the server exit. The client uses the launch result
+process-control capability to wait for server cleanup and report completion
 before closing that observer handle. See [process completion](processes.md#implemented-process-completion)
 for the lifetime and repeatable wait contract.
 Both have output handles; the server has no startup content grant. Their
 endpoint rights are CALL for the client and RECEIVE | REPLY for the server.
 The [endpoint contract](endpoints.md) describes ownership, growth and errors.
 
-The [boot launcher](../kernel/user/launch.c) creates a process that owns the
+The [boot launcher](../kernel/user/launch.c) prepares hello and client. Both boot
+and userspace launch use [shared image/stack preparation](../kernel/user/load.c)
+to create a process that owns the
 loaded address space and belongs to the target CPU's space. Before submission, it calls
 `process_prepare_startup()` with named bindings to already installed handles,
 arguments and environment. Preparation validates and copies the supplied kernel

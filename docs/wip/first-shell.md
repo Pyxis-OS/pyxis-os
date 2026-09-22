@@ -264,7 +264,7 @@ not duplicated here as a second ABI definition.
   or after completion returns the same result and closing the observer does not
   stop the observed program or retain its execution memory.
 
-- [ ] **11. Userspace launch through a launcher capability.** Accept a readable
+- [x] **11. Userspace launch through a launcher capability.** Accept a readable
   image handle, startup data and attenuated grants; return a process-control
   handle only after complete preparation. Service preparation on the BSP while
   preserving caller table and buffer lifetimes; adapt the loader's input only
@@ -675,6 +675,49 @@ object-retirement queues were empty. Fatal-user-fault routing, nonzero status
 propagation and allocation-failure unwinding were code-reviewed, not forced.
 No tests, fault injection or boot automation were added.
 
-Task 11 remains unstarted. Discuss the concrete launch request, startup/grant
-bounds and policy for executable files being modified during loading before
-implementing userspace launch through a launcher capability.
+Task 11 is complete (assistant). A stateless launcher capability authorizes a
+child in the caller's space on its assigned CPU. There is no target-space/CPU
+parameter. LAUNCH accepts a readable P1F image file, explicit source-handle/right
+grants, resources, roots, directory context, environment and argv. Bindings refer
+to grant indices, preserving intentional aliases. All rights are equal or reduced;
+there is no implicit inheritance, including memory or launcher authority.
+
+Caller-side capture checks nested pointers/counts against a combined 64 KiB
+array/string/alignment budget. The child startup region separately obeys its
+existing 64 KiB padded limit. BSP allocates/disposes staging, prepares a private
+process/stack, copies grants and startup, and installs the parent's WAIT handle
+before submitting the child. Failures unwind unpublished resources and preserve
+source handles. The caller lends its table while blocked; BSP never reads caller
+virtual pointers or remote stack storage. Boot and runtime launch share image
+and stack preparation. No schema/version changes.
+
+The file's existing operation ownership keeps executable bytes stable through
+loading. Reads/writes/resizes queue without holding a spinlock; ownership is
+released before submission. No additional whole-image copy or generic reader
+abstraction. Staging and synchronous preparation costs are recorded in
+`docs/technical-debt.md`; the launch contract is in `docs/processes.md`.
+
+Boot now starts hello and client. Client receives the server image, a launcher
+and both endpoint ends; it launches server with explicit output/endpoint/memory
+grants and argv, drops preparation-only handles, performs the exchange and waits
+for completion. Server runs on client's CPU and does not inherit home or environment.
+Libpyxis exposes an allocation-free launcher_launch wrapper with native statuses.
+
+Validation: ordinary image builds passed without warnings. One- and four-CPU
+KVM boots completed hello, client and the userspace-launched server with status 0;
+framebuffer inspection confirmed the exchange and completion report. Manual
+four-CPU TCG/GDB calls rejected invalid authority, request shape, image handles/
+types/contents, nested pointers/counts, excess rights, duplicate names and invalid
+grant indices. Failed preparation released file ownership and preserved sources.
+A valid launch with aliased resources, an attenuated directory grant, root,
+working-directory context and environment delivered the expected child startup.
+Filling the parent's table made it grow before submission to accommodate the
+observer. Child space/CPU matched its parent, file/queue spinlocks were clear
+during preparation, and the image operation was released before task submission.
+After exit, physical-frame use returned to baseline and launch, request,
+completion and retirement queues were empty. Mutable-image writer contention,
+physical allocation failure and late task-allocation failure were reviewed,
+not forced. No tests, fault injection or boot automation were added.
+
+Task 12 remains unstarted. Discuss terminal input layout, queue capacity/overflow
+and terminal dimension behavior before implementing text input and size queries.
