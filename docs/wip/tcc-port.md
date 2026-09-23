@@ -125,7 +125,7 @@ option does not remove those operations from the compiler itself.
 | Area | Finding and proposed boundary |
 | --- | --- |
 | Public headers | Use declarations TCC can parse while keeping first-party implementation GNU C23. Provide target-owned integer/limit definitions; use TCC's own compiler-dependent `stdarg.h`/`stddef.h`. Audit `bool` and attributes in public headers. Do not export GCC internals or invent an ABI version. |
-| Ordinary libc | Allocation, memory routines, unbuffered streams, seeking, errno and integer formatting exist. Core compiler paths also use `strcpy`, `strpbrk`, integer `strto*`, `atoi`, `qsort` and `sprintf`, plus assert/abort support. Add useful C functions in focused slices; replace bounded port-local formatting with existing `snprintf` where appropriate. |
+| Ordinary libc | Allocation, memory routines, unbuffered streams, seeking, errno and integer formatting exist. Task 3 supplies retained string/integer-conversion requirements. Sorting, assert/abort and formatting call-site work remain in task 4; use existing bounded formatting where appropriate. |
 | Numeric conversion | `strtof`, `strtod`, `strtold` and `ldexpl` are used by literal parsing. Select and review an implementation before this task; correct parsing, range handling and long-double behavior are separate from enabling the FPU. No dummy conversions or silent integer-only compiler. |
 | Error unwinding | TCC uses `setjmp`/`longjmp` to recover from compile errors. Supply the C facility, including its x86-64 ABI/compiler attributes, without signal-mask or POSIX additions. Define its FP-control behavior with the FP contract. |
 | Files | `BufferedFile`, `full_read`, object/archive readers and response files use fd-shaped `open/read/lseek/close`. Adapt the port's actual source to native streams/handles; do not add POSIX syscalls or a public fd layer just for TCC. Preserve short-read/error handling and source ownership. |
@@ -188,7 +188,7 @@ review reveals a larger change. Update its checkbox when delivering it.
 
 1. [x] FP support and Mandelbrot.
 2. [x] Public headers usable by TCC and GCC.
-3. [ ] String and integer-conversion libc facilities.
+3. [x] String and integer-conversion libc facilities.
 4. [ ] Sorting and diagnostic libc facilities.
 5. [ ] C nonlocal jumps.
 6. [ ] Floating literal conversion and binary scaling.
@@ -217,20 +217,20 @@ this is header consumption, not complete generated-code interoperability.
 
 ### 3. Strings and integer conversion
 
-Owner: userland libc. Depends on 2 for the intended public-header contract.
-Inventory the retained compiler paths, then implement the missing standard
-functions they actually use: initial candidates are `strcpy`, `strpbrk`, the
-needed `strto*` integer family and `atoi`. Existing allocation, streams and
-memory routines remain authoritative.
+Complete: native userland libc implementations of `strcpy`, `strtol`, `strtoul`,
+`strtoll`, `strtoull` and `atoi`, with `ERANGE` and its `strerror` message. The
+integer conversions handle ASCII whitespace/signs, bases 2–36 and base 0,
+including C23 binary prefixes, end pointers and range errors. Existing allocation,
+streams and memory routines remain authoritative. No imported source, kernel
+calls or TCC-specific libc behavior.
 
-Define the normal standard semantics, including end pointers, supported bases,
-leading sign/whitespace and range errors. Do not implement a parser that happens
-to accept only TCC's current inputs. Review the existing errno set and add only
-errors required by these facilities.
-
-Done: GCC builds the shared libc and TCC can consume its declarations; retained
-compiler translation units no longer need local replacements for these calls.
-No new kernel calls. Settle any reuse source/license before implementation.
+The pinned source uses these calls in compiler strings, assembler numeric
+operands, ELF archive sizes and command-line parsing. `strpbrk` occurs in the
+archive tool and Mach-O backend, which are outside this port's selected scope;
+it was a candidate in the audit, not a retained requirement, and stays deferred.
+The changed libc sources compile with GCC and pinned host TCC against the SDK.
+Full compiler-unit builds still depend on the later runtime/platform tasks;
+this does not claim a linked or runnable guest TCC.
 
 ### 4. Sorting and diagnostics
 
