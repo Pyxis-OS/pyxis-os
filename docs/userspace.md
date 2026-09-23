@@ -193,6 +193,22 @@ disables evaluation; re-including `<assert.h>` honors its current setting.
 `abort` terminates through `_Exit(EXIT_FAILURE)`, without flushing streams or
 running libc cleanup. There is no signal delivery or abort handler.
 
+`setjmp`/`longjmp` provide nonlocal recovery within a thread. `setjmp` returns
+zero initially; `longjmp` resumes that call with the supplied value, replacing
+zero with one. Use `setjmp` as a whole controlling expression, optionally with
+`!` or a comparison against an integer constant, or as a standalone statement;
+do not use it in an initializer or assignment.
+
+The buffer must refer to the most recent save in a still-active invocation of
+the saving function. Do not jump across threads or back into a scope of a
+variably modified type after leaving it. Non-volatile automatic locals in the
+saving function that changed since the save have indeterminate values after
+the jump. Heap objects and streams are not unwound; recovery code owns cleanup.
+The x87/MXCSR control modes and status remain as they were at `longjmp`, following
+[C23 7.13.2.1](https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3096.pdf#page=301).
+This libc saves only the callee-saved integer registers, stack pointer and return
+address; it adds no signal-mask handling or kernel context-switch interface.
+
 The allocator separately compiles the project's pinned BSD-3-Clause TLSF source.
 It retains its own MANAGE copy of the named startup memory grant, independent of
 application handle close. A missing grant or failed copy leaves allocation
