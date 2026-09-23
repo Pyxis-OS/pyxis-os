@@ -1,0 +1,25 @@
+name: Build Pyxis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  image:
+    runs-on: pyxis
+    container:
+      image: git.internal/chronium/pyxis-builder:gcc16.2-binutils2.47
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v4
+      - name: Build bootable ISO
+        run: make -j4 image
+      - name: Save kernel and ISO
+        uses: https://data.forgejo.org/actions/upload-artifact@v3
+        with:
+          name: pyxis-image
+          path: |
+            build/pyxis.iso
+            build/caelum.elf
+          if-no-files-found: error
