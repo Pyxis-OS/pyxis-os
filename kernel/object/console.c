@@ -256,6 +256,7 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   uint64_t required;
   switch (operation) {
   case CONSOLE_WRITE:
+  case CONSOLE_FRESH_LINE:
     required = CONSOLE_RIGHT_WRITE;
     break;
   case CONSOLE_READ:
@@ -283,6 +284,19 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   }
   if (operation == CONSOLE_READ) {
     return read_console(console, &request.read, reply_address, reply_capacity);
+  }
+
+  if (operation == CONSOLE_FRESH_LINE) {
+    bool locked = log_begin();
+    if (!locked) {
+      return (struct syscall_result){CALL_UNAVAILABLE, 0};
+    }
+    bool initialized = console->tty->initialized;
+    if (initialized) {
+      tty_fresh_line(console->tty);
+    }
+    log_end(locked);
+    return (struct syscall_result){initialized ? CALL_OK : CALL_UNAVAILABLE, 0};
   }
 
   struct console_size_reply reply = {

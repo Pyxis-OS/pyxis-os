@@ -28,8 +28,11 @@ fallback, Caelum logs and shell output share a TTY and can disrupt line editing.
 ## Commands and quoting
 
 The shell uses libterm's line editor and waits for one foreground child at a
-time. The prompt is `> `. Whitespace separates arguments. Single and double
-quotes preserve whitespace and allow empty arguments; adjacent quoted/unquoted
+time. The prompt shows the working path, for example `home://notes> `. Long
+paths show an ellipsis and their tail, keeping at least half the first row for
+input; control and non-ASCII bytes display as `?`. Whitespace separates
+arguments. Single and double quotes preserve whitespace and allow empty
+arguments; adjacent quoted/unquoted
 pieces form one argument. Outside single quotes, backslash takes the following
 character literally, including inside double quotes. Inside single quotes,
 backslash is an ordinary character. For example:
@@ -54,8 +57,8 @@ piping, redirection or background execution. Characters such as `$`, `*`, `#`,
 `;`, `|` and `>` are literal argument bytes, not operators.
 
 `cd path` changes the shell's owned directory chain. It requires one argument;
-failure preserves the old chain and its rights. `exit` takes no arguments and
-ends the shell successfully. Command failures do not accumulate into the shell's
+failure preserves the old chain, its rights and the displayed path. `exit` takes
+no arguments and ends the shell successfully. Command failures do not accumulate into the shell's
 exit status; unrecoverable terminal, wait or cleanup failures terminate it with
 failure.
 
@@ -85,15 +88,17 @@ Each child receives explicit copies of terminal input/output, memory, both roots
 with the rights above, and the current directory chain. It does not receive the
 shell's launcher. The immutable initial environment is forwarded in full using
 libpyxis's borrowed environment-array accessors. No environment mutation or PWD
-maintenance is implemented. Children receive no working-path display string,
-since the shell does not maintain one after cd; their directory handles still
-support relative access and parent navigation.
+maintenance is implemented. Children receive the full current working-path
+display string alongside their directory handles. Display normalization removes
+redundant separators and dot components, but lookup still walks the original
+input: `missing/..` fails rather than skipping the missing directory.
 
 The shell never reads terminal input while waiting. Successful wait means child
 resources have been reclaimed; it then closes the process observer, reports a
-nonzero exit or fault, and prompts again. A newline after child completion keeps
-unterminated child output separate from the line editor's next cleared prompt
-row. Failed launch returns to the prompt; failed wait ends the shell because
+nonzero exit or fault, and prompts again. The terminal advances to a fresh line
+only when its cursor is not already at column zero, preserving unterminated child
+output without inserting an extra blank line after newline-terminated output.
+Failed launch returns to the prompt; failed wait ends the shell because
 input ownership can no longer be assumed. Fatal user faults are reported through
 the existing completion kind, with details left in the kernel log. No process
 cancellation or terminal ownership mechanism is added.

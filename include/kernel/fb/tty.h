@@ -69,6 +69,7 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
 
 void tty_put_char(struct tty *tty, char c);
 void tty_clear(struct tty *tty);
+void tty_fresh_line(struct tty *tty);
 
 struct tty *get_tty(void);
 
