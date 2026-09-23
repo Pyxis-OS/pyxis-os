@@ -9,6 +9,7 @@ QEMU, GNU cpio, xorriso, and a matching raw OVMF code/variables pair.
 ```
 make
 make image
+make image INIT=/tmp/init.sh  # optional native PXE or shebang init
 make run
 make run CPUS=4  # one socket, four cores, no SMT
 make run LOG_LEVEL=trace  # include scheduler idle diagnostics (default: info)
@@ -25,8 +26,9 @@ GTK by default; `QEMU_DISPLAY=none` keeps a run headless.
 Boot installs serial and a kernel stack, copies boot information, installs
 GDT/IDT/TSS, initializes the bitmap PMM, and switches to kernel-owned paging.
 Generic initialization creates the VM allocator and TLSF heap, brings APs onto
-owned stacks and paging, initializes framebuffer text output, and schedules the
-shell on CPU 1 when available, or the BSP on a single-CPU boot.
+owned stacks and paging, initializes framebuffer text output, and schedules
+[init](docs/init.md) on CPU 1 when available, or the BSP on a single-CPU boot.
+The default init script hands off to the interactive shell.
 Use Alt+Right to select CPU 1; the shell starts at `home://`. See
 [the shell walkthrough](docs/shell.md).
 Local APIC timers preempt each CPU's pinned tasks and wake idle CPUs. The BSP

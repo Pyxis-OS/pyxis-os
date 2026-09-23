@@ -55,5 +55,5 @@ clear responsibilities; their exact placement remains open.
 ## Related direction
 
 - [Spaces](../spaces.md) and [filesystem namespaces](../vfs.md).
-- [Initial session handoff](init-and-scripts.md).
+- [Initial session handoff](../init.md).
 - [First host mount](virtio-fs.md) and [later storage/services](later-os-directions.md).

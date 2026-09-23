@@ -5,6 +5,9 @@ QEMU_DISPLAY ?= gtk
 MEMORY ?= 256M
 CPUS ?= 1
 ACCEL ?= kvm
+INIT ?= userspace/init.sh
+export INIT
+
 LOG_LEVEL ?= info
 ifeq ($(LOG_LEVEL),trace)
 TRACE_ENABLED := 1
@@ -38,20 +41,23 @@ tools:
 userspace: tools
 	$(MAKE) -C userspace
 
-build/userspace/shell.pxe build/userspace/cat.pxe build/userspace/ls.pxe \
-    build/userspace/mkdir.pxe build/userspace/share/hello.txt: userspace
-
 initrd: build/initrd.cpio
 
-build/initrd.cpio: build/userspace/shell.pxe build/userspace/cat.pxe \
-                  build/userspace/ls.pxe build/userspace/mkdir.pxe \
-                  build/userspace/share/hello.txt Makefile
+# Always stage the selected contents, even when INIT changes to an older file.
+# Package after the recursive build; make may have cached its outputs' mtimes.
+# Compare before replacing so identical contents do not rebuild the ISO.
+build/initrd.cpio: userspace Makefile
 	@command -v cpio >/dev/null 2>&1 || { \
 	  echo 'Missing GNU cpio: install it, then run make initrd.' >&2; \
 	  exit 1; }
-	cd build/userspace && printf '%s\n' shell.pxe cat.pxe ls.pxe mkdir.pxe share share/hello.txt | \
+	@test -f "$$INIT" || { printf 'Init is not a regular file: %s\n' "$$INIT" >&2; exit 1; }
+	cp -- "$$INIT" build/userspace/init.tmp
+	@cmp -s build/userspace/init.tmp build/userspace/init || mv build/userspace/init.tmp build/userspace/init
+	@rm -f build/userspace/init.tmp
+	cd build/userspace && printf '%s\n' init shell.pxe cat.pxe ls.pxe mkdir.pxe share share/hello.txt | \
 	  cpio --create --format=newc --reproducible --owner=0:0 --quiet > ../initrd.cpio.tmp
-	mv build/initrd.cpio.tmp $@
+	@cmp -s build/initrd.cpio.tmp $@ || mv build/initrd.cpio.tmp $@
+	@rm -f build/initrd.cpio.tmp
 
 check-toolchain:
 	@command -v $(CC) >/dev/null 2>&1 || { \

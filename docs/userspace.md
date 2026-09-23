@@ -32,8 +32,8 @@ See [gdb.md](gdb.md) for kernel debugger usage.
 
 ## Entry and loading
 
-`make initrd` packages shell, cat, ls, mkdir and a sample text file into
-`build/initrd.cpio`; `make image` includes that uncompressed `newc` archive as the
+`make initrd` packages the selected [init](init.md), shell, cat, ls, mkdir and a
+sample text file into `build/initrd.cpio`; `make image` includes that uncompressed `newc` archive as the
 sole Limine module. A boot-time [tree builder](../include/kernel/fs/initrd_tree.h)
 exposes its entries as read-only directory/file objects without extracting file
 contents or adding a block device. The text asset is `share/hello.txt`.
