@@ -9,6 +9,7 @@ QEMU, GNU cpio, xorriso, and a matching raw OVMF code/variables pair.
 ```
 make
 make image
+make sdk  # export the userspace SDK to build/sdk; see docs/sdk.md
 make image INIT=/tmp/init.sh  # optional native PXE or shebang init
 make run
 make run CPUS=4  # one socket, four cores, no SMT

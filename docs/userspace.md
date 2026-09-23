@@ -2,24 +2,24 @@
 
 ## Building an image
 
-`make userspace` builds the freestanding programs and the hosted `elf2pxe`
-converter. Each program has a directory and an explicit target in the
-[userspace Makefile](../userspace/Makefile); for example,
+`make userspace` first builds the [SDK](sdk.md), then the freestanding
+applications against it. Each application has a directory and an explicit target
+in the [userspace Makefile](../userspace/Makefile); after `make sdk`, for example,
 `make -C userspace hello` builds just that program. Pass `CROSS_COMPILE` as for
 kernel builds and `HOSTCC` for the converter. Outputs live under `build/`.
 
-The native wrappers build into `build/userspace/libpyxis.a`; use
-`make -C userspace libpyxis` to build just the library. The target C library builds separately into
-`build/userspace/libc.a` (`make -C userspace libc`). Every program links libc
-startup explicitly, then its code and the libc, libpyxis and libterm archives;
-only referenced archive objects are pulled in. No host runtime is linked.
-Libpyxis owns native operations and startup accessors; libc owns C entry/exit,
-allocation and the initial C support routines.
+Runtime libraries and startup are built separately by
+[userspace/runtime.mk](../userspace/runtime.mk) into `build/runtime`, then exported
+to `build/sdk/sysroot/usr/lib`. Applications link the SDK's startup object,
+libc, libpyxis and libterm archives, plus compiler-provided libgcc. Only referenced
+archive objects are pulled in. No host runtime is linked. Libpyxis owns native
+operations and startup accessors; libc owns C entry/exit, allocation and the
+initial C support routines.
 
 To convert an already linked executable:
 
 ```sh
-build/tools/elf2pxe --format p1f -o hello.pxe hello.elf
+build/sdk/bin/elf2pxe --format p1f -o hello.pxe hello.elf
 ```
 
 The input must be a fixed-address, little-endian x86_64 ELF executable with no

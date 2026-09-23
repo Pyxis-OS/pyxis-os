@@ -36,7 +36,7 @@ assembly. This does not require a separate runtime repository.
 
 Keep the compiler binary and evolving target sysroot separate. Configure the
 compiler for an external sysroot and supply the selected SDK to each build.
-A candidate target is x86_64-unknown-pyxis, with __pyxis__, appropriate startup
+The agreed target is x86_64-unknown-pyxis, with __pyxis__, appropriate startup
 and linker defaults, a defined C data/calling convention and target libgcc.
 A target name alone is insufficient. Port code must use only the runtime and
 machine features Pyxis actually supports.
@@ -66,9 +66,25 @@ creates repositories, configures dispatch integration and rebuilds/publishes the
 compiler container when required. Initial orchestration stays in Pyxis with
 pinned submodules; cross-repository workflow design is separate work.
 
-## Decisions before implementation
+## Focused tasks
 
-- Select the target configuration and SDK layout.
+- [x] Separate runtime/application builds, export a relocatable SDK, and build
+  existing applications using only the compiler, application sources and SDK.
+  Implemented usage and layout are in [the SDK reference](../sdk.md). This step
+  retains the existing x86_64-elf compiler and does not change the container.
+- [ ] Add the Pyxis compiler target and pinned toolchain patches, build it
+  separately, and update the container recipe. Use GCC 16.2.0 and binutils 2.47;
+  the owner rebuilds/publishes the container when ready.
+- [ ] Extract userspace with source/license history preserved into
+  `pyxis-userland`, then integrate the pinned submodule without changing boot.
+  The owner creates the empty repository when extraction is ready.
+
+## Decisions before the remaining implementation
+
+- Define the Pyxis target's exact driver/startup defaults and libgcc build.
+  The SDK layout is now implemented; the first export still uses x86_64-elf.
+  Local validation may use the existing binutils 2.46.1 installation until the
+  target toolchain step; its actual identity is recorded in the SDK manifest.
 - Settle repository extraction order and source/license history preservation.
 - Identify the container changes before asking the owner to rebuild it.
 
