@@ -128,11 +128,11 @@ option does not remove those operations from the compiler itself.
 | Ordinary libc | Allocation, memory routines, unbuffered streams, seeking, errno and integer formatting exist. Task 3 supplies retained string/integer-conversion requirements. Sorting, assert/abort and formatting call-site work remain in task 4; use existing bounded formatting where appropriate. |
 | Numeric conversion | `strtof`, `strtod`, `strtold` and `ldexpl` are used by literal parsing. Select and review an implementation before this task; correct parsing, range handling and long-double behavior are separate from enabling the FPU. No dummy conversions or silent integer-only compiler. |
 | Error unwinding | TCC uses `setjmp`/`longjmp` to recover from compile errors. Supply the C facility, including its x86-64 ABI/compiler attributes, without signal-mask or POSIX additions. Define its FP-control behavior with the FP contract. |
-| Files | `BufferedFile`, `full_read`, object/archive readers and response files use fd-shaped `open/read/lseek/close`. Adapt the port's actual source to native streams/handles; do not add POSIX syscalls or a public fd layer just for TCC. Preserve short-read/error handling and source ownership. |
-| Output | Replace unlink/open/fdopen with create/truncate stream output. Check writes and close. Failed output may remain partial until filesystem replacement/removal support exists; never report success. |
-| Paths | Unix `PATHSEP` is `:` and `IS_ABSPATH` recognizes leading `/`. Both conflict with `app://` and `home://`. Treat native URIs as rooted paths and keep individual `-I`/`-L` arguments intact. Settle a search-list convention for configured defaults/environment separately. |
-| Include identity | `realpath` is used for `#pragma once`. Native capability paths have no existing realpath API. Choose bounded port-local handling or an explicit unsupported diagnostic; do not claim different path spellings identify different files or add a global VFS interface solely for this. |
-| Time | `__DATE__`/`__TIME__` use time/localtime and `-bench` uses gettimeofday. Decide real clock support or explicit diagnostics when these features are requested. Do not fabricate a current date. See [timekeeping debt](../technical-debt.md#timekeeping-beyond-delivered-timer-ticks). |
+| Files | Task 8 adapts `BufferedFile`, binary readers and response files to streams, retaining source ownership and short-read/error handling. No POSIX syscalls or public fd layer. |
+| Output | Task 8 uses create/truncate stream output and checks writes/close. Failed output may remain partial until filesystem replacement/removal support exists. |
+| Paths | Task 8 recognizes leading native URIs, preserves each `-I`/`-L` path and uses separate configured defaults. Host path behavior remains host-based. |
+| Include identity | Native TCC rejects `#pragma once` until opened files can be compared by identity. Include guards work. Aliases cannot be resolved from path strings; see [file-identity debt](../technical-debt.md#file-identity-across-capability-paths). |
+| Time | Guest TCC now diagnoses use of `__DATE__`/`__TIME__` instead of fabricating a date; the host compiler retains its clock. Driver benchmark timing still needs handling in task 9. See [timekeeping debt](../technical-debt.md#timekeeping-beyond-delivered-timer-ticks). |
 | Unneeded host services | Exclude JIT/run, dynamic loading, coverage, runtime backtraces, bounds checking, semaphore locking and cross-compiler exec dispatch. Static configuration alone does not exclude all native-run paths. Reject unavailable command options explicitly. Archive creation tools can wait; reading `.a` is needed now. |
 
 The host executable's undefined-symbol list contains optional Linux services
@@ -193,7 +193,7 @@ review reveals a larger change. Update its checkbox when delivering it.
 5. [x] C nonlocal jumps.
 6. [x] Floating literal conversion and binary scaling.
 7. [x] Pyxis code-generation defaults and compiler support archive.
-8. [ ] Native file I/O and URI handling in TCC.
+8. [x] Native file I/O and URI handling in TCC.
 9. [ ] Guest compiler driver and build recipe through object output.
 10. [ ] Native P1F executable output.
 11. [ ] Guest SDK and compiler packaging.
@@ -385,29 +385,43 @@ remain in tasks 8–11.
 
 ### 8. Native streams and paths
 
-Owner: ports/TCC patches. Depends on 3–4 and 7.
-Adapt `BufferedFile`, `full_read`, archive/object readers and output creation to
-native streams/handles. Preserve binary reads, seeking, short-read/error handling
-and ownership on normal and nonlocal exits. A host file descriptor must not be
-confused with a Pyxis capability handle. No SDK-wide fd emulation.
+Complete: the selected TCC readers use native `FILE *` streams for source,
+includes, response files and ELF objects/archives. Source ownership stays on
+`BufferedFile`'s cleanup chain, including nested-include error unwinding;
+stdin is borrowed and memory inputs have no stream. Binary seeks and reads
+check errors, bounds and short data before use. Output uses create/truncate
+streams, checks writes and close, and may leave partial data on failure until
+independent replacement/removal support exists. Pyxis-target TCC rejects shared
+objects and linker scripts. No public fd layer, libc or kernel changes.
 
-Resolve relative paths through the inherited working context; treat native
-URIs as rooted paths. Retain directory-relative includes and explicit `-I`/`-L`
-arguments without splitting `app://` at a colon. Review response files and
-linker-script path handling in the same pass; reject unsupported forms clearly.
-Use existing create/truncate writes and check close errors. A failed compile
-may leave partial output until independent replacement/removal support exists.
+Guest relative paths use the inherited working directory; leading `scheme://`
+paths select capability roots. Each repeated `-I`/`-L` contributes one path,
+with colons intact. Configured defaults are separate entries rather than a
+new search-list syntax. Quoted includes search beside their source first;
+rooted includes do not fall through to search directories. Existing filename
+buffer limits now produce diagnostics rather than truncated paths. Path
+components are not normalized ahead of actual filesystem traversal.
 
-Before implementation: settle configured search lists and include identity.
-Prefer repeated explicit paths over adding a new global environment convention.
-For `#pragma once`, propose a bounded port-local URI normalization only if it is
-correct for the supported namespace; aliases cannot be assumed identical or
-distinct from path spelling alone. Otherwise report the limitation explicitly.
-Do not add `realpath`, `stat` or new filesystem semantics just for this port.
+Native `#pragma once` is explicitly unsupported; normal include guards work.
+The missing operation is [file identity](../technical-debt.md#file-identity-across-capability-paths),
+not path canonicalization: multiple grants or directory paths can reach the
+same file. Do not add `realpath`, `stat` or new filesystem semantics just for
+this port. The agreed guest clock-macro policy was brought forward from task 9:
+expanding `__DATE__`/`__TIME__` reports the missing clock. Host paths, include
+identity and time behavior remain host-based.
 
-Done: affected compiler units build against native headers, with no implicit
-POSIX I/O dependencies. Record remaining driver dependencies for 9; the full
-compiler need not yet link. Keep unfinished patches out of the normal image.
+Validation: rebuilt the pinned recipe from all four patches, compiled
+`libtcc.c`, `tccpp.c`, `tccelf.c`, `tccgen.c` and `tccasm.c` against the real SDK
+with implicit declarations treated as errors, and built existing shell and
+Mandelbrot sources with the host compiler. Relocatable merging exercised SDK
+object/archive input, and a response file compiled the existing cat source.
+The ordinary image build and four-CPU KVM boot passed. TCC-built Mandelbrot,
+linked with the existing GNU SDK path, rendered correctly in a separate boot
+and exited with status zero. No new test sources or automation were added.
+
+The guest executable is still task 9. Its driver/tool dispatch, benchmark timing,
+optional host services and debug-directory metadata remain to be adapted; no
+runnable guest compiler is claimed or included in the normal image yet.
 
 ### 9. Guest driver and object compilation
 
@@ -418,11 +432,10 @@ retain native diagnostics and error unwinding, and make `-E`/`-c` usable. Record
 exact supported options and required startup grants (console, working context,
 readable source/header roots, writable output directory and memory).
 
-Before implementation: decide the current-time policy. Until wall-clock support
-exists independently, the proposed behavior is a clear error when `__DATE__`,
-`__TIME__` or unavailable benchmark timing is requested, not a fabricated date
-or a TCC-specific clock syscall. Review stack use against the existing 64 KiB
-process stack. If that exposes a real general runtime need, discuss it; do not
+The guest `__DATE__`/`__TIME__` diagnostic is implemented in task 8. Before
+implementation, confirm the proposed diagnostic for unavailable benchmark timing
+as well; do not fabricate timing or add a TCC-specific clock syscall. Review
+stack use against the existing 64 KiB process stack. If that exposes a real general runtime need, discuss it; do not
 silently enlarge kernel resources for the port.
 
 Done: manually launch the staged compiler in Pyxis, compile a source file to an
