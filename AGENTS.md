@@ -20,3 +20,9 @@
 - Do not increment schema or version fields merely because the implementation
   changed. Introduce a new version only when multiple versions must intentionally
   coexist or migration is required.
+- When a milestone is complete, rewrite its `docs/wip` document as concise
+  documentation of the implemented behavior, interfaces and remaining limits,
+  then move it into `docs` and update links. Remove completed task lists,
+  superseded proposals and discussion history; Git preserves the original plan.
+  Keep still-relevant deferred work in an appropriate WIP or technical-debt
+  document rather than losing it during cleanup. Do not keep archive copies.

@@ -67,6 +67,14 @@ interaction when implementing it.
 
 These can be focused changes; neither needs to wait for the init milestone.
 
+## Completing a milestone
+
+Rewrite the completed milestone document around the implemented behavior and
+useful interface/usage guidance, then move it from `docs/wip` to `docs` and update
+links. Remove the planning history and completed checklist; the original remains
+in Git history. Carry forward relevant deferred work into another WIP or
+technical-debt document. Do not retain a duplicate archive of the old plan.
+
 ## Existing context
 
 - [Completed first-shell milestone](first-shell.md).
