@@ -10,7 +10,7 @@ case "${1:-}" in
     rm -rf "$staging"
     trap 'rm -rf "$staging"' EXIT
     trap 'exit 1' HUP INT TERM
-    mkdir -p "$staging/abi" "$staging/pxe" "$sdk/sysroot/usr" "$sdk/share"
+    mkdir -p "$staging/abi" "$staging/pxe" "$sdk/sysroot/usr" "$sdk/share/pyxis"
     cp include/abi/*.h "$staging/abi/"
     cp include/pxe/*.h "$staging/pxe/"
     cp userspace/include/*.h userspace/libc/include/*.h "$staging/"
@@ -18,6 +18,7 @@ case "${1:-}" in
       rm -rf "$sdk/sysroot/usr/include"
       mv "$staging" "$sdk/sysroot/usr/include"
     fi
+    install -C -m 644 lib/shebang.c "$sdk/share/pyxis/shebang.c"
     install -C -m 644 userspace/target.mk "$sdk/share/pyxis.mk"
     ;;
   complete)
@@ -29,14 +30,20 @@ case "${1:-}" in
     install -C -m 644 userspace/linker.ld "$sdk/sysroot/usr/lib/pyxis.ld"
     install -C -m 755 build/tools/elf2pxe "$sdk/bin/elf2pxe"
     # tlsf.h carries the complete upstream license; do not export its API.
-    install -C -m 644 third_party/tlsf/tlsf.h "$sdk/share/licenses/tlsf.h"
-    install -C -m 644 third_party/tlsf/UPSTREAM.md "$sdk/share/licenses/tlsf-upstream.md"
+    install -C -m 644 userspace/third_party/tlsf/tlsf.h "$sdk/share/licenses/tlsf.h"
+    install -C -m 644 userspace/third_party/tlsf/UPSTREAM.md "$sdk/share/licenses/tlsf-upstream.md"
     {
       printf 'pyxis_revision=%s\n' "$(git rev-parse HEAD)"
       if [ -n "$(git status --porcelain)" ]; then
         printf 'source_state=modified\n'
       else
         printf 'source_state=clean\n'
+      fi
+      printf 'userland_revision=%s\n' "$(git -C userspace rev-parse HEAD)"
+      if [ -n "$(git -C userspace status --porcelain)" ]; then
+        printf 'userland_state=modified\n'
+      else
+        printf 'userland_state=clean\n'
       fi
       printf 'compiler_target=%s\n' "$("${CROSS_COMPILE:-x86_64-unknown-pyxis-}gcc" -dumpmachine)"
       printf 'compiler_version=%s\n' "$("${CROSS_COMPILE:-x86_64-unknown-pyxis-}gcc" -dumpfullversion)"

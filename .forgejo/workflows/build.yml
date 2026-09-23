@@ -16,6 +16,10 @@ jobs:
         password: ${{ secrets.PYXIS_REGISTRY_READ_TOKEN }}
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.PYXIS_SOURCE_READ_TOKEN }}
+          persist-credentials: false
       - name: Build bootable ISO
         run: make -j4 image
       - name: Save kernel and ISO

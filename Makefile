@@ -41,14 +41,17 @@ tools:
 	$(MAKE) -C tools
 
 sdk-headers:
+	@test -f userspace/runtime.mk || { \
+	  echo 'Missing userspace submodule: run git submodule update --init userspace.' >&2; \
+	  exit 1; }
 	./scripts/export-sdk.sh headers
 
 sdk: tools sdk-headers
-	$(MAKE) -C userspace -f runtime.mk SDK=$(abspath build/sdk)
+	$(MAKE) -C userspace -f runtime.mk SDK=$(abspath build/sdk) BUILD=$(abspath build/runtime)
 	./scripts/export-sdk.sh complete
 
 userspace: sdk
-	$(MAKE) -C userspace SDK=$(abspath build/sdk)
+	$(MAKE) -C userspace SDK=$(abspath build/sdk) BUILD=$(abspath build/userspace)
 
 initrd: build/initrd.cpio
 
