@@ -69,6 +69,7 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
 
 static void tty_newline(struct tty *tty)
 {
+  tty->wrap_pending = false;
   tty->x = 0;
   tty->y++;
 
@@ -130,6 +131,13 @@ static void execute_csi(struct tty *tty, unsigned char command)
   size_t cell = (size_t)tty->y * tty->width + tty->x;
   size_t cells = (size_t)tty->width * tty->height;
 
+  if (tty->private_csi) {
+    if (tty->parameter_index == 0 && parameter == 25 &&
+        (command == 'h' || command == 'l')) {
+      tty->cursor_visible = command == 'h';
+    }
+    return;
+  }
   if (command == 'm') {
     for (size_t i = 0; i <= tty->parameter_index; ++i) {
       select_style(tty, tty->parameters[i]);
@@ -138,6 +146,11 @@ static void execute_csi(struct tty *tty, unsigned char command)
   }
   if (tty->parameter_index > (command == 'H' ? 1u : 0u)) {
     return;
+  }
+
+  if (command == 'A' || command == 'B' || command == 'C' || command == 'D' ||
+      command == 'G' || command == 'H' || command == 'J' || command == 'K') {
+    tty->wrap_pending = false;
   }
 
   switch (command) {
@@ -187,6 +200,7 @@ static void begin_escape(struct tty *tty)
 {
   tty->escape_state = TTY_ESCAPE;
   tty->parameter_index = 0;
+  tty->private_csi = false;
   memset(tty->parameters, 0, sizeof(tty->parameters));
 }
 
@@ -199,6 +213,7 @@ void tty_put_char(struct tty *tty, char c)
   }
   if (byte == '\n' || byte == '\r' || byte == '\b') {
     tty->escape_state = TTY_TEXT;
+    tty->wrap_pending = false;
     if (byte == '\n') {
       tty_newline(tty);
     } else if (byte == '\r') {
@@ -210,10 +225,18 @@ void tty_put_char(struct tty *tty, char c)
   }
 
   if (tty->escape_state == TTY_ESCAPE) {
-    tty->escape_state = byte == '[' ? TTY_CSI : TTY_TEXT;
+    tty->escape_state = byte == '[' ? TTY_CSI_ENTRY : TTY_TEXT;
     return;
   }
-  if (tty->escape_state == TTY_CSI || tty->escape_state == TTY_CSI_IGNORE) {
+  if (tty->escape_state == TTY_CSI_ENTRY || tty->escape_state == TTY_CSI ||
+      tty->escape_state == TTY_CSI_IGNORE) {
+    if (tty->escape_state == TTY_CSI_ENTRY) {
+      tty->escape_state = TTY_CSI;
+      if (byte == '?') {
+        tty->private_csi = true;
+        return;
+      }
+    }
     if (byte >= 0x40 && byte <= 0x7e) {
       if (tty->escape_state == TTY_CSI) {
         execute_csi(tty, byte);
@@ -237,10 +260,16 @@ void tty_put_char(struct tty *tty, char c)
     return;
   }
 
-  tty_draw_cell(tty, c, tty->x, tty->y);
-  ++tty->x;
-  if (tty->x >= tty->width) {
+  /* Writing the margin must not scroll a full-screen application's last row.
+   * Styles and cursor visibility preserve this pending wrap across writes. */
+  if (tty->wrap_pending) {
     tty_newline(tty);
+  }
+  tty_draw_cell(tty, c, tty->x, tty->y);
+  if (tty->x == tty->width - 1) {
+    tty->wrap_pending = true;
+  } else {
+    ++tty->x;
   }
 }
 
@@ -254,12 +283,13 @@ void tty_clear(struct tty *tty)
   tty->x = 0;
   tty->y = 0;
   tty->escape_state = TTY_TEXT;
+  tty->wrap_pending = false;
 }
 
 void tty_fresh_line(struct tty *tty)
 {
   tty->escape_state = TTY_TEXT;
-  if (tty->x) {
+  if (tty->x || tty->wrap_pending) {
     tty_newline(tty);
   }
 }
