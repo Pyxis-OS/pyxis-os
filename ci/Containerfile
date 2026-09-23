@@ -64,3 +64,5 @@ ENV PATH=/opt/cross/bin:${PATH}
 RUN test "$(x86_64-elf-gcc -dumpfullversion)" = 16.2.0 \
     && x86_64-elf-ld --version | head -n 1 | grep -F 'GNU ld (GNU Binutils) 2.47.' \
     && printf '' | cc -std=gnu23 -x c -fsyntax-only -
+
+RUN rm -f /var/run && mkdir -p /var/run

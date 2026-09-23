@@ -20,6 +20,8 @@ jobs:
         run: make -j4 image
       - name: Save kernel and ISO
         uses: https://data.forgejo.org/actions/upload-artifact@v3
+        env:
+          NODE_USE_SYSTEM_CA: '1'
         with:
           name: pyxis-image
           path: |
