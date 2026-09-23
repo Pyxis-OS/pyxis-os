@@ -37,12 +37,13 @@ and upstream formatting, recording ordered local patches in its recipe.
    `isspace`, `isdigit` and `isprint`. The Kilo adaptation must cast plain-char
    byte data to unsigned char before classification. Allocation, formatting
    and basic file streams already exist.
-3. **Host recipes and Kilo adaptation.** Use libterm for terminal size/input/output
-   and existing stdio for file loading/saving. Replace getline locally with a
-   growable reader. Review allocation failures and touched bounds handling.
-   Keep status messages until replaced initially; no fabricated wall clock.
-   Saving through create/truncate/write is non-atomic and may leave partial
-   contents on failure; retain that limitation in the port's documentation.
+3. **Host recipes and Kilo adaptation — complete.** The
+   [ports repository](https://git.internal/chronium/pyxis-ports) provides the Lua
+   runner, pinned recipe and ordered patches. Kilo uses libterm and libc streams
+   with a growable line reader, checked allocations and touched bounds fixes.
+   Status messages persist until replaced. Saves remain non-atomic; limitations
+   are recorded beside the recipe. Processes now receive a fixed, eager 64 KiB
+   stack; the former one-page stack was insufficient for ordinary C file loading.
 4. **OS integration.** Pin the ports repository, stage Kilo into the boot archive,
    and manually verify opening, editing, saving, reopening and return to shell.
 
@@ -61,9 +62,8 @@ Do not add workflow/dispatch integration beyond the explicitly assigned task.
 ## Completion boundary
 
 The host runner consumes a pinned recipe and SDK, applies ordered patches and
-stages build outputs. Kilo is the proposed first consumer; its actual port stays
-a separate focused task. Use that real recipe as it becomes buildable rather
-than adding a dummy port.
+stages Kilo and its license. OS integration remains before this milestone is
+complete: pin and package those outputs through the ordinary build.
 
 ## Decisions before implementation
 
