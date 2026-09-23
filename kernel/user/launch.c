@@ -17,6 +17,7 @@
 #include <kernel/object/memory.h>
 #include <kernel/object/console.h>
 #include <kernel/object/endpoint.h>
+#include <kernel/object/process.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
@@ -30,7 +31,7 @@ struct initial_program {
   uintptr_t entry;
   size_t cpu_index;
   handle_t input, output, content, endpoint, application_root, home, memory;
-  handle_t launcher, server_image, server_endpoint;
+  handle_t launcher, server_image, server_endpoint, client_process;
 };
 
 /* Shared read-only application namespace retains the tree across process exit. */
@@ -87,6 +88,13 @@ void user_launch_initial(void)
 
   if (capability_install(&hello->process->capabilities, &hello->process->space->console->object,
         CONSOLE_RIGHT_READ, &hello->input) != CAP_OK) {
+    goto fail;
+  }
+
+  /* Hello begins interactive editing only after the other terminal writers
+   * finish. Client already waits for its server before exiting. */
+  if (capability_install(&hello->process->capabilities, &client->process->control->object,
+        PROCESS_RIGHT_WAIT, &hello->client_process) != CAP_OK) {
     goto fail;
   }
 
@@ -163,6 +171,9 @@ void user_launch_initial(void)
       resources[count++] = (struct process_binding){"input", program->input};
     }
     resources[count++] = (struct process_binding){"memory", program->memory};
+    if (program->client_process != HANDLE_INVALID) {
+      resources[count++] = (struct process_binding){"client_process", program->client_process};
+    }
     if (program->content != HANDLE_INVALID) {
       resources[count++] = (struct process_binding){"content", program->content};
     }

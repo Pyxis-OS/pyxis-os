@@ -87,12 +87,15 @@ and reports actual bytes written. Its byte-count and string helpers finish parti
 each kernel call renders a bounded chunk. Requests and replies have shared
 layouts, and CALL returns both status and reply byte count. All programs use
 console capabilities for TTY output. Hello additionally receives a READ-only
-`input` handle, queries terminal dimensions, waits for one input chunk, echoes
-it and exits. On multicore boots select its CPU tab with Alt+Right before typing;
-typing on Caelum is discarded. The single-CPU fallback accepts input on Caelum.
-Missing keyboard input is reported without blocking indefinitely. Input loss is
-reported and retried. Line editing and command history are not implemented.
-See [keyboard input](keyboard.md) for the current layout and navigation bytes.
+`input` handle and uses [libterm](terminal.md) to query dimensions and read an
+edited line. A WAIT-only `client_process` grant lets it wait for the other
+application writers before drawing its prompt. It retries after Ctrl+C cancellation or input loss, prints an
+accepted line and exits. On multicore boots select its CPU tab with Alt+Right
+before typing; typing on Caelum is discarded. The single-CPU fallback accepts
+input on Caelum, but concurrent kernel logs can disrupt the editor's display.
+Missing keyboard input is reported without blocking indefinitely. History and
+lines larger than the visible terminal remain later work.
+See [keyboard input](keyboard.md) for the layout and navigation bytes.
 
 CALL takes a handle, a tagged message and its size, then a reply buffer and
 capacity. Shared protocol headers define the tag and payload union. Rights are

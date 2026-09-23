@@ -160,9 +160,11 @@ later work. Kernel terminal input does not perform line editing or echo.
 `libterm` provides explicit-handle operations for input, output, write-all,
 dimensions and focused cursor/clear/style helpers for supported terminal
 sequences. Its line-input helper performs editing and echo in userspace.
-Initially support printable text, Enter and Backspace with a caller-provided
-buffer, an explicit result and returned length. Do not silently truncate a line.
-History and cursor-based line editing can follow later. A terminal context
+Support printable ASCII, insertion/deletion, Left/Right, Home/End and wrapped
+editing with a caller-provided buffer and an explicit result/length. Ctrl+C
+cancels the line locally. Prompt and line must fit the visible terminal; reject
+extra insertion at either the buffer or display limit and report it. History
+and a scrolling viewport for longer lines can follow later. A terminal context
 borrows its handle by default; its owner remains responsible for closing it.
 There is no implicit global terminal in the native API.
 
@@ -282,7 +284,7 @@ not duplicated here as a second ABI definition.
   Depends on 2. Done when a userspace reader sleeps awaiting text, receives it
   in the selected space, and global navigation still works.
 
-- [ ] **13. Shared libterm and line input.** Implement the explicit-handle API,
+- [x] **13. Shared libterm and line input.** Implement the explicit-handle API,
   supported terminal controls and the small line-input helper. Settle buffer-full,
   end-of-input, Backspace and supported text-encoding behavior here; do not imply
   complete Unicode editing or display-width support. Depends on 1 and 12.
@@ -750,5 +752,41 @@ returned to the pre-launch baseline after exit. Multiple-reader ordering,
 overflow/device-loss recovery and unavailable hardware were code-reviewed, not
 forced. No tests, fault injection or boot automation were added.
 
-Task 13 remains unstarted. Discuss line-input limits, control handling, Escape
-prefix decoding and editing scope before implementing libterm.
+Task 13 is complete (assistant). Libterm is a separate static archive with
+borrowed explicit handles, native-status input/output, dimensions, cursor,
+erase and color helpers. Console output wrappers now preserve native statuses
+instead of reducing failures to -1; in-tree callers remain coordinated, with
+no compatibility layer or schema/version change.
+
+The allocation-free line helper uses a caller buffer, printable ASCII prompt,
+insertion/deletion, Left/Right, Home/End and wrapping across rows. A highlighted
+cell marks the editing position. The buffer and visible terminal both bound
+length; excess insertion is rejected with a red cursor and a result flag, while
+editing and submission remain possible. Ctrl+C abandons the line, advances to a
+fresh line and returns CANCELLED. Input loss and native failures have explicit
+results and clear the partial line. No EOF convention, history or Unicode editing.
+Single-byte reads decode navigation sequences without retaining a future child's
+input. Standalone Escape has no action or timeout.
+
+The TTY now recognizes the focused cursor, erase and style sequences used by
+libterm, carrying bounded parser state across writes. Existing immediate wrapping
+and scrolling remain. No kernel echo, line editing, cursor overlay or cell-buffer
+allocation was introduced. Hello waits for client (which waits for server) before
+starting editing, using the existing completion capability, then prints a submitted
+line and exits. See `docs/terminal.md` for the contract and `docs/technical-debt.md`
+for rendering cost and terminal exclusivity limitations.
+
+Validation: ordinary image builds passed without warnings. Normal four-CPU KVM
+boots exercised insertion/deletion, Home/End, movement and Backspace across a
+wrapped row at the screen bottom, scrolling, cancellation/retry and submission.
+The one-CPU fallback accepted input and exited successfully, but shared kernel
+logs visibly disrupt its editor display; that limitation is documented. Manual
+TCG/GDB calls exercised small-buffer and visible-area limits, continued editing
+after rejection, cancellation, invalid prompts/arguments, missing READ authority,
+and native error/result propagation. Split output sequences, palette/default
+colors, cursor positioning, clearing and oversized-command recovery were inspected.
+Physical-frame usage returned to the pre-launch baseline after exit. Input-loss
+recovery was code-reviewed, not forced. No tests or boot automation were added.
+
+Task 14 remains unstarted. Discuss FILE stream modes, buffering, standard-stream
+bindings and native-error translation before implementing stdio.
