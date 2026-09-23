@@ -1,10 +1,9 @@
 # Choosing the first guest C compiler
 
-Status: initial comparison, not a compiler selection. The goal is the complete
-[edit/build/run loop](edit-build-run.md), not necessarily a TCC port. The
-[TCC audit](tcc-port.md) records deeper investigation of one candidate; its task
-list is conditional on selecting it. FP support and the Mandelbrot application
-remain useful independently of that choice.
+Status: background comparison. The [TCC porting plan](tcc-port.md) is the current
+route toward the [edit/build/run loop](edit-build-run.md). Keep these alternatives
+available if that port exceeds its agreed boundaries; this is not a plan to
+implement several compilers. FP/Mandelbrot is already complete.
 
 ## Candidates inspected
 
@@ -58,9 +57,8 @@ scope. A compiler-plus-linker combination must preserve license notices and
 be audited as a whole; borrowing TCC's linker does not make its file/runtime
 adaptation disappear.
 
-Before implementing a compiler port, choose whether the priority is the smallest
-complete guest pipeline, compiler readability/development, or a modular toolchain.
-Then audit the chosen candidate's target headers, runtime and native output in
-detail. Do not implement all candidates or treat the existing TCC investigation
-as a commitment. The independent [FP/Mandelbrot slice](../userspace.md#floating-point)
-is complete; detailed compiler-port planning follows separately.
+The current plan pursues TCC's self-contained pipeline with native Pyxis I/O and
+P1F output. Follow its [decision checkpoints](tcc-port.md#pr-worklist) before
+implementation. Revisit this comparison if that requires a broad linker rewrite
+or bending OS interfaces around the compiler; a different frontend still needs
+a complete guest toolchain.
