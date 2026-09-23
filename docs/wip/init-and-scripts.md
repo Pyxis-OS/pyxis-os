@@ -68,7 +68,7 @@ not require it or introduce a resident supervisor.
 
 ## Focused implementation tasks
 
-- [ ] Define the shared script-launch contract: bounded shebang parsing, script
+- [x] Define the shared script-launch contract: bounded shebang parsing, script
   grant/name convention, interpreter lookup and boot adaptation.
 - [ ] Add script mode using the existing parser and foreground execution, with
   line diagnostics and the agreed failure behavior.
@@ -81,6 +81,10 @@ These are proposed PR boundaries; keep dependent changes together where needed
 to preserve working builds. First-line bounds, line endings, the script grant
 and argument convention, and the launch integration boundary are agreed above.
 The SDK/repository split is not a prerequisite.
+
+The first task is implemented in the [script-launch contract](../script-launch.md).
+Normal boot still starts the native shell; script mode, session handoff and init
+selection are not implemented by that task.
 
 ## Completion boundary
 

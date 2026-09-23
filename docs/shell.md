@@ -66,7 +66,10 @@ A command without `/` is a bare name: `cat` opens `app://cat.pxe`. There is no
 PATH search or fallback. Names already ending in `.pxe` still receive the suffix
 when bare; use `app://cat.pxe` or `./cat.pxe` to name an image directly. Paths
 containing `/` are resolved as written. Builtins are recognized after quote
-removal. An empty command name is an error.
+removal. An empty command name is an error. Opened programs use the
+[script-launch helper](script-launch.md), which can dispatch a shebang to a native
+interpreter. The shell itself rejects script input until script mode is added;
+it does not silently treat a script launch as an interactive session.
 
 ## Startup and child authority
 

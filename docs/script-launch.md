@@ -1,0 +1,40 @@
+# Script launch
+
+`program_launch()` in libpyxis accepts an opened image and the same explicit
+request as `launcher_launch()`. Native PXE requests pass through unchanged.
+The kernel launcher and PXE loader continue to load only native executables.
+
+For a shebang script, the helper resolves the interpreter URI through the
+caller's startup roots and submits that executable instead. It appends a READ
+resource named `script` for the original file. Existing grant indices and child
+resources, roots, working directory and environment retain their meaning; no
+launcher authority is added. A caller-supplied `script` resource conflicts with
+this convention and is rejected for shebang launch.
+
+Interpreter arguments are its URI, the original script name from `argv[0]`,
+then the remaining original arguments. The script name is descriptive, not
+permission to reopen the file. The interpreter reads the granted file from
+byte offset zero. Terminal input remains a separate resource.
+
+The shared [parser contract](../include/pxe/shebang.h) bounds the first line,
+accepts LF or CRLF (or EOF without a newline), and permits spaces/tabs between
+`#!` and one explicit `scheme://file` URI. It does not support interpreter
+arguments, quoting, trailing whitespace or recursive script interpreters.
+An invalid interpreter image is rejected by the native loader.
+
+The helper borrows the request, closes temporary interpreter/directory handles,
+and preserves all source grants on success or failure. Successful launch returns
+an owned process observer; failure returns no child. Prefixes and temporary
+arrays use userspace heap storage. Reads do not create a snapshot of a writable
+script: the interpreter receives the same file object, which other authorized
+writers may still change.
+
+Boot shares the parser, but its interpreter lookup is deliberately limited to
+`app://` followed by an exact initrd archive entry name. It neither walks general
+kernel paths nor normalizes archive names. Boot installs the same script grant
+and argument convention with its explicit initial-process resources.
+
+Normal boot still selects the native shell. The shell uses program launch for
+foreground commands but explicitly rejects a script resource until its script
+execution mode is implemented. Default init selection and Make overrides remain
+later tasks in the [init milestone](wip/init-and-scripts.md).
