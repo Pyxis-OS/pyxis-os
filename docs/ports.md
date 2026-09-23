@@ -66,3 +66,12 @@ is read-only. Processes receive a fixed 64 KiB stack without automatic growth.
 Persistent storage, atomic replacement and timekeeping remain separate work.
 The next compiler investigation belongs to the [edit/build/run milestone](wip/edit-build-run.md);
 [guest Lua](wip/lua-port.md) is independent of the host recipe runner.
+
+## TCC target work in progress
+
+The ports catalog also contains a [TCC recipe](../ports/tcc/README.md). It currently
+builds a host-running compiler that emits Pyxis ELF objects, plus the target
+support archive. Invoke it explicitly through the standalone runner; `make ports`
+and the normal image still select Kilo only. It does not modify the consumed SDK
+or require rebuilding the compiler container. Guest TCC, native P1F linking and
+boot-archive packaging follow the [TCC task list](wip/tcc-port.md).
