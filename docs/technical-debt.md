@@ -122,6 +122,20 @@ directory context, rights and errno before implementing them. The native ABI
 remains capability-based; this does not commit the OS to POSIX semantics or add
 those wrappers to the first-shell milestone.
 
+## File identity across capability paths
+
+The filesystem protocol has no operation for determining whether two opened
+file handles refer to the same underlying file. Path strings cannot provide
+that identity: different capability roots and directory paths can reach the
+same object, and a descriptive path is not authority or a canonical name.
+
+This blocks reliable `#pragma once` handling in native TCC. The port rejects
+that directive explicitly for now; ordinary include guards remain usable.
+Revisit an identity operation when adding this facility. Define its comparison
+scope, lifetime and behavior across mounts and file replacement before exposing
+it; do not substitute normalized path strings or add `realpath` just for TCC.
+See [the TCC milestone](wip/tcc-port.md#8-native-streams-and-paths).
+
 ## Timekeeping beyond delivered timer ticks
 
 Bounded console reads currently count BSP timer interrupts at the configured
