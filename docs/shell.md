@@ -52,15 +52,16 @@ limit is also rejected. The command buffer has room for 1023 bytes plus NUL;
 libterm's visible-area limit may be smaller. History and scrolling input beyond
 that visible area remain deferred.
 
-There is no expansion, substitution, globbing, scripting, comment syntax,
-piping, redirection or background execution. Characters such as `$`, `*`, `#`,
-`;`, `|` and `>` are literal argument bytes, not operators.
+There is no expansion, substitution, globbing, piping, redirection or background
+execution. Characters such as `$`, `*`, `;`, `|` and `>` are literal argument
+bytes, not operators. Interactive input treats `#` literally too; script mode
+supports whole-line comments.
 
 `cd path` changes the shell's owned directory chain. It requires one argument;
 failure preserves the old chain, its rights and the displayed path. `exit` takes
-no arguments and ends the shell successfully. Command failures do not accumulate into the shell's
-exit status; unrecoverable terminal, wait or cleanup failures terminate it with
-failure.
+no arguments and ends the shell successfully. Interactive command failures do
+not accumulate into the shell's exit status; unrecoverable terminal, wait or
+cleanup failures terminate it with failure.
 
 A command without `/` is a bare name: `cat` opens `app://cat.pxe`. There is no
 PATH search or fallback. Names already ending in `.pxe` still receive the suffix
@@ -68,8 +69,34 @@ when bare; use `app://cat.pxe` or `./cat.pxe` to name an image directly. Paths
 containing `/` are resolved as written. Builtins are recognized after quote
 removal. An empty command name is an error. Opened programs use the
 [script-launch helper](script-launch.md), which can dispatch a shebang to a native
-interpreter. The shell itself rejects script input until script mode is added;
-it does not silently treat a script launch as an interactive session.
+interpreter.
+
+## Script mode
+
+A named READ resource `script` selects script mode. `argv[1]` supplies the name
+used in diagnostics; the shell reads the granted handle from offset zero rather
+than reopening that name. Additional arguments are not expanded by the shell.
+It reads one command per line with the same parser, `cd`, `exit` and foreground
+execution as interactive mode, without prompts or command echo. Terminal input
+stays available to foreground children.
+
+Blank lines and whole-line `#` comments are ignored, including the shebang.
+Spaces/tabs may precede the comment marker; embedded or quoted `#` is literal.
+Each line allows 1024 bytes before LF, including CR in CRLF. Only CR immediately
+before LF is stripped. A final line without LF is executed too. Oversized lines
+and embedded NUL bytes are rejected without executing that line; comments have
+the same bounds. A trailing backslash is an error, not line continuation.
+
+The first malformed command, failed `cd` or launch, nonzero child exit, child
+fault or read failure stops the script with failure. Shell diagnostics include
+`script-name:line:` (lines start at one); child diagnostics retain their own
+format. EOF or `exit` succeeds. Neither falls back to an interactive prompt.
+
+Script mode needs the same startup resources as interactive mode, including an
+explicit launcher grant. Ordinary shell children do not receive the launcher,
+so launching a shell script as an ordinary foreground command currently fails
+its resource check. Boot can explicitly grant the interpreter launch authority;
+session handoff and selecting a default script init remain later milestone tasks.
 
 ## Startup and child authority
 
