@@ -28,7 +28,10 @@ mount without requiring those features.
 
 Init mounts a QEMU host directory through virtio-fs and launches a program that
 can enumerate and read `host://` using native directory/file capabilities.
-Writable host access needs a separate explicit scope.
+Writable host access needs a separate explicit scope, including the
+[user/authority checkpoint](users-and-authority.md). The first mount's explicit
+directory grants do not settle future guest-user ownership or host identity
+mapping.
 
 PCI discovery, VirtIO transport, queue ownership and filesystem integration are
 focused steps within this milestone, not a single large driver PR. Define those

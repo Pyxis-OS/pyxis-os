@@ -18,6 +18,13 @@ Hosting the Pyxis landing page remains a release goal. Networking, the server
 and their resource contracts need their own scoped plans. Revisit init
 supervision and restart policies when defining the first web-server milestone.
 
+## Multiple users and restricted permissions
+
+Multi-user support is a requirement, with an earlier
+[identity and authority design checkpoint](users-and-authority.md). Keep that
+checkpoint ahead of persistent ownership and broader sharing decisions; do not
+leave it as account UI to bolt on after those interfaces are fixed.
+
 ## Persistent storage and installation
 
 Keep three choices separate: Pyxis file/directory capability requests, a backend
