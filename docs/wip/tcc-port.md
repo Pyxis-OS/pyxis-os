@@ -191,7 +191,7 @@ review reveals a larger change. Update its checkbox when delivering it.
 3. [x] String and integer-conversion libc facilities.
 4. [x] Sorting and diagnostic libc facilities.
 5. [x] C nonlocal jumps.
-6. [ ] Floating literal conversion and binary scaling.
+6. [x] Floating literal conversion and binary scaling.
 7. [ ] Pyxis code-generation defaults and compiler support archive.
 8. [ ] Native file I/O and URI handling in TCC.
 9. [ ] Guest compiler driver and build recipe through object output.
@@ -299,7 +299,7 @@ remains in task 9.
 Owner: userland libc. Depends on 1–2. Split into two focused PRs:
 
 - [x] Math support: `ldexpl`, `scalbn`, `scalbnl`, `fmodl`, `fabsl`, `copysignl`.
-- [ ] String conversion: `strtof`, `strtod`, `strtold`.
+- [x] String conversion: `strtof`, `strtod`, `strtold`.
 
 Agreed source: a narrow musl subset, pinned to release 1.2.5 commit
 `0784374d561435f7c787a555aeab8ede699ed298`, with its MIT license and notices.
@@ -311,12 +311,29 @@ rounding-aware compilation and standard excess precision. Provenance and local
 adaptations are recorded in userland's `third_party/musl/UPSTREAM.md` and shipped
 with the SDK.
 
-Next: adapt musl's conversion scanner to read a string without importing its
-FILE implementation. Use the existing float/double/80-bit long-double ABI with
-precision-specific conversion. Retain the numerical algorithm, covering decimal
-and hexadecimal forms, rounding, overflow/underflow, end pointers, errno and
-special values. Syntax is ASCII with `.` as decimal separator; no locale state.
-Do not import the rest of libc/libm or add floating-point printf.
+Complete: the conversion scanner reads strings directly, with no imported FILE
+implementation or heap use. It retains musl's decimal/hexadecimal numerical
+algorithms and precision-specific rounding for float/double/80-bit long double.
+Syntax is ASCII with `.` as decimal separator and case-insensitive infinity/NaN;
+NaN payload text is consumed without choosing payload bits or sign. Incomplete
+exponents/payloads preserve the valid prefix in the end pointer.
+
+Local reporting adaptations set ERANGE for overflow, all nonzero subnormal
+results (including exact ones), and nonzero input rounded to zero. Hexadecimal
+overflow is checked before scaling so directed rounding to a finite maximum
+still reports it. If no conversion occurs, the result is zero with the original
+end pointer and errno preserved; ordinary conversions preserve errno too. These
+rules are
+separate from the math helpers' exception-only convention. The scanner retains
+its 8 KiB automatic digit workspace, including sticky rounding information for
+longer input. No locale, float printf or wider libm import.
+
+The ordinary SDK/image build and normal four-CPU boot pass. Manual guest GDB
+inspection covered decimal/hex conversion, precision and directed rounding,
+end pointers, signed zero, special values, hexadecimal overflow in all three
+types, exact subnormal minima and underflow to zero. The public wrappers and
+adapted scanner also compile with pinned host TCC against the SDK; these
+inspection objects are not packaged guest code.
 
 Done: target libraries build and export the required conversion/scaling
 facilities without host math or parser stubs. The compiler can consume their
