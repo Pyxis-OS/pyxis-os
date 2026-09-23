@@ -11,7 +11,8 @@ kernel builds and `HOSTCC` for the converter. Outputs live under `build/`.
 The native wrappers build into `build/userspace/libpyxis.a`; use
 `make -C userspace libpyxis` to build just the library. The target C library builds separately into
 `build/userspace/libc.a` (`make -C userspace libc`). Every program links libc
-startup explicitly, then its code and both archives; no host runtime is linked.
+startup explicitly, then its code and the libc, libpyxis and libterm archives;
+only referenced archive objects are pulled in. No host runtime is linked.
 Libpyxis owns native operations and startup accessors; libc owns C entry/exit,
 allocation and the initial C support routines.
 
@@ -56,7 +57,8 @@ metadata is read-only; argv and its strings occupy separate writable pages.
 Neither part is executable.
 
 The libc entry validates and initializes the native startup snapshot without
-heap allocation, prepares the allocator, and calls `main(int argc, char **argv)`,
+heap allocation, prepares the allocator and standard streams, then calls
+`main(int argc, char **argv)`,
 then exits with main's return value. Use
 [startup_resource() and the other native accessors](../userspace/include/startup.h)
 to find supplied handles and environment values. Lookup borrows an existing
@@ -73,9 +75,9 @@ Hello obtains named output and its `app` scheme root, uses its argument vector
 and environment in its greeting, then enumerates the root and its `share` child.
 It reads the text file first through an explicit scheme path, then relatively
 after changing into `share`, closing each owned handle even after an I/O error.
-Hello then creates a RAM directory and file, rediscovers them through independent
-grants, and enumerates their names. It writes text and truncates an appended tail
-through a WRITE-only handle, then prints the contents through a READ-only handle.
+Hello then creates a RAM directory through the native interface and uses
+[stdio](stdio.md) to open a file, write formatted text, seek back and copy its
+contents to stdout. Its greeting also uses libc output; stdio failures use perror.
 See [directories.md](directories.md) for lookup, enumeration and exclusive creation.
 The syscall register
 convention is defined in the [native wrapper](../userspace/include/syscall.h).
@@ -153,10 +155,11 @@ while tasks can run on their assigned AP. See the
 
 Headers under [userspace/libc/include](../userspace/libc/include) define the
 implemented subset: allocation, byte memory operations, string length/comparison/
-search/duplication, bounded integer/string formatting and environment lookup.
+search/duplication, integer/string formatting, environment lookup and
+[unbuffered file/terminal stdio](stdio.md).
 `snprintf`/`vsnprintf` report the full required length and terminate a nonempty
 destination even when truncated. Their header lists supported formats; floating
-point, wide characters, streams and locale support are not implemented.
+point, wide characters and locale support are not implemented.
 `errno` is process-local today because there is only one thread per process.
 Native libpyxis calls continue to return native statuses without setting it.
 
@@ -206,5 +209,6 @@ root can the CPU return ownership to the BSP for cleanup. This prevents freeing
 an executing stack or active page tables. The BSP then destroys the process
 and its private address space, followed by the task's kernel stack and metadata.
 The owning space and its TTY survive; original boot-module frames remain
-reserved. Fatal kernel exceptions still panic, and exit runs no cleanup
-callbacks or stream flushing.
+reserved. Fatal kernel exceptions still panic. Normal libc exit flushes and
+closes registered streams before invoking the kernel; _Exit and fatal faults
+bypass that libc cleanup. No exit callbacks are implemented.

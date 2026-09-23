@@ -18,8 +18,8 @@ through the `app` startup scheme binding, plus a shared RAM root under `home`. I
 lists `share`, then opens `hello.txt` with READ and prints it through the console.
 The [path helpers](paths.md) compose lookups and retain working-directory handles.
 Hello reads through an explicit scheme path and again after changing directory.
-It also creates and rediscovers a directory and file under `home`, writes and
-truncates the file, then reads it through an independent grant. Its memory
+It also creates a directory under `home`, then uses libc stdio to create a file,
+write formatted text, seek back and print the contents. Its memory
 capability supplies temporary file-read buffers and a process-lifetime path
 workspace; see [private memory](memory.md) for allocation and release.
 Lookup returns owned handles, which hello closes after use. File reads use
@@ -406,9 +406,9 @@ All fallible work precedes mutation. Shared user memory, task cancellation or
 multiple tasks per process would require revisiting these assumptions.
 
 [Libpyxis wrappers](../userspace/include/file.h) return native status for all four
-operations and validate reply sizes/counts; failure clears output values. Hello
-uses a WRITE-only creation grant and independently looks up a READ grant, writes
-text, appends then truncates a tail, and prints the retained contents.
+operations and validate reply sizes/counts; failure clears output values.
+[Libc stdio](stdio.md) composes these operations into independently positioned
+FILE streams without a kernel descriptor table.
 
 ### Implemented user-buffer access
 

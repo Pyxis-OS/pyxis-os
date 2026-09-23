@@ -68,3 +68,18 @@ needed before treating that fallback as a normal interactive environment.
 The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
 on screen. History, Unicode widths, larger-line viewports and Escape timing are
 not implemented. These boundaries are recorded in [the terminal contract](terminal.md).
+
+## Non-atomic stdio append
+
+Append streams query the current file size before each native write. Another
+writer can change the file between those calls, so concurrent appenders can
+overwrite one another. Seeking does not disable the append policy, but it cannot
+make the pair atomic. Keep this limitation until concurrent appending needs a
+native operation that chooses the end and writes under one file operation.
+
+Formatted stream output currently stages the full result using snprintf, with
+heap allocation and a second formatting pass when the small stack buffer is
+insufficient. This avoids a second formatter or a generic output callback layer,
+but large formatted output requires temporary memory. Revisit bounded streaming
+when real consumers make that cost material. All FILE streams are unbuffered;
+there are no pending writes to flush yet.
