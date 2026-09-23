@@ -298,7 +298,7 @@ not duplicated here as a second ABI definition.
   define their C-facing translation. Depends on 5, 7, 9 and 13. Done when a C
   program writes and rereads a RAM file and prints it using libc facilities.
 
-- [ ] **15. cat using libc.** Build and package a separate program using stdio
+- [x] **15. cat using libc.** Build and package a separate program using stdio
   to copy named file contents to stdout, handling partial I/O and errors with a
   meaningful exit status. Depends on 14. Done when it displays both an initrd
   file and a RAM file using arguments from startup.
@@ -826,5 +826,26 @@ resource/completion queues drained. Allocation failure, concurrent-create/append
 races and terminal input loss were code-reviewed, not forced. No tests, fault
 injection or boot automation added.
 
-Task 15 remains unstarted: cat using libc. Settle its command-line/error behavior
-before implementation.
+Task 15 is complete (assistant). The separate cat program uses only libc APIs
+to copy one or more named files to stdout in argument order, with a fixed 4 KiB
+buffer outside the initial user stack. Input errors name the path on stderr,
+set a failure exit status and leave later paths eligible for copying. Output
+errors stop immediately. No options or implicit stdin: every argument is a path,
+and no paths produces usage and failure. See `docs/userspace.md`.
+
+The initrd packages cat. Hello receives launcher authority, creates its RAM file,
+waits for client/server, then launches cat with explicit paths to the initrd text
+and RAM file. Cat receives output, memory and read-only app/home roots; no input,
+launcher, environment or working-directory context. Hello waits for completion
+and closes the process observer before entering the line editor. No ABI or libc
+interface changed.
+
+Validation: the ordinary image build passed without warnings. One- and four-CPU
+KVM boots copied the files and completed all four programs with status zero after
+line input. Manual TCG/GDB calls checked usage/failure with no paths, a missing
+path followed by successful copies, and stopping on an unwritable stdout before
+trying the next path. The normal cat invocation then returned zero. Partial-read
+error preservation and multi-buffer copying were code-reviewed, not forced.
+No tests, test infrastructure or boot automation added.
+
+Task 16 remains unstarted: ls and mkdir using libc and native directory helpers.

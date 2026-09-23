@@ -32,7 +32,7 @@ See [gdb.md](gdb.md) for kernel debugger usage.
 
 ## Entry and loading
 
-`make initrd` packages hello and its text asset, plus the client and server
+`make initrd` packages hello and its text asset, plus the client, server and cat
 programs, into `build/initrd.cpio`; `make image`
 includes that uncompressed `newc` archive as the sole Limine module. The kernel
 keeps the archive mapped read-only and uses `initrd_lookup()` to find the program
@@ -78,6 +78,9 @@ after changing into `share`, closing each owned handle even after an I/O error.
 Hello then creates a RAM directory through the native interface and uses
 [stdio](stdio.md) to open a file, write formatted text, seek back and copy its
 contents to stdout. Its greeting also uses libc output; stdio failures use perror.
+After client/server completion, Hello launches `cat` to copy the initrd text and
+the RAM file to stdout in argument order. It explicitly grants output, memory
+and read-only `app`/`home` roots, then waits before starting line input.
 See [directories.md](directories.md) for lookup, enumeration and exclusive creation.
 The syscall register
 convention is defined in the [native wrapper](../userspace/include/syscall.h).
@@ -150,6 +153,19 @@ a private kernel-entry stack. Allocation, submission and reclamation stay on the
 while tasks can run on their assigned AP. See the
 [task interface](../include/kernel/user.h) for the ownership contract and
 [smp.md](smp.md) for CPU selection and cross-CPU handoff rules.
+
+## cat
+
+`cat path...` copies one or more named files through libc stdio with a fixed
+transfer buffer. It accepts native scheme paths and relative paths when its
+caller supplies directory context. There are no options: every argument is a
+path, including `-`. With no paths it prints usage to stderr and exits with failure;
+implicit stdin is deferred until terminal input has an EOF convention.
+
+Input errors are reported to stderr with the path, and copying continues with
+the remaining arguments. Any error makes the exit status unsuccessful; an output
+error stops copying immediately. Files are copied as bytes without separators,
+text conversion or an added newline.
 
 ## Foundational libc
 
