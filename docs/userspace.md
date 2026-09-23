@@ -222,3 +222,26 @@ The owning space and its TTY survive; original boot-module frames remain
 reserved. Fatal kernel exceptions still panic. Normal libc exit flushes and
 closes registered streams before invoking the kernel; _Exit and fatal faults
 bypass that libc cleanup. No exit callbacks are implemented.
+
+## Floating point
+
+Userspace uses baseline x86-64 x87/SSE2 instructions and the System V floating
+calling convention. `float` and `double` arithmetic normally use SSE; `long
+double` uses the 80-bit x87 format in 16-byte ABI storage. The compiler and SDK
+enable this by default, with no red zone. Kernel code, including libraries built
+into the kernel, must retain `-mgeneral-regs-only`.
+
+Each task owns an aligned FXSAVE64 area. New tasks start with empty x87 registers,
+zero XMM registers, x87 control word `0x037f` and MXCSR `0x1f80`: round to nearest,
+masked FP exceptions, and no flush-to-zero/denormals-are-zero mode. Preemption
+and blocking save this state; dispatch restores it before returning to the task.
+Syscalls preserve it even when they park. AVX/XSAVE state is not supported;
+do not compile for a newer CPU baseline or enable AVX.
+
+Static libgcc provides compiler arithmetic/conversion helpers. This does not
+provide floating-point `printf`, `strtod` or libm, which remain future work.
+There is no public floating-point environment API yet.
+
+Run `mandelbrot` from the shell to render a double-precision Mandelbrot set using
+the terminal's background palette. It sizes itself to the terminal, leaves one
+row for the prompt, and restores default colors and cursor visibility on return.
