@@ -1,9 +1,29 @@
 # Foreground shell
 
-`make -C userspace shell` builds `shell.pxe`; the normal initrd includes it.
-The boot launcher still starts Hello and client. Switching normal boot to the
-shell is first-shell task 18. This task adds a program that an existing launcher
-can start, without a boot option or a test-only entry point.
+`make -C userspace shell` builds `shell.pxe`. Normal boot starts one shell on
+CPU 1 when available, otherwise on the BSP, with `home://` as its working
+directory. On multicore boots use Alt+Right to select CPU 1 before typing.
+The normal initrd contains shell, ls, cat, mkdir and `share/hello.txt`; home is
+initially empty and its RAM contents disappear on reboot.
+
+A first walkthrough:
+
+```text
+ls app://
+cat app://share/hello.txt
+mkdir notes
+cd notes
+ls
+cd app://share
+cat hello.txt
+exit
+```
+
+On exit, process cleanup logs completion in Caelum and releases the shell's
+resources. Its space, tab, framebuffer contents and shared namespace roots
+remain alive. There is no automatic restart or new input consumer in that
+space, but tab switching and kernel presentation continue. In the single-CPU
+fallback, Caelum logs and shell output share a TTY and can disrupt line editing.
 
 ## Commands and quoting
 

@@ -1,9 +1,9 @@
 # Directory capabilities
 
 The launcher retains two trees for the kernel lifetime: read-only `app`, built
-from the boot initrd, and initially empty `home`, backed by RAM. Hello receives
-both roots; client and server also receive explicit grants to the same `home`
-object. RAM contents survive process exit and disappear on reboot.
+from the boot initrd, and initially empty `home`, backed by RAM. The shell receives
+both roots and explicitly passes grants to its children. RAM contents survive
+process exit and disappear on reboot.
 
 Both use the existing tagged CALL interface. There is no userspace filesystem
 server, mount table, block device or kernel path parser.
@@ -139,8 +139,8 @@ parent keeps an independent child reference.
 ## Userspace example
 
 [Libpyxis helpers](../userspace/include/directory.h) wrap lookup and enumeration
-without allocation or path parsing. Hello gets `startup_root("app")`, enumerates
-it, looks up `share` as a directory, enumerates that directory, then looks up
+without allocation or path parsing. The optional Hello example gets
+`startup_root("app")`, enumerates it, looks up `share` as a directory, then looks up
 `hello.txt` with file READ. It reads through the existing file protocol and closes
 both lookup handles and its startup grants. Its fixed name buffer reports an
 oversized entry as an error rather than silently truncating it.

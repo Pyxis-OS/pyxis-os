@@ -1,23 +1,17 @@
-#include <abi/file.h>
 #include <abi/launcher.h>
 #include <abi/memory.h>
 #include <abi/directory.h>
 #include <abi/console.h>
-#include <abi/endpoint.h>
 #include <arch/cpu_local.h>
 #include <arch/smp.h>
-#include <kernel/image.h>
 #include <kernel/initrd.h>
 #include <kernel/fs/initrd_tree.h>
 #include <kernel/object/directory.h>
 #include <kernel/log.h>
 #include <kernel/mm/vm.h>
-#include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/memory.h>
 #include <kernel/object/console.h>
-#include <kernel/object/endpoint.h>
-#include <kernel/object/process.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
@@ -25,50 +19,16 @@
 #include <kernel/user/launch.h>
 #include <kernel/user/startup.h>
 
-struct initial_program {
-  struct process *process;
-  const char *name;
-  uintptr_t entry;
-  size_t cpu_index;
-  handle_t input, output, content, endpoint, application_root, home, memory;
-  handle_t launcher, server_image, server_endpoint, client_process;
-};
-
-/* Shared read-only application namespace retains the tree across process exit. */
+/* Namespace roots survive shell exit; RAM contents remain until shutdown. */
 static struct directory_object *application_root;
-/* One shared RAM namespace, retained until shutdown regardless of process exit. */
 static struct directory_object *home_root;
-
-static bool load_program(const char *name, size_t cpu_index,
-                         struct initial_program *program)
-{
-  struct initrd_file image;
-  if (initrd_lookup(name, &image) != INITRD_OK) {
-    return false;
-  }
-  if (user_process_load(arch_cpu_at(cpu_index)->space, image.data, image.size,
-        &program->process, &program->entry) != MM_OK) {
-    return false;
-  }
-  program->name = name;
-  program->cpu_index = cpu_index;
-  struct process *process = program->process;
-  if (capability_install(&process->capabilities, &process->space->console->object,
-        CONSOLE_RIGHT_WRITE, &program->output) != CAP_OK) {
-    return false;
-  }
-  klog("userspace: %s entry=%p, CPU %zu\n", name, (void *)program->entry, cpu_index);
-  return true;
-}
 
 void user_launch_initial(void)
 {
   KASSERT(arch_cpu_index() == 0);
-  size_t client_cpu = arch_cpu_count() > 1 ? 1 : 0;
-  struct initial_program programs[2] = {0};
+  size_t cpu_index = arch_cpu_count() > 1 ? 1 : 0;
+  struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL;
-  struct initial_program *hello = &programs[0];
-  struct initial_program *client = &programs[1];
 
   if (initrd_tree_create(&application_root) != INITRD_OK) {
     goto fail;
@@ -77,161 +37,71 @@ void user_launch_initial(void)
   if (!home_root) {
     goto fail;
   }
+  struct initrd_file image;
+  uintptr_t entry;
+  if (initrd_lookup("shell.pxe", &image) != INITRD_OK ||
+      user_process_load(arch_cpu_at(cpu_index)->space, image.data, image.size,
+        &process, &entry) != MM_OK) {
+    goto fail;
+  }
   memory = memory_create();
-  if (!memory) {
-    goto fail;
-  }
-  if (!load_program("hello.pxe", client_cpu, hello) ||
-      !load_program("client.pxe", client_cpu, client)) {
-    goto fail;
-  }
-
-  if (capability_install(&hello->process->capabilities, &hello->process->space->console->object,
-        CONSOLE_RIGHT_READ, &hello->input) != CAP_OK) {
-    goto fail;
-  }
-
-  /* Hello begins interactive editing only after the other terminal writers
-   * finish. Client already waits for its server before exiting. */
-  if (capability_install(&hello->process->capabilities, &client->process->control->object,
-        PROCESS_RIGHT_WAIT, &hello->client_process) != CAP_OK) {
-    goto fail;
-  }
-
-  struct initrd_file text;
-  if (initrd_lookup("share/hello.txt", &text) != INITRD_OK) {
-    goto fail;
-  }
-  struct file_object *file = file_create_initrd(&text);
-  if (!file) {
-    goto fail;
-  }
-  enum capability_result result = capability_install(&client->process->capabilities,
-      &file->object, FILE_RIGHT_READ, &client->content);
-  object_release(&file->object);
-  if (result != CAP_OK) {
-    goto fail;
-  }
-  result = capability_install(&hello->process->capabilities, &application_root->object,
-      DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES,
-      &hello->application_root);
-  if (result != CAP_OK) {
-    goto fail;
-  }
-
-  struct endpoint *caller, *service;
-  if (!endpoint_pair_create(&caller, &service)) {
-    goto fail;
-  }
-  result = capability_install(&client->process->capabilities, &caller->object,
-      ENDPOINT_RIGHT_CALL, &client->endpoint);
-  if (result == CAP_OK) {
-    result = capability_install(&client->process->capabilities, &service->object,
-        ENDPOINT_RIGHT_RECEIVE | ENDPOINT_RIGHT_REPLY, &client->server_endpoint);
-  }
-  object_release(&caller->object);
-  object_release(&service->object);
-  if (result != CAP_OK) {
-    goto fail;
-  }
-
-  struct initrd_file server_image;
-  if (initrd_lookup("server.pxe", &server_image) != INITRD_OK) {
-    goto fail;
-  }
-  file = file_create_initrd(&server_image);
-  if (!file) {
-    goto fail;
-  }
-  result = capability_install(&client->process->capabilities, &file->object,
-      FILE_RIGHT_READ, &client->server_image);
-  object_release(&file->object);
-  if (result != CAP_OK) {
-    goto fail;
-  }
   launcher = launcher_create();
-  if (!launcher || capability_install(&client->process->capabilities, launcher,
-        LAUNCHER_RIGHT_LAUNCH, &client->launcher) != CAP_OK ||
-      capability_install(&hello->process->capabilities, launcher,
-        LAUNCHER_RIGHT_LAUNCH, &hello->launcher) != CAP_OK) {
+  if (!memory || !launcher) {
     goto fail;
   }
-  object_release(launcher);
-  launcher = NULL;
 
-  for (size_t i = 0; i < 2; ++i) {
-    struct initial_program *program = &programs[i];
-    result = capability_install(&program->process->capabilities, memory,
-        MEMORY_RIGHT_MANAGE, &program->memory);
-    if (result != CAP_OK) {
-      goto fail;
-    }
-    struct process_binding resources[7];
-    size_t count = 0;
-    resources[count++] = (struct process_binding){"output", program->output};
-    if (program->input != HANDLE_INVALID) {
-      resources[count++] = (struct process_binding){"input", program->input};
-    }
-    resources[count++] = (struct process_binding){"memory", program->memory};
-    if (program->client_process != HANDLE_INVALID) {
-      resources[count++] = (struct process_binding){"client_process", program->client_process};
-    }
-    if (program->content != HANDLE_INVALID) {
-      resources[count++] = (struct process_binding){"content", program->content};
-    }
-    if (program->endpoint != HANDLE_INVALID) {
-      resources[count++] = (struct process_binding){"endpoint", program->endpoint};
-    }
-    if (program->launcher != HANDLE_INVALID) {
-      resources[count++] = (struct process_binding){"launcher", program->launcher};
-    }
-    if (program->server_image != HANDLE_INVALID) {
-      resources[count++] = (struct process_binding){"server_image", program->server_image};
-    }
-    if (program->server_endpoint != HANDLE_INVALID) {
-      resources[count++] = (struct process_binding){"server_endpoint", program->server_endpoint};
-    }
-    result = capability_install(&program->process->capabilities, &home_root->object,
-        DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES |
-        DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES, &program->home);
-    if (result != CAP_OK) {
-      goto fail;
-    }
-    struct process_binding roots[2];
-    size_t root_count = 0;
-    if (program->application_root != HANDLE_INVALID) {
-      roots[root_count++] = (struct process_binding){"app", program->application_root};
-    }
-    roots[root_count++] = (struct process_binding){"home", program->home};
-    const char *arguments[] = {program->name};
-    const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
-    const struct process_startup startup = {
-      .resources = resources,
-      .resource_count = count,
-      .roots = roots,
-      .root_count = root_count,
-      .working_directories = &program->application_root,
-      .working_directory_count = program->application_root != HANDLE_INVALID ? 1 : 0,
-      .working_path = program->application_root != HANDLE_INVALID ? "app://" : NULL,
-      .environment = environment,
-      .environment_count = 1,
-      .argc = 1,
-      .argv = arguments,
-    };
-    if (process_prepare_startup(program->process, &startup) != MM_OK) {
-      goto fail;
-    }
+  handle_t input, output, memory_handle, launcher_handle, app, home;
+  struct kernel_object *console = &process->space->console->object;
+  if (capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &input) != CAP_OK ||
+      capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, &output) != CAP_OK ||
+      capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, &memory_handle) != CAP_OK ||
+      capability_install(&process->capabilities, launcher, LAUNCHER_RIGHT_LAUNCH, &launcher_handle) != CAP_OK) {
+    goto fail;
+  }
+  uint64_t app_rights = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE |
+                        DIRECTORY_RIGHT_READ_FILES;
+  uint64_t home_rights = app_rights | DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES;
+  if (capability_install(&process->capabilities, &application_root->object, app_rights, &app) != CAP_OK ||
+      capability_install(&process->capabilities, &home_root->object, home_rights, &home) != CAP_OK) {
+    goto fail;
   }
   object_release(memory);
-  memory = NULL; /* Startup handles now own the stateless service. */
-  for (size_t i = 0; i < 2; ++i) {
-    struct initial_program *program = &programs[i];
-    if (user_task_create_on(program->cpu_index, program->process, program->entry,
-          USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE) != MM_OK) {
-      goto fail;
-    }
-    program->process = NULL; /* Ownership transferred to its scheduler queue. */
+  object_release(launcher);
+  memory = NULL;
+  launcher = NULL; /* The process's grants now own the stateless services. */
+
+  const struct process_binding resources[] = {
+    {"input", input},
+    {"output", output},
+    {"memory", memory_handle},
+    {"launcher", launcher_handle},
+  };
+  const struct process_binding roots[] = {{"app", app}, {"home", home}};
+  const char *arguments[] = {"shell"};
+  const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
+  const struct process_startup startup = {
+    .resources = resources,
+    .resource_count = sizeof(resources) / sizeof(resources[0]),
+    .roots = roots,
+    .root_count = sizeof(roots) / sizeof(roots[0]),
+    .working_directories = &home,
+    .working_directory_count = 1,
+    .working_path = "home://",
+    .environment = environment,
+    .environment_count = sizeof(environment) / sizeof(environment[0]),
+    .argc = 1,
+    .argv = arguments,
+  };
+  if (process_prepare_startup(process, &startup) != MM_OK) {
+    goto fail;
   }
+  klog("userspace: shell.pxe entry=%p, CPU %zu\n", (void *)entry, cpu_index);
+  if (user_task_create_on(cpu_index, process, entry,
+        USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE) != MM_OK) {
+    goto fail;
+  }
+  /* The scheduler owns the process. Its eventual cleanup leaves the space,
+   * terminal contents and namespace roots alive; there is no shell restart. */
   return;
 
 fail:
@@ -241,10 +111,8 @@ fail:
   if (memory) {
     object_release(memory);
   }
-  for (size_t i = 0; i < 2; ++i) {
-    if (programs[i].process) {
-      KASSERT(process_destroy(programs[i].process) == MM_OK);
-    }
+  if (process) {
+    KASSERT(process_destroy(process) == MM_OK);
   }
   if (application_root) {
     object_release(&application_root->object);
@@ -257,7 +125,5 @@ fail:
   while (object_reap_pending()) {
     object_reap();
   }
-  /* Already submitted tasks remain owned by their queues. Scheduling has not
-   * started; a boot failure halts without exposing a partially prepared peer. */
-  panic("cannot prepare initial userspace programs");
+  panic("cannot prepare initial shell");
 }

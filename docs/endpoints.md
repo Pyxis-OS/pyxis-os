@@ -2,8 +2,9 @@
 
 An endpoint pair connects two sides. Each side is a reference-counted kernel
 object with its own handles and rights; both sides support the same operations.
-The boot launcher gives the client CALL rights on one side and the server
-RECEIVE | REPLY on the other. Each process also gets its own space's console.
+The optional client/server examples require CALL rights on one side and
+RECEIVE | REPLY on the other, plus console grants. Normal shell boot does not
+create their endpoint pair.
 No global endpoint name or implicit authority is involved.
 
 The launcher uses `capability_grant()` to copy an existing grant with reduced

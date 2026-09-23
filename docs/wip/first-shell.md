@@ -1,6 +1,6 @@
 # First shell, filesystem and C runtime
 
-Status: agreed milestone direction, with a proposed sequence of focused PRs.
+Status: milestone implemented; all 18 tasks below are complete.
 This is a working handoff document, not a frozen ABI or authorization to implement
 all tasks at once. Either collaborator can pick up the next assigned task; mark
 it complete and record its handoff in the implementing PR.
@@ -320,7 +320,7 @@ not duplicated here as a second ABI definition.
   Depends on 5, 9, 11 and 13. Done when a user can launch a packaged program,
   change directory and launch another without restarting the shell.
 
-- [ ] **18. Make the shell the normal application-space entry.** Package the
+- [x] **18. Make the shell the normal application-space entry.** Package the
   shell, utilities and sample content, grant the application/home roots, launcher
   and terminal, and replace the boot-only demo sequence for normal use. Define
   what remains visible after the shell exits; no supervisor/restart framework is
@@ -898,5 +898,25 @@ literal $HOME and NULL termination. The shell exited successfully and returned
 control to its caller. Fault reporting, input loss and allocation failures were
 reviewed, not forced. No tests or boot automation added.
 
-Task 18 remains unstarted: make the shell the normal application-space entry
-and decide what remains visible when it exits.
+Task 18 is complete (assistant). Normal boot prepares one shell on CPU 1 when
+available, otherwise on the BSP, starting at home://. It grants the terminal,
+launcher, memory and app/home roots directly; demo processes, endpoint setup and
+their special startup bindings are removed from the boot path. The default
+userspace build and initrd contain shell, ls, cat, mkdir and the sample text.
+Hello/client/server remain explicit build targets outside the normal archive.
+
+Shell exit uses the existing process cleanup and Caelum completion log. The
+space, tab, framebuffer contents and namespace roots survive, with no restart
+or replacement input consumer. Tab navigation and presentation remain active.
+The known single-CPU shared-log/editor limitation is unchanged. No ABI or
+version changes, scheduler redesign or new lifecycle machinery.
+
+Validation: ordinary image and explicit demo-target builds passed without
+warnings. A normal four-CPU KVM boot completed the walkthrough: list app://,
+read the sample, create and enter a RAM directory, launch utilities with relative
+and explicit paths, and exit successfully. Switching to Caelum showed completion;
+switching back preserved the application terminal contents. The archive contains
+only the four intended executables and sample text. A normal single-CPU KVM boot
+also created/entered a directory, ran ls and exited successfully, with the known
+kernel-log interference visible. No tests or boot automation added. See
+`docs/shell.md` for the normal boot walkthrough and exit behavior.

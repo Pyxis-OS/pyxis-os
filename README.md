@@ -25,7 +25,9 @@ Boot installs serial and a kernel stack, copies boot information, installs
 GDT/IDT/TSS, initializes the bitmap PMM, and switches to kernel-owned paging.
 Generic initialization creates the VM allocator and TLSF heap, brings APs onto
 owned stacks and paging, initializes framebuffer text output, and schedules the
-initial user image on CPU 1 when available, or the BSP on a single-CPU boot.
+shell on CPU 1 when available, or the BSP on a single-CPU boot.
+Use Alt+Right to select CPU 1; the shell starts at `home://`. See
+[the shell walkthrough](docs/shell.md).
 Local APIC timers preempt each CPU's pinned tasks and wake idle CPUs. The BSP
 owns allocation and completed-task cleanup; see `docs/smp.md`.
 
