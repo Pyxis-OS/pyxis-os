@@ -151,7 +151,9 @@ void user_launch_initial(void)
   }
   launcher = launcher_create();
   if (!launcher || capability_install(&client->process->capabilities, launcher,
-        LAUNCHER_RIGHT_LAUNCH, &client->launcher) != CAP_OK) {
+        LAUNCHER_RIGHT_LAUNCH, &client->launcher) != CAP_OK ||
+      capability_install(&hello->process->capabilities, launcher,
+        LAUNCHER_RIGHT_LAUNCH, &hello->launcher) != CAP_OK) {
     goto fail;
   }
   object_release(launcher);
@@ -182,7 +184,11 @@ void user_launch_initial(void)
     }
     if (program->launcher != HANDLE_INVALID) {
       resources[count++] = (struct process_binding){"launcher", program->launcher};
+    }
+    if (program->server_image != HANDLE_INVALID) {
       resources[count++] = (struct process_binding){"server_image", program->server_image};
+    }
+    if (program->server_endpoint != HANDLE_INVALID) {
       resources[count++] = (struct process_binding){"server_endpoint", program->server_endpoint};
     }
     result = capability_install(&program->process->capabilities, &home_root->object,
