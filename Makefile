@@ -32,17 +32,17 @@ userspace: tools
 
 build/userspace/hello.pxe build/userspace/share/hello.txt \
     build/userspace/client.pxe build/userspace/server.pxe build/userspace/cat.pxe \
-    build/userspace/ls.pxe build/userspace/mkdir.pxe: userspace
+    build/userspace/ls.pxe build/userspace/mkdir.pxe build/userspace/shell.pxe: userspace
 
 initrd: build/initrd.cpio
 
 build/initrd.cpio: build/userspace/hello.pxe build/userspace/share/hello.txt \
                   build/userspace/client.pxe build/userspace/server.pxe build/userspace/cat.pxe \
-                  build/userspace/ls.pxe build/userspace/mkdir.pxe Makefile
+                  build/userspace/ls.pxe build/userspace/mkdir.pxe build/userspace/shell.pxe Makefile
 	@command -v cpio >/dev/null 2>&1 || { \
 	  echo 'Missing GNU cpio: install it, then run make initrd.' >&2; \
 	  exit 1; }
-	cd build/userspace && printf '%s\n' hello.pxe share share/hello.txt client.pxe server.pxe cat.pxe ls.pxe mkdir.pxe | \
+	cd build/userspace && printf '%s\n' hello.pxe share share/hello.txt client.pxe server.pxe cat.pxe ls.pxe mkdir.pxe shell.pxe | \
 	  cpio --create --format=newc --reproducible --owner=0:0 --quiet > ../initrd.cpio.tmp
 	mv build/initrd.cpio.tmp $@
 
