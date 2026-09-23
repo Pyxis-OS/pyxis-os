@@ -83,6 +83,7 @@ static struct tty *tty_alloc(const struct framebuffer *fb) {
   tty_clear(tty);
 
   tty->initialized = true;
+  tty->cursor_visible = true;
 
   return tty;
 }
@@ -175,6 +176,23 @@ void space_present()
   memcpy((void *)(screen->address + dst_offset),
       (const void *)(active_space->fb->address),
       active_space->fb->size);
+
+  /* Composite the cursor onto the display, leaving the TTY pixels intact.
+   * Snapshot under the output lock; never keep it held while copying a frame. */
+  uint64_t flags = cpu_save_interrupts();
+  bool locked = log_begin();
+  const struct tty *tty = active_space->tty;
+  bool visible = locked && tty->cursor_visible;
+  size_t x = tty->x, y = tty->y;
+  log_end(locked);
+  cpu_restore_interrupts(flags);
+  if (visible) {
+    struct framebuffer display = *active_space->fb;
+    display.address = screen->address + dst_offset;
+    fb_fill_rect(&display, x * tty->font->width,
+        (y + 1) * tty->font->height - 1, tty->font->width, 1,
+        tty->scheme->cursor);
+  }
 
   cpu_store_fence();
 }

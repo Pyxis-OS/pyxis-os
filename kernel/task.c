@@ -30,6 +30,9 @@ enum task_kind {
 struct task_wait {
   struct task *task;
   bool notified;
+  bool timed;
+  uint64_t deadline;
+  struct task_wait *timeout_next;
 };
 
 enum launch_action { LAUNCH_ALLOCATE, LAUNCH_DISCARD, LAUNCH_START };
@@ -92,6 +95,7 @@ static struct task *memory_head, *memory_tail;
 static struct task *launch_head, *launch_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
+static struct task_wait *timed_waits; /* queues_locked, expired by the BSP. */
 
 /* Sleeping kernel tasks belong to the BSP and are accessed only with IF=0. */
 static struct task *sleeping_tasks;
@@ -176,28 +180,59 @@ struct console_wait *task_prepare_console_wait(void)
   return record;
 }
 
-void task_wait_sleep(struct task_wait *wait)
+static uint64_t bsp_ticks(void)
+{
+  return atomic_load_explicit(&arch_cpu_at(0)->timer_interrupts, memory_order_relaxed);
+}
+
+uint64_t task_deadline_after_ms(uint32_t milliseconds)
+{
+  uint64_t ticks = ((uint64_t)milliseconds * arch_timer_frequency() + 999) / 1000;
+  return bsp_ticks() + ticks + (milliseconds != 0);
+}
+
+bool task_deadline_expired(uint64_t deadline)
+{
+  return (int64_t)(bsp_ticks() - deadline) >= 0;
+}
+
+static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline)
 {
   struct scheduler *scheduler = local_scheduler();
   struct task *task = scheduler->current_task;
   KASSERT(task == wait->task && task->kind == TASK_USER);
 
   lock_queues();
-  if (wait->notified) {
+  if (wait->notified || (timed && task_deadline_expired(deadline))) {
     unlock_queues();
     return;
   }
   KASSERT(!task->wait && !task->parked);
   task->wait = wait;
+  if (timed) {
+    wait->timed = true;
+    wait->deadline = deadline;
+    wait->timeout_next = timed_waits;
+    timed_waits = wait;
+  }
   unlock_queues();
 
   arch_user_save(&task->cpu);
   arch_context_switch(&task->saved_stack, scheduler->stack);
 }
 
-void task_wait_wake(struct task_wait *wait)
+void task_wait_sleep(struct task_wait *wait)
 {
-  lock_queues();
+  sleep_wait(wait, false, 0);
+}
+
+void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline)
+{
+  sleep_wait(wait, true, deadline);
+}
+
+static void wake_wait_locked(struct task_wait *wait)
+{
   wait->notified = true;
   struct task *task = wait->task;
   if (task->parked) {
@@ -208,6 +243,40 @@ void task_wait_wake(struct task_wait *wait)
   }
   /* A wake before the switch only records notification. Enqueueing a task
    * before its stack has been saved could run it on two contexts at once. */
+}
+
+void task_wait_wake(struct task_wait *wait)
+{
+  lock_queues();
+  if (wait->timed) {
+    struct task_wait **link = &timed_waits;
+    while (*link != wait) {
+      KASSERT(*link);
+      link = &(*link)->timeout_next;
+    }
+    *link = wait->timeout_next;
+    wait->timeout_next = NULL;
+    wait->timed = false;
+  }
+  wake_wait_locked(wait);
+  unlock_queues();
+}
+
+static void expire_timed_waits(void)
+{
+  lock_queues();
+  struct task_wait **link = &timed_waits;
+  while (*link) {
+    struct task_wait *wait = *link;
+    if (!task_deadline_expired(wait->deadline)) {
+      link = &wait->timeout_next;
+      continue;
+    }
+    *link = wait->timeout_next;
+    wait->timeout_next = NULL;
+    wait->timed = false;
+    wake_wait_locked(wait);
+  }
   unlock_queues();
 }
 
@@ -696,6 +765,7 @@ void kernel_task_sleep(uint64_t ticks)
   bool idle_reported = false;
   for (;;) {
     if (cpu_index == 0) {
+      expire_timed_waits();
       grow_requested_tables();
       service_directory_requests();
       service_file_requests();
@@ -782,6 +852,7 @@ void task_preempt(bool user_mode)
   }
 
   if (arch_cpu_index() == 0) {
+    expire_timed_waits();
     wake_sleepers();
   }
 

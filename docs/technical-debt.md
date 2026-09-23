@@ -92,8 +92,7 @@ from those writes. A real terminal ownership policy or separate log view is
 needed before treating that fallback as a normal interactive environment.
 
 The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
-on screen. History, Unicode widths, larger-line viewports and Escape timing are
-not implemented. These boundaries are recorded in [the terminal contract](terminal.md).
+on screen. History, Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](terminal.md).
 
 ## Non-atomic stdio append
 
@@ -122,3 +121,17 @@ iteration and a mkdir wrapper. Define how those APIs map to capability roots,
 directory context, rights and errno before implementing them. The native ABI
 remains capability-based; this does not commit the OS to POSIX semantics or add
 those wrappers to the first-shell milestone.
+
+## Timekeeping beyond delivered timer ticks
+
+Bounded console reads currently count BSP timer interrupts at the configured
+frequency. This is sufficient for coarse Escape-sequence timeouts, but long
+interrupt-disabled sections or suspended VMs can extend a wait in real time.
+There is no userspace monotonic-clock query or wall-clock interface yet.
+
+Wall-clock support is wanted soon, alongside a deliberate monotonic time source
+for deadlines. Define the hardware source, boot-time UTC initialization,
+resolution and user ABI before implementation. Clock adjustments must not change
+relative wait deadlines. Do not invent a date or expose scheduler tick counts as
+Unix time. The Kilo plan currently proposes persistent status messages until an
+appropriate elapsed-time facility can replace that temporary limitation.

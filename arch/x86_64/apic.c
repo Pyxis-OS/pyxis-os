@@ -52,6 +52,11 @@
 #define PIT_CALIBRATION_COUNT ((PIT_FREQUENCY + TIMER_FREQUENCY - 1) / TIMER_FREQUENCY)
 #define PIT_POLL_LIMIT 10000000u
 
+uint32_t arch_timer_frequency(void)
+{
+  return TIMER_FREQUENCY;
+}
+
 static uint32_t apic_read(unsigned offset)
 {
   return *(volatile uint32_t *)(APIC_BASE + offset);

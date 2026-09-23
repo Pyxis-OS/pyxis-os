@@ -151,13 +151,18 @@ void console_input(struct console_object *console, const char *bytes, size_t siz
   cpu_restore_interrupts(flags);
 }
 
-static void begin_read(struct console_object *console)
+static bool begin_read(struct console_object *console, bool timed, uint64_t deadline)
 {
   lock_input(console);
   if (!console->reader_active) {
     console->reader_active = true;
     unlock_input(console);
-    return;
+    return true;
+  }
+
+  if (timed && task_deadline_expired(deadline)) {
+    unlock_input(console);
+    return false;
   }
 
   struct console_wait *reader = task_prepare_console_wait();
@@ -169,8 +174,33 @@ static void begin_read(struct console_object *console)
   }
   console->last_reader = reader;
   unlock_input(console);
-  task_wait_sleep(wait);
+  if (timed) {
+    task_wait_sleep_until(wait, deadline);
+  } else {
+    task_wait_sleep(wait);
+  }
+  lock_input(console);
+  bool acquired = reader->wait == NULL;
+  if (!acquired) {
+    /* Timeout can race the previous reader's handoff. Only remove a record
+     * still queued; end_read clears wait when it grants ownership. */
+    struct console_wait **link = &console->first_reader;
+    struct console_wait *previous = NULL;
+    while (*link != reader) {
+      KASSERT(*link);
+      previous = *link;
+      link = &(*link)->next;
+    }
+    *link = reader->next;
+    if (console->last_reader == reader) {
+      console->last_reader = previous;
+    }
+    reader->next = NULL;
+    reader->wait = NULL;
+  }
+  unlock_input(console);
   /* Read ownership is handed directly to us, so newcomers cannot overtake. */
+  return acquired;
 }
 
 static void end_read(struct console_object *console)
@@ -197,6 +227,11 @@ static struct syscall_result read_console(struct console_object *console,
     size_t reply_capacity)
 {
   struct console_read_reply reply = {0};
+  bool timed = request->timeout_ms != CONSOLE_WAIT_FOREVER;
+  if (timed && request->timeout_ms > UINT32_MAX) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  uint64_t deadline = timed ? task_deadline_after_ms(request->timeout_ms) : 0;
   if (reply_capacity < sizeof(reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
@@ -208,14 +243,30 @@ static struct syscall_result read_console(struct console_object *console,
     if (!keyboard_available()) {
       return (struct syscall_result){CALL_UNAVAILABLE, 0};
     }
-    begin_read(console);
+    if (!begin_read(console, timed, deadline)) {
+      return (struct syscall_result){CALL_TIMED_OUT, 0};
+    }
     lock_input(console);
     while (!console->input_count && !console->input_lost) {
+      if (timed && task_deadline_expired(deadline)) {
+        unlock_input(console);
+        end_read(console);
+        return (struct syscall_result){CALL_TIMED_OUT, 0};
+      }
       struct task_wait *wait = task_wait_prepare();
       console->input_wait = wait;
       unlock_input(console);
-      task_wait_sleep(wait);
+      if (timed) {
+        task_wait_sleep_until(wait, deadline);
+      } else {
+        task_wait_sleep(wait);
+      }
       lock_input(console);
+      /* A timeout wakes without taking this lock. Detach before this task can
+       * reuse its wait record; input may already have detached it instead. */
+      if (console->input_wait == wait) {
+        console->input_wait = NULL;
+      }
     }
     if (console->input_lost) {
       console->input_lost = false;
