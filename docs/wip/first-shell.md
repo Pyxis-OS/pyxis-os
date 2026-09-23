@@ -312,7 +312,7 @@ not duplicated here as a second ABI definition.
   and other C support. Revisit libc directory APIs as a separate
   [follow-up](../technical-debt.md#directory-apis-in-libpyxis).
 
-- [ ] **17. Interactive foreground shell.** Parse commands with arguments and
+- [x] **17. Interactive foreground shell.** Parse commands with arguments and
   quoted strings, implement `cd` and `exit`, resolve bare names under `app://`,
   and launch with explicit resources, environment and working-directory context.
   Define the small quoting syntax without expansion or scripting. Wait without
@@ -872,5 +872,31 @@ missing parents, existing names, root/parent boundaries, wrong-kind operands,
 denied creation and continuation after errors. Concurrent enumeration mutation
 and allocation failures were reviewed, not forced. No tests or boot automation.
 
-Task 17 remains unstarted: the interactive foreground shell. Settle its quoting
-syntax before implementation.
+Task 17 is complete (assistant). The packaged shell uses libterm line input,
+whitespace/quote parsing, cd and exit, app:// bare-name lookup with a .pxe suffix,
+and explicit foreground launch/wait. Single/double quotes, empty arguments,
+adjacent fragments and backslash outside single quotes are supported without
+expansion or operators. Failed commands return to the prompt; failed cd preserves
+the old context. Cancellation, malformed input and editor-limit rejection never
+execute a partial line. See `docs/shell.md` for the contract.
+
+Children receive terminal, memory, app/home roots, the current directory chain
+and the immutable initial environment, but no launcher. Two borrowed libpyxis
+accessors expose the environment array/count for forwarding; no kernel ABI or
+version change. Rights follow the two known namespace policies. The shell does
+not maintain a display path or PWD. Normal boot still starts Hello and client;
+there are no boot hooks or test entry points.
+
+Validation: ordinary image builds passed without warnings and normal one- and
+four-CPU KVM boots completed. A four-CPU TCG boot with GDB launched the shell through
+the existing userspace launcher while Hello waited. Interactive commands listed,
+created and changed directories, read relative files in both roots, launched an
+explicit executable path, and recovered from child failure and failed cd. Quoted
+spaces, escaped spaces, malformed quotes/escapes and Ctrl+C were exercised.
+Manual parser calls confirmed empty arguments, concatenation, escaped quotes,
+literal $HOME and NULL termination. The shell exited successfully and returned
+control to its caller. Fault reporting, input loss and allocation failures were
+reviewed, not forced. No tests or boot automation added.
+
+Task 18 remains unstarted: make the shell the normal application-space entry
+and decide what remains visible when it exits.

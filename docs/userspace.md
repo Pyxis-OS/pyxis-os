@@ -32,7 +32,7 @@ See [gdb.md](gdb.md) for kernel debugger usage.
 
 ## Entry and loading
 
-`make initrd` packages hello and its text asset, plus client, server, cat, ls and mkdir
+`make initrd` packages hello and its text asset, plus client, server, cat, ls, mkdir and shell
 programs, into `build/initrd.cpio`; `make image`
 includes that uncompressed `newc` archive as the sole Limine module. The kernel
 keeps the archive mapped read-only and uses `initrd_lookup()` to find the program
@@ -192,6 +192,13 @@ Directory operations use libpyxis; libc supplies allocation and output. The smal
 shared utility helper sizes path scratch storage and formats native errors without
 introducing libc directory APIs or converting native statuses to errno. The libc
 directory API [follow-up](technical-debt.md#directory-apis-in-libpyxis) remains open.
+
+## Foreground shell
+
+The packaged [shell](shell.md) uses libterm for command input and libpyxis for
+navigation and synchronous foreground launch. Its quoting rules, builtin
+commands and explicit startup/child authority are documented there. It does not
+replace the normal boot programs yet; that is first-shell task 18.
 
 ## Foundational libc
 
