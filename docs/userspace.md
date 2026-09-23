@@ -183,6 +183,16 @@ No conversion leaves the end pointer at the input; successful calls leave
 decimal conversion without reliable range diagnostics. No locale state or
 floating conversion is added by these functions.
 
+`qsort` is an in-place, unstable heapsort: O(n log n) comparisons, constant
+stack use, no allocation or recursion. Comparators receive pointers to array
+elements and return a negative, zero or positive result.
+
+`assert` evaluates its expression once and writes the expression, file, line
+and function to stderr before calling `abort` on failure. Defining `NDEBUG`
+disables evaluation; re-including `<assert.h>` honors its current setting.
+`abort` terminates through `_Exit(EXIT_FAILURE)`, without flushing streams or
+running libc cleanup. There is no signal delivery or abort handler.
+
 The allocator separately compiles the project's pinned BSD-3-Clause TLSF source.
 It retains its own MANAGE copy of the named startup memory grant, independent of
 application handle close. A missing grant or failed copy leaves allocation

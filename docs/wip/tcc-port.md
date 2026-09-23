@@ -189,7 +189,7 @@ review reveals a larger change. Update its checkbox when delivering it.
 1. [x] FP support and Mandelbrot.
 2. [x] Public headers usable by TCC and GCC.
 3. [x] String and integer-conversion libc facilities.
-4. [ ] Sorting and diagnostic libc facilities.
+4. [x] Sorting and diagnostic libc facilities.
 5. [ ] C nonlocal jumps.
 6. [ ] Floating literal conversion and binary scaling.
 7. [ ] Pyxis code-generation defaults and compiler support archive.
@@ -234,20 +234,35 @@ this does not claim a linked or runnable guest TCC.
 
 ### 4. Sorting and diagnostics
 
-Owner: userland libc, with bounded formatting replacements kept in the port.
-Depends on 2. Add `qsort`, `assert.h` and `abort` as needed by the retained
-compiler and its support runtime. Reuse existing integer `snprintf`/stdio;
-review each `sprintf` use before choosing a bounded port-local replacement or
-adding the useful standard formatting entry point.
+Complete: userland libc supplies an iterative, allocation-free heapsort for
+`qsort`, `<assert.h>` and `abort`. Assertions report the expression, file, line
+and function to stderr without allocating, then abort. `NDEBUG` suppresses
+evaluation and is reconsidered on each header inclusion. Abort uses
+`_Exit(EXIT_FAILURE)` without libc cleanup or signals. These are shared libc
+facilities; the kernel and native ABI are unchanged.
 
-Before implementation: agree the sorting implementation and the initial
-`abort` behavior. A useful proposal is process termination through the existing
-exit/fault contract with no libc exit cleanup; do not introduce signals to
-match a Unix implementation. Assertions should retain useful diagnostics.
+The pinned compiler uses `qsort` for switch-case ordering, assertions throughout
+the x86-64 generator, and `abort` in its x86-64 varargs support. The new sort and
+diagnostic sources compile with GCC and pinned host TCC against the SDK. Full
+compiler builds still need the later runtime and platform tasks.
 
-Done: these are ordinary reusable C facilities with documented limits, not
-TCC-only libc symbols. The compiler's retained call sites build against them.
-Do not grow floating-point printf as part of diagnostic formatting.
+Formatting review for the port patches in tasks 7–9: keep the existing integer
+`snprintf`/stdio implementation; no `sprintf` or floating printf addition is
+needed for the retained calls. Replace calls with explicit destination bounds
+and check formatting failure/truncation rather than accepting partial names:
+
+- `tccpp.c:get_tok_str`: three numeric formats (`%llu`, `<\\x%02x>`, `L.%u`)
+  write at the start of `cstr_buf`, allocated during preprocessor initialization.
+  Use its `size_allocated`, not the size of the data pointer.
+- `tccgen.c:parse_atomic`: format the helper name into `buf[40]` with `sizeof(buf)`.
+- `tccasm.c:asm_parse_directive`: two section-name formats use `sname[64]`;
+  use `sizeof(sname)`.
+- PE name decoration, archive creation in `tcctools.c`, and the Windows backtrace
+  DLL are excluded from this port; their `sprintf` calls need no libc expansion.
+
+The formatting patches belong with the compiler port, whose sources and recipe
+are not imported yet. This task records the call-site decisions, not a runnable
+guest compiler.
 
 ### 5. Nonlocal jumps
 
