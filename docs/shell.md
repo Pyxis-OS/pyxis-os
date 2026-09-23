@@ -19,7 +19,7 @@ cat hello.txt
 exit
 ```
 
-On exit, process cleanup logs completion in Caelum and releases the shell's
+On ordinary exit, process cleanup logs completion in Caelum and releases the shell's
 resources. Its space, tab, framebuffer contents and shared namespace roots
 remain alive. There is no automatic restart or new input consumer in that
 space, but tab switching and kernel presentation continue. In the single-CPU
@@ -96,7 +96,35 @@ Script mode needs the same startup resources as interactive mode, including an
 explicit launcher grant. Ordinary shell children do not receive the launcher,
 so launching a shell script as an ordinary foreground command currently fails
 its resource check. Boot can explicitly grant the interpreter launch authority;
-session handoff and selecting a default script init remain later milestone tasks.
+selecting a default script init remains a later milestone task.
+
+## Session handoff
+
+`session program [arguments...]` launches a successor in the same space and on
+its assigned CPU, then exits the calling shell successfully without waiting.
+For example, an init script can finish with `session app://shell.pxe`. The
+command also works interactively; failed launch returns to the prompt, while
+script mode reports the script name/line and exits with failure as usual.
+Program lookup and quoting use the ordinary command rules, including shebang
+launch. The `session` word is removed from the child's arguments.
+
+The successor receives copies of the usual terminal, memory, app/home root and
+working-directory grants, current working-path metadata and initial environment,
+plus an explicit `launcher` resource with LAUNCH authority. Other startup
+resources, including the caller's `script`, are not forwarded. Launching another
+script supplies that target's own READ script grant through `program_launch`.
+Ordinary foreground commands still receive no launcher.
+
+Successful launch ends script execution immediately: later lines do not run,
+and the caller never reads terminal input again. Closing its process observer
+and exiting releases only the caller's references; the successor keeps its own
+references and can read input and launch programs after the caller is reclaimed.
+There is no wait for application readiness: success means the launch was
+accepted, not that the new program will initialize successfully. A later exit or
+fault does not bring back the original shell or restart the session.
+
+This is explicit delegation followed by caller exit, not process replacement
+or a terminal ownership protocol. It does not add supervision or `exec`.
 
 ## Startup and child authority
 
@@ -114,7 +142,7 @@ fail normally. With no initial chain the shell starts at `home://`. Explicit
 scheme changes select that scheme's rights; relative changes keep the current
 rights. Crossing a retained ancestor boundary fails as in the native path API.
 
-Each child receives explicit copies of terminal input/output, memory, both roots
+Each foreground child receives explicit copies of terminal input/output, memory, both roots
 with the rights above, and the current directory chain. It does not receive the
 shell's launcher. The immutable initial environment is forwarded in full using
 libpyxis's borrowed environment-array accessors. No environment mutation or PWD
