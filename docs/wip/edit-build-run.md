@@ -20,9 +20,9 @@ Persistent storage is useful but not a prerequisite for demonstrating this loop.
 
 ## Proposed stages
 
-1. **Kilo editing.** Pin a source revision, assess terminal/file requirements and
-   adapt it to Pyxis. Completion is opening, editing and saving a source file,
-   then reopening it. Decide the terminal and input additions before that work.
+1. **Kilo editing — complete.** The pinned [Kilo port](../ports.md) is packaged
+   in the normal boot archive and supports opening, editing, saving and reopening
+   source files with the shared terminal and libc facilities.
 2. **TCC feasibility and target contract.** Pin TCC, audit its host-service and
    C-library needs, inspect target header compatibility, and verify linking of
    the existing startup objects and runtime archives. TCC need not rebuild the
@@ -79,4 +79,4 @@ and application subset explicitly after the audit.
   (initial inspection; pin a revision for the feasibility work).
 - [P1F contract](../../include/pxe/p1f.h) and
   [current converter](../../tools/elf2pxe.c).
-- [SDK milestone](../sdk-and-repositories.md) and [port recipes](ports-and-first-port.md).
+- [SDK milestone](../sdk-and-repositories.md) and [port recipes](../ports.md).

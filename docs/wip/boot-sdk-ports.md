@@ -12,9 +12,9 @@ milestone's remaining interface details before starting its code work.
 2. [SDK and repository separation](../sdk-and-repositories.md) — complete:
    exported SDK, prebuilt Pyxis compiler and pinned userspace submodule with
    the integrated build preserved.
-3. [Port recipes and one first port](ports-and-first-port.md): consume that SDK
-   through a small host Lua runner. Prefer Kilo as the first guest port after
-   its requirements audit, then investigate TCC for the edit/build/run loop.
+3. [Port recipes and Kilo](../ports.md) — complete: pinned host Lua recipes,
+   SDK-based Kilo build and ordinary boot-archive integration. TCC investigation
+   remains part of the separate edit/build/run milestone.
 4. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
    through an init-managed virtio-fs mount and native filesystem capabilities.
 

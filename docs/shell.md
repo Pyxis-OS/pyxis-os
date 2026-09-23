@@ -4,7 +4,8 @@
 default [init script](init.md), which hands off to one shell on CPU 1 when available,
 otherwise on the BSP, with `home://` as its working directory. On multicore boots
 use Alt+Right to select CPU 1 before typing. The normal initrd contains init,
-shell, ls, cat, mkdir and `share/hello.txt`; home is initially empty and its RAM
+shell, ls, cat, mkdir, [Kilo and its license](ports.md), and `share/hello.txt`;
+home is initially empty and its RAM
 contents disappear on reboot.
 
 A first walkthrough:

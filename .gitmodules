@@ -1,3 +1,6 @@
 [submodule "userspace"]
 	path = userspace
 	url = ../pyxis-userland.git
+[submodule "ports"]
+	path = ports
+	url = ../pyxis-ports.git
