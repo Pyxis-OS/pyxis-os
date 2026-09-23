@@ -15,8 +15,8 @@ struct space;
 enum mm_result user_process_load(struct space *space, const void *bytes, size_t size,
                                   struct process **process, uintptr_t *entry);
 
-/* BSP, IF=0, before scheduler startup. Loads the archive programs, grants
- * resources and submits them. Failures unwind unsubmitted processes. */
+/* BSP, IF=0, before scheduler startup. Loads the shell, grants resources
+ * and submits it on CPU 1 (or the BSP alone). Failure unwinds the process. */
 void user_launch_initial(void);
 
 #endif
