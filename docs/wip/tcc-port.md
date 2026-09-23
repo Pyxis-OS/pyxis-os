@@ -190,7 +190,7 @@ review reveals a larger change. Update its checkbox when delivering it.
 2. [x] Public headers usable by TCC and GCC.
 3. [x] String and integer-conversion libc facilities.
 4. [x] Sorting and diagnostic libc facilities.
-5. [ ] C nonlocal jumps.
+5. [x] C nonlocal jumps.
 6. [ ] Floating literal conversion and binary scaling.
 7. [ ] Pyxis code-generation defaults and compiler support archive.
 8. [ ] Native file I/O and URI handling in TCC.
@@ -266,22 +266,33 @@ guest compiler.
 
 ### 5. Nonlocal jumps
 
-Owner: userland libc, x86-64 implementation. Depends on 1 and 2.
-Add `jmp_buf`, `setjmp` and `longjmp` with the required compiler attributes and
-assembly. Preserve the stack/return context and C callee-saved registers; a
-zero `longjmp` value returns one. Jumps stay within the same live process and
-valid calling frame; there is no kernel scheduler or signal-mask interface.
+Complete: userland libc supplies `jmp_buf`, the `setjmp` macro/declaration and
+`longjmp`, with returns-twice/noreturn compiler attributes and x86-64 assembly.
+The eight-word buffer holds RBX, RBP, R12–R15, the post-return RSP and RIP;
+zero passed to `longjmp` becomes one. The public header and
+[runtime contract](../userspace.md#foundational-libc) describe valid call sites,
+frame lifetime and changed automatic locals. No allocation or kernel changes.
 
-Before implementation: settle FP-control handling, including the x87 control
-word and MXCSR control fields, and distinguish it from saving all caller-saved
-FP data. Account for compiler handling of returns-twice functions and the C
-rules for changed automatic locals. Review TCC's existing error cleanup so
-nonlocal returns do not lose owned streams or compiler allocations.
+The FP decision follows C23: leave the x87 and MXCSR environment as it exists
+at the `longjmp` call, including control modes and status. Do not restore the
+environment from `setjmp`, or save caller-saved FP data registers. This is a
+nonlocal C return, not a scheduler context switch or signal-mask operation.
 
-Done: the shared declaration/assembly builds, and the pinned TCC call sites
-accept its declarations. Review the saved layout and generated calling sequence.
-Runtime inspection of an actual guest compile/error path follows in 9; this
-task does not claim it ran before the compiler exists.
+Pinned TCC's `error1` frees the diagnostic string and tracked temporary
+allocations before jumping to `tcc_compile`. Its recovery path calls
+`tccgen_finish` and `preprocess_end` on either outcome: they release compiler
+state/macros, close the `BufferedFile` chain and free its buffers. Task 8 must
+retain that ownership path when replacing file descriptors with native streams;
+`longjmp` itself does no cleanup.
+
+The ordinary SDK/image build includes the assembly. GCC and pinned host TCC
+also compile the existing `libtcc.c` recovery call sites with just the new
+`setjmp.h` substituted into the host build's includes; those inspection objects
+are not linked or packaged as guest code. GCC honors `returns_twice`; pinned
+TCC ignores that attribute but already spills live expression registers across
+calls. Generated calls target `setjmp` directly, without a C wrapper whose
+frame would expire. Runtime inspection of an actual guest compile/error path
+remains in task 9.
 
 ### 6. Floating literal conversion
 
