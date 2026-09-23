@@ -36,19 +36,9 @@
  x86_64-*-elf* | x86_64-*-rtems*)
  	tmake_file="$tmake_file i386/t-crtstuff t-crtstuff-pic t-libgcc-pic"
  	case ${host} in
-@@ -1605,6 +1608,9 @@
- esac
- 
- case ${host} in
-+x86_64-*-pyxis*)
-+	# No FP/SIMD context switching yet; do not add soft-fp ABI helpers.
-+	;;
- i[34567]86-*-elfiamcu | i[34567]86-*-rtems*)
- 	# These use soft-fp for SFmode and DFmode, not just TFmode.
- 	;;
 --- /dev/null
 +++ b/gcc/config/pyxis.h
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,37 @@
 +/* Target definitions for Pyxis OS on x86-64.
 +   This file is part of GCC and is distributed under GPL-3.0-or-later,
 +   with the GCC Runtime Library Exception 3.1.  */
@@ -57,13 +47,12 @@
 +#define TARGET_OS_CPP_BUILTINS() \
 +  do { builtin_define ("__pyxis__"); } while (0)
 +
-+/* Caelum does not yet save FP/SIMD state.  Use the integer subset of the
-+   x86-64 System V calling convention, without a red zone.  */
++/* Use the x86-64 System V calling convention without a red zone.
++   Kernel builds explicitly select -mgeneral-regs-only.  */
 +#undef SUBTARGET_DRIVER_SELF_SPECS
 +#define SUBTARGET_DRIVER_SELF_SPECS \
 +  "%{m32|mx32:%ePyxis supports only the x86-64 LP64 ABI}", \
-+  "%{!mred-zone:%{!mno-red-zone:-mno-red-zone}}", \
-+  "%{!mgeneral-regs-only:%{!mno-general-regs-only:-mgeneral-regs-only}}"
++  "%{!mred-zone:%{!mno-red-zone:-mno-red-zone}}"
 +
 +/* Describe stack permissions in ELF objects, including ordinary C output. */
 +#undef TARGET_ASM_FILE_END
@@ -89,12 +78,6 @@
 +  "--build-id=none -z max-page-size=0x1000"
 --- /dev/null
 +++ b/libgcc/config/t-pyxis
-@@ -0,0 +1,8 @@
-+# Caelum currently preserves only general registers.  Floating-point helpers
-+# are intentionally absent; compiling them with a different ABI would make
-+# libgcc appear usable for code the scheduler cannot safely run.
-+LIBGCC2_CFLAGS += -mno-red-zone -mgeneral-regs-only
-+LIB2FUNCS_EXCLUDE += _powisf2 _powidf2 _powixf2 _powitf2 \
-+  _mulhc3 _mulsc3 _muldc3 _mulxc3 _multc3 \
-+  _divhc3 _divsc3 _divdc3 _divxc3 _divtc3 \
-+  $(subst XX,si,$(swfloatfuncs)) $(subst XX,di,$(dwfloatfuncs))
+@@ -0,0 +1,2 @@
++# Userspace preserves x87/SSE state; keep compiler helpers off the red zone.
++LIBGCC2_CFLAGS += -mno-red-zone

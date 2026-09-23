@@ -38,15 +38,18 @@ podman push git.internal/chronium/pyxis-builder:pyxis-gcc16.2-binutils2.47
 ## Target contract
 
 The target is little-endian x86-64 LP64: 8-bit char, 16-bit short, 32-bit int,
-64-bit long/pointers and the integer subset of the System V x86-64 calling
-convention. The compiler defines `__pyxis__`; it does not define Unix/POSIX
+64-bit long/pointers and the System V x86-64 calling convention. The compiler
+defines `__pyxis__`; it does not define Unix/POSIX
 platform macros. Only the C frontend and a static target libgcc are built.
 
-General-register-only code and no red zone are the defaults. Caelum does not
-save FP/SIMD state yet, so floating-point/vector code is unsupported even if
-options can explicitly re-enable it. Libgcc is built under the same restrictions
-and omits floating-point helpers. The target has no 32-bit/x32 multilib, shared
-libraries, PIE, C++ runtime, thread runtime or exception-handling contract.
+The compiler defaults to baseline x86-64 x87/SSE2 code and no red zone. Caelum
+preserves x87/SSE state across task switches; AVX remains unsupported. Do not
+select `-march=native` or other options that require unsaved extended state.
+Kernel builds explicitly retain `-mgeneral-regs-only`. Static libgcc includes
+the normal x86 floating-point arithmetic/conversion helpers and also avoids the
+red zone; it is not a libc or libm implementation. The target has no 32-bit/x32
+multilib, shared libraries, PIE, C++ runtime, thread runtime or exception-handling
+contract.
 
 Applications select an external SDK with `--sysroot=/path/to/sdk/sysroot`.
 The driver finds `crt0.o`, `pyxis.ld`, libc and libpyxis there, and its own libgcc
@@ -68,8 +71,8 @@ compiler; changing SDK headers/libraries/startup/linker script does not.
   x86-64 ELF backend/emulation, without adding a PXE backend.
 - [GCC 16.2.0](https://gcc.gnu.org/pub/gcc/releases/gcc-16.2.0/gcc-16.2.0.tar.gz):
   recognize the tuple, add Pyxis driver/builtin defaults and GNU-stack metadata,
-  and configure the
-  integer-only libgcc build without libc headers or fixed-header copies.
+  and configure static libgcc, including its x86 floating-point helpers,
+  without libc headers or fixed-header copies.
   GCC supplies stdint definitions matching its
   existing x86-64 ELF data model; this does not introduce a newlib dependency.
 

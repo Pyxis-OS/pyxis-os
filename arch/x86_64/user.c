@@ -12,6 +12,7 @@
 
 #define CPUID_FEATURE_FXSR (1u << 24)
 #define CPUID_FEATURE_SSE (1u << 25)
+#define CPUID_FEATURE_SSE2 (1u << 26)
 #define CR0_MONITOR_COPROCESSOR (UINT64_C(1) << 1)
 #define CR0_EMULATE_FPU (UINT64_C(1) << 2)
 #define CR0_TASK_SWITCHED (UINT64_C(1) << 3)
@@ -37,9 +38,9 @@ void arch_user_init(void)
 
   uint32_t eax, ebx, ecx, edx;
   cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
-  if ((edx & (CPUID_FEATURE_FXSR | CPUID_FEATURE_SSE)) !=
-      (CPUID_FEATURE_FXSR | CPUID_FEATURE_SSE)) {
-    panic("userspace requires FXSAVE and SSE support");
+  uint32_t required = CPUID_FEATURE_FXSR | CPUID_FEATURE_SSE | CPUID_FEATURE_SSE2;
+  if ((edx & required) != required) {
+    panic("userspace requires FXSAVE, SSE and SSE2 support");
   }
 
   write_cr0((read_cr0() | CR0_MONITOR_COPROCESSOR | CR0_NUMERIC_ERROR) &
