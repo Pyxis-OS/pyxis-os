@@ -83,3 +83,16 @@ insufficient. This avoids a second formatter or a generic output callback layer,
 but large formatted output requires temporary memory. Revisit bounded streaming
 when real consumers make that cost material. All FILE streams are unbuffered;
 there are no pending writes to flush yet.
+
+## Directory APIs in libpyxis
+
+The first ls and mkdir will use native libpyxis enumeration and creation helpers,
+with libc for output and other C support. This keeps the initial utilities small,
+but programs expecting libc directory APIs will still need native adaptations.
+
+TODO: revisit libc directory enumeration and creation APIs when extending libc
+or porting consumers that need them, including whether to expose dirent-style
+iteration and a mkdir wrapper. Define how those APIs map to capability roots,
+directory context, rights and errno before implementing them. The native ABI
+remains capability-based; this does not commit the OS to POSIX semantics or add
+those wrappers to the first-shell milestone.
