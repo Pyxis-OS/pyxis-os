@@ -209,6 +209,16 @@ The x87/MXCSR control modes and status remain as they were at `longjmp`, followi
 This libc saves only the callee-saved integer registers, stack pointer and return
 address; it adds no signal-mask handling or kernel context-switch interface.
 
+The initial `<math.h>` subset provides `scalbn`, `scalbnl`, `ldexpl`, `fmodl`,
+`fabsl` and `copysignl`, built from pinned musl sources. They are in libc and need
+no `-lm`. The SDK uses SSE2 float/double evaluation and x87 80-bit long double.
+Scaling follows the active rounding mode; `fmodl` uses a quotient truncated
+toward zero. Errors use floating-point exception flags (`math_errhandling` is
+`MATH_ERREXCEPT`) and leave `errno` unchanged. Traps are masked at process start;
+there is no public fenv interface yet. This does not add string-to-float
+conversion, floating-point printf or the rest of libm. The SDK carries musl's
+license and the subset's provenance under `share/licenses`.
+
 The allocator separately compiles the project's pinned BSD-3-Clause TLSF source.
 It retains its own MANAGE copy of the named startup memory grant, independent of
 application handle close. A missing grant or failed copy leaves allocation

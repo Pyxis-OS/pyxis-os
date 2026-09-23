@@ -296,18 +296,27 @@ remains in task 9.
 
 ### 6. Floating literal conversion
 
-Owner: userland libc and the minimal required math support. Depends on 1–2.
-TCC's pinned parser uses `strtof`, `strtod`, `strtold` and `ldexpl`. Provide real
-conversion/scaling with the existing float/double/80-bit long-double ABI; do
-not substitute casts from `strtod` for every precision or fake numeric results.
+Owner: userland libc. Depends on 1–2. Split into two focused PRs:
 
-Before implementation: choose and, if reused, pin the implementation/license.
-Review decimal and hexadecimal forms, rounding, overflow/underflow, end pointers,
-errno and special values, plus dependencies the candidate implementation brings.
-Decide whether the scaling function belongs in a small libm archive or another
-explicit runtime location. This is a decision checkpoint, not authorization to
-import a complete libc/libm or float printf. Split conversion and scaling PRs if
-that makes the chosen implementation easier to review.
+- [x] Math support: `ldexpl`, `scalbn`, `scalbnl`, `fmodl`, `fabsl`, `copysignl`.
+- [ ] String conversion: `strtof`, `strtod`, `strtold`.
+
+Agreed source: a narrow musl subset, pinned to release 1.2.5 commit
+`0784374d561435f7c787a555aeab8ede699ed298`, with its MIT license and notices.
+Math sources retain upstream algorithms and formatting; a small private header
+supplies their x86-64 long-double layout. They live in libc with a minimal public
+`math.h`; callers do not acquire a separate libm link dependency. Math errors
+follow musl's FP-exception convention, leaving `errno` unchanged. The build uses
+rounding-aware compilation and standard excess precision. Provenance and local
+adaptations are recorded in userland's `third_party/musl/UPSTREAM.md` and shipped
+with the SDK.
+
+Next: adapt musl's conversion scanner to read a string without importing its
+FILE implementation. Use the existing float/double/80-bit long-double ABI with
+precision-specific conversion. Retain the numerical algorithm, covering decimal
+and hexadecimal forms, rounding, overflow/underflow, end pointers, errno and
+special values. Syntax is ASCII with `.` as decimal separator; no locale state.
+Do not import the rest of libc/libm or add floating-point printf.
 
 Done: target libraries build and export the required conversion/scaling
 facilities without host math or parser stubs. The compiler can consume their
