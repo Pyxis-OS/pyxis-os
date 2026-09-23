@@ -308,6 +308,9 @@ not duplicated here as a second ABI definition.
   compatibility requirement. Depends on 5, 6 and 14. Done when they list the two
   roots and create/list a RAM directory, reporting missing authority and other
   failures through their normal output/status paths.
+  For now, enumeration and creation stay in libpyxis; libc supplies formatting
+  and other C support. Revisit libc directory APIs as a separate
+  [follow-up](../technical-debt.md#directory-apis-in-libpyxis).
 
 - [ ] **17. Interactive foreground shell.** Parse commands with arguments and
   quoted strings, implement `cd` and `exit`, resolve bare names under `app://`,
