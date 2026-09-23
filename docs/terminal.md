@@ -68,9 +68,8 @@ four parameters of up to 65535 are accepted; malformed or oversized CSI commands
 are discarded through their final byte. A new Escape starts a fresh sequence.
 This is a focused subset, not a claim of full ANSI/VT compatibility.
 
-Hello waits for client through a WAIT-only startup grant (client already waits
-for its server), then uses the helper. It retries after cancellation or input
-loss, then prints an
-accepted line and exits. The native entry points and result contract live beside
-the declarations in `term.h`; no global terminal, stdio stream or shell history
+The shell uses the helper for command input, then stops reading while a child
+runs. It retries after cancellation or input loss and rejects submitted lines
+that reached the editor limit. The native entry points and result contract live
+beside the declarations in `term.h`; no global terminal, stdio stream or shell history
 is hidden inside libterm.

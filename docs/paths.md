@@ -82,7 +82,7 @@ its output on failure. This is local copying, not an endpoint attachment or move
 
 ## Consumer and failures
 
-Hello starts with `app://` as its working-directory boundary. It enumerates the
+The optional Hello example starts with `app://` as its working-directory boundary. It enumerates the
 application tree, reads `app://share/hello.txt`, changes into `app://share`, and
 reads `hello.txt` relatively. It releases discovered handles and the context
 before closing its original startup grants.

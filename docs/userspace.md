@@ -32,16 +32,15 @@ See [gdb.md](gdb.md) for kernel debugger usage.
 
 ## Entry and loading
 
-`make initrd` packages hello and its text asset, plus client, server, cat, ls, mkdir and shell
-programs, into `build/initrd.cpio`; `make image`
-includes that uncompressed `newc` archive as the sole Limine module. The kernel
-keeps the archive mapped read-only and uses `initrd_lookup()` to find the program
-and content by exact archive names. The text source lives beside hello in
-[message.txt](../userspace/hello/message.txt). See [the initrd interface](../include/kernel/initrd.h)
-for the supported records and borrowed-view lifetime. The archive reader provides raw entry views. A separate boot-time
-[tree builder](../include/kernel/fs/initrd_tree.h) exposes those entries as
-read-only directory/file objects without extracting file contents or adding a
-block device. The text asset is packaged at `share/hello.txt`.
+`make initrd` packages shell, cat, ls, mkdir and a sample text file into
+`build/initrd.cpio`; `make image` includes that uncompressed `newc` archive as the
+sole Limine module. A boot-time [tree builder](../include/kernel/fs/initrd_tree.h)
+exposes its entries as read-only directory/file objects without extracting file
+contents or adding a block device. The text asset is `share/hello.txt`.
+
+Hello, client and server remain optional build targets, for example
+`make -C userspace hello client server`. They are not packaged or launched by
+normal boot and still require their example-specific startup grants.
 
 The image loader creates an inactive private address space, copies the program
 into owned backing and applies its permissions. Failure releases partial
@@ -65,46 +64,21 @@ to find supplied handles and environment values. Lookup borrows an existing
 handle and never duplicates it. Missing resource names return HANDLE_INVALID;
 missing environment values return NULL, while an empty value is an empty string.
 `getenv` borrows these same immutable values; environment mutation is not
-implemented. Hello receives an `app` directory root
-and a working-directory chain starting at that root. The
-[path context](paths.md) retains its own copies of these handles. Boot-launched hello and client also receive grants to one shared RAM-backed
-`home` root and the caller-scoped [private-memory service](memory.md). Client
-explicitly passes memory authority when it launches server.
+implemented. The shell receives the read-only `app` root, shared RAM-backed
+`home` root, terminal input/output, launcher and caller-scoped
+[private-memory service](memory.md). It starts at `home://`, with an empty RAM
+tree, and explicitly supplies grants, directory context and environment when
+launching foreground children. See [the shell contract](shell.md).
 
-Hello obtains named output and its `app` scheme root, uses its argument vector
-and environment in its greeting, then enumerates the root and its `share` child.
-It reads the text file first through an explicit scheme path, then relatively
-after changing into `share`, closing each owned handle even after an I/O error.
-Hello then creates a RAM directory through the native interface and uses
-[stdio](stdio.md) to open a file, write formatted text, seek back and copy its
-contents to stdout. Its greeting also uses libc output; stdio failures use perror.
-After client/server completion, Hello launches `cat` to copy the initrd text and
-the RAM file, `mkdir` to create a RAM directory, and `ls` to list both roots and
-the new directory. It waits between children and before starting line input.
-Each utility receives output, memory and a `home://` working directory. Filesystem
-grants differ: cat can read files, mkdir can create under home (its app binding
-has no rights), and ls can enumerate both roots. None receives input or launcher
-authority.
-See [directories.md](directories.md) for lookup, enumeration and exclusive creation.
-The syscall register
-convention is defined in the [native wrapper](../userspace/include/syscall.h).
-Normal output targets the owning space's TTY; diagnostic output targets the
-kernel log, which goes to the Caelum TTY and serial.
+Normal output targets the owning space's TTY; the kernel-log syscall targets
+Caelum and serial. On multicore boots use Alt+Right to select CPU 1 before typing;
+input on Caelum is discarded. The single-CPU fallback accepts input on Caelum,
+where kernel logs can disrupt the editor's display. See [keyboard input](keyboard.md)
+and [libterm](terminal.md) for input and editing behavior.
 
-The [console wrapper](../userspace/include/console.h) uses the native CALL ABI
-and reports actual bytes written. Its byte-count and string helpers finish partial writes;
-each kernel call renders a bounded chunk. Requests and replies have shared
-layouts, and CALL returns both status and reply byte count. All programs use
-console capabilities for TTY output. Hello additionally receives a READ-only
-`input` handle and uses [libterm](terminal.md) to query dimensions and read an
-edited line. A WAIT-only `client_process` grant lets it wait for the other
-application writers before drawing its prompt. It retries after Ctrl+C cancellation or input loss, prints an
-accepted line and exits. On multicore boots select its CPU tab with Alt+Right
-before typing; typing on Caelum is discarded. The single-CPU fallback accepts
-input on Caelum, but concurrent kernel logs can disrupt the editor's display.
-Missing keyboard input is reported without blocking indefinitely. History and
-lines larger than the visible terminal remain later work.
-See [keyboard input](keyboard.md) for the layout and navigation bytes.
+The [console wrapper](../userspace/include/console.h) reports bytes written and
+its helpers finish partial writes. The kernel renders bounded chunks under the
+output lock. Terminal input is blocking, with no EOF convention.
 
 CALL takes a handle, a tagged message and its size, then a reply buffer and
 capacity. Shared protocol headers define the tag and payload union. Rights are
@@ -116,33 +90,16 @@ The [file wrappers](../userspace/include/file.h) query size, read/write at expli
 offsets and resize RAM files. They preserve native error statuses and check reply
 lengths/counts. Writes complete in full or leave the file unchanged; gaps and
 newly grown ranges read as zero. A short read is allowed and zero bytes with
-nonzero capacity means EOF. Hello uses `malloc` for a small read buffer and `free` after each file; buffer size does not depend on file
-size, and content need not be NUL-terminated. It checks that EOF and transferred counts agree with the queried size.
+nonzero capacity means EOF. Cat uses libc stdio to copy bytes without assuming
+NUL-terminated content or allocating a buffer the size of the file.
 
 The [handle wrapper](../userspace/include/handle.h) releases the calling process's
 reference. A closed handle is immediately stale; other owners, including the
 space that owns the console, retain their references. Process exit releases
 handles left open. The read-only startup record is not updated after close.
 
-Client launches server through a granted launcher and a readable image handle.
-It explicitly supplies output, endpoint and memory grants, plus the child argv.
-No roots or environment are inherited. See [launch](processes.md#implemented-userspace-launch)
-for request bounds, source-grant ownership and mutable-image behavior.
-
-The client and server use the [endpoint wrappers](../userspace/include/endpoint.h)
-to exchange a structured request with an attached capability. The client receives
-a content file at startup and copies a READ grant to the server. The server
-reads and prints its contents, closes its received handle, then replies with
-the byte count. The client prints the result and closes its own content grant,
-which remained valid. Closing its endpoint then lets the server exit. The client uses the launch result
-process-control capability to wait for server cleanup and report completion
-before closing that observer handle. See [process completion](processes.md#implemented-process-completion)
-for the lifetime and repeatable wait contract.
-Both have output handles; the server has no startup content grant. Their
-endpoint rights are CALL for the client and RECEIVE | REPLY for the server.
-The [endpoint contract](endpoints.md) describes ownership, growth and errors.
-
-The [boot launcher](../kernel/user/launch.c) prepares hello and client. Both boot
+The [boot launcher](../kernel/user/launch.c) prepares one shell on CPU 1 when
+available, otherwise on the BSP. Both boot
 and userspace launch use [shared image/stack preparation](../kernel/user/load.c)
 to create a process that owns the
 loaded address space and belongs to the target CPU's space. Before submission, it calls
@@ -197,8 +154,9 @@ directory API [follow-up](technical-debt.md#directory-apis-in-libpyxis) remains 
 
 The packaged [shell](shell.md) uses libterm for command input and libpyxis for
 navigation and synchronous foreground launch. Its quoting rules, builtin
-commands and explicit startup/child authority are documented there. It does not
-replace the normal boot programs yet; that is first-shell task 18.
+commands and explicit startup/child authority are documented there. On shell
+exit its process is reclaimed, completion is logged in Caelum, and the space
+and terminal contents remain visible. No shell restart is performed.
 
 ## Foundational libc
 
@@ -224,8 +182,7 @@ the old allocation. Zero-sized allocations return NULL, and this libc defines
 
 `free` returns blocks to TLSF. Pools remain mapped until kernel process cleanup;
 see [the retention tradeoff](technical-debt.md#retained-userspace-heap-pools).
-Hello leaves its path workspace live until exit, while reusing freed file
-buffers. Allocator assertions remain enabled and terminate the affected process
+Allocator assertions remain enabled and terminate the affected process
 after allocation-free diagnostic logging.
 
 ## Switching and cleanup

@@ -13,6 +13,14 @@ handoffs for this first milestone.
 
 ## Current programs
 
+Normal boot starts the [shell](shell.md) at home:// with terminal, launcher,
+memory and app/home root grants. It launches foreground utilities with explicit
+resources, waits for completion and returns to its prompt. Its space and TTY
+survive shell exit; no supervisor restarts it.
+
+Hello and the client/server examples remain explicit build targets, outside the
+normal initrd. Their demonstration flows require the grants described below.
+
 Hello receives output through a named resource and an application directory
 through the `app` startup scheme binding, plus a shared RAM root under `home`. It lists that directory, looks up and
 lists `share`, then opens `hello.txt` with READ and prints it through the console.
@@ -98,12 +106,12 @@ immutable snapshot, so a later lookup can return its stale value.
 Scheme roots have their own name/handle table. Preparation checks that each root
 is an installed directory capability and that root names are nonempty, unique
 and contain neither ':' nor '/'.
-Hello receives the read-only application root under `app`. All three boot
-programs receive explicit grants to the shared RAM root under `home`. No lookup right is added by the startup binding.
+The shell receives the read-only application root under `app` and a shared RAM
+root under `home`. No lookup right is added by the startup binding.
 Startup also copies a launcher-ordered chain of installed directory handles,
 boundary first and current last, plus an optional descriptive path. The kernel
-validates their types without inferring ancestry or granting parent access. Hello
-starts at its application root; libpyxis retains an independently owned context.
+validates their types without inferring ancestry or granting parent access. The
+shell starts at home; libpyxis retains an independently owned context.
 
 The launcher supplies argument strings, including argv[0] when present; neither
 the kernel nor startup parses a command line. Zero arguments are valid and still
@@ -123,10 +131,9 @@ The shared assembly entry calls the native C startup routine, which checks the
 record's bounds and initializes accessors before invoking `main(argc, argv)`.
 Its return value goes to exit. Programs use
 [the startup helpers](../userspace/include/startup.h) instead of decoding the
-record. The boot launcher supplies named output/content/endpoint grants as needed,
-each program's filename as argv[0], and an OS_NAME environment entry. Hello uses
-its arguments and environment in its greeting, then discovers its content through
-its application directory.
+record. The boot launcher supplies the shell's named input/output, memory and
+launcher resources, app/home roots, a home directory chain, argv[0] and an OS_NAME
+environment entry.
 
 ## First operation shapes
 
@@ -320,7 +327,7 @@ The userspace console wrapper checks status, reply size and progress.
 `console_write_all()` repeats partial writes for an explicit byte count;
 `console_print()` uses it for strings.
 
-Hello also receives a separate READ-only grant named `input`, referring to the
+The shell receives a separate READ-only grant named `input`, referring to the
 same space console. READ validates its entire destination and count reply before
 consuming bytes, then sleeps if input is empty. It returns up to 256 available
 bytes per call, without echo, editing or EOF. Zero capacity returns immediately,
@@ -529,11 +536,11 @@ invalid handles, denied rights, wrong image object type, bad user buffers and
 allocation exhaustion retain their native statuses.
 
 [Libpyxis](../userspace/include/launcher.h) exposes launcher_launch without heap
-allocation. The current client receives a launcher, a readable server image and
-both endpoint ends from boot setup. It launches server with output, endpoint
-and memory grants, closes its copies of preparation-only handles, then performs
-the existing exchange and completion wait. Server runs on client's CPU. Endpoint
-creation from userspace is separate work.
+allocation. The shell receives a launcher from boot setup and explicitly
+constructs its children's grants, arguments, environment and directory context.
+The optional client/server example requires a readable server image and endpoint
+grants in addition to its launcher. Endpoint creation from userspace is separate
+work.
 
 ## Later operations and open decisions
 
