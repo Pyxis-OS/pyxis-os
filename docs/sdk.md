@@ -70,10 +70,16 @@ x86_64-unknown-pyxis-gcc --sysroot=/path/to/sdk/sysroot program.c -o program.elf
 /path/to/sdk/bin/elf2pxe --format p1f -o program.pxe program.elf
 ```
 
-Add `-lterm` when using terminal helpers. The target defaults to general
-registers and no red zone; FP/SIMD execution remains unsupported. This produces
+Add `-lterm` when using terminal helpers. The target defaults to x87/SSE2 and
+no red zone; the SDK explicitly selects baseline `-march=x86-64`. AVX remains
+unsupported. Use the rebuilt FP-capable Pyxis compiler: the earlier compiler
+forced general registers and omitted floating-point libgcc helpers. This produces
 an ELF for conversion, not a directly runnable PXE. The SDK Make fragment keeps
 explicit startup/archive paths so Make can track them as dependencies.
+
+Hardware `float`, `double` and x87 `long double` arithmetic and compiler libgcc
+helpers are available. Libc floating-point parsing/formatting and libm remain
+separate work. See the [userspace FP contract](userspace.md#floating-point).
 
 ## Runtime build phase
 

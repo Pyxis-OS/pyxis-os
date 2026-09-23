@@ -70,30 +70,16 @@ state, initializes each new task's clean state, and uses FXSAVE64/FXRSTOR64.
 waits and restores before dispatch. The aligned state belongs to each user
 task. AVX remains disabled and kernel code must remain free of FP/SIMD use.
 
-The actual mismatch is the supported build/runtime contract: SDK flags and
-the GCC driver default to `-mgeneral-regs-only`, libgcc excludes FP helpers,
-and several documents still say state is not preserved. TCC itself evaluates
-floating constants in `parse_number` and `gen_opif`; disabling generated SSE
-with its `-mno-sse` option does not remove host-compiler FP operations.
+The compiler now defaults to baseline x87/SSE2 and builds the normal x86 libgcc
+helpers. SDK/runtime/application builds use that baseline; kernel builds retain
+`-mgeneral-regs-only`. This requires rebuilding the compiler/container. See the
+[implemented FP contract](../userspace.md#floating-point).
 
-First slice: review the existing save/restore paths and clean initial state,
-enable a deliberate x87/SSE2 userspace build contract, and reconcile documentation
-with the implementation. Keep the kernel's integer-only build and defer AVX.
-Distinguish basic hardware arithmetic from libc conversions, `%f` formatting,
-libm and libgcc helpers; the demo need not acquire all of those at once.
-The existing GCC driver accepts `-mno-general-regs-only`; changing defaults or
-libgcc contents would require a later compiler/container rebuild.
-
-Mandelbrot can use `double` arithmetic, query the terminal dimensions and emit
-spaces with SGR backgrounds 40–47 and 100–107. This gives colored blocks with
-the current 16-color, byte-oriented TTY; it does not require UTF-8 block glyphs,
-truecolor or a graphics ABI. Restore style/cursor on return to the shell. Keep
-it an ordinary userspace application, not a kernel self-test.
-
-A correct picture alone does not establish register isolation. Manually inspect
-state across preemption and blocking, and arrange competing FP users on the
-same CPU with existing launch/debugger facilities. Running one FP application
-on each of two cores does not exercise switching between their register states.
+`mandelbrot` is an ordinary userspace application using `double` arithmetic and
+SGR background colors. It is included in the boot archive and can be launched
+from the shell. libc conversions, `%f` formatting, libm and AVX remain deferred.
+TCC itself evaluates floating constants in `parse_number` and `gen_opif`;
+disabling generated SSE with its `-mno-sse` option does not remove these operations.
 
 ## Runtime and native platform gaps
 
@@ -159,10 +145,9 @@ Each item is a separate reviewable slice; split further if its implementation
 requires choosing a new runtime facility. These are proposals, not blanket
 implementation approval.
 
-1. [ ] **FP support and Mandelbrot.** Review existing isolation, enable the
-   supported userspace settings, update inaccurate contract text and build the
-   terminal application. Settle whether flags remain explicit or toolchain
-   defaults/libgcc change in this slice before implementation.
+1. [x] **FP support and Mandelbrot.** Enable compiler defaults, libgcc and SDK
+   settings; retain eager task preservation and the integer-only kernel. The
+   terminal application and supported contract are documented above.
 2. [ ] **TCC-readable public headers.** Settle ownership of integer/limit headers
    and declaration spellings. Build existing applications with TCC against the
    exported SDK, with no temporary replacements or host includes.

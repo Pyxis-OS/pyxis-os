@@ -75,7 +75,7 @@ build/initrd.cpio: userspace ports Makefile
 	@rm -f build/userspace/init.tmp
 	install -C -m 644 build/ports/kilo/stage/bin/kilo.pxe build/userspace/kilo.pxe
 	install -C -D -m 644 build/ports/kilo/stage/share/licenses/kilo/LICENSE build/userspace/share/licenses/kilo/LICENSE
-	cd build/userspace && printf '%s\n' init shell.pxe cat.pxe ls.pxe mkdir.pxe kilo.pxe \
+	cd build/userspace && printf '%s\n' init shell.pxe cat.pxe ls.pxe mkdir.pxe kilo.pxe mandelbrot.pxe \
 	  share share/hello.txt share/licenses share/licenses/kilo share/licenses/kilo/LICENSE | \
 	  cpio --create --format=newc --reproducible --owner=0:0 --quiet > ../initrd.cpio.tmp
 	@cmp -s build/initrd.cpio.tmp $@ || mv build/initrd.cpio.tmp $@

@@ -31,8 +31,8 @@ Persistent storage is useful but not a prerequisite for demonstrating this loop.
    This is not in-guest compiler or complete ABI validation. TCC need not rebuild
    the GNU C23 kernel/runtime; it should compile applications using their public
    headers and link their prebuilt libraries.
-3. **FP support and Mandelbrot.** Review the existing eager x87/SSE task state,
-   reconcile userspace build settings and demonstrate hardware floating point
+3. **FP support and Mandelbrot — complete.** Retain eager x87/SSE task state,
+   enable compiler/SDK defaults and libgcc helpers, and demonstrate floating point
    with terminal background colors. Keep kernel code integer-only and defer AVX.
    This comes before the remaining compiler port; details are in the audit.
 4. **Compiler selection and in-guest compilation.** Choose a compiler using the

@@ -62,4 +62,5 @@ Before implementing a compiler port, choose whether the priority is the smallest
 complete guest pipeline, compiler readability/development, or a modular toolchain.
 Then audit the chosen candidate's target headers, runtime and native output in
 detail. Do not implement all candidates or treat the existing TCC investigation
-as a commitment. The next independent implementation can remain FP/Mandelbrot.
+as a commitment. The independent [FP/Mandelbrot slice](../userspace.md#floating-point)
+is complete; detailed compiler-port planning follows separately.
