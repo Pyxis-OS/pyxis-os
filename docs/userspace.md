@@ -166,13 +166,22 @@ and terminal contents remain visible. No shell restart is performed.
 
 Headers under [userspace/libc/include](https://git.internal/chronium/pyxis-userland/src/branch/main/libc/include) define the
 implemented subset: allocation, byte memory operations, string length/comparison/
-search/duplication, integer/string formatting, environment lookup and
+search/copy/duplication, integer conversion/formatting, environment lookup and
 [unbuffered file/terminal stdio](stdio.md).
 `snprintf`/`vsnprintf` report the full required length and terminate a nonempty
 destination even when truncated. Their header lists supported formats; floating
 point, wide characters and locale support are not implemented.
 `errno` is process-local today because there is only one thread per process.
 Native libpyxis calls continue to return native statuses without setting it.
+
+`strtol`, `strtoul`, `strtoll` and `strtoull` accept ASCII whitespace/signs and
+bases 2–36, with base 0 selecting the radix. They include C23 binary prefixes;
+see [C23 draft 7.24.1.7](https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3096.pdf#page=379).
+Range errors saturate and set `ERANGE` while consuming the full digit sequence.
+No conversion leaves the end pointer at the input; successful calls leave
+`errno` unchanged. Invalid bases return zero with `EINVAL`. `atoi` provides
+decimal conversion without reliable range diagnostics. No locale state or
+floating conversion is added by these functions.
 
 The allocator separately compiles the project's pinned BSD-3-Clause TLSF source.
 It retains its own MANAGE copy of the named startup memory grant, independent of
