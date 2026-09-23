@@ -255,3 +255,11 @@ void tty_clear(struct tty *tty)
   tty->y = 0;
   tty->escape_state = TTY_TEXT;
 }
+
+void tty_fresh_line(struct tty *tty)
+{
+  tty->escape_state = TTY_TEXT;
+  if (tty->x) {
+    tty_newline(tty);
+  }
+}

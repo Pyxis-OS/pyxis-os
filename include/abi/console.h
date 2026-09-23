@@ -11,6 +11,9 @@
 #define CONSOLE_WRITE UINT64_C(1)
 #define CONSOLE_READ UINT64_C(2)
 #define CONSOLE_SIZE UINT64_C(3)
+/* WRITE authority; ignored fixed-size payload, no reply. Ends an incomplete
+ * escape sequence and emits a newline only when the cursor is not at column 0. */
+#define CONSOLE_FRESH_LINE UINT64_C(4)
 
 struct console_write_request {
   uint64_t address;

@@ -29,8 +29,11 @@ At either limit, further insertion is rejected, the cursor turns red, and the
 result's `limit_reached` flag records that rejection. Editing and submission
 remain available; movement or deletion restores the normal cursor appearance.
 
-The helper starts at column zero on the current row and clears from there to
-screen end. It uses default colors. The caller must have exclusive input/output
+The helper first calls `term_fresh_line`: under the output lock, the console
+ends an incomplete escape sequence and advances only if the cursor is not already
+at column zero. This WRITE-authorized operation has no reply payload and does
+not clear text or reset colors. The helper then clears from that position to
+screen end and uses default colors. The caller must have exclusive input/output
 use for the duration: another writer can invalidate cursor tracking. In
 particular, the single-CPU development fallback shares Caelum's TTY with kernel
 logs, which can visibly disrupt editing. Use an application space on a multicore
