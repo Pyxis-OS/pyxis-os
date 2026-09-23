@@ -14,7 +14,7 @@ RUN /tmp/pyxis-toolchain/build.sh /opt/cross /tmp/cross-build
 FROM docker.io/library/node:24-trixie
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates git make gcc cpio xorriso \
+    ca-certificates git make gcc cpio xorriso lua5.4 \
     libgmp10 libmpfr6 libmpc3 libisl23 zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
