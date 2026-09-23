@@ -265,8 +265,8 @@ Userspace runs with interrupts enabled. Interrupt gates and SYSCALL disable
 them on kernel entry, so syscall execution is not preempted on its own CPU and
 a long syscall delays scheduling there. Endpoint CALL and RECEIVE explicitly
 park the task while waiting; the scheduler resumes its private kernel stack and
-address space before the handler accesses user memory again. Memory calls lend
-the inactive private address space to the BSP for allocation/release; their
+address space before the handler accesses user memory again. Memory and display
+calls lend the inactive private address space to the BSP for mapping changes; their
 requests are published only after the caller has left its private root. Separate BSP
 kernel tasks run with interrupts enabled and can be preempted. Other CPUs
 continue running. SYSCALL needs an explicit kernel-stack switch; unlike an interrupt from userspace, it
@@ -307,6 +307,6 @@ provide floating-point `printf` or a full libm. The libc conversion/scaling
 subset is described [above](#foundational-libc).
 There is no public floating-point environment API yet.
 
-Run `mandelbrot` from the shell to render a double-precision Mandelbrot set using
-the terminal's background palette. It sizes itself to the terminal, leaves one
-row for the prompt, and restores default colors and cursor visibility on return.
+Run `mandelbrot` from the shell to render a double-precision Mandelbrot set into
+a [mapped pixel buffer](graphics.md). It displays progress below the navigation
+bar and waits for a terminal key before releasing graphics and restoring the TTY.
