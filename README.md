@@ -4,11 +4,11 @@ Caelum is the freestanding x86_64 kernel of Pyxis OS. Development targets
 QEMU booted through OVMF/UEFI and the vendored Limine v12.9.0.
 
 Requires GNU Make, the [Pyxis GCC/binutils toolchain](toolchain/README.md),
-QEMU, GNU cpio, xorriso, and a matching raw OVMF code/variables pair.
-Userspace is a [pinned submodule](docs/sdk-and-repositories.md).
+QEMU, GNU cpio, xorriso, host Lua 5.4, and a matching raw OVMF code/variables pair.
+Userspace and ports are [pinned submodules](docs/sdk-and-repositories.md).
 
 ```
-git submodule update --init userspace
+git submodule update --init userspace ports
 make
 make image
 make sdk  # export the userspace SDK to build/sdk; see docs/sdk.md
