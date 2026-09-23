@@ -57,21 +57,11 @@ before persistent home storage, writable shared mounts and cross-user services
 make ownership assumptions expensive to change. This is a design checkpoint,
 not a requirement to implement accounts before the current init work.
 
-## Small independent shell follow-ups
+## Shell follow-ups
 
-The unconditional newline after every foreground child is annoying. Replace it
-with starting the next prompt on a fresh line only when needed. Preserve child
-output that ends mid-line: libterm currently clears the prompt row. The terminal
-owns cursor state, so guessing from the shell's own writes is insufficient.
-The specific query or terminal operation remains to be selected separately.
-
-Show the current working path in the prompt, including its scheme, for example
-`home://projects> `. Keep it consistent with successful directory changes and
-the initial working directory. The display string does not replace the retained
-directory capabilities used for lookup. Settle long-path display and line-editor
-interaction when implementing it.
-
-These can be focused changes; neither needs to wait for the init milestone.
+The fresh-line prompt and current working-path display are implemented. Their
+behavior and limits are documented in [the shell reference](../shell.md) and
+[terminal reference](../terminal.md).
 
 ## Completing a milestone
 
