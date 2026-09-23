@@ -94,6 +94,15 @@ needed before treating that fallback as a normal interactive environment.
 The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
 on screen. History, Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](terminal.md).
 
+## TTY horizontal tabs
+
+The TTY ignores horizontal-tab bytes instead of advancing the cursor to a tab
+stop. Kilo expands tabs while drawing its own rows, but cat copies the saved
+bytes unchanged, so indentation disappears when a tabbed file is printed.
+Implement tab-stop movement in the TTY rather than replacing tabs in cat or
+changing saved files. Define right-margin/pending-wrap behavior and preserve
+intervening cells; tab movement is not a request to erase them.
+
 ## Non-atomic stdio append
 
 Append streams query the current file size before each native write. Another
@@ -134,7 +143,7 @@ that directive explicitly for now; ordinary include guards remain usable.
 Revisit an identity operation when adding this facility. Define its comparison
 scope, lifetime and behavior across mounts and file replacement before exposing
 it; do not substitute normalized path strings or add `realpath` just for TCC.
-See [the TCC milestone](wip/tcc-port.md#8-native-streams-and-paths).
+See [the TCC contract](tcc.md#remaining-limits).
 
 ## Timekeeping beyond delivered timer ticks
 

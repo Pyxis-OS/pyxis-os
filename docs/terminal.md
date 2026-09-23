@@ -73,6 +73,8 @@ row/column one. Erasing does not move the cursor. Style parameters are 0 (reset)
 39/49 (separate terminal defaults). Unsupported controls are ignored. At most
 four parameters of up to 65535 are accepted; malformed or oversized CSI commands
 are discarded through their final byte. A new Escape starts a fresh sequence.
+Horizontal tabs are currently ignored, including in cat output; Kilo expands
+them for its own display. See [tab handling debt](technical-debt.md#tty-horizontal-tabs).
 This is a focused subset, not a claim of full ANSI/VT compatibility.
 
 Writing the rightmost cell leaves the cursor there with a pending wrap. Only the

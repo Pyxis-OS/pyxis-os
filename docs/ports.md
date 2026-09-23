@@ -66,7 +66,7 @@ losing unsaved edits. `home://` remains volatile across reboot, while `app://`
 is read-only. Processes receive a fixed 64 KiB stack without automatic growth.
 
 Persistent storage, atomic replacement and timekeeping remain separate work.
-The next compiler investigation belongs to the [edit/build/run milestone](wip/edit-build-run.md);
+The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and TCC;
 [guest Lua](wip/lua-port.md) is independent of the host recipe runner.
 
 ## TCC and the guest SDK
@@ -92,5 +92,5 @@ inherited read-only `app` and writable `home` grants and needs no launch authori
 The SDK packages target runtime files, not host compilers or a host converter.
 GCC remains the compiler for the OS and maintained applications.
 
-The final interactive editing walkthrough and milestone documentation cleanup
-remain in the [TCC task list](wip/tcc-port.md).
+See the [edit/build/run walkthrough](edit-build-run.md) and
+[TCC contract and limits](tcc.md).
