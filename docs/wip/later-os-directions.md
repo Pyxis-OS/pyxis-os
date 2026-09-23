@@ -13,16 +13,15 @@ milestone; this does not commit to Unix PID 1 semantics.
 
 ## Additional ports
 
-Prefer Kilo first, then assess TCC for the development loop below. Guest Lua
+Kilo and TCC provide the [edit/build/run workflow](../edit-build-run.md). Guest Lua
 can wait until useful, notably for system-wide configuration; retain
 [its staged worklist](lua-port.md). Other candidates are SQLite, Doom, a CHIP-8
 interpreter, Frotz and NetHack. This is not an instruction to port the whole list.
 Neovim remains a later editor goal.
 
-Kilo and TCC now have a concrete [edit/build/run milestone](edit-build-run.md):
-write a hello-world program in Kilo, compile it with TCC and run it entirely
-inside Pyxis. Evaluate direct PXE output without letting compiler internals
-turn the milestone into an open-ended toolchain rewrite.
+A custom linker remains a possible later investigation alongside application
+bundles/images. TCC already emits native P1F executables; a new linker or custom
+object/archive format is not required for the working development loop.
 
 ## Networking and website hosting
 

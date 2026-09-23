@@ -13,8 +13,8 @@ milestone's remaining interface details before starting its code work.
    exported SDK, prebuilt Pyxis compiler and pinned userspace submodule with
    the integrated build preserved.
 3. [Port recipes and Kilo](../ports.md) — complete: pinned host Lua recipes,
-   SDK-based Kilo build and ordinary boot-archive integration. TCC investigation
-   remains part of the separate edit/build/run milestone.
+   SDK-based Kilo build and ordinary boot-archive integration. The
+   [edit/build/run workflow](../edit-build-run.md) with TCC is also complete.
 4. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
    through an init-managed virtio-fs mount and native filesystem capabilities.
 
@@ -25,9 +25,8 @@ init. Each milestone should become several focused PRs where needed.
 
 [Later directions](later-os-directions.md) park the remaining ports, networking,
 website hosting, block storage, filesystem-format choices and an installer.
-The later [edit/build/run milestone](edit-build-run.md) gives Kilo and TCC a
-concrete goal: write C in Pyxis, compile it there and run the resulting program.
-It includes a bounded investigation of native TCC PXE output. Guest Lua is
+The [edit/build/run workflow](../edit-build-run.md) now supports writing C in
+Pyxis, compiling it there and running the native P1F result. Guest Lua remains
 deferred until useful, notably for system-wide configuration; its
 [staged worklist](lua-port.md) is retained. Host Lua recipes do not depend on it.
 
