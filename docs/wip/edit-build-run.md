@@ -1,9 +1,9 @@
 # Edit, build and run inside Pyxis
 
-Status: Kilo is integrated, the [TCC feasibility audit](tcc-port.md) is recorded,
-and [compiler selection remains open](guest-compiler.md). Compiler implementation
-remains proposed work. Guest Lua is not a prerequisite; discuss each slice's
-remaining decisions before implementing it.
+Status: Kilo and FP/Mandelbrot are integrated. The [TCC porting plan](tcc-port.md)
+defines the next proposed PRs; [compiler alternatives](guest-compiler.md) remain
+background if that route grows too large. Guest Lua is not a prerequisite.
+Discuss each task's remaining decisions before implementing it.
 
 ## The complete loop
 
@@ -35,17 +35,18 @@ Persistent storage is useful but not a prerequisite for demonstrating this loop.
    enable compiler/SDK defaults and libgcc helpers, and demonstrate floating point
    with terminal background colors. Keep kernel code integer-only and defer AVX.
    This comes before the remaining compiler port; details are in the audit.
-4. **Compiler selection and in-guest compilation.** Choose a compiler using the
-   [whole-pipeline comparison](guest-compiler.md), then port its required services
-   and output path in focused PRs. Completion is producing a launchable hello
-   program within Pyxis, with useful compile/link failure diagnostics.
+4. **TCC port and in-guest compilation.** Follow the [PR worklist](tcc-port.md#pr-worklist)
+   through reusable runtime facilities, native compiler adaptation and P1F output.
+   Adapt the compiler to Pyxis; do not change OS interfaces to satisfy Unix
+   assumptions. Completion is producing a launchable hello program within Pyxis,
+   with useful compile/link failure diagnostics.
 5. **Join the loop.** Use Kilo, the compiler and the shell together on a writable
    source file, document the small set of commands, and verify repeated edit/build/run
    cycles through ordinary interactive boots.
 
-TCC was the initial candidate, not a requirement. Reassess if runtime or linker
-work grows beyond a manageable slice; another frontend still needs a complete
-guest path from source to launchable image.
+TCC is the current porting plan, not a reason to force a kernel or filesystem
+redesign. Reassess if runtime or linker work grows beyond the agreed boundaries;
+another frontend still needs a complete guest path from source to launchable image.
 
 ## Bounded native PXE output investigation
 
@@ -70,7 +71,7 @@ and application subset explicitly after the audit.
 ## References
 
 - [TCC manual: linker and output formats](https://bellard.org/tcc/tcc-doc.html).
-- [Pinned audit and conditional worklist](tcc-port.md), plus
+- [Pinned audit and PR worklist](tcc-port.md), plus
   [compiler alternatives](guest-compiler.md).
 - [P1F contract](../../include/pxe/p1f.h) and
   [current converter](../../tools/elf2pxe.c).
