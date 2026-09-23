@@ -25,6 +25,11 @@ init. Each milestone should become several focused PRs where needed.
 
 [Later directions](later-os-directions.md) park the remaining ports, networking,
 website hosting, block storage, filesystem-format choices and an installer.
+The later [edit/build/run milestone](edit-build-run.md) gives Kilo and TCC a
+concrete goal: write C in Pyxis, compile it there and run the resulting program.
+It includes a bounded investigation of native TCC PXE output. Lua remains the
+first port.
+
 VirtIO driver order is agreed: virtio-fs, then virtio-net, then virtio-blk.
 
 ## Agreed boundaries

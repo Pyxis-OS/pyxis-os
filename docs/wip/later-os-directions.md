@@ -11,6 +11,11 @@ candidates are Kilo, TCC, SQLite, Doom, a CHIP-8 interpreter, Frotz and NetHack.
 This is not an instruction to port the whole list. Neovim remains a later editor
 goal.
 
+Kilo and TCC now have a concrete [edit/build/run milestone](edit-build-run.md):
+write a hello-world program in Kilo, compile it with TCC and run it entirely
+inside Pyxis. Evaluate direct PXE output without letting compiler internals
+turn the milestone into an open-ended toolchain rewrite.
+
 ## Networking and website hosting
 
 After virtio-fs, the next intended VirtIO driver is virtio-net, then virtio-blk.
