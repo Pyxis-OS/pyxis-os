@@ -11,6 +11,7 @@ make
 make image
 make run
 make run CPUS=4  # one socket, four cores, no SMT
+make run LOG_LEVEL=trace  # include scheduler idle diagnostics (default: info)
 make debug  # paused; GDB: file build/caelum.elf, target remote :1234
 make clean
 ```

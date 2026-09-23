@@ -5,10 +5,18 @@ QEMU_DISPLAY ?= gtk
 MEMORY ?= 256M
 CPUS ?= 1
 ACCEL ?= kvm
+LOG_LEVEL ?= info
+ifeq ($(LOG_LEVEL),trace)
+TRACE_ENABLED := 1
+else ifeq ($(LOG_LEVEL),info)
+TRACE_ENABLED := 0
+else
+$(error LOG_LEVEL must be info or trace)
+endif
 OVMF_CODE ?= /usr/share/OVMF/x64/OVMF_CODE.4m.fd
 OVMF_VARS ?= /usr/share/OVMF/x64/OVMF_VARS.4m.fd
 
-CPPFLAGS := -Iinclude -Iarch/x86_64/include -Ithird_party/limine -Ithird_party/tlsf
+CPPFLAGS := -Ibuild -Iinclude -Iarch/x86_64/include -Ithird_party/limine -Ithird_party/tlsf
 CFLAGS := -std=gnu23 -O2 -g3 -ffreestanding -fno-stack-protector \
           -fno-pic -fno-pie -mno-red-zone -mgeneral-regs-only -mcmodel=kernel \
           -fno-omit-frame-pointer -Wall -Wextra -Wshadow -Wstrict-prototypes \
@@ -21,7 +29,7 @@ C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/user/*
 ASM_SOURCES := $(wildcard boot/limine/*.S arch/x86_64/*.S)
 OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM_SOURCES))
 
-.PHONY: all tools userspace initrd image run debug clean check-toolchain
+.PHONY: all tools userspace initrd image run debug clean check-toolchain FORCE
 all: build/caelum.elf
 
 tools:
@@ -53,7 +61,17 @@ check-toolchain:
 build/caelum.elf: $(OBJECTS) arch/x86_64/linker.ld
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS)
 
-build/%.o: %.c | check-toolchain
+# Preserve the header timestamp unless the selected level actually changes.
+# Compiler flags alone do not make existing objects out of date.
+FORCE:
+
+build/kernel-log-config.h: FORCE
+	@mkdir -p $(@D)
+	@printf '#define KLOG_TRACE_ENABLED %s\n' $(TRACE_ENABLED) > $@.tmp
+	@cmp -s $@.tmp $@ || mv $@.tmp $@
+	@rm -f $@.tmp
+
+build/%.o: %.c build/kernel-log-config.h | check-toolchain
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
