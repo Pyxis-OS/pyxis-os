@@ -215,9 +215,28 @@ no `-lm`. The SDK uses SSE2 float/double evaluation and x87 80-bit long double.
 Scaling follows the active rounding mode; `fmodl` uses a quotient truncated
 toward zero. Errors use floating-point exception flags (`math_errhandling` is
 `MATH_ERREXCEPT`) and leave `errno` unchanged. Traps are masked at process start;
-there is no public fenv interface yet. This does not add string-to-float
-conversion, floating-point printf or the rest of libm. The SDK carries musl's
-license and the subset's provenance under `share/licenses`.
+there is no public fenv interface yet. `<math.h>` also supplies `INFINITY`, `NAN`
+and the `HUGE_VAL`/`HUGE_VALF`/`HUGE_VALL` constants. The SDK carries musl's license
+and the subset's provenance under `share/licenses`.
+
+`strtof`, `strtod` and `strtold` use the same pinned musl subset with a direct
+string reader. They accept ASCII whitespace/signs, decimal and hexadecimal
+numbers, case-insensitive `inf`/`infinity` and `nan` with an optional alphanumeric
+or underscore payload. The decimal separator is always `.`; there is no locale
+state. NaN payload text is consumed but does not select payload bits or sign.
+Incomplete exponents and NaN payloads leave the end pointer at the end of the
+valid prefix. If no conversion occurs, the result is zero, the end pointer
+remains at the original input and errno is preserved. The end-pointer argument
+may be NULL.
+
+Conversion rounds for the requested float, double or 80-bit long-double type.
+Overflow, any nonzero subnormal result (even an exact one), and nonzero input
+rounded to zero set `ERANGE`; ordinary conversions, including literal infinity
+and NaN, preserve errno. This conversion errno contract is separate from the
+math helpers' FP-exception-only convention above. The decimal scanner uses an
+8 KiB automatic workspace without heap allocation; it keeps rounding information
+and consumes remaining digits when that workspace fills. Floating-point printf
+and the rest of libm remain outside this subset.
 
 The allocator separately compiles the project's pinned BSD-3-Clause TLSF source.
 It retains its own MANAGE copy of the named startup memory grant, independent of
@@ -284,7 +303,8 @@ Syscalls preserve it even when they park. AVX/XSAVE state is not supported;
 do not compile for a newer CPU baseline or enable AVX.
 
 Static libgcc provides compiler arithmetic/conversion helpers. This does not
-provide floating-point `printf`, `strtod` or libm, which remain future work.
+provide floating-point `printf` or a full libm. The libc conversion/scaling
+subset is described [above](#foundational-libc).
 There is no public floating-point environment API yet.
 
 Run `mandelbrot` from the shell to render a double-precision Mandelbrot set using
