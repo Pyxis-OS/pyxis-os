@@ -4,6 +4,13 @@ Status: parked ideas, not an implementation milestone or worklist. Promote one
 to a focused milestone when its prerequisites and intended result are clear.
 See the [planning index](boot-sdk-ports.md) for the current sequence.
 
+## Execution lifecycle
+
+The implemented [init handoff](../init.md) launches a successor and exits. Real
+process replacement (`exec`) still needs its own resource and failure contract.
+Init supervision and restart policies remain deferred to the first web-server
+milestone; this does not commit to Unix PID 1 semantics.
+
 ## Additional ports
 
 Prefer Kilo first, then assess TCC for the development loop below. Guest Lua

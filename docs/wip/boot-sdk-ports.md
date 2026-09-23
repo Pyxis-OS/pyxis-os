@@ -7,8 +7,8 @@ milestone's remaining interface details before starting its code work.
 
 ## Suggested focus order
 
-1. [Selected init and primitive scripts](init-and-scripts.md): boot a native or
-   shebang init, perform setup and hand off to a working interactive shell.
+1. [Init and primitive scripts](../init.md) — complete: selected native or
+   shebang init and explicit handoff to an interactive shell.
 2. [SDK and repository separation](sdk-and-repositories.md): export the runtime
    contract, keep the compiler prebuilt, and move userspace into its own pinned
    repository while preserving the integrated build.

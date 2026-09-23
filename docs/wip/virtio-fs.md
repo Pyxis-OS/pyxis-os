@@ -49,6 +49,6 @@ then virtio-blk; later drivers get their own milestones when selected.
 
 ## References
 
-- [Init setup and handoff](init-and-scripts.md).
+- [Init setup and handoff](../init.md).
 - [Virtio-fs design and FUSE transport](https://virtio-fs.gitlab.io/design.html).
 - [Existing filesystem direction](../vfs.md).

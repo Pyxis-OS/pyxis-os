@@ -34,8 +34,8 @@ Boot shares the parser, but its interpreter lookup is deliberately limited to
 kernel paths nor normalizes archive names. Boot installs the same script grant
 and argument convention with its explicit initial-process resources.
 
-Normal boot still selects the native shell. The shell uses program launch for
-foreground commands and supports [script execution](shell.md#script-mode) when
-explicitly granted the required resources. The shell's [session command](shell.md#session-handoff)
-can delegate launch authority and exit after starting a successor. Default init
-selection and Make overrides remain later tasks in the [init milestone](wip/init-and-scripts.md).
+Normal boot selects [init](init.md), whose default script hands off to the
+interactive shell. The shell supports [script execution](shell.md#script-mode)
+when explicitly granted the required resources. Its
+[session command](shell.md#session-handoff) delegates launch authority and exits
+after starting a successor.

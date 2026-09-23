@@ -1,10 +1,11 @@
 # Foreground shell
 
-`make -C userspace shell` builds `shell.pxe`. Normal boot starts one shell on
-CPU 1 when available, otherwise on the BSP, with `home://` as its working
-directory. On multicore boots use Alt+Right to select CPU 1 before typing.
-The normal initrd contains shell, ls, cat, mkdir and `share/hello.txt`; home is
-initially empty and its RAM contents disappear on reboot.
+`make -C userspace shell` builds `shell.pxe`. Normal boot runs the default
+[init script](init.md), which hands off to one shell on CPU 1 when available,
+otherwise on the BSP, with `home://` as its working directory. On multicore boots
+use Alt+Right to select CPU 1 before typing. The normal initrd contains init,
+shell, ls, cat, mkdir and `share/hello.txt`; home is initially empty and its RAM
+contents disappear on reboot.
 
 A first walkthrough:
 
@@ -95,8 +96,8 @@ format. EOF or `exit` succeeds. Neither falls back to an interactive prompt.
 Script mode needs the same startup resources as interactive mode, including an
 explicit launcher grant. Ordinary shell children do not receive the launcher,
 so launching a shell script as an ordinary foreground command currently fails
-its resource check. Boot can explicitly grant the interpreter launch authority;
-selecting a default script init remains a later milestone task.
+its resource check. Boot explicitly grants the init interpreter launch authority;
+the default init uses `session` to pass it to the interactive shell.
 
 ## Session handoff
 
