@@ -23,6 +23,26 @@ case "${1:-}" in
     ;;
   complete)
     mkdir -p "$sdk/sysroot/usr/lib" "$sdk/bin" "$sdk/share/licenses"
+    compiler=${CROSS_COMPILE:-x86_64-unknown-pyxis-}gcc
+    libgcc=$("$compiler" -print-libgcc-file-name)
+    # The project toolchain installs provenance beside its lib/gcc hierarchy.
+    toolchain=$(dirname -- "$libgcc")/../../../../share/pyxis-toolchain
+    if [ ! -f "$libgcc" ] || [ ! -f "$toolchain/COPYING.RUNTIME" ]; then
+      echo 'Missing target libgcc or toolchain provenance: use the installed Pyxis toolchain.' >&2
+      exit 1
+    fi
+    install -C -m 644 "$libgcc" "$sdk/sysroot/usr/lib/libgcc.a"
+    staging=build/sdk-toolchain
+    rm -rf "$staging"
+    trap 'rm -rf "$staging"' EXIT
+    trap 'exit 1' HUP INT TERM
+    mkdir -p "$staging"
+    cp "$toolchain/COPYING3" "$toolchain/COPYING.RUNTIME" \
+      "$toolchain/SHA256SUMS" "$toolchain/README.md" "$toolchain/"*.patch "$staging/"
+    if ! diff -qr "$staging" "$sdk/share/toolchain" >/dev/null 2>&1; then
+      rm -rf "$sdk/share/toolchain"
+      mv "$staging" "$sdk/share/toolchain"
+    fi
     for library in libc libpyxis libterm; do
       install -C -m 644 "build/runtime/$library.a" "$sdk/sysroot/usr/lib/$library.a"
     done
@@ -49,6 +69,7 @@ case "${1:-}" in
       fi
       printf 'compiler_target=%s\n' "$("${CROSS_COMPILE:-x86_64-unknown-pyxis-}gcc" -dumpmachine)"
       printf 'compiler_version=%s\n' "$("${CROSS_COMPILE:-x86_64-unknown-pyxis-}gcc" -dumpfullversion)"
+      printf 'libgcc_sha256=%s\n' "$(sha256sum "$libgcc" | cut -d ' ' -f 1)"
       "${CROSS_COMPILE:-x86_64-unknown-pyxis-}ld" --version | sed -n '1p'
       printf 'host=%s %s\n' "$(uname -s)" "$(uname -m)"
       "${HOSTCC:-cc}" --version | sed -n '1p'
