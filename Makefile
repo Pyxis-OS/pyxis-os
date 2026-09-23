@@ -1,4 +1,4 @@
-CROSS_COMPILE ?= x86_64-elf-
+CROSS_COMPILE ?= x86_64-unknown-pyxis-
 CC := $(CROSS_COMPILE)gcc
 HOSTCC ?= cc
 export CROSS_COMPILE HOSTCC

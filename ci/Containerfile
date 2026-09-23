@@ -1,46 +1,15 @@
 # Build this image once; normal Pyxis jobs only download and use it.
 FROM docker.io/library/node:24-trixie AS toolchain
 
-ARG GCC_VERSION=16.2.0
-ARG BINUTILS_VERSION=2.47
-ENV TARGET=x86_64-elf \
-    PREFIX=/opt/cross \
-    PATH=/opt/cross/bin:${PATH}
+ENV PATH=/opt/cross/bin:${PATH}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential bison flex texinfo libgmp-dev libmpfr-dev libmpc-dev \
-    libisl-dev zlib1g-dev ca-certificates curl xz-utils \
+    libisl-dev zlib1g-dev ca-certificates curl xz-utils patch \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /tmp
-RUN curl -fL --retry 3 \
-      "https://ftp.gnu.org/gnu/binutils/binutils-${BINUTILS_VERSION}.tar.xz" \
-      -o binutils.tar.xz \
-    && tar -xf binutils.tar.xz \
-    && rm binutils.tar.xz \
-    && mkdir build-binutils \
-    && cd build-binutils \
-    && "../binutils-${BINUTILS_VERSION}/configure" \
-      --target="${TARGET}" --prefix="${PREFIX}" --with-sysroot \
-      --disable-nls --disable-werror --disable-multilib \
-    && make -j4 \
-    && make install
-
-RUN curl -fL --retry 3 \
-      "https://gcc.gnu.org/pub/gcc/releases/gcc-${GCC_VERSION}/gcc-${GCC_VERSION}.tar.xz" \
-      -o gcc.tar.xz \
-    && tar -xf gcc.tar.xz \
-    && rm gcc.tar.xz \
-    && mkdir build-gcc \
-    && cd build-gcc \
-    && "../gcc-${GCC_VERSION}/configure" \
-      --target="${TARGET}" --prefix="${PREFIX}" \
-      --disable-nls --disable-multilib --enable-languages=c \
-      --without-headers \
-    && make -j4 all-gcc \
-    && make -j4 all-target-libgcc \
-    && make install-gcc \
-    && make install-target-libgcc
+COPY toolchain/ /tmp/pyxis-toolchain/
+RUN /tmp/pyxis-toolchain/build.sh /opt/cross /tmp/cross-build
 
 FROM docker.io/library/node:24-trixie
 
@@ -61,8 +30,8 @@ RUN for cert in /tmp/pyxis-ci/*.crt; do \
 COPY --from=toolchain /opt/cross /opt/cross
 ENV PATH=/opt/cross/bin:${PATH}
 
-RUN test "$(x86_64-elf-gcc -dumpfullversion)" = 16.2.0 \
-    && x86_64-elf-ld --version | head -n 1 | grep -F 'GNU ld (GNU Binutils) 2.47.' \
+RUN test "$(x86_64-unknown-pyxis-gcc -dumpfullversion)" = 16.2.0 \
+    && x86_64-unknown-pyxis-ld --version | head -n 1 | grep -Fx 'GNU ld (GNU Binutils) 2.47.20260726' \
     && printf '' | cc -std=gnu23 -x c -fsyntax-only -
 
 RUN rm -f /var/run && mkdir -p /var/run

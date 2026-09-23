@@ -38,9 +38,9 @@ case "${1:-}" in
       else
         printf 'source_state=clean\n'
       fi
-      printf 'compiler_target=%s\n' "$("${CROSS_COMPILE:-x86_64-elf-}gcc" -dumpmachine)"
-      printf 'compiler_version=%s\n' "$("${CROSS_COMPILE:-x86_64-elf-}gcc" -dumpfullversion)"
-      "${CROSS_COMPILE:-x86_64-elf-}ld" --version | sed -n '1p'
+      printf 'compiler_target=%s\n' "$("${CROSS_COMPILE:-x86_64-unknown-pyxis-}gcc" -dumpmachine)"
+      printf 'compiler_version=%s\n' "$("${CROSS_COMPILE:-x86_64-unknown-pyxis-}gcc" -dumpfullversion)"
+      "${CROSS_COMPILE:-x86_64-unknown-pyxis-}ld" --version | sed -n '1p'
       printf 'host=%s %s\n' "$(uname -s)" "$(uname -m)"
       "${HOSTCC:-cc}" --version | sed -n '1p'
     } > "$sdk/manifest.txt.tmp"
