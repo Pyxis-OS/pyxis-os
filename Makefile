@@ -1,7 +1,8 @@
 CROSS_COMPILE ?= x86_64-unknown-pyxis-
 CC := $(CROSS_COMPILE)gcc
 HOSTCC ?= cc
-export CROSS_COMPILE HOSTCC
+LUA ?= lua
+export CROSS_COMPILE HOSTCC LUA
 QEMU ?= qemu-system-x86_64
 QEMU_DISPLAY ?= gtk
 MEMORY ?= 256M
@@ -34,7 +35,7 @@ C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/user/*
 ASM_SOURCES := $(wildcard boot/limine/*.S arch/x86_64/*.S)
 OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM_SOURCES))
 
-.PHONY: all tools sdk sdk-headers userspace initrd image run debug clean check-toolchain FORCE
+.PHONY: all tools sdk sdk-headers userspace ports initrd image run debug clean check-toolchain FORCE
 all: build/caelum.elf
 
 tools:
@@ -53,12 +54,18 @@ sdk: tools sdk-headers
 userspace: sdk
 	$(MAKE) -C userspace SDK=$(abspath build/sdk) BUILD=$(abspath build/userspace)
 
+ports: sdk
+	@test -f ports/build.lua || { \
+	  echo 'Missing ports submodule: run git submodule update --init ports.' >&2; \
+	  exit 1; }
+	$(MAKE) -f scripts/ports.mk
+
 initrd: build/initrd.cpio
 
 # Always stage the selected contents, even when INIT changes to an older file.
 # Package after the recursive build; make may have cached its outputs' mtimes.
 # Compare before replacing so identical contents do not rebuild the ISO.
-build/initrd.cpio: userspace Makefile
+build/initrd.cpio: userspace ports Makefile
 	@command -v cpio >/dev/null 2>&1 || { \
 	  echo 'Missing GNU cpio: install it, then run make initrd.' >&2; \
 	  exit 1; }
@@ -66,7 +73,10 @@ build/initrd.cpio: userspace Makefile
 	cp -- "$$INIT" build/userspace/init.tmp
 	@cmp -s build/userspace/init.tmp build/userspace/init || mv build/userspace/init.tmp build/userspace/init
 	@rm -f build/userspace/init.tmp
-	cd build/userspace && printf '%s\n' init shell.pxe cat.pxe ls.pxe mkdir.pxe share share/hello.txt | \
+	install -C -m 644 build/ports/kilo/stage/bin/kilo.pxe build/userspace/kilo.pxe
+	install -C -D -m 644 build/ports/kilo/stage/share/licenses/kilo/LICENSE build/userspace/share/licenses/kilo/LICENSE
+	cd build/userspace && printf '%s\n' init shell.pxe cat.pxe ls.pxe mkdir.pxe kilo.pxe \
+	  share share/hello.txt share/licenses share/licenses/kilo share/licenses/kilo/LICENSE | \
 	  cpio --create --format=newc --reproducible --owner=0:0 --quiet > ../initrd.cpio.tmp
 	@cmp -s build/initrd.cpio.tmp $@ || mv build/initrd.cpio.tmp $@
 	@rm -f build/initrd.cpio.tmp
