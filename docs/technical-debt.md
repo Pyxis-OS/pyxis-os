@@ -37,6 +37,32 @@ long-lived applications make retained capacity or copying material. The current
 allocator and errno assume one thread per process; add synchronization and
 thread-local errno when introducing userspace threads.
 
+## BSP-only allocation and VM mutation
+
+Kernel allocation and page-table mutation remain owned by the BSP. Tasks submit
+specific requests and wait for BSP service. This keeps allocator and VM ownership
+explicit, but moves subsystem coordination into [the scheduler](../kernel/task.c):
+capability-table growth, directory-entry allocation, file-buffer replacement,
+private memory and launch preparation each carry request state in the task and
+have their own queue and BSP service path. More consumers mean more scheduler
+coupling, and long service operations delay other requests and BSP work.
+
+The handoff ordering is part of correctness, not incidental queue plumbing.
+Private-memory requests are published only after the requester has left its
+task stack and private address space; resumption reloads CR3 before returning to
+the task stack. A wake arriving before a task finishes parking records a
+notification without making the still-running context runnable elsewhere.
+Changes to service placement or synchronization must preserve these guarantees
+or explicitly replace them with an equally defined ownership and translation
+invalidation contract.
+
+Reconsider this split when adding a subsystem repeatedly expands task state and
+scheduler service paths, when BSP service latency becomes material, or before
+allowing concurrent use and mutation of one private address space. Moving
+subsystem work out of the scheduler and allowing allocation on other CPUs are
+separate decisions. A generic request framework or allocator spinlock alone
+does not resolve the ownership constraints; no replacement is chosen yet.
+
 ## Synchronous launch preparation
 
 Each in-flight launch reserves a full 64 KiB metadata capture buffer plus a
