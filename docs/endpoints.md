@@ -16,7 +16,7 @@ an endpoint request as described below; moving remains future work.
 ## Messages
 
 The [shared endpoint header](../include/abi/endpoint.h) defines the tagged
-messages, packet layout and rights. The [userspace helpers](../userspace/include/endpoint.h)
+messages, packet layout and rights. The [userspace helpers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/endpoint.h)
 wrap the existing native CALL syscall:
 
 | Helper | Required right | Result |
@@ -27,7 +27,7 @@ wrap the existing native CALL syscall:
 
 Application data is opaque to the kernel and limited to 64 inline bytes per
 request or response. It may contain an application-defined tag and structure,
-as in [the content service](../userspace/common/content_service.h). That example
+as in [the content service](https://git.internal/chronium/pyxis-userland/src/branch/main/common/content_service.h). That example
 copies a READ file capability; the server reads the initrd-backed file and
 closes its own handle before replying with the byte count. Embedded
 pointers and handle numbers in these ordinary bytes grant no authority in the

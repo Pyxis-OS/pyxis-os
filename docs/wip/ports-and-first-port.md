@@ -49,6 +49,6 @@ of scope.
 
 ## References
 
-- [SDK prerequisite](sdk-and-repositories.md).
+- [SDK prerequisite](../sdk-and-repositories.md).
 - [Kilo upstream source](https://github.com/antirez/kilo/blob/master/kilo.c).
 - [Lua embedding and standard libraries](https://www.lua.org/manual/5.4/manual.html).

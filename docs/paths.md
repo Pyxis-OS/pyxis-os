@@ -1,6 +1,6 @@
 # Native paths and working directories
 
-[Libpyxis path helpers](../userspace/include/path.h) walk the existing directory
+[Libpyxis path helpers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/path.h) walk the existing directory
 protocol in userspace. They use startup scheme-root grants and an explicit
 working-directory context. The kernel still accepts only one ordinary component
 per lookup; it has no path parser or process-global working directory.
@@ -69,7 +69,7 @@ not used to rediscover it.
 
 ## Local handle copies
 
-[Handle copying](../userspace/include/handle.h) installs another reference in the
+[Handle copying](https://git.internal/chronium/pyxis-userland/src/branch/main/include/handle.h) installs another reference in the
 same process. `handle_copy()` preserves rights; `handle_copy_restricted()` requests
 an exact subset, including zero. Neither changes the source or grants extra
 authority. Closing either copy leaves the other alive.

@@ -9,9 +9,9 @@ milestone's remaining interface details before starting its code work.
 
 1. [Init and primitive scripts](../init.md) — complete: selected native or
    shebang init and explicit handoff to an interactive shell.
-2. [SDK and repository separation](sdk-and-repositories.md): export the runtime
-   contract, keep the compiler prebuilt, and move userspace into its own pinned
-   repository while preserving the integrated build.
+2. [SDK and repository separation](../sdk-and-repositories.md) — complete:
+   exported SDK, prebuilt Pyxis compiler and pinned userspace submodule with
+   the integrated build preserved.
 3. [Port recipes and one first port](ports-and-first-port.md): consume that SDK
    through a small host Lua runner. Prefer Kilo as the first guest port after
    its requirements audit, then investigate TCC for the edit/build/run loop.

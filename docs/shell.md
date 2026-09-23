@@ -1,7 +1,7 @@
 # Foreground shell
 
-After `make sdk`, `make -C userspace shell` builds `shell.pxe`. Normal boot runs the default
-[init script](init.md), which hands off to one shell on CPU 1 when available,
+`make userspace` builds the SDK, shell and core utilities. Normal boot runs the
+default [init script](init.md), which hands off to one shell on CPU 1 when available,
 otherwise on the BSP, with `home://` as its working directory. On multicore boots
 use Alt+Right to select CPU 1 before typing. The normal initrd contains init,
 shell, ls, cat, mkdir and `share/hello.txt`; home is initially empty and its RAM
