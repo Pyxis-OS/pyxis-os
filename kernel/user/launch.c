@@ -23,7 +23,10 @@
 #include <kernel/user/launch.h>
 #include <kernel/user/startup.h>
 
-/* Namespace roots survive shell exit; RAM contents remain until shutdown. */
+#define INITIAL_IMAGE "init"
+#define INITIAL_IMAGE_URI "app://" INITIAL_IMAGE
+
+/* Namespace roots survive init and session exit; RAM contents remain until shutdown. */
 static struct directory_object *application_root;
 static struct directory_object *home_root;
 
@@ -73,9 +76,9 @@ void user_launch_initial(void)
   struct initrd_file image, script;
   char interpreter[SHEBANG_PREFIX_SIZE];
   uintptr_t entry;
-  enum initrd_result selection = select_image("shell.pxe", &image, &script, interpreter);
+  enum initrd_result selection = select_image(INITIAL_IMAGE, &image, &script, interpreter);
   if (selection != INITRD_OK) {
-    klog("userspace: cannot select boot image (initrd result %u)\n", (unsigned)selection);
+    klog("userspace: cannot select %s (initrd result %u)\n", INITIAL_IMAGE, (unsigned)selection);
     goto fail;
   }
   if (user_process_load(arch_cpu_at(cpu_index)->space, image.data, image.size,
@@ -126,7 +129,7 @@ void user_launch_initial(void)
     {"script", script_handle},
   };
   const struct process_binding roots[] = {{"app", app}, {"home", home}};
-  const char *arguments[] = {script.data ? interpreter : "shell", "app://shell.pxe"};
+  const char *arguments[] = {script.data ? interpreter : INITIAL_IMAGE_URI, INITIAL_IMAGE_URI};
   const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
   const struct process_startup startup = {
     .resources = resources,
@@ -144,13 +147,13 @@ void user_launch_initial(void)
   if (process_prepare_startup(process, &startup) != MM_OK) {
     goto fail;
   }
-  klog("userspace: shell.pxe entry=%p, CPU %zu\n", (void *)entry, cpu_index);
+  klog("userspace: %s entry=%p, CPU %zu\n", INITIAL_IMAGE, (void *)entry, cpu_index);
   if (user_task_create_on(cpu_index, process, entry,
         USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE) != MM_OK) {
     goto fail;
   }
   /* The scheduler owns the process. Its eventual cleanup leaves the space,
-   * terminal contents and namespace roots alive; there is no shell restart. */
+   * terminal contents and namespace roots alive; there is no init restart. */
   return;
 
 fail:
@@ -177,5 +180,5 @@ fail:
   while (object_reap_pending()) {
     object_reap();
   }
-  panic("cannot prepare initial shell");
+  panic("cannot prepare init");
 }
