@@ -1,8 +1,8 @@
 # TCC porting plan
 
-Status: working plan for the first guest C compiler, following the completed
-FP/Mandelbrot work. TCC has not been ported to Pyxis. This document records the
-source audit, proposed boundaries and individual PR tasks for the
+Status: guest preprocessing and object compilation are implemented; native
+executable linking and permanent SDK packaging remain. This document records
+the source audit, remaining boundaries and individual PR tasks for the
 [edit/build/run milestone](edit-build-run.md). The [candidate comparison](guest-compiler.md)
 remains background if the port grows beyond these boundaries. Discuss unresolved
 choices before starting the affected task; this list is not blanket approval to
@@ -194,7 +194,7 @@ review reveals a larger change. Update its checkbox when delivering it.
 6. [x] Floating literal conversion and binary scaling.
 7. [x] Pyxis code-generation defaults and compiler support archive.
 8. [x] Native file I/O and URI handling in TCC.
-9. [ ] Guest compiler driver and build recipe through object output.
+9. [x] Guest compiler driver and build recipe through object output.
 10. [ ] Native P1F executable output.
 11. [ ] Guest SDK and compiler packaging.
 12. [ ] Complete the interactive edit/build/run loop.
@@ -425,24 +425,49 @@ runnable guest compiler is claimed or included in the normal image yet.
 
 ### 9. Guest driver and object compilation
 
-Owner: ports/TCC recipe, metadata and patches. Depends on 3–8.
-Build the compiler as a freestanding Pyxis executable with the prebuilt GCC/SDK,
-following the existing Lua port recipe model. Remove optional host services,
-retain native diagnostics and error unwinding, and make `-E`/`-c` usable. Record
-exact supported options and required startup grants (console, working context,
-readable source/header roots, writable output directory and memory).
+Complete: the pinned port recipe builds `bin/tcc.pxe` using Pyxis GCC and the
+real SDK, alongside its host compiler and target support archive. The guest
+uses `-E` for preprocessing and `-c` for ELF objects, with explicit option
+validation and guest help. Unsupported options report errors, including linking,
+`-L`/`-l`, dependency generation, archive creation, JIT/run, coverage, backtraces,
+bounds checking and cross-compiler subprocess dispatch. `-bench` reports the
+missing elapsed-time clock; the earlier clock-macro policy is unchanged.
 
-The guest `__DATE__`/`__TIME__` diagnostic is implemented in task 8. Before
-implementation, confirm the proposed diagnostic for unavailable benchmark timing
-as well; do not fabricate timing or add a TCC-specific clock syscall. Review
-stack use against the existing 64 KiB process stack. If that exposes a real general runtime need, discuss it; do not
-silently enlarge kernel resources for the port.
+Debug output defaults to DWARF 5 when requested. Compilation-directory metadata
+uses the existing optional startup path description, never global filesystem
+authority. `-dumpmachine` reports `x86_64-unknown-pyxis`. No new kernel/libc
+interfaces, runtime shims or changes to the 64 KiB process stack were required.
+See `ports/tcc/README.md` for the accepted options and startup-grant contract.
 
-Done: manually launch the staged compiler in Pyxis, compile a source file to an
-ELF object in `home://`, and observe useful diagnostics and resource cleanup on
-an ordinary source error. Do not claim successful executable linking yet.
-Temporary image staging can provide the required headers; permanent packaging
-is 11. Keep the reusable build recipe in ports, not the kernel build scripts.
+Guest validation used temporary initrd staging: compiler at `app://tcc.pxe`,
+shared headers at `app://sdk/usr/include`, private headers at
+`app://sdk/lib/tcc/include`, and existing application sources. These are the
+recipe's provisional guest prefixes, configurable at build time; permanent
+normal-image integration remains task 11. The compiler needs console output,
+private-memory management, readable sources/includes and writable output via
+the inherited directory chain or named roots. The shell already supplies these
+without granting the child launcher authority.
+
+Manually launched in four-CPU KVM QEMU through the shell, with GDB inspection:
+
+- Cat compiled into `home://cat.o`; inspecting the copied-out result confirmed
+  x86-64 ELF relocatable output and the non-executable-stack note.
+- Shell preprocessing resolved quoted includes and wrote `home://shell.i`.
+- One invocation compiled cat and the shell parser into separate default-named
+  objects in `home://`.
+- Mandelbrot compiled with floating constants and DWARF 5 metadata; the source
+  URI and `home://` directory description appeared in its debug information.
+- The unchanged line-editor source produced its expected unsupported-C23
+  attribute diagnostic and exit status one. Its source-file chain was empty,
+  only standard streams remained before libc exit cleanup, and kernel heap
+  allocation/free-frame counts returned to their pre-launch values afterward.
+- `-bench` reported the intended missing-clock diagnostic and returned failure.
+
+Fresh recipe and ordinary SDK/kernel/image builds passed. GCC stack-usage output
+showed a largest fixed compiler frame of 2,720 bytes; recursive parsing can use
+more than one frame, so this is not a maximum-input guarantee. Existing sources
+compiled on the unchanged stack. No new test programs or automation were added.
+Guest executable linking has not been implemented or claimed.
 
 ### 10. Native executable output
 
