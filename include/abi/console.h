@@ -14,18 +14,25 @@
 /* WRITE authority; ignored fixed-size payload, no reply. Ends an incomplete
  * escape sequence and emits a newline only when the cursor is not at column 0. */
 #define CONSOLE_FRESH_LINE UINT64_C(4)
+#define CONSOLE_WAIT_FOREVER UINT64_MAX
 
 struct console_write_request {
   uint64_t address;
   uint64_t length;
 };
 
-/* READ blocks for available bytes, without echo, editing or EOF semantics.
+/* READ waits for available bytes, without echo, editing or EOF semantics.
  * Zero capacity succeeds immediately. INPUT_LOST acknowledges discarded input;
- * retry starts a fresh stream. Navigation sequences may span short reads. */
+ * retry starts a fresh stream. Navigation sequences may span short reads.
+ * timeout_ms is 0 for a poll, 1..UINT32_MAX for a bounded wait, or WAIT_FOREVER.
+ * The budget includes waiting behind another reader. Expiry returns TIMED_OUT
+ * without a reply or consuming bytes. Available input/ownership wins a race
+ * with expiry when observed under the input lock. Timer resolution is coarse:
+ * intervals round upward and count delivered ticks, not suspended host time. */
 struct console_read_request {
   uint64_t address;
   uint64_t capacity;
+  uint64_t timeout_ms;
 };
 
 union console_payload {
@@ -53,12 +60,12 @@ struct console_size_reply {
   uint64_t rows;
 };
 
-_Static_assert(sizeof(struct console_read_request) == 16, "console read layout");
+_Static_assert(sizeof(struct console_read_request) == 24, "console read layout");
 _Static_assert(sizeof(struct console_read_reply) == 8, "console read reply layout");
 _Static_assert(sizeof(struct console_size_reply) == 16, "console size reply layout");
 _Static_assert(sizeof(struct console_write_request) == 16, "console request layout");
 _Static_assert(sizeof(struct console_write_reply) == 8, "console reply layout");
 _Static_assert(offsetof(struct console_message, body) == 16, "console payload offset");
-_Static_assert(sizeof(struct console_message) == 32, "console message layout");
+_Static_assert(sizeof(struct console_message) == 40, "console message layout");
 
 #endif

@@ -21,6 +21,9 @@
 #define EFER_SCE (UINT64_C(1) << 0)
 #define EFER_NXE (UINT64_C(1) << 11)
 
+/* Nominal frequency of the periodic scheduler timer. */
+uint32_t arch_timer_frequency(void);
+
 static inline void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx,
                          uint32_t *ecx, uint32_t *edx)
 {

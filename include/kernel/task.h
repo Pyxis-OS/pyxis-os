@@ -24,6 +24,17 @@ void task_wait_sleep(struct task_wait *wait);
 /* Any CPU, IF=0, after detaching the record under its resource lock. */
 void task_wait_wake(struct task_wait *wait);
 
+/* Deadlines use delivered BSP timer ticks, not wall time. Positive millisecond
+ * intervals round upward with one extra tick for the current tick's phase.
+ * Use one deadline across all waits within an operation. */
+uint64_t task_deadline_after_ms(uint32_t milliseconds);
+bool task_deadline_expired(uint64_t deadline);
+/* As sleep, but also resumes at deadline. After return, the caller MUST detach
+ * any remaining resource pointer under its resource lock before reusing the
+ * wait record. A concurrent resource wake remains safe until that detachment.
+ * Recheck resource state under the lock; a wake is not a grant of ownership. */
+void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline);
+
 /* Current user task, IF=0, no held locks. Lends its capability table to the
  * BSP and blocks until growth completes. No AP allocation or remote stack
  * access. Existing handles/references survive even when allocation fails. */
