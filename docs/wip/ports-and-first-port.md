@@ -33,9 +33,10 @@ and upstream formatting, recording ordered local patches in its recipe.
 1. **Terminal prerequisites — complete.** Delayed wrap in the TTY, a visible
    nonblinking cursor and timed console reads are implemented, with libterm
    helpers and updated shell editing. See [terminal.md](../terminal.md).
-2. **Required libc additions.** Add `strstr` and the ASCII character-classification
-   functions actually used by the pinned source. Allocation, formatting and
-   basic file streams already exist.
+2. **Required libc additions — complete.** Libc provides `strstr` and ASCII
+   `isspace`, `isdigit` and `isprint`. The Kilo adaptation must cast plain-char
+   byte data to unsigned char before classification. Allocation, formatting
+   and basic file streams already exist.
 3. **Host recipes and Kilo adaptation.** Use libterm for terminal size/input/output
    and existing stdio for file loading/saving. Replace getline locally with a
    growable reader. Review allocation failures and touched bounds handling.
