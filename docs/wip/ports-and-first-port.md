@@ -18,25 +18,23 @@ Build into a staging directory rather than overwriting the consumed SDK. Package
 format, dependency resolver sophistication and binary distribution are separate
 questions; do not invent them all for the first port.
 
-Suggested first consumers are Lua and Kilo, to expose concrete libc, terminal
-and file-operation gaps. Lua configuration evaluation and a full Lua program
-need not receive identical libraries/authority. Current stdio formatting lacks
-floating point; runtime/math and file support should be assessed against the
-selected upstream revision. Other candidates remain in [later directions](later-os-directions.md). Each
-needs its own platform contract review, not POSIX-shaped kernel syscalls added
-by default. The first port and priority order remain undecided.
+Lua is the agreed first port. Its runtime work is split into the smaller
+[milestones in the Lua worklist](lua-port.md), rather than one large port PR.
+Host recipe execution is independent of those guest milestones. Kilo and the
+other candidates remain in [later directions](later-os-directions.md).
 
 ## Completion boundary
 
-A pinned port builds through a host Lua recipe against the SDK, stages its
-outputs and runs in Pyxis. Address only the concrete runtime gaps of the chosen
-port. The host recipe runner does not depend on guest Lua being available.
+The host runner consumes a pinned recipe and SDK, applies ordered patches and
+stages build outputs. The Lua milestones provide the first working guest port;
+do not make the recipe infrastructure PR responsible for completing all of Lua.
+Use that real recipe as it becomes buildable rather than adding a dummy port.
 
 ## Decisions before implementation
 
-- Choose the first port and pinned source revision; Lua and Kilo are candidates.
+- Pin the Lua source revision as part of the first Lua milestone.
 - Agree on the small metadata/recipe contract and required host dependencies.
-- Review that port's libc, terminal and filesystem requirements.
+- Keep guest runtime work in the Lua milestones below.
 
 Do not turn the candidate list into one implementation assignment. Full package
 management, a sophisticated dependency solver and binary distribution are out

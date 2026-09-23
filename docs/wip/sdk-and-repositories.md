@@ -7,11 +7,14 @@ direction is distinguished from proposals and open decisions below. See the
 Agreed ownership:
 
 - Pyxis: kernel, exported native ABI/format headers, boot/image assembly,
-  toolchain patches/container recipe and pinned integration revisions.
+  toolchain patches/container recipe, elf2pxe and pinned integration revisions.
 - Userspace: libc, libpyxis, libterm, startup/link support, native applications
-  and initial boot scripts. Exact ownership of elf2pxe remains open.
+  and initial boot scripts.
 - Ports: pinned third-party source descriptions, patches, recipes and staging
   rules; consume an explicit SDK rather than internal kernel source paths.
+
+Ship the host elf2pxe executable in the SDK; userspace and ports consume it there.
+Its source stays in Pyxis alongside the format definition.
 
 Keep public ABI headers authoritative in one repository and export them into
 the SDK. Do not move kernel-private headers into the sysroot or maintain manual
@@ -65,7 +68,7 @@ pinned submodules; cross-repository workflow design is separate work.
 
 ## Decisions before implementation
 
-- Select the target configuration, SDK layout and converter ownership.
+- Select the target configuration and SDK layout.
 - Settle repository extraction order and source/license history preservation.
 - Identify the container changes before asking the owner to rebuild it.
 

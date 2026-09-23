@@ -6,9 +6,10 @@ See the [planning index](boot-sdk-ports.md) for the current sequence.
 
 ## Additional ports
 
-Candidates are Lua, Kilo, TCC, SQLite, Doom, a CHIP-8 interpreter, Frotz and
-NetHack. The [first-port milestone](ports-and-first-port.md) selects one; this is
-not an instruction to port the whole list. Neovim remains a later editor goal.
+Lua is selected first, with [its own staged worklist](lua-port.md). Remaining
+candidates are Kilo, TCC, SQLite, Doom, a CHIP-8 interpreter, Frotz and NetHack.
+This is not an instruction to port the whole list. Neovim remains a later editor
+goal.
 
 ## Networking and website hosting
 

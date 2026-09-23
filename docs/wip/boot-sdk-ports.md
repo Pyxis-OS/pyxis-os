@@ -2,8 +2,8 @@
 
 Status: working discussion after the first-shell milestone. These documents
 separate the next concrete results from parked ideas; they do not authorize
-implementation. Prepare the documentation PR once the milestone boundaries are
-settled. Resolve each milestone's open decisions before starting its code work.
+implementation. The initial scope decisions are recorded; resolve each
+milestone's remaining interface details before starting its code work.
 
 ## Suggested focus order
 
@@ -13,7 +13,8 @@ settled. Resolve each milestone's open decisions before starting its code work.
    contract, keep the compiler prebuilt, and move userspace into its own pinned
    repository while preserving the integrated build.
 3. [Port recipes and one first port](ports-and-first-port.md): consume that SDK
-   through a small host Lua runner and get one chosen program running.
+   through a small host Lua runner. Lua is the first port, divided into
+   [runtime audit, execution and script/REPL milestones](lua-port.md).
 4. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
    through an init-managed virtio-fs mount and native filesystem capabilities.
 
@@ -29,14 +30,17 @@ VirtIO driver order is agreed: virtio-fs, then virtio-net, then virtio-blk.
 ## Agreed boundaries
 
 - Init performs setup and hands off to the shell. Supervision/restart policy
-  waits for the first web-server milestone.
+  waits for the first web-server milestone. Start with a shebang shell script,
+  fail on script errors and use an explicit session launch; `exec` comes later.
 - Userspace owns libc, libpyxis, libterm, startup and applications. Pyxis owns
-  public ABI headers and assembles the SDK, kernel and boot image.
+  public ABI headers and elf2pxe, and assembles the SDK, kernel and boot image.
 - Export headers, build runtime libraries, assemble the SDK, then build apps and
   ports. Initially pin the new userspace/ports repositories as submodules.
 - The owner handles repository creation, dispatch integration and compiler
   container publication. Ordinary builds consume the prebuilt compiler and
   evolving SDK; they do not rebuild GCC/binutils.
+- The first host mount is read-only `host://`, mounted by init before launching
+  the shell and passed to the session as a directory capability.
 - No container, workflow, repository or submodule changes are part of this draft.
 
 ## Small independent shell follow-up

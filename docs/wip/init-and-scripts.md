@@ -1,76 +1,79 @@
 # Selected init and primitive shell scripts
 
-Status: working milestone draft, not an implementation assignment. Agreed
-direction is distinguished from proposals and open decisions below. See the
+Status: agreed milestone scope, not an implementation assignment. Resolve the
+remaining interface details before their implementation tasks. See the
 [planning index](boot-sdk-ports.md) for sequencing.
 
-Agreed role: init performs setup and hands off to an interactive shell.
-Supervision and restart policies are deferred until the website-server milestone.
-The exact handoff mechanism remains open.
+## Boot and build contract
 
-Proposed scope: replace the current application-space entry on CPU 1 (BSP on a
-single-CPU boot), retaining Caelum's separate role. This does not define a global
-Unix PID 1, complete supervision, or the future per-space lifecycle model.
+Init performs setup and explicitly hands off to an interactive shell. Replace
+the current application-space entry on CPU 1 (BSP on a single-CPU boot), keeping
+Caelum's separate role. This does not define a global Unix PID 1 or the future
+per-space lifecycle model. Supervision/restart policy waits for the web server.
 
-Keep boot material in the initrd even after virtio-fs exists: init and its
-interpreter must be readable before init can mount anything. The selected entry
-must be explicit, with ordinary failure diagnostics and no silent fallback to
-another executable.
+The default init is a small shell script in the userspace sources, exercising
+shebang launch. Native executable init overrides are also supported. Init and
+its interpreter remain in the initrd so neither depends on a future mount.
 
-A possible build interface is `INIT=<host path>`: stage those bytes under a
-stable archive entry, without editing tracked source. Distinguish the build-host
-path from a guest capability path. Exact Make names, a default script, optional
-arguments and placement in the userspace repository are still open. Changing
-an override must invalidate the relevant build outputs, even if the new file
-has an older timestamp. A temporary init must not leak into subsequent default
-builds or published artifacts.
+`make image INIT=/path/to/init` selects a host file to stage under a stable
+archive entry. Without the override, restore the default init. Changing the
+selected file must rebuild the relevant outputs even if its timestamp is older.
+Do not leave temporary init contents in later default builds or artifacts.
 
-Shebang handling should be a program-launch facility reusable beyond the
-interactive shell. Interpreter lookup must stay within explicitly supplied
-roots; knowing an interpreter URI does not grant access. Avoid growing a general
-path parser inside the kernel. The boot adaptation and userspace launch helper
-need a concrete design because today's loader accepts an opened image handle.
+## Shebang and script contract
 
-Decide the initial shebang grammar: explicit interpreter URI, whether an optional
-argument is accepted, first-line length bound, CRLF handling and recursion/cycle
-policy. Prefer a bounded, nonrecursive first implementation. An interpreter must
-receive authority to read the script, not merely a pathname. Passing the already
-opened READ capability avoids requiring a second lookup; argv convention and the
-resource name need agreement.
+Accept an explicit interpreter URI, such as `#!app://shell.pxe`, without optional
+interpreter arguments. The interpreter must be a native executable: recursive
+shebang interpretation is outside this milestone. Interpreter lookup uses
+explicitly supplied roots; a URI does not grant authority.
 
-Proposed shell script mode reuses current quoting and command execution: one
-command per line, blank lines and whole-line comments, cd and foreground launch.
-No expansion, variables, conditions, loops, pipelines or redirection initially.
-Process the final line without a newline and report script name/line on errors.
-Do not silently truncate long lines. Proposed boot-script policy is to stop on
-syntax, cd, launch, nonzero child exit or child fault; confirm this rather than
-implicitly adopting interactive-shell behavior. Script EOF exits without an
-interactive prompt unless a handoff is explicitly requested.
+Give the interpreter an already-open READ capability for the script and its name
+for diagnostics. Reopening the script by pathname is unnecessary. Shebang launch
+should be reusable beyond the interactive shell. Keep general path parsing out
+of the kernel; the boot adapter and userspace launch helper need a concrete
+integration design because today's loader accepts an opened image handle.
 
-Init needs setup authority that ordinary applications should not inherit.
-Current shell children intentionally receive no launcher, so simply putting
-`shell` in a script cannot launch a fully functioning interactive shell today.
-Choose an explicit handoff/delegation mechanism, including eventual mount
-management authority, before implementing startup scripts. Decide whether the
-handoff launches a shell and lets init exit or turns init into the session
-program, and what remains visible after startup failure or normal init exit.
-Neither choice introduces a resident supervisor in this milestone.
+Script mode reuses current quoting and command execution: one command per line,
+blank lines, whole-line `#` comments, `cd` and foreground programs. No variables,
+expansion, conditions, loops, pipelines or redirection initially. Handle the final
+line without a newline and reject oversized lines rather than truncating them.
+
+Stop at the first syntax error, failed `cd`, failed launch, nonzero child exit or
+child fault. Report the script name and line, leaving the diagnostic visible.
+Do not silently fall back to an interactive shell. EOF exits unless the script
+explicitly requests a session handoff.
+
+## Session handoff
+
+Provide an explicit command such as `session app://shell.pxe`. Launch the session
+with its required capabilities, including launch authority, and let init exit
+after successful launch. A failed handoff follows the script failure policy.
+Ordinary commands retain their restricted grants; they do not gain the launcher
+just because their parent is init. Future mount-management authority stays with
+init unless explicitly delegated.
+
+This is an initial handoff mechanism, not process replacement. A real `exec` is
+wanted later, with its own resource and failure contract. This milestone does
+not require it or introduce a resident supervisor.
+
+## Focused implementation tasks
+
+- [ ] Define the shared script-launch contract: bounded shebang parsing, script
+  grant/name convention, interpreter lookup and boot adaptation.
+- [ ] Add script mode using the existing parser and foreground execution, with
+  line diagnostics and the agreed failure behavior.
+- [ ] Add explicit session launch/delegation and verify that the shell remains
+  usable after init exits, including input ownership and resource lifetime.
+- [ ] Select native/script init at boot, ship the default script, and add the
+  Make override with correct rebuild behavior. Build and boot both forms normally.
+
+These are proposed PR boundaries; keep dependent changes together where needed
+to preserve working builds. Before the first task, settle first-line bounds,
+CRLF handling, the script resource/argv convention and the launch integration.
+The SDK/repository split is not a prerequisite.
 
 ## Completion boundary
 
-Boot either a selected native init or a shebang init, run a short setup script,
-and reach a usable interactive shell. A Make override can select a temporary
-init without contaminating subsequent default builds. Validate with ordinary
-builds and interactive boots.
-
-No supervision, restart policy, mount implementation, shell control-flow
-language, pipelines or redirection belongs in this milestone.
-
-## Decisions before implementation
-
-- Select the shebang grammar, script grant and argv convention.
-- Agree on script failure behavior and the explicit shell handoff/delegation.
-- Settle the Make override and default init placement.
-
-Split the resulting design into focused implementation PRs after those decisions.
-The SDK/repository split is not a prerequisite.
+Boot a selected native or shebang init, run setup and reach a usable interactive
+shell. A temporary init override does not contaminate the next default build.
+No supervision, restart policy, mounts or broader shell language belongs here.
