@@ -65,7 +65,7 @@ initrd: build/initrd.cpio
 # Always stage the selected contents, even when INIT changes to an older file.
 # Package after the recursive build; make may have cached its outputs' mtimes.
 # Compare before replacing so identical contents do not rebuild the ISO.
-build/initrd.cpio: userspace ports Makefile
+build/initrd.cpio: userspace ports Makefile scripts/stage-guest-sdk.sh
 	@command -v cpio >/dev/null 2>&1 || { \
 	  echo 'Missing GNU cpio: install it, then run make initrd.' >&2; \
 	  exit 1; }
@@ -75,9 +75,15 @@ build/initrd.cpio: userspace ports Makefile
 	@rm -f build/userspace/init.tmp
 	install -C -m 644 build/ports/kilo/stage/bin/kilo.pxe build/userspace/kilo.pxe
 	install -C -D -m 644 build/ports/kilo/stage/share/licenses/kilo/LICENSE build/userspace/share/licenses/kilo/LICENSE
-	cd build/userspace && printf '%s\n' init shell.pxe cat.pxe ls.pxe mkdir.pxe kilo.pxe mandelbrot.pxe \
-	  share share/hello.txt share/licenses share/licenses/kilo share/licenses/kilo/LICENSE | \
-	  cpio --create --format=newc --reproducible --owner=0:0 --quiet > ../initrd.cpio.tmp
+	install -C -m 644 build/ports/tcc/stage/bin/tcc.pxe build/userspace/tcc.pxe
+	./scripts/stage-guest-sdk.sh
+	printf '%s\n' init shell.pxe cat.pxe ls.pxe mkdir.pxe kilo.pxe mandelbrot.pxe tcc.pxe \
+	  share share/hello.txt share/licenses share/licenses/kilo share/licenses/kilo/LICENSE \
+	  > build/initrd-files.list
+	cd build/userspace && find sdk -print > ../sdk-files.list
+	LC_ALL=C sort build/sdk-files.list >> build/initrd-files.list
+	cd build/userspace && cpio --create --format=newc --reproducible --owner=0:0 --quiet \
+	  < ../initrd-files.list > ../initrd.cpio.tmp
 	@cmp -s build/initrd.cpio.tmp $@ || mv build/initrd.cpio.tmp $@
 	@rm -f build/initrd.cpio.tmp
 
