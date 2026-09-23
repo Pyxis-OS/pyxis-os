@@ -291,7 +291,7 @@ not duplicated here as a second ABI definition.
   Done when an interactive userspace consumer reads and echoes edited lines,
   queries dimensions and handles errors without silently accepting a short line.
 
-- [ ] **14. File and terminal stdio.** Add `FILE`, open/close, read/write, required
+- [x] **14. File and terminal stdio.** Add `FILE`, open/close, read/write, required
   formatting, EOF/error reporting and flushing. Define the supported fopen modes
   and initial buffering policy. Bind standard streams from startup grants and
   flush owned output on normal C exit. Keep native errors available below libc;
@@ -788,5 +788,43 @@ colors, cursor positioning, clearing and oversized-command recovery were inspect
 Physical-frame usage returned to the pre-launch baseline after exit. Input-loss
 recovery was code-reviewed, not forced. No tests or boot automation were added.
 
-Task 14 remains unstarted. Discuss FILE stream modes, buffering, standard-stream
-bindings and native-error translation before implementing stdio.
+Task 14 is complete (assistant). Libc provides unbuffered FILE streams over
+native file and console capabilities, with r/w/a and + modes (b has no effect),
+fread/fwrite, character/line I/O, seeking, EOF/error indicators, fflush and close.
+Path storage grows from each request rather than imposing a fixed depth/length.
+Only the final file is created; existing directories and granted authority are
+required. Each FILE owns its handle and position. Append performs SIZE then
+WRITE and is explicitly non-atomic; concurrent appenders can overwrite each
+other. This is recorded in `docs/technical-debt.md`.
+
+Runtime initialization copies input for stdin and makes separate output copies
+for stdout/stderr. Native startup handles remain independent. Normal exit
+flushes and closes registered streams; _Exit retains its immediate semantics.
+Terminal reads are raw, blocking and have no EOF convention. Libterm remains the
+explicit line editor. Formatting uses the existing snprintf engine, with a small
+stack buffer or heap staging for larger results. No kernel ABI change, new file
+protocol, compatibility layer or version bump.
+
+Native statuses map to documented errno values. strerror supplies static messages
+and an unknown-error fallback; perror accepts an optional prefix, writes to stderr
+and preserves errno even if reporting fails. Hello uses printf for its greeting
+and stdio to create, write, seek and reread a RAM file, with perror on I/O errors.
+See `docs/stdio.md` for stream semantics, error mapping and remaining boundaries.
+
+Validation: ordinary image builds passed without warnings. One- and four-CPU
+KVM boots printed the stdio file contents, accepted the existing libterm input,
+and completed hello/client/server successfully. Manual four-CPU TCG/GDB calls
+covered independent file positions, truncation, seek gaps, EOF and partial-element
+counts, clearerr/rewind, append after seeking, relative paths, invalid modes,
+missing paths, denied authority and terminal seek rejection. Large formatted
+output, embedded NUL, unsupported formatting and arithmetic overflow behaved as
+documented. Raw stdin fgets returned the entered newline. Closing stdout left
+stderr and the native output grant usable; perror preserved errno with NULL/empty
+prefixes and after stderr was closed. Normal exit closed an intentionally retained
+file stream. Physical-frame usage returned to the pre-launch baseline and pending
+resource/completion queues drained. Allocation failure, concurrent-create/append
+races and terminal input loss were code-reviewed, not forced. No tests, fault
+injection or boot automation added.
+
+Task 15 remains unstarted: cat using libc. Settle its command-line/error behavior
+before implementation.
