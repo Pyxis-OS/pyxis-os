@@ -25,7 +25,7 @@ if [ ! -f binutils-2.47.tar.xz ]; then
     -o binutils-2.47.tar.xz
 fi
 if [ ! -f gcc-16.2.0.tar.gz ]; then
-  curl -fL --retry 3 https://gcc.gnu.org/pub/gcc/releases/gcc-16.2.0/gcc-16.2.0.tar.gz \
+  curl -fL --retry 3 https://ftp.gwdg.de/pub/misc/gcc/releases/gcc-16.2.0/gcc-16.2.0.tar.gz \
     -o gcc-16.2.0.tar.gz
 fi
 sha256sum -c "$patches/SHA256SUMS"

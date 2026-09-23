@@ -20,6 +20,7 @@ make -j4 image
 
 Use a fresh work directory. Verified archives can be placed there beforehand
 for an offline build; the script refuses to reuse source/build directories.
+GCC downloads use the GWDG mirror and are checked against the pinned SHA-256.
 The install prefix must be dedicated to this toolchain. Keep work/prefix paths
 free of spaces, as required by the upstream builds. The script downloads and
 builds tools only; it does not install host packages or run tests.
