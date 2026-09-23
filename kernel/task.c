@@ -710,7 +710,7 @@ void kernel_task_sleep(uint64_t ticks)
     scheduler->current_task = task;
     if (!task) {
       if (!idle_reported) {
-        klog("scheduler: CPU %zu no runnable tasks, idle\n", cpu_index);
+        ktrace("scheduler: CPU %zu no runnable tasks, idle\n", cpu_index);
         idle_reported = true;
       }
       /* The local timer also bounds wakeup latency for cross-CPU submissions
