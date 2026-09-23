@@ -1,4 +1,4 @@
-# Ports and Kilo
+# Ports
 
 Pyxis pins [pyxis-ports](https://git.internal/chronium/pyxis-ports) at `ports`.
 Its host Lua runner fetches an exact upstream commit, applies ordered patches,
@@ -11,7 +11,7 @@ output names live in each recipe's metadata; `ports.lua` only lists recipes.
 
 ```sh
 git submodule update --init userspace ports
-make ports                 # export SDK, build and stage Kilo
+make ports                 # export SDK, build and stage Kilo and TCC
 make image                 # also package userspace and assemble the ISO
 make run CPUS=4
 ```
@@ -22,16 +22,18 @@ upstream source on a port rebuild. See [SDK/repository setup](sdk-and-repositori
 The build container includes Lua; the owner publishes container updates.
 
 `make ports` exports the SDK before checking recipe and SDK dependencies.
-Unchanged inputs reuse `build/ports/kilo/stage`. Changes rebuild in a fresh
-`build/ports/kilo` work directory, replacing its fetched source and intermediate
-outputs. Make source changes in the recipe/patches, not that disposable copy.
+Unchanged inputs reuse each port's `build/ports/<name>/stage`. Recipe or SDK
+changes rebuild the affected port in a fresh work directory, replacing its
+fetched source and intermediate outputs. Make source changes in the recipe/patches, not that disposable copy.
 For port development with a separately managed work directory, use the
 [standalone runner](../ports/README.md).
 
 The normal boot archive includes Kilo at `app://kilo.pxe` and its BSD-2-Clause
 license at `app://share/licenses/kilo/LICENSE`. The shell resolves the bare
 command `kilo` to that executable. Packaging has an explicit entry list; it
-does not recursively include other files left in build output. Kernel-only
+enumerates only selected payloads and the freshly assembled guest SDK, never
+other files left in build output. The SDK staging tree removes obsolete files
+and preserves its timestamps when contents are unchanged. Kernel-only
 `make`, `make sdk` and `make userspace` do not build ports.
 
 The existing integrated workflow checks out both submodules with
@@ -67,11 +69,28 @@ Persistent storage, atomic replacement and timekeeping remain separate work.
 The next compiler investigation belongs to the [edit/build/run milestone](wip/edit-build-run.md);
 [guest Lua](wip/lua-port.md) is independent of the host recipe runner.
 
-## TCC target work in progress
+## TCC and the guest SDK
 
-The ports catalog also contains a [TCC recipe](../ports/tcc/README.md). It currently
-builds a host-running compiler that emits Pyxis ELF objects, plus the target
-support archive. Invoke it explicitly through the standalone runner; `make ports`
-and the normal image still select Kilo only. It does not modify the consumed SDK
-or require rebuilding the compiler container. Guest TCC, native P1F linking and
-boot-archive packaging follow the [TCC task list](wip/tcc-port.md).
+The normal image includes `app://tcc.pxe`; the shell resolves `tcc` to it.
+The [recipe](../ports/tcc/README.md) builds TCC with the prebuilt Pyxis GCC and
+exports the guest executable, target libtcc1, compiler-private headers, licenses
+and ordered patch provenance. No compiler-container rebuild is needed.
+
+`app://sdk` contains:
+
+- `usr/include`: shared libc/libpyxis/libterm and ABI/P1F headers.
+- `usr/lib`: `crt0.o`, libc, libterm, libpyxis and target libgcc archives.
+- `lib/tcc`: libtcc1 and private `stddef.h`, `stdarg.h`, `stdbool.h`, `float.h`.
+- `share`: TLSF/musl/TCC licenses and notices, TCC source pin and patches, and
+  the selected toolchain's hashes, patches and runtime licensing.
+- `manifest.txt`: SDK build provenance plus the ports revision and dirty state.
+
+From `home://`, compile a saved C source with `tcc hello.c -o hello.pxe`, then
+launch `./hello.pxe`. TCC supports `-E`, ELF object output with `-c`, and static
+P1F linking; the port notes list supported options and limits. The compiler uses
+inherited read-only `app` and writable `home` grants and needs no launch authority.
+The SDK packages target runtime files, not host compilers or a host converter.
+GCC remains the compiler for the OS and maintained applications.
+
+The final interactive editing walkthrough and milestone documentation cleanup
+remain in the [TCC task list](wip/tcc-port.md).

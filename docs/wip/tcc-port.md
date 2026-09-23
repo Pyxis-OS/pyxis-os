@@ -1,8 +1,8 @@
 # TCC porting plan
 
 Status: guest preprocessing, object compilation and native executable linking
-are implemented; permanent SDK packaging and the interactive edit/build/run
-milestone remain. This document records
+and normal-image SDK packaging are implemented; the final interactive
+edit/build/run walkthrough remains. This document records
 the source audit, remaining boundaries and individual PR tasks for the
 [edit/build/run milestone](edit-build-run.md). The [candidate comparison](guest-compiler.md)
 remains background if the port grows beyond these boundaries. Discuss unresolved
@@ -197,7 +197,7 @@ review reveals a larger change. Update its checkbox when delivering it.
 8. [x] Native file I/O and URI handling in TCC.
 9. [x] Guest compiler driver and build recipe through object output.
 10. [x] Native P1F executable output.
-11. [ ] Guest SDK and compiler packaging.
+11. [x] Guest SDK and compiler packaging.
 12. [ ] Complete the interactive edit/build/run loop.
 
 ### 2. Public headers
@@ -513,22 +513,32 @@ output file. The process stack remains 64 KiB; no new test sources or automation
 
 ### 11. Guest SDK and compiler packaging
 
-Owners: ports stages and Pyxis build/initrd integration. Depends on 9–10.
-Proposed location: read-only `app://sdk`. Agree the final paths before coding.
-Package compiler-private headers separately from shared Pyxis headers, `crt0.o`,
-libc/libpyxis/libterm, libtcc1 and the required target libgcc archive, together
-with their licenses and source provenance. The guest payload is target runtime
-material, not the host GCC/binutils installation or host `elf2pxe` binary.
+Complete: ordinary `make ports` builds Kilo and TCC; `make image` includes
+`app://tcc.pxe` and the read-only guest SDK at `app://sdk`. Shared headers live
+in `usr/include`, `crt0.o` and libc/libterm/libpyxis/libgcc in `usr/lib`, and
+TCC's support archive and four private headers in `lib/tcc`. These match the
+compiler defaults; additional paths still require explicit directory grants.
 
-Wire the compiler and SDK into the existing explicit initrd entry list and
-incremental build inputs. Native TCC search defaults must find only these guest
-resources; `-I`/`-L` can select additional explicitly granted paths. Keep writable
-source/output under `home://`. Record source/helper revisions, not a new ABI
-version. No new CI framework, dependency resolver or package manager.
+SDK export copies the selected target libgcc and its installed source hashes,
+patches, GPLv3 and Runtime Library Exception. TCC stages its source pin and
+ordered patches beside its existing license and runtime notices. The guest
+manifest records Pyxis, userland, ports and compiler provenance, including a
+libgcc hash; no version field was introduced. The existing toolchain already
+installs the required records, so no container rebuild is needed.
 
-Done: an ordinary clean image build contains the compiler and complete guest
-runtime inputs. A fresh boot compiles and launches a program without manually
-copying host files into the guest.
+The guest SDK is assembled from explicit target inputs and replaced only when
+contents differ, removing stale files while retaining timestamps on unchanged
+builds. Initrd packaging enumerates only that SDK and the named application
+payloads. Host GCC/binutils, host elf2pxe, GCC private headers and the GNU linker
+script are not packaged. Recipe/SDK changes rebuild the affected port.
+
+Validation: an ordinary clean image build and four-CPU KVM QEMU boot passed.
+Saved a small `main`/`puts` program in Kilo under `home://`, compiled it with
+`tcc hello.c -o hello.pxe` and launched `./hello.pxe`; both compiler and program
+exited successfully. The compiler used only the normally packaged headers and
+libraries. An unchanged rebuild reused the ports and preserved the ISO. No
+manually staged compiler/SDK files, kernel changes or test infrastructure.
+The full editing/rebuilding walkthrough remains task 12. See [guest SDK use](../ports.md#tcc-and-the-guest-sdk).
 
 ### 12. Finish the loop and documentation
 

@@ -3,7 +3,7 @@
 `make sdk` exports `build/sdk` using the prebuilt `x86_64-unknown-pyxis-`
 [toolchain](../toolchain/README.md). `make userspace` builds that SDK first, then
 applications against it; `make image` continues through initrd and ISO assembly.
-No compiler is built by these targets. Initialize the [userspace submodule](sdk-and-repositories.md)
+GCC and binutils remain prebuilt; image builds also build the guest TCC port. Initialize the [userspace submodule](sdk-and-repositories.md)
 with `git submodule update --init userspace` before building the SDK.
 
 ## Contents and ownership
@@ -11,15 +11,18 @@ with `git submodule update --init userspace` before building the SDK.
 | SDK path | Contents |
 | --- | --- |
 | `sysroot/usr/include` | libc, libpyxis and libterm headers, plus public `abi/` and `pxe/` headers |
-| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a` and `pyxis.ld` |
+| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libgcc.a` and `pyxis.ld` |
 | `bin/elf2pxe` | Host executable for converting the linked ELF to PXE |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
-| `share/licenses` | TLSF license and upstream/local-adaptation record |
-| `manifest.txt` | Pyxis and userland revisions/dirty states, compiler/linker identities and host identity |
+| `share/licenses` | TLSF and musl licenses and adaptation records |
+| `share/toolchain` | Installed toolchain source hashes, patches, GPLv3 and GCC Runtime Library Exception |
+| `manifest.txt` | Pyxis and userland revisions/dirty states, compiler/linker identities, libgcc hash and host identity |
 
-The compiler supplies its own builtin headers and libgcc. It stays outside the
-SDK, as does the host C runtime needed by elf2pxe. Use a compatible host for that
+The compiler supplies its own builtin headers. SDK export copies its target
+libgcc archive and installed `share/pyxis-toolchain` provenance into the SDK;
+it does not copy GCC's private headers. The compiler stays outside the SDK,
+as does the host C runtime needed by elf2pxe. Use a compatible host for that
 executable and the compiler recorded in the manifest. The manifest records build
 provenance, not an ABI version or compatibility guarantee. Modified checkouts
 are marked as such; publish SDKs from committed source for an exact revision.
@@ -100,18 +103,19 @@ Hardware `float`, `double` and x87 `long double` arithmetic and compiler libgcc
 helpers are available. Libc floating-point parsing/formatting and libm remain
 separate work. See the [userspace FP contract](userspace.md#floating-point).
 
-The pinned host TCC can consume these headers for object compilation:
+## Guest SDK
 
-```sh
-/path/to/tcc -std=c11 -nostdinc -I/path/to/sdk/sysroot/usr/include \
-  -isystem /path/to/tcc/include -c userspace/mandelbrot/main.c -o mandelbrot.o
-```
+`make image` also packages the [TCC port](ports.md#tcc-and-the-guest-sdk) and a
+target-only SDK at `app://sdk`. Shared headers remain in `usr/include`, startup
+and runtime archives in `usr/lib`, and TCC-private headers/support in `lib/tcc`.
+The guest payload includes library licenses, exact TCC patches and toolchain
+source provenance. Its manifest adds the ports revision/dirty state to the
+exported SDK record. There is no separate guest ABI version.
 
-Cat and Mandelbrot compile this way without replacement headers. This is header
-consumption only: TCC is not yet a Pyxis-target compiler or a guest executable,
-and this command does not establish complete ABI or link compatibility. GCC
-remains the compiler for the OS and maintained userspace. No compiler/container
-rebuild is needed for these SDK header changes.
+The guest receives no GCC/binutils executables, GCC private headers, host
+`elf2pxe` or GNU linker script. TCC writes P1F directly using the same loader
+contract. `app://sdk` is read-only; applications compile source and write output
+in `home://` or other explicitly granted directories.
 
 ## Runtime build phase
 
