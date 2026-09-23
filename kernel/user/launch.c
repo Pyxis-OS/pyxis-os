@@ -2,6 +2,8 @@
 #include <abi/memory.h>
 #include <abi/directory.h>
 #include <abi/console.h>
+#include <abi/file.h>
+#include <pxe/shebang.h>
 #include <arch/cpu_local.h>
 #include <arch/smp.h>
 #include <kernel/initrd.h>
@@ -9,6 +11,8 @@
 #include <kernel/object/directory.h>
 #include <kernel/log.h>
 #include <kernel/mm/vm.h>
+#include <kernel/memory.h>
+#include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/memory.h>
 #include <kernel/object/console.h>
@@ -23,12 +27,41 @@
 static struct directory_object *application_root;
 static struct directory_object *home_root;
 
+/* Boot exposes only the immutable app archive. Match its exact entry names;
+ * userspace path walking and its wider namespace policy stay in libpyxis. */
+static enum initrd_result select_image(const char *name, struct initrd_file *image,
+    struct initrd_file *script, char interpreter[SHEBANG_PREFIX_SIZE])
+{
+  *script = (struct initrd_file){0};
+  enum initrd_result status = initrd_lookup(name, image);
+  if (status != INITRD_OK) {
+    return status;
+  }
+  struct shebang header;
+  enum shebang_result format = shebang_parse(image->data, image->size, &header);
+  if (format == SHEBANG_NONE) {
+    return INITRD_OK;
+  }
+  if (format != SHEBANG_OK) {
+    return INITRD_INVALID;
+  }
+  if (header.length <= 6 || memcmp(header.interpreter, "app://", 6)) {
+    return INITRD_UNSUPPORTED;
+  }
+  memcpy(interpreter, header.interpreter, header.length);
+  interpreter[header.length] = '\0';
+  *script = *image;
+  /* No recursive interpretation: the selected bytes go directly to PXE. */
+  return initrd_lookup(interpreter + 6, image);
+}
+
 void user_launch_initial(void)
 {
   KASSERT(arch_cpu_index() == 0);
   size_t cpu_index = arch_cpu_count() > 1 ? 1 : 0;
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL;
+  struct file_object *script_file = NULL;
 
   if (initrd_tree_create(&application_root) != INITRD_OK) {
     goto fail;
@@ -37,10 +70,15 @@ void user_launch_initial(void)
   if (!home_root) {
     goto fail;
   }
-  struct initrd_file image;
+  struct initrd_file image, script;
+  char interpreter[SHEBANG_PREFIX_SIZE];
   uintptr_t entry;
-  if (initrd_lookup("shell.pxe", &image) != INITRD_OK ||
-      user_process_load(arch_cpu_at(cpu_index)->space, image.data, image.size,
+  enum initrd_result selection = select_image("shell.pxe", &image, &script, interpreter);
+  if (selection != INITRD_OK) {
+    klog("userspace: cannot select boot image (initrd result %u)\n", (unsigned)selection);
+    goto fail;
+  }
+  if (user_process_load(arch_cpu_at(cpu_index)->space, image.data, image.size,
         &process, &entry) != MM_OK) {
     goto fail;
   }
@@ -51,6 +89,7 @@ void user_launch_initial(void)
   }
 
   handle_t input, output, memory_handle, launcher_handle, app, home;
+  handle_t script_handle = HANDLE_INVALID;
   struct kernel_object *console = &process->space->console->object;
   if (capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &input) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, &output) != CAP_OK ||
@@ -65,6 +104,15 @@ void user_launch_initial(void)
       capability_install(&process->capabilities, &home_root->object, home_rights, &home) != CAP_OK) {
     goto fail;
   }
+  if (script.data) {
+    script_file = file_create_initrd(&script);
+    if (!script_file || capability_install(&process->capabilities, &script_file->object,
+          FILE_RIGHT_READ, &script_handle) != CAP_OK) {
+      goto fail;
+    }
+    object_release(&script_file->object);
+    script_file = NULL;
+  }
   object_release(memory);
   object_release(launcher);
   memory = NULL;
@@ -75,13 +123,14 @@ void user_launch_initial(void)
     {"output", output},
     {"memory", memory_handle},
     {"launcher", launcher_handle},
+    {"script", script_handle},
   };
   const struct process_binding roots[] = {{"app", app}, {"home", home}};
-  const char *arguments[] = {"shell"};
+  const char *arguments[] = {script.data ? interpreter : "shell", "app://shell.pxe"};
   const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
   const struct process_startup startup = {
     .resources = resources,
-    .resource_count = sizeof(resources) / sizeof(resources[0]),
+    .resource_count = sizeof(resources) / sizeof(resources[0]) - (script.data ? 0 : 1),
     .roots = roots,
     .root_count = sizeof(roots) / sizeof(roots[0]),
     .working_directories = &home,
@@ -89,7 +138,7 @@ void user_launch_initial(void)
     .working_path = "home://",
     .environment = environment,
     .environment_count = sizeof(environment) / sizeof(environment[0]),
-    .argc = 1,
+    .argc = script.data ? 2 : 1,
     .argv = arguments,
   };
   if (process_prepare_startup(process, &startup) != MM_OK) {
@@ -105,6 +154,9 @@ void user_launch_initial(void)
   return;
 
 fail:
+  if (script_file) {
+    object_release(&script_file->object);
+  }
   if (launcher) {
     object_release(launcher);
   }
