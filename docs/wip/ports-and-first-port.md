@@ -1,4 +1,4 @@
-# Lua port recipes and a first port
+# Host Lua port recipes and a first guest port
 
 Status: working milestone draft, not an implementation assignment. Agreed
 direction is distinguished from proposals and open decisions below. See the
@@ -18,23 +18,30 @@ Build into a staging directory rather than overwriting the consumed SDK. Package
 format, dependency resolver sophistication and binary distribution are separate
 questions; do not invent them all for the first port.
 
-Lua is the agreed first port. Its runtime work is split into the smaller
-[milestones in the Lua worklist](lua-port.md), rather than one large port PR.
-Host recipe execution is independent of those guest milestones. Kilo and the
-other candidates remain in [later directions](later-os-directions.md).
+Guest Lua no longer needs to be first. Prefer Kilo after a focused requirements
+audit, then investigate TCC toward the [edit/build/run loop](edit-build-run.md).
+This order is a practical recommendation, not a finding that TCC is simpler than
+Lua. Keep the [Lua milestones](lua-port.md) for when a guest interpreter is needed,
+notably system-wide configuration. Host Lua recipe execution stays independent.
+
+The initial Kilo source review suggests a narrower adaptation: replace its
+termios/ioctl and file-descriptor assumptions with native terminal/file access.
+Pyxis already exposes terminal size, cursor movement, clearing and file streams.
+Check input escape handling, visible cursor support, saving and remaining libc
+calls before implementation; do not introduce a full POSIX terminal subsystem.
 
 ## Completion boundary
 
 The host runner consumes a pinned recipe and SDK, applies ordered patches and
-stages build outputs. The Lua milestones provide the first working guest port;
-do not make the recipe infrastructure PR responsible for completing all of Lua.
-Use that real recipe as it becomes buildable rather than adding a dummy port.
+stages build outputs. Kilo is the proposed first consumer; its actual port stays
+a separate focused task. Use that real recipe as it becomes buildable rather
+than adding a dummy port.
 
 ## Decisions before implementation
 
-- Pin the Lua source revision as part of the first Lua milestone.
+- Pin Kilo and verify the proposed first-port scope against that revision.
 - Agree on the small metadata/recipe contract and required host dependencies.
-- Keep guest runtime work in the Lua milestones below.
+- Define the required native adaptations and libc/terminal additions first.
 
 Do not turn the candidate list into one implementation assignment. Full package
 management, a sophisticated dependency solver and binary distribution are out
@@ -43,4 +50,5 @@ of scope.
 ## References
 
 - [SDK prerequisite](sdk-and-repositories.md).
+- [Kilo upstream source](https://github.com/antirez/kilo/blob/master/kilo.c).
 - [Lua embedding and standard libraries](https://www.lua.org/manual/5.4/manual.html).

@@ -1,7 +1,8 @@
 # Lua port milestones
 
-Status: Lua is the agreed first port. The small milestone boundaries below are
-proposed; select concrete runtime requirements before implementation. They
+Status: deferred guest port, not a prerequisite for Kilo, TCC or host Lua recipes.
+Revisit when useful, notably for system-wide configuration. The small milestone
+boundaries below remain proposals; select runtime requirements first. They
 consume the [SDK](sdk-and-repositories.md) and [port recipe setup](ports-and-first-port.md).
 Host Lua for recipes is independent of this guest port.
 

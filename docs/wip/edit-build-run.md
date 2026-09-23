@@ -1,8 +1,8 @@
 # Edit, build and run inside Pyxis
 
-Status: desired milestone, not an implementation assignment. Lua remains the
-selected first port. This gives the later Kilo and TCC work a concrete outcome,
-with focused stages to define when their prerequisites are ready.
+Status: desired milestone, not an implementation assignment. Prefer Kilo as the
+first guest port, then assess TCC against this concrete outcome. Guest Lua is
+not a prerequisite. Define focused stages as their requirements become clear.
 
 ## The complete loop
 
@@ -34,6 +34,10 @@ Persistent storage is useful but not a prerequisite for demonstrating this loop.
 4. **Join the loop.** Use Kilo, TCC and the shell together on a writable source
    file, document the small set of commands, and verify repeated edit/build/run
    cycles through ordinary interactive boots.
+
+TCC's priority serves this loop; it does not establish that the compiler is an
+easier port than Lua. Reassess after the feasibility stage if runtime or linker
+work grows beyond a manageable slice.
 
 ## Bounded native PXE output investigation
 

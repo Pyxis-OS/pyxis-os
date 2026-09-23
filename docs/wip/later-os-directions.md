@@ -6,10 +6,11 @@ See the [planning index](boot-sdk-ports.md) for the current sequence.
 
 ## Additional ports
 
-Lua is selected first, with [its own staged worklist](lua-port.md). Remaining
-candidates are Kilo, TCC, SQLite, Doom, a CHIP-8 interpreter, Frotz and NetHack.
-This is not an instruction to port the whole list. Neovim remains a later editor
-goal.
+Prefer Kilo first, then assess TCC for the development loop below. Guest Lua
+can wait until useful, notably for system-wide configuration; retain
+[its staged worklist](lua-port.md). Other candidates are SQLite, Doom, a CHIP-8
+interpreter, Frotz and NetHack. This is not an instruction to port the whole list.
+Neovim remains a later editor goal.
 
 Kilo and TCC now have a concrete [edit/build/run milestone](edit-build-run.md):
 write a hello-world program in Kilo, compile it with TCC and run it entirely

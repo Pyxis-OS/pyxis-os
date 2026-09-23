@@ -13,8 +13,8 @@ milestone's remaining interface details before starting its code work.
    contract, keep the compiler prebuilt, and move userspace into its own pinned
    repository while preserving the integrated build.
 3. [Port recipes and one first port](ports-and-first-port.md): consume that SDK
-   through a small host Lua runner. Lua is the first port, divided into
-   [runtime audit, execution and script/REPL milestones](lua-port.md).
+   through a small host Lua runner. Prefer Kilo as the first guest port after
+   its requirements audit, then investigate TCC for the edit/build/run loop.
 4. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
    through an init-managed virtio-fs mount and native filesystem capabilities.
 
@@ -27,8 +27,9 @@ init. Each milestone should become several focused PRs where needed.
 website hosting, block storage, filesystem-format choices and an installer.
 The later [edit/build/run milestone](edit-build-run.md) gives Kilo and TCC a
 concrete goal: write C in Pyxis, compile it there and run the resulting program.
-It includes a bounded investigation of native TCC PXE output. Lua remains the
-first port.
+It includes a bounded investigation of native TCC PXE output. Guest Lua is
+deferred until useful, notably for system-wide configuration; its
+[staged worklist](lua-port.md) is retained. Host Lua recipes do not depend on it.
 
 VirtIO driver order is agreed: virtio-fs, then virtio-net, then virtio-blk.
 
