@@ -30,6 +30,21 @@ path. The example protocol lives beside the application helpers. Header exports
 remove obsolete files; unchanged headers and installed artifacts keep their
 timestamps so an unchanged build does not recompile consumers.
 
+Userland owns `stdint.h` and `limits.h` in the SDK. They define the current
+x86-64 LP64 model independently of GCC's private type macros: exact/least types
+use 8/16/32/64 bits, fast types use 32 bits through `int_fast32_t` and 64 bits
+for `int_fast64_t`, and pointer/max types use `long`/`unsigned long`. Limits and
+constant suffixes preserve the existing Pyxis GCC choices. `MB_LEN_MAX` is 1
+for the current single-byte libc; these headers add no character conversion,
+signal or wide-character runtime facilities.
+
+`stddef.h`, `stdarg.h`, `stdbool.h` and `float.h` remain compiler-provided.
+SDK `-I` paths precede compiler `-isystem` paths, so both GCC and another
+compiler use the same SDK integer definitions while retaining their own
+compiler-sensitive headers. Do not add GCC's private include directory to a
+TCC build. Public declarations use GNU noreturn attributes where needed and
+include their own type dependencies; implementations remain GNU C23.
+
 ## Building applications
 
 After `make sdk`, build individual applications with:
@@ -63,10 +78,14 @@ is linked. SDK selection and compiler flags are recorded in each build directory
 to rebuild consumers when those inputs change, even with older SDK timestamps.
 
 For a direct compiler invocation, the Pyxis driver supplies startup, libc,
-libpyxis, libgcc and the SDK linker script:
+libpyxis, libgcc and the SDK linker script. Use the same explicit header search
+as the Make fragment: GCC otherwise searches its private integer headers first
+and ignores an `-I` duplicate of the sysroot's default system directory.
 
 ```sh
-x86_64-unknown-pyxis-gcc --sysroot=/path/to/sdk/sysroot program.c -o program.elf
+x86_64-unknown-pyxis-gcc --sysroot=/path/to/sdk/sysroot \
+  -nostdinc -isystem "$(x86_64-unknown-pyxis-gcc -print-file-name=include)" \
+  -I/path/to/sdk/sysroot/usr/include program.c -o program.elf
 /path/to/sdk/bin/elf2pxe --format p1f -o program.pxe program.elf
 ```
 
@@ -80,6 +99,19 @@ explicit startup/archive paths so Make can track them as dependencies.
 Hardware `float`, `double` and x87 `long double` arithmetic and compiler libgcc
 helpers are available. Libc floating-point parsing/formatting and libm remain
 separate work. See the [userspace FP contract](userspace.md#floating-point).
+
+The pinned host TCC can consume these headers for object compilation:
+
+```sh
+/path/to/tcc -std=c11 -nostdinc -I/path/to/sdk/sysroot/usr/include \
+  -isystem /path/to/tcc/include -c userspace/mandelbrot/main.c -o mandelbrot.o
+```
+
+Cat and Mandelbrot compile this way without replacement headers. This is header
+consumption only: TCC is not yet a Pyxis-target compiler or a guest executable,
+and this command does not establish complete ABI or link compatibility. GCC
+remains the compiler for the OS and maintained userspace. No compiler/container
+rebuild is needed for these SDK header changes.
 
 ## Runtime build phase
 

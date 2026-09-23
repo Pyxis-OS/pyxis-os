@@ -187,7 +187,7 @@ companion submodule-pin PR where needed); split an item again if its source
 review reveals a larger change. Update its checkbox when delivering it.
 
 1. [x] FP support and Mandelbrot.
-2. [ ] Public headers usable by TCC and GCC.
+2. [x] Public headers usable by TCC and GCC.
 3. [ ] String and integer-conversion libc facilities.
 4. [ ] Sorting and diagnostic libc facilities.
 5. [ ] C nonlocal jumps.
@@ -201,26 +201,19 @@ review reveals a larger change. Update its checkbox when delivering it.
 
 ### 2. Public headers
 
-Owners: userland libc/public headers and the Pyxis SDK export. No runtime ABI
-change. Start from the current exported SDK and the pinned compiler's include
-files, not copied host headers.
+Complete: userland owns SDK `stdint.h`/`limits.h`, preserving the Pyxis GCC
+integer types, limits and constant suffixes, including the existing fast types.
+The agreed single-byte libc limit is `MB_LEN_MAX=1`. `stddef.h`, `stdarg.h`,
+`stdbool.h` and `float.h` stay compiler-provided; TCC's C11 `stddef.h` supplies
+`max_align_t`. SDK includes take precedence over compiler includes.
 
-Provide target-owned `stdint.h` and `limits.h` with the existing x86-64 data
-model. Keep `stdarg.h` and compiler-sensitive definitions in `stddef.h` with the
-compiler that owns them. Review `stdbool.h`, `float.h`, `max_align_t`, attributes
-and `_Static_assert` coverage before deciding whether any additional header
-belongs in the SDK. Resolve the include order explicitly so a TCC build cannot
-accidentally consume GCC's private headers. Change noreturn spelling where
-needed; keep ABI structure sizes and layout checks intact.
-
-Done: existing cat and Mandelbrot sources compile to objects with pinned host
-TCC against the exported SDK without temporary replacement headers or host
-system headers. Normal GCC SDK/application builds still work. This establishes
-header consumption, not full generated-code interoperability.
-
-Before implementation: agree the integer/limit definitions and ownership of
-any additional compiler-sensitive header discovered by this pass. The small
-noreturn spelling change is already acceptable.
+Public exit declarations use `__attribute__((noreturn))`; `startup.h` includes
+`stdbool.h` directly. No TCC-specific branches, kernel changes or ABI layout
+changes were needed. Existing `_Static_assert` and diagnostic attributes remain.
+Cat and Mandelbrot compile with pinned host TCC and the real SDK without host
+system headers or temporary replacements. The ordinary GCC image build and
+boot remain the integration check. See the [SDK contract](../sdk.md) for commands;
+this is header consumption, not complete generated-code interoperability.
 
 ### 3. Strings and integer conversion
 
