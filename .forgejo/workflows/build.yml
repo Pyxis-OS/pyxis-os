@@ -10,7 +10,7 @@ jobs:
   image:
     runs-on: pyxis
     container:
-      image: git.internal/chronium/pyxis-builder:gcc16.2-binutils2.47
+      image: git.internal/chronium/pyxis-builder:pyxis-gcc16.2-binutils2.47
       credentials:
         username: chronium
         password: ${{ secrets.PYXIS_REGISTRY_READ_TOKEN }}

@@ -72,21 +72,19 @@ pinned submodules; cross-repository workflow design is separate work.
   existing applications using only the compiler, application sources and SDK.
   Implemented usage and layout are in [the SDK reference](../sdk.md). This step
   retains the existing x86_64-elf compiler and does not change the container.
-- [ ] Add the Pyxis compiler target and pinned toolchain patches, build it
+- [x] Add the Pyxis compiler target and pinned toolchain patches, build it
   separately, and update the container recipe. Use GCC 16.2.0 and binutils 2.47;
-  the owner rebuilds/publishes the container when ready.
+  the owner rebuilds/publishes the container when ready. Target defaults and
+  rebuild commands are in [the toolchain reference](../../toolchain/README.md).
 - [ ] Extract userspace with source/license history preserved into
   `pyxis-userland`, then integrate the pinned submodule without changing boot.
   The owner creates the empty repository when extraction is ready.
 
 ## Decisions before the remaining implementation
 
-- Define the Pyxis target's exact driver/startup defaults and libgcc build.
-  The SDK layout is now implemented; the first export still uses x86_64-elf.
-  Local validation may use the existing binutils 2.46.1 installation until the
-  target toolchain step; its actual identity is recorded in the SDK manifest.
 - Settle repository extraction order and source/license history preservation.
-- Identify the container changes before asking the owner to rebuild it.
+- Publish the Pyxis-target builder image before merging the toolchain consumer
+  changes; workflow configuration selects its distinct image tag.
 
 No custom object/archive format, dynamic linking or package manager is required.
 

@@ -1,10 +1,11 @@
 # Userspace SDK
 
-`make sdk` exports `build/sdk` using the existing prebuilt `x86_64-elf-`
-toolchain. `make userspace` builds that SDK first, then applications against it;
+`make sdk` exports `build/sdk` using the prebuilt `x86_64-unknown-pyxis-`
+[toolchain](../toolchain/README.md). `make userspace` builds that SDK first, then
+applications against it;
 `make image` continues through initrd and ISO assembly. No compiler is built by
-these targets. The Pyxis-specific compiler target and repository extraction are
-later [milestone tasks](wip/sdk-and-repositories.md).
+these targets. Repository extraction remains a later
+[milestone task](wip/sdk-and-repositories.md).
 
 ## Contents and ownership
 
@@ -58,6 +59,19 @@ Project headers use a normal include path so generated dependencies track them.
 Startup and runtime archives are explicit link inputs; no host libc or startup
 is linked. SDK selection and compiler flags are recorded in each build directory
 to rebuild consumers when those inputs change, even with older SDK timestamps.
+
+For a direct compiler invocation, the Pyxis driver supplies startup, libc,
+libpyxis, libgcc and the SDK linker script:
+
+```sh
+x86_64-unknown-pyxis-gcc --sysroot=/path/to/sdk/sysroot program.c -o program.elf
+/path/to/sdk/bin/elf2pxe --format p1f -o program.pxe program.elf
+```
+
+Add `-lterm` when using terminal helpers. The target defaults to general
+registers and no red zone; FP/SIMD execution remains unsupported. This produces
+an ELF for conversion, not a directly runnable PXE. The SDK Make fragment keeps
+explicit startup/archive paths so Make can track them as dependencies.
 
 ## Runtime build phase
 
