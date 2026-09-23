@@ -192,7 +192,7 @@ review reveals a larger change. Update its checkbox when delivering it.
 4. [x] Sorting and diagnostic libc facilities.
 5. [x] C nonlocal jumps.
 6. [x] Floating literal conversion and binary scaling.
-7. [ ] Pyxis code-generation defaults and compiler support archive.
+7. [x] Pyxis code-generation defaults and compiler support archive.
 8. [ ] Native file I/O and URI handling in TCC.
 9. [ ] Guest compiler driver and build recipe through object output.
 10. [ ] Native P1F executable output.
@@ -342,24 +342,46 @@ follows when 9–10 are runnable.
 
 ### 7. Pyxis target defaults and compiler support
 
-Owner: ports/TCC patches and pinned provenance. Depends on 2 and 4; FP baseline
-is already available. Keep the selected upstream commit and its licenses.
+Complete: the ports repository has an explicit `tcc` recipe using the audited
+pin. It builds a host-running `x86_64-pyxis-tcc` and a target `libtcc1.a`, with
+ordered patches and upstream/compiler-runtime notices. It is not in the normal
+boot archive. See the [recipe instructions](../../ports/tcc/README.md) for the
+build command and intermediate GNU ld/elf2pxe link path.
 
-Separate the platform on which TCC itself runs from the platform it generates
-code for. Define a Pyxis target with LP64/System V conventions, `__pyxis__`,
-baseline x87/SSE2, native startup/library choices and no Linux predefines. Keep
-ELF `.o`/`.a` interoperability and non-executable-stack metadata. Build the
-required `libtcc1` subset, including x86-64 varargs support, using the target SDK.
-Audit its overlap with libgcc and decide library order/archive rescanning rather
-than allowing duplicate runtime definitions to win accidentally.
+The target defines `__pyxis__`, LP64/System V types, x87/SSE2 and freestanding
+evaluation defaults. It excludes Linux/Unix predefines, ignores host include/
+library environment paths and consumes the SDK before its four compiler-private
+headers. Objects carry a non-executable GNU-stack note. FP transfers reserve
+scratch space with flag-preserving LEA instructions rather than using a red zone.
+Executable/shared/in-memory output is rejected until native output is implemented;
+this stage supports preprocessing and ELF object compilation.
 
-Done: a host-built TCC configured for the Pyxis target compiles existing
-application sources to ELF objects using the real public headers. GNU ld and
-the existing converter may supply the temporary host-side link path for ordinary
-boot/debugger inspection. Inspect ABI boundaries in actual programs, including
-variadic calls, aggregate returns and FP use; do not infer full ABI coverage
-from a successful link. This host tool is intermediate evidence, not the guest
-compiler or a host dependency of the final editing loop.
+The support archive is compiled with the Pyxis GCC/SDK from `libtcc1.c`,
+`va_list.c` and `builtin.c`. libgcc supplies unsigned float/double/long-double to
+integer conversions; the TCC copies are excluded. TCC supplies its unsigned
+integer-to-FP helpers, signed long-double conversion, varargs and bit builtins.
+The two archives have no overlapping defined symbols in the current toolchain.
+The documented link places SDK `crt0.o` and application objects before a rescan
+group containing libc, libterm, libpyxis, libtcc1 and libgcc. Native TCC linking
+must retain that rescan behavior when it arrives.
+
+Validation: built the recipe from a fresh pinned checkout, built the ordinary
+SDK/kernel/image and booted normally with four CPUs. Compiled the existing shell
+and Mandelbrot sources with the Pyxis TCC target, linked them with GNU ld and
+converted them with the unchanged elf2pxe. The TCC shell ran with GCC's line
+editor, exercising its 24-byte structure return through a hidden result pointer;
+its TCC-built format/printf code used the GCC-built `__va_arg` helper. Manual GDB
+inspection confirmed the varargs register-save layout. The TCC Mandelbrot rendered
+and exited normally; debugger calls through TCC strto* wrappers into the GCC-built
+scanner preserved float/double/x87 returns, and conversion-helper calls produced
+the expected unsigned and signed values. This is bounded ABI evidence, not full
+language/ABI coverage or a runnable guest compiler.
+
+First-party sources remain GNU C23. Formatting sources needed `-include stdbool.h`
+for these inspection builds; the line editor stays GCC-built because its C23
+`[[fallthrough]]` is unsupported. No source edits or new test programs were needed.
+Guest streams/URI handling, driver work, P1F output and permanent guest SDK paths
+remain in tasks 8–11.
 
 ### 8. Native streams and paths
 
