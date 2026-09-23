@@ -79,4 +79,4 @@ and application subset explicitly after the audit.
   (initial inspection; pin a revision for the feasibility work).
 - [P1F contract](../../include/pxe/p1f.h) and
   [current converter](../../tools/elf2pxe.c).
-- [SDK milestone](sdk-and-repositories.md) and [port recipes](ports-and-first-port.md).
+- [SDK milestone](../sdk-and-repositories.md) and [port recipes](ports-and-first-port.md).

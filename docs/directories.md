@@ -138,7 +138,7 @@ parent keeps an independent child reference.
 
 ## Userspace example
 
-[Libpyxis helpers](../userspace/include/directory.h) wrap lookup and enumeration
+[Libpyxis helpers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/directory.h) wrap lookup and enumeration
 without allocation or path parsing. The optional Hello example gets
 `startup_root("app")`, enumerates it, looks up `share` as a directory, then looks up
 `hello.txt` with file READ. It reads through the existing file protocol and closes

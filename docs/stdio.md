@@ -1,7 +1,7 @@
 # File and terminal stdio
 
 The freestanding C library exposes an unbuffered `FILE` subset in
-[`stdio.h`](../userspace/libc/include/stdio.h). It uses native file, directory and
+[`stdio.h`](https://git.internal/chronium/pyxis-userland/src/branch/main/libc/include/stdio.h). It uses native file, directory and
 console capabilities; there is no kernel descriptor table or POSIX syscall layer.
 Libpyxis still returns native statuses. Libc translates failures into `errno`.
 

@@ -2,10 +2,9 @@
 
 `make sdk` exports `build/sdk` using the prebuilt `x86_64-unknown-pyxis-`
 [toolchain](../toolchain/README.md). `make userspace` builds that SDK first, then
-applications against it;
-`make image` continues through initrd and ISO assembly. No compiler is built by
-these targets. Repository extraction remains a later
-[milestone task](wip/sdk-and-repositories.md).
+applications against it; `make image` continues through initrd and ISO assembly.
+No compiler is built by these targets. Initialize the [userspace submodule](sdk-and-repositories.md)
+with `git submodule update --init userspace` before building the SDK.
 
 ## Contents and ownership
 
@@ -15,8 +14,9 @@ these targets. Repository extraction remains a later
 | `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a` and `pyxis.ld` |
 | `bin/elf2pxe` | Host executable for converting the linked ELF to PXE |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
+| `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
 | `share/licenses` | TLSF license and upstream/local-adaptation record |
-| `manifest.txt` | Pyxis revision and dirty state, compiler/linker identities and host identity |
+| `manifest.txt` | Pyxis and userland revisions/dirty states, compiler/linker identities and host identity |
 
 The compiler supplies its own builtin headers and libgcc. It stays outside the
 SDK, as does the host C runtime needed by elf2pxe. Use a compatible host for that
@@ -35,14 +35,16 @@ timestamps so an unchanged build does not recompile consumers.
 After `make sdk`, build individual applications with:
 
 ```sh
-make -C userspace shell
-make -C userspace hello client server
-make -C userspace SDK=/path/to/sdk BUILD=/tmp/pyxis-apps all
+make -C userspace SDK=../build/sdk BUILD=../build/userspace shell
+make -C userspace SDK=../build/sdk BUILD=../build/userspace hello client server
+make -C /path/to/pyxis-userland SDK=/path/to/sdk all
 ```
 
 The userspace Makefile now builds applications only. It consumes a complete SDK
-and does not build the converter or runtime. `SDK` defaults to `../build/sdk`;
-`BUILD` defaults to `../build/userspace`. The SDK can be copied to another path.
+and does not build the converter or runtime. `SDK` defaults to `build/sdk`
+within the userland checkout; application `BUILD` defaults to `build/apps`. The integrated
+Pyxis build passes both paths explicitly to keep its outputs in
+`build/userspace`. The SDK can be copied to another path.
 Application sources, their local helpers, the Makefile, compiler and SDK are
 sufficient; kernel and runtime source directories are not needed.
 
@@ -81,9 +83,16 @@ The root build first exports public headers and compiler settings, then invokes
 before invoking the separate application build. This avoids a dependency cycle
 between SDK production and applications.
 
-For focused runtime work, `make sdk-headers` followed by
-`make -C userspace -f runtime.mk libc` builds just libc; `libpyxis` and `libterm`
-are also targets. Run `make sdk` afterward to publish a complete SDK. Runtime
-builds still consume the shared shebang source and pinned TLSF source from this
-repository. Handling those shared sources and preserving their history/licenses
-belongs to repository extraction; no vendored implementation is duplicated here.
+For focused runtime work, run `make sdk-headers`, then:
+
+```sh
+make -C userspace -f runtime.mk SDK=../build/sdk BUILD=../build/runtime libc
+```
+
+`libpyxis` and `libterm` are also targets. Run `make sdk` afterward to publish a
+complete SDK. Standalone runtime builds default to `build/runtime` within the
+userland checkout. They take their own libc/libpyxis/libterm headers from that
+checkout and ABI/format headers from the selected SDK. TLSF is vendored in
+userland. The shared shebang implementation stays in Pyxis and is exported to
+`share/pyxis/shebang.c` during the header stage, so runtime builds never reach
+into parent source directories.

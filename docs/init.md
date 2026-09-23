@@ -5,7 +5,7 @@ when available, otherwise on the BSP; Caelum keeps its existing kernel role.
 Init is a native PXE executable or a script with a native interpreter in that
 same archive. This does not define a global PID 1 or per-space supervisor.
 
-The default [userspace/init.sh](../userspace/init.sh) uses `app://shell.pxe` as
+The default [userspace/init.sh](https://git.internal/chronium/pyxis-userland/src/branch/main/init.sh) uses `app://shell.pxe` as
 its interpreter and hands off with `session app://shell.pxe`. Init then exits;
 the interactive shell retains its own resource references and launch authority.
 See [script execution](shell.md#script-mode) and
