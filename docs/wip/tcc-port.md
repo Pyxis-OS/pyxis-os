@@ -1,7 +1,8 @@
 # TCC porting plan
 
-Status: guest preprocessing and object compilation are implemented; native
-executable linking and permanent SDK packaging remain. This document records
+Status: guest preprocessing, object compilation and native executable linking
+are implemented; permanent SDK packaging and the interactive edit/build/run
+milestone remain. This document records
 the source audit, remaining boundaries and individual PR tasks for the
 [edit/build/run milestone](edit-build-run.md). The [candidate comparison](guest-compiler.md)
 remains background if the port grows beyond these boundaries. Discuss unresolved
@@ -195,7 +196,7 @@ review reveals a larger change. Update its checkbox when delivering it.
 7. [x] Pyxis code-generation defaults and compiler support archive.
 8. [x] Native file I/O and URI handling in TCC.
 9. [x] Guest compiler driver and build recipe through object output.
-10. [ ] Native P1F executable output.
+10. [x] Native P1F executable output.
 11. [ ] Guest SDK and compiler packaging.
 12. [ ] Complete the interactive edit/build/run loop.
 
@@ -471,20 +472,44 @@ Guest executable linking has not been implemented or claimed.
 
 ### 10. Native executable output
 
-Owner: ports/TCC linker patches. Depends on 7–9.
-Implement the [bounded P1F output path](#executable-output-recommendation): fix
-layout before relocation, write entry/segment metadata and contents, preserve
-zero-fill tails and reject unresolved symbols or unsupported dynamic/TLS needs.
-Do not alter the P1F ABI, loader permissions or alignment rules.
+Complete: the sixth ordered TCC patch adds static P1F output to both the host
+and guest compiler. Executable linking is the default (`a.pxe` without `-o`);
+`-c` remains ELF relocatable output. The compiler consumes the SDK's authoritative
+P1F header. No loader, format, kernel or libc interfaces changed.
 
-Before implementation: confirm the audited insertion point still gives a small
-local change. Use the existing linker; if it requires broad restructuring,
-stop and compare the ELF-plus-guest-converter fallback. A host conversion is
-never the final path.
+The existing linker still resolves symbols, sorts sections, builds its GOT and
+applies relocations. Layout uses the existing non-ELF alignment path with a
+fixed `0x400000` base and 4 KiB permission transitions, preserving stronger
+section alignment. The writer emits entry/segment metadata and backed bytes,
+zeroes interior gaps, and leaves zero-filled tails out of the file. It checks
+range arithmetic, page overlap, entry placement and readable/non-WX permissions;
+its size bound also respects the upstream layout's signed-int offsets.
 
-Done: an in-guest compile/link emits a PXE that the unchanged loader launches.
-Inspect the segment layout and run ordinary integer/FP application code linked
-with the GCC-built runtime and the chosen TCC/libgcc helper set.
+`crt0.o` precedes application inputs. The default libc/libterm/libpyxis/libtcc1/
+libgcc group rescans until no further archive members are extracted. Explicit
+archives and `-L`/`-l` inputs retain command-line ordering. `-static` names the
+default policy; `-nostdlib` omits startup and default libraries. Unresolved strong
+symbols, TLS, IFUNCs, dynamic relocations and constructor/destructor arrays fail
+explicitly. Shared output, linker scripts, JIT and arbitrary `-Wl` controls stay
+unsupported. P1F contains no debug sections; ELF objects can retain them.
+
+The guest SDK/runtime inputs were temporarily staged under `app://sdk`, including
+target libgcc, without changing the ordinary image list. Host-running TCC uses
+an explicit `-L` for the Pyxis GCC libgcc directory until SDK packaging includes
+that archive. See the [port instructions](../../ports/tcc/README.md).
+
+Validation: built the pinned recipe from all six patches, built the ordinary
+SDK/kernel/image, and booted the normal image successfully. Inspected native
+cat/Mandelbrot output. In four-CPU KVM QEMU, guest TCC compiled and linked cat to
+`home://`, then the unchanged loader launched it and it printed the boot archive
+file. Guest-built Mandelbrot rendered and exited normally. A second guest link
+compiled the existing printf/format sources alongside Mandelbrot with
+`-include stdbool.h`, exercising TCC's varargs helper with the GCC-built runtime;
+it also rendered and exited normally. Host link tracing confirmed extraction
+from both libtcc1 and libgcc and rescanning of the runtime group. Segment inspection
+confirmed page-aligned non-overlapping permissions and smaller file than memory
+extents for BSS. An unresolved-symbol link reported errors without creating an
+output file. The process stack remains 64 KiB; no new test sources or automation.
 
 ### 11. Guest SDK and compiler packaging
 
