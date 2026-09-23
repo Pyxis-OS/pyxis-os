@@ -46,8 +46,11 @@ The image loader creates an inactive private address space, copies the program
 into owned backing and applies its permissions. Failure releases partial
 allocations; loading does not change the caller's active address space.
 
-The kernel supplies an executable entry point and a writable, 16-byte-aligned
-user stack. Entry receives a pointer in `RDI` to the
+The kernel supplies an executable entry point and a writable, non-executable,
+16-byte-aligned user stack. Boot and subsequently launched processes each get
+64 KiB of eager stack backing at `0x800000`, with the initial stack pointer at
+the upper end. Stack growth is not implemented.
+Entry receives a pointer in `RDI` to the
 [startup region](../include/abi/startup.h), which remains mapped until process
 exit. Its address is chosen by VM allocation; programs must use the pointer.
 The region carries named resources, environment, arguments and optional directory
