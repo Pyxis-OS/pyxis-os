@@ -32,7 +32,7 @@ See [gdb.md](gdb.md) for kernel debugger usage.
 
 ## Entry and loading
 
-`make initrd` packages hello and its text asset, plus the client, server and cat
+`make initrd` packages hello and its text asset, plus client, server, cat, ls and mkdir
 programs, into `build/initrd.cpio`; `make image`
 includes that uncompressed `newc` archive as the sole Limine module. The kernel
 keeps the archive mapped read-only and uses `initrd_lookup()` to find the program
@@ -79,8 +79,12 @@ Hello then creates a RAM directory through the native interface and uses
 [stdio](stdio.md) to open a file, write formatted text, seek back and copy its
 contents to stdout. Its greeting also uses libc output; stdio failures use perror.
 After client/server completion, Hello launches `cat` to copy the initrd text and
-the RAM file to stdout in argument order. It explicitly grants output, memory
-and read-only `app`/`home` roots, then waits before starting line input.
+the RAM file, `mkdir` to create a RAM directory, and `ls` to list both roots and
+the new directory. It waits between children and before starting line input.
+Each utility receives output, memory and a `home://` working directory. Filesystem
+grants differ: cat can read files, mkdir can create under home (its app binding
+has no rights), and ls can enumerate both roots. None receives input or launcher
+authority.
 See [directories.md](directories.md) for lookup, enumeration and exclusive creation.
 The syscall register
 convention is defined in the [native wrapper](../userspace/include/syscall.h).
@@ -166,6 +170,28 @@ Input errors are reported to stderr with the path, and copying continues with
 the remaining arguments. Any error makes the exit status unsuccessful; an output
 error stops copying immediately. Files are copied as bytes without separators,
 text conversion or an added newline.
+
+## ls and mkdir
+
+`ls [path...]` lists directory entries in native enumeration order, one per line,
+with `/` after directory names. No arguments lists the supplied working directory;
+multiple paths get a heading each. It does not sort, recurse or list individual
+file operands. Its name buffer grows on demand. A directory mutation during
+enumeration reports failure instead of restarting and potentially duplicating
+already printed entries.
+
+`mkdir path...` exclusively creates each final directory component. Parents must
+exist; existing names are errors. It accepts trailing separators but does not
+create intermediate directories. Success is silent. With no paths it prints usage
+and fails.
+
+Both accept native scheme and relative paths, treating all arguments as paths
+without options. They report path-specific errors to stderr, continue to later
+paths and return failure if any operation failed. Output errors stop the utility.
+Directory operations use libpyxis; libc supplies allocation and output. The small
+shared utility helper sizes path scratch storage and formats native errors without
+introducing libc directory APIs or converting native statuses to errno. The libc
+directory API [follow-up](technical-debt.md#directory-apis-in-libpyxis) remains open.
 
 ## Foundational libc
 

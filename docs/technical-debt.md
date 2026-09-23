@@ -86,7 +86,7 @@ there are no pending writes to flush yet.
 
 ## Directory APIs in libpyxis
 
-The first ls and mkdir will use native libpyxis enumeration and creation helpers,
+The first ls and mkdir use native libpyxis enumeration and creation helpers,
 with libc for output and other C support. This keeps the initial utilities small,
 but programs expecting libc directory APIs will still need native adaptations.
 
