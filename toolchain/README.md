@@ -74,8 +74,8 @@ compiler; changing SDK headers/libraries/startup/linker script does not.
   recognize the tuple, add Pyxis driver/builtin defaults and GNU-stack metadata,
   and configure static libgcc, including its x86 floating-point helpers,
   without libc headers or fixed-header copies.
-  GCC supplies stdint definitions matching its
-  existing x86-64 ELF data model; this does not introduce a newlib dependency.
+  GCC retains its builtin headers; SDK-owned integer/limit headers take
+  precedence in SDK builds. This does not introduce a newlib dependency.
 
 Upstream sources retain their licenses: GCC/binutils are primarily
 GPL-3.0-or-later, with the GCC Runtime Library Exception 3.1 for covered runtime
