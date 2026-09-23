@@ -1,5 +1,7 @@
 CROSS_COMPILE ?= x86_64-elf-
 CC := $(CROSS_COMPILE)gcc
+HOSTCC ?= cc
+export CROSS_COMPILE HOSTCC
 QEMU ?= qemu-system-x86_64
 QEMU_DISPLAY ?= gtk
 MEMORY ?= 256M
@@ -32,14 +34,21 @@ C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/user/*
 ASM_SOURCES := $(wildcard boot/limine/*.S arch/x86_64/*.S)
 OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM_SOURCES))
 
-.PHONY: all tools userspace initrd image run debug clean check-toolchain FORCE
+.PHONY: all tools sdk sdk-headers userspace initrd image run debug clean check-toolchain FORCE
 all: build/caelum.elf
 
 tools:
 	$(MAKE) -C tools
 
-userspace: tools
-	$(MAKE) -C userspace
+sdk-headers:
+	./scripts/export-sdk.sh headers
+
+sdk: tools sdk-headers
+	$(MAKE) -C userspace -f runtime.mk SDK=$(abspath build/sdk)
+	./scripts/export-sdk.sh complete
+
+userspace: sdk
+	$(MAKE) -C userspace SDK=$(abspath build/sdk)
 
 initrd: build/initrd.cpio
 
