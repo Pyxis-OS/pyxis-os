@@ -70,7 +70,7 @@ not require it or introduce a resident supervisor.
 
 - [x] Define the shared script-launch contract: bounded shebang parsing, script
   grant/name convention, interpreter lookup and boot adaptation.
-- [ ] Add script mode using the existing parser and foreground execution, with
+- [x] Add script mode using the existing parser and foreground execution, with
   line diagnostics and the agreed failure behavior.
 - [ ] Add explicit session launch/delegation and verify that the shell remains
   usable after init exits, including input ownership and resource lifetime.
@@ -82,9 +82,9 @@ to preserve working builds. First-line bounds, line endings, the script grant
 and argument convention, and the launch integration boundary are agreed above.
 The SDK/repository split is not a prerequisite.
 
-The first task is implemented in the [script-launch contract](../script-launch.md).
-Normal boot still starts the native shell; script mode, session handoff and init
-selection are not implemented by that task.
+The first two tasks are described in the [script-launch contract](../script-launch.md)
+and [shell script mode](../shell.md#script-mode). Normal boot still starts the
+native shell; session handoff and init selection remain upcoming tasks.
 
 ## Completion boundary
 

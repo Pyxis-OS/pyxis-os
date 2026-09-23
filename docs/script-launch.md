@@ -35,6 +35,6 @@ kernel paths nor normalizes archive names. Boot installs the same script grant
 and argument convention with its explicit initial-process resources.
 
 Normal boot still selects the native shell. The shell uses program launch for
-foreground commands but explicitly rejects a script resource until its script
-execution mode is implemented. Default init selection and Make overrides remain
-later tasks in the [init milestone](wip/init-and-scripts.md).
+foreground commands and supports [script execution](shell.md#script-mode) when
+explicitly granted the required resources. Session handoff, default init
+selection and Make overrides remain later tasks in the [init milestone](wip/init-and-scripts.md).
