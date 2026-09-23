@@ -1,7 +1,7 @@
 # Processes, capabilities and the first userspace ABI
 
-Status: console, initrd/RAM file, directory, private-memory, process-completion
-and caller-scoped launcher capabilities are implemented.
+Status: console, initrd/RAM file, directory, private-memory, process-completion,
+caller-scoped launcher and [mapped display](graphics.md) capabilities are implemented.
 The broader process and resource model remains a working draft alongside the
 [spaces draft](spaces.md). Startup delivery, console and file CALL operations,
 and handle close are implemented, including the complete userspace example.
@@ -14,7 +14,7 @@ handoffs for this first milestone.
 ## Current programs
 
 Normal boot starts the [shell](shell.md) at home:// with terminal, launcher,
-memory and app/home root grants. It launches foreground utilities with explicit
+memory, display and app/home root grants. It launches foreground utilities with explicit
 resources, waits for completion and returns to its prompt. Its space and TTY
 survive shell exit; no supervisor restarts it.
 
@@ -42,7 +42,7 @@ transfer independently. The endpoint exchange still uses directly supplied grant
 ## Objects, capabilities and handles
 
 An object is the underlying resource: a console, file, directory, memory
-service, launcher, process-control object or endpoint. A capability grants particular operations on that object. A handle
+service, display, launcher, process-control object or endpoint. A capability grants particular operations on that object. A handle
 is an opaque, process-local value naming an entry in the process's capability
 table. The kernel entry holds the object reference and rights; userspace cannot
 gain rights by changing the handle value.
@@ -131,8 +131,8 @@ The shared assembly entry calls the native C startup routine, which checks the
 record's bounds and initializes accessors before invoking `main(argc, argv)`.
 Its return value goes to exit. Programs use
 [the startup helpers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/startup.h) instead of decoding the
-record. The boot launcher supplies the shell's named input/output, memory and
-launcher resources, app/home roots, a home directory chain, argv[0] and an OS_NAME
+record. The boot launcher supplies the shell's named input/output, memory,
+launcher and [display](graphics.md) resources, app/home roots, a home directory chain, argv[0] and an OS_NAME
 environment entry.
 
 ## First operation shapes

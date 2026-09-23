@@ -4,6 +4,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/object/process.h>
+#include <kernel/object/display.h>
 #include <kernel/process.h>
 
 enum mm_result process_create(struct space *space, struct vm_space *address_space,
@@ -38,6 +39,7 @@ enum mm_result process_destroy(struct process *process)
     return MM_INVALID;
   }
 
+  display_process_exit(process);
   enum mm_result result = vm_space_destroy(process->address_space);
   if (result != MM_OK) {
     return result;

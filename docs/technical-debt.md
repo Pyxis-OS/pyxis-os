@@ -43,7 +43,7 @@ Kernel allocation and page-table mutation remain owned by the BSP. Tasks submit
 specific requests and wait for BSP service. This keeps allocator and VM ownership
 explicit, but moves subsystem coordination into [the scheduler](../kernel/task.c):
 capability-table growth, directory-entry allocation, file-buffer replacement,
-private memory and launch preparation each carry request state in the task and
+private memory, mapped graphics and launch preparation each carry request state in the task and
 have their own queue and BSP service path. More consumers mean more scheduler
 coupling, and long service operations delay other requests and BSP work.
 

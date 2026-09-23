@@ -1,3 +1,4 @@
+#include <abi/display.h>
 #include <abi/file.h>
 #include <abi/process.h>
 #include <abi/launcher.h>
@@ -26,6 +27,8 @@ bool object_rights_valid(enum object_type type, uint64_t rights)
     return !(rights & ~MEMORY_RIGHT_MANAGE);
   case OBJECT_PROCESS_CONTROL:
     return !(rights & ~PROCESS_RIGHT_WAIT);
+  case OBJECT_DISPLAY:
+    return !(rights & ~DISPLAY_RIGHT_DRAW);
   case OBJECT_LAUNCHER:
     return !(rights & ~LAUNCHER_RIGHT_LAUNCH);
   case OBJECT_ENDPOINT:

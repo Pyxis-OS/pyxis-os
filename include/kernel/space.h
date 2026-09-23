@@ -10,12 +10,14 @@
 #include <kernel/boot.h>
 
 struct console_object;
+struct display_object;
 
 struct space
 {
   char *name;
   struct framebuffer *fb;
   struct tty *tty;
+  struct display_object *display; /* Space retains the initial reference. */
   struct console_object *console; /* Space retains the initial reference. */
 };
 
