@@ -62,6 +62,10 @@ static struct framebuffer *fb_alloc(const struct boot_framebuffer *boot_fb,
 static struct tty *tty_alloc(const struct framebuffer *fb) {
   struct tty *tty;
   tty = (struct tty *)kmalloc(sizeof(struct tty));
+  if (!tty) {
+    panic("cannot allocate space TTY");
+  }
+  *tty = (struct tty){0};
 
   tty->x = 0;
   tty->y = 0;
