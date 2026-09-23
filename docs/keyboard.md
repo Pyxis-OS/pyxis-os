@@ -51,7 +51,8 @@ Unmodified navigation keys produce terminal sequences:
 Each console retains a 4 KiB byte queue, including while its space is inactive.
 A sequence is enqueued whole or rejected whole. Reads can split sequences; a
 userspace terminal decoder must retain partial sequences. Standalone Escape is
-ambiguous with a sequence prefix. Cursor editing and history are userspace work.
+ambiguous with a sequence prefix. Wrapped cursor editing is provided by [libterm](terminal.md); history remains
+userspace work for the shell.
 
 Overflow clears the queue and latches `CALL_INPUT_LOST`. Further input is
 discarded until a nonempty read acknowledges the loss by returning that status.

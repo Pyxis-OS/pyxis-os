@@ -10,6 +10,15 @@
 
 #include "font.h"
 
+enum tty_escape_state {
+  TTY_TEXT,
+  TTY_ESCAPE,
+  TTY_CSI,
+  TTY_CSI_IGNORE,
+};
+
+#define TTY_CSI_PARAMETERS 4
+
 struct tty
 {
   uint16_t x;
@@ -23,6 +32,12 @@ struct tty
   uint32_t bg;
 
   bool initialized;
+  bool reverse;
+
+  /* Output calls can split a sequence; parser state belongs to the TTY. */
+  enum tty_escape_state escape_state;
+  uint16_t parameters[TTY_CSI_PARAMETERS];
+  size_t parameter_index;
 
   const struct font *font;
   const struct color_scheme *scheme;
