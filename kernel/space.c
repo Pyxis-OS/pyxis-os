@@ -21,6 +21,7 @@
 #include <kernel/task.h>
 #include <kernel/keyboard.h>
 #include <kernel/object/console.h>
+#include <kernel/object/display.h>
 
 #define PRESENT_INTERVAL_TICKS 2
 
@@ -118,6 +119,11 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
       panic("cannot allocate space console");
     }
 
+    space->display = display_create(space);
+    if (!space->display) {
+      panic("cannot allocate space display");
+    }
+
     arch_cpu_at(i)->space = space;
 
     if (i == 0) {
@@ -172,22 +178,27 @@ void space_present()
       (const void *)spaces_nav_fb->address,
       spaces_nav_fb->size);
 
+  struct space *space = active_space;
+  uint64_t flags = cpu_save_interrupts();
+  struct display_frame *frame = display_snapshot(space->display);
+  cpu_restore_interrupts(flags);
+  const struct framebuffer *source = frame ? &frame->fb : space->fb;
+
   // Copy active space framebuffer
   memcpy((void *)(screen->address + dst_offset),
-      (const void *)(active_space->fb->address),
-      active_space->fb->size);
+      (const void *)source->address, source->size);
 
   /* Composite the cursor onto the display, leaving the TTY pixels intact.
    * Snapshot under the output lock; never keep it held while copying a frame. */
-  uint64_t flags = cpu_save_interrupts();
+  flags = cpu_save_interrupts();
   bool locked = log_begin();
-  const struct tty *tty = active_space->tty;
-  bool visible = locked && tty->cursor_visible;
+  const struct tty *tty = space->tty;
+  bool visible = !frame && locked && tty->cursor_visible;
   size_t x = tty->x, y = tty->y;
   log_end(locked);
   cpu_restore_interrupts(flags);
   if (visible) {
-    struct framebuffer display = *active_space->fb;
+    struct framebuffer display = *space->fb;
     display.address = screen->address + dst_offset;
     fb_fill_rect(&display, x * tty->font->width,
         (y + 1) * tty->font->height - 1, tty->font->width, 1,
@@ -195,6 +206,11 @@ void space_present()
   }
 
   cpu_store_fence();
+  if (frame) {
+    flags = cpu_save_interrupts();
+    display_frame_release(frame);
+    cpu_restore_interrupts(flags);
+  }
 }
 
 static void switch_adjacent_space(bool next)

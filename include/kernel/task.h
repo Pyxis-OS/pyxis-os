@@ -12,6 +12,8 @@ struct file_wait;
 struct process_wait;
 struct console_wait;
 struct memory_region;
+struct display_object;
+struct display_buffer;
 struct launch_capture;
 
 /* Current user task, IF=0. Prepare its wait record before publishing. The
@@ -64,6 +66,11 @@ bool task_replace_file_buffer(struct file_object *file, size_t capacity);
  * the private root and task stack; BSP returns ownership through wakeup.
  * region is local caller storage, never dereferenced remotely. */
 enum mm_result task_request_memory(uint64_t operation, struct memory_region *region);
+
+/* Same inactive-root handoff as private memory. The capability keeps display
+ * alive while blocked; reply is copied through task metadata, never remotely. */
+enum call_status task_request_display(struct display_object *display,
+    uint64_t operation, struct display_buffer *reply);
 
 /* Current user task, IF=0, no spinlocks. Staging allocation/disposal runs on
  * BSP. Launch consumes capture, borrows the caller's table and image operation,
