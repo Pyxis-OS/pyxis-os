@@ -303,7 +303,7 @@ not duplicated here as a second ABI definition.
   meaningful exit status. Depends on 14. Done when it displays both an initrd
   file and a RAM file using arguments from startup.
 
-- [ ] **16. ls and mkdir.** Build and package separate programs combining libc
+- [x] **16. ls and mkdir.** Build and package separate programs combining libc
   with native enumeration/creation helpers. Keep options minimal; no POSIX
   compatibility requirement. Depends on 5, 6 and 14. Done when they list the two
   roots and create/list a RAM directory, reporting missing authority and other
@@ -851,4 +851,26 @@ trying the next path. The normal cat invocation then returned zero. Partial-read
 error preservation and multi-buffer copying were code-reviewed, not forced.
 No tests, test infrastructure or boot automation added.
 
-Task 16 remains unstarted: ls and mkdir using libc and native directory helpers.
+Task 16 is complete (assistant). Separate ls and mkdir programs use native
+directory/path helpers with libc allocation and output. Ls defaults to the
+working directory, preserves enumeration order, marks directories with / and
+grows its name buffer. Concurrent directory change is reported without restart.
+Mkdir creates only the final component, rejecting existing names and missing
+parents. Both report path-specific errors, continue with later operands and
+return failure on any error. Output failures stop execution; neither has options.
+
+Hello launches cat, mkdir and ls sequentially with explicit per-utility rights
+and a home:// working directory, then enters line input. The initrd packages all
+three. No kernel, ABI or libc interfaces changed; the libc directory API TODO
+remains open. See `docs/userspace.md` for command behavior.
+
+Validation: image builds passed without warnings. Normal one- and four-CPU KVM
+boots created/listed the RAM directory and listed both roots; all six programs
+completed successfully after line input. Manual TCG/GDB calls checked default and
+relative paths, repeated/trailing separators, a 200-byte name and buffer growth,
+missing parents, existing names, root/parent boundaries, wrong-kind operands,
+denied creation and continuation after errors. Concurrent enumeration mutation
+and allocation failures were reviewed, not forced. No tests or boot automation.
+
+Task 17 remains unstarted: the interactive foreground shell. Settle its quoting
+syntax before implementation.
