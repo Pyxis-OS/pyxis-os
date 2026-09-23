@@ -22,16 +22,26 @@ Do not leave temporary init contents in later default builds or artifacts.
 
 ## Shebang and script contract
 
-Accept an explicit interpreter URI, such as `#!app://shell.pxe`, without optional
-interpreter arguments. The interpreter must be a native executable: recursive
-shebang interpretation is outside this milestone. Interpreter lookup uses
+Accept LF and CRLF line endings, with at most 1024 bytes before LF (including
+the CR when present). Strip only the CR immediately before LF; do not normalize
+other bytes. Allow spaces/tabs after `#!`, followed by one explicit interpreter
+URI such as `app://shell.pxe`, without optional interpreter arguments. The
+interpreter must be a native executable: recursive shebang interpretation is
+outside this milestone. Interpreter lookup uses
 explicitly supplied roots; a URI does not grant authority.
 
-Give the interpreter an already-open READ capability for the script and its name
-for diagnostics. Reopening the script by pathname is unnecessary. Shebang launch
-should be reusable beyond the interactive shell. Keep general path parsing out
-of the kernel; the boot adapter and userspace launch helper need a concrete
-integration design because today's loader accepts an opened image handle.
+Give the interpreter an already-open READ capability named `script`, read from
+offset zero. The shell treats the shebang as a comment. Set `argv[0]` to the
+interpreter URI, `argv[1]` to the script's diagnostic name, followed by the
+original script arguments. The name is descriptive; access comes from the handle.
+Terminal input remains separate so foreground programs can still use it.
+
+Share shebang parsing between boot and userspace launch. Userspace resolves
+interpreters through supplied roots; initial boot resolves `app://` interpreters
+from the initrd. Keep general path parsing out of the kernel and keep the PXE
+loader focused on executable loading. Script interpretation grants no additional
+authority: init explicitly receives the launcher, ordinary child grants remain
+restricted. Keep normal shell boot until script mode and session handoff work.
 
 Script mode reuses current quoting and command execution: one command per line,
 blank lines, whole-line `#` comments, `cd` and foreground programs. No variables,
@@ -68,8 +78,8 @@ not require it or introduce a resident supervisor.
   Make override with correct rebuild behavior. Build and boot both forms normally.
 
 These are proposed PR boundaries; keep dependent changes together where needed
-to preserve working builds. Before the first task, settle first-line bounds,
-CRLF handling, the script resource/argv convention and the launch integration.
+to preserve working builds. First-line bounds, line endings, the script grant
+and argument convention, and the launch integration boundary are agreed above.
 The SDK/repository split is not a prerequisite.
 
 ## Completion boundary
