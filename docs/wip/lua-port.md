@@ -60,6 +60,9 @@ return {
 }
 ```
 
+This explicitly selects Bucharest; absent `TZ` defaults to UTC. Configuration
+will pass the selected IANA name through the session environment.
+
 Settle the configuration file location, startup ordering, available Lua
 libraries/capabilities and error/default behavior before implementation. The
 evaluator need not receive the authority of an interactive interpreter. Define

@@ -19,8 +19,14 @@ TCC_OUTPUTS := $(addprefix $(TCC_STAGE)/,bin/tcc.pxe lib/tcc/libtcc1.a \
   share/licenses/tcc/va_list.c share/licenses/tcc/builtin.c share/tcc/source.txt)
 TCC_OUTPUTS += $(addprefix $(TCC_STAGE)/share/tcc/patches/,$(notdir $(wildcard ports/tcc/patches/*.patch)))
 
+TZDATA_INPUTS := $(wildcard ports/tzdata/*.lua) ports/ports.lua ports/build.lua
+TZDATA_STAGE := build/ports/tzdata/stage
+TZDATA_OUTPUTS := $(addprefix $(TZDATA_STAGE)/,share/zoneinfo/UTC \
+  share/zoneinfo/Europe/Bucharest share/zoneinfo/tzdata.zi share/zoneinfo/version \
+  share/licenses/tzdata/LICENSE share/tzdata/source.txt)
+
 .PHONY: all
-all: $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) $(TCC_OUTPUTS)
+all: $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.
@@ -43,3 +49,10 @@ $(DOOM_IMAGE) $(DOOM_LICENSE) &: $(DOOM_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
 	rm -rf build/ports/doom
 	$(LUA) ports/build.lua doom --sdk $(abspath build/sdk) --work $(abspath build/ports/doom)
+
+# This recipe builds host zic and data only; target SDK changes do not alter TZif.
+$(TZDATA_OUTPUTS) &: $(TZDATA_INPUTS) scripts/ports.mk
+	@command -v $(LUA) >/dev/null 2>&1 || { \
+	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
+	rm -rf build/ports/tzdata
+	$(LUA) ports/build.lua tzdata --sdk $(abspath build/sdk) --work $(abspath build/ports/tzdata)
