@@ -16,11 +16,18 @@ milestone's remaining interface details before starting its code work.
    SDK-based Kilo build and ordinary boot-archive integration. The
    [edit/build/run workflow](../edit-build-run.md) with TCC is also complete.
 4. [Filesystem mutations and Doom saves](../filesystem-mutations.md) — complete.
-   Next: TTY horizontal tabs, then wall-clock time with UTC initialization and
-   adjustment semantics independent of monotonic deadlines, enabling TCC's
-   deferred calendar features. See [technical debt](../technical-debt.md).
-5. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
-   through an init-managed virtio-fs mount and native filesystem capabilities.
+5. TTY horizontal tabs — complete: eight-column stops, clamped at the right edge,
+   without erasing cells or wrapping. See [terminal controls](../terminal.md#tty-output-controls).
+6. [UTC wall-clock and calendar conversion](wall-clock.md): independent monotonic
+   deadlines, ISO date display and TCC's deferred time features.
+7. [Boot archive assembly](boot-archive.md): a dedicated guest staging tree and
+   small host Lua manifest, preserving the current archive and guest paths.
+8. [Zoneinfo-backed local time](timezones.md): package the full pinned database,
+   with Europe/Bucharest as the initial default; no locale subsystem yet.
+9. [Guest Lua and configuration](lua-port.md): audit/port, scripts and REPL, then
+   init/session configuration for timezone selection and terminal tab width.
+10. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
+    through an init-managed virtio-fs mount and native filesystem capabilities.
 
 This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO
@@ -30,9 +37,10 @@ init. Each milestone should become several focused PRs where needed.
 [Later directions](later-os-directions.md) park the remaining ports, networking,
 website hosting, block storage, filesystem-format choices and an installer.
 The [edit/build/run workflow](../edit-build-run.md) now supports writing C in
-Pyxis, compiling it there and running the native P1F result. Guest Lua remains
-deferred until useful, notably for system-wide configuration; its
-[staged worklist](lua-port.md) is retained. Host Lua recipes do not depend on it.
+Pyxis, compiling it there and running the native P1F result. Guest Lua now has a
+concrete configuration consumer in the [staged worklist](lua-port.md).
+Clock/calendar functions and host Lua build tools
+remain independent of that port.
 
 The [Doom port](../doom.md) uses the mapped display, keyboard sessions and
 monotonic clock for single-player gameplay and demo playback. Images include

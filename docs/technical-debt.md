@@ -94,15 +94,6 @@ needed before treating that fallback as a normal interactive environment.
 The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
 on screen. History, Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](terminal.md).
 
-## TTY horizontal tabs
-
-The TTY ignores horizontal-tab bytes instead of advancing the cursor to a tab
-stop. Kilo expands tabs while drawing its own rows, but cat copies the saved
-bytes unchanged, so indentation disappears when a tabbed file is printed.
-Implement tab-stop movement in the TTY rather than replacing tabs in cat or
-changing saved files. Define right-margin/pending-wrap behavior and preserve
-intervening cells; tab movement is not a request to erase them.
-
 ## Non-atomic stdio append
 
 Append streams query the current file size before each native write. Another
@@ -152,7 +143,8 @@ counter. Console timeouts no longer count delivered BSP interrupts. APIC timer
 interrupts still bound wakeup latency; nanosecond units do not promise precise
 wakeup, and time spent with the VM paused need not count.
 
-Wall-clock support is still wanted soon. Define boot-time UTC initialization,
+The [wall-clock milestone](wip/wall-clock.md) precedes
+[zoneinfo-backed local time](wip/timezones.md). Define boot-time UTC initialization,
 resolution and the user ABI before implementation. Calendar adjustments must
 not change monotonic deadlines. Do not invent a date or expose elapsed time as
 Unix time. TCC's calendar macros and `-bench` remain unavailable; enable its

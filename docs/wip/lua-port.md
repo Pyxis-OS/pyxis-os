@@ -1,10 +1,14 @@
 # Lua port milestones
 
-Status: deferred guest port, not a prerequisite for Kilo, TCC or host Lua recipes.
-Revisit when useful, notably for system-wide configuration. The small milestone
-boundaries below remain proposals; select runtime requirements first. They
-consume the [SDK](../sdk-and-repositories.md) and [port recipe setup](../ports.md).
-Host Lua for recipes is independent of this guest port.
+Status: planned after [zoneinfo-backed local time](timezones.md). Configuration
+is the first system integration: choose the default timezone and terminal tab
+width. Host Lua for build recipes and image manifests remains independent of
+this guest port. Libraries consume the [SDK](../sdk-and-repositories.md) and
+[port recipe setup](../ports.md).
+
+Clock reads, calendar conversion and timezone conversion must work without Lua.
+Audit the port before implementation and discuss newly discovered runtime gaps;
+this milestone does not authorize unrelated kernel or libc expansion.
 
 ## 1. Pin Lua and define the runtime slice
 
@@ -16,9 +20,9 @@ Completion: a pinned source recipe/metadata and a concrete list of missing
 runtime facilities split into focused PR tasks. This is an audit milestone, not
 an instruction to implement an entire libc or change kernel interfaces to POSIX.
 
-Decide numeric requirements explicitly, including any needed floating-point
-execution/context support. Do not quietly change Lua's numeric behavior to get
-a build. Current stdio formatting lacks floating point; review conversion, math,
+Userspace already supports x87/SSE2. Review the selected Lua version's numeric
+requirements against that support. Do not quietly change Lua's numeric behavior
+to get a build. Current stdio formatting lacks floating point; review conversion, math,
 error handling and other requirements against the selected source.
 
 ## 2. Run Lua code in Pyxis
@@ -42,10 +46,32 @@ Completion: launch a script from the shell and use an interactive Lua REPL, with
 useful file and language error reporting. Expand only the runtime facilities
 needed for that slice. These may be separate PRs.
 
+## 4. Init/session configuration
+
+Add a userspace configuration evaluator that returns a table, validates its
+settings and supplies ordinary values to consumers. Applications need not each
+embed Lua, and the kernel receives explicit operations rather than Lua code.
+Start with the default timezone and terminal tab width, for example:
+
+```lua
+return {
+  timezone = "Europe/Bucharest",
+  terminal = { tab_width = 8 },
+}
+```
+
+Settle the configuration file location, startup ordering, available Lua
+libraries/capabilities and error/default behavior before implementation. The
+evaluator need not receive the authority of an interactive interpreter. Define
+how init passes the selected timezone to children and applies terminal settings;
+no settings API or reload machinery is implied to exist today.
+
+Completion: boot consumes the config and applies its timezone/tab settings,
+while direct clock and calendar operations still work independently of Lua.
+
 ## Deferred
 
-System-wide Lua configuration needs its own authority and library policy;
-a configuration evaluator need not receive the same facilities as an interactive
-program. Dynamic loading, broader library coverage, additional ports and Neovim
-remain separate work. Do not couple the first Lua milestone to virtio-fs: the
-existing initrd and RAM filesystem are sufficient places to supply scripts.
+Dynamic loading, broad standard-library coverage, live configuration reload,
+per-user/space configuration policy, additional ports and Neovim remain separate
+work. Do not couple the first Lua milestone to virtio-fs: the existing initrd
+and RAM filesystem are sufficient places to supply scripts.
