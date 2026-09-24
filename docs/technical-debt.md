@@ -164,3 +164,18 @@ validated TSC source later, including frequency discovery and cross-CPU
 consistency, without changing the clock protocol. The current source requires
 a 64-bit, memory-mapped HPET; there is no source registry or fallback. VirtIO
 RTC remains deferred until PCI/VirtIO infrastructure exists.
+
+## Doom save games and configuration
+
+The first [Doom port](doom.md) deliberately disables save/load. Upstream writes
+a temporary save, removes the old name, then renames the temporary file. Native
+directory/file protocols currently lack removal and rename/replacement. Define
+rights, same/cross-directory behavior, replacement rules and open-handle lifetime
+before exposing real libc operations; do not fake success or silently replace
+this with a less reliable direct overwrite.
+
+Configuration persistence is already disabled in the pinned generic engine.
+Re-enabling it needs an explicit writable configuration location and review of
+its parser/formatting requirements. Timedemo reporting currently needs floating
+printf support or a deliberate integer report. These are separate from normal
+gameplay and demo playback; wall-clock time is not a prerequisite.
