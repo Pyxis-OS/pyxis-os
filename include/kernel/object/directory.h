@@ -16,13 +16,15 @@ struct directory_entry {
   char name[];
 };
 
-/* Published trees are append-only. The lock protects links/count/generation;
- * names and child pointers never change. Entries own child references; children
- * do not retain parents. Only the unpublished initrd builder bypasses the lock. */
+/* The lock protects links/count/generation/detached. Entries own child
+ * references; children do not retain parents. Removed empty directories stay
+ * detached and reject creation through surviving handles. Only the unpublished
+ * initrd builder bypasses the lock. */
 struct directory_object {
   struct kernel_object object;
   enum directory_backing backing;
   atomic_bool locked;
+  bool detached;
   struct directory_entry *first, *last;
   size_t entry_count;
   uint64_t generation;
@@ -36,9 +38,8 @@ struct directory_object *directory_create(enum directory_backing backing);
 /* Current user task, IF=0, with a live reference and stable private mappings.
  * Lookup retains the child before releasing the lock or waiting for BSP table
  * growth. CREATE waits for BSP entry allocation/disposal with no locks held.
- * Enumeration captures one result under the lock, then copies its immutable
- * name while the caller's directory reference keeps the entry alive. Removal
- * must revisit that name lifetime before allowing entries to be reclaimed. */
+ * Enumeration copies the selected name while locked. REMOVE detaches an entry
+ * under the lock and then lends it to BSP disposal, with no borrowed readers. */
 struct syscall_result directory_call(struct directory_object *directory, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);

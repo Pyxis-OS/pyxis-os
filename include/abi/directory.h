@@ -10,14 +10,18 @@
 #define DIRECTORY_RIGHT_READ_FILES (UINT64_C(1) << 2)
 #define DIRECTORY_RIGHT_CREATE (UINT64_C(1) << 3)
 #define DIRECTORY_RIGHT_WRITE_FILES (UINT64_C(1) << 4)
+#define DIRECTORY_RIGHT_REMOVE (UINT64_C(1) << 5)
 #define DIRECTORY_RIGHTS (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | \
                           DIRECTORY_RIGHT_READ_FILES | DIRECTORY_RIGHT_CREATE | \
-                          DIRECTORY_RIGHT_WRITE_FILES)
+                          DIRECTORY_RIGHT_WRITE_FILES | DIRECTORY_RIGHT_REMOVE)
 
 #define DIRECTORY_LOOKUP UINT64_C(1)
 #define DIRECTORY_ENUMERATE UINT64_C(2)
 #define DIRECTORY_CREATE UINT64_C(3)
+#define DIRECTORY_REMOVE UINT64_C(4)
 
+/* ANY is accepted only by REMOVE; lookup/create still require an exact kind. */
+#define DIRECTORY_KIND_ANY UINT64_C(0)
 #define DIRECTORY_KIND_FILE UINT64_C(1)
 #define DIRECTORY_KIND_DIRECTORY UINT64_C(2)
 
@@ -42,10 +46,19 @@ struct directory_enumerate_request {
   uint64_t capacity;
 };
 
+/* Remove one name, requiring the selected kind (or ANY). Directories must be
+ * empty. Existing child handles survive; no child rights or reply are needed. */
+struct directory_remove_request {
+  uint64_t name;
+  uint64_t name_length;
+  uint64_t kind;
+};
+
 union directory_payload {
   struct directory_child_request lookup;
   struct directory_child_request create;
   struct directory_enumerate_request enumerate;
+  struct directory_remove_request remove;
 };
 
 struct directory_message {

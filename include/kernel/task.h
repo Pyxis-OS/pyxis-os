@@ -43,9 +43,10 @@ void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline);
 enum capability_result task_grow_capabilities(void);
 
 /* Current user task, IF=0, no held locks. A focused BSP service allocates or
- * discards an unpublished RAM entry. Requests live in task metadata, never on
- * a remote private stack. Allocation returns NULL on exhaustion. The caller
- * fills the name and either publishes the entry or returns it for disposal. */
+ * discards an unpublished or removed RAM entry. Requests live in task metadata,
+ * never on a remote private stack. Allocation returns NULL on exhaustion.
+ * The caller fills the name and publishes the entry or returns it for disposal.
+ * Removed entries must have no list links or borrowed readers before disposal. */
 struct directory_entry *task_allocate_directory_entry(uint64_t kind, size_t name_length);
 void task_discard_directory_entry(struct directory_entry *entry);
 

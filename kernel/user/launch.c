@@ -114,7 +114,8 @@ void user_launch_initial(void)
   }
   uint64_t app_rights = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE |
                         DIRECTORY_RIGHT_READ_FILES;
-  uint64_t home_rights = app_rights | DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES;
+  uint64_t home_rights = app_rights | DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
+                         DIRECTORY_RIGHT_REMOVE;
   if (capability_install(&process->capabilities, &application_root->object, app_rights, &app) != CAP_OK ||
       capability_install(&process->capabilities, &home_root->object, home_rights, &home) != CAP_OK) {
     goto fail;

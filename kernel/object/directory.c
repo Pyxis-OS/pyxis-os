@@ -223,8 +223,12 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   }
 
   lock_directory(directory);
+  bool detached = directory->detached;
   bool exists = find_user_entry(directory, request->name, request->name_length) != NULL;
   unlock_directory(directory);
+  if (detached) {
+    return (struct syscall_result){CALL_NOT_FOUND, 0};
+  }
   if (exists) {
     return (struct syscall_result){CALL_ALREADY_EXISTS, 0};
   }
@@ -247,7 +251,9 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   lock_directory(directory);
   /* Another CPU may have created this name while allocation/table growth
    * slept. Publish only after both the entry and returned handle are ready. */
-  if (name_exists(directory, entry)) {
+  if (directory->detached) {
+    status = CALL_NOT_FOUND;
+  } else if (name_exists(directory, entry)) {
     status = CALL_ALREADY_EXISTS;
   } else if (directory->generation == UINT64_MAX || directory->entry_count == SIZE_MAX) {
     status = CALL_LIMIT;
@@ -270,6 +276,67 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   }
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
+static struct syscall_result remove_child(struct directory_object *directory,
+    const struct directory_remove_request *request)
+{
+  if (request->kind != DIRECTORY_KIND_ANY && request->kind != DIRECTORY_KIND_FILE &&
+      request->kind != DIRECTORY_KIND_DIRECTORY) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  enum call_status status = check_name(request->name, request->name_length);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  if (directory->backing != DIRECTORY_RAM) {
+    return (struct syscall_result){CALL_READ_ONLY, 0};
+  }
+
+  lock_directory(directory);
+  struct directory_entry *entry = find_user_entry(directory, request->name, request->name_length);
+  if (!entry) {
+    status = CALL_NOT_FOUND;
+  } else if (request->kind != DIRECTORY_KIND_ANY && entry_kind(entry) != request->kind) {
+    status = CALL_WRONG_TYPE;
+  } else if (directory->generation == UINT64_MAX) {
+    status = CALL_LIMIT;
+  } else if (entry_kind(entry) == DIRECTORY_KIND_DIRECTORY) {
+    /* There are no directory moves or links. Parent-before-child locking is
+     * acyclic, and serializes the empty check with creation in the child. */
+    struct directory_object *child = (struct directory_object *)entry->object;
+    lock_directory(child);
+    if (child->entry_count) {
+      status = CALL_NOT_EMPTY;
+    } else {
+      child->detached = true;
+    }
+    unlock_directory(child);
+  }
+
+  if (status == CALL_OK) {
+    struct directory_entry *previous = NULL;
+    struct directory_entry **link = &directory->first;
+    while (*link != entry) {
+      previous = *link;
+      link = &previous->next;
+    }
+    *link = entry->next;
+    if (directory->last == entry) {
+      directory->last = previous;
+    }
+    entry->next = NULL;
+    --directory->entry_count;
+    ++directory->generation;
+  }
+  unlock_directory(directory);
+
+  if (status == CALL_OK) {
+    /* The removed entry still owns its child until BSP disposal. Independent
+     * handles keep the object alive after that reference is released. */
+    task_discard_directory_entry(entry);
+  }
+  return (struct syscall_result){status, 0};
 }
 
 static struct syscall_result enumerate(struct directory_object *directory,
@@ -320,13 +387,12 @@ static struct syscall_result enumerate(struct directory_object *directory,
       }
     }
   }
-  unlock_directory(directory);
-  /* Entries cannot be removed yet. The caller's directory reference keeps the
-   * selected name alive after unlocking; a later mutation invalidates the next
-   * cursor rather than mixing two generations in this reply. */
+  /* Stable, checked private mappings make this copy nonblocking. Keep the
+   * lock until it finishes so removal cannot reclaim the selected name. */
   if (reply.outcome == DIRECTORY_ENTRY) {
     KASSERT(copy_to_user(request->name, entry->name, reply.name_size));
   }
+  unlock_directory(directory);
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
@@ -346,6 +412,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   case DIRECTORY_CREATE:
     required = DIRECTORY_RIGHT_CREATE;
     break;
+  case DIRECTORY_REMOVE:
+    required = DIRECTORY_RIGHT_REMOVE;
+    break;
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
@@ -364,6 +433,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (operation == DIRECTORY_CREATE) {
     return create_child(directory, rights, &request.create, reply_address, reply_capacity);
+  }
+  if (operation == DIRECTORY_REMOVE) {
+    return remove_child(directory, &request.remove);
   }
   return enumerate(directory, &request.enumerate, reply_address, reply_capacity);
 }
