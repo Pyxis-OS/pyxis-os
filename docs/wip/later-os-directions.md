@@ -15,9 +15,10 @@ milestone; this does not commit to Unix PID 1 semantics.
 
 Kilo and TCC provide the [edit/build/run workflow](../edit-build-run.md). Guest Lua
 can wait until useful, notably for system-wide configuration; retain
-[its staged worklist](lua-port.md). Other candidates are SQLite, Doom, a CHIP-8
-interpreter, Frotz and NetHack. This is not an instruction to port the whole list.
-Neovim remains a later editor goal.
+[its staged worklist](lua-port.md). The [Doom port](../doom.md) provides initial
+gameplay and demo playback. Other candidates are SQLite, a CHIP-8 interpreter,
+Frotz and NetHack. This is not an instruction to port the whole list. Neovim
+remains a later editor goal.
 
 A custom linker remains a possible later investigation alongside application
 bundles/images. TCC already emits native P1F executables; a new linker or custom
