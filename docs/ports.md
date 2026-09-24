@@ -30,15 +30,16 @@ For port development with a separately managed work directory, use the
 
 The normal boot archive includes Kilo at `app://kilo.pxe` and its BSD-2-Clause
 license at `app://share/licenses/kilo/LICENSE`. The shell resolves the bare
-command `kilo` to that executable. Packaging has an explicit entry list; it
-enumerates only selected payloads and the freshly assembled guest SDK, never
-other files left in build output. The SDK staging tree removes obsolete files
-and preserves its timestamps when contents are unchanged. Kernel-only
+command `kilo` to that executable. The ports-owned `install.lua` selects guest
+payloads into a dedicated tree, which the root [archive manifest](boot-archive.md)
+combines with userland and the guest SDK. Intermediate and host outputs stay out.
+Fresh staging removes obsolete files and preserves unchanged output timestamps. Kernel-only
 `make`, `make sdk` and `make userspace` do not build ports.
 
-The existing integrated workflow checks out both submodules with
-`PYXIS_SOURCE_READ_TOKEN` and runs `make image`. Separate ports CI, SDK exchange
-and dispatch orchestration remain future work; there is no package manager.
+The root workflow has a separate ports job consuming the SDK job's artifact.
+It publishes an [independent bundle](build-bundles.md), which the image job or a
+local build can consume without compiling ports again. Source checkout uses
+`PYXIS_SOURCE_READ_TOKEN`. Cross-repository dispatch remains future work.
 
 ## Editing in Pyxis
 
@@ -83,7 +84,7 @@ and ordered patch provenance. No compiler-container rebuild is needed.
 - `lib/tcc`: libtcc1 and private `stddef.h`, `stdarg.h`, `stdbool.h`, `float.h`.
 - `share`: TLSF/musl/TCC licenses and notices, TCC source pin and patches, and
   the selected toolchain's hashes, patches and runtime licensing.
-- `manifest.txt`: SDK build provenance plus the ports revision and dirty state.
+- `manifest.txt`: SDK provenance plus the ports bundle's source and dependency record.
 
 From `home://`, compile a saved C source with `tcc hello.c -o hello.pxe`, then
 launch `./hello.pxe`. TCC supports `-E`, ELF object output with `-c`, and static

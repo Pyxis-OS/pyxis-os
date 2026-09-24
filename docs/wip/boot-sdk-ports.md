@@ -20,8 +20,9 @@ milestone's remaining interface details before starting its code work.
    without erasing cells or wrapping. See [terminal controls](../terminal.md#tty-output-controls).
 6. [UTC wall-clock and calendar conversion](../wall-clock.md) — complete:
    ISO date display, independent monotonic deadlines and TCC time features.
-7. [Boot archive assembly](boot-archive.md): a dedicated guest staging tree and
-   small host Lua manifest, preserving the current archive and guest paths.
+7. [Boot archive assembly](../boot-archive.md) — complete: install trees, Lua
+   manifest and [independent build bundles](../build-bundles.md).
+   [Automatic artifact selection](build-artifact-reuse.md) remains follow-up work.
 8. [Zoneinfo-backed local time](timezones.md): package the full pinned database,
    with Europe/Bucharest as the initial default; no locale subsystem yet.
 9. [Guest Lua and configuration](lua-port.md): audit/port, scripts and REPL, then

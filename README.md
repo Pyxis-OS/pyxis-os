@@ -6,6 +6,7 @@ QEMU booted through OVMF/UEFI and the vendored Limine v12.9.0.
 Requires GNU Make, the [Pyxis GCC/binutils toolchain](toolchain/README.md),
 QEMU, GNU cpio, xorriso, host Lua 5.4, and a matching raw OVMF code/variables pair.
 Userspace and ports are [pinned submodules](docs/sdk-and-repositories.md).
+CI publishes [independent build bundles](docs/build-bundles.md) for local reuse.
 
 ```
 git submodule update --init userspace ports
