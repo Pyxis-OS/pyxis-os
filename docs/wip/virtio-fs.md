@@ -78,8 +78,9 @@ interrupt as required and wakes the worker. It does not allocate, parse FUSE
 responses or perform filesystem operations.
 
 The event-wait API supports user tasks and BSP kernel tasks, preserving the
-wake-before-park ordering. The worker must check and publish its wait under its
-resource lock so work arriving as it goes idle cannot be lost; see
+wake-before-park ordering. The worker must check and publish its wait with
+producer access excluded so work arriving as it goes idle cannot be lost. The
+BSP-local IRQ handoff uses IF=0; cross-CPU producers will require a lock. See
 [task waiting](../smp.md). Keep device queues and request state in the owning
 subsystem.
 
@@ -124,8 +125,9 @@ unmounting and live namespace replacement remain later work.
 ## Decisions at the relevant task boundary
 
 - PCI resources: the ECAM mapping, claim, reset and BAR preparation contracts
-  are implemented in [PCI resources](../pci.md). MSI-X vector ownership and
-  delivery remain for task 5.
+  are implemented in [PCI resources](../pci.md). The first virtio-fs function
+  owns a static BSP vector, with entry zero shared by configuration changes and
+  both queues. Routing remains masked until the task 6 worker/queues are ready.
 - Transport: initial negotiation accepts only `VIRTIO_F_VERSION_1`; reset and
   configuration reads have one-second deadlines. The implemented boundary is in
   [PCI setup](../pci.md#feature-negotiation-and-queue-inspection). Queue and
@@ -180,10 +182,13 @@ grows. No later item is implied by completing an earlier one.
    Kernel tasks now use the same IF=0 wait and deadline API, without user CPU-state
    saving. Wake schedules them through the ordinary ready queue. Existing kernel
    deadline sleep and user-only process-service contracts are preserved.
-5. [ ] **PCI MSI-X delivery.** Configure the selected device's table and vector,
+5. [x] **PCI MSI-X delivery.** Configure the selected device's table and vector,
    route it to the BSP and connect short interrupt handling to worker wakeups.
    Completion: masking, activation and teardown ordering are defined; actual
    queue-completion interrupts are exercised by the next task.
+   Implemented masked table programming and checked VirtIO vector selection,
+   plus the short BSP handler and remembered-activity worker wait. No DMA or
+   interrupt delivery is enabled yet; see [MSI-X routing](../pci.md#masked-msi-x-routing).
 6. [ ] **Split queues and BSP worker.** Implement owned DMA buffers, descriptor
    publication, completions and worker lifecycle. Add the opt-in host-service
    setup needed for a real virtio-fs session-negotiation request. Completion:
