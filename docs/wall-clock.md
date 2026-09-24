@@ -41,14 +41,14 @@ Years outside the range of the integer `tm_year` produce `EOVERFLOW`.
 The conversion comes from the existing pinned musl subset, with provenance and
 license recorded in userland.
 
-`date` takes no arguments and prints `YYYY-MM-DDTHH:MM:SSZ`. It diagnoses clock
-failures and years outside its four-digit display range. Native TCC expands
+`date -u` prints `YYYY-MM-DDTHH:MM:SSZ`; plain `date` uses the selected
+[local timezone](timezones.md) and a numeric offset. Both diagnose clock failures
+and years outside the four-digit display range. Native TCC expands
 `__DATE__` and `__TIME__` from UTC using their C spellings, and uses monotonic
 elapsed milliseconds for `-bench`. Benchmark reports retain upstream floating-
 point formatting through libc's [printf support](stdio.md#standard-streams-formatting-and-exit).
 Host-running TCC continues to use the host's clock and local time.
 
-Local time, zone selection, `mktime`, `strftime`, locale and clock adjustment are
-not provided. Next are [boot archive assembly](boot-archive.md),
-[zoneinfo-backed local time](wip/timezones.md) and Lua configuration. Reads and
-calendar conversion will continue to work independently of Lua.
+[Local-time conversion](timezones.md) is provided by userspace. Reverse
+conversion (`mktime`), `strftime`, locale and clock adjustment remain deferred.
+Reads and calendar conversion work independently of future Lua configuration.

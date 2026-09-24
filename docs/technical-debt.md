@@ -148,8 +148,8 @@ monotonic time. Firmware accuracy, subsecond alignment and boot handoff delay
 are not known; there is no drift correction or resynchronization. Time while the
 VM is paused need not advance. A missing seed is an explicit error, but a
 plausible incorrect RTC value cannot be detected. Future adjustments must not
-change monotonic deadlines. [Zoneinfo-backed local time](wip/timezones.md) follows
-boot archive assembly. TCC now uses UTC calendar macros and monotonic `-bench`;
+change monotonic deadlines. [Zoneinfo-backed local time](timezones.md) is handled
+in userspace. TCC uses UTC calendar macros and monotonic `-bench`;
 Kilo uses monotonic time for status-message expiry.
 
 HPET MMIO reads can be expensive, especially under virtualization. Consider a

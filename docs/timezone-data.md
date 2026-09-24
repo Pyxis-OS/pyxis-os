@@ -30,10 +30,6 @@ Update the version and exact source pin together in the recipe when updating the
 database. The source/compiler and selection policy are described in
 [the port notes](../ports/tzdata/README.md).
 
-The current implementation supplies data only: libc and `date` still expose UTC. The next
-[timezone task](wip/timezones.md) adds conversion, named-zone selection and
-`date -u`. The agreed default is UTC when `TZ` is absent. Bucharest requires an
-explicit selection, which later Lua configuration may supply. Invalid or
-inaccessible named zones must report errors. A reader must implement future-rule
-footers instead of freezing the last stored offset; reverse conversion and
-locale selection remain deferred.
+Libc's [local-time conversion](timezones.md) reads this data and its future-rule
+footers. Absent or empty `TZ` means UTC; named zones are selected explicitly.
+Later Lua configuration may supply that preference through the environment.

@@ -101,5 +101,5 @@ See the [edit/build/run walkthrough](edit-build-run.md) and
 The `tzdata` recipe builds matching host zic and the pinned IANA database. The
 [packaged data](timezone-data.md) includes all standard zones/aliases and notices
 under `app://share`, with no dependency on the host's installed timezone version.
-It travels in the same ports bundle as the executable ports. Runtime timezone
-conversion is a separate task; `date` still displays UTC.
+It travels in the same ports bundle as the executable ports. Libc provides
+[local-time conversion](timezones.md); absent or empty `TZ` defaults to UTC.

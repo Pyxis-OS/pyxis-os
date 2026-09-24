@@ -1,6 +1,6 @@
 # Lua port milestones
 
-Status: planned after [zoneinfo-backed local time](timezones.md). Configuration
+Status: planned after [zoneinfo-backed local time](../timezones.md). Configuration
 is the first system integration: choose the default timezone and terminal tab
 width. Host Lua for build recipes and image manifests remains independent of
 this guest port. Libraries consume the [SDK](../sdk-and-repositories.md) and
