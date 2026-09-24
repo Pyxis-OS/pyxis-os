@@ -1,3 +1,4 @@
+#include <kernel/object/mount.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/clock.h>
 #include <abi/message.h>
@@ -136,6 +137,11 @@ static struct syscall_result call_object(handle_t handle,
     }
     return keyboard_call((struct keyboard_object *)object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_MOUNT:
+    if (header.protocol != PROTOCOL_MOUNT) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return mount_call(rights, header.operation, request_size, reply_address, reply_capacity);
   case OBJECT_CLOCK:
     if (header.protocol != PROTOCOL_CLOCK) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

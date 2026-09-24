@@ -13,6 +13,7 @@
 #define PROTOCOL_DISPLAY UINT64_C(8)
 #define PROTOCOL_CLOCK UINT64_C(9)
 #define PROTOCOL_KEYBOARD UINT64_C(10)
+#define PROTOCOL_MOUNT UINT64_C(11)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

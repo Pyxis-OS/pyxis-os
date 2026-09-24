@@ -557,17 +557,27 @@ void virtio_fs_pci_stop(const char *reason)
   }
 }
 
+/* Set before resource preparation; a failed device is not an absent device. */
+static bool filesystem_present;
+
+bool virtio_fs_pci_present(void)
+{
+  return filesystem_present;
+}
+
 static void filesystem_worker(void *argument)
 {
   (void)argument;
   if (!activate_transport()) {
     stop_transport("cannot activate transport");
+    hostfs_start_failed(VIRTIO_FS_UNAVAILABLE);
     return;
   }
   enum virtio_fs_result result = virtio_fs_session_init(&filesystem.session);
   if (result != VIRTIO_FS_OK) {
     klog("virtio-fs: session initialization failed (result %u)\n", (unsigned)result);
     virtio_fs_pci_stop("FUSE INIT failed");
+    hostfs_start_failed(result);
     return;
   }
   klog("virtio-fs: tag=\"%s\" FUSE %u.%u session ready, optional features=0\n",
@@ -597,9 +607,11 @@ void virtio_fs_pci_start(void)
   if (!filesystem.prepared) {
     return;
   }
+  hostfs_prepare();
   enum mm_result result = kernel_task_create(filesystem_worker, NULL);
   if (result != MM_OK) {
     filesystem.prepared = false;
+    hostfs_start_failed(VIRTIO_FS_NO_MEMORY);
     klog("virtio-fs: cannot create worker (error %u); DMA remains disabled, "
          "resources retained until reboot\n", (unsigned)result);
   }
@@ -842,6 +854,7 @@ void virtio_fs_pci_prepare(const struct boot_info *boot)
   if (!device) {
     return;
   }
+  filesystem_present = true;
   struct pci_claim *claim = &filesystem.claim;
   if (!pci_claim_device(device, claim)) {
     klog("virtio-fs PCI: function busy or unsupported; resources not claimed\n");

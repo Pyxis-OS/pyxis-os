@@ -35,6 +35,12 @@ struct hostfs_request {
   uint8_t data[VIRTIO_FS_READ_MAX];
 };
 
+/* BSP/IF=0 before the worker can run. Submissions wait through bounded INIT.
+ * Every worker-creation/initialization failure must complete queued callers. */
+void hostfs_prepare(void);
+/* BSP, either interrupt state; only before successful start. */
+void hostfs_start_failed(enum virtio_fs_result result);
+
 /* Sole transport worker, IF=1. Start publishes the boot-lifetime session.
  * Service performs one queued request or deferred destruction, and may sleep.
  * It must keep running after session failure to retire local objects. */
