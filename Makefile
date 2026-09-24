@@ -73,11 +73,11 @@ sdk: tools sdk-headers
 endif
 
 ifneq ($(filter userspace,$(PREBUILT)),)
-userspace: sdk
+userspace: ports
 	./scripts/bundle.sh verify userspace
 else
-userspace: sdk
-	$(MAKE) -C userspace SDK=$(abspath build/sdk) BUILD=$(abspath build/userspace) install DESTDIR=$(abspath build/userspace-root)
+userspace: ports
+	$(MAKE) -C userspace SDK=$(abspath build/sdk) LUA_PREFIX=$(abspath build/ports-dev/lua) BUILD=$(abspath build/userspace) install DESTDIR=$(abspath build/userspace-root)
 	./scripts/bundle.sh record userspace
 endif
 
@@ -91,6 +91,7 @@ ports: sdk
 	  exit 1; }
 	$(MAKE) -f scripts/ports.mk
 	$(LUA) scripts/stage-tree.lua ports/install.lua build/ports-root ports=build/ports
+	$(LUA) scripts/stage-tree.lua ports/develop.lua build/ports-dev ports=build/ports
 	./scripts/bundle.sh record ports
 endif
 

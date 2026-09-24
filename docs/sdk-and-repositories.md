@@ -33,12 +33,13 @@ kernel and ISO. It does not build a compiler or follow either submodule's latest
 | --- | --- |
 | Pyxis | Kernel, public ABI/format headers, shared shebang parser, elf2pxe, compiler patches/container, SDK export and image assembly |
 | pyxis-userland | libc, libpyxis, libterm, startup/link support, applications, initial boot scripts and its TLSF vendor copy |
-| pyxis-ports | Host Lua runner, pinned third-party recipes, ordered patches and staged executables/licenses |
+| pyxis-ports | Host Lua runner, pinned third-party recipes, ordered patches and staged executables/licenses and development libraries/headers |
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime, then installs startup, libraries, linker support
 and elf2pxe into `build/sdk`. `make userspace` builds applications against that
-SDK; `make ports` builds and stages Kilo against the same SDK. `make image`
+SDK and the Lua library exported by `make ports`. Ports consumes only the SDK,
+so building it before userland introduces no cycle. `make image`
 includes both in initrd and ISO assembly. The parent passes
 explicit output directories, preserving `build/runtime` and `build/userspace`.
 See [SDK commands and layout](sdk.md) for standalone and focused builds.

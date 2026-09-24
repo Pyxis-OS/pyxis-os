@@ -153,10 +153,16 @@ Focused PRs:
 
 - [x] Per-TTY tab width with a WRITE-authorized console request and libterm
   helper. Accept 1–32 columns, default to eight, and affect only subsequent tabs.
-- [ ] Userspace configuration evaluator and session-launch integration. Keep
+- [x] Userspace configuration evaluator and session-launch integration. Keep
   Lua execution outside the kernel and validate before applying any settings.
 - [ ] Package the default configuration, integrate boot startup, then rewrite
   this completed milestone as concrete documentation under `docs`.
+
+The native `app://session.pxe` launcher is available for an explicit `session`
+handoff. It consumes the ports-exported static Lua library; userland owns startup
+policy and the SDK remains Lua-independent. See [session configuration](../session-configuration.md)
+for the implemented validation and grant behavior. The default init and packaged
+configuration are deliberately left for the final PR.
 
 Completion: boot consumes the config and applies its timezone/tab settings,
 while direct clock and calendar operations still work independently of Lua.

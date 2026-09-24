@@ -6,23 +6,24 @@ export LC_ALL=C
 action=${1:?Usage: scripts/bundle.sh record|pack|verify COMPONENT}
 component=${2:?Missing component}
 case "$component" in
-  kernel) payload=build/caelum.elf; repository=. ;;
-  sdk) payload=build/sdk; repository=. ;;
-  userspace) payload=build/userspace-root; repository=userspace ;;
-  ports) payload=build/ports-root; repository=ports ;;
+  kernel) payload=(build/caelum.elf); repository=. ;;
+  sdk) payload=(build/sdk); repository=. ;;
+  userspace) payload=(build/userspace-root); repository=userspace ;;
+  ports) payload=(build/ports-root build/ports-dev); repository=ports ;;
   *) echo "Unknown component: $component" >&2; exit 1 ;;
 esac
 info=build/bundle-info/$component
 mkdir -p build/bundle-info
 
 checksums() {
-  test -e "$1"
-  if [ -n "$(find "$1" ! -type f ! -type d -print -quit)" ]; then
+  local path
+  for path in "$@"; do test -e "$path" || return 1; done
+  if [ -n "$(find "$@" ! -type f ! -type d -print -quit)" ]; then
     echo "Bundle payload must contain only regular files and directories: $1" >&2
     return 1
   fi
-  printf 'directories_sha256=%s\n' "$(find "$1" -type d -print0 | sort -z | sha256sum | cut -d ' ' -f 1)"
-  find "$1" -type f -print0 | sort -z | xargs -0 -r sha256sum
+  printf 'directories_sha256=%s\n' "$(find "$@" -type d -print0 | sort -z | sha256sum | cut -d ' ' -f 1)"
+  find "$@" -type f -print0 | sort -z | xargs -0 -r sha256sum
 }
 
 sdk_id() {
@@ -54,7 +55,7 @@ source_info() {
 
 case "$action" in
   record)
-    checksums "$payload" > "$info.sha256.tmp"
+    checksums "${payload[@]}" > "$info.sha256.tmp"
     {
       printf 'component=%s\n' "$component"
       source_info "$component" "$repository"
@@ -75,6 +76,9 @@ case "$action" in
           "${CC:-${CROSS_COMPILE:-x86_64-unknown-pyxis-}gcc}" --version | head -n 1
           ;;
       esac
+      if [ "$component" = userspace ]; then
+        printf 'lua_sha256=%s\n' "$(checksums build/ports-dev/lua | sha256sum | cut -d ' ' -f 1)"
+      fi
     } > "$info.txt.tmp"
     for extension in txt sha256; do
       cmp -s "$info.$extension.tmp" "$info.$extension" || mv "$info.$extension.tmp" "$info.$extension"
@@ -85,7 +89,7 @@ case "$action" in
     "$0" verify "$component"
     mkdir -p build/bundles
     tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
-      -cf "build/bundles/$component.tar.tmp" "$payload" "$info.txt" "$info.sha256"
+      -cf "build/bundles/$component.tar.tmp" "${payload[@]}" "$info.txt" "$info.sha256"
     cmp -s "build/bundles/$component.tar.tmp" "build/bundles/$component.tar" ||
       mv "build/bundles/$component.tar.tmp" "build/bundles/$component.tar"
     rm -f "build/bundles/$component.tar.tmp"
@@ -95,7 +99,7 @@ case "$action" in
       echo "Missing $component bundle metadata; extract its bundle at the repository root." >&2
       exit 1
     }
-    checksums "$payload" > "$info.check"
+    checksums "${payload[@]}" > "$info.check"
     if ! cmp -s "$info.check" "$info.sha256"; then
       rm -f "$info.check"
       echo "$component payload differs from its recorded bundle (including added/removed files)." >&2
@@ -106,6 +110,13 @@ case "$action" in
       expected=$(sed -n 's/^sdk_sha256=//p' "$info.txt")
       test "$expected" = "$(sdk_id)" || {
         echo "$component bundle requires a different SDK; select matching bundles or rebuild it." >&2
+        exit 1
+      }
+    fi
+    if [ "$component" = userspace ]; then
+      expected=$(sed -n 's/^lua_sha256=//p' "$info.txt")
+      test "$expected" = "$(checksums build/ports-dev/lua | sha256sum | cut -d ' ' -f 1)" || {
+        echo 'Userland bundle requires different Lua development files; select matching bundles or rebuild it.' >&2
         exit 1
       }
     fi
