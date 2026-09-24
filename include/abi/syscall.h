@@ -30,6 +30,7 @@ enum call_status {
   CALL_TIMED_OUT = 17,
   CALL_NOT_EMPTY = 18,
   CALL_IO = 19,
+  CALL_NO_ROUTE = 20,
   CALL_STATUS_COUNT, /* Validation bound, not a result. */
 };
 

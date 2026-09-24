@@ -8,13 +8,12 @@
 
 /* BSP task/initialization context, IF=0. Copies payload into an owned packet
  * and queues an echo from 127.0.0.1. No retained caller storage. NET_OK means
- * queued, not answered. Reply matching and application waits come separately. */
+ * queued, not answered; the echo service owns application reply matching. */
 enum net_result net_icmp_echo_send(uint32_t destination, uint16_t identifier,
     uint16_t sequence, const void *payload, size_t length);
 
 /* Sole BSP network worker, IF=1. Borrows validated IPv4 payload for this call.
- * Checks ICMP before replying; received replies are counted and consumed until
- * the application echo facility supplies matching and completion. */
+ * Checks ICMP before replying or dispatching replies to the echo service. */
 void net_icmp_receive(uint32_t source, uint32_t destination,
     const uint8_t *message, size_t length);
 

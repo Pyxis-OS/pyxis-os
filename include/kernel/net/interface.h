@@ -30,6 +30,11 @@ enum net_result {
  * transmission unavailable; no packets are allocated or submitted at boot. */
 enum mm_result net_init(void);
 
+/* Ready is published once after worker creation. Notify is any CPU, IF=0;
+ * publish work before notifying, without holding the protocol's own lock. */
+bool net_worker_available(void);
+void net_worker_notify(void);
+
 /* BSP task/initialization context, IF=0. Only net_loopback is supported.
  * Success transfers packet ownership to deferred receive; it means queued,
  * not protocol acceptance or delivery to an application. Every error preserves

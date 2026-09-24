@@ -17,6 +17,7 @@ enum object_type {
   OBJECT_CLOCK = 9,
   OBJECT_KEYBOARD = 10,
   OBJECT_MOUNT = 11,
+  OBJECT_ECHO = 12,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.

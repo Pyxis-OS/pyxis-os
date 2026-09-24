@@ -94,13 +94,11 @@ Remaining decisions:
   subset are implemented in [networking](../networking.md). Before task 5, settle
   source selection for external routes, local delivery to assigned external
   addresses and precedence between local, directly connected and default routes.
-- **Native ABI:** choose the configuration and echo object requests, rights,
-  reply matching, deadlines and close behavior before task 3. A focused echo
-  facility may suffice for ping; unrestricted raw-packet authority is not an
-  implicit requirement. Continue tagged requests and explicit capability grants.
-  New syscalls are allowed if a concrete contract needs them. This milestone
-  must not commit future networking to synchronous calls or add placeholder
-  send/receive/wait APIs.
+- **Configuration ABI:** the echo capability and native ping are implemented.
+  Define separate init-only address/route configuration rights and requests when
+  external routing has a consumer (tasks 5/6); do not add mutable loopback setup
+  merely to populate an interface. New syscalls remain allowed for concrete needs,
+  without placeholder asynchronous networking APIs.
 - **Host setup and init policy:** select the QEMU backend and a reachable peer,
   opt-in/default device behavior, configuration command syntax and missing-device
   policy before integration. Numeric addresses suffice; no DNS dependency.
@@ -121,11 +119,15 @@ Remaining decisions:
    IPv4/ICMP validation and deferred echo replies preserving request data.
    Options, fragments and unsupported protocols are dropped; other destinations
    have no route. The 1500-byte MTU allows 1472 echo payload bytes. Wire layouts
-   stay kernel-private; application reply matching and waits remain task 3.
+   stay kernel-private; task 3 adds application reply matching and waits.
    See [networking](../networking.md) for ownership, limits and inspection.
-3. [ ] **Native configuration and ping.** Define the agreed capability contract,
-   libpyxis helpers and a small numeric-address ping utility. Complete ordinary
-   userspace ping over loopback without a network device, including bounded waits.
+3. [x] **Native echo capability and ping.** Added tagged synchronous exchange,
+   a separate echo grant delegated through init/session/shell, libpyxis helpers
+   and numeric-address ping. Sixteen shared request slots, five-second maximum
+   deadlines and non-reused payload tokens bound work and correlate replies.
+   The BSP worker handles expiry and transmission without extending scheduler
+   service queues. Address/route configuration moves to tasks 5/6, when an
+   external interface can use it. See [networking](../networking.md).
 4. [ ] **Virtio-net transport.** Prepare the selected PCI function and owned RX/TX
    queues, connect MSI-X and the BSP worker, and define failure/cleanup behavior.
    Keep virtio-fs working alongside it. Split resource preparation and active
