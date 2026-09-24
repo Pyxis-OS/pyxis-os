@@ -10,6 +10,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/object/clock.h>
 #include <kernel/panic.h>
+#include <kernel/pci.h>
 #include <kernel/task.h>
 #include <kernel/space.h>
 
@@ -26,6 +27,8 @@
     panic("cannot initialize boot archive (error %u)", (unsigned)archive_result);
   }
   klog("initrd: newc archive=%zu bytes, mapped read-only\n", boot->initrd.size);
+
+  pci_discover();
 
   boot_start_cpus();
 

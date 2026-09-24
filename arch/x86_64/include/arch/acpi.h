@@ -19,4 +19,9 @@ bool acpi_keyboard_route(const struct boot_info *boot,
 /* Same bootstrap lifetime as keyboard routing. Requires a memory-mapped HPET. */
 uint64_t acpi_hpet_address(const struct boot_info *boot);
 
+struct pci_ecam;
+/* Copies the supported MCFG aperture while firmware tables remain mapped.
+ * Missing/unsupported MCFG disables discovery with a diagnostic. */
+bool acpi_pci_ecam(const struct boot_info *boot, struct pci_ecam *ecam);
+
 #endif

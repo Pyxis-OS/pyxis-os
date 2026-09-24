@@ -1,3 +1,4 @@
+#include <arch/acpi.h>
 #include <arch/apic.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
@@ -5,6 +6,7 @@
 #include <arch/clock.h>
 #include <arch/layout.h>
 #include <arch/paging.h>
+#include <arch/pci.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/pmm.h>
@@ -355,6 +357,42 @@ static void map_hpet(void)
   *bootstrap_leaf(HPET_BASE) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
 }
 
+static unsigned map_pci_ecam(const struct boot_info *boot)
+{
+  struct pci_ecam ecam;
+  if (!acpi_pci_ecam(boot, &ecam)) {
+    return 0;
+  }
+
+  size_t bytes = ecam.bus_count * PCI_ECAM_BUS_BYTES;
+  if (!physical_valid(ecam.physical) || bytes > PCI_ECAM_SIZE ||
+      bytes > physical_limit - ecam.physical) {
+    klog("PCI: MCFG aperture outside supported address range; discovery disabled\n");
+    return 0;
+  }
+  /* MCFG is not a RAM reservation. Do not create an uncached alias of memory
+   * owned by the allocator, firmware tables, boot payload or framebuffer. */
+  for (size_t i = 0; i < boot->region_count; ++i) {
+    const struct boot_region *region = &boot->regions[i];
+    if (region->base < ecam.physical + bytes &&
+        ecam.physical < region->base + region->length && region->type != BOOT_RESERVED) {
+      klog("PCI: MCFG aperture overlaps non-reserved memory; discovery disabled\n");
+      return 0;
+    }
+  }
+
+  /* map_local_apic already checked PAT[3]=UC. Discovery has no config writes:
+   * retain CR0.WP protection, NX, and the device cache type on every leaf. */
+  for (size_t offset = 0; offset < bytes; offset += PAGE_SIZE) {
+    uintptr_t address = PCI_ECAM_BASE + offset;
+    bootstrap_map(address, ecam.physical + offset, 0);
+    *bootstrap_leaf(address) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
+  }
+  klog("PCI: ECAM physical=0x%lx bytes=0x%zx segment=0 buses=0..%u\n",
+       ecam.physical, bytes, ecam.bus_count - 1);
+  return ecam.bus_count;
+}
+
 void paging_init(struct boot_info *boot)
 {
   _Static_assert(ARCH_PAGE_SIZE == PAGE_SIZE, "page size interface");
@@ -374,6 +412,7 @@ void paging_init(struct boot_info *boot)
   map_framebuffer(&boot->framebuffer);
   map_local_apic();
   map_hpet();
+  unsigned pci_buses = map_pci_ecam(boot);
 
   for (size_t offset = 0; offset < metadata_bytes; offset += PAGE_SIZE) {
     bootstrap_map(PMM_METADATA_BASE + offset, plan.metadata_phys + offset,
@@ -400,6 +439,7 @@ void paging_init(struct boot_info *boot)
   pmm_rebase((void *)PMM_METADATA_BASE);
   bootstrap_offset = 0;
   boot->bootstrap_direct_offset = 0;
+  arch_pci_init(pci_buses);
 
   klog("paging: owned CR3=0x%lx; 4 KiB leaves, recursive slot %u, no HHDM\n",
        read_cr3(), RECURSIVE_SLOT);

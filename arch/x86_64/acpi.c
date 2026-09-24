@@ -1,4 +1,6 @@
 #include <arch/acpi.h>
+#include <arch/pci.h>
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 
@@ -278,4 +280,64 @@ uint64_t acpi_hpet_address(const struct boot_info *boot)
     return hpet->address;
   }
   panic("no ACPI HPET table");
+}
+
+bool acpi_pci_ecam(const struct boot_info *boot, struct pci_ecam *ecam)
+{
+  struct mcfg_allocation {
+    uint64_t base;
+    uint16_t segment;
+    uint8_t first_bus, last_bus;
+    uint32_t reserved;
+  } __attribute__((packed));
+  struct mcfg_table {
+    struct acpi_header header;
+    uint64_t reserved;
+    struct mcfg_allocation allocations[];
+  } __attribute__((packed));
+
+  *ecam = (struct pci_ecam){0};
+  if (!boot->acpi_rsdp) {
+    klog("PCI: no ACPI tables; discovery disabled\n");
+    return false;
+  }
+
+  size_t entry_bytes;
+  const struct acpi_header *root = root_table(boot, &entry_bytes);
+  const struct acpi_header *mcfg = NULL;
+  for (size_t offset = sizeof(*root); offset < root->length; offset += entry_bytes) {
+    uint64_t physical = 0;
+    memcpy(&physical, (const uint8_t *)root + offset, entry_bytes);
+    const struct acpi_header *table = read_table(boot, physical);
+    if (!memcmp(table->signature, "MCFG", 4)) {
+      if (mcfg) {
+        klog("PCI: duplicate MCFG tables; discovery disabled\n");
+        return false;
+      }
+      mcfg = table;
+    }
+  }
+
+  if (!mcfg) {
+    klog("PCI: no MCFG table; discovery disabled\n");
+    return false;
+  }
+  if (mcfg->length != sizeof(struct mcfg_table) + sizeof(struct mcfg_allocation)) {
+    klog("PCI: MCFG must contain exactly one aperture; discovery disabled\n");
+    return false;
+  }
+
+  const struct mcfg_table *table = (const void *)mcfg;
+  const struct mcfg_allocation *allocation = &table->allocations[0];
+  if (allocation->segment || allocation->first_bus || !allocation->base ||
+      allocation->base % PCI_ECAM_BUS_BYTES) {
+    klog("PCI: unsupported MCFG base/segment/bus range; discovery disabled\n");
+    return false;
+  }
+
+  /* MCFG's base is relative to bus zero, even for ranges starting elsewhere.
+   * This first platform slice explicitly supports only a range starting at 0. */
+  ecam->physical = allocation->base;
+  ecam->bus_count = (unsigned)allocation->last_bus + 1;
+  return true;
 }
