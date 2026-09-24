@@ -31,7 +31,8 @@ milestone's remaining interface details before starting its code work.
 10. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
     through an init-managed read-only virtio-fs mount and native filesystem
     capabilities. The agreed Q35/ECAM, modern PCI, split-queue and BSP-worker
-    direction is split into nine focused tasks; PCI discovery comes first.
+    direction is split into nine focused tasks. [PCI discovery](../pci.md) is
+    complete; driver-owned PCI resources are next.
 
 This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO

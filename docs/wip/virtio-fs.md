@@ -148,11 +148,12 @@ Each numbered item is an intended PR boundary, not a requirement to combine
 all supporting work into one commit. Split a task further if its review scope
 grows. No later item is implied by completing an earlier one.
 
-1. [ ] **PCI discovery.** Capture MCFG information, implement ECAM reads and
+1. [x] **PCI discovery.** Capture MCFG information, implement ECAM reads and
    enumerate the supported firmware-configured topology. Decode identity,
    capabilities and assigned BAR addresses with named fields. Completion: an
    accurate, concise PCI inventory during an otherwise normal boot; devices
-   remain untouched by discovery.
+   remain untouched by discovery. Implemented behavior and limits are in
+   [PCI discovery](../pci.md).
 2. [ ] **Driver-owned PCI resources.** Add the configuration writes and BAR
    sizing/mapping needed by the selected device, including paired 64-bit BARs
    and capability extent checks. Completion: the driver's register regions are
