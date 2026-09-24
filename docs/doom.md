@@ -1,12 +1,19 @@
 # Doom
 
 The ports repository builds a pinned [doomgeneric](https://github.com/ozkl/doomgeneric)
-with a Pyxis adapter. The ordinary image includes the executable and license,
-but no game data. No wall-clock, PCI, VirtIO or kernel-interface change is needed.
+with a Pyxis adapter. The ordinary image includes the executable and Doom 1.9
+shareware data: run `doom` in the application-space shell to play the first
+episode. No wall-clock, PCI, VirtIO or kernel-interface change is needed.
+
+The unchanged shareware WAD is pinned under `third_party/doom-shareware`, with
+its source, checksums and redistribution terms. Its license and provenance ship
+at `app://share/licenses/doom-shareware/`, separately from the engine's GPL
+license. The shareware license permits free redistribution; it does not grant
+permission to charge for the data or redistribute a retail WAD.
 
 ## Local game data
 
-Supply a WAD you own when building or running:
+Override the shareware data with a WAD you own when building or running:
 
 ```sh
 make run CPUS=4 DOOM_WAD=/shared/assets/doom-wad/DOOM.WAD \
@@ -14,10 +21,10 @@ make run CPUS=4 DOOM_WAD=/shared/assets/doom-wad/DOOM.WAD \
 ```
 
 `DOOM_WAD` is copied to `app://share/doom/DOOM.WAD`. The optional `DOOM_DEMOS`
-directory supplies `e1m1sec.lmp` and `e1m2sec.lmp`; it requires `DOOM_WAD`.
-These are local inputs, not repository files or downloaded dependencies. A
-subsequent build without those overrides removes the staged data from its
-archive. Normal CI builds remain data-free.
+directory supplies `e1m1sec.lmp` and `e1m2sec.lmp`, and can also be used with the
+default shareware WAD. These overrides are local inputs, not repository files.
+A subsequent build without those overrides restores shareware and removes the
+local demos from its archive. Normal CI images include only the shareware data.
 
 In the application-space shell:
 
