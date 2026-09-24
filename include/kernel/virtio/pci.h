@@ -1,6 +1,7 @@
 #ifndef KERNEL_VIRTIO_PCI_H
 #define KERNEL_VIRTIO_PCI_H
 #include <kernel/boot.h>
+#include <kernel/virtio/fs.h>
 
 /* BSP/IF=0 before AP startup. Own resources, negotiate features, prepare masked
  * MSI-X routing and allocate/program both queues. DRIVER_OK and DMA stay clear.
@@ -16,10 +17,14 @@ void virtio_fs_pci_start(void);
 void virtio_fs_pci_interrupt(void);
 
 /* Sole BSP worker, IF=1, no held locks. Copies into owned DMA storage and sleeps
- * for completion, bounded by five seconds. Reply length is checked against the
- * caller's capacity before copying. Returns NULL or a diagnostic; any failure
- * ends the session and requires the worker's stop/reset path before returning.
+ * for completion, bounded by five seconds. Transport/protocol failure stops
+ * the session before returning; storage remains mapped until reboot.
  * No concurrent callers, allocation, user pointers or request cancellation. */
-const char *virtio_fs_pci_request(const void *request, size_t request_bytes,
+enum virtio_fs_result virtio_fs_pci_request(const void *request, size_t request_bytes,
     void *reply, size_t reply_capacity, size_t *reply_bytes);
+/* High-priority FORGET with no device-writable payload; waits for used-ring
+ * completion, not a FUSE reply. Serialized with ordinary requests. */
+enum virtio_fs_result virtio_fs_pci_forget(const void *request, size_t request_bytes);
+/* Same worker context, no published waiter. Idempotent after stopping. */
+void virtio_fs_pci_stop(const char *reason);
 #endif
