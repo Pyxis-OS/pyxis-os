@@ -32,4 +32,5 @@ database. The source/compiler and selection policy are described in
 
 Libc's [local-time conversion](timezones.md) reads this data and its future-rule
 footers. Absent or empty `TZ` means UTC; named zones are selected explicitly.
-Later Lua configuration may supply that preference through the environment.
+The default [session configuration](session-configuration.md) supplies the
+explicit Bucharest selection through the environment.

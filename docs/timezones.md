@@ -22,9 +22,10 @@ a silent UTC fallback. Files are not watched or reloaded while the name remains
 unchanged. The cache assumes the current one-thread-per-process runtime.
 
 The shell forwards its startup environment to children. There is no new shell
-assignment command or timezone syscall. Future [Lua configuration](wip/lua-port.md)
-will supply `TZ` when starting a session. Until then, ordinary startup without
-that variable displays UTC; Bucharest is an explicit selection.
+assignment command or timezone syscall. The default [session configuration](session-configuration.md)
+explicitly selects Bucharest and supplies `TZ` when starting the shell.
+Startup that bypasses the session launcher still uses UTC when `TZ` is absent
+or empty; libc's default has not changed.
 
 ## C interface
 

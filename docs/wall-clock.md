@@ -51,4 +51,4 @@ Host-running TCC continues to use the host's clock and local time.
 
 [Local-time conversion](timezones.md) is provided by userspace. Reverse
 conversion (`mktime`), `strftime`, locale and clock adjustment remain deferred.
-Reads and calendar conversion work independently of future Lua configuration.
+Reads and calendar conversion work independently of [session configuration](session-configuration.md).

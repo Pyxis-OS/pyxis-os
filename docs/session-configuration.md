@@ -2,25 +2,27 @@
 
 `app://session.pxe` is a native userspace launcher that evaluates
 `app://config/session.lua`, applies terminal tab spacing, and hands off to
-`app://shell.pxe`. It accepts no arguments. The default init still starts the
-shell directly; an explicit init script can select the launcher:
+`app://shell.pxe`. It accepts no arguments. The default init script selects it:
 
 ```text
 #!app://shell.pxe
 session app://session.pxe
 ```
 
-Select that host file through `make run INIT=/path/to/init.sh`. A direct native
-init selection also works. Interactive use must go through the shell's
+`make run` uses this path without overrides. `INIT=/path/to/init.sh` can still
+select a different startup script. A direct native init selection also works.
+Interactive use must go through the shell's
 `session app://session.pxe` handoff so the launcher receives launch authority
 and the parent stops using terminal input.
 
-The configuration is Lua text returning exactly one table:
+The installed `userspace/config/session.lua` supplies
+`app://config/session.lua` in the read-only boot archive. Edit that source file
+and rebuild the image to change the system selection. It returns one table:
 
 ```lua
 return {
   timezone = "Europe/Bucharest",
-  terminal = { tab_width = 4 },
+  terminal = { tab_width = 8 },
 }
 ```
 
@@ -57,8 +59,9 @@ child observer and exits without waiting or reading input; the shell owns its
 copied grants and environment. Tab spacing belongs to the shared TTY and survives
 that exit. If applying spacing fails, no shell is launched. If shell launch
 fails afterward, the applied spacing remains; there is no rollback or supervisor.
-`INIT=` can bypass configured startup for recovery. Live reload, defaults packaged
-in the image and switching the default init remain separate work.
+`make run INIT=build/userspace/shell.pxe` bypasses configured startup for recovery.
+The packaged config remains present but is not evaluated. Live reload and
+per-user/space configuration policy remain deferred.
 
 The launcher lives in pyxis-userland and links against `liblua.a` and public
 headers exported by the Lua port. These build inputs travel in the ports bundle
