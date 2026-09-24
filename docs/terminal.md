@@ -52,6 +52,17 @@ line and returns a distinct result, so the caller can explain the loss and retry
 On an output failure, the screen/cursor may be partially updated and must not be
 assumed to match the discarded line.
 
+`term_read_key_timeout` bounds only the wait for the initial byte. Zero polls;
+no initial byte returns `CALL_TIMED_OUT` with `TERM_KEY_UNKNOWN`. Once a byte
+arrives, it uses the same Escape decoding rules as the blocking helper, even
+when decoding extends past the caller's timeout. It never discards a partial
+key merely because that initial timeout elapsed.
+
+Kilo uses this helper with a remaining monotonic deadline to expire transient
+status messages while idle. After clearing a message it blocks indefinitely
+again; active search prompts do not expire. No periodic redraw or polling is
+needed.
+
 ## TTY output controls
 
 The TTY keeps its parser state across writes. The supported subset is:

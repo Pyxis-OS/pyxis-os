@@ -155,8 +155,9 @@ wakeup, and time spent with the VM paused need not count.
 Wall-clock support is still wanted soon. Define boot-time UTC initialization,
 resolution and the user ABI before implementation. Calendar adjustments must
 not change monotonic deadlines. Do not invent a date or expose elapsed time as
-Unix time. TCC's calendar macros remain unavailable; Kilo's persistent status
-messages can be revisited separately now that elapsed time is available.
+Unix time. TCC's calendar macros and `-bench` remain unavailable; enable its
+elapsed-time and calendar features together when wall-clock support is ready.
+Kilo now uses monotonic time for status-message expiry.
 
 HPET MMIO reads can be expensive, especially under virtualization. Consider a
 validated TSC source later, including frequency discovery and cross-CPU
