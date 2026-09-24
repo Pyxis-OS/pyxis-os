@@ -18,8 +18,8 @@ milestone's remaining interface details before starting its code work.
 4. [Filesystem mutations and Doom saves](../filesystem-mutations.md) — complete.
 5. TTY horizontal tabs — complete: eight-column stops, clamped at the right edge,
    without erasing cells or wrapping. See [terminal controls](../terminal.md#tty-output-controls).
-6. [UTC wall-clock and calendar conversion](wall-clock.md): independent monotonic
-   deadlines, ISO date display and TCC's deferred time features.
+6. [UTC wall-clock and calendar conversion](../wall-clock.md) — complete:
+   ISO date display, independent monotonic deadlines and TCC time features.
 7. [Boot archive assembly](boot-archive.md): a dedicated guest staging tree and
    small host Lua manifest, preserving the current archive and guest paths.
 8. [Zoneinfo-backed local time](timezones.md): package the full pinned database,

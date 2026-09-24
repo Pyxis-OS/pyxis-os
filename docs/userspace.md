@@ -166,11 +166,11 @@ and terminal contents remain visible. No shell restart is performed.
 
 Headers under [userspace/libc/include](https://git.internal/chronium/pyxis-userland/src/branch/main/libc/include) define the
 implemented subset: allocation, byte memory operations, string length/comparison/
-search/copy/duplication, integer conversion/formatting, environment lookup and
+search/copy/duplication, numeric conversion/formatting, environment lookup and
 [unbuffered file/terminal stdio](stdio.md).
 `snprintf`/`vsnprintf` report the full required length and terminate a nonempty
-destination even when truncated. Their header lists supported formats; floating
-point, wide characters and locale support are not implemented.
+destination even when truncated. Their header lists supported formats, including
+floating point. Wide characters and locale support are not implemented.
 `errno` is process-local today because there is only one thread per process.
 Native libpyxis calls continue to return native statuses without setting it.
 
@@ -210,7 +210,7 @@ This libc saves only the callee-saved integer registers, stack pointer and retur
 address; it adds no signal-mask handling or kernel context-switch interface.
 
 The initial `<math.h>` subset provides `scalbn`, `scalbnl`, `ldexpl`, `fmodl`,
-`fabsl` and `copysignl`, built from pinned musl sources. They are in libc and need
+`fabsl`, `copysignl` and `frexpl`, built from pinned musl sources. They are in libc and need
 no `-lm`. The SDK uses SSE2 float/double evaluation and x87 80-bit long double.
 Scaling follows the active rounding mode; `fmodl` uses a quotient truncated
 toward zero. Errors use floating-point exception flags (`math_errhandling` is
@@ -236,7 +236,8 @@ and NaN, preserve errno. This conversion errno contract is separate from the
 math helpers' FP-exception-only convention above. The decimal scanner uses an
 8 KiB automatic workspace without heap allocation; it keeps rounding information
 and consumes remaining digits when that workspace fills. Floating-point printf
-and the rest of libm remain outside this subset.
+is described in [stdio](stdio.md#standard-streams-formatting-and-exit); a full
+libm remains deferred.
 
 The allocator separately compiles the project's pinned BSD-3-Clause TLSF source.
 It retains its own MANAGE copy of the named startup memory grant, independent of
@@ -303,8 +304,9 @@ Syscalls preserve it even when they park. AVX/XSAVE state is not supported;
 do not compile for a newer CPU baseline or enable AVX.
 
 Static libgcc provides compiler arithmetic/conversion helpers. This does not
-provide floating-point `printf` or a full libm. The libc conversion/scaling
-subset is described [above](#foundational-libc).
+provide a full libm. The libc conversion/scaling subset is described
+[above](#foundational-libc); floating-point output uses the
+[shared printf formatter](stdio.md#standard-streams-formatting-and-exit).
 There is no public floating-point environment API yet.
 
 Run `mandelbrot` from the shell to render a double-precision Mandelbrot set into

@@ -100,8 +100,8 @@ an ELF for conversion, not a directly runnable PXE. The SDK Make fragment keeps
 explicit startup/archive paths so Make can track them as dependencies.
 
 Hardware `float`, `double` and x87 `long double` arithmetic and compiler libgcc
-helpers are available. Libc floating-point parsing/formatting and libm remain
-separate work. See the [userspace FP contract](userspace.md#floating-point).
+helpers are available. Libc provides floating-point parsing/formatting and a
+small math subset; a full libm remains deferred. See the [userspace FP contract](userspace.md#floating-point).
 
 ## Guest SDK
 

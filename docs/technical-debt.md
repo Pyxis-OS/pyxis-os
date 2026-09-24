@@ -143,13 +143,14 @@ counter. Console timeouts no longer count delivered BSP interrupts. APIC timer
 interrupts still bound wakeup latency; nanosecond units do not promise precise
 wakeup, and time spent with the VM paused need not count.
 
-The [wall-clock milestone](wip/wall-clock.md) precedes
-[zoneinfo-backed local time](wip/timezones.md). Define boot-time UTC initialization,
-resolution and the user ABI before implementation. Calendar adjustments must
-not change monotonic deadlines. Do not invent a date or expose elapsed time as
-Unix time. TCC's calendar macros and `-bench` remain unavailable; enable its
-elapsed-time and calendar features together when wall-clock support is ready.
-Kilo now uses monotonic time for status-message expiry.
+[UTC wall time](wall-clock.md) uses a whole-second Limine RTC seed plus elapsed
+monotonic time. Firmware accuracy, subsecond alignment and boot handoff delay
+are not known; there is no drift correction or resynchronization. Time while the
+VM is paused need not advance. A missing seed is an explicit error, but a
+plausible incorrect RTC value cannot be detected. Future adjustments must not
+change monotonic deadlines. [Zoneinfo-backed local time](wip/timezones.md) follows
+boot archive assembly. TCC now uses UTC calendar macros and monotonic `-bench`;
+Kilo uses monotonic time for status-message expiry.
 
 HPET MMIO reads can be expensive, especially under virtualization. Consider a
 validated TSC source later, including frequency discovery and cross-CPU
@@ -167,6 +168,6 @@ implemented. Interrupted saves can leave temporary files for manual removal.
 
 Configuration persistence is already disabled in the pinned generic engine.
 Re-enabling it needs an explicit writable configuration location and review of
-its parser/formatting requirements. Timedemo reporting currently needs floating
-printf support or a deliberate integer report. These are separate from normal
-gameplay and demo playback; wall-clock time is not a prerequisite.
+its parser/formatting requirements. Floating printf is now available for the
+upstream timedemo report; exercising timedemo remains separate from normal
+gameplay and demo playback. Wall-clock time is not a prerequisite.
