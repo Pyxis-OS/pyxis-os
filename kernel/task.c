@@ -167,16 +167,26 @@ static void enqueue(struct scheduler *scheduler, struct task *task)
 
 struct task_wait *task_wait_prepare(void)
 {
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct task *task = local_scheduler()->current_task;
-  KASSERT(task && task->kind == TASK_USER && !task->exited);
+  KASSERT(task && !task->exited);
+  KASSERT(task->kind == TASK_USER || arch_cpu_index() == 0);
   KASSERT(!task->wait && !task->parked);
   task->wait_record = (struct task_wait){.task = task};
   return &task->wait_record;
 }
 
-struct process_wait *task_prepare_process_wait(void)
+/* Process-specific service requests still require a user task. */
+static struct task_wait *prepare_user_wait(void)
 {
   struct task_wait *wait = task_wait_prepare();
+  KASSERT(wait->task->kind == TASK_USER);
+  return wait;
+}
+
+struct process_wait *task_prepare_process_wait(void)
+{
+  struct task_wait *wait = prepare_user_wait();
   struct task *task = wait->task;
   task->process_wait = (struct process_wait){.wait = wait};
   return &task->process_wait;
@@ -184,7 +194,7 @@ struct process_wait *task_prepare_process_wait(void)
 
 struct console_wait *task_prepare_console_wait(void)
 {
-  struct task_wait *wait = task_wait_prepare();
+  struct task_wait *wait = prepare_user_wait();
   struct console_wait *record = &wait->task->console_wait;
   *record = (struct console_wait){.wait = wait};
   return record;
@@ -204,9 +214,11 @@ bool task_deadline_expired(uint64_t deadline)
 
 static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline)
 {
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct scheduler *scheduler = local_scheduler();
   struct task *task = scheduler->current_task;
-  KASSERT(task == wait->task && task->kind == TASK_USER);
+  KASSERT(task && wait == &task->wait_record && wait->task == task && !task->exited);
+  KASSERT(task->kind == TASK_USER || arch_cpu_index() == 0);
 
   lock_queues();
   if (wait->notified || (timed && task_deadline_expired(deadline))) {
@@ -223,7 +235,9 @@ static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline)
   }
   unlock_queues();
 
-  arch_user_save(&task->cpu);
+  if (task->kind == TASK_USER) {
+    arch_user_save(&task->cpu);
+  }
   arch_context_switch(&task->saved_stack, scheduler->stack);
 }
 
@@ -253,6 +267,7 @@ static void wake_wait_locked(struct task_wait *wait)
 
 void task_wait_wake(struct task_wait *wait)
 {
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   lock_queues();
   if (wait->timed) {
     struct task_wait **link = &timed_waits;
@@ -289,7 +304,7 @@ static void expire_timed_waits(void)
 
 enum capability_result task_grow_capabilities(void)
 {
-  struct task_wait *wait = task_wait_prepare();
+  struct task_wait *wait = prepare_user_wait();
   struct task *task = wait->task;
 
   lock_queues();
@@ -340,7 +355,7 @@ static void queue_directory_request(struct task *task, struct task_wait *wait)
 
 struct directory_entry *task_allocate_directory_entry(uint64_t kind, size_t name_length)
 {
-  struct task_wait *wait = task_wait_prepare();
+  struct task_wait *wait = prepare_user_wait();
   struct task *task = wait->task;
   task->directory_kind = kind;
   task->directory_name_length = name_length;
@@ -354,7 +369,7 @@ struct directory_entry *task_allocate_directory_entry(uint64_t kind, size_t name
 
 struct directory_entry *task_allocate_directory_name(size_t name_length)
 {
-  struct task_wait *wait = task_wait_prepare();
+  struct task_wait *wait = prepare_user_wait();
   struct task *task = wait->task;
   task->directory_name_length = name_length;
   task->directory_action = DIRECTORY_ALLOCATE_NAME;
@@ -367,7 +382,7 @@ struct directory_entry *task_allocate_directory_name(size_t name_length)
 
 void task_discard_directory_entry(struct directory_entry *entry)
 {
-  struct task_wait *wait = task_wait_prepare();
+  struct task_wait *wait = prepare_user_wait();
   struct task *task = wait->task;
   task->directory_action = DIRECTORY_DISCARD;
   task->directory_entry = entry;
@@ -400,7 +415,7 @@ static void service_directory_requests(void)
 
 struct file_wait *task_prepare_file_wait(void)
 {
-  struct task_wait *wait = task_wait_prepare();
+  struct task_wait *wait = prepare_user_wait();
   struct file_wait *record = &wait->task->file_wait;
   *record = (struct file_wait){.wait = wait};
   return record;
@@ -408,7 +423,7 @@ struct file_wait *task_prepare_file_wait(void)
 
 bool task_replace_file_buffer(struct file_object *file, size_t capacity)
 {
-  struct task_wait *wait = task_wait_prepare();
+  struct task_wait *wait = prepare_user_wait();
   struct task *task = wait->task;
   task->file = file;
   task->file_capacity = capacity;
@@ -447,7 +462,7 @@ static void service_file_requests(void)
 enum mm_result task_request_memory(uint64_t operation, struct memory_region *region)
 {
   KASSERT(operation == MEMORY_ALLOCATE || operation == MEMORY_RELEASE);
-  struct task_wait *wait = task_wait_prepare();
+  struct task_wait *wait = prepare_user_wait();
   struct task *task = wait->task;
   KASSERT(!task->memory_pending);
   task->memory_operation = operation;
@@ -507,7 +522,7 @@ static void service_memory_requests(void)
 enum call_status task_request_display(struct display_object *display,
     uint64_t operation, struct display_buffer *reply)
 {
-  struct task_wait *wait = task_wait_prepare();
+  struct task_wait *wait = prepare_user_wait();
   struct task *task = wait->task;
   KASSERT(!task->display_pending);
   task->display = display;
@@ -559,7 +574,7 @@ static void service_display_requests(void)
 static struct task *request_launch_service(enum launch_action action,
                                             struct launch_capture *capture)
 {
-  struct task_wait *wait = task_wait_prepare();
+  struct task_wait *wait = prepare_user_wait();
   struct task *task = wait->task;
   task->launch_action = action;
   task->launch_capture = capture;
