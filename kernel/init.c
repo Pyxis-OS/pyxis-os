@@ -8,6 +8,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/vm.h>
+#include <kernel/net/interface.h>
 #include <kernel/object/clock.h>
 #include <kernel/panic.h>
 #include <kernel/pci.h>
@@ -40,7 +41,12 @@
 
   virtio_fs_pci_start();
 
-  enum mm_result result = kernel_task_create(space_present_task, NULL);
+  enum mm_result result = net_init();
+  if (result != MM_OK) {
+    klog("net: cannot create worker (error %u); networking unavailable\n", (unsigned)result);
+  }
+
+  result = kernel_task_create(space_present_task, NULL);
   if (result != MM_OK) {
     panic("cannot create presentation task (error %u)", (unsigned)result);
   }

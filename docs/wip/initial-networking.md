@@ -78,16 +78,18 @@ still owned by the device.
 
 ## Decisions before implementation
 
-- **Network scope:** start with one system-wide stack and loopback, or separate
-  network domains? Decide what processes in different spaces share. Capability
-  checks do not by themselves isolate addresses, routes or local services.
-  Do not add speculative namespace fields while this remains undecided.
-- **Stack implementation:** choose a focused in-tree protocol subset or a pinned
-  existing implementation before selecting internal packet structures. No new
-  third-party stack is selected by this document.
-- **Interface and packet ownership:** define registration/lifetime, worker queues,
-  buffer budgets, queue-full behavior and who owns a packet on every return path.
-  Settle these before task 1.
+The task 1 decisions are settled: one system-wide stack with shared interfaces,
+routes and loopback; a small in-tree Ethernet/ARP/IPv4/ICMP implementation; and
+one BSP worker with bounded queues. Spaces do not yet have network isolation.
+Reconsider existing stack implementations before the later TCP milestone.
+
+Packet lifetime, queue ownership and the initial budgets are implemented in
+[network interfaces and loopback delivery](../networking.md). There is one
+boot-lifetime loopback descriptor; no speculative interface registry or
+namespace fields are needed yet.
+
+Remaining decisions:
+
 - **IPv4 subset:** define source-address selection, local delivery to assigned
   external addresses, route precedence, MTU limits and behavior for unsupported
   options/fragments. Check lengths, byte order and checksums before access.
@@ -107,9 +109,13 @@ still owned by the device.
 
 ## Proposed focused PRs
 
-1. [ ] **Interfaces, packet ownership and deferred loopback.** Resolve scope and
+1. [x] **Interfaces, packet ownership and deferred loopback.** Resolve scope and
    implementation ownership first, then introduce the small interface/packet
    boundary and local delivery queue. No hardware dependency or boot-time probe.
+   Implemented a 32-packet software allocation budget, 16-entry loopback queue,
+   event-driven BSP worker and yield after eight deliveries. Send errors retain
+   caller ownership. The worker explicitly discards unsupported input; IPv4
+   processing and addressing remain task 2. See the [current contract](../networking.md).
    Validate with ordinary builds/boots and debugger inspection.
 2. [ ] **Local IPv4 routing and ICMP echo.** Add the selected packet validation,
    local routing and echo processing on the common IP path, with explicit limits
@@ -133,7 +139,7 @@ These are review boundaries, not a requirement to land unused scaffolding.
 Adjust or subdivide a task when its concrete caller or ownership contract makes
 that clearer. Add no test framework, packet injection harness, boot probes or
 output automation. On completion, consolidate the implemented contract and usage
-into `docs/networking.md`; Git retains this plan.
+into the existing `docs/networking.md` reference; Git retains this plan.
 
 ## Follow-up milestones
 
