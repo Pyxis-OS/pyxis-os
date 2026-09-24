@@ -308,6 +308,25 @@ static struct syscall_result read_console(struct console_object *console,
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
+static struct syscall_result set_tab_width(struct console_object *console,
+    const struct console_tab_width_request *request)
+{
+  if (request->columns < CONSOLE_TAB_WIDTH_MIN || request->columns > CONSOLE_TAB_WIDTH_MAX) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+
+  bool locked = log_begin();
+  if (!locked) {
+    return (struct syscall_result){CALL_UNAVAILABLE, 0};
+  }
+  bool initialized = console->tty->initialized;
+  if (initialized) {
+    console->tty->tab_width = request->columns;
+  }
+  log_end(locked);
+  return (struct syscall_result){initialized ? CALL_OK : CALL_UNAVAILABLE, 0};
+}
+
 struct syscall_result console_call(struct console_object *console, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
@@ -316,6 +335,7 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   switch (operation) {
   case CONSOLE_WRITE:
   case CONSOLE_FRESH_LINE:
+  case CONSOLE_SET_TAB_WIDTH:
     required = CONSOLE_RIGHT_WRITE;
     break;
   case CONSOLE_READ:
@@ -343,6 +363,9 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   }
   if (operation == CONSOLE_READ) {
     return read_console(console, &request.read, reply_address, reply_capacity);
+  }
+  if (operation == CONSOLE_SET_TAB_WIDTH) {
+    return set_tab_width(console, &request.tab_width);
   }
 
   if (operation == CONSOLE_FRESH_LINE) {

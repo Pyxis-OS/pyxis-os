@@ -19,6 +19,7 @@ enum tty_escape_state {
 };
 
 #define TTY_CSI_PARAMETERS 4
+#define TTY_DEFAULT_TAB_WIDTH 8
 
 struct tty
 {
@@ -27,6 +28,7 @@ struct tty
 
   uint16_t width;
   uint16_t height;
+  uint16_t tab_width; /* Nonzero; changes share the TTY output lock. */
 
   /* Colors use 0xRRGGBB, independent of the framebuffer channel layout. */
   uint32_t fg;
