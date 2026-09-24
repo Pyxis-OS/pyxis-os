@@ -23,6 +23,14 @@ Deleting a name inherited from a lower layer requires an overlay record that
 hides that name. Simply removing the upper copy would expose the lower one
 again. Directory merging, rename and replacement semantics remain open.
 
+A concrete follow-up candidate is a
+[host-backed development overlay](wip/virtio-fs.md#follow-up-host-backed-development-overlay)
+above the boot archive, exposed through the existing `app://` namespace. Host
+builds could publish replacement programs without rebuilding the ISO, while
+the guest keeps read-only access. This remains an opt-in experiment after the
+plain virtio-fs mount; it does not implement the full private-overlay or system
+publication model described here.
+
 ## Publishing system updates
 
 An explicit operation could promote selected overlay content into the shared
