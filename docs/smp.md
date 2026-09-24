@@ -137,16 +137,18 @@ address space with interrupts enabled. The timer can preempt it; returning from
 entry retires its stack and metadata through the same scheduler cleanup path.
 The argument is borrowed, so its owner must keep it alive until entry returns.
 
-`kernel_task_sleep(ticks)` suspends the current kernel task until that many BSP
-timer interrupts have been delivered. Zero ticks yields to other ready tasks.
+`kernel_task_sleep_until(deadline)` suspends the current kernel task until an
+absolute monotonic nanosecond deadline. A past deadline yields to ready tasks.
 Sleeping tasks are checked both by the BSP scheduler and by timer preemption,
 so a busy task cannot prevent a sleeper from becoming runnable. Sleep requires
 interrupts enabled and no held locks. The [task header](../include/kernel/task.h)
 defines the calling contracts.
 
 Framebuffer presentation is the first BSP kernel task. It copies the active
-space and sleeps for two local timer ticks between copies. Rendering stays out
-of interrupt entry and the scheduler does not know about display timing.
+space on a roughly 60 Hz monotonic deadline schedule, skipping missed frames.
+Rendering stays out of interrupt entry; APIC interrupts still bound wakeup
+latency. The scheduler does not know about display timing. See
+[timekeeping](timekeeping.md) for the clock and deadline contracts.
 
 ## Memory and output boundaries
 

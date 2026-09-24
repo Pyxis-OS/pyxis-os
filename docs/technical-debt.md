@@ -145,16 +145,21 @@ scope, lifetime and behavior across mounts and file replacement before exposing
 it; do not substitute normalized path strings or add `realpath` just for TCC.
 See [the TCC contract](tcc.md#remaining-limits).
 
-## Timekeeping beyond delivered timer ticks
+## Wall-clock time and clock-source performance
 
-Bounded console reads currently count BSP timer interrupts at the configured
-frequency. This is sufficient for coarse Escape-sequence timeouts, but long
-interrupt-disabled sections or suspended VMs can extend a wait in real time.
-There is no userspace monotonic-clock query or wall-clock interface yet.
+[Monotonic time and deadline sleep](timekeeping.md) now use the shared HPET
+counter. Console timeouts no longer count delivered BSP interrupts. APIC timer
+interrupts still bound wakeup latency; nanosecond units do not promise precise
+wakeup, and time spent with the VM paused need not count.
 
-Wall-clock support is wanted soon, alongside a deliberate monotonic time source
-for deadlines. Define the hardware source, boot-time UTC initialization,
-resolution and user ABI before implementation. Clock adjustments must not change
-relative wait deadlines. Do not invent a date or expose scheduler tick counts as
-Unix time. The Kilo plan currently proposes persistent status messages until an
-appropriate elapsed-time facility can replace that temporary limitation.
+Wall-clock support is still wanted soon. Define boot-time UTC initialization,
+resolution and the user ABI before implementation. Calendar adjustments must
+not change monotonic deadlines. Do not invent a date or expose elapsed time as
+Unix time. TCC's calendar macros remain unavailable; Kilo's persistent status
+messages can be revisited separately now that elapsed time is available.
+
+HPET MMIO reads can be expensive, especially under virtualization. Consider a
+validated TSC source later, including frequency discovery and cross-CPU
+consistency, without changing the clock protocol. The current source requires
+a 64-bit, memory-mapped HPET; there is no source registry or fallback. VirtIO
+RTC remains deferred until PCI/VirtIO infrastructure exists.

@@ -134,7 +134,8 @@ The shell expects named `input`, `output`, `memory` and `launcher` resources,
 plus `app` and `home` roots. Input/output are separate console READ/WRITE grants;
 memory permits MANAGE and launcher permits LAUNCH. The app root supplies LOOKUP,
 ENUMERATE and READ_FILES. Home additionally supplies CREATE and WRITE_FILES.
-An optional `display` resource supplies DRAW authority for the space.
+An optional `display` resource supplies DRAW authority for the space. An optional
+`clock` resource supplies READ and SLEEP authority for monotonic time.
 This first shell has explicit policies for these two namespaces.
 
 An initial directory chain is copied from startup, preserving its navigation
@@ -147,8 +148,9 @@ rights. Crossing a retained ancestor boundary fails as in the native path API.
 
 Each foreground child receives explicit copies of terminal input/output, memory, both roots
 with the rights above, and the current directory chain. It does not receive the
-shell's launcher. When available, the [display grant](graphics.md) is also
-forwarded to children and session successors. The immutable initial environment is forwarded in full using
+shell's launcher. When available, the [display grant](graphics.md) and
+[clock grant](timekeeping.md) are also forwarded to children and session successors.
+The immutable initial environment is forwarded in full using
 libpyxis's borrowed environment-array accessors. No environment mutation or PWD
 maintenance is implemented. Children receive the full current working-path
 display string alongside their directory handles. Display normalization removes

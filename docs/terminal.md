@@ -110,10 +110,10 @@ and waiting for input. Available ownership/input wins a race with expiry when
 observed under the console lock. Reader ownership remains FIFO; a timed-out
 queued reader removes itself before its task wait record can be reused.
 
-Deadlines use delivered BSP timer ticks at the nominal timer frequency. Positive
-intervals round upward, including a tick for the current phase. Expiry and task
-resumption can be late if interrupts or scheduling are delayed. These are coarse
-relative waits, not a wall clock or elapsed-host-time guarantee under VM pauses.
+Deadlines use the shared [monotonic clock](timekeeping.md). Expiry and task
+resumption can be late if interrupts or scheduling are delayed, but missing
+interrupts no longer loses elapsed time. These waits do not provide a calendar
+clock or an elapsed-host-time guarantee under VM pauses.
 The scheduler retains its wake-before-park rule: timeout cannot enqueue a task
 until its stack has been saved. Resource wait pointers are detached under the
 console lock before the task prepares another wait.
