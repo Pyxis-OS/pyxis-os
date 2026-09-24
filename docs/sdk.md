@@ -2,7 +2,7 @@
 
 `make sdk` exports `build/sdk` using the prebuilt `x86_64-unknown-pyxis-`
 [toolchain](../toolchain/README.md). `make userspace` builds that SDK first, then
-applications against it; `make image` continues through initrd and ISO assembly.
+the ports development files and applications against it; `make image` continues through initrd and ISO assembly.
 GCC and binutils remain prebuilt; image builds also build the guest TCC port. Initialize the [userspace submodule](sdk-and-repositories.md)
 with `git submodule update --init userspace` before building the SDK.
 
@@ -55,8 +55,12 @@ After `make sdk`, build individual applications with:
 ```sh
 make -C userspace SDK=../build/sdk BUILD=../build/userspace shell
 make -C userspace SDK=../build/sdk BUILD=../build/userspace hello client server
-make -C /path/to/pyxis-userland SDK=/path/to/sdk all
+make -C /path/to/pyxis-userland SDK=/path/to/sdk LUA_PREFIX=/path/to/ports-dev/lua all
 ```
+
+The `session` application also consumes Lua headers and `liblua.a` through
+`LUA_PREFIX`, exported by the ports build. Other application targets can still
+build with the SDK alone.
 
 The userspace Makefile now builds applications only. It consumes a complete SDK
 and does not build the converter or runtime. `SDK` defaults to `build/sdk`

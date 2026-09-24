@@ -16,6 +16,8 @@ LUA_INPUTS := $(wildcard ports/lua/*.lua ports/lua/*.c ports/lua/*.h \
                         ports/lua/Makefile ports/lua/patches/*.patch) ports/ports.lua ports/build.lua
 LUA_IMAGE := build/ports/lua/stage/bin/lua.pxe
 LUA_LICENSE := build/ports/lua/stage/share/licenses/lua/lua.h
+LUA_DEVELOP := $(addprefix build/ports/lua/stage/dev/,lib/liblua.a \
+               include/lua.h include/luaconf.h include/lauxlib.h include/lualib.h)
 
 TCC_STAGE := build/ports/tcc/stage
 TCC_OUTPUTS := $(addprefix $(TCC_STAGE)/,bin/tcc.pxe lib/tcc/libtcc1.a \
@@ -32,7 +34,7 @@ TZDATA_OUTPUTS := $(addprefix $(TZDATA_STAGE)/,share/zoneinfo/UTC \
 
 .PHONY: all
 all: $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
-     $(LUA_IMAGE) $(LUA_LICENSE) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS)
+     $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.
@@ -50,7 +52,7 @@ $(TCC_OUTPUTS) &: $(TCC_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/tcc
 	$(LUA) ports/build.lua tcc --sdk $(abspath build/sdk) --work $(abspath build/ports/tcc)
 
-$(LUA_IMAGE) $(LUA_LICENSE) &: $(LUA_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+$(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) &: $(LUA_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	@command -v $(LUA) >/dev/null 2>&1 || { \
 	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
 	rm -rf build/ports/lua

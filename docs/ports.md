@@ -34,11 +34,13 @@ command `kilo` to that executable. The ports-owned `install.lua` selects guest
 payloads into a dedicated tree, which the root [archive manifest](boot-archive.md)
 combines with userland and the guest SDK. Intermediate and host outputs stay out.
 Fresh staging removes obsolete files and preserves unchanged output timestamps. Kernel-only
-`make`, `make sdk` and `make userspace` do not build ports.
+`make` and `make sdk` do not build ports. `make userspace` now consumes the
+Lua development files from the ports build, in addition to the SDK.
 
 The root workflow has a separate ports job consuming the SDK job's artifact.
-It publishes an [independent bundle](build-bundles.md), which the image job or a
-local build can consume without compiling ports again. Source checkout uses
+It publishes a [bundle](build-bundles.md) containing separate boot and
+development trees. The userland job consumes its Lua library/headers; the image
+job consumes only its boot tree. Both can reuse it without compiling ports again. Source checkout uses
 `PYXIS_SOURCE_READ_TOKEN`. Cross-repository dispatch remains future work.
 
 ## Editing in Pyxis

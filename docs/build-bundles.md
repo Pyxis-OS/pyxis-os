@@ -2,15 +2,15 @@
 
 The root workflow has separate kernel, SDK, userland and ports jobs, each
 publishing its own tar bundle. Kernel and SDK builds can run independently;
-userland and ports consume the SDK job's bundle. The final image job downloads
-all four and assembles the ISO without compiling them again.
+ports consumes the SDK bundle, then userland consumes both SDK and ports. The
+final image job downloads all four and assembles the ISO without compiling them again.
 
 | Job / artifact | Local target | Tar payload |
 | --- | --- | --- |
 | kernel / pyxis-kernel | `make bundle-kernel` | `build/caelum.elf` |
 | sdk / pyxis-sdk | `make bundle-sdk` | `build/sdk` |
 | userland / pyxis-userland | `make bundle-userspace` | `build/userspace-root` |
-| ports / pyxis-ports | `make bundle-ports` | `build/ports-root` |
+| ports / pyxis-ports | `make bundle-ports` | `build/ports-root`, `build/ports-dev` |
 
 Archives are written to `build/bundles/{kernel,sdk,userspace,ports}.tar`.
 Each also contains its `build/bundle-info` record and payload checksum list.
@@ -48,9 +48,16 @@ A fully bundled image needs neither initialized source submodules nor a target
 compiler, but still needs the normal host assembly/boot tools and repository
 bootloader/data files.
 
+The ports bundle separates boot contents (`ports-root`) from development files
+(`ports-dev`). Lua provides its static library and public headers under
+`ports-dev/lua`; these do not enter the boot archive or the SDK. Standalone
+userland builds receive this prefix through `LUA_PREFIX`. SDK runtime builds
+remain independent of ports, so there is no dependency cycle.
+
 Recorded payload checksums do not depend on timestamps. Application and ports
 bundles record the exact SDK content identity; image assembly also checks that
-the kernel and SDK ABI/format headers match. Mismatches fail rather than silently
+the kernel and SDK ABI/format headers match. Userland also records and verifies
+the Lua development files used for its session launcher. Mismatches fail rather than silently
 building a different component. Records include source revisions, dirty state
 and local change hashes, selected builder image, and relevant compiler/flag
 provenance. These checks establish matching inputs, not a cryptographic trust
