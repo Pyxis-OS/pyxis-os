@@ -3,8 +3,10 @@
 #include <kernel/log.h>
 #include <kernel/net/interface.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/echo.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include <stdatomic.h>
 
 #define NET_WORK_BUDGET 8
 
@@ -13,15 +15,49 @@ const struct net_interface net_loopback = {
   .mtu = NET_PACKET_MAX_BYTES,
 };
 
-/* BSP/IF=0 serializes queue publication and the worker's wait handoff.
+/* BSP/IF=0 serializes packet queue publication.
  * The queue owns its pointers; interface metadata survives until reboot. */
 static struct {
   struct net_packet *packets[NET_RECEIVE_QUEUE_LIMIT];
   size_t head, count;
-  struct task_wait *wait;
-  bool ready;
   uint64_t submitted, received, queue_full;
 } loopback;
+
+/* AP echo submissions also wake this worker. Notification is remembered across
+ * the gap between checking protocol work and publishing the worker wait. */
+static atomic_bool worker_ready, worker_locked;
+static struct task_wait *worker_wait;
+static bool worker_notified;
+
+static void lock_worker(void)
+{
+  while (atomic_exchange_explicit(&worker_locked, true, memory_order_acquire)) {
+    __asm__ volatile("pause");
+  }
+}
+
+static void unlock_worker(void)
+{
+  atomic_store_explicit(&worker_locked, false, memory_order_release);
+}
+
+bool net_worker_available(void)
+{
+  return atomic_load_explicit(&worker_ready, memory_order_acquire);
+}
+
+void net_worker_notify(void)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  lock_worker();
+  worker_notified = true;
+  if (worker_wait) {
+    struct task_wait *wait = worker_wait;
+    worker_wait = NULL;
+    task_wait_wake(wait);
+  }
+  unlock_worker();
+}
 
 enum net_result net_transmit(const struct net_interface *interface,
     struct net_packet *packet)
@@ -32,7 +68,7 @@ enum net_result net_transmit(const struct net_interface *interface,
       packet->length > net_loopback.mtu) {
     return NET_INVALID;
   }
-  if (!loopback.ready) {
+  if (!net_worker_available()) {
     return NET_UNAVAILABLE;
   }
   if (loopback.count == NET_RECEIVE_QUEUE_LIMIT) {
@@ -44,32 +80,50 @@ enum net_result net_transmit(const struct net_interface *interface,
   loopback.packets[tail] = packet;
   ++loopback.count;
   ++loopback.submitted;
-  if (loopback.wait) {
-    struct task_wait *wait = loopback.wait;
-    loopback.wait = NULL;
-    task_wait_wake(wait);
-  }
+  net_worker_notify();
   return NET_OK;
 }
 
-/* Sole BSP worker, IF=1. Check and publish the wait with producer access
- * excluded, so a packet arriving before park cannot leave the worker asleep. */
+/* Sole BSP worker, IF=1. Packet ownership remains serialized by BSP/IF=0. */
 static struct net_packet *next_packet(void)
 {
   uint64_t flags = cpu_save_interrupts();
-  while (!loopback.count) {
-    struct task_wait *wait = task_wait_prepare();
-    loopback.wait = wait;
-    task_wait_sleep(wait);
-    loopback.wait = NULL;
+  struct net_packet *packet = NULL;
+  if (loopback.count) {
+    packet = loopback.packets[loopback.head];
+    loopback.packets[loopback.head] = NULL;
+    loopback.head = (loopback.head + 1) % NET_RECEIVE_QUEUE_LIMIT;
+    --loopback.count;
   }
-
-  struct net_packet *packet = loopback.packets[loopback.head];
-  loopback.packets[loopback.head] = NULL;
-  loopback.head = (loopback.head + 1) % NET_RECEIVE_QUEUE_LIMIT;
-  --loopback.count;
   cpu_restore_interrupts(flags);
   return packet;
+}
+
+static void wait_for_work(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  uint64_t deadline;
+  bool timed = net_echo_next_deadline(&deadline);
+  lock_worker();
+  if (worker_notified || loopback.count || (timed && task_deadline_expired(deadline))) {
+    worker_notified = false;
+    unlock_worker();
+    cpu_restore_interrupts(flags);
+    return;
+  }
+  struct task_wait *wait = task_wait_prepare();
+  worker_wait = wait;
+  unlock_worker();
+
+  if (!timed) {
+    task_wait_sleep(wait);
+  } else {
+    task_wait_sleep_until(wait, deadline);
+  }
+  lock_worker();
+  worker_wait = NULL;
+  unlock_worker();
+  cpu_restore_interrupts(flags);
 }
 
 static void receive_packet(struct net_packet *packet)
@@ -85,25 +139,33 @@ static void receive_packet(struct net_packet *packet)
 static void network_worker(void *argument)
 {
   (void)argument;
-  unsigned handled = 0;
   for (;;) {
-    struct net_packet *packet = next_packet();
-    receive_packet(packet);
-    if (++handled == NET_WORK_BUDGET) {
-      handled = 0;
+    bool serviced = net_echo_service();
+    unsigned handled = 0;
+    while (handled < NET_WORK_BUDGET) {
+      struct net_packet *packet = next_packet();
+      if (!packet) {
+        break;
+      }
+      receive_packet(packet);
+      ++handled;
+    }
+    if (serviced || handled == NET_WORK_BUDGET) {
       /* A past deadline yields without imposing an extra timer delay. */
       kernel_task_sleep_until(0);
+    } else {
+      wait_for_work();
     }
   }
 }
 
 enum mm_result net_init(void)
 {
-  KASSERT(arch_cpu_index() == 0 && !loopback.ready);
+  KASSERT(arch_cpu_index() == 0 && !net_worker_available());
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   enum mm_result result = kernel_task_create(network_worker, NULL);
   if (result == MM_OK) {
-    loopback.ready = true;
+    atomic_store_explicit(&worker_ready, true, memory_order_release);
     klog("net: lo 127.0.0.1/8 MTU=%zu, IPv4/ICMP worker ready\n", net_loopback.mtu);
   }
   return result;

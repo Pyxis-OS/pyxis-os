@@ -2,6 +2,7 @@
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/net/icmp.h>
+#include <kernel/net/echo.h>
 #include <kernel/panic.h>
 #include "wire.h"
 
@@ -84,8 +85,10 @@ void net_icmp_receive(uint32_t source, uint32_t destination,
     return;
   }
   if (header->type == ICMP_ECHO_REPLY) {
-    /* The next slice supplies application reply matching and completion. */
     ++icmp_stats.replies;
+    net_echo_receive(source, destination, net_read_u16(header->identifier),
+        net_read_u16(header->sequence), message + ICMP_ECHO_HEADER_SIZE,
+        length - ICMP_ECHO_HEADER_SIZE);
     return;
   }
 

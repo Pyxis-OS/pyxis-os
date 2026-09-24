@@ -3,6 +3,8 @@
 #include <kernel/virtio/pci.h>
 #include <kernel/object/keyboard.h>
 #include <abi/clock.h>
+#include <abi/echo.h>
+#include <kernel/object/echo.h>
 #include <kernel/object/clock.h>
 #include <abi/launcher.h>
 #include <abi/display.h>
@@ -73,7 +75,7 @@ void user_launch_initial(void)
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
   struct file_object *script_file = NULL;
-  struct kernel_object *mount = NULL;
+  struct kernel_object *mount = NULL, *echo = NULL;
 
   if (initrd_tree_create(&application_root) != INITRD_OK) {
     goto fail;
@@ -97,12 +99,13 @@ void user_launch_initial(void)
   memory = memory_create();
   launcher = launcher_create();
   clock = clock_create();
-  if (!memory || !launcher || !clock) {
+  echo = echo_create();
+  if (!memory || !launcher || !clock || !echo) {
     goto fail;
   }
 
   handle_t input, output, memory_handle, launcher_handle, display_handle, app, home;
-  handle_t clock_handle, keyboard_handle;
+  handle_t clock_handle, keyboard_handle, echo_handle;
   handle_t script_handle = HANDLE_INVALID;
   struct kernel_object *console = &process->space->console->object;
   if (capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &input) != CAP_OK ||
@@ -110,6 +113,7 @@ void user_launch_initial(void)
       capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, &memory_handle) != CAP_OK ||
       capability_install(&process->capabilities, &process->space->keyboard->object,
           KEYBOARD_RIGHT_INPUT, &keyboard_handle) != CAP_OK ||
+      capability_install(&process->capabilities, echo, ECHO_RIGHT_SEND, &echo_handle) != CAP_OK ||
       capability_install(&process->capabilities, clock, CLOCK_RIGHTS, &clock_handle) != CAP_OK ||
       capability_install(&process->capabilities, launcher, LAUNCHER_RIGHT_LAUNCH, &launcher_handle) != CAP_OK ||
       capability_install(&process->capabilities, &process->space->display->object,
@@ -143,6 +147,8 @@ void user_launch_initial(void)
     object_release(&script_file->object);
     script_file = NULL;
   }
+  object_release(echo);
+  echo = NULL;
   object_release(clock);
   clock = NULL;
   object_release(memory);
@@ -150,16 +156,17 @@ void user_launch_initial(void)
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[9] = {
+  struct process_binding resources[10] = {
     {"input", input},
     {"output", output},
     {"memory", memory_handle},
     {"launcher", launcher_handle},
     {"display", display_handle},
     {"clock", clock_handle},
+    {"echo", echo_handle},
     {"keyboard", keyboard_handle},
   };
-  size_t resource_count = 7;
+  size_t resource_count = 8;
   if (script_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"script", script_handle};
   }
@@ -195,6 +202,9 @@ void user_launch_initial(void)
   return;
 
 fail:
+  if (echo) {
+    object_release(echo);
+  }
   if (mount) {
     object_release(mount);
   }

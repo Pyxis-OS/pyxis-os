@@ -1,4 +1,5 @@
 #include <abi/mount.h>
+#include <abi/echo.h>
 #include <abi/keyboard.h>
 #include <abi/clock.h>
 #include <abi/display.h>
@@ -34,6 +35,8 @@ bool object_rights_valid(enum object_type type, uint64_t rights)
     return !(rights & ~KEYBOARD_RIGHT_INPUT);
   case OBJECT_MOUNT:
     return !(rights & ~MOUNT_RIGHT_OPEN_ROOT);
+  case OBJECT_ECHO:
+    return !(rights & ~ECHO_RIGHT_SEND);
   case OBJECT_CLOCK:
     return !(rights & ~CLOCK_RIGHTS);
   case OBJECT_DISPLAY:
