@@ -58,14 +58,36 @@ shifts and pitch. Presentation retains the existing single-buffer contract;
 tearing is possible. There is no display refresh synchronization or pixel-aspect
 correction.
 
+## Saves
+
+F2 opens the save menu; F3 opens load. F6 selects a quicksave slot on its first
+use, then F6/Y overwrites it and F9/Y reloads it. Quit and run `doom` again to
+load the same slots, or use `doom -loadgame 0` for the first slot (slots 0–5).
+
+Saves live under `home://doom/saves/<iwad-name>/`. Shareware uses `doom1.wad`,
+registered/Ultimate Doom uses `doom.wad`, and other missions use upstream's
+canonical IWAD name. The engine detects the game mode from the data; renaming
+the input WAD does not mix shareware and retail saves. The first save creates
+these directories using the `home` capability. Saves survive process exit,
+**not reboot**: the filesystem is still RAM-backed.
+
+A save writes its own exclusively reserved temporary file, checks writes and
+close, then atomically replaces the destination. Failure preserves the previous
+save and reports an error. Simultaneous saves to the same slot use the last
+successful replacement. An interrupted save can leave `temp-*.dsg` files, which
+can be removed manually; later saves do not reuse those names.
+
+The upstream format assumes trusted saves and matching game data. Short reads
+stop with an error and slot descriptions are bounded, but the parser is not
+hardened against arbitrary malformed files. Different PWADs on the same IWAD
+still share slots. See [filesystem mutations](filesystem-mutations.md) for the
+native removal/replacement semantics.
+
 ## Boundaries
 
-This is single-player keyboard gameplay and demo playback. No audio, networking,
-mouse, save/load, configuration persistence, demo recording or timedemo reporting.
-Save/load menus report that the feature is unavailable. The corresponding
-command-line load/record options and alternate pixel-format/scaling options are
-rejected; no successful save is fabricated. See the ports recipe's README for
-source pin, patch scope and build details.
-
-Save-game replacement needs native filesystem removal/rename semantics before
-it can be exposed through libc; this is tracked in [technical debt](technical-debt.md#doom-save-games-and-configuration).
+This is single-player keyboard gameplay, save/load and demo playback. No audio,
+networking, mouse, configuration persistence, demo recording or timedemo
+reporting. Recording, timedemo and alternate pixel-format/scaling options are
+rejected. See the ports recipe's README for source pin, patch scope and build
+details. Configuration and timedemo remain in
+[technical debt](technical-debt.md#doom-configuration-and-save-format-limits).

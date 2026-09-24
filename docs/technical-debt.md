@@ -165,15 +165,13 @@ consistency, without changing the clock protocol. The current source requires
 a 64-bit, memory-mapped HPET; there is no source registry or fallback. VirtIO
 RTC remains deferred until PCI/VirtIO infrastructure exists.
 
-## Doom save games and configuration
+## Doom configuration and save-format limits
 
-The first [Doom port](doom.md) deliberately disables save/load. Upstream writes
-a temporary save, removes the old name, then renames the temporary file. Native
-directory protocol now supports removal and atomic file rename/replacement,
-including preserved open-handle lifetime and libc remove/rename. Doom adaptation
-remains the next step before save/load can be enabled. The [mutation milestone](wip/filesystem-mutations.md)
-records the agreed rights, replacement and save-location contracts. Do not fake
-success or silently substitute a less reliable direct overwrite.
+[Doom save/load](doom.md#saves) now uses checked temporary writes and atomic
+replacement through the [RAM filesystem](filesystem-mutations.md). Saves remain
+volatile across reboot. The upstream parser assumes trusted saves matching the
+loaded game data; full malformed-file validation and separation by PWAD are not
+implemented. Interrupted saves can leave temporary files for manual removal.
 
 Configuration persistence is already disabled in the pinned generic engine.
 Re-enabling it needs an explicit writable configuration location and review of

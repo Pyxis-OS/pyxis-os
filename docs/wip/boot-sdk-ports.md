@@ -15,8 +15,10 @@ milestone's remaining interface details before starting its code work.
 3. [Port recipes and Kilo](../ports.md) — complete: pinned host Lua recipes,
    SDK-based Kilo build and ordinary boot-archive integration. The
    [edit/build/run workflow](../edit-build-run.md) with TCC is also complete.
-4. [Filesystem mutations and Doom saves](filesystem-mutations.md), followed by
-   TTY tab handling and wall-clock time.
+4. [Filesystem mutations and Doom saves](../filesystem-mutations.md) — complete.
+   Next: TTY horizontal tabs, then wall-clock time with UTC initialization and
+   adjustment semantics independent of monotonic deadlines, enabling TCC's
+   deferred calendar features. See [technical debt](../technical-debt.md).
 5. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
    through an init-managed virtio-fs mount and native filesystem capabilities.
 
@@ -79,6 +81,6 @@ technical-debt document. Do not retain a duplicate archive of the old plan.
 
 ## Existing context
 
-- [Completed first-shell milestone](first-shell.md).
+- [Shell, filesystem and application runtime](../first-shell.md).
 - [Earlier development candidates](development-paths.md).
 - [Filesystem direction](../vfs.md) and [space direction](../spaces.md).
