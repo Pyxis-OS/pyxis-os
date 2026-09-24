@@ -26,9 +26,9 @@ void task_wait_sleep(struct task_wait *wait);
 /* Any CPU, IF=0, after detaching the record under its resource lock. */
 void task_wait_wake(struct task_wait *wait);
 
-/* Deadlines use delivered BSP timer ticks, not wall time. Positive millisecond
- * intervals round upward with one extra tick for the current tick's phase.
- * Use one deadline across all waits within an operation. */
+/* Absolute monotonic nanosecond deadlines. Relative conversion saturates on
+ * overflow. Use one deadline across all waits within an operation. Expiry is
+ * checked during BSP scheduling/timer interrupts; wakeup may be late. */
 uint64_t task_deadline_after_ms(uint32_t milliseconds);
 bool task_deadline_expired(uint64_t deadline);
 /* As sleep, but also resumes at deadline. After return, the caller MUST detach
@@ -91,9 +91,9 @@ void task_init(void);
  * As elsewhere in the kernel, FP/SIMD use is forbidden. */
 enum mm_result kernel_task_create(void (*entry)(void *), void *argument);
 
-/* Current BSP kernel task only, IF=1. Sleep for delivered local timer ticks;
- * zero ticks yields to the end of the ready queue. Resumes with IF=1. */
-void kernel_task_sleep(uint64_t ticks);
+/* Current BSP kernel task only, IF=1. Sleep until a monotonic nanosecond
+ * deadline; a past deadline yields to the ready queue. Resumes with IF=1. */
+void kernel_task_sleep_until(uint64_t deadline);
 
 /* Round-robin queue per CPU. The boot stack becomes the scheduler/cleanup
  * stack. Call once per CPU with IF=0; the BSP releases waiting AP schedulers.

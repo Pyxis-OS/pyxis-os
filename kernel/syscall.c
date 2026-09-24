@@ -1,3 +1,4 @@
+#include <kernel/object/clock.h>
 #include <abi/message.h>
 #include <kernel/object/display.h>
 #include <kernel/object/file.h>
@@ -128,6 +129,12 @@ static struct syscall_result call_object(handle_t handle,
     }
     return directory_call((struct directory_object *)object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_CLOCK:
+    if (header.protocol != PROTOCOL_CLOCK) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return clock_call(rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
   case OBJECT_DISPLAY:
     if (header.protocol != PROTOCOL_DISPLAY) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

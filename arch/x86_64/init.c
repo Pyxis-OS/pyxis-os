@@ -1,4 +1,5 @@
 #include <arch/apic.h>
+#include <arch/clock.h>
 #include <arch/console.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
@@ -61,7 +62,9 @@ void arch_init(struct boot_info *boot)
   idt_init();
   klog("x86_64: kernel GDT, IDT and double-fault IST installed; interrupts disabled\n");
   io_apic_prepare(boot);
+  arch_clock_prepare(boot);
   paging_init(boot);
+  arch_clock_init();
   apic_init();
   if (io_apic_init()) {
     ps2_keyboard_init();

@@ -2,6 +2,7 @@
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/io_apic.h>
+#include <arch/clock.h>
 #include <arch/layout.h>
 #include <arch/paging.h>
 #include <kernel/log.h>
@@ -344,6 +345,16 @@ static void map_local_apic(void)
   }
 }
 
+static void map_hpet(void)
+{
+  phys_addr_t physical = arch_clock_physical_address();
+  if (!physical_valid(physical)) {
+    panic("invalid HPET physical address");
+  }
+  bootstrap_map(HPET_BASE, physical, PAGE_WRITE);
+  *bootstrap_leaf(HPET_BASE) |= PTE_CACHE_DISABLE | PTE_WRITE_THROUGH;
+}
+
 void paging_init(struct boot_info *boot)
 {
   _Static_assert(ARCH_PAGE_SIZE == PAGE_SIZE, "page size interface");
@@ -362,6 +373,7 @@ void paging_init(struct boot_info *boot)
   map_kernel_section(boot, __data_start, __data_end, PAGE_WRITE);
   map_framebuffer(&boot->framebuffer);
   map_local_apic();
+  map_hpet();
 
   for (size_t offset = 0; offset < metadata_bytes; offset += PAGE_SIZE) {
     bootstrap_map(PMM_METADATA_BASE + offset, plan.metadata_phys + offset,

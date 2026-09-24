@@ -78,7 +78,7 @@ GCC's private headers. `-print-search-dirs` displays the configured paths.
   Use include guards.
 - Expanding `__DATE__` or `__TIME__`, and requesting `-bench`, reports the missing
   clock facility. No date or elapsed time is fabricated. See
-  [timekeeping debt](technical-debt.md#timekeeping-beyond-delivered-timer-ticks).
+  [timekeeping debt](technical-debt.md#wall-clock-time-and-clock-source-performance).
 - Output uses create/truncate streams. A failed write can leave a partial file;
   atomic replacement and persistent storage remain separate work. `home://`
   contents are lost on reboot.

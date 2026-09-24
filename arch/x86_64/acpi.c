@@ -239,3 +239,43 @@ bool acpi_keyboard_route(const struct boot_info *boot,
   }
   return route->io_apic_physical != 0;
 }
+
+uint64_t acpi_hpet_address(const struct boot_info *boot)
+{
+  if (!boot->acpi_rsdp) {
+    panic("HPET requires ACPI tables");
+  }
+
+  /* HPET table: header, block ID, then a Generic Address Structure. Only the
+   * system-memory register block is supported; no firmware alias is retained. */
+  struct hpet_table {
+    struct acpi_header header;
+    uint32_t block_id;
+    uint8_t address_space, bit_width, bit_offset, access_size;
+    uint64_t address;
+    uint8_t number;
+    uint16_t minimum_tick;
+    uint8_t page_protection;
+  } __attribute__((packed));
+  enum { ACPI_SYSTEM_MEMORY = 0 };
+
+  size_t entry_bytes;
+  const struct acpi_header *root = root_table(boot, &entry_bytes);
+  for (size_t offset = sizeof(*root); offset < root->length; offset += entry_bytes) {
+    uint64_t physical = 0;
+    memcpy(&physical, (const uint8_t *)root + offset, entry_bytes);
+    const struct acpi_header *table = read_table(boot, physical);
+    if (memcmp(table->signature, "HPET", 4)) {
+      continue;
+    }
+    if (table->length < sizeof(struct hpet_table)) {
+      panic("truncated HPET table");
+    }
+    const struct hpet_table *hpet = (const void *)table;
+    if (hpet->address_space != ACPI_SYSTEM_MEMORY || hpet->bit_offset || !hpet->address) {
+      panic("unsupported HPET register address");
+    }
+    return hpet->address;
+  }
+  panic("no ACPI HPET table");
+}

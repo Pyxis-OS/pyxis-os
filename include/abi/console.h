@@ -27,8 +27,8 @@ struct console_write_request {
  * timeout_ms is 0 for a poll, 1..UINT32_MAX for a bounded wait, or WAIT_FOREVER.
  * The budget includes waiting behind another reader. Expiry returns TIMED_OUT
  * without a reply or consuming bytes. Available input/ownership wins a race
- * with expiry when observed under the input lock. Timer resolution is coarse:
- * intervals round upward and count delivered ticks, not suspended host time. */
+ * with expiry when observed under the input lock. Deadlines use monotonic
+ * elapsed time; scheduling may delay wakeup. VM pause time need not count. */
 struct console_read_request {
   uint64_t address;
   uint64_t capacity;

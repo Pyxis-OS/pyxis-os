@@ -2,6 +2,7 @@
 // Created by chronium on 9/18/26.
 //
 
+#include <arch/clock.h>
 #include "arch/cpu.h"
 #include "kernel/fb/font.h"
 #include "kernel/fb/tty.h"
@@ -23,7 +24,7 @@
 #include <kernel/object/console.h>
 #include <kernel/object/display.h>
 
-#define PRESENT_INTERVAL_TICKS 2
+#define PRESENT_INTERVAL_NS UINT64_C(16666667)
 
 #define SPACES_NAV_HEIGHT 32
 #define SPACES_NAV_COUNT 4
@@ -267,11 +268,18 @@ static void handle_space_input(void)
 void space_present_task(void *argument)
 {
   (void)argument;
+  uint64_t deadline = arch_monotonic_ns();
 
   for (;;) {
     handle_space_input();
     space_present();
-    kernel_task_sleep(PRESENT_INTERVAL_TICKS);
+    deadline += PRESENT_INTERVAL_NS;
+    uint64_t now = arch_monotonic_ns();
+    if (deadline <= now) {
+      /* Drop missed frames rather than catching up in a busy loop. */
+      deadline = now + PRESENT_INTERVAL_NS;
+    }
+    kernel_task_sleep_until(deadline);
   }
 }
 

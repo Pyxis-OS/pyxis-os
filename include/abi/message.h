@@ -11,6 +11,7 @@
 #define PROTOCOL_PROCESS UINT64_C(6)
 #define PROTOCOL_LAUNCHER UINT64_C(7)
 #define PROTOCOL_DISPLAY UINT64_C(8)
+#define PROTOCOL_CLOCK UINT64_C(9)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

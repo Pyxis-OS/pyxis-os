@@ -1,3 +1,5 @@
+#include <abi/clock.h>
+#include <kernel/object/clock.h>
 #include <abi/launcher.h>
 #include <abi/display.h>
 #include <kernel/object/display.h>
@@ -65,7 +67,7 @@ void user_launch_initial(void)
   KASSERT(arch_cpu_index() == 0);
   size_t cpu_index = arch_cpu_count() > 1 ? 1 : 0;
   struct process *process = NULL;
-  struct kernel_object *memory = NULL, *launcher = NULL;
+  struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
   struct file_object *script_file = NULL;
 
   if (initrd_tree_create(&application_root) != INITRD_OK) {
@@ -89,16 +91,19 @@ void user_launch_initial(void)
   }
   memory = memory_create();
   launcher = launcher_create();
-  if (!memory || !launcher) {
+  clock = clock_create();
+  if (!memory || !launcher || !clock) {
     goto fail;
   }
 
   handle_t input, output, memory_handle, launcher_handle, display_handle, app, home;
+  handle_t clock_handle;
   handle_t script_handle = HANDLE_INVALID;
   struct kernel_object *console = &process->space->console->object;
   if (capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &input) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, &output) != CAP_OK ||
       capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, &memory_handle) != CAP_OK ||
+      capability_install(&process->capabilities, clock, CLOCK_RIGHTS, &clock_handle) != CAP_OK ||
       capability_install(&process->capabilities, launcher, LAUNCHER_RIGHT_LAUNCH, &launcher_handle) != CAP_OK ||
       capability_install(&process->capabilities, &process->space->display->object,
           DISPLAY_RIGHT_DRAW, &display_handle) != CAP_OK) {
@@ -120,6 +125,8 @@ void user_launch_initial(void)
     object_release(&script_file->object);
     script_file = NULL;
   }
+  object_release(clock);
+  clock = NULL;
   object_release(memory);
   object_release(launcher);
   memory = NULL;
@@ -131,6 +138,7 @@ void user_launch_initial(void)
     {"memory", memory_handle},
     {"launcher", launcher_handle},
     {"display", display_handle},
+    {"clock", clock_handle},
     {"script", script_handle},
   };
   const struct process_binding roots[] = {{"app", app}, {"home", home}};
@@ -162,6 +170,9 @@ void user_launch_initial(void)
   return;
 
 fail:
+  if (clock) {
+    object_release(clock);
+  }
   if (script_file) {
     object_release(&script_file->object);
   }
