@@ -52,6 +52,8 @@ struct boot_info {
   size_t kernel_size;
   uint64_t bootstrap_direct_offset; /* Valid only before arch_init returns. */
   uint64_t acpi_rsdp; /* Physical; zero when the bootloader found no ACPI. */
+  int64_t utc_seconds; /* Unix seconds from Limine; not an exact handoff sample. */
+  bool utc_available;
   struct boot_module initrd;
   struct boot_framebuffer framebuffer;
   size_t region_count;
