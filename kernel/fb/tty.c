@@ -7,6 +7,8 @@
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 
+#define TTY_TAB_WIDTH 8
+
 const struct color_scheme aardvark_scheme = {
     .palette = {0x222734, 0xc26265, 0x52aa60, 0xad9b49, 0x487fd4, 0xaf5bd1,
                 0x269d9a, 0x5a6377, 0x3a4152, 0xe48383, 0x75cf84, 0xc7b461,
@@ -211,13 +213,16 @@ void tty_put_char(struct tty *tty, char c)
     begin_escape(tty);
     return;
   }
-  if (byte == '\n' || byte == '\r' || byte == '\b') {
+  if (byte == '\n' || byte == '\r' || byte == '\b' || byte == '\t') {
     tty->escape_state = TTY_TEXT;
     tty->wrap_pending = false;
     if (byte == '\n') {
       tty_newline(tty);
     } else if (byte == '\r') {
       tty->x = 0;
+    } else if (byte == '\t') {
+      unsigned next = tty->x + TTY_TAB_WIDTH - tty->x % TTY_TAB_WIDTH;
+      tty->x = next < tty->width ? next : tty->width - 1u;
     } else if (tty->x) {
       --tty->x;
     }
