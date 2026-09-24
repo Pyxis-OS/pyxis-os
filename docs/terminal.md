@@ -8,10 +8,13 @@ wrappers now preserve those statuses too, rather than reducing failures to -1.
 
 The line helper takes a printable ASCII prompt and a separate caller-owned
 buffer. Capacity includes the terminating NUL. Successful input excludes the
-newline; cancellation, input loss and errors clear the buffer and return zero
+newline; cancellation, EOF, input loss and errors clear the buffer and return zero
 length. Ctrl+C cancels this line locally, moves to a fresh line and returns
 `TERM_LINE_CANCELLED`; it is not a signal and does not terminate the process.
-There is no terminal EOF operation, and Ctrl+D has no special meaning.
+Ctrl+D on an empty line returns `TERM_LINE_EOF`; on a nonempty line it is
+ignored. This is an editor result, not closure of the console input object.
+The shell exits successfully on EOF; Lua also accepts it at a continuation
+prompt, discarding the unfinished chunk and exiting.
 
 Editing supports insertion, Backspace, Delete, Left/Right, Home/End and Enter.
 A steady underline cursor marks the editing position, including the blank cell

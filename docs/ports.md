@@ -112,9 +112,15 @@ an explicit URI such as `home://scripts/hello.lua`. Lua's `arg` table and `...`
 carry script arguments. `loadfile` and `dofile` require filenames and use the
 same path rules, without changing to the script's directory or searching modules.
 
-Base, coroutine, table, string and UTF-8 libraries are available. Errors return
-a nonzero process status; runtime errors include a traceback. No arguments
-prints usage. REPL, stdin scripts, shebang handoff, package loading, io/os, debug
+With no arguments, `lua` starts a libterm REPL with expression results,
+multiline statements and persistent globals. Ctrl+C discards pending input;
+Ctrl+D on an empty line exits, including at a continuation prompt. Language
+errors are reported without leaving the REPL; allocation/terminal failures exit
+nonzero. Cancellation cannot interrupt an executing chunk.
+
+Base, coroutine, table, string and UTF-8 libraries are available. Script and
+`-e` errors return a nonzero process status; runtime errors include a traceback.
+Stdin scripts, shebang handoff, package loading, io/os, debug
 and the full math library remain deferred, as does signal-driven interruption.
 This does not replace the host Lua used by build recipes. See the
 [port notes](../ports/lua/README.md) and
