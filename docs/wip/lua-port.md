@@ -1,6 +1,6 @@
 # Lua port milestones
 
-Status: expression and script execution are implemented; the REPL is next.
+Status: expression/script execution and the libterm REPL are implemented.
 Configuration is the first system integration: choose the default timezone and
 terminal tab width. Host Lua for build recipes and image manifests remains independent of
 this guest port. Libraries consume the [SDK](../sdk-and-repositories.md) and
@@ -47,7 +47,7 @@ Prerequisites and focused PR tasks:
   through Lua's existing hooks; no locale subsystem or signal stubs.
 - [x] Add explicit-filename script loading with inherited cwd/URI lookup,
   `arg`/`...`, and restored `loadfile`/`dofile`.
-- [ ] Add the libterm REPL with the exit/cancellation behavior below.
+- [x] Add the libterm REPL with the exit/cancellation behavior below.
 
 The interpreter registers base, coroutine, table, string and UTF-8, including
 explicit-filename `loadfile` and `dofile`. Broad `io`/`os`, native dynamic modules
@@ -74,9 +74,9 @@ lua -e 'print("Hello from Lua", 2 ^ 0.5)'
 The small native driver accepts exactly one `-e` text chunk. It opens the five
 selected libraries and protects initialization, compilation and execution.
 Success exits zero; usage and execution errors exit one. Runtime errors include
-tracebacks. No arguments prints usage. Chunk return values are discarded.
-The driver also supports explicit scripts as described below. There is no REPL
-fallback or environment startup hook.
+tracebacks. Chunk return values are discarded. No arguments enters the REPL.
+The driver also supports explicit scripts as described below. There is no
+environment startup hook.
 
 The full image build and manual boot/debugger inspection cover real Lua
 execution and error reporting. This does not imply system-wide configuration,
@@ -97,19 +97,22 @@ Stdin scripts and direct shebang launches are deferred. The latter needs to
 consume the launcher's already-open `script` capability rather than reopen a
 diagnostic name; the current driver rejects that handoff explicitly.
 
-The next focused PR adds the libterm REPL. The agreed controls are Ctrl+D on an
-empty line to exit, and Ctrl+C to discard the whole pending multiline input and
-return to the primary prompt. Cancellation is not EOF. Current libterm needs a
-reusable EOF result; update its callers deliberately. History is not part of this
-slice. Preserve Lua's multiline compilation/error handling and keep the selected
-libraries and filesystem policy above.
+The libterm REPL prints expression results and retains globals across chunks.
+Lua's parser determines whether a statement needs continuation input. Ctrl+D on
+an empty line exits, including at a continuation prompt; Ctrl+C discards the
+whole pending multiline chunk and returns to the primary prompt. Libterm exposes
+EOF separately from cancellation, and the shell exits successfully on EOF too.
+Syntax/runtime errors return to the prompt; allocation/terminal failures exit
+nonzero. Input loss or line-limit rejection discards the whole pending chunk.
+History and custom prompts are not part of this slice. The selected libraries
+and filesystem policy above remain unchanged.
 
 Lua's CLI normally uses SIGINT, which Pyxis does not provide. Line cancellation
 does not interrupt an executing CPU-bound script. Signals, module lookup and
 additional standard libraries remain separate work.
 
-Completion: script execution is done; an interactive REPL with useful language
-errors and the agreed exit/cancel controls remains.
+Completion: script execution and the interactive REPL are implemented. See the
+[port notes](../../ports/lua/README.md) for input limits and language behavior.
 
 ## 4. Init/session configuration
 
