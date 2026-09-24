@@ -99,9 +99,10 @@ ownership handoff; this slice adds no scheduler request state.
 The worker runs with interrupts enabled. It disables them around allocation,
 transmission, release and shared queue/wait operations. Receive parsing and
 validation run with IF=1 outside interrupt entry. Each turn scans at most 16 echo
-slots and delivers at most eight packets, then yields if it serviced requests or
-reached the packet budget. Local transmission never recursively enters receive.
-There is no Ethernet header, MAC address, ARP, PCI or DMA dependency.
+slots and delivers at most eight loopback packets. The optional NIC adds at most
+16 RX and 16 TX completions per turn. The worker yields if it serviced echo
+requests or exhausted either delivery budget. Local transmission never recursively
+enters receive and has no Ethernet, ARP, PCI or DMA dependency.
 
 Packet queue access remains BSP/IF=0. A separate small lock protects the worker's
 notification flag and wait pointer because AP callers may now submit echo work.
@@ -217,7 +218,7 @@ failures. Queue and protocol counters are diagnostics, not a public statistics
 ABI. Inspect a normal ping call at `net_echo_exchange`, and its BSP completion
 at `net_echo_receive`, to follow cross-CPU handoff without injected requests.
 
-## Virtio-net preparation
+## Virtio-net transport
 
 `make run VIRTIO_NET=1` (also accepted by `make debug`) adds one modern
 `virtio-net-pci` device backed by QEMU user networking. No TAP device, daemon or
@@ -226,41 +227,111 @@ suppresses QEMU's implicit NIC; loopback still works. Values other than `0` or
 `1` are rejected. The network option can be combined with
 `VIRTIO_FS_SOCKET=...` using the [usual filesystem setup](virtio-fs.md).
 
-The driver currently prepares hardware only. Before AP startup,
-`virtio_net_prepare` claims the first modern network PCI function (`1af4:1041`),
-confirms reset before BAR probing, maps its registers uncached and negotiates
-`VIRTIO_F_VERSION_1` and `VIRTIO_NET_F_MAC`. `VIRTIO_NET_F_STATUS` is accepted
-when offered; otherwise the link is assumed up. The MAC must be nonzero and
-unicast. MAC and link status are sampled between matching configuration
-generations, with a one-second deadline. No address or route is configured.
+Before AP startup, `virtio_net_prepare` claims the first modern network PCI
+function (`1af4:1041`), confirms reset before BAR probing, maps its registers
+uncached and negotiates `VIRTIO_F_VERSION_1` and `VIRTIO_NET_F_MAC`.
+`VIRTIO_NET_F_STATUS` is accepted when offered; otherwise the link is assumed up.
+The MAC must be nonzero and unicast. MAC and link status are sampled between
+matching configuration generations, with a one-second deadline.
 
-Queue zero (RX) and queue one (TX) must be available and disabled, with usable
-notification offsets. Their maximum sizes are recorded without allocating rings
-or buffers. MSI-X table entry zero routes configuration and both queues to the
-BSP's reserved `APIC_VIRTIO_NET_VECTOR` (35), independently of virtio-fs (34).
-Every table entry and the function remain masked. The NIC's queues stay disabled,
-PCI bus mastering stays clear, and `DRIVER_OK` is not set. There is no network
-interrupt handler, external interface or packet exchange yet.
+Queue zero (RX) and queue one (TX) each use 16 direct descriptors and 16 owned
+2 KiB buffers. A device must support at least that queue size. Each queue has
+one physically contiguous nine-page allocation: a ring page plus eight buffer
+pages, totalling 72 KiB for both queues. CPU mappings and DMA physical addresses
+are kept distinct. This storage is independent of the software packet budget.
+No packed queues, indirect descriptors, offloads, merged RX buffers, control
+queue or multiple queue pairs are negotiated.
 
-Missing hardware is harmless. Unsupported configuration logs a diagnostic and
-leaves software networking available. Negotiation/routing failures disable MSI-X
-and confirm reset before releasing the boot-only claim. Unconfirmed cleanup
-retains ownership and mappings until reboot. This preparation never enables DMA.
+Boot prepares the queues and posts all receive buffers, with PCI bus mastering
+and `DRIVER_OK` clear and MSI-X delivery masked. At the start of the existing
+BSP network worker, `virtio_net_start` enables DMA, sets `DRIVER_OK`, unmasks
+MSI-X and notifies RX. Worker creation failure leaves the NIC inactive. Table
+entry zero routes configuration and both queues to `APIC_VIRTIO_NET_VECTOR`
+(35), independently of virtio-fs (34). The IRQ handler only records activity and
+wakes the worker; arch acknowledges the APIC. It never touches ring ownership.
 
-The next slice supplies owned RX/TX buffers and connects real interrupts to the
-existing BSP worker. The agreed initial bounds are one queue pair, 16 buffers
-per queue and a 1500-byte IP MTU, without offloads, merged RX buffers, packed
-queues or a control queue. Ethernet, ARP and manual IPv4 configuration follow
-that transport slice. QEMU's local router at `10.0.2.2` is the intended first
+### Buffer ownership and bounded work
+
+Each descriptor permanently names one buffer. Publishing an available index
+lends it to the device. The worker snapshots a used index, validates the entire
+batch (count, IDs, duplicate IDs, ownership and written lengths), then returns
+those buffers to CPU ownership. Release/acquire DMA barriers order these
+transfers; a full barrier precedes checking device notification suppression.
+Available-ring interrupt suppression remains off, so completions can wake an
+idle worker without polling.
+
+The modern network header occupies twelve bytes even without merged buffers.
+Incoming data must fit that header plus an ordinary 14..1514-byte Ethernet frame
+and require neither segmentation nor checksum completion. Invalid packets are
+counted and discarded. Valid frames are also counted and discarded for now:
+Ethernet/ARP dispatch is the next task. After processing, the worker reposts each
+RX buffer. It does not retain DMA pointers or feed external frames into the
+loopback-only IP path.
+
+`virtio_net_transmit(frame, length)` is a BSP network-worker interface, with
+interrupts enabled. It copies a complete checksummed Ethernet frame, without
+FCS, into a free TX buffer and supplies the VirtIO header. All return paths leave
+caller storage owned by the caller. `NET_OK` means queued, `NET_QUEUE_FULL` means
+all sixteen buffers remain lent, and `NET_UNAVAILABLE` covers an inactive NIC,
+link-down or an unstable configuration. TX storage is reusable only after a
+checked completion; modern TX used lengths must be zero. No userspace syscall
+or ordinary Ethernet caller is introduced in this transport slice.
+
+One turn processes at most sixteen completions from each queue. Reaching either
+budget requests a yield after the worker also services echo and loopback work.
+Pending notifications are remembered through the existing worker wait handoff.
+Idle RX has no timeout, heartbeat or timer polling.
+
+### Failure and link changes
+
+Each outstanding TX buffer has a five-second completion deadline. The worker
+sleeps until the earliest echo, TX or exceptional configuration/reset deadline.
+Scheduling can make expiry handling late. A timeout never returns DMA ownership.
+
+A broken completion, device status failure, activation failure, changed MAC or
+configuration that fails to stabilize stops the NIC. It masks delivery, disables
+MSI-X and bus mastering, requests reset and checks completion over at most one
+second. Configuration retries and reset checks are spaced by one-millisecond
+monotonic deadlines; actual wakes follow scheduler resolution. Each check returns
+to the common worker loop, allowing loopback and echo processing to continue.
+No lock is held across sleep. Resources stay allocated and mapped until reboot,
+even after confirmed reset; there is no reconnect or runtime reclamation.
+
+Ordinary link-status changes are sampled on worker wake. Link-down prevents new
+transmissions, while already submitted buffers retain their completion deadlines.
+Link-up permits new submissions without rebuilding queues. In the absence of a
+pending operation or device interrupt, an idle device failure is not polled for.
+
+Missing hardware is harmless. Failed boot preparation releases storage only
+after confirmed reset and MSI-X disable; otherwise ownership is retained.
+Neither absent nor failed hardware disables loopback or virtio-fs.
+
+### Inspection and remaining scope
+
+At `boot_start_cpus`, `network.prepared` should be true for supported hardware,
+RX should have sixteen outstanding buffers, and TX none. Common status should
+be `ACKNOWLEDGE | DRIVER | FEATURES_OK` (`0x0b`), with bus mastering clear and
+MSI-X masked. At the worker's first `virtio_net_service`, activation should have
+set status `0x0f`, enabled bus mastering and unmasked entry zero/function delivery.
+Read MMIO only at individual register widths; do not read the ISR merely for
+inspection because that acknowledges pending interrupts.
+
+`network.rx` and `network.tx` expose physical/virtual storage, ownership, ring
+indices and outstanding counts. `network.interrupts`, `received`, `dropped`,
+`malformed`, `transmitted`, `completed` and `queue_full` are debugger diagnostics,
+not a public statistics ABI. An idle worker sleeps with all RX buffers posted
+and no TX in flight. Inspect real interrupts at `virtio_net_interrupt`.
+
+For manual frame submission use TCG and the [GDB calling constraints](gdb.md):
+allocate caller storage before AP startup, then stop in the network worker after
+activation and call `virtio_net_transmit` with a valid frame. The call copies
+bytes and does not wait. Continue normally to observe real device completions;
+do not call from an arbitrary stopped task or IRQ. No boot-time packets or
+validation hooks are built into the driver.
+
+There is still no external IP route or address configuration. Ethernet, ARP and
+manual IPv4 setup follow. QEMU's router at `10.0.2.2` is the intended first
 external ping target; ordinary Internet ICMP has additional backend limitations.
-
-For manual inspection, stop at `boot_start_cpus` in GDB. `network.prepared`
-records successful preparation; `network.pci`, `network.accepted_features`,
-`network.mac`, `network.link_up`, `network.rx_info` and `network.tx_info` hold the
-captured state. Read MMIO only at its individual register widths. Common status
-should be `ACKNOWLEDGE | DRIVER | FEATURES_OK` (`0x0b`); MSI-X function and vector
-masks must remain set, and the PCI command's bus-master bit clear. Do not read
-the ISR merely for inspection: that acknowledges pending interrupts.
 
 References: [VirtIO 1.4 network device and PCI transport](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.pdf),
 [QEMU user networking](https://www.qemu.org/docs/master/system/devices/net.html).

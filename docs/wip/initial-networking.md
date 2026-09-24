@@ -65,9 +65,9 @@ buffers and independently completed transmissions; do not simulate it as a FUSE
 request/reply exchange or redesign the filesystem worker to accommodate it.
 Extract shared mechanics only where both concrete consumers benefit.
 
-Use VirtIO 1.4 as the reference. The driver task is split into preparation and activation below; feature
-selection and interrupt routing are settled, with queue ownership and runtime
-failure behavior to review before activation. Do not add offloads, multiple queue pairs or userspace DMA merely
+Use VirtIO 1.4 as the reference. The driver task below implements preparation and
+activation, with explicit queue ownership, completion bounds and runtime resource
+retention. Do not add offloads, multiple queue pairs or userspace DMA merely
 because the device advertises them. A failed network device must leave loopback,
 the filesystem and the rest of the OS usable.
 
@@ -129,17 +129,18 @@ Remaining decisions:
    The BSP worker handles expiry and transmission without extending scheduler
    service queues. Address/route configuration moves to tasks 5/6, when an
    external interface can use it. See [networking](../networking.md).
-4. [ ] **Virtio-net transport.** Prepare the selected PCI function and owned RX/TX
+4. [x] **Virtio-net transport.** Prepare the selected PCI function and owned RX/TX
    queues, connect MSI-X and the BSP worker, and define failure/cleanup behavior.
    Keep virtio-fs working alongside it.
    - [x] Device preparation: shared concrete PCI resource helpers, required modern
      transport/MAC features, optional link status, disabled RX/TX queue inspection
      and an independent masked MSI-X route. Opt-in `VIRTIO_NET=1` selects QEMU
      user networking; default boot has no NIC. See [networking](../networking.md).
-   - [ ] Active queues: one RX/TX pair with 16 owned buffers each, a 1500-byte IP
+   - [x] Active queues: one RX/TX pair with 16 owned buffers each, a 1500-byte IP
      MTU, short BSP IRQ and bounded work in the existing network worker. No
-     offloads, merged buffers, packed queues or control queue. Define runtime
-     stop/reset and DMA retention before activation.
+     offloads, merged buffers, packed queues or control queue. Five-second TX
+     deadlines, checked completion batches and incremental reset handling retain
+     runtime DMA storage until reboot. Frames are counted/discarded until task 5.
 5. [ ] **Ethernet, ARP and external routing.** Connect the device to IP through
    Ethernet framing and bounded ARP resolution. Add the directly connected and
    default-gateway paths, expiry/retry handling and explicit unavailable results.
