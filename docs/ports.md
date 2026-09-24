@@ -64,7 +64,8 @@ and saves LF with a final newline per row. Saves truncate before writing:
 failures can leave partial files. Status messages persist until replaced;
 no userspace clock is assumed. Allocation failure reports an error and exits,
 losing unsaved edits. `home://` remains volatile across reboot, while `app://`
-is read-only. Processes receive a fixed 64 KiB stack without automatic growth.
+is read-only. Processes receive a fixed 1 MiB stack with a reserved, unmapped
+guard page below it and no automatic growth.
 
 Persistent storage, atomic replacement and timekeeping remain separate work.
 The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and TCC;

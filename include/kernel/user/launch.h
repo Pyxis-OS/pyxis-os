@@ -7,8 +7,10 @@ struct process;
 struct space;
 
 #define USER_INITIAL_STACK_BASE UINT64_C(0x800000)
-/* Fixed, eagerly backed userspace stack; no automatic growth yet. */
-#define USER_INITIAL_STACK_SIZE (64 * 1024)
+/* Fixed, eagerly backed userspace stack; the page below stays reserved/unmapped.
+ * No automatic growth. Boot and ordinary launches use the same layout. */
+#define USER_INITIAL_STACK_SIZE (1024 * 1024)
+#define USER_INITIAL_STACK_GUARD_BASE (USER_INITIAL_STACK_BASE - PAGE_SIZE)
 
 /* BSP, IF=0. Stable kernel image bytes; creates an owned, inactive process and
  * its initial stack. No startup/grants or task submission. Clears outputs and

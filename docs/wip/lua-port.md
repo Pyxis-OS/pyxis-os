@@ -10,6 +10,11 @@ Clock reads, calendar conversion and timezone conversion must work without Lua.
 Audit the port before implementation and discuss newly discovered runtime gaps;
 this milestone does not authorize unrelated kernel or libc expansion.
 
+The general [userspace stack](../userspace.md) now has 1 MiB of eager backing
+and a reserved guard page. Lua's heap value stack does not eliminate native C
+recursion in parsing and callbacks; review those paths against this budget
+without silently lowering Lua's recursion limits. Automatic growth is deferred.
+
 ## 1. Pin Lua and define the runtime slice
 
 Choose an upstream revision, preserve its license and review its actual build

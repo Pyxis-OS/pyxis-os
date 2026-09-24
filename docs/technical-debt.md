@@ -37,6 +37,19 @@ long-lived applications make retained capacity or copying material. The current
 allocator and errno assume one thread per process; add synchronization and
 thread-local errno when introducing userspace threads.
 
+## Fixed userspace stacks
+
+Each process eagerly backs a 1 MiB user stack, including programs that use much
+less. This gives native parsers and callbacks room without port-specific
+recursion limits, at a cost of 960 KiB more backing per process than the former
+64 KiB budget. It is still finite; port stack requirements need review.
+
+A reserved, unmapped page below the stack catches ordinary downward overruns,
+but a large adjustment can skip it. Compiler stack probing and automatic stack
+growth are not implemented. Reconsider eager backing when process counts or
+memory pressure justify it. Demand-backed stacks must respect BSP ownership of
+allocation and page-table mutation; they are not just a fault-handler shortcut.
+
 ## BSP-only allocation and VM mutation
 
 Kernel allocation and page-table mutation remain owned by the BSP. Tasks submit
