@@ -4,10 +4,10 @@ The kernel has one system-wide networking worker and a boot-lifetime interface
 named `lo`. Interfaces and future addresses/routes are shared across spaces;
 capability-mediated access will not by itself provide network isolation.
 The implementation is in `kernel/net`, with kernel interfaces in
-`include/kernel/net`. There is no userspace network ABI yet.
+`include/kernel/net`. The native echo capability supports userspace ping without raw-packet authority.
 
 The worker validates IPv4 packets and handles ICMP echo requests/replies over
-loopback. There is no userspace ping, external route or configurable address yet.
+loopback. There is no external route or configurable address yet.
 No packets are allocated or transmitted automatically at boot. The
 [networking milestone](wip/initial-networking.md) records the remaining tasks.
 
@@ -76,9 +76,9 @@ request creates a separate bounded reply carrying the unchanged identifier,
 sequence and payload. Replies enter the same deferred queue; a failed reply
 allocation or submission is counted and discarded. The original receive packet
 remains owned by the worker until processing returns. Echo replies are currently
-validated, counted and consumed; matching them to application requests, deadlines
-and userspace completion belongs to the next task. Transmit success never claims
-that a peer has answered.
+validated and offered to the echo service for matching. Unmatched replies are
+consumed without waking an application. Transport success never claims that a
+peer has answered.
 
 References: [IPv4](https://www.rfc-editor.org/rfc/rfc791.html),
 [ICMP echo](https://www.rfc-editor.org/rfc/rfc792.html),
@@ -96,17 +96,90 @@ context with IF=0. They are not AP, user-pointer or interrupt-entry interfaces.
 Future application calls will need the existing kind of explicit cross-CPU
 ownership handoff; this slice adds no scheduler request state.
 
-The worker runs with interrupts enabled. It disables them briefly to check the
-queue, publish its event wait, dequeue, allocate/queue an echo reply or release
-packet storage. Receive parsing and validation run with IF=1, outside interrupt
-entry. A sender detaches the wait pointer before waking it. Empty-queue checking and wait
-publication share the same BSP/IF=0 exclusion, preserving wake-before-park.
-Idle networking sleeps on an event instead of polling.
+The worker runs with interrupts enabled. It disables them around allocation,
+transmission, release and shared queue/wait operations. Receive parsing and
+validation run with IF=1 outside interrupt entry. Each turn scans at most 16 echo
+slots and delivers at most eight packets, then yields if it serviced requests or
+reached the packet budget. Local transmission never recursively enters receive.
+There is no Ethernet header, MAC address, ARP, PCI or DMA dependency.
 
-After eight deliveries the worker yields to the ready queue using a past
-deadline. This bounds each batch without adding a timer sleep. Local transmission
-never recursively enters receive processing. The current path has no Ethernet
-header, MAC address, ARP, PCI or DMA dependency.
+Packet queue access remains BSP/IF=0. A separate small lock protects the worker's
+notification flag and wait pointer because AP callers may now submit echo work.
+Submission publishes a request before notifying, with the request lock released.
+The remembered notification bridges the gap between inspecting deadlines and
+publishing the wait. Wake detaches the pointer under the notification lock;
+timeout resumption detaches under that same lock before reusing its wait record.
+The worker sleeps until new work or the earliest echo deadline, indefinitely
+when there is neither. No scheduler request queue or per-tick network polling
+is added.
+
+## Native echo capability
+
+Init receives an `echo` resource. Session handoff and ordinary shell launches
+copy its ECHO_RIGHT_SEND grant. It authorizes ICMP echo exchanges only: no raw
+headers, user-selected source address, interface configuration or routing changes.
+The stack and request budget remain shared between spaces. Configuration
+capabilities are deferred until there is an external interface to configure.
+
+[The echo protocol](../include/abi/echo.h) uses the existing CALL syscall with a
+tagged ECHO_EXCHANGE request. Its input is a host-order IPv4 destination and an
+absolute deadline in the CLOCK_NOW monotonic epoch, at most five seconds ahead.
+A past deadline returns CALL_TIMED_OUT; an excessive future deadline or nonzero
+reserved field is CALL_BAD_REQUEST. Capture/check all input and reply storage
+before publishing any work. Errors return no bytes and leave user storage alone.
+Success returns the peer address, wire identifier/sequence and round-trip
+nanoseconds, measured from transport submission through reply processing.
+
+The kernel owns the fixed 32-byte payload and wire identifiers. Every request
+gets a nonzero 64-bit token that is never reused before reboot; exhaustion returns
+CALL_LIMIT. Reply matching checks source/destination, identifier, sequence and
+all payload bytes, including that token. This correlates late/duplicate replies;
+it is not authentication against a peer that can observe or predict a token.
+
+At most 16 calls may occupy the shared request table, including completed calls
+whose callers have not resumed. Exhaustion returns CALL_QUEUE_FULL. Callers copy
+scalar input into a slot, publish their task-metadata waiter and sleep. Only the
+BSP worker allocates/sends packets, receives replies and expires requests. No
+user pointers, caller stack pointers or private mappings cross this boundary.
+No lock is held while allocating or transmitting. Slot state and completion are
+protected across CPUs; completion detaches/wakes its waiter under the slot lock.
+The original caller copies the result and releases the slot before returning.
+
+A deadline covers time queued as well as time awaiting a reply. Replies processed
+at or beyond the deadline time out. Completion removes the slot from matching;
+late replies cannot wake its previous task or a new request. Packet ownership is
+independent: timeout never frees a packet already transferred to the transport.
+This is important for future device DMA as well as the current deferred queue.
+
+Processes currently have one task and no external cancellation. The blocked
+call keeps its capability and private mappings alive; closing a copied grant
+elsewhere does not revoke it. Request state belongs to the call, not the echo
+object, so closing another grant cannot destroy that state. Multithreading,
+external termination or asynchronous cancellation must extend this contract.
+
+A missing worker returns CALL_UNAVAILABLE, a missing route CALL_NO_ROUTE, and
+allocation failure CALL_NO_MEMORY. Queue errors propagate. This synchronous echo
+protocol does not constrain future socket/endpoint or asynchronous network APIs.
+
+## Userspace ping
+
+Libpyxis supplies `echo_exchange`, taking an echo handle, destination, deadline
+and reply pointer. Its reply is cleared on failure and native status is preserved.
+The initial utility needs the `echo` grant plus clock READ/SLEEP authority:
+
+```text
+ping 127.0.0.1
+ping -c 10 127.0.0.2
+```
+
+The default is four requests, with one-second deadlines and starts paced at least
+one second apart. `-c` accepts 1..65535. Addresses must have four decimal octets;
+no DNS or shorthand is supported. Each success prints peer, sequence and RTT;
+errors are explicit, followed by attempted/replied/unanswered counts and RTT
+min/average/max when any replies arrived. Only timeouts continue to the next
+request; other errors stop. Success requires every requested exchange to succeed.
+There is no indefinite mode, signal/Ctrl+C cancellation or configurable payload
+in this slice. Timeouts and pacing keep existing tasks runnable.
 
 ## Inspection
 
@@ -114,7 +187,9 @@ Build and boot normally; `net: lo` reports that the worker was created.
 Debugger inspection can check `net_loopback`, the queue/counters in
 `'kernel/net/interface.c'::loopback`, and
 `'kernel/net/packet.c'::live_packets`. In an ordinary idle boot the queue and
-live-packet count are zero and the worker has published its wait.
+live-packet count are zero and `worker_wait` is published. The `pending` array
+in `kernel/net/echo.c` shows queued, sent and completed calls; after ping exits
+all slots should be ECHO_FREE, with no retained waiter.
 
 For manual calls, use the BSP/IF=0 pre-scheduling stop described in
 [GDB](gdb.md), with TCG for inferior calls. `net_icmp_echo_send` exercises the
@@ -139,4 +214,5 @@ After continuing past both deliveries, live-packet count should return to zero.
 `'kernel/net/ipv4.c'::ipv4_stats` separates malformed, unsupported and nonlocal
 input. `'kernel/net/icmp.c'::icmp_stats` records requests, replies and reply-send
 failures. Queue and protocol counters are diagnostics, not a public statistics
-ABI or a substitute for future application reply matching.
+ABI. Inspect a normal ping call at `net_echo_exchange`, and its BSP completion
+at `net_echo_receive`, to follow cross-CPU handoff without injected requests.
