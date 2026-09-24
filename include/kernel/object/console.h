@@ -33,6 +33,10 @@ struct console_object {
 void console_input(struct console_object *console, const char *bytes, size_t size);
 void console_input_lost(struct console_object *console);
 
+/* Any CPU, IF=0. Routing handoff discards queued text without input-loss
+ * notification; existing readers continue waiting for future text. */
+void console_discard_input(struct console_object *console);
+
 /* BSP, IF=0. Returns one owned reference, or NULL on allocation failure.
  * The space owns the TTY and must keep it alive through all console references.
  * Destroying the wrapper never frees the TTY or framebuffer. */
