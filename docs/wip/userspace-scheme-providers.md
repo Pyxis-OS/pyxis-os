@@ -59,42 +59,46 @@ provider bindings would be a new facility, not a description of existing code.
 Keep ordinary directory traversal and the provider-open contract distinct; an
 HTTP URI need not be represented as a tree of remote directory objects.
 
-## Initial HTTP size policy
+## Initial HTTP file policy
 
-The initial provider rejects response bodies whose length is not known upfront.
-It does not download an unknown-length body merely to discover its size. This is
-an intentional compatibility restriction, not a claim that such HTTP responses
-are invalid or always belong to streaming applications.
+Support ordinary finite web downloads even when their total length is not known
+upfront. The initial provider stages the complete response body under a byte
+budget and an overall deadline, then returns a read-only, sized resource. The
+file consumer sees stable bytes and explicit-offset reads; it never receives an
+unbounded live stream. Open may block while fetching, and must report failure if
+completion cannot be reached within the limits.
 
 Finite responses can omit `Content-Length`. HTTP/1.1 chunked framing carries chunk
 sizes rather than an upfront total; connection-close framing is also possible.
-There is no universal streaming flag. Reject chunked and close-delimited bodies
-in the initial subset, and reject conflicting framing rather than trusting a
-length beside `Transfer-Encoding`.
+There is no universal streaming flag. Apply the protocol's framing rules to
+determine completion, and reject conflicting framing rather than trusting a
+length beside `Transfer-Encoding`. Close-delimited completion cannot itself
+prove that the origin intended to send no more data.
 See [HTTP/1.1 body framing](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3).
 
-For a body-bearing GET response in the initial subset, require a valid
-`Content-Length` within the configured resource limit. Zero is a valid declared
-length. Interpret method/status semantics before length; a separate HEAD request
-is not proof of the length of a later GET. Parse lengths with overflow checks.
+When supplied and applicable to the body, validate `Content-Length` and use it
+for early size-limit rejection. Zero is valid; absence alone is not an error.
+Interpret method/status semantics before length, and parse lengths with overflow
+checks. A separate HEAD request is not proof of the length of a later GET.
 See [Content-Length semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6).
 
-The exposed file size must describe the bytes the caller reads. Content decoding
-must not confuse the transmitted encoded length with the resulting file length.
-A simple initial option is to request identity encoding and reject unsupported
-content encodings; settle that exact policy before implementation.
+The exposed file size describes the bytes actually retained for the caller.
+Content decoding must not confuse transmitted encoded length with the resulting
+file length, and any decoding needs its own output bound. A simple initial option
+is to request identity encoding and reject unsupported content encodings; settle
+that exact policy before implementation.
 
-A declared length is a bound to verify, not permission for unchecked allocation.
-Set response-size budgets and receive deadlines. Incomplete transfers must fail,
-not become successful shorter files or cached results. Invalid framing is an
-error. The detailed HTTP status/redirect mapping remains undecided.
+A declared length is not permission for unchecked allocation. Enforce the byte
+budget as data arrives whether or not a length was declared. Malformed framing,
+a declared-length mismatch, a size limit or deadline expiry fails the open and
+releases staging storage; never publish a partial result as a complete file.
+An indefinitely continuing response eventually fails the same limits. Exact
+budgets, staging storage, HTTP versions and status/redirect mapping remain open.
 
-Known size does not provide random access. Current native files use explicit
-read offsets and size queries, so decide whether the initial provider stages a
-complete bounded body before returning a read-only file, or implements another
-honest offset-read contract. Do not assume servers support range requests or
-fetch a potentially different representation for each read. Temporary storage
-for one open is separate from retaining responses for reuse across opens.
+Staging satisfies the existing file size/offset contract without assuming server
+range support or fetching a potentially different representation for each read.
+Temporary storage for one open is separate from retaining completed responses
+for reuse across opens. This initial policy requires the former, not the latter.
 
 ## Future response cache
 
@@ -112,9 +116,9 @@ this milestone. Namespace/authority and credentials belong in the cache's
 isolation policy; a URL alone is not a sufficient sharing boundary.
 
 Eviction removes reuse eligibility; it must not invalidate storage still owned
-by open handles. Account for that retained storage too. Unknown-length responses
-remain rejected unless that policy is explicitly changed in a later milestone;
-adding a cache does not implicitly enable them.
+by open handles. Account for that retained storage too. A response whose length
+was initially unknown can become a cache candidate after bounded completion;
+partial or still-arriving bodies cannot satisfy another open.
 
 ## Compiler experiment
 
@@ -124,7 +128,15 @@ A future compiler could resolve:
 #include "https://example.com/foo.h"
 ```
 
-through its granted namespace. Compiler include lookup would need URI handling,
+through its granted namespace. A motivating example is fetching a raw GitHub
+header such as `stb_image.h` and including it in a TCC-built program. Use the raw
+content endpoint rather than GitHub's rendered source page; a URI shaped like
+`https://raw.githubusercontent.com/nothings/stb/<commit>/stb_image.h` pins the
+selected revision when `<commit>` is replaced with its actual commit ID.
+Neither `cat` nor the compiler should require an upfront HTTP length to consume
+a response that finishes within the provider's limits.
+
+Compiler include lookup would need URI handling,
 relative includes based on the containing resource, and defined file identity.
 `fopen` support alone does not guarantee that an unchanged compiler accepts or
 resolves these names correctly. The caller still needs provider authority.
@@ -151,7 +163,7 @@ Before an implementation milestone, settle:
   library and trust configuration. TLS stays out of the kernel regardless of
   library choice.
 - HTTP status mapping, redirects, encoding, size/deadline limits and offset-read
-  behavior for the first read-only provider. Cache and compiler work come later.
+  storage for the first read-only provider. Cache and compiler work come later.
 
 This is a future consumer of networking, IPC and namespace work. It is not a
 reason to add placeholder syscalls, provider registries or protocol adapters to

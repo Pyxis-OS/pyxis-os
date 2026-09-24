@@ -85,8 +85,9 @@ Native relative paths, escaping and normalization rules remain open.
 The [userspace scheme-provider direction](wip/userspace-scheme-providers.md)
 extends this idea to endpoint-backed resources such as HTTP and HTTPS. The
 kernel would own scoped bindings and route requests; protocol clients and TLS
-remain entirely in userspace. Initial HTTP access would require a known body
-length, with response caching left for later.
+remain entirely in userspace. Initial HTTP access would stage a complete body
+under size/time limits before exposing a sized file, with response caching left
+for later.
 
 ## Application bundles
 
