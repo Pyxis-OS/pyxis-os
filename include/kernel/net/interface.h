@@ -14,7 +14,7 @@ struct net_interface {
 };
 
 /* The sole current interface carries IP packets, without link-layer headers.
- * It exists independently of PCI. Addressing and IP processing come next. */
+ * It exists independently of PCI and carries the local IPv4 /8 route. */
 extern const struct net_interface net_loopback;
 
 enum net_result {
@@ -22,6 +22,8 @@ enum net_result {
   NET_INVALID,
   NET_UNAVAILABLE,
   NET_QUEUE_FULL,
+  NET_NO_ROUTE,
+  NET_NO_MEMORY,
 };
 
 /* Once on BSP/IF=0 after task_init(), before scheduling starts. Failure leaves
@@ -32,7 +34,7 @@ enum mm_result net_init(void);
  * Success transfers packet ownership to deferred receive; it means queued,
  * not protocol acceptance or delivery to an application. Every error preserves
  * caller ownership. No inline receive, allocation or waiting.
- * The worker currently counts/discards unsupported protocol input. */
+ * The worker validates IPv4 and dispatches supported protocols. */
 enum net_result net_transmit(const struct net_interface *interface,
     struct net_packet *packet);
 
