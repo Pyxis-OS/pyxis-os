@@ -16,14 +16,20 @@ struct display_object;
 struct display_buffer;
 struct launch_capture;
 
-/* Current user task, IF=0. Prepare its wait record before publishing. The
- * record lives in task metadata, whose heap mapping survives stack reuse.
- * Sleep only after releasing resource locks; an earlier wake is remembered.
+/* Current user task or BSP kernel task, in task context with IF=0. Prepare its
+ * wait record before publishing it under the resource lock, after checking the
+ * condition under that lock. The record lives in task metadata, whose heap
+ * mapping survives stack reuse. Sleep after releasing all locks; an earlier
+ * wake is remembered. Sleep returns with IF=0; kernel callers save/disable
+ * interrupts before preparation and restore them after detaching the record.
  * A resource must remove its wait pointer before waking and never use it after
- * wake returns. No allocation or migration; one wait per task at a time. */
+ * wake returns. Recheck the condition after wake. Detach any published pointer
+ * before reusing the record or returning from a kernel task's entry.
+ * No allocation or migration; one wait per task at a time. */
 struct task_wait *task_wait_prepare(void);
 void task_wait_sleep(struct task_wait *wait);
-/* Any CPU, IF=0, after detaching the record under its resource lock. */
+/* Any CPU, including interrupt entry, IF=0, after detaching the record under
+ * its resource lock. Makes a parked task runnable; never switches to it here. */
 void task_wait_wake(struct task_wait *wait);
 
 /* Absolute monotonic nanosecond deadlines. Relative conversion saturates on

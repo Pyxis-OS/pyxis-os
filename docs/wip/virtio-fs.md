@@ -77,10 +77,11 @@ submit work and wait; the interrupt handler records activity, acknowledges the
 interrupt as required and wakes the worker. It does not allocate, parse FUSE
 responses or perform filesystem operations.
 
-The current event-wait API accepts user tasks, while kernel tasks support timed
-sleep. Extend event waiting to kernel tasks in a focused prerequisite. Preserve
-the wake-before-park ordering and ensure work arriving as the worker goes idle
-cannot be lost. Keep device queues and request state in the owning subsystem.
+The event-wait API supports user tasks and BSP kernel tasks, preserving the
+wake-before-park ordering. The worker must check and publish its wait under its
+resource lock so work arriving as it goes idle cannot be lost; see
+[task waiting](../smp.md). Keep device queues and request state in the owning
+subsystem.
 
 Do not run blocking host I/O in the scheduler's BSP service loop. The worker
 must sleep while awaiting completion so presentation and other tasks continue.
@@ -173,9 +174,12 @@ grows. No later item is implied by completing an earlier one.
    and inspects queues zero and one. Leaves `DRIVER_OK` clear and DMA/interrupts
    disabled. Failure resets before resource release; an unconfirmed reset retains
    the claim and mappings until reboot while normal boot continues.
-4. [ ] **Kernel task event waits.** Extend the existing prepare/park/wake
+4. [x] **Kernel task event waits.** Extend the existing prepare/park/wake
    contract to BSP kernel tasks. Completion: the upcoming worker can block on
    an event without polling sleeps or weakening wake-before-park guarantees.
+   Kernel tasks now use the same IF=0 wait and deadline API, without user CPU-state
+   saving. Wake schedules them through the ordinary ready queue. Existing kernel
+   deadline sleep and user-only process-service contracts are preserved.
 5. [ ] **PCI MSI-X delivery.** Configure the selected device's table and vector,
    route it to the BSP and connect short interrupt handling to worker wakeups.
    Completion: masking, activation and teardown ordering are defined; actual

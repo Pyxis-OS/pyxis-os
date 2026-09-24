@@ -85,18 +85,20 @@ current task and saved scheduler stack are local to their CPU. Local timer
 interrupts wake idle CPUs to check for submissions and wake the BSP to collect
 completions, so these handoffs need no IPI and may wait about one timer period.
 
-Blocking userspace syscalls use a wait record embedded in task metadata. The
-resource publishes it under its own lock and removes it before waking the task. The scheduler queue
-lock protects notification and parking: an early wake is remembered, and no task
-is enqueued until its context has been saved on the permanent scheduler stack.
+Blocking userspace syscalls and BSP kernel tasks use a wait record embedded in
+task metadata. The resource publishes it under its own lock and removes it before
+waking the task. The scheduler queue lock protects notification and parking.
+An early wake is remembered; a task is only enqueued after execution has returned
+to the permanent scheduler stack.
 This prevents lost wakeups or resuming a stack still in use. The resource lock
 may nest the queue lock; the reverse order is forbidden. Neither is held across
 a context switch.
 
-Parking saves user CPU state just like timer preemption. Resume restores the
-same CPU, process root and private entry stack, with interrupts still disabled.
-The process remains alive while blocked. User mappings stay stable except during
-an explicit private-memory loan after the task has left its address space.
+Parking a user task saves user CPU state just like timer preemption. Resume
+restores the same CPU, process root and private entry stack, with interrupts
+still disabled. The process remains alive while blocked. User mappings stay
+stable except during an explicit private-memory loan after the task has left
+its address space.
 Only an explicit table-growth loan allows the BSP to modify its capability table.
 Remote wakeups use the existing timer-driven ready-queue check, with no IPI.
 
@@ -136,6 +138,29 @@ with interrupts disabled. Its entry runs on a private stack in the kernel
 address space with interrupts enabled. The timer can preempt it; returning from
 entry retires its stack and metadata through the same scheduler cleanup path.
 The argument is borrowed, so its owner must keep it alive until entry returns.
+
+Kernel tasks can also use `task_wait_prepare`, `task_wait_sleep` and
+`task_wait_sleep_until`. Save and disable interrupts before entering this
+sequence; prepare/sleep are task-context calls, never interrupt-handler calls.
+Under the resource lock, check for work and publish the prepared wait record if
+there is none. Release every lock before sleeping. A wake before sleep returns
+immediately; a wake during the context switch is remembered until the scheduler
+has saved the stack. A parked task goes back onto its owning CPU's normal ready
+queue. Wake never switches into the task directly and can run from interrupt
+entry or another CPU with IF=0.
+
+Sleep resumes with IF=0. Recheck the resource condition under its lock: a wake
+does not reserve work for the waiter. With a deadline, remove any remaining
+resource wait pointer under that lock before reusing the record; expiry can race
+with a resource wake. Restore the saved interrupt state after that detachment.
+One task has one wait record, and all published references must be detached before
+its entry returns. The resource owns the pending-work condition; the wait record
+only remembers notifications for this wait and is not a persistent event counter.
+
+Kernel waits save only the kernel context and resume in the shared kernel root;
+they do not save or restore user FP/segment state. Timed event waits use the
+existing BSP expiry path, including timer preemption of a busy task. The private
+memory, capability-growth and other process-service helpers remain user-only.
 
 `kernel_task_sleep_until(deadline)` suspends the current kernel task until an
 absolute monotonic nanosecond deadline. A past deadline yields to ready tasks.
