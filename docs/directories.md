@@ -29,12 +29,12 @@ the BSP and queues their children for retirement without recursive C calls.
 Failure during tree construction releases the unpublished root through this
 same path. The archive's bytes survive file-object destruction.
 
-The initrd is immutable; RAM directories are append-only. A per-directory lock
-protects entry links, count and generation. Lookup acquires a child reference
-under that lock, then releases the lock before handle installation or BSP table
-growth. Destruction runs only after the last owner releases the directory.
-Names and child pointers never change once published. Removal and rename remain
-later work and must revisit enumeration's borrowed-name lifetime.
+The initrd is immutable; RAM directories support creation and removal. A
+per-directory lock protects entry links, count, generation and detached state.
+Lookup acquires a child reference under that lock, then releases the lock before
+handle installation or BSP table growth. Destruction runs only after the last owner releases the directory.
+Names and child pointers never change within an entry. Removed entries are
+detached under the lock and disposed on the BSP after borrowed readers finish.
 
 ## Lookup
 
@@ -51,12 +51,13 @@ kernel compares bounded chunks without allocating on an AP.
 | READ_FILES | Grant READ on a file found through LOOKUP or CREATE |
 | WRITE_FILES | Grant WRITE on a file found through LOOKUP or CREATE |
 | CREATE | Add a directory or empty file to RAM backing |
+| REMOVE | Remove a file or empty directory name from RAM backing |
 
 Returned directory rights must be a subset of the parent's granted directory
 rights. Returned file READ requires READ_FILES; WRITE requires WRITE_FILES.
 Neither implies the other. Zero-rights grants are allowed. Enumeration is not
-required to read a known name. There is no removal operation. CREATE is separate
-from LOOKUP and ENUMERATE; granting WRITE cannot make initrd backing mutable.
+required to read a known name. CREATE and REMOVE are independent of LOOKUP,
+ENUMERATE and file rights; granting WRITE cannot make initrd backing mutable.
 
 Successful lookup installs a new owned handle in the caller's table. Missing
 names return NOT_FOUND, an unexpected kind returns WRONG_TYPE, and excessive
@@ -86,15 +87,16 @@ inside a successful reply so a short buffer can carry its required size without
 changing the CALL error convention. Name and reply destinations must be disjoint;
 request storage may overlap outputs because the kernel captures the request first.
 
-Generation checks and selection of one entry occur under the directory lock.
-The handler then copies the selected immutable name with the caller's directory
-reference keeping it alive. A successful creation increments the generation;
-mutation after selection affects the next enumeration call. Even an old END
-cursor reports CHANGED after a new entry is published. A short-buffer reply
-keeps the original cursor, including zero when no generation has been acquired.
+Generation checks, selection and copying the name occur under the directory
+lock. User mappings are validated beforehand and remain private/stable, so the
+copy cannot allocate or sleep. Removal cannot reclaim the name during copying.
+Successful creation or removal increments the generation; a later mutation
+affects the next enumeration call. Even an old END cursor reports CHANGED after
+a mutation. A short-buffer reply keeps the original cursor, including zero when
+no generation has been acquired.
 
-Generation never wraps: exhausted generation or entry-count space rejects
-creation with LIMIT. Failed creation does not advance it. This contract provides
+Generation never wraps: exhausted generation rejects mutation with LIMIT.
+Creation also checks entry-count capacity. Failed mutation does not advance it. This contract provides
 no snapshot, and callers should not retry forever if another process keeps
 changing a directory.
 
@@ -122,11 +124,12 @@ a remote private stack or user address. The resumed caller copies its validated
 name into that allocation and installs the provisional child handle, using the
 existing BSP table-growth request if needed.
 
-Under the directory lock, CREATE rechecks the name and generation capacity, then
-links the complete entry and increments the generation. That is the publication
+Under the directory lock, CREATE rechecks detached state, the name and generation
+capacity, then links the complete entry and increments the generation. That is the publication
 point. Nothing fallible remains afterward: the caller's sole task owns stable,
 already-validated reply mappings. A competing creator returns ALREADY_EXISTS,
 closes its provisional handle and asks the BSP to discard its unpublished entry.
+A directory removed while staging waited rejects publication with NOT_FOUND.
 Failed staging also discards partial ownership. Existing handles and names remain
 valid; a failed request may have grown its own capability table.
 
@@ -135,6 +138,32 @@ participates in scheduler wake/preemption decisions, including single-CPU use.
 Disposal releases the child through normal object retirement and frees the entry
 on the BSP. Closing a successful creation handle never deletes the name: its
 parent keeps an independent child reference.
+
+## Removal
+
+REMOVE takes one counted name and FILE, DIRECTORY or ANY as its expected kind.
+ANY accepts either kind in the same atomic operation, without a userspace
+lookup/remove race. Only REMOVE on the parent is required; file READ/WRITE and
+parent LOOKUP/ENUMERATE are not implied or needed. It returns no reply bytes.
+Names have the same component rules as LOOKUP. A missing name returns NOT_FOUND,
+a kind mismatch WRONG_TYPE, and a nonempty directory NOT_EMPTY. Insufficient
+rights returns DENIED before immutable backing can report READ_ONLY.
+
+A successful removal unlinks the entry and advances the parent's generation.
+No fallible work remains after unlinking. The detached entry retains its child
+reference until the existing BSP disposal service releases it. Open file handles
+remain usable, and recreating the name creates a different object. The last
+reference releases the old object's storage through normal retirement.
+
+Removing a directory locks its parent, then the child, checks that the child is
+empty and marks it detached before unlinking. This ordering is acyclic while
+there are no directory moves or links. CREATE checks detached state before
+staging and again at publication. An open removed directory can still be
+inspected or closed, but attempts to create children return NOT_FOUND. A new
+directory created under the old name does not reactivate those handles.
+
+Roots have no removable parent entry. Removal is nonrecursive; no rename,
+mount changes, capability revocation or persistent storage is added.
 
 ## Userspace example
 

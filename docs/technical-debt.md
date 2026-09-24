@@ -169,10 +169,11 @@ RTC remains deferred until PCI/VirtIO infrastructure exists.
 
 The first [Doom port](doom.md) deliberately disables save/load. Upstream writes
 a temporary save, removes the old name, then renames the temporary file. Native
-directory/file protocols currently lack removal and rename/replacement. Define
-rights, same/cross-directory behavior, replacement rules and open-handle lifetime
-before exposing real libc operations; do not fake success or silently replace
-this with a less reliable direct overwrite.
+directory protocol now supports removal, including open-handle lifetime and
+libc remove. Atomic rename/replacement remains the next filesystem step before
+save/load can be enabled. The [mutation milestone](wip/filesystem-mutations.md)
+records the agreed rights, replacement and save-location contracts. Do not fake
+success or silently substitute a less reliable direct overwrite.
 
 Configuration persistence is already disabled in the pinned generic engine.
 Re-enabling it needs an explicit writable configuration location and review of

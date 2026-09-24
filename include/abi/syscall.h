@@ -28,6 +28,7 @@ enum call_status {
   CALL_READ_ONLY = 15,
   CALL_INPUT_LOST = 16,
   CALL_TIMED_OUT = 17,
+  CALL_NOT_EMPTY = 18,
   CALL_STATUS_COUNT, /* Validation bound, not a result. */
 };
 

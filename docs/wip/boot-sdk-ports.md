@@ -15,10 +15,12 @@ milestone's remaining interface details before starting its code work.
 3. [Port recipes and Kilo](../ports.md) — complete: pinned host Lua recipes,
    SDK-based Kilo build and ordinary boot-archive integration. The
    [edit/build/run workflow](../edit-build-run.md) with TCC is also complete.
-4. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
+4. [Filesystem mutations and Doom saves](filesystem-mutations.md), followed by
+   TTY tab handling and wall-clock time.
+5. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
    through an init-managed virtio-fs mount and native filesystem capabilities.
 
-This focus order is proposed, not a commitment to work on all four together.
+This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO
 infrastructure can be developed independently, while its final mount setup uses
 init. Each milestone should become several focused PRs where needed.
