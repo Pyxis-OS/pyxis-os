@@ -1,9 +1,17 @@
 # Virtio-fs filesystem backend and host setup
 
-The optional virtio-fs device provides a read-only native filesystem backend
-through a kernel FUSE client. It does **not** expose a mount or `host://` yet. Ordinary boot needs
-neither the device nor the daemon. Remaining init/mount work is in
-[the milestone](wip/virtio-fs.md).
+The optional virtio-fs device provides a read-only `host://` root through native
+directory/file capabilities. Init opens the selected export and delegates its
+root through the session launcher to the shell and ordinary children. Existing
+`ls` and `cat` use it without PCI, VirtIO or FUSE knowledge. Ordinary boot needs
+neither the device nor the daemon.
+
+The supported platform is QEMU Q35 with firmware-assigned PCI resources, modern
+VirtIO PCI transport and split queues. See [PCI discovery and resources](pci.md)
+for MCFG/ECAM, BAR ownership and MSI-X routing. Only `VIRTIO_F_VERSION_1` is
+negotiated; legacy transport, packed queues, indirect descriptors and DAX are
+unsupported. There is no host overlay or change to `app://`. The
+[development overlay](wip/host-development-overlay.md) remains a separate idea.
 
 ## Start the host service
 
@@ -61,8 +69,19 @@ not contain commas, which delimit QEMU options.
 
 Successful initialization logs the prepared queue addresses followed by a FUSE
 session-ready message. The shell remains on CPU 1 when available; Super+Right
-selects that tab. A successful handshake does not yet let the shell read the
-exported directory.
+selects that tab. The default init mounts the export before session handoff.
+From the shell, try:
+
+```text
+ls host://
+cat host://hello.txt
+cd host://
+ls .
+```
+
+Create `hello.txt` in the exported host directory first. The prompt tracks the
+new working directory and children inherit it. Writes fail; native executable
+launch directly from a host file remains unsupported.
 
 Exit QEMU with Ctrl-a x in its serial terminal, or use the monitor's `quit`.
 Stop the daemon with Ctrl+C if it remains running. After **both** have stopped,
@@ -119,8 +138,8 @@ activity and detaches/wakes its waiter. The BSP-local check/publication handoff
 runs with IF=0 and preserves interrupts arriving before parking. The worker runs
 with IF=1 otherwise; presentation and userspace continue to be scheduled.
 After successful INIT it services native requests and deferred object cleanup,
-sleeping when neither work nor device activity is pending. Normal boot still
-exposes no host capability; there are no background polling requests.
+sleeping when neither work nor device activity is pending. There are no
+background polling requests.
 
 ## Read-only client contract
 
@@ -164,7 +183,7 @@ Wire errors become `enum virtio_fs_result`; Linux errno values do not escape the
 client. Ordinary errors such as a missing or inaccessible file leave the session
 usable. Truncated/inconsistent replies, invalid directory records, transport
 failures and failed RELEASE/FORGET cleanup stop it. No writes, symlink traversal,
-reconnection or public mount API are implemented.
+reconnection or unmount operation are implemented.
 
 ## Native directory and file objects
 
@@ -208,9 +227,54 @@ object reaping transfers the wrapper to a worker cleanup queue without sleeping
 or allocating. That worker sends RELEASE/RELEASEDIR followed by FORGET before
 freeing local storage. Copies held elsewhere keep the object alive independently.
 
-The internal ROOT request creates a native directory reference for the upcoming
-mount operation. It is not a syscall or an ambient way to acquire host access;
-init mount authority and startup delegation remain the next task.
+## Init mount and delegation
+
+The default init script is:
+
+```text
+#!app://shell.pxe
+mount --optional host
+session app://session.pxe
+```
+
+When the selected modern virtio-fs device is present, native init or its script
+interpreter receives a `host_mount` resource. This mount object is authority over
+that one boot-lifetime export; knowing the device tag supplies no authority.
+Presence is recorded before preparation, so a failed device is never confused
+with an absent one.
+
+`MOUNT_OPEN_ROOT` is a header-only synchronous request requiring
+`MOUNT_RIGHT_OPEN_ROOT`. It returns one owned directory handle granting exactly
+LOOKUP, ENUMERATE and READ_FILES. Libpyxis exposes it as `mount_open_root`.
+It creates neither a global namespace entry nor a kernel URI parser. There is
+no new syscall: it uses the existing object-call ABI.
+
+Mount requests arriving during initialization wait on the native request queue.
+The worker's bounded FUSE INIT completes them, or its failure wakes them with an
+error. Failed preparation, worker creation or initialization does not leave
+callers parked indefinitely. Transport request deadlines are five seconds;
+stopping/reset may take up to one additional second, plus scheduling delay.
+
+The shell's `mount [--optional] host` binds the returned root locally. The only
+optional success is a missing `host_mount` resource: any call failure reports an
+error and stops a script. An existing `host` binding is never replaced. Names and
+handles in a caller-supplied `path_context` root set are borrowed; a NULL set
+continues to resolve immutable startup bindings. The shell owns newly mounted
+roots until exit, and changing its bindings does not change a retained cwd chain.
+
+Session handoff and ordinary child launches copy the optional read-only host
+root alongside app/home. They never forward mount authority. The session
+launcher forwards that root to its interactive shell, whose `cd host://` and
+child launches retain the same navigation boundary and rights. Mount authority,
+root directories and opened children have independent reference lifetimes;
+init exiting does not revoke the copies it delegated.
+
+No device means archive-only startup as before. An explicit bad socket fails
+QEMU setup; a present device that cannot mount fails the init script rather than
+silently continuing. Selecting `INIT=build/userspace/shell.pxe` provides a native
+recovery shell without executing the mount command or session configuration.
+There is no mount attachment below directories, unmount, reconnection, live
+namespace replacement, host executable loader or overlay.
 
 ## Failure and lifetime
 
@@ -260,12 +324,11 @@ ownership counters should be zero and both queues should be idle. Retained
 native objects may legitimately keep lookup references or open handles alive.
 These are manual debugger calls, not boot-time probes.
 
-Before mount exposure exists, the native path can be inspected by submitting an
-internal ROOT request in that worker and lending the resulting object through a
-stopped process's capability table. Respect table ownership, retain/release every
-replaced reference, and keep allocator calls on BSP/IF=0. Ordinary `ls`/`cat`
-then exercise the syscall, AP wait, BSP forwarding, worker and deferred cleanup
-paths. Such debugger setup is not part of normal startup or a mount API.
+Ordinary `ls host://` and `cat host://hello.txt` exercise startup delegation,
+syscall dispatch, AP waits, BSP forwarding, worker I/O and deferred cleanup.
+Inspect the session ownership counters after returning to an archive/RAM cwd
+and closing children; a retained host root has no FUSE lookup reference.
+No debugger-injected capabilities are needed.
 
 References: [VirtIO 1.4 split queues and filesystem device](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.pdf),
 [virtiofsd 1.14.0 FUSE definitions](https://gitlab.com/virtio-fs/virtiofsd/-/blob/v1.14.0/src/fuse.rs),

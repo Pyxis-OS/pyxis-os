@@ -115,6 +115,14 @@ its resource check. Boot explicitly grants the init interpreter launch authority
 the default init uses `session` to pass it to the configuration launcher, which
 then delegates it to the interactive shell.
 
+## Optional host mount
+
+`mount [--optional] host` uses init's scoped `host_mount` resource to open the
+selected read-only host export and bind `host://` in this shell. It rejects an
+existing binding. Optional mode skips only a missing resource; any actual mount
+failure is an error, which stops a script. Ordinary shells receive the mounted
+root rather than mount authority. See [host setup and lifetime](virtio-fs.md).
+
 ## Session handoff
 
 `session program [arguments...]` launches a successor in the same space and on
@@ -125,10 +133,11 @@ script mode reports the script name/line and exits with failure as usual.
 Program lookup and quoting use the ordinary command rules, including shebang
 launch. The `session` word is removed from the child's arguments.
 
-The successor receives copies of the usual terminal, memory, app/home root and
+The successor receives copies of the usual terminal, memory, app/home and optional
+host root and
 working-directory grants, current working-path metadata and initial environment,
 plus an explicit `launcher` resource with LAUNCH authority. Other startup
-resources, including the caller's `script`, are not forwarded. Launching another
+resources, including the caller's `script` and `host_mount`, are not forwarded. Launching another
 script supplies that target's own READ script grant through `program_launch`.
 Ordinary foreground commands still receive no launcher.
 
@@ -152,17 +161,18 @@ ENUMERATE and READ_FILES. Home additionally supplies CREATE, WRITE_FILES and REM
 An optional `display` resource supplies DRAW authority for the space. An optional
 `clock` resource supplies READ and SLEEP authority for monotonic time. An optional
 `keyboard` resource supplies INPUT authority for physical-key sessions.
-This first shell has explicit policies for these two namespaces.
+The optional `host` root supplies the same read-only rights as app.
+The shell has explicit policies for these three namespaces.
 
 An initial directory chain is copied from startup, preserving its navigation
 boundary. A supplied chain requires a descriptive working path beginning with
-`app://` or `home://` to select the requested rights. The path is not resolved to
+`app://`, `home://` or `host://` to select the requested rights. The path is not resolved to
 replace the chain: actual handles remain authoritative, and insufficient grants
 fail normally. With no initial chain the shell starts at `home://`. Explicit
 scheme changes select that scheme's rights; relative changes keep the current
 rights. Crossing a retained ancestor boundary fails as in the native path API.
 
-Each foreground child receives explicit copies of terminal input/output, memory, both roots
+Each foreground child receives explicit copies of terminal input/output, memory, available roots
 with the rights above, and the current directory chain. It does not receive the
 shell's launcher. When available, the [display](graphics.md),
 [clock](timekeeping.md) and [keyboard](keyboard.md) grants are also forwarded

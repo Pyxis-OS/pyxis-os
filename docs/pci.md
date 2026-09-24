@@ -205,8 +205,7 @@ Read MMIO registers individually at their documented byte, word or dword width.
 A bulk structure read can combine neighboring registers into accesses the device
 does not support, producing misleading values even with correct field offsets.
 
-The [init-managed mount](wip/virtio-fs.md#focused-task-list) is next. The
+The [init-managed mount](virtio-fs.md#init-mount-and-delegation) exposes the
+read-only export as `host://` through directory/file capabilities. The
 [host setup](virtio-fs.md#start-the-host-service) documents the opt-in daemon and
-socket used by `make run`/`make debug`. Queue transport and session negotiation
-and the read-only native backend work; normal startup does not yet expose a
-host capability or public mount operation.
+socket used by `make run`/`make debug`. Ordinary archive-only boot needs neither.

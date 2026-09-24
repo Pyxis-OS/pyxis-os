@@ -28,15 +28,11 @@ milestone's remaining interface details before starting its code work.
    Locale and reverse conversion remain deferred.
 9. Complete: [guest Lua](../lua.md), including scripts, REPL and default
    [session configuration](../session-configuration.md) for timezone and tab width.
-10. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
-    through an init-managed read-only virtio-fs mount and native filesystem
-    capabilities. The agreed Q35/ECAM, modern PCI, split-queue and BSP-worker
-    direction is split into nine focused tasks. [PCI discovery and owned
-    resources](../pci.md), VirtIO feature negotiation and queue inspection are
-    complete, as are kernel task event waits, MSI-X delivery and split queues.
-    The BSP worker now establishes a [FUSE session](../virtio-fs.md) through real
-    completion interrupts and provides the read-only client. Native filesystem
-    backend integration is complete; init-managed mount exposure is next.
+10. Complete: [PCI and VirtIO host filesystem access](../virtio-fs.md).
+    Init opens the opt-in read-only export and delegates `host://` through the
+    session launcher to the shell and children. Existing `ls`/`cat` use native
+    directory/file capabilities; archive-only boot remains the default without
+    a device/socket.
 
 This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO
@@ -57,7 +53,7 @@ shareware data; local retail WADs and demos are optional overrides. PCI/VirtIO
 is not a prerequisite.
 
 VirtIO driver order is agreed: virtio-fs, then virtio-net, then virtio-blk.
-An opt-in [host-backed development overlay](virtio-fs.md#follow-up-host-backed-development-overlay)
+An opt-in [host-backed development overlay](host-development-overlay.md)
 is a follow-up experiment after the plain mount works, not part of its completion
 boundary or a replacement for the default boot archive.
 
