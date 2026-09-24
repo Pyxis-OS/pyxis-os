@@ -11,7 +11,7 @@ output names live in each recipe's metadata; `ports.lua` only lists recipes.
 
 ```sh
 git submodule update --init userspace ports
-make ports                 # export SDK, build and stage Kilo and TCC
+make ports                 # export SDK and stage the selected ports
 make image                 # also package userspace and assemble the ISO
 make run CPUS=4
 ```
@@ -95,3 +95,11 @@ GCC remains the compiler for the OS and maintained applications.
 
 See the [edit/build/run walkthrough](edit-build-run.md) and
 [TCC contract and limits](tcc.md).
+
+## Timezone data
+
+The `tzdata` recipe builds matching host zic and the pinned IANA database. The
+[packaged data](timezone-data.md) includes all standard zones/aliases and notices
+under `app://share`, with no dependency on the host's installed timezone version.
+It travels in the same ports bundle as the executable ports. Runtime timezone
+conversion is a separate task; `date` still displays UTC.
