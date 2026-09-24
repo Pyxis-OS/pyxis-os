@@ -4,7 +4,7 @@
 default [init script](init.md), which hands off to one shell on CPU 1 when available,
 otherwise on the BSP, with `home://` as its working directory. On multicore boots
 use Super+Right to select CPU 1 before typing. The normal initrd contains init,
-shell, ls, cat, mkdir, rm, rmdir, [Kilo and its license](ports.md), and `share/hello.txt`;
+shell, ls, cat, mkdir, rm, rmdir, mv, [Kilo and its license](ports.md), and `share/hello.txt`;
 home is initially empty and its RAM
 contents disappear on reboot.
 
@@ -79,6 +79,12 @@ return failure if any removal failed. They have no options, recursive removal,
 parent pruning or wildcard expansion. Existing handles survive removal, and
 removing an empty directory makes it unavailable for new children even through
 an older handle. See [the directory contract](directories.md#removal).
+
+`mv source-file destination-file` renames a file and replaces an existing file
+at the exact destination path. It accepts exactly two operands, has no options,
+and does not append a basename when the destination is a directory. Directory
+moves and cross-filesystem copying are unsupported. It uses libc rename and
+reports failure without deleting the source or destination itself.
 
 ## Script mode
 

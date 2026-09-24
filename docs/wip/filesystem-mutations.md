@@ -8,7 +8,7 @@ storage, a filesystem server, a mount framework or POSIX kernel interfaces.
 
 - [x] Removal: independent directory REMOVE authority, file/empty-directory
   removal, safe enumeration, native path helpers, libc remove and rm/rmdir.
-- [ ] Atomic file rename/replacement: native calls, path helpers, libc rename
+- [x] Atomic file rename/replacement: native calls, path helpers, libc rename
   and file-only mv. Failure preserves both entries. Support moves between RAM
   directories, with explicit replace/no-replace policy; never silently fall
   back to copy-and-delete across filesystems.

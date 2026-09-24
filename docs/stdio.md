@@ -43,8 +43,24 @@ name fails unless another entry has been created there. Roots and final `.` or
 `..` are rejected, and a trailing slash requires a directory.
 
 Nonempty directories report ENOTEMPTY. This is nonrecursive removal, without
-unlink/rmdir syscall adapters or a process-wide file descriptor table. Rename
-and persistent storage remain separate work.
+unlink/rmdir syscall adapters or a process-wide file descriptor table. Persistent
+storage remains separate work.
+
+## Rename
+
+`rename(old_path, new_path)` performs atomic file rename/replacement through the
+native directory protocol. It returns zero on success or -1 with errno on
+failure, using startup roots and the initial directory chain just like fopen.
+The destination is an exact file path; an existing directory is not interpreted
+as a request to append the old basename. Directory moves, trailing separators,
+roots and final `.`/`..` are unsupported. No copy-and-delete fallback exists.
+
+Source-parent REMOVE and destination-parent CREATE are required, with destination
+REMOVE when replacing another file. Existing streams keep their original file
+objects even when a destination name is replaced. A failed operation does not
+remove either entry, and replacement exposes no missing-destination interval.
+Renaming an existing file to itself succeeds. These are namespace guarantees
+within the RAM filesystem, not disk durability or a whole-path snapshot.
 
 ## Transfers and positions
 
