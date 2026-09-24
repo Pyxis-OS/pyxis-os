@@ -23,6 +23,7 @@
 #include <kernel/keyboard.h>
 #include <kernel/object/console.h>
 #include <kernel/object/display.h>
+#include <kernel/object/keyboard.h>
 
 #define PRESENT_INTERVAL_NS UINT64_C(16666667)
 
@@ -123,6 +124,11 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
     space->display = display_create(space);
     if (!space->display) {
       panic("cannot allocate space display");
+    }
+
+    space->keyboard = keyboard_create(space, i == 0);
+    if (!space->keyboard) {
+      panic("cannot allocate space keyboard");
     }
 
     arch_cpu_at(i)->space = space;
@@ -234,34 +240,44 @@ static void switch_adjacent_space(bool next)
 static void handle_space_input(void)
 {
   struct key_event event;
+  static bool navigation_held[2];
   const unsigned shortcut_modifiers =
       KEY_MOD_SHIFT | KEY_MOD_CONTROL | KEY_MOD_ALT | KEY_MOD_SUPER;
 
   while (keyboard_read_event(&event)) {
     if (event.action == KEY_STATE_RESET) {
+      navigation_held[0] = navigation_held[1] = false;
+      uint64_t flags = cpu_save_interrupts();
       /* Lost scan bytes can include a space shortcut, so no queued stream can
        * be trusted to describe what the user meant to send. */
       for (size_t i = arch_cpu_count() > 1 ? 1 : 0; i < arch_cpu_count(); ++i) {
-        console_input_lost(arch_cpu_at(i)->space->console);
+        keyboard_reset_input(arch_cpu_at(i)->space->keyboard);
       }
+      cpu_restore_interrupts(flags);
       continue;
     }
-    if ((event.modifiers & shortcut_modifiers) == KEY_MOD_ALT &&
-        (event.key == KEY_LEFT || event.key == KEY_RIGHT)) {
-      if (event.action == KEY_PRESS) {
-        switch_adjacent_space(event.key == KEY_RIGHT);
+    if (event.key == KEY_LEFT || event.key == KEY_RIGHT) {
+      size_t arrow = event.key == KEY_RIGHT;
+      if (navigation_held[arrow]) {
+        if (event.action == KEY_RELEASE) {
+          navigation_held[arrow] = false;
+        }
+        continue;
       }
-      continue;
+      if ((event.modifiers & shortcut_modifiers) == KEY_MOD_SUPER &&
+          event.action == KEY_PRESS) {
+        navigation_held[arrow] = true;
+        switch_adjacent_space(arrow);
+        continue;
+      }
     }
     if (arch_cpu_count() > 1 && active_space == arch_cpu_at(0)->space) {
       continue;
     }
 
-    char bytes[KEY_TEXT_MAX];
-    size_t size = keyboard_text(&event, bytes);
-    if (size) {
-      console_input(active_space->console, bytes, size);
-    }
+    uint64_t flags = cpu_save_interrupts();
+    keyboard_route_event(active_space->keyboard, &event);
+    cpu_restore_interrupts(flags);
   }
 }
 
@@ -285,7 +301,15 @@ void space_present_task(void *argument)
 
 void space_switch(size_t index)
 {
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
   if (index < arch_cpu_count()) {
-    active_space = arch_cpu_at(index)->space;
+    struct space *next = arch_cpu_at(index)->space;
+    if (next != active_space) {
+      keyboard_focus(active_space->keyboard, false);
+      active_space = next;
+      keyboard_focus(next->keyboard, true);
+    }
   }
+  cpu_restore_interrupts(flags);
 }
