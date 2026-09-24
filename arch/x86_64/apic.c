@@ -13,6 +13,8 @@
 
 #define APIC_ID 0x020
 #define APIC_ID_SHIFT 24
+#define APIC_MSI_ADDRESS UINT32_C(0xfee00000)
+#define APIC_MSI_DESTINATION_SHIFT 12
 #define APIC_VERSION 0x030
 #define APIC_TASK_PRIORITY 0x080
 #define APIC_EOI 0x0b0
@@ -55,6 +57,22 @@
 uint32_t arch_timer_frequency(void)
 {
   return TIMER_FREQUENCY;
+}
+
+struct apic_msi_message apic_bsp_msi_message(uint8_t vector)
+{
+  uint32_t destination = cpu_bsp()->lapic_id;
+  KASSERT(destination <= UINT8_MAX);
+  KASSERT(vector >= APIC_TIMER_VECTOR && vector < APIC_SPURIOUS_VECTOR);
+
+  /* Address bits 19:12 select the physical APIC. Zero mode/delivery/trigger
+   * fields mean physical destination, fixed delivery and edge triggering.
+   * This is an interrupt message address, not the CPU's APIC MMIO base. */
+  return (struct apic_msi_message){
+    .address_low = APIC_MSI_ADDRESS | (destination << APIC_MSI_DESTINATION_SHIFT),
+    .address_high = 0,
+    .data = vector,
+  };
 }
 
 static uint32_t apic_read(unsigned offset)

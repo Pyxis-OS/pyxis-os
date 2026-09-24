@@ -1,7 +1,12 @@
+#include <arch/apic.h>
 #include <arch/clock.h>
+#include <arch/cpu.h>
+#include <arch/cpu_local.h>
 #include <arch/pci.h>
 #include <kernel/log.h>
+#include <kernel/panic.h>
 #include <kernel/pci/registers.h>
+#include <kernel/task.h>
 #include <kernel/virtio/pci.h>
 #include <stddef.h>
 
@@ -39,6 +44,14 @@
 #define VIRTIO_STATUS_DRIVER 2u
 #define VIRTIO_STATUS_FEATURES_OK 8u
 #define VIRTIO_STATUS_FAILED 128u
+#define VIRTIO_FS_MSIX_ENTRY 0
+
+struct pci_msix_entry {
+  uint32_t address_low, address_high, data, control;
+};
+
+_Static_assert(sizeof(struct pci_msix_entry) == PCI_MSIX_ENTRY_BYTES,
+               "PCI MSI-X table entry layout");
 
 /* Naturally aligned, little-endian registers in the common configuration.
  * The prefix ends before queue addresses, which this stage does not program. */
@@ -86,11 +99,115 @@ static struct {
   uint32_t request_queues;
   struct virtio_queue_info hiprio, request;
   bool negotiated;
+  bool interrupt_ready, interrupt_pending;
+  struct task_wait *interrupt_wait;
 } filesystem;
 
 static volatile struct virtio_pci_common *common_config(void)
 {
   return (volatile struct virtio_pci_common *)filesystem.common.mapping.address;
+}
+
+void virtio_fs_pci_interrupt(void)
+{
+  KASSERT(cpu_current() == cpu_bsp());
+  if (!filesystem.interrupt_ready) {
+    return;
+  }
+
+  /* Worker and IRQ both run on the BSP: IF=0 protects this handoff. Activity
+   * survives an interrupt before publication of the worker's wait record. */
+  filesystem.interrupt_pending = true;
+  struct task_wait *wait = filesystem.interrupt_wait;
+  filesystem.interrupt_wait = NULL;
+  if (wait) {
+    task_wait_wake(wait);
+  }
+}
+
+void virtio_fs_pci_wait_interrupt(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(cpu_current() == cpu_bsp() && (flags & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(filesystem.interrupt_ready && !filesystem.interrupt_wait);
+
+  while (!filesystem.interrupt_pending) {
+    struct task_wait *wait = task_wait_prepare();
+    filesystem.interrupt_wait = wait;
+    task_wait_sleep(wait);
+    filesystem.interrupt_wait = NULL;
+  }
+  filesystem.interrupt_pending = false;
+  cpu_restore_interrupts(flags);
+}
+
+static bool disable_msix(void)
+{
+  struct pci_claim *claim = &filesystem.claim;
+  unsigned offset = filesystem.msix_capability + PCI_MSIX_CONTROL;
+  uint16_t control = pci_read16(claim->device->address, offset);
+  pci_write16(claim, offset, (control | PCI_MSIX_FUNCTION_MASK) & ~PCI_MSIX_ENABLE);
+  filesystem.interrupt_ready = false;
+  control = pci_read16(claim->device->address, offset);
+  return (control & (PCI_MSIX_ENABLE | PCI_MSIX_FUNCTION_MASK)) == PCI_MSIX_FUNCTION_MASK;
+}
+
+static bool prepare_msix(void)
+{
+  struct pci_claim *claim = &filesystem.claim;
+  unsigned offset = filesystem.msix_capability + PCI_MSIX_CONTROL;
+  uint16_t control = pci_read16(claim->device->address, offset);
+  unsigned masked_enable = PCI_MSIX_ENABLE | PCI_MSIX_FUNCTION_MASK;
+  /* VirtIO only accepts vector mappings while MSI-X is enabled. Keep the
+   * function mask set throughout setup, including all failure paths. */
+  pci_write16(claim, offset, control | masked_enable);
+  if ((pci_read16(claim->device->address, offset) & masked_enable) != masked_enable) {
+    return false;
+  }
+
+  volatile struct pci_msix_entry *table =
+    (volatile struct pci_msix_entry *)filesystem.msix_table.mapping.address;
+  for (unsigned i = 0; i < filesystem.msix_entries; ++i) {
+    table[i].control |= PCI_MSIX_VECTOR_MASK;
+    if (!(table[i].control & PCI_MSIX_VECTOR_MASK)) {
+      return false;
+    }
+  }
+
+  struct apic_msi_message message = apic_bsp_msi_message(APIC_VIRTIO_FS_VECTOR);
+  volatile struct pci_msix_entry *entry = &table[VIRTIO_FS_MSIX_ENTRY];
+  entry->address_low = message.address_low;
+  entry->address_high = message.address_high;
+  entry->data = message.data;
+  /* Read back device writes before relying on the route. All register mappings
+   * are uncached; table accesses use individual aligned 32-bit transactions. */
+  if (entry->address_low != message.address_low || entry->address_high != message.address_high ||
+      entry->data != message.data || !(entry->control & PCI_MSIX_VECTOR_MASK)) {
+    return false;
+  }
+
+  /* These registers contain table indices, not CPU interrupt vectors. A
+   * rejected mapping reads back as NO_VECTOR (0xffff), even for a valid index. */
+  volatile struct virtio_pci_common *common = common_config();
+  common->config_msix_vector = VIRTIO_FS_MSIX_ENTRY;
+  if (common->config_msix_vector != VIRTIO_FS_MSIX_ENTRY) {
+    return false;
+  }
+  common->queue_select = VIRTIO_FS_HIPRIO_QUEUE;
+  common->queue_msix_vector = VIRTIO_FS_MSIX_ENTRY;
+  if (common->queue_msix_vector != VIRTIO_FS_MSIX_ENTRY) {
+    return false;
+  }
+  common->queue_select = VIRTIO_FS_FIRST_REQUEST_QUEUE;
+  common->queue_msix_vector = VIRTIO_FS_MSIX_ENTRY;
+  if (common->queue_msix_vector != VIRTIO_FS_MSIX_ENTRY) {
+    return false;
+  }
+
+  filesystem.interrupt_ready = true;
+  klog("virtio-fs PCI: MSI-X entry %u -> BSP APIC %u vector %u; config and queues share masked route\n",
+       VIRTIO_FS_MSIX_ENTRY, cpu_bsp()->lapic_id, APIC_VIRTIO_FS_VECTOR);
+  return true;
 }
 
 static bool reset_mapped_device(void)
@@ -492,13 +609,21 @@ void virtio_fs_pci_prepare(const struct boot_info *boot)
        filesystem.msix_entries);
 
   failure = negotiate_transport();
+  if (!failure && !prepare_msix()) {
+    failure = "MSI-X routing rejected";
+  }
   if (failure) {
+    bool interrupts_disabled = disable_msix();
+    filesystem.negotiated = false;
     klog("virtio-fs PCI: %s; marking FAILED and resetting\n", failure);
     common_config()->device_status |= VIRTIO_STATUS_FAILED;
-    if (!reset_mapped_device()) {
+    bool reset = reset_mapped_device();
+    if (!reset || !interrupts_disabled) {
       /* No queues or DMA buffers exist, but keep the failed function claimed:
        * an unconfirmed reset must not look like an available device. */
-      klog("virtio-fs PCI: reset timed out; claim and mappings retained until reboot, DMA disabled\n");
+      klog("virtio-fs PCI: cleanup unconfirmed (reset=%u MSI-X disabled=%u); "
+           "claim and mappings retained until reboot, DMA disabled\n",
+           (unsigned)reset, (unsigned)interrupts_disabled);
       return;
     }
     goto fail;

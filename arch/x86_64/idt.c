@@ -7,6 +7,7 @@
 #include <kernel/panic.h>
 #include <kernel/user.h>
 #include <kernel/task.h>
+#include <kernel/virtio/pci.h>
 #include <stddef.h>
 
 #define IDT_GATE_PRESENT (1u << 7)
@@ -75,6 +76,11 @@ static void report_page_fault(uint64_t error, uint64_t address)
 
 void interrupt_handler(struct exception_frame *frame)
 {
+  if (frame->vector == APIC_VIRTIO_FS_VECTOR) {
+    virtio_fs_pci_interrupt();
+    apic_end_interrupt();
+    return;
+  }
   if (frame->vector == APIC_KEYBOARD_VECTOR) {
     ps2_keyboard_interrupt();
     apic_end_interrupt();

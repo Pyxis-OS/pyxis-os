@@ -5,7 +5,16 @@
 
 #define APIC_TIMER_VECTOR 32
 #define APIC_KEYBOARD_VECTOR 33
+#define APIC_VIRTIO_FS_VECTOR 34
 #define APIC_SPURIOUS_VECTOR 255
+
+struct apic_msi_message {
+  uint32_t address_low, address_high, data;
+};
+
+/* Physical xAPIC destination, fixed edge-triggered delivery to the BSP.
+ * The caller must own a statically assigned external interrupt vector. */
+struct apic_msi_message apic_bsp_msi_message(uint8_t vector);
 
 /* xAPIC mode. Paging maps the device before setup. PIT calibration is shared:
  * initialize one CPU at a time, with IF=0, and leave the timer CPU-local. */
