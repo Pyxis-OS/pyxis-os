@@ -1,175 +1,73 @@
-# Lua port milestones
+# Lua in Pyxis
 
-Status: expression/script execution and the libterm REPL are implemented.
-Configuration is the first system integration: choose the default timezone and
-terminal tab width. Host Lua for build recipes and image manifests remains independent of
-this guest port. Libraries consume the [SDK](../sdk-and-repositories.md) and
-[port recipe setup](../ports.md).
+The boot archive includes `app://lua.pxe`, resolved as `lua` by the shell.
+The port uses Lua 5.5.1, pinned to upstream commit
+`7579fc9d7ed90240487251dfb69168f8e64e9294`, with the recorded upstream GC fix.
+The MIT notice is installed at `app://share/licenses/lua/lua.h`.
+See the [port notes](../ports/lua/README.md) for the source adaptations.
+Host Lua used by build recipes and image manifests is independent of guest Lua.
 
-Clock reads, calendar conversion and timezone conversion must work without Lua.
-Audit the port before implementation and discuss newly discovered runtime gaps;
-this milestone does not authorize unrelated kernel or libc expansion.
-
-The general [userspace stack](../userspace.md) now has 1 MiB of eager backing
-and a reserved guard page. Lua's heap value stack does not eliminate native C
-recursion in parsing and callbacks; review those paths against this budget
-without silently lowering Lua's recursion limits. Automatic growth is deferred.
-
-## 1. Pin Lua and define the runtime slice
-
-The expression interpreter uses Lua 5.5.1 from the
-[official Git mirror](https://github.com/lua/lua), pinned to commit
-`7579fc9d7ed90240487251dfb69168f8e64e9294` (`v5.5.1`). Its C sources and headers
-match the release except that the mirror does not contain `luac.c`; the separate
-bytecode compiler is outside this slice. Preserve the MIT license in `lua.h`.
-The port carries upstream's [negative-shift GC fix](https://github.com/lua/lua/commit/0b29f408433e92953cc72b1d3e06c7ac8139e439)
-as a recorded production-code patch.
-
-The initial compile audit identified the runtime requirements below, now
-implemented in the SDK. Lua keeps its normal 64-bit integers and double-precision
-numbers. The normal ports build includes the executable and its MIT notice;
-see the [recipe notes](../../ports/lua/README.md) for source adaptations.
-
-Prerequisites and focused PR tasks:
-
-- [x] General 1 MiB userspace stack and reserved guard page. Review Lua's native
-  recursive paths when integrating the port; individual frame sizes do not
-  establish a worst-case bound.
-- [x] Add libc `memchr`, `strspn`, `strpbrk`, and the missing ASCII classifiers
-  `isalnum`, `isalpha`, `iscntrl`, `isgraph`, `islower`, `ispunct`, `isupper`,
-  `isxdigit`. Preserve the existing unsigned-byte/EOF argument contract.
-- [x] Add core double-precision `floor`, `fmod`, `pow`, `frexp` and `ldexp` using
-  the pinned musl subset and its required internal helpers/tables. Lua's core
-  needs these even without the standard `math` library; the full library is
-  deferred.
-- [x] Add the pinned recipe, license and ordered adaptations, then the expression
-  execution slice below. Record fixed-C-locale decimal point and byte collation
-  through Lua's existing hooks; no locale subsystem or signal stubs.
-- [x] Add explicit-filename script loading with inherited cwd/URI lookup,
-  `arg`/`...`, and restored `loadfile`/`dofile`.
-- [x] Add the libterm REPL with the exit/cancellation behavior below.
-
-The interpreter registers base, coroutine, table, string and UTF-8, including
-explicit-filename `loadfile` and `dofile`. Broad `io`/`os`, native dynamic modules
-and the full math library are not prerequisites. The `io`/`os`
-audit found additional needs including pushback, temporary files, stream-buffer
-control, process CPU time and calendar formatting/conversion. Do not substitute
-wall time for CPU time or introduce successful stubs for missing operations.
-
-The auxiliary script loader uses a port-owned 512-byte buffer and opens files
-in binary mode initially, avoiding the unnecessary `freopen` cycle on Pyxis.
-Pure-Lua `require` still needs an explicit module search-path policy.
-
-The pin, library selection and runtime prerequisites are complete. This does
-not authorize unrelated libc or kernel expansion.
-
-## 2. Run Lua code in Pyxis
-
-Implemented as `app://lua.pxe`, resolved as `lua` by the shell:
+## Interpreter
 
 ```text
 lua -e 'print("Hello from Lua", 2 ^ 0.5)'
+lua home://scripts/hello.lua Alice
+lua
 ```
 
-The small native driver accepts exactly one `-e` text chunk. It opens the five
-selected libraries and protects initialization, compilation and execution.
-Success exits zero; usage and execution errors exit one. Runtime errors include
-tracebacks. Chunk return values are discarded. No arguments enters the REPL.
-The driver also supports explicit scripts as described below. There is no
-environment startup hook.
+`-e` executes one text chunk. A filename runs a script, with `--` available for
+filenames beginning with `-`. Paths use the inherited working directory or an
+explicit Pyxis URI; the interpreter does not change to the script directory or
+search for modules. `arg[0]` is the supplied filename, positive indices and `...`
+carry script arguments, and negative indices retain preceding interpreter
+arguments. `loadfile` and `dofile` require explicit filenames and use those same
+path rules. Script/chunk return values are discarded. File, syntax and runtime
+errors return a nonzero process status; runtime errors include tracebacks.
 
-The full image build and manual boot/debugger inspection cover real Lua
-execution and error reporting. This does not imply system-wide configuration,
-dynamic modules or complete standard-library support.
+With no arguments, Lua opens the libterm REPL. Expressions print their results,
+globals survive across chunks, and locals belong to the current chunk. Lua's
+parser determines when a statement needs another line, shown by the `>> `
+prompt. Language errors return to the primary prompt. Ctrl+C discards the whole
+pending chunk; Ctrl+D on an empty primary or continuation line exits. Neither
+control interrupts an executing chunk.
 
-## 3. Scripts and an interactive REPL
+The line editor supports insertion, deletion and cursor movement. Each input
+line is limited to 1023 bytes and the visible terminal capacity. Input loss or
+line-limit rejection discards the pending chunk. Multiline source grows on
+Lua's heap; allocation and terminal failures exit nonzero. Prompts are fixed,
+and history is not implemented.
 
-Script execution is implemented as `lua file.lua [args...]`, with `--` to
-terminate option parsing for filenames beginning with `-`. Paths resolve through
-the inherited working directory or explicit Pyxis URIs; the interpreter does not
-change to the script's directory or search for modules. `arg[0]` is the supplied
-filename, positive indices and `...` carry script arguments, and negative indices
-retain preceding interpreter arguments. The base library's `loadfile` and
-`dofile` require explicit filenames and preserve Lua's usual return/error rules.
-File, syntax and runtime errors return a nonzero process status.
+## Libraries and runtime
 
-Stdin scripts and direct shebang launches are deferred. The latter needs to
-consume the launcher's already-open `script` capability rather than reopen a
-diagnostic name; the current driver rejects that handoff explicitly.
+The interpreter opens base, coroutine, table, string and UTF-8. It keeps Lua's
+64-bit integers and double-precision numbers. Library initialization, loading
+and execution are protected against Lua errors. Decimal point and string
+collation use the fixed C-locale hooks; no locale or signal subsystem is implied.
 
-The libterm REPL prints expression results and retains globals across chunks.
-Lua's parser determines whether a statement needs continuation input. Ctrl+D on
-an empty line exits, including at a continuation prompt; Ctrl+C discards the
-whole pending multiline chunk and returns to the primary prompt. Libterm exposes
-EOF separately from cancellation, and the shell exits successfully on EOF too.
-Syntax/runtime errors return to the prompt; allocation/terminal failures exit
-nonzero. Input loss or line-limit rejection discards the whole pending chunk.
-History and custom prompts are not part of this slice. The selected libraries
-and filesystem policy above remain unchanged.
+There is no io/os, package/require, debug or full math library. Stdin scripts and
+direct shebang handoffs are unsupported: the latter must eventually consume the
+launcher's existing script capability rather than reopen its diagnostic name.
+No environment startup chunks or native dynamic modules are loaded.
 
-Lua's CLI normally uses SIGINT, which Pyxis does not provide. Line cancellation
-does not interrupt an executing CPU-bound script. Signals, module lookup and
-additional standard libraries remain separate work.
+The native stack has the general 1 MiB eager backing and an unmapped guard page;
+Lua value stacks live on the heap. Parser, callback and pattern recursion retain
+upstream limits, which do not prove that every combination fits the native stack.
+Automatic stack growth and signal-driven interruption remain deferred.
 
-Completion: script execution and the interactive REPL are implemented. See the
-[port notes](../../ports/lua/README.md) for input limits and language behavior.
+## Embedding and session configuration
 
-## 4. Init/session configuration
+The ports build exports `liblua.a` and public headers separately from its boot
+payload. The archive has the core, auxiliary library and selected libraries,
+without the CLI main; consumers choose which libraries to open. It is built
+against the selected SDK and carried in the [ports bundle](build-bundles.md).
+The SDK itself does not depend on Lua.
 
-Add a userspace configuration evaluator that returns a table, validates its
-settings and supplies ordinary values to consumers. Applications need not each
-embed Lua, and the kernel receives explicit operations rather than Lua code.
-Start with the default timezone and terminal tab width, for example:
+The first-party session launcher embeds this library to evaluate
+`app://config/session.lua`. Default init uses that launcher to select Bucharest,
+apply eight-column tabs and start the shell. Its restricted evaluator, validation,
+defaults and recovery path are documented in [session configuration](session-configuration.md).
+Clock/calendar conversion and terminal operations remain usable without Lua.
 
-```lua
-return {
-  timezone = "Europe/Bucharest",
-  terminal = { tab_width = 8 },
-}
-```
-
-This explicitly selects Bucharest; absent `TZ` defaults to UTC. Configuration
-will pass the selected IANA name through the session environment.
-
-The agreed boot path is init → session configuration → interactive shell.
-A small userspace session launcher evaluates `app://config/session.lua` from
-the boot archive, validates the complete table before applying settings, and
-launches the shell with the selected `TZ` in its environment. A child evaluator
-cannot change its parent's environment; the component consuming configuration
-must own the configured session launch.
-
-Missing settings default to UTC and eight-column tabs. A missing file uses
-those defaults; an existing but invalid file reports an error and stops
-configured startup. The packaged file explicitly selects Bucharest. `INIT=`
-remains available to bypass that startup path for recovery.
-
-Configuration may calculate values and construct tables, but has no exposed
-file-loading, module-search or OS bindings. Terminal settings affect the
-session's TTY, not every space. Caelum retains its own TTY settings on multicore
-boots; the existing single-CPU fallback still shares one TTY. No global settings
-singleton or live reload is introduced.
-
-Focused PRs:
-
-- [x] Per-TTY tab width with a WRITE-authorized console request and libterm
-  helper. Accept 1–32 columns, default to eight, and affect only subsequent tabs.
-- [x] Userspace configuration evaluator and session-launch integration. Keep
-  Lua execution outside the kernel and validate before applying any settings.
-- [ ] Package the default configuration, integrate boot startup, then rewrite
-  this completed milestone as concrete documentation under `docs`.
-
-The native `app://session.pxe` launcher is available for an explicit `session`
-handoff. It consumes the ports-exported static Lua library; userland owns startup
-policy and the SDK remains Lua-independent. See [session configuration](../session-configuration.md)
-for the implemented validation and grant behavior. The default init and packaged
-configuration are deliberately left for the final PR.
-
-Completion: boot consumes the config and applies its timezone/tab settings,
-while direct clock and calendar operations still work independently of Lua.
-
-## Deferred
-
-Dynamic loading, broad standard-library coverage, live configuration reload,
-per-user/space configuration policy, additional ports and Neovim remain separate
-work. Do not couple the first Lua milestone to virtio-fs: the existing initrd
-and RAM filesystem are sufficient places to supply scripts.
+[Later Lua work](wip/later-os-directions.md#lua-follow-ups) includes broader
+libraries, module policy and extracting a shared C configuration library when
+another consumer needs one.

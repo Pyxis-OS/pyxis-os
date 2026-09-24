@@ -71,7 +71,7 @@ guard page below it and no automatic growth.
 
 Persistent storage, atomic replacement and timekeeping remain separate work.
 The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and TCC;
-[guest Lua](wip/lua-port.md) is independent of the host recipe runner.
+[guest Lua](lua.md) is independent of the host recipe runner.
 
 ## TCC and the guest SDK
 
@@ -126,7 +126,7 @@ Stdin scripts, shebang handoff, package loading, io/os, debug
 and the full math library remain deferred, as does signal-driven interruption.
 This does not replace the host Lua used by build recipes. See the
 [port notes](../ports/lua/README.md) and
-[remaining milestone tasks](wip/lua-port.md).
+[Lua runtime reference](lua.md).
 
 ## Timezone data
 

@@ -13,9 +13,8 @@ milestone; this does not commit to Unix PID 1 semantics.
 
 ## Additional ports
 
-Kilo and TCC provide the [edit/build/run workflow](../edit-build-run.md). Guest Lua
-can wait until useful, notably for system-wide configuration; retain
-[its staged worklist](lua-port.md). The [Doom port](../doom.md) provides initial
+Kilo and TCC provide the [edit/build/run workflow](../edit-build-run.md).
+[Guest Lua](../lua.md) now supplies scripts, a REPL and session configuration. The [Doom port](../doom.md) provides initial
 gameplay and demo playback. Other candidates are SQLite, a CHIP-8 interpreter,
 Frotz and NetHack. This is not an instruction to port the whole list. Neovim
 remains a later editor goal.
@@ -27,6 +26,24 @@ and eventual compositor prerequisites; it does not authorize implementation.
 A custom linker remains a possible later investigation alongside application
 bundles/images. TCC already emits native P1F executables; a new linker or custom
 object/archive format is not required for the working development loop.
+
+## Lua follow-ups
+
+When a second Lua configuration consumer appears, extract a small C library
+from the session evaluator. Share source loading, the restricted Lua environment,
+protected evaluation, diagnostics and state cleanup. Keep settings schemas,
+defaults, validation and application policy with each consumer; do not introduce
+a generic schema framework before there is a concrete need.
+
+Further interpreter work includes a module search policy for pure-Lua `require`,
+stdin scripts, and consuming the existing script capability for shebang launches.
+Broader io/os, debug and full math libraries remain separate slices. The earlier
+io/os audit identified pushback, temporary files, stream-buffer control, process
+CPU time and calendar formatting/conversion as missing runtime pieces. Do not
+substitute wall time for CPU time or add successful stubs for missing operations.
+Dynamic modules, live configuration reload and per-user/space settings policy
+also remain deferred. Existing initrd/RAM filesystems suffice for Lua scripts;
+these tasks do not depend on virtio-fs.
 
 ## Networking and website hosting
 
