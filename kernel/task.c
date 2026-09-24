@@ -38,6 +38,7 @@ struct task_wait {
 };
 
 enum launch_action { LAUNCH_ALLOCATE, LAUNCH_DISCARD, LAUNCH_START };
+enum directory_action { DIRECTORY_ALLOCATE_ENTRY, DIRECTORY_ALLOCATE_NAME, DIRECTORY_DISCARD };
 
 struct task {
   struct task *next;
@@ -47,7 +48,7 @@ struct task {
   struct directory_entry *directory_entry;
   uint64_t directory_kind;
   size_t directory_name_length;
-  bool directory_discard;
+  enum directory_action directory_action;
   struct file_wait file_wait;
   struct console_wait console_wait;
   struct process_wait process_wait;
@@ -343,7 +344,20 @@ struct directory_entry *task_allocate_directory_entry(uint64_t kind, size_t name
   struct task *task = wait->task;
   task->directory_kind = kind;
   task->directory_name_length = name_length;
-  task->directory_discard = false;
+  task->directory_action = DIRECTORY_ALLOCATE_ENTRY;
+  task->directory_entry = NULL;
+  queue_directory_request(task, wait);
+  struct directory_entry *entry = task->directory_entry;
+  task->directory_entry = NULL;
+  return entry;
+}
+
+struct directory_entry *task_allocate_directory_name(size_t name_length)
+{
+  struct task_wait *wait = task_wait_prepare();
+  struct task *task = wait->task;
+  task->directory_name_length = name_length;
+  task->directory_action = DIRECTORY_ALLOCATE_NAME;
   task->directory_entry = NULL;
   queue_directory_request(task, wait);
   struct directory_entry *entry = task->directory_entry;
@@ -355,7 +369,7 @@ void task_discard_directory_entry(struct directory_entry *entry)
 {
   struct task_wait *wait = task_wait_prepare();
   struct task *task = wait->task;
-  task->directory_discard = true;
+  task->directory_action = DIRECTORY_DISCARD;
   task->directory_entry = entry;
   queue_directory_request(task, wait);
 }
@@ -369,9 +383,11 @@ static void service_directory_requests(void)
 
   while (task) {
     struct task *next = task->directory_next;
-    if (task->directory_discard) {
+    if (task->directory_action == DIRECTORY_DISCARD) {
       ramfs_discard_entry(task->directory_entry);
       task->directory_entry = NULL;
+    } else if (task->directory_action == DIRECTORY_ALLOCATE_NAME) {
+      task->directory_entry = ramfs_allocate_name(task->directory_name_length);
     } else {
       task->directory_entry = ramfs_allocate_entry(task->directory_kind,
           task->directory_name_length);

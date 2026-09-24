@@ -12,6 +12,9 @@ struct directory_entry;
  * Disposal is BSP-only; the entry must be unpublished or removed, with no
  * remaining list links or borrowed readers. It releases the child reference. */
 struct directory_entry *ramfs_allocate_entry(uint64_t kind, size_t name_length);
+/* Prepare name storage only, with a NULL child. Rename transfers its existing
+ * child reference into this entry at publication. Same BSP/length contract. */
+struct directory_entry *ramfs_allocate_name(size_t name_length);
 void ramfs_discard_entry(struct directory_entry *entry);
 
 #endif

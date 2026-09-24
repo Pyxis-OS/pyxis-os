@@ -6,12 +6,22 @@
 #include <kernel/object/file.h>
 #include <kernel/panic.h>
 
-struct directory_entry *ramfs_allocate_entry(uint64_t kind, size_t name_length)
+struct directory_entry *ramfs_allocate_name(size_t name_length)
 {
   KASSERT(arch_cpu_index() == 0);
-  KASSERT(kind == DIRECTORY_KIND_DIRECTORY || kind == DIRECTORY_KIND_FILE);
   KASSERT(name_length && name_length <= SIZE_MAX - sizeof(struct directory_entry) - 1);
   struct directory_entry *entry = kmalloc(sizeof(*entry) + name_length + 1);
+  if (!entry) {
+    return NULL;
+  }
+  *entry = (struct directory_entry){.name_length = name_length};
+  return entry;
+}
+
+struct directory_entry *ramfs_allocate_entry(uint64_t kind, size_t name_length)
+{
+  KASSERT(kind == DIRECTORY_KIND_DIRECTORY || kind == DIRECTORY_KIND_FILE);
+  struct directory_entry *entry = ramfs_allocate_name(name_length);
   if (!entry) {
     return NULL;
   }
@@ -28,13 +38,15 @@ struct directory_entry *ramfs_allocate_entry(uint64_t kind, size_t name_length)
     kfree(entry);
     return NULL;
   }
-  *entry = (struct directory_entry){.object = object, .name_length = name_length};
+  entry->object = object;
   return entry;
 }
 
 void ramfs_discard_entry(struct directory_entry *entry)
 {
   KASSERT(arch_cpu_index() == 0 && entry && !entry->next);
-  object_release(entry->object);
+  if (entry->object) {
+    object_release(entry->object);
+  }
   kfree(entry);
 }

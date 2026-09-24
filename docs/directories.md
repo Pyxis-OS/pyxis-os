@@ -29,10 +29,11 @@ the BSP and queues their children for retirement without recursive C calls.
 Failure during tree construction releases the unpublished root through this
 same path. The archive's bytes survive file-object destruction.
 
-The initrd is immutable; RAM directories support creation and removal. A
-per-directory lock protects entry links, count, generation and detached state.
+The initrd is immutable; RAM directories support creation, removal and file
+rename. A per-directory lock protects entry links, count, generation and detached state.
 Lookup acquires a child reference under that lock, then releases the lock before
-handle installation or BSP table growth. Destruction runs only after the last owner releases the directory.
+handle installation or BSP table growth. Destruction runs only after the last
+owner releases the directory.
 Names and child pointers never change within an entry. Removed entries are
 detached under the lock and disposed on the BSP after borrowed readers finish.
 
@@ -90,8 +91,8 @@ request storage may overlap outputs because the kernel captures the request firs
 Generation checks, selection and copying the name occur under the directory
 lock. User mappings are validated beforehand and remain private/stable, so the
 copy cannot allocate or sleep. Removal cannot reclaim the name during copying.
-Successful creation or removal increments the generation; a later mutation
-affects the next enumeration call. Even an old END cursor reports CHANGED after
+Successful creation, removal or a rename that changes entries increments the
+generation; a later mutation affects the next enumeration call. Even an old END cursor reports CHANGED after
 a mutation. A short-buffer reply keeps the original cursor, including zero when
 no generation has been acquired.
 
@@ -155,15 +156,59 @@ reference until the existing BSP disposal service releases it. Open file handles
 remain usable, and recreating the name creates a different object. The last
 reference releases the old object's storage through normal retirement.
 
-Removing a directory locks its parent, then the child, checks that the child is
-empty and marks it detached before unlinking. This ordering is acyclic while
-there are no directory moves or links. CREATE checks detached state before
+Removing a directory takes the mutation lock, then its parent and child locks,
+checks that the child is empty and marks it detached before unlinking. The
+mutation lock serializes operations needing more than one directory lock,
+including rename between arbitrary parents. CREATE checks detached state before
 staging and again at publication. An open removed directory can still be
 inspected or closed, but attempts to create children return NOT_FOUND. A new
 directory created under the old name does not reactivate those handles.
 
-Roots have no removable parent entry. Removal is nonrecursive; no rename,
-mount changes, capability revocation or persistent storage is added.
+Roots have no removable parent entry. Removal is nonrecursive; no mount changes,
+capability revocation or persistent storage is added.
+
+## Atomic file rename
+
+RENAME is sent to the source directory, with a source name, a destination
+capability from the caller's own table, destination name and explicit REPLACE
+or NO_REPLACE policy. Both names use the same counted-component rules as LOOKUP.
+The directory payload is 48 bytes (64 bytes including the protocol/operation
+header); all consumers are rebuilt together. Success returns no reply bytes.
+
+Source REMOVE and destination CREATE are required. If a different destination
+entry exists, NO_REPLACE returns ALREADY_EXISTS; REPLACE additionally needs
+REMOVE on the destination. Neither file READ/WRITE nor parent ENUMERATE/LOOKUP
+is needed for the direct operation. Sources must be files, and replacement
+accepts only files. Directory moves/replacement return WRONG_TYPE. Missing
+sources and detached parents return NOT_FOUND. Only RAM backing is mutable;
+initrd mutation returns READ_ONLY after capability checks. There is no implicit
+copy-and-delete fallback or cross-filesystem implementation.
+
+Renaming an existing file to the same entry, including through another handle
+to the same parent, succeeds without allocation or generation changes under
+either policy. Ordinary source REMOVE/destination CREATE checks still apply.
+A missing source never becomes a successful no-op.
+
+Rename first checks the operation under both parent locks. If work is needed,
+it releases all locks and asks the existing BSP directory service for name
+storage without a new child object. The caller's private mappings and directory
+capabilities remain stable while waiting. After filling the name, it reacquires
+both parents and rechecks entries, rights, detached state and generation/count
+capacity. It never carries borrowed entry pointers across that wait.
+
+Publication transfers the source entry's owned file reference into the prepared
+entry, unlinks the source and any replaced entry, and publishes the destination
+before releasing either parent lock. No fallible work remains at that point.
+There is no observable missing-destination interval; failures make no namespace
+changes themselves. Existing file handles keep their objects, including handles
+to a replaced destination. Obsolete entries are disposed on BSP after unlocking.
+Each changed parent advances its generation once; same-parent rename advances it
+once total. Enumeration order remains unspecified.
+
+A short shared mutation lock precedes directory locks for REMOVE and RENAME,
+preventing cycles between parent/child removal and arbitrary-parent rename.
+Lookup, enumeration and creation retain their per-directory locks. No allocation,
+BSP wait, scheduler lock or file-data operation occurs under these locks.
 
 ## Userspace example
 

@@ -48,6 +48,8 @@ enum capability_result task_grow_capabilities(void);
  * The caller fills the name and publishes the entry or returns it for disposal.
  * Removed entries must have no list links or borrowed readers before disposal. */
 struct directory_entry *task_allocate_directory_entry(uint64_t kind, size_t name_length);
+/* Name storage only; its child reference remains NULL until rename commits. */
+struct directory_entry *task_allocate_directory_name(size_t name_length);
 void task_discard_directory_entry(struct directory_entry *entry);
 
 /* Current user task, IF=0. The file queue uses this task-owned record until it

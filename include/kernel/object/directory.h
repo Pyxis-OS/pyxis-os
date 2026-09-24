@@ -11,15 +11,16 @@ enum directory_backing {
 
 struct directory_entry {
   struct directory_entry *next;
-  struct kernel_object *object; /* One owned child reference. */
+  struct kernel_object *object; /* Owned child; NULL only in unlinked rename storage. */
   size_t name_length;
   char name[];
 };
 
 /* The lock protects links/count/generation/detached. Entries own child
  * references; children do not retain parents. Removed empty directories stay
- * detached and reject creation through surviving handles. Only the unpublished
- * initrd builder bypasses the lock. */
+ * detached and reject creation through surviving handles. Multi-directory
+ * mutations take the mutation lock before any directory locks. Only the
+ * unpublished initrd builder bypasses locking. */
 struct directory_object {
   struct kernel_object object;
   enum directory_backing backing;
@@ -39,7 +40,9 @@ struct directory_object *directory_create(enum directory_backing backing);
  * Lookup retains the child before releasing the lock or waiting for BSP table
  * growth. CREATE waits for BSP entry allocation/disposal with no locks held.
  * Enumeration copies the selected name while locked. REMOVE detaches an entry
- * under the lock and then lends it to BSP disposal, with no borrowed readers. */
+ * under the lock and then lends it to BSP disposal, with no borrowed readers.
+ * RENAME stages name storage on BSP, rechecks both parents under their locks,
+ * transfers the child reference and disposes obsolete entries after unlocking. */
 struct syscall_result directory_call(struct directory_object *directory, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
