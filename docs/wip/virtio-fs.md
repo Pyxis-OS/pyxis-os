@@ -122,8 +122,9 @@ unmounting and live namespace replacement remain later work.
 
 ## Decisions at the relevant task boundary
 
-- PCI resources: the exact ECAM mapping strategy and supported BAR types,
-  sizing procedure and MSI-X resource/vector ownership.
+- PCI resources: the ECAM mapping, claim, reset and BAR preparation contracts
+  are implemented in [PCI resources](../pci.md). MSI-X vector ownership and
+  delivery remain for task 5.
 - Transport: queue and transfer-buffer sizes, supported feature mask and reset
   completion checks. Keep ordinary allocation failure explicit.
 - Host setup: select and record a virtiofsd version and negotiated FUSE subset;
@@ -153,13 +154,17 @@ grows. No later item is implied by completing an earlier one.
    capabilities and assigned BAR addresses with named fields. Completion: an
    accurate, concise PCI inventory during an otherwise normal boot; devices
    remain untouched by discovery. Implemented behavior and limits are in
-   [PCI discovery](../pci.md).
-2. [ ] **Driver-owned PCI resources.** Add the configuration writes and BAR
+   [PCI discovery and resources](../pci.md).
+2. [x] **Driver-owned PCI resources.** Add the configuration writes and BAR
    sizing/mapping needed by the selected device, including paired 64-bit BARs
    and capability extent checks. Completion: the driver's register regions are
    mapped with explicit ownership and failure unwinding; no resource reassignment.
-3. [ ] **Modern VirtIO PCI setup.** Discover transport capabilities, reset the
-   selected device, negotiate supported features and inspect queue information.
+   Initial VirtIO reset and capability discovery were brought forward here:
+   OVMF leaves bus mastering enabled, so reset must be confirmed before probing
+   BARs. DMA, INTx and MSI-X remain disabled; ordinary boot needs no device.
+3. [ ] **Modern VirtIO PCI setup.** Continue from the claimed, reset transport,
+   negotiate supported features and inspect queue information. Define reset
+   and failure handling for this additional initialization state.
    Completion: readable transport diagnostics and defined failed-init cleanup;
    do not mark the device ready before its queues and handlers are ready.
 4. [ ] **Kernel task event waits.** Extend the existing prepare/park/wake

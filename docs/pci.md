@@ -1,8 +1,9 @@
-# PCI discovery
+# PCI discovery and owned resources
 
 Caelum reads the firmware-configured PCI topology during BSP initialization,
-before starting APs. The current implementation produces a serial inventory;
-it does not bind drivers, activate devices or keep a device registry.
+before starting APs. Discovery produces a serial inventory and retains heap-backed
+device records for driver lookup. A separate resource path claims the first
+modern virtio-fs function when present. Without it, boot continues normally.
 
 ## Configuration access
 
@@ -11,7 +12,8 @@ bus zero. It copies the aperture description while the boot firmware mappings
 are available, then maps that range into the owned kernel root. The mapping is
 supervisor-only, read-only, non-executable and uncached, with no retained HHDM
 alias. Naturally aligned byte, word and dword reads address a function's 4 KiB
-configuration page through ECAM.
+configuration page through ECAM. Claiming a function makes only its page
+writable; the rest of the aperture remains read-only.
 
 The complete advertised bus range is mapped, although enumeration visits only
 reachable buses. Q35's 256 MiB aperture requires 128 leaf page-table pages
@@ -33,6 +35,8 @@ advance beyond their primary bus and fit within both the parent bridge range
 and the MCFG aperture. Repeated buses and overlapping sibling bridge ranges
 are diagnosed. The work queue is bounded by PCI's 256 possible bus numbers;
 there is no fixed device-count registry or recursive traversal stack.
+Device records live for the boot; allocation failure is reported as an incomplete
+inventory while enumeration continues.
 
 Each function reports its address as `segment:bus:device.function`, identity,
 class/subclass/programming interface, revision and header type. Bus and device
@@ -49,14 +53,75 @@ Expansion ROMs and bridge forwarding windows are not inventoried. Unsupported
 headers, BAR types and malformed topology/capability chains mark the inventory
 incomplete while other reachable functions are still inspected.
 
+## Driver-owned resources
+
+Resource preparation runs on the BSP with interrupts disabled, before AP startup.
+`pci_claim_device` gives one stable, caller-owned `pci_claim` exclusive ownership
+of an endpoint. It validates the conventional capability chain, rejects enabled
+MSI/MSI-X, disables bus mastering and disables INTx. Configuration writes require
+that claim. Command changes use 16-bit writes so the adjacent status register's
+write-one-to-clear bits are not accidentally acknowledged.
+
+The driver must confirm the device is stopped and disable address decoding before
+calling `pci_size_bars`. Sizing handles firmware-assigned 32-bit and paired 64-bit
+memory BARs. Each probe restores both original halves before returning, including
+on malformed size/alignment or overlapping BARs. Unassigned resources and obsolete
+memory BAR encodings are rejected. I/O BARs stay untouched and are not mapped.
+There is no resource reassignment or bridge-window programming.
+
+`pci_map_bar` checks the requested extent against the sized BAR, rejects overlap
+with non-reserved boot memory and existing ECAM/APIC/HPET mappings, then reserves
+kernel virtual pages. `vm_map_mmio` installs supervisor RW/NX/uncached leaves;
+it neither allocates nor owns the physical device frames. The caller keeps each
+`pci_mapping` at a stable address for the claim's lifetime. Capability regions
+sharing a physical page use the same uncached memory type.
+
+Partial mapping failure removes installed leaves and releases the reservation.
+`pci_release_device` unwinds boot preparation: it removes all owned mappings,
+restores original address decoding with bus mastering and INTx kept disabled,
+and returns the function's ECAM page to read-only. BAR assignments stay unchanged.
+It never frees MMIO through the PMM. Empty page tables may remain for reuse under
+the existing VM policy. This is not runtime teardown or hot-unplug: it must not
+be used after starting DMA, and a device reset cannot be undone.
+
+## Initial virtio-fs consumer
+
+`virtio_fs_pci_prepare` selects the first discovered modern filesystem function
+(`1af4:105a`). OVMF may leave bus mastering enabled, so preparation first uses the
+VirtIO PCI configuration-access capability to write zero to device status and
+wait for reset confirmation, with a one-second monotonic deadline. This reaches
+the advertised common configuration byte before probing BAR sizes. The indirect
+access selector fields are restored afterward.
+
+Once reset is confirmed, preparation disables decoding, sizes BARs and validates
+the common, notification, ISR and filesystem configuration extents, plus the
+MSI-X table and pending-bit array. Required regions must fit assigned memory BARs
+and not overlap each other. Reserved BAR numbers and unknown VirtIO capability
+types are ignored; the first supported instance is selected. Larger capability
+structures are accepted without using their unknown fields.
+
+Only needed register ranges are mapped (the advertised notification range is
+retained for later queue offsets). Memory decoding is then enabled, and status
+must still read zero. The ISR is not read merely for diagnostics because that
+would acknowledge interrupts. Preparation failures log a diagnostic and unwind
+without preventing the existing OS from booting.
+
+No features are negotiated, queues allocated, interrupts enabled or DMA started.
+MSI-X entries are counted and mapped but not programmed. The reference is
+[VirtIO 1.4](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.pdf),
+especially PCI configuration access (§4.1.4.9) and device initialization (§4.1.5).
+
 ## Inspection and next step
 
 An ordinary `make run` prints the inventory before SMP startup. QEMU's monitor
 `info pci` provides an independent view of device addresses and assigned BARs.
 `make debug` allows inspection at `pci_discover` before any device discovery
 reads occur. ECAM page permissions can also be inspected through the recursive
-page tables; no configuration writes are needed for this check.
+page tables. Break at `boot_start_cpus` to inspect completed preparation before
+APs start; use direct memory inspection rather than inferior function calls
+under KVM (see [GDB](gdb.md)).
 
-Resource sizing, writable configuration access, BAR mapping and driver ownership
-are the next [milestone task](wip/virtio-fs.md#focused-task-list). Interrupts,
-VirtIO queues and host filesystem access are not implemented by discovery.
+Feature negotiation and queue inspection are the next
+[milestone task](wip/virtio-fs.md#focused-task-list). The opt-in host daemon/QEMU
+setup will become part of the normal build/run interface with the queue worker.
+Host filesystem access is not implemented yet.
