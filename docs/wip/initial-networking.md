@@ -90,10 +90,10 @@ namespace fields are needed yet.
 
 Remaining decisions:
 
-- **IPv4 subset:** define source-address selection, local delivery to assigned
-  external addresses, route precedence, MTU limits and behavior for unsupported
-  options/fragments. Check lengths, byte order and checksums before access.
-  Do not silently treat an incomplete implementation as full IPv4 support.
+- **External IPv4 routing:** local `127/8` routing and the limited IPv4/ICMP
+  subset are implemented in [networking](../networking.md). Before task 5, settle
+  source selection for external routes, local delivery to assigned external
+  addresses and precedence between local, directly connected and default routes.
 - **Native ABI:** choose the configuration and echo object requests, rights,
   reply matching, deadlines and close behavior before task 3. A focused echo
   facility may suffice for ping; unrestricted raw-packet authority is not an
@@ -114,12 +114,15 @@ Remaining decisions:
    boundary and local delivery queue. No hardware dependency or boot-time probe.
    Implemented a 32-packet software allocation budget, 16-entry loopback queue,
    event-driven BSP worker and yield after eight deliveries. Send errors retain
-   caller ownership. The worker explicitly discards unsupported input; IPv4
-   processing and addressing remain task 2. See the [current contract](../networking.md).
+   caller ownership. Task 2 adds IPv4 processing to this worker.
+   See the [current contract](../networking.md).
    Validate with ordinary builds/boots and debugger inspection.
-2. [ ] **Local IPv4 routing and ICMP echo.** Add the selected packet validation,
-   local routing and echo processing on the common IP path, with explicit limits
-   for unsupported packets. Keep wire layouts out of the application ABI.
+2. [x] **Local IPv4 routing and ICMP echo.** Implemented `127/8` local routing,
+   IPv4/ICMP validation and deferred echo replies preserving request data.
+   Options, fragments and unsupported protocols are dropped; other destinations
+   have no route. The 1500-byte MTU allows 1472 echo payload bytes. Wire layouts
+   stay kernel-private; application reply matching and waits remain task 3.
+   See [networking](../networking.md) for ownership, limits and inspection.
 3. [ ] **Native configuration and ping.** Define the agreed capability contract,
    libpyxis helpers and a small numeric-address ping utility. Complete ordinary
    userspace ping over loopback without a network device, including bounded waits.

@@ -2,6 +2,7 @@
 #include <arch/smp.h>
 #include <kernel/log.h>
 #include <kernel/net/interface.h>
+#include <kernel/net/ipv4.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 
@@ -19,7 +20,7 @@ static struct {
   size_t head, count;
   struct task_wait *wait;
   bool ready;
-  uint64_t submitted, received, unsupported, queue_full;
+  uint64_t submitted, received, queue_full;
 } loopback;
 
 enum net_result net_transmit(const struct net_interface *interface,
@@ -73,11 +74,10 @@ static struct net_packet *next_packet(void)
 
 static void receive_packet(struct net_packet *packet)
 {
-  /* No IP handler exists in this slice. Consume unsupported input explicitly;
-   * transmit success only promises queue ownership, never protocol success. */
-  uint64_t flags = cpu_save_interrupts();
   ++loopback.received;
-  ++loopback.unsupported;
+  net_ipv4_receive(packet);
+
+  uint64_t flags = cpu_save_interrupts();
   net_packet_release(packet);
   cpu_restore_interrupts(flags);
 }
@@ -104,7 +104,7 @@ enum mm_result net_init(void)
   enum mm_result result = kernel_task_create(network_worker, NULL);
   if (result == MM_OK) {
     loopback.ready = true;
-    klog("net: lo MTU=%zu, deferred loopback worker ready\n", net_loopback.mtu);
+    klog("net: lo 127.0.0.1/8 MTU=%zu, IPv4/ICMP worker ready\n", net_loopback.mtu);
   }
   return result;
 }

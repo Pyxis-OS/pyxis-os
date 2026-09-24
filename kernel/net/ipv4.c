@@ -1,0 +1,119 @@
+#include <arch/cpu.h>
+#include <arch/smp.h>
+#include <kernel/net/icmp.h>
+#include <kernel/net/ipv4.h>
+#include <kernel/panic.h>
+#include "wire.h"
+
+#define IPV4_VERSION 4
+#define IPV4_VERSION_SHIFT 4
+#define IPV4_HEADER_WORD_MASK 0x0f
+#define IPV4_HEADER_WORD_BYTES 4
+#define IPV4_DEFAULT_TTL 64
+#define IPV4_LOOPBACK_MASK UINT32_C(0xff000000)
+#define IPV4_FLAG_RESERVED 0x8000
+#define IPV4_FLAG_DONT_FRAGMENT 0x4000
+#define IPV4_FLAG_MORE_FRAGMENTS 0x2000
+#define IPV4_FRAGMENT_OFFSET_MASK 0x1fff
+
+struct ipv4_header {
+  uint8_t version_length;
+  uint8_t service;
+  uint8_t total_length[2];
+  uint8_t identification[2];
+  uint8_t fragment[2];
+  uint8_t ttl;
+  uint8_t protocol;
+  uint8_t checksum[2];
+  uint8_t source[4];
+  uint8_t destination[4];
+};
+static_assert(sizeof(struct ipv4_header) == IPV4_HEADER_SIZE);
+
+/* Diagnostics owned by the sole network worker, not an application ABI. */
+static struct {
+  uint64_t received, malformed, unsupported, nonlocal;
+} ipv4_stats;
+
+bool net_ipv4_is_loopback(uint32_t address)
+{
+  return (address & IPV4_LOOPBACK_MASK) == (IPV4_LOOPBACK_ADDRESS & IPV4_LOOPBACK_MASK);
+}
+
+enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
+    uint32_t destination, uint8_t protocol)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!packet || packet->length < IPV4_HEADER_SIZE ||
+      packet->length > net_loopback.mtu || !net_ipv4_is_loopback(source)) {
+    return NET_INVALID;
+  }
+  if (!net_ipv4_is_loopback(destination)) {
+    return NET_NO_ROUTE;
+  }
+
+  struct ipv4_header *header = (void *)packet->data;
+  *header = (struct ipv4_header){
+    .version_length = (IPV4_VERSION << IPV4_VERSION_SHIFT) |
+        (IPV4_HEADER_SIZE / IPV4_HEADER_WORD_BYTES),
+    .ttl = IPV4_DEFAULT_TTL,
+    .protocol = protocol,
+  };
+  net_write_u16(header->total_length, packet->length);
+  /* No fragmentation is supported. DF also makes a zero identification valid
+   * for these atomic datagrams; receivers must not use it for reassembly. */
+  net_write_u16(header->fragment, IPV4_FLAG_DONT_FRAGMENT);
+  net_write_u32(header->source, source);
+  net_write_u32(header->destination, destination);
+  net_write_u16(header->checksum, net_checksum(packet->data, IPV4_HEADER_SIZE));
+  return net_transmit(&net_loopback, packet);
+}
+
+void net_ipv4_receive(const struct net_packet *packet)
+{
+  ++ipv4_stats.received;
+  if (packet->length < IPV4_HEADER_SIZE) {
+    ++ipv4_stats.malformed;
+    return;
+  }
+
+  const struct ipv4_header *header = (const void *)packet->data;
+  size_t header_length = (header->version_length & IPV4_HEADER_WORD_MASK) *
+      IPV4_HEADER_WORD_BYTES;
+  size_t total_length = net_read_u16(header->total_length);
+  if (header->version_length >> IPV4_VERSION_SHIFT != IPV4_VERSION ||
+      header_length < IPV4_HEADER_SIZE || header_length > packet->length ||
+      total_length < header_length || total_length > packet->length ||
+      total_length > net_loopback.mtu || net_checksum(packet->data, header_length)) {
+    ++ipv4_stats.malformed;
+    return;
+  }
+
+  uint16_t fragment = net_read_u16(header->fragment);
+  if (fragment & IPV4_FLAG_RESERVED) {
+    ++ipv4_stats.malformed;
+    return;
+  }
+  if (header_length != IPV4_HEADER_SIZE ||
+      (fragment & (IPV4_FLAG_MORE_FRAGMENTS | IPV4_FRAGMENT_OFFSET_MASK))) {
+    ++ipv4_stats.unsupported;
+    return;
+  }
+
+  uint32_t source = net_read_u32(header->source);
+  uint32_t destination = net_read_u32(header->destination);
+  if (!net_ipv4_is_loopback(source) || !net_ipv4_is_loopback(destination)) {
+    ++ipv4_stats.nonlocal;
+    return;
+  }
+
+  /* This host delivers locally, never forwards. Do not decrement TTL or reject
+   * an otherwise valid local packet merely because its TTL is below two. */
+  if (header->protocol != IPV4_PROTOCOL_ICMP) {
+    ++ipv4_stats.unsupported;
+    return;
+  }
+  net_icmp_receive(source, destination, packet->data + header_length,
+      total_length - header_length);
+}
