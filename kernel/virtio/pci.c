@@ -3,6 +3,7 @@
 #include <kernel/log.h>
 #include <kernel/pci/registers.h>
 #include <kernel/virtio/pci.h>
+#include <stddef.h>
 
 #define VIRTIO_VENDOR_ID 0x1af4
 #define VIRTIO_PCI_DEVICE_BASE 0x1040
@@ -23,16 +24,55 @@
 #define VIRTIO_PCI_CONFIG_BYTES 20
 #define VIRTIO_PCI_CONFIG_DATA 16
 #define VIRTIO_RESET_TIMEOUT_NS UINT64_C(1000000000)
+#define VIRTIO_CONFIG_TIMEOUT_NS UINT64_C(1000000000)
 #define VIRTIO_COMMON_BYTES 56
-#define VIRTIO_COMMON_STATUS 20
 #define VIRTIO_NOTIFY_BYTES 2
 #define VIRTIO_ISR_BYTES 1
 #define VIRTIO_FS_CONFIG_BYTES 40
+#define VIRTIO_FS_TAG_BYTES 36
+#define VIRTIO_FS_HIPRIO_QUEUE 0
+/* No notification queue: VIRTIO_FS_F_NOTIFICATION is not negotiated. */
+#define VIRTIO_FS_FIRST_REQUEST_QUEUE 1
+#define VIRTIO_FEATURE_WORD_BITS 32
+#define VIRTIO_F_VERSION_1 (UINT64_C(1) << 32)
+#define VIRTIO_STATUS_ACKNOWLEDGE 1u
+#define VIRTIO_STATUS_DRIVER 2u
+#define VIRTIO_STATUS_FEATURES_OK 8u
+#define VIRTIO_STATUS_FAILED 128u
+
+/* Naturally aligned, little-endian registers in the common configuration.
+ * The prefix ends before queue addresses, which this stage does not program. */
+struct virtio_pci_common {
+  uint32_t device_feature_select, device_feature;
+  uint32_t driver_feature_select, driver_feature;
+  uint16_t config_msix_vector, num_queues;
+  uint8_t device_status, config_generation;
+  uint16_t queue_select, queue_size, queue_msix_vector, queue_enable;
+  uint16_t queue_notify_off;
+};
+
+struct virtio_fs_config {
+  uint8_t tag[VIRTIO_FS_TAG_BYTES];
+  uint32_t num_request_queues;
+};
+
+_Static_assert(offsetof(struct virtio_pci_common, device_status) == 20 &&
+               offsetof(struct virtio_pci_common, queue_notify_off) == 30,
+               "VirtIO PCI common register layout");
+_Static_assert(sizeof(struct virtio_fs_config) == VIRTIO_FS_CONFIG_BYTES,
+               "VirtIO filesystem configuration layout");
+
+#define VIRTIO_COMMON_STATUS offsetof(struct virtio_pci_common, device_status)
 
 struct virtio_pci_region {
   unsigned bar;
   uint32_t offset, length;
   struct pci_mapping mapping;
+};
+
+struct virtio_queue_info {
+  uint16_t max_size;
+  uintptr_t notify_address;
 };
 
 static struct {
@@ -41,8 +81,128 @@ static struct {
   struct virtio_pci_region msix_table, msix_pba;
   unsigned msix_capability, msix_entries;
   uint32_t notify_multiplier;
-  bool ready;
+  uint64_t offered_features, accepted_features;
+  char tag[VIRTIO_FS_TAG_BYTES + 1];
+  uint32_t request_queues;
+  struct virtio_queue_info hiprio, request;
+  bool negotiated;
 } filesystem;
+
+static volatile struct virtio_pci_common *common_config(void)
+{
+  return (volatile struct virtio_pci_common *)filesystem.common.mapping.address;
+}
+
+static bool reset_mapped_device(void)
+{
+  volatile struct virtio_pci_common *common = common_config();
+  common->device_status = 0;
+  uint64_t start = arch_monotonic_ns();
+  do {
+    if (common->device_status == 0) {
+      return true;
+    }
+    __asm__ volatile("pause");
+  } while (arch_monotonic_ns() - start < VIRTIO_RESET_TIMEOUT_NS);
+  return false;
+}
+
+static bool read_filesystem_config(void)
+{
+  volatile struct virtio_pci_common *common = common_config();
+  const volatile struct virtio_fs_config *config =
+    (const volatile struct virtio_fs_config *)filesystem.device.mapping.address;
+  uint64_t start = arch_monotonic_ns();
+  do {
+    /* A tag and queue count must come from the same configuration generation. */
+    uint8_t generation = common->config_generation;
+    for (size_t i = 0; i < VIRTIO_FS_TAG_BYTES; ++i) {
+      filesystem.tag[i] = config->tag[i];
+    }
+    filesystem.request_queues = config->num_request_queues;
+    if (common->config_generation == generation) {
+      /* A full-width device tag has no terminator on the wire. */
+      filesystem.tag[VIRTIO_FS_TAG_BYTES] = '\0';
+      return true;
+    }
+  } while (arch_monotonic_ns() - start < VIRTIO_CONFIG_TIMEOUT_NS);
+  return false;
+}
+
+static bool inspect_queue(unsigned index, struct virtio_queue_info *queue)
+{
+  volatile struct virtio_pci_common *common = common_config();
+  common->queue_select = index;
+  uint16_t size = common->queue_size;
+  if (!size || (size & (size - 1)) || common->queue_enable) {
+    return false;
+  }
+
+  /* queue_notify_off is in multiplier units, not bytes. Widen before multiplying. */
+  uint64_t offset = (uint64_t)common->queue_notify_off * filesystem.notify_multiplier;
+  if (offset > filesystem.notify.length ||
+      VIRTIO_NOTIFY_BYTES > filesystem.notify.length - offset) {
+    return false;
+  }
+  *queue = (struct virtio_queue_info){
+    .max_size = size,
+    .notify_address = filesystem.notify.mapping.address + offset,
+  };
+  klog("virtio-fs PCI: queue %u maximum=%u notify=%p, disabled\n",
+       index, (unsigned)size, (void *)queue->notify_address);
+  return true;
+}
+
+static const char *negotiate_transport(void)
+{
+  volatile struct virtio_pci_common *common = common_config();
+  uint8_t status = VIRTIO_STATUS_ACKNOWLEDGE;
+  common->device_status = status;
+  status |= VIRTIO_STATUS_DRIVER;
+  common->device_status = status;
+
+  common->device_feature_select = 0;
+  uint64_t low = common->device_feature;
+  common->device_feature_select = 1;
+  filesystem.offered_features = low | ((uint64_t)common->device_feature << VIRTIO_FEATURE_WORD_BITS);
+  klog("virtio-fs PCI: offered features[63:0]=0x%lx\n", filesystem.offered_features);
+  if (!(filesystem.offered_features & VIRTIO_F_VERSION_1)) {
+    return "VIRTIO_F_VERSION_1 is required";
+  }
+
+  /* Accept only the modern baseline: split queues, direct physical addresses,
+   * and 16-bit queue notifications. Reset leaves all other feature words zero. */
+  filesystem.accepted_features = VIRTIO_F_VERSION_1;
+  common->driver_feature_select = 0;
+  common->driver_feature = (uint32_t)filesystem.accepted_features;
+  common->driver_feature_select = 1;
+  common->driver_feature = filesystem.accepted_features >> VIRTIO_FEATURE_WORD_BITS;
+  status |= VIRTIO_STATUS_FEATURES_OK;
+  common->device_status = status;
+  if (common->device_status != status) {
+    return "feature negotiation rejected or device needs reset";
+  }
+  klog("virtio-fs PCI: accepted VIRTIO_F_VERSION_1, FEATURES_OK confirmed\n");
+
+  if (!read_filesystem_config()) {
+    return "filesystem configuration did not stabilize";
+  }
+  unsigned queues = common->num_queues;
+  if (queues < 2 || !filesystem.request_queues || filesystem.request_queues > queues - 1) {
+    return "invalid filesystem request queue count";
+  }
+  klog("virtio-fs PCI: tag=\"%s\", request queues=%u, transport queues=%u\n",
+       filesystem.tag, filesystem.request_queues, queues);
+  if (!inspect_queue(VIRTIO_FS_HIPRIO_QUEUE, &filesystem.hiprio) ||
+      !inspect_queue(VIRTIO_FS_FIRST_REQUEST_QUEUE, &filesystem.request)) {
+    return "required queue unavailable, enabled or outside notification region";
+  }
+  if (common->device_status != status) {
+    return "device status changed during queue inspection";
+  }
+  filesystem.negotiated = true;
+  return NULL;
+}
 
 /* A capability must name a BAR register, not the high half of a 64-bit BAR. */
 static bool assigned_memory_bar(struct pci_address address, unsigned wanted)
@@ -325,15 +485,27 @@ void virtio_fs_pci_prepare(const struct boot_info *boot)
               (claim->saved_command & ~(PCI_COMMAND_IO | PCI_COMMAND_MASTER)) |
               PCI_COMMAND_MEMORY | PCI_COMMAND_INTX_DISABLE);
   /* Reading status has no acknowledgement side effect, unlike the ISR byte. */
-  unsigned status = *(const volatile uint8_t *)(filesystem.common.mapping.address +
-                                               VIRTIO_COMMON_STATUS);
+  unsigned status = common_config()->device_status;
   if (status) {
     failure = "device did not remain reset";
     goto fail;
   }
-  filesystem.ready = true;
   klog("virtio-fs PCI: register resources owned; %u MSI-X entries, DMA and interrupts disabled\n",
        filesystem.msix_entries);
+
+  failure = negotiate_transport();
+  if (failure) {
+    klog("virtio-fs PCI: %s; marking FAILED and resetting\n", failure);
+    common_config()->device_status |= VIRTIO_STATUS_FAILED;
+    if (!reset_mapped_device()) {
+      /* No queues or DMA buffers exist, but keep the failed function claimed:
+       * an unconfirmed reset must not look like an available device. */
+      klog("virtio-fs PCI: reset timed out; claim and mappings retained until reboot, DMA disabled\n");
+      return;
+    }
+    goto fail;
+  }
+  klog("virtio-fs PCI: transport negotiated; queues inactive, DRIVER_OK clear\n");
   return;
 
 fail:
