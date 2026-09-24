@@ -21,6 +21,8 @@ struct hostfs_node {
 /* Queue links are BSP/IF=0. Only the worker uses session and node protocol
  * state. Its scratch stays off the task stack and is never lent to a caller. */
 static struct virtio_fs_session *session;
+static bool starting;
+static enum call_status startup_failure = CALL_UNAVAILABLE;
 static struct hostfs_request *first_request, *last_request;
 static struct hostfs_node *first_retired, *last_retired;
 static uint64_t next_identity = 1;
@@ -56,11 +58,35 @@ static uint64_t native_kind(enum virtio_fs_kind kind)
   }
 }
 
+void hostfs_prepare(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !session && !starting);
+  starting = true;
+}
+
+void hostfs_start_failed(enum virtio_fs_result result)
+{
+  KASSERT(arch_cpu_index() == 0 && !session && result != VIRTIO_FS_OK);
+  uint64_t flags = cpu_save_interrupts();
+  starting = false;
+  startup_failure = call_result(result);
+  while (first_request) {
+    struct hostfs_request *request = first_request;
+    first_request = request->next;
+    request->next = NULL;
+    request->status = startup_failure;
+    task_wait_wake(request->wait);
+  }
+  last_request = NULL;
+  cpu_restore_interrupts(flags);
+}
+
 void hostfs_start(struct virtio_fs_session *started)
 {
   KASSERT(arch_cpu_index() == 0 && !session && started->ready);
   uint64_t flags = cpu_save_interrupts();
   session = started;
+  starting = false;
   cpu_restore_interrupts(flags);
 }
 
@@ -68,8 +94,8 @@ void hostfs_submit(struct hostfs_request *request)
 {
   KASSERT(arch_cpu_index() == 0);
   request->next = NULL;
-  if (!session) {
-    request->status = CALL_UNAVAILABLE;
+  if (!session && !starting) {
+    request->status = startup_failure;
     task_wait_wake(request->wait);
     return;
   }

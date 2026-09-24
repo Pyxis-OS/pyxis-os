@@ -1,3 +1,6 @@
+#include <abi/mount.h>
+#include <kernel/object/mount.h>
+#include <kernel/virtio/pci.h>
 #include <kernel/object/keyboard.h>
 #include <abi/clock.h>
 #include <kernel/object/clock.h>
@@ -70,6 +73,7 @@ void user_launch_initial(void)
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
   struct file_object *script_file = NULL;
+  struct kernel_object *mount = NULL;
 
   if (initrd_tree_create(&application_root) != INITRD_OK) {
     goto fail;
@@ -120,6 +124,16 @@ void user_launch_initial(void)
       capability_install(&process->capabilities, &home_root->object, home_rights, &home) != CAP_OK) {
     goto fail;
   }
+  handle_t mount_handle = HANDLE_INVALID;
+  if (virtio_fs_pci_present()) {
+    mount = mount_create();
+    if (!mount || capability_install(&process->capabilities, mount,
+          MOUNT_RIGHT_OPEN_ROOT, &mount_handle) != CAP_OK) {
+      goto fail;
+    }
+    object_release(mount);
+    mount = NULL;
+  }
   if (script.data) {
     script_file = file_create_initrd(&script);
     if (!script_file || capability_install(&process->capabilities, &script_file->object,
@@ -136,7 +150,7 @@ void user_launch_initial(void)
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  const struct process_binding resources[] = {
+  struct process_binding resources[9] = {
     {"input", input},
     {"output", output},
     {"memory", memory_handle},
@@ -144,14 +158,20 @@ void user_launch_initial(void)
     {"display", display_handle},
     {"clock", clock_handle},
     {"keyboard", keyboard_handle},
-    {"script", script_handle},
   };
+  size_t resource_count = 7;
+  if (script_handle != HANDLE_INVALID) {
+    resources[resource_count++] = (struct process_binding){"script", script_handle};
+  }
+  if (mount_handle != HANDLE_INVALID) {
+    resources[resource_count++] = (struct process_binding){"host_mount", mount_handle};
+  }
   const struct process_binding roots[] = {{"app", app}, {"home", home}};
   const char *arguments[] = {script.data ? interpreter : INITIAL_IMAGE_URI, INITIAL_IMAGE_URI};
   const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
   const struct process_startup startup = {
     .resources = resources,
-    .resource_count = sizeof(resources) / sizeof(resources[0]) - (script.data ? 0 : 1),
+    .resource_count = resource_count,
     .roots = roots,
     .root_count = sizeof(roots) / sizeof(roots[0]),
     .working_directories = &home,
@@ -175,6 +195,9 @@ void user_launch_initial(void)
   return;
 
 fail:
+  if (mount) {
+    object_release(mount);
+  }
   if (clock) {
     object_release(clock);
   }

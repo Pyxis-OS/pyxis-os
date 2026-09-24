@@ -6,6 +6,7 @@
 
 ```text
 #!app://shell.pxe
+mount --optional host
 session app://session.pxe
 ```
 
@@ -49,10 +50,11 @@ the state and configuration stream are closed before launch.
 
 Validation completes before the first terminal change. The launcher preserves
 the startup environment except that it replaces any `TZ` entry with the selected
-name. It forwards the input/output, memory and launcher grants; app/home roots;
+name. It forwards the input/output, memory and launcher grants; app/home and optional
+read-only host roots;
 the working-directory chain and display path; and optional display, clock and
 keyboard resources, using the same rights as the shell's session handoff.
-It does not forward arbitrary named resources or the interpreter's script handle.
+It does not forward mount authority, arbitrary named resources or the interpreter's script handle.
 
 The kernel copies launch metadata before returning. The launcher closes its
 child observer and exits without waiting or reading input; the shell owns its

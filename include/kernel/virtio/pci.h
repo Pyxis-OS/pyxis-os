@@ -7,6 +7,8 @@
  * MSI-X routing and allocate/program both queues. DRIVER_OK and DMA stay clear.
  * Boot failure unwinds only after confirmed reset; otherwise resources remain. */
 void virtio_fs_pci_prepare(const struct boot_info *boot);
+/* Immutable after prepare, including devices whose preparation failed. */
+bool virtio_fs_pci_present(void);
 
 /* Once after task_init(), BSP/IF=0. Creates the worker if preparation succeeded.
  * That worker activates DMA/delivery and starts the FUSE session with IF=1. */

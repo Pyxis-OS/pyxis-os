@@ -6,7 +6,8 @@ Init is a native PXE executable or a script with a native interpreter in that
 same archive. This does not define a global PID 1 or per-space supervisor.
 
 The default [userspace/init.sh](https://git.internal/chronium/pyxis-userland/src/branch/main/init.sh) uses `app://shell.pxe` as
-its interpreter and hands off with `session app://session.pxe`. Init then exits;
+its interpreter, opens the optional [host export](virtio-fs.md#init-mount-and-delegation)
+with `mount --optional host`, and hands off with `session app://session.pxe`. Init then exits;
 the session launcher evaluates [configuration](session-configuration.md), applies
 terminal settings, and launches the interactive shell with the selected `TZ`.
 The shell retains its own resource references and launch authority.
@@ -23,7 +24,7 @@ make image INIT=build/userspace/shell.pxe  # native PXE init, built first
 make image                          # restore the default, without cleaning
 ```
 
-Selecting `build/userspace/shell.pxe` directly bypasses session configuration,
+Selecting `build/userspace/shell.pxe` directly bypasses mounting and session configuration,
 including for recovery from a configuration error. It receives the kernel's
 initial environment; absent `TZ` means UTC.
 
@@ -56,11 +57,14 @@ Init explicitly receives terminal input/output, private-memory management,
 [display authority](graphics.md), [clock authority](timekeeping.md), [keyboard authority](keyboard.md), launch authority, read-only `app` and writable RAM-backed `home` roots, an
 initial `home://` working directory and the initial environment. Ordinary shell
 commands do not inherit launch authority; `session` delegates it explicitly.
+When a virtio-fs device is present, init also receives `host_mount`, scoped to
+that export. Neither ordinary children nor session successors inherit this
+authority; the mounted directory travels as the optional `host` root instead.
 URI names do not supply authority independently of those grants.
 
 Failure to select or load init is a boot error. A running script stops on its
 first failed command; EOF exits without opening a prompt. Neither init nor its
 session is automatically restarted. Their space, terminal contents and namespace
-roots survive process exit. No mount setup, supervision or process replacement
+roots survive process exit. No supervision or process replacement
 is implemented; [later lifecycle work](wip/later-os-directions.md#execution-lifecycle)
 remains separate from this startup contract.
