@@ -32,6 +32,20 @@ Append currently performs separate SIZE and WRITE calls. Concurrent appenders
 can choose the same end and overwrite one another. This is explicitly not an
 atomic append guarantee; see [technical debt](technical-debt.md#non-atomic-stdio-append).
 
+## Removal
+
+`remove(path)` removes a file or empty directory through the native parent
+capability, returning zero on success or -1 with errno on failure. It uses the
+same startup roots and initial working-directory chain as fopen. Selection and
+removal happen in one kernel operation, without first probing the child type.
+Existing FILE streams keep their original object after removal; reopening the
+name fails unless another entry has been created there. Roots and final `.` or
+`..` are rejected, and a trailing slash requires a directory.
+
+Nonempty directories report ENOTEMPTY. This is nonrecursive removal, without
+unlink/rmdir syscall adapters or a process-wide file descriptor table. Rename
+and persistent storage remain separate work.
+
 ## Transfers and positions
 
 `fread` and `fwrite` return complete element counts and check size/count overflow
@@ -107,6 +121,7 @@ if reporting itself fails.
 | NOT_FOUND | ENOENT |
 | ALREADY_EXISTS | EEXIST |
 | READ_ONLY | EROFS |
+| NOT_EMPTY | ENOTEMPTY |
 | INPUT_LOST, unrecognized failure | EIO |
 
 The native WRONG_TYPE result does not distinguish a file from an intermediate

@@ -4,7 +4,7 @@
 default [init script](init.md), which hands off to one shell on CPU 1 when available,
 otherwise on the BSP, with `home://` as its working directory. On multicore boots
 use Super+Right to select CPU 1 before typing. The normal initrd contains init,
-shell, ls, cat, mkdir, [Kilo and its license](ports.md), and `share/hello.txt`;
+shell, ls, cat, mkdir, rm, rmdir, [Kilo and its license](ports.md), and `share/hello.txt`;
 home is initially empty and its RAM
 contents disappear on reboot.
 
@@ -73,6 +73,13 @@ removal. An empty command name is an error. Opened programs use the
 [script-launch helper](script-launch.md), which can dispatch a shebang to a native
 interpreter.
 
+`rm path...` removes files only; `rmdir path...` removes empty directories only.
+Both accept multiple literal paths, continue after an individual failure, and
+return failure if any removal failed. They have no options, recursive removal,
+parent pruning or wildcard expansion. Existing handles survive removal, and
+removing an empty directory makes it unavailable for new children even through
+an older handle. See [the directory contract](directories.md#removal).
+
 ## Script mode
 
 A named READ resource `script` selects script mode. `argv[1]` supplies the name
@@ -133,7 +140,7 @@ or a terminal ownership protocol. It does not add supervision or `exec`.
 The shell expects named `input`, `output`, `memory` and `launcher` resources,
 plus `app` and `home` roots. Input/output are separate console READ/WRITE grants;
 memory permits MANAGE and launcher permits LAUNCH. The app root supplies LOOKUP,
-ENUMERATE and READ_FILES. Home additionally supplies CREATE and WRITE_FILES.
+ENUMERATE and READ_FILES. Home additionally supplies CREATE, WRITE_FILES and REMOVE.
 An optional `display` resource supplies DRAW authority for the space. An optional
 `clock` resource supplies READ and SLEEP authority for monotonic time. An optional
 `keyboard` resource supplies INPUT authority for physical-key sessions.

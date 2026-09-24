@@ -67,6 +67,19 @@ failed handle allocation leave the old context intact. A retained directory
 continues referring to its object if its name later changes; displayed text is
 not used to rediscover it.
 
+## Removal paths
+
+`path_remove()` walks intermediate components in order, retaining parent grants,
+and sends one REMOVE for the final name. FILE, DIRECTORY and ANY select the
+allowed child kind. A trailing separator requires a directory; FILE with a
+trailing separator fails without removal. Bare scheme roots and final `.`/`..`
+are rejected. An intermediate `missing/..` still fails at `missing`.
+
+The parent needs REMOVE; intermediate traversal needs LOOKUP and authority to
+obtain that parent grant. Child file READ/WRITE and enumeration are unnecessary.
+The helper uses caller-owned scratch storage and closes every temporary handle.
+It never removes by a displayed path or by a child handle.
+
 ## Local handle copies
 
 [Handle copying](https://git.internal/chronium/pyxis-userland/src/branch/main/include/handle.h) installs another reference in the
@@ -91,5 +104,6 @@ Helpers return native call statuses: BAD_REQUEST for malformed syntax, NOT_FOUND
 for an unknown scheme or missing component, WRONG_TYPE for a kind mismatch,
 UNAVAILABLE for absent working-directory context, DENIED for a boundary escape
 or insufficient rights, and LIMIT for insufficient caller storage. Kernel
-allocation and handle-limit failures pass through. No libc errno translation,
-heap, filesystem mutation or executable search policy is introduced here.
+allocation and handle-limit failures pass through. Libpyxis does not allocate
+workspace storage or translate failures into errno. Executable search policy
+remains with the caller.
