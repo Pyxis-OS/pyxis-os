@@ -54,6 +54,12 @@ contracts still need separate scopes. Hosting the Pyxis landing page remains a
 release goal; revisit init supervision and restart policies when defining that
 web-server milestone. Virtio-blk remains the next intended VirtIO storage driver.
 
+[Userspace URI scheme providers](userspace-scheme-providers.md) are a separate
+future consumer: scoped kernel routing to userspace HTTP/HTTPS services, with
+readable results usable by `fopen` and `cat`. Unknown-length HTTP bodies are
+initially rejected; a bounded LRU response cache and remote compiler includes
+are later ideas. This does not add HTTP or TLS to the kernel.
+
 ## Multiple users and restricted permissions
 
 Multi-user support is a requirement, with an earlier

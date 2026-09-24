@@ -82,6 +82,12 @@ Knowing a URI would not grant access. Namespace resolution and authorization
 must remain distinct, with the space's assigned resources determining access.
 Native relative paths, escaping and normalization rules remain open.
 
+The [userspace scheme-provider direction](wip/userspace-scheme-providers.md)
+extends this idea to endpoint-backed resources such as HTTP and HTTPS. The
+kernel would own scoped bindings and route requests; protocol clients and TLS
+remain entirely in userspace. Initial HTTP access would require a known body
+length, with response caching left for later.
+
 ## Application bundles
 
 A future application could be a bundle exposed as a directory under `app://`,
