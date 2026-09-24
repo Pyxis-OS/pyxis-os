@@ -198,3 +198,21 @@ Revisit reclamation alongside shared-mapping invalidation and a defined device
 teardown/reconnect lifecycle. Never free an outstanding DMA buffer solely because
 a request timed out. Idle daemon disconnection is not necessarily observable
 until the next request or device event; there is no heartbeat.
+
+## Host filesystem request storage and enumeration
+
+The [native virtio-fs backend](virtio-fs.md#native-directory-and-file-objects)
+keeps one bounded request record in each task, including a 4 KiB read buffer.
+This avoids allocating on APs or exposing private stacks to the worker, but
+charges that storage to every task even if it never accesses the host. Revisit
+lazy staging if task counts make the cost material; do not add another fixed
+request registry. The BSP scheduler only forwards these records, never performs
+blocking host I/O.
+
+The native enumeration ABI returns one name per call. The backend requests a
+fresh 4 KiB READDIR batch and discards unused entries, so a large listing can
+transfer the same trailing names repeatedly. There is no attribute/data cache
+or directory snapshot. Revisit batching with a concrete consumer and explicit
+host-change semantics. Direct executable loading also remains limited to
+in-memory files; remote launch needs bounded staging and a lifetime contract
+before allowing the BSP loader to consume host bytes.

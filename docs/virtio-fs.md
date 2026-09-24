@@ -1,8 +1,8 @@
-# Virtio-fs client and host setup
+# Virtio-fs filesystem backend and host setup
 
-The optional virtio-fs device provides a read-only kernel FUSE client for a host
-service. It does **not** expose a mount or `host://` yet. Ordinary boot needs
-neither the device nor the daemon. Remaining backend/mount work is in
+The optional virtio-fs device provides a read-only native filesystem backend
+through a kernel FUSE client. It does **not** expose a mount or `host://` yet. Ordinary boot needs
+neither the device nor the daemon. Remaining init/mount work is in
 [the milestone](wip/virtio-fs.md).
 
 ## Start the host service
@@ -118,17 +118,18 @@ activity or the five-second monotonic request deadline. IRQ entry only remembers
 activity and detaches/wakes its waiter. The BSP-local check/publication handoff
 runs with IF=0 and preserves interrupts arriving before parking. The worker runs
 with IF=1 otherwise; presentation and userspace continue to be scheduled.
-After successful INIT it retains the session and sleeps indefinitely for device
-activity. There are no public filesystem callers or background polling requests.
+After successful INIT it services native requests and deferred object cleanup,
+sleeping when neither work nor device activity is pending. Normal boot still
+exposes no host capability; there are no background polling requests.
 
 ## Read-only client contract
 
 `include/kernel/virtio/fs.h` exposes root acquisition, LOOKUP, GETATTR, OPEN,
 READ, OPENDIR, READDIR, RELEASE/RELEASEDIR and reference release. These functions
 run only on the existing BSP transport worker with interrupts enabled and no
-held locks. They neither allocate nor accept userspace pointers. Native caller
-handoff and capability integration belong to the next task; normal boot still
-only initializes the session and parks the worker.
+held locks. They neither allocate nor accept userspace pointers. The native
+backend below owns their records and performs allocation with BSP interrupts
+disabled, outside transport waits.
 
 The caller supplies zeroed, stable node and open records. Each successful LOOKUP
 owns one host lookup reference, even if another record has the same node ID.
@@ -155,14 +156,61 @@ incremented, ordered or reused with another open.
 
 There is no guest data or attribute cache. Host edits can affect later requests;
 a read-only export is not an immutable tree. Enumeration is not a snapshot and
-cannot reliably detect external changes. The native backend must settle how
-this fits the current `DIRECTORY_CHANGED` contract before exposing enumeration.
+cannot reliably detect external changes. Native enumeration therefore promises
+a live view and reports `DIRECTORY_CHANGED` only for detected invalidation.
+RAM directories retain their existing generation checks.
 
 Wire errors become `enum virtio_fs_result`; Linux errno values do not escape the
 client. Ordinary errors such as a missing or inaccessible file leave the session
 usable. Truncated/inconsistent replies, invalid directory records, transport
 failures and failed RELEASE/FORGET cleanup stop it. No writes, symlink traversal,
 reconnection or public mount API are implemented.
+
+## Native directory and file objects
+
+`kernel/fs/hostfs.c` connects the client to the existing directory and file
+protocols. Each successful native lookup creates an independently owned wrapper
+with one FUSE lookup reference. It acquires a read-only open handle lazily on
+first read or enumeration; size uses fresh GETATTR. Copying or granting a
+capability retains the same native object. Closing a parent does not invalidate
+children. No host path, node ID or wire structure becomes an application request.
+
+File reads return at most 4 KiB per call, including when the supplied buffer is
+larger; callers must handle short reads. Native directory cursors are opaque and
+scoped to the directory object. A retained open directory gives their host
+cookies a stable lifetime without a shared enumeration position. Restart with
+a zero cursor. A too-small name buffer preserves the input cursor and returns
+the required size. Enumeration reports file, directory, symlink, other and
+unknown kinds; lookup still accepts only file/directory requests and never
+follows symlinks. Libpyxis validates replies without assuming numeric cursor
+increments. External changes may alter results, including after a prior EOF.
+
+Rights checks precede dispatch. Unsupported mutations report READ_ONLY when the
+caller has the required right, otherwise DENIED. Host I/O errors use CALL_IO
+(libc EIO); unavailable sessions and timeouts have their existing distinct
+statuses. Launching a native executable from a host file is explicitly rejected:
+the current kernel loader requires in-memory bytes. This does not prevent
+reading a script as data or copying a file into RAM first.
+
+A caller captures inputs in a record embedded in shared task metadata, then
+blocks through the existing wake-before-park contract. The BSP scheduler only
+forwards queued records; blocking FUSE work runs in the transport worker. All
+user-buffer validation and copies happen on the caller's CPU. The worker never
+switches to a caller's root or accesses its private stack. Its reply and any new
+owned object are fully published before wakeup, and it never touches the record
+after waking its owner. Requests hold no spinlock across a transport wait.
+
+There is one task per process and no external cancellation: a blocked caller
+cannot close its capability or exit until the operation finishes. Its capability
+keeps the source object alive. Failure to install a returned child releases its
+owned reference. Process exit closes remaining capabilities normally. Final
+object reaping transfers the wrapper to a worker cleanup queue without sleeping
+or allocating. That worker sends RELEASE/RELEASEDIR followed by FORGET before
+freeing local storage. Copies held elsewhere keep the object alive independently.
+
+The internal ROOT request creates a native directory reference for the upcoming
+mount operation. It is not a syscall or an ambient way to acquire host access;
+init mount authority and startup delegation remain the next task.
 
 ## Failure and lifetime
 
@@ -174,8 +222,10 @@ A runtime timeout, malformed reply, unexpected completion, status change or
 configuration-generation change makes the session unavailable. The worker masks
 delivery, disables MSI-X and bus mastering, requests reset, and waits up to one
 second while yielding between reset-status reads. It reports whether stopping
-was confirmed, then exits with no published waiter. Static interrupt state stays
-valid for a late APIC delivery.
+was confirmed. The worker remains available to reject pending/new operations
+and retire local objects; device IRQ delivery stays disabled. Native submissions
+and reaper cleanup still wake it through the BSP handoff. Static interrupt state
+stays valid for a late APIC delivery.
 
 Runtime failure retains the device claim, DMA storage and mappings until reboot,
 even after confirmed reset. Shared kernel mappings must remain stable while APs
@@ -206,8 +256,16 @@ before calling client functions: they may sleep for real device completions.
 Use allocated storage for names too; GDB string arguments otherwise try to call
 an unavailable `malloc`. Do not call the client from an arbitrary stopped task
 or interrupt handler. After closing opens and putting nodes, both session
-ownership counters should be zero and both queues should be idle. These are
-manual debugger calls, not boot-time probes.
+ownership counters should be zero and both queues should be idle. Retained
+native objects may legitimately keep lookup references or open handles alive.
+These are manual debugger calls, not boot-time probes.
+
+Before mount exposure exists, the native path can be inspected by submitting an
+internal ROOT request in that worker and lending the resulting object through a
+stopped process's capability table. Respect table ownership, retain/release every
+replaced reference, and keep allocator calls on BSP/IF=0. Ordinary `ls`/`cat`
+then exercise the syscall, AP wait, BSP forwarding, worker and deferred cleanup
+paths. Such debugger setup is not part of normal startup or a mount API.
 
 References: [VirtIO 1.4 split queues and filesystem device](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.pdf),
 [virtiofsd 1.14.0 FUSE definitions](https://gitlab.com/virtio-fs/virtiofsd/-/blob/v1.14.0/src/fuse.rs),
