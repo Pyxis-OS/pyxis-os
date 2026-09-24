@@ -522,6 +522,15 @@ enum mm_result vm_map(struct vm_space *space, uintptr_t base, phys_addr_t physic
   return arch_page_map(page_space(space), base, physical, permissions);
 }
 
+enum mm_result vm_map_mmio(uintptr_t base, phys_addr_t physical)
+{
+  struct vm_range *range = range_containing(&kernel_space, base);
+  if (!range || range->state != RANGE_RESERVED) {
+    return MM_INVALID;
+  }
+  return arch_page_map_mmio(base, physical);
+}
+
 enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
                         phys_addr_t *physical)
 {

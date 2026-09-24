@@ -1,4 +1,8 @@
+#include <arch/apic.h>
+#include <arch/clock.h>
+#include <arch/io_apic.h>
 #include <arch/layout.h>
+#include <arch/paging.h>
 #include <arch/pci.h>
 #include <kernel/panic.h>
 
@@ -46,4 +50,42 @@ uint16_t pci_read16(struct pci_address address, unsigned offset)
 uint32_t pci_read32(struct pci_address address, unsigned offset)
 {
   return *(const volatile uint32_t *)config_address(address, offset, sizeof(uint32_t));
+}
+
+void arch_pci_config_writable(struct pci_address address, bool writable)
+{
+  paging_pci_config_writable(config_address(address, 0, 1), writable);
+}
+
+void arch_pci_write8(struct pci_address address, unsigned offset, uint8_t value)
+{
+  *(volatile uint8_t *)config_address(address, offset, sizeof(value)) = value;
+}
+
+void arch_pci_write16(struct pci_address address, unsigned offset, uint16_t value)
+{
+  *(volatile uint16_t *)config_address(address, offset, sizeof(value)) = value;
+}
+
+void arch_pci_write32(struct pci_address address, unsigned offset, uint32_t value)
+{
+  *(volatile uint32_t *)config_address(address, offset, sizeof(value)) = value;
+}
+
+bool arch_pci_mmio_available(phys_addr_t physical, size_t bytes)
+{
+  struct page_translation ecam;
+  if (arch_page_query(arch_kernel_space(), PCI_ECAM_BASE, &ecam) != MM_OK) {
+    return false;
+  }
+  phys_addr_t reserved[] = {
+    apic_physical_address(), io_apic_physical_address(), arch_clock_physical_address(),
+  };
+  for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); ++i) {
+    if (reserved[i] && physical < reserved[i] + PAGE_SIZE && reserved[i] < physical + bytes) {
+      return false;
+    }
+  }
+  return physical >= ecam.physical + mapped_buses * PCI_ECAM_BUS_BYTES ||
+    physical + bytes <= ecam.physical;
 }

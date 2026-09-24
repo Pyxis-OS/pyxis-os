@@ -1,56 +1,10 @@
 #include <arch/pci.h>
 #include <kernel/log.h>
+#include <kernel/mm/heap.h>
 #include <kernel/pci.h>
+#include <kernel/pci/registers.h>
 
-#define PCI_VENDOR_ID 0x00
-#define PCI_DEVICE_ID 0x02
-#define PCI_STATUS 0x06
-#define PCI_REVISION 0x08
-#define PCI_INTERFACE 0x09
-#define PCI_SUBCLASS 0x0a
-#define PCI_CLASS 0x0b
-#define PCI_HEADER_TYPE 0x0e
-#define PCI_BAR_FIRST 0x10
-#define PCI_BRIDGE_PRIMARY 0x18
-#define PCI_BRIDGE_SECONDARY 0x19
-#define PCI_BRIDGE_SUBORDINATE 0x1a
-#define PCI_CAPABILITIES 0x34
-
-#define PCI_NO_VENDOR UINT16_MAX
-#define PCI_STATUS_CAPABILITIES (1u << 4)
-#define PCI_HEADER_MULTIFUNCTION (1u << 7)
-#define PCI_HEADER_TYPE_MASK 0x7f
-#define PCI_HEADER_ENDPOINT 0
-#define PCI_HEADER_BRIDGE 1
-#define PCI_ENDPOINT_BARS 6
-#define PCI_BRIDGE_BARS 2
-#define PCI_REGISTER_BYTES 4
-#define PCI_BAR_IO 1u
-#define PCI_BAR_MEMORY_TYPE_MASK 6u
-#define PCI_BAR_MEMORY_32 0u
-#define PCI_BAR_MEMORY_64 4u
-#define PCI_BAR_PREFETCHABLE 8u
-#define PCI_BAR_IO_ADDRESS_MASK (~UINT32_C(3))
-#define PCI_BAR_MEMORY_ADDRESS_MASK (~UINT32_C(15))
-#define PCI_BAR_HIGH_SHIFT 32
-#define PCI_CLASS_BRIDGE 0x06
-#define PCI_SUBCLASS_PCI_BRIDGE 0x04
-
-#define PCI_CONVENTIONAL_BYTES 256
-#define PCI_CAP_FIRST 0x40
-#define PCI_CAP_POINTER_MASK 0xfc
-#define PCI_CAP_ID 0
-#define PCI_CAP_NEXT 1
-#define PCI_CAP_POWER 0x01
-#define PCI_CAP_MSI 0x05
-#define PCI_CAP_VENDOR 0x09
-#define PCI_CAP_EXPRESS 0x10
-#define PCI_CAP_MSIX 0x11
-#define PCI_EXT_CAP_FIRST 0x100
-#define PCI_EXT_CAP_ID_MASK 0xffff
-#define PCI_EXT_CAP_VERSION_SHIFT 16
-#define PCI_EXT_CAP_VERSION_MASK 0xf
-#define PCI_EXT_CAP_NEXT_SHIFT 20
+static struct pci_device *devices;
 
 struct pci_bus {
   uint8_t number, last_bus, parent;
@@ -224,6 +178,17 @@ static void discover_function(struct pci_scan *scan, struct pci_address address,
        class, subclass, interface, pci_read8(address, PCI_REVISION), header);
   ++scan->functions;
 
+  struct pci_device *record = kmalloc(sizeof(*record));
+  if (!record) {
+    report_problem(scan, address, "cannot retain device for driver lookup");
+  } else {
+    *record = (struct pci_device){
+      .address = address, .vendor_id = vendor, .device_id = device,
+      .header_type = header, .next = devices,
+    };
+    devices = record;
+  }
+
   if (header != PCI_HEADER_ENDPOINT && header != PCI_HEADER_BRIDGE) {
     report_problem(scan, address, "unsupported header type");
     return;
@@ -271,4 +236,15 @@ void pci_discover(void)
   }
   klog("PCI: %u functions on %u buses; read-only inventory%s\n",
        scan.functions, scan.bus_count, scan.incomplete ? " incomplete" : " complete");
+}
+
+struct pci_device *pci_find_device(uint16_t vendor, uint16_t device)
+{
+  struct pci_device *first = NULL;
+  for (struct pci_device *entry = devices; entry; entry = entry->next) {
+    if (entry->vendor_id == vendor && entry->device_id == device) {
+      first = entry;
+    }
+  }
+  return first;
 }
