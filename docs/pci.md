@@ -3,7 +3,7 @@
 Caelum reads the firmware-configured PCI topology during BSP initialization,
 before starting APs. Discovery produces a serial inventory and retains heap-backed
 device records for driver lookup. A separate resource path claims the first
-modern virtio-fs function when present. Without it, boot continues normally.
+modern virtio-fs and virtio-net functions when present. Boot needs neither device.
 
 ## Configuration access
 
@@ -101,11 +101,19 @@ and not overlap each other. Reserved BAR numbers and unknown VirtIO capability
 types are ignored; the first supported instance is selected. Larger capability
 structures are accepted without using their unknown fields.
 
-Only needed register ranges are mapped (the advertised notification range is
-retained for later queue offsets). Memory decoding is then enabled, and status
+Common and ISR mappings cover the needed register prefixes. Notification and
+device configuration mappings retain their advertised ranges for queue offsets
+and optional negotiated fields. Memory decoding is then enabled, and status
 must still read zero. The ISR is not read merely for diagnostics because that
 would acknowledge interrupts. Preparation failures log a diagnostic and unwind
 without preventing the existing OS from booting.
+
+The shared reset, capability validation, mappings, queue inspection and masked
+MSI-X mechanics live in `kernel/virtio/transport.c`. Each driver keeps its own
+`virtio_pci_transport` at a stable address for the claim's lifetime. Feature
+policy, queue storage, activation and workers remain driver-owned. The
+[network preparation path](networking.md#virtio-net-preparation) uses these same
+mechanisms with an independent claim and MSI-X vector.
 
 ### Feature negotiation and queue inspection
 

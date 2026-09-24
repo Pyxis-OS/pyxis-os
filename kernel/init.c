@@ -13,6 +13,7 @@
 #include <kernel/panic.h>
 #include <kernel/pci.h>
 #include <kernel/virtio/pci.h>
+#include <kernel/virtio/net.h>
 #include <kernel/task.h>
 #include <kernel/space.h>
 
@@ -32,6 +33,7 @@
 
   pci_discover();
   virtio_fs_pci_prepare(boot);
+  virtio_net_prepare(boot);
 
   boot_start_cpus();
 
