@@ -109,7 +109,15 @@ atexit callbacks, buffering controls, pushback, scanning, wide I/O or fd adapter
 in this slice.
 
 `printf`/`fprintf` and their va_list forms share the existing snprintf formatter
-and its supported conversions. Output is staged completely before writing: a
+and its supported conversions. Floating conversions `f/F/e/E/g/G/a/A` support
+double (including `l`) and long double (`L`), width, precision, signs, alternate
+form, zero padding, infinities, NaNs and signed zero. The radix is always `.`;
+there is no locale state. Conversion uses the pinned musl algorithm with an
+approximately 8 KiB stack workspace, honors the active FP rounding mode, and
+does not allocate. Large padding on a bounded destination is counted without
+iterating through discarded bytes. Kernel formatting remains integer-only.
+
+Output is staged completely before writing: a
 small stack buffer handles short results, with heap storage for larger ones.
 Formatting/allocation failures produce no output; output errors can leave a
 partial transfer. Failures set the stream error indicator and errno.

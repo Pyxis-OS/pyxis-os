@@ -4,6 +4,11 @@
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
 
+struct boot_info;
+/* BSP only, once after the monotonic clock starts and before AP startup.
+ * Copies the UTC seed and samples the monotonic anchor; uses no allocation. */
+void clock_init(const struct boot_info *boot);
+
 /* Stateless authority to read the shared clock and/or sleep the caller.
  * Creation is BSP-only, IF=0; returns one owned reference. */
 struct kernel_object *clock_create(void);

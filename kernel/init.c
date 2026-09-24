@@ -8,12 +8,14 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/vm.h>
+#include <kernel/object/clock.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/space.h>
 
 [[noreturn]] void kernel_init(const struct boot_info *boot)
 {
+  clock_init(boot);
   vm_init();
   if (!heap_init()) {
     panic("cannot initialize the TLSF heap");

@@ -26,6 +26,7 @@ else
   set --
 fi
 exec "$QEMU" -machine q35 -accel "$ACCEL" -cpu max \
+  -rtc base=utc \
   -smp "cpus=$CPUS,sockets=1,cores=$CPUS,threads=1" -m "$MEMORY" \
   -drive "if=pflash,format=raw,unit=0,readonly=on,file=$OVMF_CODE" \
   -drive if=pflash,format=raw,unit=1,file=build/OVMF_VARS.fd \

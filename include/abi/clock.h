@@ -9,6 +9,18 @@
 
 #define CLOCK_NOW UINT64_C(1)
 #define CLOCK_SLEEP_UNTIL UINT64_C(2)
+#define CLOCK_WALL_NOW UINT64_C(3)
+
+/* WALL_NOW is header-only, requires READ and replies with Unix UTC seconds
+ * plus a normalized [0, 1e9) nanosecond fraction. Leap seconds are not distinct.
+ * Boot seeding has whole-second resolution and unspecified handoff delay;
+ * fractional advancement is not a claim of absolute nanosecond accuracy.
+ * Missing boot time returns UNAVAILABLE; arithmetic overflow returns LIMIT.
+ * No clock setting or timezone state. NOW and sleep deadlines are unchanged. */
+struct clock_wall_reading {
+  int64_t seconds;
+  uint64_t nanoseconds;
+};
 
 /* NOW is header-only and replies with clock_reading. All clock grants refer
  * to the same monotonic epoch, established during boot, not a calendar date.
@@ -27,6 +39,7 @@ struct clock_sleep_request {
 };
 
 _Static_assert(sizeof(struct clock_reading) == 8, "clock reading layout");
+_Static_assert(sizeof(struct clock_wall_reading) == 16, "wall clock reading layout");
 _Static_assert(sizeof(struct clock_sleep_request) == 24, "clock sleep layout");
 
 #endif

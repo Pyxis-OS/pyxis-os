@@ -28,8 +28,8 @@ The target uses the existing LP64/System V x86-64 ABI, defines `__pyxis__`, and
 supports SSE2 float/double and x87 long double. Public SDK headers are usable by
 TCC, with its own compiler-dependent headers. This does not imply full GNU C23
 support: the existing line editor's `[[fallthrough]]`, for example, is rejected.
-Float formatting and a full libm remain separate from floating-point arithmetic
-and literal conversion. See the [FP contract](userspace.md#floating-point).
+Libc provides floating-point formatting alongside literal conversion and a
+small math subset; a full libm remains deferred. See the [FP contract](userspace.md#floating-point).
 
 Default linking places `crt0.o` before application inputs, then rescans libc,
 libterm, libpyxis, libtcc1 and libgcc until no more archive members are extracted.
@@ -76,9 +76,11 @@ GCC's private headers. `-print-search-dirs` displays the configured paths.
 - Native `#pragma once` is rejected until the filesystem provides
   [file identity](technical-debt.md#file-identity-across-capability-paths).
   Use include guards.
-- Expanding `__DATE__` or `__TIME__`, and requesting `-bench`, reports the missing
-  clock facility. No date or elapsed time is fabricated. See
-  [timekeeping debt](technical-debt.md#wall-clock-time-and-clock-source-performance).
+- `__DATE__` and `__TIME__` use [UTC wall time](wall-clock.md), preserving C's
+  macro spelling. Missing time or dates outside years 0000–9999 are diagnosed.
+  `-bench` uses monotonic elapsed time and upstream floating-point output. Both
+  need a readable startup clock; the shell supplies it. Timezone selection is
+  deferred. The unsigned millisecond benchmark interval must be under 49 days.
 - Output uses create/truncate streams. A failed write can leave a partial file;
   atomic replacement and persistent storage remain separate work. `home://`
   contents are lost on reboot.

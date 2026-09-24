@@ -34,6 +34,11 @@ static volatile struct limine_rsdp_request rsdp_request = {
 };
 
 __attribute__((used, section(".limine_requests")))
+static volatile struct limine_date_at_boot_request date_request = {
+  .id = LIMINE_DATE_AT_BOOT_REQUEST_ID,
+};
+
+__attribute__((used, section(".limine_requests")))
 static volatile struct limine_executable_address_request address_request = {
   .id = LIMINE_EXECUTABLE_ADDRESS_REQUEST_ID,
 };
@@ -296,6 +301,10 @@ static void copy_framebuffer(void)
   copy_acpi_address();
   copy_initrd();
   copy_framebuffer();
+  if (date_request.response) {
+    boot.utc_seconds = date_request.response->timestamp;
+    boot.utc_available = true;
+  }
   limine_capture_cpus(&boot);
 
   klog("Limine: base revision %u, %zu memory regions, kernel phys=0x%lx virt=%p\n",

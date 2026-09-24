@@ -1,6 +1,6 @@
 # Boot archive assembly
 
-Agreed build-system milestone after [UTC wall-clock support](wall-clock.md),
+Agreed build-system milestone after [UTC wall-clock support](../wall-clock.md),
 before adding the full timezone database. Preserve the current `newc` boot
 archive, guest paths and kernel reader.
 

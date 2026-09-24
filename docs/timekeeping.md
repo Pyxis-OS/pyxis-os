@@ -28,6 +28,7 @@ asynchronous timer. Closing a handle releases that grant.
 | Request | Right | Result |
 | --- | --- | --- |
 | `NOW` | `READ` | Monotonic nanoseconds in `clock_reading` |
+| `WALL_NOW` | `READ` | Unix UTC seconds and normalized nanoseconds; see [wall clock](wall-clock.md) |
 | `SLEEP_UNTIL` | `SLEEP` | Block the caller until an absolute nanosecond deadline; no reply payload |
 
 A deadline already reached succeeds immediately. Sleep never completes before
@@ -39,7 +40,8 @@ object alive while the sole user task is blocked.
 Libpyxis exposes `clock_now`, `clock_sleep_until` and `clock_sleep_for` in
 `<clock.h>`. The relative helper reads the clock once and checks addition for
 overflow, returning `CALL_LIMIT` instead of wrapping the deadline. It requires
-both rights. There is no libc calendar/time compatibility layer yet.
+both rights. `clock_wall_now` and the libc calendar subset are documented in
+[UTC wall clock](wall-clock.md).
 
 ## Scheduler timing
 
@@ -58,6 +60,6 @@ interrupts and scheduling still delay execution, but missing interrupts no
 longer extends a deadline by losing counted ticks. There is no busy-wait sleep.
 
 The clock need not include time while QEMU is paused or the machine suspended.
-There is no wall-clock epoch, clock-setting operation, cancellation, HPET alarm,
-or userspace direct counter mapping. HPET read cost and future calendar support
+There is no clock-setting operation, cancellation, HPET alarm, or userspace
+direct counter mapping. Wall-clock precision and HPET read cost
 are tracked in [technical debt](technical-debt.md#wall-clock-time-and-clock-source-performance).
