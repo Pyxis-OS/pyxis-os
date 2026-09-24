@@ -1,7 +1,7 @@
 # First process and capability ABI: worklist
 
 Historical worklist: the blob object and protocol described below were replaced
-by initrd-backed file objects in [first-shell task 3](first-shell.md). See
+by initrd-backed file objects during the [first-shell milestone](../first-shell.md). See
 [the current file contract](../processes.md#implemented-file-calls). Earlier
 handoffs retain the names used by their original commits.
 

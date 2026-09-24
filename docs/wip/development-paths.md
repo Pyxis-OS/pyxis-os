@@ -4,9 +4,9 @@ Status: working notes from discussion, not an approved design or ordered task
 list. These are candidates to revisit and split into focused milestones. No
 implementation is assigned by this document.
 
-The subsequent [first-shell milestone](first-shell.md) records the filesystem,
-application-runtime and library decisions selected from these candidates, with
-a focused PR worklist. The remaining paths below stay parked for later discussion.
+The [shell and runtime reference](../first-shell.md) describes the implemented
+filesystem, application runtime and libraries selected from these candidates.
+The remaining paths below stay parked for later discussion.
 
 Request/reply endpoints, request-side capability copies and BSP-serviced
 capability-table growth are implemented. Their handoff is recorded in
@@ -119,9 +119,9 @@ supporting work; this list gives them concrete applications to serve.
    configuration execution. The first Lua port and Neovim's Lua runtime
    requirements should be evaluated separately.
 
-The filesystem and application-runtime discussion is now recorded in the
-[first-shell worklist](first-shell.md). That milestone stops before editors and
-Lua, using a native shell and libc-backed utilities to exercise the interfaces.
+The implemented filesystem and application-runtime contracts are described in
+[the shell and runtime reference](../first-shell.md). The shell and libc-backed
+utilities provide the foundation for subsequent application ports.
 
 ## References for that discussion
 

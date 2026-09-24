@@ -81,6 +81,6 @@ technical-debt document. Do not retain a duplicate archive of the old plan.
 
 ## Existing context
 
-- [Completed first-shell milestone](first-shell.md).
+- [Shell, filesystem and application runtime](../first-shell.md).
 - [Earlier development candidates](development-paths.md).
 - [Filesystem direction](../vfs.md) and [space direction](../spaces.md).
