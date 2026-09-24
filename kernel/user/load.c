@@ -17,8 +17,14 @@ enum mm_result user_process_load(struct space *space, const void *bytes, size_t 
   if (image != IMAGE_OK) {
     return image == IMAGE_NO_MEMORY ? MM_NO_MEMORY : MM_INVALID;
   }
-  enum mm_result result = vm_alloc_at(address_space, USER_INITIAL_STACK_BASE,
-      USER_INITIAL_STACK_SIZE, PAGE_USER | PAGE_WRITE);
+  /* Reserve the guard so later VM allocations cannot fill the page below the
+   * stack. A colliding image is rejected through the usual load unwind. */
+  enum mm_result result = vm_reserve_at(address_space,
+      USER_INITIAL_STACK_GUARD_BASE, PAGE_SIZE);
+  if (result == MM_OK) {
+    result = vm_alloc_at(address_space, USER_INITIAL_STACK_BASE,
+        USER_INITIAL_STACK_SIZE, PAGE_USER | PAGE_WRITE);
+  }
   if (result == MM_OK) {
     result = process_create(space, address_space, process);
   }

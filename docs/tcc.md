@@ -84,8 +84,8 @@ GCC's private headers. `-print-search-dirs` displays the configured paths.
 - Output uses create/truncate streams. A failed write can leave a partial file;
   atomic replacement and persistent storage remain separate work. `home://`
   contents are lost on reboot.
-- Each process has a fixed 64 KiB stack without growth. Recursive parsing and
-  larger inputs can exceed it. The largest fixed compiler frame observed in the
+- Each process has a fixed 1 MiB stack without growth and an unmapped guard
+  page below it. Recursive parsing and larger inputs can exceed it. The largest fixed compiler frame observed in the
   GCC build was 2,720 bytes, not a bound on total stack use or source complexity.
   Heap backing grows through private-memory requests and is reclaimed at exit;
   there is no compiler-specific resource quota.
