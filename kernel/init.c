@@ -11,6 +11,7 @@
 #include <kernel/object/clock.h>
 #include <kernel/panic.h>
 #include <kernel/pci.h>
+#include <kernel/virtio/pci.h>
 #include <kernel/task.h>
 #include <kernel/space.h>
 
@@ -29,6 +30,7 @@
   klog("initrd: newc archive=%zu bytes, mapped read-only\n", boot->initrd.size);
 
   pci_discover();
+  virtio_fs_pci_prepare(boot);
 
   boot_start_cpus();
 
