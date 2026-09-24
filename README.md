@@ -26,6 +26,7 @@ Override `CROSS_COMPILE`, `QEMU`, `CPUS` (default `1`), `MEMORY` (default `256M`
 to `/usr/share/OVMF/{OVMF_CODE,OVMF_VARS}.fd`; variables are copied into build
 on each run. Serial uses the terminal; exit QEMU with Ctrl-a x. Graphics use
 GTK by default; `QEMU_DISPLAY=none` keeps a run headless.
+For the optional virtio-fs device, see [host daemon and socket setup](docs/virtio-fs.md).
 
 Boot installs serial and a kernel stack, copies boot information, installs
 GDT/IDT/TSS, initializes the bitmap PMM, and switches to kernel-owned paging.

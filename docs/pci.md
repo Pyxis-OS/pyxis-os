@@ -136,7 +136,7 @@ running. Bus mastering, INTx and MSI-X remain disabled. MSI-X entries are counte
 and mapped at this point; masked routing setup follows. No queue storage or DMA
 buffers exist yet.
 
-Negotiation, inspection or routing failure disables MSI-X, marks `FAILED` and
+Negotiation, inspection, routing or queue-setup failure disables MSI-X, marks `FAILED` and
 resets through the mapped status register, with a one-second deadline. Confirmed
 reset and MSI-X disable use the resource unwind above. If either cannot be
 confirmed, the driver retains the claim and mappings until reboot rather than
@@ -163,7 +163,7 @@ then the arch dispatcher sends APIC EOI. It does not read the VirtIO ISR byte:
 that register is unused under MSI-X. The handler neither processes queues nor
 allocates, logs or switches tasks.
 
-`virtio_fs_pci_wait_interrupt` is for the sole BSP kernel worker with IF=1 and
+The transport interrupt wait is for the sole BSP kernel worker with IF=1 and
 no locks held. It disables interrupts around checking pending activity and
 publishing its task wait, then parks through the ordinary event-wait API. BSP
 affinity and IF=0 serialize the worker/IRQ handoff; a spinlock is unnecessary
@@ -172,20 +172,20 @@ and the task wait remembers a wake before parking finishes. Return consumes the
 activity flag and restores IF=1. The worker must recheck all relevant queue and
 configuration state: one interrupt can cover several completions.
 
-Queue/worker activation is the next task. Before enabling delivery, it must
-establish the worker and owned queue storage, program the queue addresses and
-enable bits, enable bus mastering and set `DRIVER_OK`. Only then may it unmask
-entry zero and finally the function, with device readbacks to order the writes.
-Already-pending activity must be processed; interrupt counts cannot substitute
-for used-ring inspection. This stage deliberately creates no dummy worker or
-DMA requests merely to exercise the interrupt.
+Queue storage is allocated and programmed before AP startup, while DMA and
+interrupt delivery remain disabled. After task initialization the BSP worker
+enables bus mastering, sets `DRIVER_OK`, unmasks entry zero and finally unmasks
+the function, reading back each transition. Queue publication and completion use
+explicit coherent-DMA barriers. The [transport and host setup](virtio-fs.md)
+describes the real FUSE session exchange and worker lifetime.
 
-Boot failure disables MSI-X before reset and resource release. Runtime teardown
-will additionally need to stop new submissions, mask delivery, confirm reset
-before releasing any device-owned buffer, and detach/wake the worker before
-freeing its state. A mask cannot retract an interrupt already sent to the APIC;
-the handler and its state must outlive that delivery. These runtime operations
-are not implemented yet.
+Boot failure disables MSI-X before reset and resource release. Runtime failure
+masks delivery, disables MSI-X and bus mastering, and requests reset with a
+one-second deadline. It retains the claim, queue storage and mappings until
+reboot, regardless of reset success, preserving shared kernel mappings. The
+worker detaches its waiter before exiting. A mask cannot retract an interrupt
+already sent to the APIC; the static handler state remains valid for that late
+delivery. Runtime unmapping and reconnection are not implemented.
 
 The reference is
 [VirtIO 1.4](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.pdf),
@@ -205,7 +205,7 @@ Read MMIO registers individually at their documented byte, word or dword width.
 A bulk structure read can combine neighboring registers into accesses the device
 does not support, producing misleading values even with correct field offsets.
 
-Split queues and the BSP worker are the next
-[milestone task](wip/virtio-fs.md#focused-task-list). The opt-in host daemon/QEMU
-setup will become part of the normal build/run interface with the queue worker.
-Host filesystem access is not implemented yet.
+The [read-only FUSE client](wip/virtio-fs.md#focused-task-list) is next. The
+[host setup](virtio-fs.md#start-the-host-service) documents the opt-in daemon and
+socket used by `make run`/`make debug`. Queue transport and session negotiation
+work; host filesystem access and mount exposure are not implemented yet.
