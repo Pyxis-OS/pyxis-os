@@ -59,6 +59,25 @@ provider bindings would be a new facility, not a description of existing code.
 Keep ordinary directory traversal and the provider-open contract distinct; an
 HTTP URI need not be represented as a tree of remote directory objects.
 
+## Media-type scheme aliases
+
+Use `json+http://` and `json+https://` as explicit userspace provider conventions.
+A read requests `Accept: application/json`; a write declares its supplied body
+with `Content-Type: application/json`. The prefix selects a media type, not a
+request method. It does not serialize data, infer types from leading bytes or
+promise that the supplied body is valid JSON.
+
+Accept expresses a response preference, not a guarantee of JSON. Decide whether
+the provider rejects a mismatched response type when implementing this alias.
+See [Accept](https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.1) and
+[Content-Type](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.3).
+
+Register each complete scheme name through the same scoped binding mechanism.
+The kernel treats `json+https` as a binding name; it does not split the name into
+protocol layers or interpret JSON, HTTP or TLS. The userspace provider translates
+the alias to the underlying HTTP(S) URI. More aliases and request options can be
+designed when needed; this is not a generic composition framework.
+
 ## Initial HTTP file policy
 
 Support ordinary finite web downloads even when their total length is not known
@@ -115,6 +134,54 @@ provides random access; a future cache across opens is a separate feature.
 Account for both downloads in progress and completed bodies pinned by live
 handles. A byte budget must reject or delay new opens rather than evict storage
 that an existing handle still owns.
+
+## Future writes and shell operations
+
+Writable resources follow the initial read-only provider. Keep the intended
+operation explicit and preserve familiar file-operation meanings:
+
+| Consumer operation | Proposed HTTP behavior |
+| --- | --- |
+| Read with `cat` or `fopen(..., "r")` | GET, returning a retained snapshot |
+| Replace with `>` or a file copy; save an editor buffer | PUT of the complete staged body |
+| Remove with `rm` | DELETE |
+| Submit a body for processing | Explicit POST operation |
+| Append with `>>` or `fopen(..., "a")` | Unsupported without a defined provider append contract |
+
+PUT expresses creation/replacement, while POST asks the resource to process a
+body according to its own semantics. POST is not a general remote append
+operation. See [HTTP methods](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.3).
+
+Shell redirection supplies bytes; it does not itself define an HTTP method.
+There is no standard POST redirection operator; `>` replaces and `>>` appends
+(see [shell redirections](https://www.gnu.org/software/bash/manual/html_node/Redirections.html)).
+A small explicit command could use ordinary input redirection or a pipeline.
+Illustrative future syntax:
+
+```sh
+printf '%s' '{}' > json+https://example.com/settings
+post json+https://example.com/jobs < body.json
+```
+
+The first example proposes replacement with PUT. `post` is a proposed utility,
+not an existing Pyxis command or a standard shell operation. It would invoke the
+provider through its granted capability; HTTP remains in that userspace service.
+The command name, options and response-output conventions remain undecided.
+
+A proposed write contract stages bytes under a budget and requires an explicit
+commit. Individual writes do not issue requests. Closing an uncommitted resource
+or cleaning up a failed process discards its staged body. Shell redirection could
+commit after the producing command succeeds; an editor needs a save hook that
+commits and reports the result. Ordinary file writes alone do not provide these
+transaction boundaries, and editor temporary-file/rename saves need an explicit
+adaptation rather than an assumed HTTP rename operation.
+
+Commit submits one complete request and reports its outcome, including access to
+response status and body. A lost reply can leave the remote outcome unknown;
+there is no exactly-once guarantee, and POST must not be blindly retried. Settle
+commit ownership across copied handles, cancellation, conflict detection and
+failure reporting before implementation. Write, submit and delete authority must
+be explicit; a readable URI does not grant any of these operations.
 
 ## Future response cache
 
