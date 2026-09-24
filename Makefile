@@ -8,6 +8,8 @@ QEMU_DISPLAY ?= gtk
 MEMORY ?= 256M
 CPUS ?= 1
 ACCEL ?= kvm
+VIRTIO_FS_SOCKET ?=
+export VIRTIO_FS_SOCKET
 INIT ?=
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=

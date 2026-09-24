@@ -184,3 +184,17 @@ Re-enabling it needs an explicit writable configuration location and review of
 its parser/formatting requirements. Floating printf is now available for the
 upstream timedemo report; exercising timedemo remains separate from normal
 gameplay and demo playback. Wall-clock time is not a prerequisite.
+
+## Virtio-fs runtime resource retention
+
+The first [virtio-fs transport](virtio-fs.md) reserves queue storage and device
+mappings before AP startup. A runtime failure masks interrupts, disables bus
+mastering and attempts reset, but retains the claim, two 16 KiB queue/buffer
+allocations and their mappings until reboot. Even a confirmed reset does not
+make it safe to change shared kernel mappings without a TLB invalidation and
+reader-lifetime contract. No reconnect or repeated allocation occurs.
+
+Revisit reclamation alongside shared-mapping invalidation and a defined device
+teardown/reconnect lifecycle. Never free an outstanding DMA buffer solely because
+a request timed out. Idle daemon disconnection is not necessarily observable
+until the next request or device event; there is no heartbeat.

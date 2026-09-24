@@ -127,14 +127,15 @@ unmounting and live namespace replacement remain later work.
 - PCI resources: the ECAM mapping, claim, reset and BAR preparation contracts
   are implemented in [PCI resources](../pci.md). The first virtio-fs function
   owns a static BSP vector, with entry zero shared by configuration changes and
-  both queues. Routing remains masked until the task 6 worker/queues are ready.
+  both queues. The BSP worker activates delivery after queue preparation.
 - Transport: initial negotiation accepts only `VIRTIO_F_VERSION_1`; reset and
   configuration reads have one-second deadlines. The implemented boundary is in
-  [PCI setup](../pci.md#feature-negotiation-and-queue-inspection). Queue and
-  transfer-buffer sizes remain for task 6; keep allocation failure explicit.
-- Host setup: select and record a virtiofsd version and negotiated FUSE subset;
-  define QEMU shared-memory/socket setup, read-only export enforcement and
-  actionable dependency diagnostics. Do not automatically install host packages.
+  [PCI setup](../pci.md#feature-negotiation-and-queue-inspection). Two queues use
+  up to 16 descriptors each, with 4 KiB request and 8 KiB reply buffers. Allocation
+  failure is explicit; runtime failures retain storage and mappings until reboot.
+- Host setup: [documented socket setup](../virtio-fs.md) uses virtiofsd 1.14.0,
+  FUSE 7.38 without optional features, a host-enforced read-only export and
+  explicit `VIRTIO_FS_SOCKET` selection. No host packages are installed automatically.
 - Filesystem behavior: symlinks and special files, directory cookies, caching
   and visibility of concurrent host changes, plus native error translation.
   Guest read-only access does not mean the host tree is immutable.
@@ -189,11 +190,15 @@ grows. No later item is implied by completing an earlier one.
    Implemented masked table programming and checked VirtIO vector selection,
    plus the short BSP handler and remembered-activity worker wait. No DMA or
    interrupt delivery is enabled yet; see [MSI-X routing](../pci.md#masked-msi-x-routing).
-6. [ ] **Split queues and BSP worker.** Implement owned DMA buffers, descriptor
+6. [x] **Split queues and BSP worker.** Implement owned DMA buffers, descriptor
    publication, completions and worker lifecycle. Add the opt-in host-service
    setup needed for a real virtio-fs session-negotiation request. Completion:
    that request completes through the device and interrupt path while normal
    scheduling continues. No synthetic boot requests or test-only driver API.
+   Implemented both owned queues, MSI-X activation, a timed interrupt wait and
+   validated FUSE_INIT negotiation. The worker retains the session and parks;
+   runtime failure stops it and retains resources until reboot. Host setup and
+   limits are documented in [the transport reference](../virtio-fs.md).
 7. [ ] **Read-only FUSE client.** Implement the selected traversal/read subset,
    high-priority reference release, bounded replies and request failure handling.
    Completion: the backend has explicit session, node and open-handle lifetimes;
