@@ -70,6 +70,7 @@ The TTY keeps its parser state across writes. The supported subset is:
 | Bytes | Effect |
 | --- | --- |
 | LF / CR / BS | New row at column zero / column zero / one column left without erasing |
+| HT (`\t`) | Move to the next eight-column tab stop, clamped to the last column, without erasing |
 | `CSI n A/B/C/D` | Move up/down/right/left, clamped to screen edges |
 | `CSI n G` | Set column (one-based) |
 | `CSI row;column H` | Set position (one-based) |
@@ -84,13 +85,19 @@ row/column one. Erasing does not move the cursor. Style parameters are 0 (reset)
 39/49 (separate terminal defaults). Unsupported controls are ignored. At most
 four parameters of up to 65535 are accepted; malformed or oversized CSI commands
 are discarded through their final byte. A new Escape starts a fresh sequence.
-Horizontal tabs are currently ignored, including in cat output; Kilo expands
-them for its own display. See [tab handling debt](technical-debt.md#tty-horizontal-tabs).
 This is a focused subset, not a claim of full ANSI/VT compatibility.
+
+Horizontal tab stops are at zero-based columns 8, 16, 24 and so on. A tab at a
+stop advances to the next one. Tabs only move the cursor: they preserve existing
+cells, never wrap or scroll, and cancel pending wrap even at the right edge.
+The next printable character then writes at that column, setting pending wrap
+if it fills the last cell. Like CR/LF/BS, a tab ends an incomplete escape sequence.
+Cat passes tabs through unchanged; Kilo still controls their display inside the
+editor. Tab-stop configuration is deferred to [Lua configuration](wip/lua-port.md).
 
 Writing the rightmost cell leaves the cursor there with a pending wrap. Only the
 next printable character moves to the next row (scrolling at the bottom).
-CR, LF, BS, supported cursor movement and erasing cancel pending wrap; styling
+CR, LF, BS, HT, supported cursor movement and erasing cancel pending wrap; styling
 and cursor visibility preserve it. LF still starts a new row at column zero.
 This permits a full-width line followed by CR/LF without a second line advance,
 and permits writing the bottom-right cell before repositioning without scrolling.
