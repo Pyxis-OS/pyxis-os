@@ -39,6 +39,10 @@ enum mm_result arch_space_destroy(struct arch_address_space *space);
 enum mm_result arch_page_map(struct arch_address_space *space,
                              uintptr_t virtual, phys_addr_t physical,
                              unsigned permissions);
+/* Supervisor RW/NX/UC mapping in the kernel allocation area. */
+enum mm_result arch_page_map_mmio(uintptr_t virtual, phys_addr_t physical);
+/* PCI ownership changes, BSP/IF=0 before AP startup, for one ECAM page only. */
+void paging_pci_config_writable(uintptr_t virtual, bool writable);
 enum mm_result arch_page_unmap(struct arch_address_space *space,
                                uintptr_t virtual, phys_addr_t *physical);
 enum mm_result arch_page_protect(struct arch_address_space *space,

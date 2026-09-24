@@ -566,9 +566,9 @@ static enum mm_result walk_to_leaf(const struct arch_address_space *space,
   return MM_OK;
 }
 
-enum mm_result arch_page_map(struct arch_address_space *space,
-                             uintptr_t virtual, phys_addr_t physical,
-                             unsigned permissions)
+static enum mm_result map_page(struct arch_address_space *space,
+                               uintptr_t virtual, phys_addr_t physical,
+                               unsigned permissions, uint64_t cache_flags)
 {
   if (!mutable_address(space, virtual) || !physical_valid(physical) ||
       !permissions_valid(permissions) ||
@@ -590,11 +590,39 @@ enum mm_result arch_page_map(struct arch_address_space *space,
     return MM_INVALID;
   }
 
-  write_table_entry(table, index, physical | leaf_flags(permissions));
+  write_table_entry(table, index, physical | leaf_flags(permissions) | cache_flags);
   if (affects_active_space(space, virtual)) {
     invlpg(virtual);
   }
   return MM_OK;
+}
+
+enum mm_result arch_page_map(struct arch_address_space *space,
+                             uintptr_t virtual, phys_addr_t physical,
+                             unsigned permissions)
+{
+  return map_page(space, virtual, physical, permissions, 0);
+}
+
+enum mm_result arch_page_map_mmio(uintptr_t virtual, phys_addr_t physical)
+{
+  return map_page(&kernel_space, virtual, physical, PAGE_WRITE,
+                  PTE_CACHE_DISABLE | PTE_WRITE_THROUGH);
+}
+
+void paging_pci_config_writable(uintptr_t virtual, bool writable)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(active && virtual >= PCI_ECAM_BASE &&
+          virtual - PCI_ECAM_BASE < PCI_ECAM_SIZE && !(virtual & (PAGE_SIZE - 1)));
+  volatile uint64_t *entry = &active_table(virtual, LEVEL_PT)[index_at(virtual, LEVEL_PT)];
+  KASSERT(*entry & PTE_PRESENT);
+  if (writable) {
+    *entry |= PTE_WRITE;
+  } else {
+    *entry &= ~PTE_WRITE;
+  }
+  invlpg(virtual);
 }
 
 enum mm_result arch_page_unmap(struct arch_address_space *space,
@@ -647,8 +675,12 @@ enum mm_result arch_page_protect(struct arch_address_space *space,
     return MM_INVALID;
   }
 
+  uint64_t cache_flags = value & (PTE_PAT_4K | PTE_CACHE_DISABLE | PTE_WRITE_THROUGH);
+  if (cache_flags && (permissions & (PAGE_USER | PAGE_EXEC))) {
+    return MM_INVALID;
+  }
   write_table_entry(table, index,
-                    (value & PTE_ADDRESS_MASK) | leaf_flags(permissions));
+                    (value & PTE_ADDRESS_MASK) | leaf_flags(permissions) | cache_flags);
   if (affects_active_space(space, virtual)) {
     invlpg(virtual);
   }

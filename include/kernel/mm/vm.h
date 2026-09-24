@@ -55,6 +55,10 @@ enum mm_result vm_free(struct vm_space *space, uintptr_t base, size_t bytes);
  * bookkeeping by mutating its spaces through the arch interface. */
 enum mm_result vm_map(struct vm_space *space, uintptr_t base, phys_addr_t physical,
                       unsigned permissions);
+/* Map a device-owned frame into a bare kernel reservation as RW/NX/uncached.
+ * Caller must exclude RAM/cache aliases. Never free MMIO frames through PMM;
+ * undo with vm_unmap and release the virtual reservation. Before AP startup. */
+enum mm_result vm_map_mmio(uintptr_t base, phys_addr_t physical);
 enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
                         phys_addr_t *physical);
 /* Protect one mapped page in a reservation or VM-owned allocation. */
