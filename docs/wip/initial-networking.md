@@ -65,9 +65,9 @@ buffers and independently completed transmissions; do not simulate it as a FUSE
 request/reply exchange or redesign the filesystem worker to accommodate it.
 Extract shared mechanics only where both concrete consumers benefit.
 
-Use VirtIO 1.4 as the reference. Feature selection, queue layout, buffer sizing,
-interrupt routing and reset/failure behavior need their own review before the
-driver task. Do not add offloads, multiple queue pairs or userspace DMA merely
+Use VirtIO 1.4 as the reference. The driver task is split into preparation and activation below; feature
+selection and interrupt routing are settled, with queue ownership and runtime
+failure behavior to review before activation. Do not add offloads, multiple queue pairs or userspace DMA merely
 because the device advertises them. A failed network device must leave loopback,
 the filesystem and the rest of the OS usable.
 
@@ -99,9 +99,10 @@ Remaining decisions:
   external routing has a consumer (tasks 5/6); do not add mutable loopback setup
   merely to populate an interface. New syscalls remain allowed for concrete needs,
   without placeholder asynchronous networking APIs.
-- **Host setup and init policy:** select the QEMU backend and a reachable peer,
-  opt-in/default device behavior, configuration command syntax and missing-device
-  policy before integration. Numeric addresses suffice; no DNS dependency.
+- **Host setup and init policy:** opt-in `VIRTIO_NET=1` uses QEMU user networking,
+  with its router at `10.0.2.2` as the first peer. Default boot has no NIC. Settle
+  configuration command syntax and missing-device policy before init integration.
+  Numeric addresses suffice; no DNS dependency.
   If Lua configuration gains a second consumer, revisit the
   [shared configuration helper](later-os-directions.md#lua-follow-ups).
 
@@ -130,8 +131,15 @@ Remaining decisions:
    external interface can use it. See [networking](../networking.md).
 4. [ ] **Virtio-net transport.** Prepare the selected PCI function and owned RX/TX
    queues, connect MSI-X and the BSP worker, and define failure/cleanup behavior.
-   Keep virtio-fs working alongside it. Split resource preparation and active
-   queues into separate PRs if needed for review.
+   Keep virtio-fs working alongside it.
+   - [x] Device preparation: shared concrete PCI resource helpers, required modern
+     transport/MAC features, optional link status, disabled RX/TX queue inspection
+     and an independent masked MSI-X route. Opt-in `VIRTIO_NET=1` selects QEMU
+     user networking; default boot has no NIC. See [networking](../networking.md).
+   - [ ] Active queues: one RX/TX pair with 16 owned buffers each, a 1500-byte IP
+     MTU, short BSP IRQ and bounded work in the existing network worker. No
+     offloads, merged buffers, packed queues or control queue. Define runtime
+     stop/reset and DMA retention before activation.
 5. [ ] **Ethernet, ARP and external routing.** Connect the device to IP through
    Ethernet framing and bounded ARP resolution. Add the directly connected and
    default-gateway paths, expiry/retry handling and explicit unavailable results.

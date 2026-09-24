@@ -216,3 +216,51 @@ input. `'kernel/net/icmp.c'::icmp_stats` records requests, replies and reply-sen
 failures. Queue and protocol counters are diagnostics, not a public statistics
 ABI. Inspect a normal ping call at `net_echo_exchange`, and its BSP completion
 at `net_echo_receive`, to follow cross-CPU handoff without injected requests.
+
+## Virtio-net preparation
+
+`make run VIRTIO_NET=1` (also accepted by `make debug`) adds one modern
+`virtio-net-pci` device backed by QEMU user networking. No TAP device, daemon or
+privileged host setup is required. `VIRTIO_NET=0`, the default, explicitly
+suppresses QEMU's implicit NIC; loopback still works. Values other than `0` or
+`1` are rejected. The network option can be combined with
+`VIRTIO_FS_SOCKET=...` using the [usual filesystem setup](virtio-fs.md).
+
+The driver currently prepares hardware only. Before AP startup,
+`virtio_net_prepare` claims the first modern network PCI function (`1af4:1041`),
+confirms reset before BAR probing, maps its registers uncached and negotiates
+`VIRTIO_F_VERSION_1` and `VIRTIO_NET_F_MAC`. `VIRTIO_NET_F_STATUS` is accepted
+when offered; otherwise the link is assumed up. The MAC must be nonzero and
+unicast. MAC and link status are sampled between matching configuration
+generations, with a one-second deadline. No address or route is configured.
+
+Queue zero (RX) and queue one (TX) must be available and disabled, with usable
+notification offsets. Their maximum sizes are recorded without allocating rings
+or buffers. MSI-X table entry zero routes configuration and both queues to the
+BSP's reserved `APIC_VIRTIO_NET_VECTOR` (35), independently of virtio-fs (34).
+Every table entry and the function remain masked. The NIC's queues stay disabled,
+PCI bus mastering stays clear, and `DRIVER_OK` is not set. There is no network
+interrupt handler, external interface or packet exchange yet.
+
+Missing hardware is harmless. Unsupported configuration logs a diagnostic and
+leaves software networking available. Negotiation/routing failures disable MSI-X
+and confirm reset before releasing the boot-only claim. Unconfirmed cleanup
+retains ownership and mappings until reboot. This preparation never enables DMA.
+
+The next slice supplies owned RX/TX buffers and connects real interrupts to the
+existing BSP worker. The agreed initial bounds are one queue pair, 16 buffers
+per queue and a 1500-byte IP MTU, without offloads, merged RX buffers, packed
+queues or a control queue. Ethernet, ARP and manual IPv4 configuration follow
+that transport slice. QEMU's local router at `10.0.2.2` is the intended first
+external ping target; ordinary Internet ICMP has additional backend limitations.
+
+For manual inspection, stop at `boot_start_cpus` in GDB. `network.prepared`
+records successful preparation; `network.pci`, `network.accepted_features`,
+`network.mac`, `network.link_up`, `network.rx_info` and `network.tx_info` hold the
+captured state. Read MMIO only at its individual register widths. Common status
+should be `ACKNOWLEDGE | DRIVER | FEATURES_OK` (`0x0b`); MSI-X function and vector
+masks must remain set, and the PCI command's bus-master bit clear. Do not read
+the ISR merely for inspection: that acknowledges pending interrupts.
+
+References: [VirtIO 1.4 network device and PCI transport](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.pdf),
+[QEMU user networking](https://www.qemu.org/docs/master/system/devices/net.html).
