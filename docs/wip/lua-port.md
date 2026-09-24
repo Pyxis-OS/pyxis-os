@@ -1,6 +1,6 @@
 # Lua port milestones
 
-Status: the expression interpreter is implemented; scripts and the REPL are next.
+Status: expression and script execution are implemented; the REPL is next.
 Configuration is the first system integration: choose the default timezone and
 terminal tab width. Host Lua for build recipes and image manifests remains independent of
 this guest port. Libraries consume the [SDK](../sdk-and-repositories.md) and
@@ -45,20 +45,20 @@ Prerequisites and focused PR tasks:
 - [x] Add the pinned recipe, license and ordered adaptations, then the expression
   execution slice below. Record fixed-C-locale decimal point and byte collation
   through Lua's existing hooks; no locale subsystem or signal stubs.
-- [ ] Add script loading and libterm REPL support after settling the file/module
-  lookup and exit/cancellation behavior below.
+- [x] Add explicit-filename script loading with inherited cwd/URI lookup,
+  `arg`/`...`, and restored `loadfile`/`dofile`.
+- [ ] Add the libterm REPL with the exit/cancellation behavior below.
 
-The interpreter registers base, coroutine, table, string and UTF-8. File-loading
-functions `loadfile` and `dofile` are absent from the base library. Broad `io`/`os`,
-native dynamic modules and the full math library are not prerequisites. The `io`/`os`
+The interpreter registers base, coroutine, table, string and UTF-8, including
+explicit-filename `loadfile` and `dofile`. Broad `io`/`os`, native dynamic modules
+and the full math library are not prerequisites. The `io`/`os`
 audit found additional needs including pushback, temporary files, stream-buffer
 control, process CPU time and calendar formatting/conversion. Do not substitute
 wall time for CPU time or introduce successful stubs for missing operations.
 
-Restoring the auxiliary script loader needs a `BUFSIZ` buffer size. Pyxis treats text
-and binary file modes identically, so opening in binary mode initially can avoid
-Lua's binary-mode `freopen` cycle as a documented local adaptation. Pure-Lua
-`require` still needs an explicit module search-path policy.
+The auxiliary script loader uses a port-owned 512-byte buffer and opens files
+in binary mode initially, avoiding the unnecessary `freopen` cycle on Pyxis.
+Pure-Lua `require` still needs an explicit module search-path policy.
 
 The pin, library selection and runtime prerequisites are complete. This does
 not authorize unrelated libc or kernel expansion.
@@ -75,7 +75,8 @@ The small native driver accepts exactly one `-e` text chunk. It opens the five
 selected libraries and protects initialization, compilation and execution.
 Success exits zero; usage and execution errors exit one. Runtime errors include
 tracebacks. No arguments prints usage. Chunk return values are discarded.
-There is no script/REPL fallback, `arg` table or environment startup hook.
+The driver also supports explicit scripts as described below. There is no REPL
+fallback or environment startup hook.
 
 The full image build and manual boot/debugger inspection cover real Lua
 execution and error reporting. This does not imply system-wide configuration,
@@ -83,19 +84,32 @@ dynamic modules or complete standard-library support.
 
 ## 3. Scripts and an interactive REPL
 
-Use native filesystem authority through libc/native adaptations to load scripts,
-and use the terminal facilities for interactive input and output. Settle the
-initial file/module lookup rules and supported libraries before implementation.
+Script execution is implemented as `lua file.lua [args...]`, with `--` to
+terminate option parsing for filenames beginning with `-`. Paths resolve through
+the inherited working directory or explicit Pyxis URIs; the interpreter does not
+change to the script's directory or search for modules. `arg[0]` is the supplied
+filename, positive indices and `...` carry script arguments, and negative indices
+retain preceding interpreter arguments. The base library's `loadfile` and
+`dofile` require explicit filenames and preserve Lua's usual return/error rules.
+File, syntax and runtime errors return a nonzero process status.
 
-Lua's CLI normally uses SIGINT, which Pyxis does not provide. Omitting that
-integration must be an explicit port adaptation: Ctrl+C line cancellation does
-not interrupt a running CPU-bound script. Current libterm has cancellation but
-no EOF action or history. Decide the REPL exit action (for example, Ctrl+D on an
-empty line) before implementation; cancellation must not be treated as EOF.
+Stdin scripts and direct shebang launches are deferred. The latter needs to
+consume the launcher's already-open `script` capability rather than reopen a
+diagnostic name; the current driver rejects that handoff explicitly.
 
-Completion: launch a script from the shell and use an interactive Lua REPL, with
-useful file and language error reporting. Expand only the runtime facilities
-needed for that slice. These may be separate PRs.
+The next focused PR adds the libterm REPL. The agreed controls are Ctrl+D on an
+empty line to exit, and Ctrl+C to discard the whole pending multiline input and
+return to the primary prompt. Cancellation is not EOF. Current libterm needs a
+reusable EOF result; update its callers deliberately. History is not part of this
+slice. Preserve Lua's multiline compilation/error handling and keep the selected
+libraries and filesystem policy above.
+
+Lua's CLI normally uses SIGINT, which Pyxis does not provide. Line cancellation
+does not interrupt an executing CPU-bound script. Signals, module lookup and
+additional standard libraries remain separate work.
+
+Completion: script execution is done; an interactive REPL with useful language
+errors and the agreed exit/cancel controls remains.
 
 ## 4. Init/session configuration
 

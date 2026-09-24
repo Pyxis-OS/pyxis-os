@@ -107,12 +107,17 @@ chunk through the shell:
 lua -e 'print("Hello from Lua", 2 ^ 0.5)'
 ```
 
-Base, coroutine, table, string and UTF-8 libraries are available, with `loadfile`
-and `dofile` omitted. Errors return a nonzero process status; runtime errors
-include a traceback. No arguments prints usage. Script files, REPL, package
-loading, io/os, debug and the full math library remain deferred, as does
-signal-driven interruption. This does not replace the host Lua used by build
-recipes. See the [port notes](../ports/lua/README.md) and
+`lua file.lua [args...]` runs a script using the inherited working directory or
+an explicit URI such as `home://scripts/hello.lua`. Lua's `arg` table and `...`
+carry script arguments. `loadfile` and `dofile` require filenames and use the
+same path rules, without changing to the script's directory or searching modules.
+
+Base, coroutine, table, string and UTF-8 libraries are available. Errors return
+a nonzero process status; runtime errors include a traceback. No arguments
+prints usage. REPL, stdin scripts, shebang handoff, package loading, io/os, debug
+and the full math library remain deferred, as does signal-driven interruption.
+This does not replace the host Lua used by build recipes. See the
+[port notes](../ports/lua/README.md) and
 [remaining milestone tasks](wip/lua-port.md).
 
 ## Timezone data
