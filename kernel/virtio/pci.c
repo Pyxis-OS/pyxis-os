@@ -156,10 +156,8 @@ static bool inspect_queue(unsigned index, struct virtio_queue_info *queue)
 static const char *negotiate_transport(void)
 {
   volatile struct virtio_pci_common *common = common_config();
-  uint8_t status = VIRTIO_STATUS_ACKNOWLEDGE;
-  common->device_status = status;
-  status |= VIRTIO_STATUS_DRIVER;
-  common->device_status = status;
+  common->device_status |= VIRTIO_STATUS_ACKNOWLEDGE;
+  common->device_status |= VIRTIO_STATUS_DRIVER;
 
   common->device_feature_select = 0;
   uint64_t low = common->device_feature;
@@ -177,8 +175,8 @@ static const char *negotiate_transport(void)
   common->driver_feature = (uint32_t)filesystem.accepted_features;
   common->driver_feature_select = 1;
   common->driver_feature = filesystem.accepted_features >> VIRTIO_FEATURE_WORD_BITS;
-  status |= VIRTIO_STATUS_FEATURES_OK;
-  common->device_status = status;
+  common->device_status |= VIRTIO_STATUS_FEATURES_OK;
+  uint8_t status = VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_FEATURES_OK;
   if (common->device_status != status) {
     return "feature negotiation rejected or device needs reset";
   }
