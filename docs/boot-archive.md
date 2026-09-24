@@ -52,5 +52,5 @@ Removing overrides removes their old payloads on the next assembly.
 
 [Independent component bundles](build-bundles.md) allow CI or local assembly to
 consume completed builds. They do not change the archive format or introduce
-runtime mounts. Next is [zoneinfo-backed local time](wip/timezones.md), followed
-by guest Lua configuration.
+runtime mounts. The archive supplies data for [local-time conversion](timezones.md);
+future Lua configuration can select a session timezone.

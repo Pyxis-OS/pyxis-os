@@ -23,9 +23,9 @@ milestone's remaining interface details before starting its code work.
 7. [Boot archive assembly](../boot-archive.md) — complete: install trees, Lua
    manifest and [independent build bundles](../build-bundles.md).
    [Automatic artifact selection](build-artifact-reuse.md) remains follow-up work.
-8. [Zoneinfo-backed local time](timezones.md): package the full pinned database,
-   default to UTC without `TZ`, with explicit IANA-name selection; no locale
-   subsystem yet. The data is packaged; conversion is the next task.
+8. Complete: [zoneinfo-backed local time](../timezones.md), including the full
+   pinned database, UTC for absent/empty `TZ`, named zones and `date -u`.
+   Locale and reverse conversion remain deferred.
 9. [Guest Lua and configuration](lua-port.md): audit/port, scripts and REPL, then
    init/session configuration for timezone selection and terminal tab width.
 10. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
