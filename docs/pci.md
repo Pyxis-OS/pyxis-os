@@ -82,7 +82,8 @@ restores original address decoding with bus mastering and INTx kept disabled,
 and returns the function's ECAM page to read-only. BAR assignments stay unchanged.
 It never frees MMIO through the PMM. Empty page tables may remain for reuse under
 the existing VM policy. This is not runtime teardown or hot-unplug: it must not
-be used after starting DMA, and a device reset cannot be undone.
+be used after starting DMA, and a device reset cannot be undone. A driver that
+enabled MSI-X must disable it before releasing the claim or table mappings.
 
 ## Initial virtio-fs consumer
 
@@ -132,14 +133,59 @@ write queue sizes, addresses, enable bits or notification registers.
 Success leaves `ACKNOWLEDGE | DRIVER | FEATURES_OK` set and `DRIVER_OK` clear.
 `filesystem.negotiated` records that boundary; it does not mean the device is
 running. Bus mastering, INTx and MSI-X remain disabled. MSI-X entries are counted
-and mapped but not programmed. No queue storage or DMA buffers exist yet.
+and mapped at this point; masked routing setup follows. No queue storage or DMA
+buffers exist yet.
 
-Negotiation or inspection failure marks `FAILED` and resets through the mapped
-status register, with a one-second deadline. Confirmed reset uses the resource
-unwind above. If reset times out, the driver retains the claim and mappings until
-reboot rather than exposing the failed device for reuse; DMA and interrupts remain
-disabled and normal boot continues. This is boot-only cleanup, not recovery of
-in-flight filesystem requests.
+Negotiation, inspection or routing failure disables MSI-X, marks `FAILED` and
+resets through the mapped status register, with a one-second deadline. Confirmed
+reset and MSI-X disable use the resource unwind above. If either cannot be
+confirmed, the driver retains the claim and mappings until reboot rather than
+exposing the failed device for reuse; DMA stays disabled and normal boot
+continues. This is boot-only cleanup, not recovery of in-flight filesystem
+requests.
+
+### Masked MSI-X routing
+
+The first virtio-fs device owns `APIC_VIRTIO_FS_VECTOR`, statically handled by
+the IDT dispatcher. Its MSI-X entry zero carries a fixed, edge-triggered message
+to the BSP's physical xAPIC ID. There is no interrupt remapping, dynamic vector
+allocator or legacy INTx fallback.
+
+Preparation enables MSI-X under its function mask, masks every table entry,
+programs entry zero and reads the message fields back. It then maps configuration
+changes, queue zero and queue one to that entry, checking each selection. VirtIO
+vector registers contain table indices, not x86 vectors; the device may reject a
+selection by returning `NO_VECTOR`. Unused queues retain their reset mappings.
+Both the function and entry masks remain set after successful preparation.
+
+The BSP handler records pending activity, detaches and wakes any worker waiter,
+then the arch dispatcher sends APIC EOI. It does not read the VirtIO ISR byte:
+that register is unused under MSI-X. The handler neither processes queues nor
+allocates, logs or switches tasks.
+
+`virtio_fs_pci_wait_interrupt` is for the sole BSP kernel worker with IF=1 and
+no locks held. It disables interrupts around checking pending activity and
+publishing its task wait, then parks through the ordinary event-wait API. BSP
+affinity and IF=0 serialize the worker/IRQ handoff; a spinlock is unnecessary
+for these two participants. Activity arriving before publication remains pending,
+and the task wait remembers a wake before parking finishes. Return consumes the
+activity flag and restores IF=1. The worker must recheck all relevant queue and
+configuration state: one interrupt can cover several completions.
+
+Queue/worker activation is the next task. Before enabling delivery, it must
+establish the worker and owned queue storage, program the queue addresses and
+enable bits, enable bus mastering and set `DRIVER_OK`. Only then may it unmask
+entry zero and finally the function, with device readbacks to order the writes.
+Already-pending activity must be processed; interrupt counts cannot substitute
+for used-ring inspection. This stage deliberately creates no dummy worker or
+DMA requests merely to exercise the interrupt.
+
+Boot failure disables MSI-X before reset and resource release. Runtime teardown
+will additionally need to stop new submissions, mask delivery, confirm reset
+before releasing any device-owned buffer, and detach/wake the worker before
+freeing its state. A mask cannot retract an interrupt already sent to the APIC;
+the handler and its state must outlive that delivery. These runtime operations
+are not implemented yet.
 
 The reference is
 [VirtIO 1.4](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.pdf),
@@ -159,7 +205,7 @@ Read MMIO registers individually at their documented byte, word or dword width.
 A bulk structure read can combine neighboring registers into accesses the device
 does not support, producing misleading values even with correct field offsets.
 
-PCI MSI-X delivery is the next
+Split queues and the BSP worker are the next
 [milestone task](wip/virtio-fs.md#focused-task-list). The opt-in host daemon/QEMU
 setup will become part of the normal build/run interface with the queue worker.
 Host filesystem access is not implemented yet.
