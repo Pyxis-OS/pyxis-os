@@ -16,4 +16,7 @@ struct keyboard_irq_route {
 bool acpi_keyboard_route(const struct boot_info *boot,
                          struct keyboard_irq_route *route);
 
+/* Same bootstrap lifetime as keyboard routing. Requires a memory-mapped HPET. */
+uint64_t acpi_hpet_address(const struct boot_info *boot);
+
 #endif

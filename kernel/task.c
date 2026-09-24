@@ -1,6 +1,7 @@
 #include <abi/memory.h>
 #include <kernel/object/display.h>
 #include <arch/cpu.h>
+#include <arch/clock.h>
 #include <arch/smp.h>
 #include <arch/user.h>
 #include <kernel/log.h>
@@ -81,7 +82,7 @@ struct task {
   int exit_status;
   void (*kernel_entry)(void *);
   void *argument;
-  uint64_t sleep_start, sleep_ticks;
+  uint64_t sleep_deadline;
   struct task_wait wait_record;
   struct task_wait *wait;
   bool parked; /* queues_locked: stack saved and no CPU is executing this task. */
@@ -188,20 +189,16 @@ struct console_wait *task_prepare_console_wait(void)
   return record;
 }
 
-static uint64_t bsp_ticks(void)
-{
-  return atomic_load_explicit(&arch_cpu_at(0)->timer_interrupts, memory_order_relaxed);
-}
-
 uint64_t task_deadline_after_ms(uint32_t milliseconds)
 {
-  uint64_t ticks = ((uint64_t)milliseconds * arch_timer_frequency() + 999) / 1000;
-  return bsp_ticks() + ticks + (milliseconds != 0);
+  uint64_t now = arch_monotonic_ns();
+  uint64_t duration = (uint64_t)milliseconds * UINT64_C(1000000);
+  return duration > UINT64_MAX - now ? UINT64_MAX : now + duration;
 }
 
 bool task_deadline_expired(uint64_t deadline)
 {
-  return (int64_t)(bsp_ticks() - deadline) >= 0;
+  return arch_monotonic_ns() >= deadline;
 }
 
 static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline)
@@ -273,10 +270,11 @@ void task_wait_wake(struct task_wait *wait)
 static void expire_timed_waits(void)
 {
   lock_queues();
+  uint64_t now = arch_monotonic_ns();
   struct task_wait **link = &timed_waits;
   while (*link) {
     struct task_wait *wait = *link;
-    if (!task_deadline_expired(wait->deadline)) {
+    if (now < wait->deadline) {
       link = &wait->timeout_next;
       continue;
     }
@@ -776,24 +774,23 @@ static void reap_completed(void)
 
 static void wake_sleepers(void)
 {
-  uint64_t ticks = atomic_load_explicit(
-      &cpu_current()->timer_interrupts, memory_order_relaxed);
+  uint64_t now = arch_monotonic_ns();
   struct task **link = &sleeping_tasks;
 
   while (*link) {
     struct task *task = *link;
-    if (ticks - task->sleep_start < task->sleep_ticks) {
+    if (now < task->sleep_deadline) {
       link = &task->next;
       continue;
     }
 
     *link = task->next;
-    task->sleep_ticks = 0;
+    task->sleep_deadline = 0;
     enqueue(&schedulers[0], task);
   }
 }
 
-void kernel_task_sleep(uint64_t ticks)
+void kernel_task_sleep_until(uint64_t deadline)
 {
   uint64_t flags = cpu_save_interrupts();
   KASSERT(arch_cpu_index() == 0 && (flags & RFLAGS_INTERRUPT_ENABLE));
@@ -801,9 +798,7 @@ void kernel_task_sleep(uint64_t ticks)
   struct task *task = scheduler->current_task;
   KASSERT(task && task->kind == TASK_KERNEL && !task->exited);
 
-  task->sleep_start = atomic_load_explicit(
-      &cpu_current()->timer_interrupts, memory_order_relaxed);
-  task->sleep_ticks = ticks;
+  task->sleep_deadline = task_deadline_expired(deadline) ? 0 : deadline;
   arch_context_switch(&task->saved_stack, scheduler->stack);
   cpu_restore_interrupts(flags);
 }
@@ -884,7 +879,7 @@ void kernel_task_sleep(uint64_t ticks)
         task->parked = true;
       }
       unlock_queues();
-    } else if (task->sleep_ticks) {
+    } else if (task->sleep_deadline) {
       task->next = sleeping_tasks;
       sleeping_tasks = task;
     } else {
