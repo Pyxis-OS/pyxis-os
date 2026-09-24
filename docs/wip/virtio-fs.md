@@ -98,9 +98,10 @@ references; serialization does not remove that lifecycle responsibility.
 
 The first client supports regular files and directories: session negotiation,
 lookup, attributes needed by native operations, enumeration, open/read and
-release. Select the exact FUSE version, operations, feature flags and limits
-before implementing the client. Track host lookup references and open handles
-separately from local capabilities; close and failure paths must release them.
+release. The [implemented client contract](../virtio-fs.md#read-only-client-contract)
+defines FUSE 7.38, its operations and bounds. Host lookup references and open
+handles are tracked separately from local capabilities; close and failure paths
+must retire them.
 Unsupported file kinds and operations must report errors rather than behave
 like empty files or successful no-ops.
 
@@ -136,9 +137,11 @@ unmounting and live namespace replacement remain later work.
 - Host setup: [documented socket setup](../virtio-fs.md) uses virtiofsd 1.14.0,
   FUSE 7.38 without optional features, a host-enforced read-only export and
   explicit `VIRTIO_FS_SOCKET` selection. No host packages are installed automatically.
-- Filesystem behavior: symlinks and special files, directory cookies, caching
-  and visibility of concurrent host changes, plus native error translation.
-  Guest read-only access does not mean the host tree is immutable.
+- Filesystem client: regular files/directories only, names up to 255 bytes and
+  reads/READDIR batches up to 4 KiB. No symlink following or data/attribute cache.
+  Cookies are opaque per open directory; host edits do not produce a snapshot or
+  reliable change notification. Wire errors become internal client results.
+  Native error/cursor translation remains a backend decision.
 - Failure behavior: deadlines, caller exit, daemon disconnection, malformed
   replies, pending-call errors and resource reclamation after reset. Automatic
   reconnection need not be part of the first client.
@@ -199,14 +202,22 @@ grows. No later item is implied by completing an earlier one.
    validated FUSE_INIT negotiation. The worker retains the session and parks;
    runtime failure stops it and retains resources until reboot. Host setup and
    limits are documented in [the transport reference](../virtio-fs.md).
-7. [ ] **Read-only FUSE client.** Implement the selected traversal/read subset,
+7. [x] **Read-only FUSE client.** Implement the selected traversal/read subset,
    high-priority reference release, bounded replies and request failure handling.
    Completion: the backend has explicit session, node and open-handle lifetimes;
    use debugger inspection as needed before public mount exposure exists.
+   Implemented lookup, fresh attributes, explicit-offset reads, checked directory
+   batches and ordered RELEASE/FORGET cleanup on the sole BSP worker. The
+   [client contract](../virtio-fs.md#read-only-client-contract) records limits
+   and distinguishes ordinary host errors from session failures.
 8. [ ] **Native filesystem backend.** Connect the client to directory/file
    capabilities and their existing rights, waiting and destruction contracts.
    Completion: native lookup/enumeration/read dispatch to the backend without
-   exposing FUSE details; unsupported mutations fail explicitly.
+   exposing FUSE details; unsupported mutations fail explicitly. Add native
+   caller handoff to the BSP worker, including caller-exit and cleanup ownership.
+   Explicitly reconcile the native `DIRECTORY_CHANGED` promise with opaque FUSE
+   cookies and external host edits: read-only does not imply immutable, and the
+   client cannot reliably detect every change. Settle this before implementation.
 9. [ ] **Init mount and session handoff.** Add the selected mount authority and
    request, pass `host://` through session startup, and document normal host
    setup and archive-only recovery. Completion: `ls` and `cat` operate on host

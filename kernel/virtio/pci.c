@@ -442,43 +442,71 @@ static const char *transport_failure(void)
   return NULL;
 }
 
-const char *virtio_fs_pci_request(const void *request, size_t request_bytes,
-    void *reply, size_t reply_capacity, size_t *reply_bytes)
+static void stop_transport(const char *failure);
+
+static enum virtio_fs_result request_failure(enum virtio_fs_result result, const char *reason)
+{
+  stop_transport(reason);
+  return result;
+}
+
+static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virtqueue *other,
+    const void *request, size_t request_bytes, void *reply, size_t reply_capacity, size_t *reply_bytes)
 {
   KASSERT(cpu_current() == cpu_bsp());
   *reply_bytes = 0;
-  if (!filesystem.active || filesystem.request.in_flight || !request_bytes ||
-      request_bytes > VIRTQUEUE_REQUEST_BYTES || reply_capacity > VIRTQUEUE_REPLY_BYTES) {
-    return "request unavailable or outside transfer buffer limits";
+  if (!filesystem.active) {
+    return VIRTIO_FS_UNAVAILABLE;
   }
-  memcpy(filesystem.request.request, request, request_bytes);
-  if (!virtqueue_submit(&filesystem.request, request_bytes, reply_capacity)) {
-    return "cannot submit request";
+  if (queue->in_flight || other->in_flight || !request_bytes ||
+      request_bytes > VIRTQUEUE_REQUEST_BYTES || reply_capacity > VIRTQUEUE_REPLY_BYTES) {
+    return VIRTIO_FS_INVALID;
+  }
+  uint64_t deadline = task_deadline_after_ms(VIRTIO_REQUEST_TIMEOUT_MS);
+  memcpy(queue->request, request, request_bytes);
+  if (!virtqueue_submit(queue, request_bytes, reply_capacity)) {
+    return VIRTIO_FS_INVALID;
   }
 
-  uint64_t deadline = task_deadline_after_ms(VIRTIO_REQUEST_TIMEOUT_MS);
   for (;;) {
     const char *failure = transport_failure();
     if (failure) {
-      return failure;
+      return request_failure(VIRTIO_FS_UNAVAILABLE, failure);
     }
     size_t ignored;
-    if (virtqueue_complete(&filesystem.hiprio, &ignored) != VIRTQUEUE_PENDING) {
-      return "unexpected high-priority queue completion";
+    if (virtqueue_complete(other, &ignored) != VIRTQUEUE_PENDING) {
+      return request_failure(VIRTIO_FS_PROTOCOL, "unexpected completion on idle queue");
     }
-    enum virtqueue_result result = virtqueue_complete(&filesystem.request, reply_bytes);
+    enum virtqueue_result result = virtqueue_complete(queue, reply_bytes);
     if (result == VIRTQUEUE_BROKEN) {
-      return "invalid request queue completion";
+      return request_failure(VIRTIO_FS_PROTOCOL, "invalid queue completion");
     }
     if (result == VIRTQUEUE_COMPLETE) {
-      memcpy(reply, filesystem.request.reply, *reply_bytes);
-      return NULL;
+      if (*reply_bytes) {
+        memcpy(reply, queue->reply, *reply_bytes);
+      }
+      return VIRTIO_FS_OK;
     }
     if (task_deadline_expired(deadline)) {
-      return "request timed out";
+      return request_failure(VIRTIO_FS_TIMED_OUT, "request timed out");
     }
     wait_interrupt(deadline);
   }
+}
+
+enum virtio_fs_result virtio_fs_pci_request(const void *request, size_t request_bytes,
+    void *reply, size_t reply_capacity, size_t *reply_bytes)
+{
+  return exchange_queue(&filesystem.request, &filesystem.hiprio,
+      request, request_bytes, reply, reply_capacity, reply_bytes);
+}
+
+enum virtio_fs_result virtio_fs_pci_forget(const void *request, size_t request_bytes)
+{
+  size_t ignored;
+  /* No FUSE reply, but the used-ring completion still returns DMA ownership. */
+  return exchange_queue(&filesystem.hiprio, &filesystem.request,
+      request, request_bytes, NULL, 0, &ignored);
 }
 
 static void stop_transport(const char *failure)
@@ -517,6 +545,13 @@ static void stop_transport(const char *failure)
        (unsigned)interrupts_disabled, (unsigned)dma_disabled);
 }
 
+void virtio_fs_pci_stop(const char *reason)
+{
+  if (filesystem.active) {
+    stop_transport(reason);
+  }
+}
+
 static void filesystem_worker(void *argument)
 {
   (void)argument;
@@ -524,24 +559,31 @@ static void filesystem_worker(void *argument)
     stop_transport("cannot activate transport");
     return;
   }
-  const char *failure = virtio_fs_session_init(&filesystem.session);
-  if (!failure) {
-    klog("virtio-fs: tag=\"%s\" FUSE %u.%u session ready, optional features=0\n",
-         filesystem.tag, filesystem.session.major, filesystem.session.minor);
+  enum virtio_fs_result result = virtio_fs_session_init(&filesystem.session);
+  if (result != VIRTIO_FS_OK) {
+    klog("virtio-fs: session initialization failed (result %u)\n", (unsigned)result);
+    virtio_fs_pci_stop("FUSE INIT failed");
+    return;
   }
+  klog("virtio-fs: tag=\"%s\" FUSE %u.%u session ready, optional features=0\n",
+       filesystem.tag, filesystem.session.major, filesystem.session.minor);
 
-  while (!failure) {
-    /* Retain the session and sleep for device activity. Filesystem callers and
-     * their request handoff are introduced with the read-only client. */
+  while (filesystem.session.ready) {
+    /* Native caller handoff belongs to backend integration. The client APIs
+     * currently run only in this worker's context; idle device events still
+     * need status and queue inspection. */
     wait_interrupt(UINT64_MAX);
-    failure = transport_failure();
+    const char *failure = transport_failure();
     size_t ignored;
     if (!failure && (virtqueue_complete(&filesystem.hiprio, &ignored) != VIRTQUEUE_PENDING ||
                      virtqueue_complete(&filesystem.request, &ignored) != VIRTQUEUE_PENDING)) {
       failure = "unexpected completion while idle";
     }
+    if (failure) {
+      stop_transport(failure);
+      return;
+    }
   }
-  stop_transport(failure);
 }
 
 void virtio_fs_pci_start(void)

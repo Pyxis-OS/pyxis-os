@@ -35,7 +35,8 @@ milestone's remaining interface details before starting its code work.
     resources](../pci.md), VirtIO feature negotiation and queue inspection are
     complete, as are kernel task event waits, MSI-X delivery and split queues.
     The BSP worker now establishes a [FUSE session](../virtio-fs.md) through real
-    completion interrupts. The read-only FUSE client is next.
+    completion interrupts and provides the read-only client. Native filesystem
+    backend integration is next, followed by init-managed mount exposure.
 
 This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO
