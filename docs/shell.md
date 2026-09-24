@@ -3,7 +3,7 @@
 `make userspace` builds the SDK, shell and core utilities. Normal boot runs the
 default [init script](init.md), which hands off to one shell on CPU 1 when available,
 otherwise on the BSP, with `home://` as its working directory. On multicore boots
-use Alt+Right to select CPU 1 before typing. The normal initrd contains init,
+use Super+Right to select CPU 1 before typing. The normal initrd contains init,
 shell, ls, cat, mkdir, [Kilo and its license](ports.md), and `share/hello.txt`;
 home is initially empty and its RAM
 contents disappear on reboot.
@@ -135,7 +135,8 @@ plus `app` and `home` roots. Input/output are separate console READ/WRITE grants
 memory permits MANAGE and launcher permits LAUNCH. The app root supplies LOOKUP,
 ENUMERATE and READ_FILES. Home additionally supplies CREATE and WRITE_FILES.
 An optional `display` resource supplies DRAW authority for the space. An optional
-`clock` resource supplies READ and SLEEP authority for monotonic time.
+`clock` resource supplies READ and SLEEP authority for monotonic time. An optional
+`keyboard` resource supplies INPUT authority for physical-key sessions.
 This first shell has explicit policies for these two namespaces.
 
 An initial directory chain is copied from startup, preserving its navigation
@@ -148,8 +149,9 @@ rights. Crossing a retained ancestor boundary fails as in the native path API.
 
 Each foreground child receives explicit copies of terminal input/output, memory, both roots
 with the rights above, and the current directory chain. It does not receive the
-shell's launcher. When available, the [display grant](graphics.md) and
-[clock grant](timekeeping.md) are also forwarded to children and session successors.
+shell's launcher. When available, the [display](graphics.md),
+[clock](timekeeping.md) and [keyboard](keyboard.md) grants are also forwarded
+to children and session successors.
 The immutable initial environment is forwarded in full using
 libpyxis's borrowed environment-array accessors. No environment mutation or PWD
 maintenance is implemented. Children receive the full current working-path

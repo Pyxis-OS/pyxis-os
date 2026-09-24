@@ -24,11 +24,13 @@ or controller, or keyboard initialization fails. Serial input is separate.
 Space navigation, character mapping and userspace delivery belong to callers;
 the driver installs no bindings or consumer task.
 
-The presentation task binds Alt+Left and Alt+Right to the previous and next
+The presentation task binds Super+Left and Super+Right to the previous and next
 space in CPU order, wrapping at either end. The selected tab's name is underlined.
-Each arrow press switches once; releases and repeats do not switch. Either Alt
+Each arrow press switches once; releases and repeats do not switch. Either Super
 key works, lock modifiers do not affect the shortcut, and adding Shift, Control
-or Super suppresses it. Remaining input goes to the selected space's console.
+or Alt suppresses it. A shortcut's arrow repeats/releases remain consumed even
+if Super is released first. Remaining input is routed to the selected space's
+keyboard session, or its console when there is no session.
 Caelum discards application input on multicore boots; the single-CPU development
 fallback shares its console with userspace.
 
@@ -56,14 +58,74 @@ userspace work for the shell.
 
 Overflow clears the queue and latches `CALL_INPUT_LOST`. Further input is
 discarded until a nonempty read acknowledges the loss by returning that status.
-A device `KEY_STATE_RESET` applies the same policy to every application console:
-lost scan bytes may include a space switch, so the intended destination is
-unknown. No kernel echo or line editing is performed.
+A device `KEY_STATE_RESET` applies this policy to every application console
+without a captured keyboard session; captured sessions receive a physical-input
+reset instead. Lost scan bytes may include a space switch, so the intended
+destination is unknown. No kernel echo or line editing is performed.
 
 For manual inspection, QEMU's monitor accepts `sendkey left`, `sendkey shift-a`
-and similar commands while the VM runs. Enter the monitor with Ctrl-a c from
+and `sendkey meta_l-right` (Super+Right) while the VM runs. Enter the monitor with Ctrl-a c from
 the serial terminal. Under TCG, use the precautions in [the GDB guide](gdb.md)
 to stop in the BSP scheduler and call `keyboard_read_event()` with allocated
 event storage. Under KVM, inspect memory or use breakpoints instead of injected
 function calls: GDB's temporary return breakpoint can land on a non-executable
 kernel stack.
+
+## Userspace keyboard sessions
+
+Each space owns a keyboard object. Boot gives init a named `keyboard` grant;
+the shell forwards it to children and session successors when present. Its
+`INPUT` right authorizes [the keyboard protocol](../include/abi/keyboard.h),
+restricted to processes in the object's own space. Libpyxis provides
+`keyboard_acquire`, `keyboard_read` and `keyboard_release` in `<keyboard.h>`.
+
+ACQUIRE and RELEASE are header-only requests with no reply. ACQUIRE returns
+`CALL_BUSY` if any process already owns the session, including the caller, or
+`CALL_UNAVAILABLE` when the keyboard device is unavailable. READ and RELEASE
+require the acquiring process. Acquisition queues an initial focus notification.
+READ returns one fixed-size event; zero flags block, while `KEYBOARD_READ_POLL`
+returns `CALL_TIMED_OUT` if the queue is empty. Validate reply storage before
+consuming an event or blocking. Display acquisition is independent.
+
+Ownership belongs to the process, not an individual handle. Copying a grant
+does not transfer an acquired session; closing its last handle does not release
+it. Another handle to the same object can release the session, and process
+exit/fault releases it even if all handles have been closed. There is one task
+per process, so the owner cannot release or exit concurrently with its blocked
+READ. Future external termination will need to detach that waiter explicitly.
+
+While acquired, physical input does not also enter the console queue. Acquisition
+and release discard queued console bytes; a terminal reader already waiting
+continues to wait for future text. Session release restores text routing without
+replaying captured keys. Held-key repeats/releases from before the routing
+change are ignored until a fresh press.
+
+### Focus and loss
+
+Only the active space receives key presses, releases and repeats. Switching
+spaces discards the old session's queued events and publishes `KEY_FOCUS_LOST`;
+the new session receives `KEY_FOCUS_GAINED`. Both reset held-key state. The
+kernel's accepted-press state is also cleared, so a key held across a switch
+must be released and pressed again. Session modifier bits reflect accepted
+modifier presses; lock-toggle bits reflect the keyboard's current lock state.
+The terminal text mapper retains its physical modifier behavior.
+
+Each event's `KEYBOARD_EVENT_FOCUSED` flag records focus when it was queued.
+Control events use `KEY_NONE` and zero modifiers. Applications must clear all
+held keys on **any** focus or state-reset event and take focus from the flag.
+Rapid transitions can replace an unread focus notification; the latest event
+still establishes a fresh state. An already-dequeued event can precede the new
+notification in the reader's execution.
+
+The session queue holds 64 events. Overflow drops the queued events and the
+event that overflowed it, clears accepted presses, and queues `KEY_STATE_RESET`.
+Subsequent fresh presses may follow that reset; orphan repeats/releases are
+ignored. Device scan loss similarly resets all application destinations. These
+notifications wake a blocked reader even while its space is inactive.
+
+Routing, ownership and queues share a per-object lock. All callers hold IF=0;
+lock order is keyboard, then console input, then scheduler queues. No allocation,
+user copy or context switch occurs under the keyboard lock. Publication detaches
+the task-owned wait record before waking it, preserving wake-before-park handling.
+Space switching and event delivery run on the BSP; session calls can run on APs
+without a new BSP allocation request queue.

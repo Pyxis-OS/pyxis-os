@@ -2,7 +2,7 @@
 
 Run `mandelbrot` from the shell in an application space. It draws a
 pixel-resolution Mandelbrot set progressively, then waits for a terminal key.
-Alt+Left/Right still switches spaces. A key delivered to the application after
+Super+Left/Right still switches spaces. A key delivered to the application after
 rendering releases graphics and restores its TTY, including the shell prompt.
 The normal image and SDK contain the application and native display helpers.
 
