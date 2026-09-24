@@ -95,10 +95,26 @@ releases staging storage; never publish a partial result as a complete file.
 An indefinitely continuing response eventually fails the same limits. Exact
 budgets, staging storage, HTTP versions and status/redirect mapping remain open.
 
-Staging satisfies the existing file size/offset contract without assuming server
-range support or fetching a potentially different representation for each read.
-Temporary storage for one open is separate from retaining completed responses
-for reuse across opens. This initial policy requires the former, not the latter.
+## Open-resource lifetime and random access
+
+Each successful open returns a read-only snapshot backed by the complete retained
+response body. Its size and bytes stay fixed for that resource's lifetime. Reads
+at any supported offset use those bytes, without another network request or a
+dependency on the server's range support. A remote edit does not change an
+already opened resource.
+
+The opened resource owns the retained body. Copied or delegated handles refer to
+that same snapshot; closing one handle does not invalidate the others. Release
+the body after its last reference is gone and any in-flight reads have finished.
+Process teardown releases its references through the normal handle lifecycle.
+No HTTP-specific lifetime management is required in the kernel.
+
+Initially, independent opens fetch independent snapshots, even for the same URI.
+There is no retention for reuse after the final close. This per-open storage
+provides random access; a future cache across opens is a separate feature.
+Account for both downloads in progress and completed bodies pinned by live
+handles. A byte budget must reject or delay new opens rather than evict storage
+that an existing handle still owns.
 
 ## Future response cache
 
