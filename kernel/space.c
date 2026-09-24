@@ -75,6 +75,7 @@ static struct tty *tty_alloc(const struct framebuffer *fb) {
 
   tty->width = fb->width / bizcat.width;
   tty->height = fb->height / bizcat.height;
+  tty->tab_width = TTY_DEFAULT_TAB_WIDTH;
 
   tty->fg = aardvark_scheme.foreground;
   tty->bg = aardvark_scheme.background;

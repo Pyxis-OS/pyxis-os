@@ -73,7 +73,7 @@ The TTY keeps its parser state across writes. The supported subset is:
 | Bytes | Effect |
 | --- | --- |
 | LF / CR / BS | New row at column zero / column zero / one column left without erasing |
-| HT (`\t`) | Move to the next eight-column tab stop, clamped to the last column, without erasing |
+| HT (`\t`) | Move to the next tab stop (eight columns by default), clamped to the last column, without erasing |
 | `CSI n A/B/C/D` | Move up/down/right/left, clamped to screen edges |
 | `CSI n G` | Set column (one-based) |
 | `CSI row;column H` | Set position (one-based) |
@@ -90,13 +90,25 @@ four parameters of up to 65535 are accepted; malformed or oversized CSI commands
 are discarded through their final byte. A new Escape starts a fresh sequence.
 This is a focused subset, not a claim of full ANSI/VT compatibility.
 
-Horizontal tab stops are at zero-based columns 8, 16, 24 and so on. A tab at a
+Horizontal tab stops are at multiples of the TTY's tab width from column zero. A tab at a
 stop advances to the next one. Tabs only move the cursor: they preserve existing
 cells, never wrap or scroll, and cancel pending wrap even at the right edge.
 The next printable character then writes at that column, setting pending wrap
 if it fills the last cell. Like CR/LF/BS, a tab ends an incomplete escape sequence.
 Cat passes tabs through unchanged; Kilo still controls their display inside the
-editor. Tab-stop configuration is deferred to [Lua configuration](wip/lua-port.md).
+editor.
+
+`term_set_tab_width(term, columns)` uses the output handle to set spacing on
+that console's TTY through `console_set_tab_width`. `CONSOLE_SET_TAB_WIDTH`
+requires WRITE authority and accepts 1–32 columns; invalid widths return
+`CALL_BAD_REQUEST` without changing the setting. The fixed-size console payload
+contains `console_tab_width_request`; there is no reply payload.
+
+Each TTY starts at eight columns. The setting is shared by its writers, survives
+clearing the screen and process exit, and changes only subsequent tabs. Updating
+it uses the output lock and preserves existing pixels, cursor position, pending
+wrap and escape-parser state. Other TTYs retain their own settings. Startup
+selection through [Lua configuration](wip/lua-port.md) is still pending.
 
 Writing the rightmost cell leaves the cursor there with a pending wrap. Only the
 next printable character moves to the next row (scrolling at the bottom).

@@ -14,6 +14,9 @@
 /* WRITE authority; ignored fixed-size payload, no reply. Ends an incomplete
  * escape sequence and emits a newline only when the cursor is not at column 0. */
 #define CONSOLE_FRESH_LINE UINT64_C(4)
+#define CONSOLE_SET_TAB_WIDTH UINT64_C(5)
+#define CONSOLE_TAB_WIDTH_MIN UINT64_C(1)
+#define CONSOLE_TAB_WIDTH_MAX UINT64_C(32)
 #define CONSOLE_WAIT_FOREVER UINT64_MAX
 
 struct console_write_request {
@@ -35,9 +38,17 @@ struct console_read_request {
   uint64_t timeout_ms;
 };
 
+/* WRITE authority; no reply. Width is 1..32 columns, otherwise BAD_REQUEST.
+ * Changes subsequent tabs on this console's TTY, shared by its writers.
+ * Does not move the cursor, redraw text or reset pending wrap/parser state. */
+struct console_tab_width_request {
+  uint64_t columns;
+};
+
 union console_payload {
   struct console_write_request write;
   struct console_read_request read;
+  struct console_tab_width_request tab_width;
 };
 
 struct console_message {
@@ -61,6 +72,7 @@ struct console_size_reply {
 };
 
 _Static_assert(sizeof(struct console_read_request) == 24, "console read layout");
+_Static_assert(sizeof(struct console_tab_width_request) == 8, "console tab width layout");
 _Static_assert(sizeof(struct console_read_reply) == 8, "console read reply layout");
 _Static_assert(sizeof(struct console_size_reply) == 16, "console size reply layout");
 _Static_assert(sizeof(struct console_write_request) == 16, "console request layout");

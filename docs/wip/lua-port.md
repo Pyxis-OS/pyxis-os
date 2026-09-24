@@ -131,11 +131,32 @@ return {
 This explicitly selects Bucharest; absent `TZ` defaults to UTC. Configuration
 will pass the selected IANA name through the session environment.
 
-Settle the configuration file location, startup ordering, available Lua
-libraries/capabilities and error/default behavior before implementation. The
-evaluator need not receive the authority of an interactive interpreter. Define
-how init passes the selected timezone to children and applies terminal settings;
-no settings API or reload machinery is implied to exist today.
+The agreed boot path is init → session configuration → interactive shell.
+A small userspace session launcher evaluates `app://config/session.lua` from
+the boot archive, validates the complete table before applying settings, and
+launches the shell with the selected `TZ` in its environment. A child evaluator
+cannot change its parent's environment; the component consuming configuration
+must own the configured session launch.
+
+Missing settings default to UTC and eight-column tabs. A missing file uses
+those defaults; an existing but invalid file reports an error and stops
+configured startup. The packaged file explicitly selects Bucharest. `INIT=`
+remains available to bypass that startup path for recovery.
+
+Configuration may calculate values and construct tables, but has no exposed
+file-loading, module-search or OS bindings. Terminal settings affect the
+session's TTY, not every space. Caelum retains its own TTY settings on multicore
+boots; the existing single-CPU fallback still shares one TTY. No global settings
+singleton or live reload is introduced.
+
+Focused PRs:
+
+- [x] Per-TTY tab width with a WRITE-authorized console request and libterm
+  helper. Accept 1–32 columns, default to eight, and affect only subsequent tabs.
+- [ ] Userspace configuration evaluator and session-launch integration. Keep
+  Lua execution outside the kernel and validate before applying any settings.
+- [ ] Package the default configuration, integrate boot startup, then rewrite
+  this completed milestone as concrete documentation under `docs`.
 
 Completion: boot consumes the config and applies its timezone/tab settings,
 while direct clock and calendar operations still work independently of Lua.
