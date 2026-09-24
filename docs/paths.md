@@ -80,6 +80,21 @@ obtain that parent grant. Child file READ/WRITE and enumeration are unnecessary.
 The helper uses caller-owned scratch storage and closes every temporary handle.
 It never removes by a displayed path or by a child handle.
 
+## Rename paths
+
+`path_rename()` resolves source and destination parents using separate caller-owned
+workspaces, then performs one native file rename. Both parents remain held until
+the call completes; no child is opened or probed first. Source and destination
+are exact file paths. Roots, final `.`/`..`, trailing separators and directory
+moves are rejected. Intermediate components retain normal ordered traversal and
+boundary checks. Every temporary handle is closed; the context is unchanged.
+
+Source traversal requests REMOVE. Destination traversal requests CREATE and,
+for replacement, REMOVE. If the latter traversal is denied it retries with
+CREATE alone, permitting a new destination under a restricted grant. The kernel
+still decides whether replacement is authorized at publication; this retry does
+not probe destination existence or widen any capability.
+
 ## Local handle copies
 
 [Handle copying](https://git.internal/chronium/pyxis-userland/src/branch/main/include/handle.h) installs another reference in the

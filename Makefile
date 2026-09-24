@@ -81,7 +81,7 @@ build/initrd.cpio: userspace ports Makefile scripts/stage-guest-sdk.sh scripts/s
 	./scripts/stage-guest-sdk.sh
 	install -C -m 644 build/ports/doom/stage/bin/doom.pxe build/userspace/doom.pxe
 	install -C -D -m 644 build/ports/doom/stage/share/licenses/doom/LICENSE build/userspace/share/licenses/doom/LICENSE
-	printf '%s\n' init shell.pxe cat.pxe ls.pxe mkdir.pxe rm.pxe rmdir.pxe \
+	printf '%s\n' init shell.pxe cat.pxe ls.pxe mkdir.pxe rm.pxe rmdir.pxe mv.pxe \
 	  kilo.pxe mandelbrot.pxe tcc.pxe doom.pxe \
 	  share share/hello.txt share/licenses share/licenses/kilo share/licenses/kilo/LICENSE \
 	  share/licenses/doom share/licenses/doom/LICENSE \

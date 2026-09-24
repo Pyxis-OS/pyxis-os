@@ -9,6 +9,24 @@
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 
+/* REMOVE may lock parent then child, while RENAME locks two arbitrary parents.
+ * Serialize these multi-directory mutations before taking any directory lock.
+ * Single-directory readers/creators never take this lock. No waits/allocations
+ * may occur while it is held. */
+static atomic_bool mutation_locked;
+
+static void lock_mutation(void)
+{
+  while (atomic_exchange_explicit(&mutation_locked, true, memory_order_acquire)) {
+    __asm__ volatile("pause");
+  }
+}
+
+static void unlock_mutation(void)
+{
+  atomic_store_explicit(&mutation_locked, false, memory_order_release);
+}
+
 static void destroy_directory(struct kernel_object *object)
 {
   struct directory_object *directory = (struct directory_object *)object;
@@ -47,6 +65,53 @@ static void lock_directory(struct directory_object *directory)
 static void unlock_directory(struct directory_object *directory)
 {
   atomic_store_explicit(&directory->locked, false, memory_order_release);
+}
+
+static void lock_parents(struct directory_object *source, struct directory_object *destination)
+{
+  lock_mutation();
+  lock_directory(source);
+  if (destination != source) {
+    lock_directory(destination);
+  }
+}
+
+static void unlock_parents(struct directory_object *source, struct directory_object *destination)
+{
+  if (destination != source) {
+    unlock_directory(destination);
+  }
+  unlock_directory(source);
+  unlock_mutation();
+}
+
+/* Caller holds the directory lock. Generation changes belong to the complete
+ * operation: a same-directory rename advances it only once. */
+static void unlink_entry(struct directory_object *directory, struct directory_entry *entry)
+{
+  struct directory_entry *previous = NULL;
+  struct directory_entry **link = &directory->first;
+  while (*link != entry) {
+    previous = *link;
+    link = &previous->next;
+  }
+  *link = entry->next;
+  if (directory->last == entry) {
+    directory->last = previous;
+  }
+  entry->next = NULL;
+  --directory->entry_count;
+}
+
+static void append_entry(struct directory_object *directory, struct directory_entry *entry)
+{
+  if (directory->last) {
+    directory->last->next = entry;
+  } else {
+    directory->first = entry;
+  }
+  directory->last = entry;
+  ++directory->entry_count;
 }
 
 static uint64_t entry_kind(const struct directory_entry *entry)
@@ -258,13 +323,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   } else if (directory->generation == UINT64_MAX || directory->entry_count == SIZE_MAX) {
     status = CALL_LIMIT;
   } else {
-    if (directory->last) {
-      directory->last->next = entry;
-    } else {
-      directory->first = entry;
-    }
-    directory->last = entry;
-    ++directory->entry_count;
+    append_entry(directory, entry);
     ++directory->generation;
   }
   unlock_directory(directory);
@@ -293,6 +352,7 @@ static struct syscall_result remove_child(struct directory_object *directory,
     return (struct syscall_result){CALL_READ_ONLY, 0};
   }
 
+  lock_mutation();
   lock_directory(directory);
   struct directory_entry *entry = find_user_entry(directory, request->name, request->name_length);
   if (!entry) {
@@ -302,8 +362,8 @@ static struct syscall_result remove_child(struct directory_object *directory,
   } else if (directory->generation == UINT64_MAX) {
     status = CALL_LIMIT;
   } else if (entry_kind(entry) == DIRECTORY_KIND_DIRECTORY) {
-    /* There are no directory moves or links. Parent-before-child locking is
-     * acyclic, and serializes the empty check with creation in the child. */
+    /* The mutation lock excludes other two-directory operations. The child
+     * lock serializes the empty check with creation in that directory. */
     struct directory_object *child = (struct directory_object *)entry->object;
     lock_directory(child);
     if (child->entry_count) {
@@ -315,26 +375,132 @@ static struct syscall_result remove_child(struct directory_object *directory,
   }
 
   if (status == CALL_OK) {
-    struct directory_entry *previous = NULL;
-    struct directory_entry **link = &directory->first;
-    while (*link != entry) {
-      previous = *link;
-      link = &previous->next;
-    }
-    *link = entry->next;
-    if (directory->last == entry) {
-      directory->last = previous;
-    }
-    entry->next = NULL;
-    --directory->entry_count;
+    unlink_entry(directory, entry);
     ++directory->generation;
   }
   unlock_directory(directory);
+  unlock_mutation();
 
   if (status == CALL_OK) {
     /* The removed entry still owns its child until BSP disposal. Independent
      * handles keep the object alive after that reference is released. */
     task_discard_directory_entry(entry);
+  }
+  return (struct syscall_result){status, 0};
+}
+
+/* Both parents locked. Returned entries are borrowed only until unlocking. */
+static enum call_status check_rename(struct directory_object *source,
+    struct directory_object *destination, uint64_t destination_rights,
+    const struct directory_rename_request *request,
+    struct directory_entry **old, struct directory_entry **replaced)
+{
+  *old = find_user_entry(source, request->source_name, request->source_length);
+  *replaced = find_user_entry(destination, request->destination_name,
+      request->destination_length);
+  if (source->detached || destination->detached || !*old) {
+    return CALL_NOT_FOUND;
+  }
+  if (entry_kind(*old) != DIRECTORY_KIND_FILE) {
+    return CALL_WRONG_TYPE;
+  }
+  if (*old == *replaced) {
+    return CALL_OK;
+  }
+  if (*replaced) {
+    if (request->policy == DIRECTORY_RENAME_NO_REPLACE) {
+      return CALL_ALREADY_EXISTS;
+    }
+    if (!(destination_rights & DIRECTORY_RIGHT_REMOVE)) {
+      return CALL_DENIED;
+    }
+    if (entry_kind(*replaced) != DIRECTORY_KIND_FILE) {
+      return CALL_WRONG_TYPE;
+    }
+  }
+  if (source->generation == UINT64_MAX || destination->generation == UINT64_MAX ||
+      (source != destination && !*replaced && destination->entry_count == SIZE_MAX)) {
+    return CALL_LIMIT;
+  }
+  return CALL_OK;
+}
+
+static struct syscall_result rename_child(struct directory_object *source,
+    const struct directory_rename_request *request)
+{
+  if (request->policy != DIRECTORY_RENAME_NO_REPLACE &&
+      request->policy != DIRECTORY_RENAME_REPLACE) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  struct kernel_object *object;
+  uint64_t destination_rights;
+  enum capability_result result = capability_resolve(&process_current()->capabilities,
+      request->destination, DIRECTORY_RIGHT_CREATE, &object, &destination_rights);
+  if (result != CAP_OK) {
+    return (struct syscall_result){result == CAP_DENIED ? CALL_DENIED : CALL_BAD_HANDLE, 0};
+  }
+  if (object->type != OBJECT_DIRECTORY) {
+    return (struct syscall_result){CALL_WRONG_TYPE, 0};
+  }
+  struct directory_object *destination = (struct directory_object *)object;
+  enum call_status status = check_name(request->source_name, request->source_length);
+  if (status == CALL_OK) {
+    status = check_name(request->destination_name, request->destination_length);
+  }
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  if (source->backing != DIRECTORY_RAM || destination->backing != DIRECTORY_RAM) {
+    return (struct syscall_result){CALL_READ_ONLY, 0};
+  }
+  if (request->destination_length > SIZE_MAX - sizeof(struct directory_entry) - 1) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+
+  struct directory_entry *old, *replaced;
+  lock_parents(source, destination);
+  status = check_rename(source, destination, destination_rights, request, &old, &replaced);
+  bool unchanged = status == CALL_OK && old == replaced;
+  unlock_parents(source, destination);
+  if (status != CALL_OK || unchanged) {
+    return (struct syscall_result){status, 0};
+  }
+
+  /* The caller's sole task keeps both directory capabilities alive while BSP
+   * allocates. No entry pointer or lock survives the wait; recheck both names. */
+  struct directory_entry *entry = task_allocate_directory_name(request->destination_length);
+  if (!entry) {
+    return (struct syscall_result){CALL_NO_MEMORY, 0};
+  }
+  KASSERT(copy_from_user(entry->name, request->destination_name, entry->name_length));
+  entry->name[entry->name_length] = 0;
+
+  lock_parents(source, destination);
+  status = check_rename(source, destination, destination_rights, request, &old, &replaced);
+  if (status == CALL_OK) {
+    /* Transfer the source entry's reference, without copying file data or
+     * changing existing handles. Nothing fallible remains before publication. */
+    entry->object = old->object;
+    unlink_entry(source, old);
+    old->object = NULL;
+    if (replaced) {
+      unlink_entry(destination, replaced);
+    }
+    append_entry(destination, entry);
+    ++source->generation;
+    if (destination != source) {
+      ++destination->generation;
+    }
+  }
+  unlock_parents(source, destination);
+
+  if (status != CALL_OK) {
+    task_discard_directory_entry(entry);
+  } else {
+    task_discard_directory_entry(old);
+    if (replaced) {
+      task_discard_directory_entry(replaced);
+    }
   }
   return (struct syscall_result){status, 0};
 }
@@ -413,6 +579,7 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     required = DIRECTORY_RIGHT_CREATE;
     break;
   case DIRECTORY_REMOVE:
+  case DIRECTORY_RENAME:
     required = DIRECTORY_RIGHT_REMOVE;
     break;
   default:
@@ -436,6 +603,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (operation == DIRECTORY_REMOVE) {
     return remove_child(directory, &request.remove);
+  }
+  if (operation == DIRECTORY_RENAME) {
+    return rename_child(directory, &request.rename);
   }
   return enumerate(directory, &request.enumerate, reply_address, reply_capacity);
 }

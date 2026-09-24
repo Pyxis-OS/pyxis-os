@@ -19,6 +19,10 @@
 #define DIRECTORY_ENUMERATE UINT64_C(2)
 #define DIRECTORY_CREATE UINT64_C(3)
 #define DIRECTORY_REMOVE UINT64_C(4)
+#define DIRECTORY_RENAME UINT64_C(5)
+
+#define DIRECTORY_RENAME_NO_REPLACE UINT64_C(0)
+#define DIRECTORY_RENAME_REPLACE UINT64_C(1)
 
 /* ANY is accepted only by REMOVE; lookup/create still require an exact kind. */
 #define DIRECTORY_KIND_ANY UINT64_C(0)
@@ -54,11 +58,24 @@ struct directory_remove_request {
   uint64_t kind;
 };
 
+/* Call the source parent with REMOVE. Destination is a handle in the caller's
+ * table and needs CREATE, plus REMOVE when replacing another file. Files only;
+ * success returns no reply. Names are counted single components. */
+struct directory_rename_request {
+  uint64_t source_name;
+  uint64_t source_length;
+  handle_t destination;
+  uint64_t destination_name;
+  uint64_t destination_length;
+  uint64_t policy;
+};
+
 union directory_payload {
   struct directory_child_request lookup;
   struct directory_child_request create;
   struct directory_enumerate_request enumerate;
   struct directory_remove_request remove;
+  struct directory_rename_request rename;
 };
 
 struct directory_message {
@@ -90,9 +107,9 @@ struct directory_enumerate_reply {
  * END is repeatable; no name or handle is returned. Order is unspecified.
  * Name and reply destinations must not overlap. Enumeration grants no handles. */
 _Static_assert(sizeof(struct directory_cursor) == 16, "directory cursor layout");
-_Static_assert(sizeof(union directory_payload) == 32, "directory payload layout");
+_Static_assert(sizeof(union directory_payload) == 48, "directory payload layout");
 _Static_assert(offsetof(struct directory_message, body) == 16, "directory payload offset");
-_Static_assert(sizeof(struct directory_message) == 48, "directory message layout");
+_Static_assert(sizeof(struct directory_message) == 64, "directory message layout");
 _Static_assert(sizeof(struct directory_child_reply) == 8, "directory child reply layout");
 _Static_assert(sizeof(struct directory_enumerate_reply) == 40, "directory enumeration reply layout");
 
