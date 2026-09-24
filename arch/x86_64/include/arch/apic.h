@@ -6,6 +6,8 @@
 #define APIC_TIMER_VECTOR 32
 #define APIC_KEYBOARD_VECTOR 33
 #define APIC_VIRTIO_FS_VECTOR 34
+/* Reserved for the NIC; delivery stays masked until its queues are active. */
+#define APIC_VIRTIO_NET_VECTOR 35
 #define APIC_SPURIOUS_VECTOR 255
 
 struct apic_msi_message {
