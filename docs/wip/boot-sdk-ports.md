@@ -29,7 +29,9 @@ milestone's remaining interface details before starting its code work.
 9. Complete: [guest Lua](../lua.md), including scripts, REPL and default
    [session configuration](../session-configuration.md) for timezone and tab width.
 10. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
-    through an init-managed virtio-fs mount and native filesystem capabilities.
+    through an init-managed read-only virtio-fs mount and native filesystem
+    capabilities. The agreed Q35/ECAM, modern PCI, split-queue and BSP-worker
+    direction is split into nine focused tasks; PCI discovery comes first.
 
 This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO
@@ -50,6 +52,9 @@ shareware data; local retail WADs and demos are optional overrides. PCI/VirtIO
 is not a prerequisite.
 
 VirtIO driver order is agreed: virtio-fs, then virtio-net, then virtio-blk.
+An opt-in [host-backed development overlay](virtio-fs.md#follow-up-host-backed-development-overlay)
+is a follow-up experiment after the plain mount works, not part of its completion
+boundary or a replacement for the default boot archive.
 
 ## Agreed boundaries
 
