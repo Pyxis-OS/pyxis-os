@@ -1,15 +1,18 @@
 #!/bin/sh
 set -eu
 
-# Assets stay local. Recreate this disposable directory so removing an override
-# cannot leave a previous WAD or demo in a later image/CI artifact.
+# Recreate these disposable directories so removing a local override cannot
+# leave retail data or demos in a later image/CI artifact.
 rm -rf build/userspace/share/doom
+rm -rf build/userspace/share/licenses/doom-shareware
 if [ -z "${DOOM_WAD:-}" ]; then
-  if [ -n "${DOOM_DEMOS:-}" ]; then
-    echo 'DOOM_DEMOS requires DOOM_WAD.' >&2
-    exit 1
-  fi
-  exit 0
+  DOOM_WAD=third_party/doom-shareware/doom1.wad
+  install -D -m 644 third_party/doom-shareware/LICENSE \
+    build/userspace/share/licenses/doom-shareware/LICENSE
+  install -m 644 third_party/doom-shareware/UPSTREAM.md \
+    build/userspace/share/licenses/doom-shareware/UPSTREAM.md
+  printf '%s\n' share/licenses/doom-shareware \
+    share/licenses/doom-shareware/LICENSE share/licenses/doom-shareware/UPSTREAM.md
 fi
 if [ ! -f "$DOOM_WAD" ]; then
   printf 'Doom WAD is not a regular file: %s\n' "$DOOM_WAD" >&2

@@ -31,8 +31,9 @@ deferred until useful, notably for system-wide configuration; its
 [staged worklist](lua-port.md) is retained. Host Lua recipes do not depend on it.
 
 The [Doom port](../doom.md) uses the mapped display, keyboard sessions and
-monotonic clock for single-player gameplay and demo playback. Its local game
-data is optional; PCI/VirtIO is not a prerequisite.
+monotonic clock for single-player gameplay and demo playback. Images include
+shareware data; local retail WADs and demos are optional overrides. PCI/VirtIO
+is not a prerequisite.
 
 VirtIO driver order is agreed: virtio-fs, then virtio-net, then virtio-blk.
 
