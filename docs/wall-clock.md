@@ -49,6 +49,6 @@ point formatting through libc's [printf support](stdio.md#standard-streams-forma
 Host-running TCC continues to use the host's clock and local time.
 
 Local time, zone selection, `mktime`, `strftime`, locale and clock adjustment are
-not provided. Next are [boot archive assembly](wip/boot-archive.md),
+not provided. Next are [boot archive assembly](boot-archive.md),
 [zoneinfo-backed local time](wip/timezones.md) and Lua configuration. Reads and
 calendar conversion will continue to work independently of Lua.

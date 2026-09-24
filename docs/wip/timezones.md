@@ -1,7 +1,7 @@
 # Zoneinfo-backed local time
 
 Agreed milestone after [UTC calendar support](../wall-clock.md) and
-[boot archive assembly](boot-archive.md), before guest Lua configuration.
+[boot archive assembly](../boot-archive.md), before guest Lua configuration.
 
 ## Contract
 
