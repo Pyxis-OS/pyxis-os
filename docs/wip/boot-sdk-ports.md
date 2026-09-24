@@ -33,7 +33,7 @@ milestone's remaining interface details before starting its code work.
     capabilities. The agreed Q35/ECAM, modern PCI, split-queue and BSP-worker
     direction is split into nine focused tasks. [PCI discovery and owned
     resources](../pci.md), VirtIO feature negotiation and queue inspection are
-    complete; kernel task event waits are next.
+    complete, as are kernel task event waits; PCI MSI-X delivery is next.
 
 This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO

@@ -159,7 +159,7 @@ Read MMIO registers individually at their documented byte, word or dword width.
 A bulk structure read can combine neighboring registers into accesses the device
 does not support, producing misleading values even with correct field offsets.
 
-Kernel task event waits are the next
+PCI MSI-X delivery is the next
 [milestone task](wip/virtio-fs.md#focused-task-list). The opt-in host daemon/QEMU
 setup will become part of the normal build/run interface with the queue worker.
 Host filesystem access is not implemented yet.
