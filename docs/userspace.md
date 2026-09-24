@@ -213,15 +213,17 @@ The x87/MXCSR control modes and status remain as they were at `longjmp`, followi
 This libc saves only the callee-saved integer registers, stack pointer and return
 address; it adds no signal-mask handling or kernel context-switch interface.
 
-The initial `<math.h>` subset provides `scalbn`, `scalbnl`, `ldexpl`, `fmodl`,
-`fabsl`, `copysignl` and `frexpl`, built from pinned musl sources. They are in libc and need
-no `-lm`. The SDK uses SSE2 float/double evaluation and x87 80-bit long double.
-Scaling follows the active rounding mode; `fmodl` uses a quotient truncated
-toward zero. Errors use floating-point exception flags (`math_errhandling` is
-`MATH_ERREXCEPT`) and leave `errno` unchanged. Traps are masked at process start;
-there is no public fenv interface yet. `<math.h>` also supplies `INFINITY`, `NAN`
+The `<math.h>` subset provides `floor`, `fmod`, `pow`, `frexp`, `ldexp`, `scalbn`,
+`fabs`, `scalbnl`, `ldexpl`, `fmodl`, `fabsl`, `copysignl` and `frexpl`, built from
+pinned musl sources. They are in libc and need no `-lm`. The SDK uses SSE2
+float/double evaluation and x87 80-bit long double. `floor` rounds downward;
+`fmod` and `fmodl` use a quotient truncated toward zero. Scaling follows the
+active rounding mode. Errors use floating-point exception flags
+(`math_errhandling` is `MATH_ERREXCEPT`) and leave `errno` unchanged. Traps are
+masked at process start; there is no public fenv interface yet. `<math.h>` also supplies `INFINITY`, `NAN`
 and the `HUGE_VAL`/`HUGE_VALF`/`HUGE_VALL` constants. The SDK carries musl's license
-and the subset's provenance under `share/licenses`.
+and the subset's provenance under `share/licenses`. Signaling NaN support and a
+full math library remain outside this subset.
 
 `strtof`, `strtod` and `strtold` use the same pinned musl subset with a direct
 string reader. They accept ASCII whitespace/signs, decimal and hexadecimal

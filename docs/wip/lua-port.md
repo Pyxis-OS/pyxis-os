@@ -40,7 +40,7 @@ Prerequisites and focused PR tasks:
 - [x] Add libc `memchr`, `strspn`, `strpbrk`, and the missing ASCII classifiers
   `isalnum`, `isalpha`, `iscntrl`, `isgraph`, `islower`, `ispunct`, `isupper`,
   `isxdigit`. Preserve the existing unsigned-byte/EOF argument contract.
-- [ ] Add core double-precision `floor`, `fmod`, `pow`, `frexp` and `ldexp` using
+- [x] Add core double-precision `floor`, `fmod`, `pow`, `frexp` and `ldexp` using
   the pinned musl subset and its required internal helpers/tables. Lua's core
   needs these even without the standard `math` library; the full library is
   deferred.
