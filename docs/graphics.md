@@ -1,10 +1,20 @@
 # Mapped graphics buffers
 
 Run `mandelbrot` from the shell in an application space. It draws a
-pixel-resolution Mandelbrot set progressively, then waits for a terminal key.
-Super+Left/Right still switches spaces. A key delivered to the application after
-rendering releases graphics and restores its TTY, including the shell prompt.
-The normal image and SDK contain the application and native display helpers.
+pixel-resolution Mandelbrot set progressively. Hold the arrow keys to pan,
+`=`/`+` to zoom in around the centre, and `-` to zoom out. Escape releases the
+keyboard and display sessions and returns to the shell. Super+Left/Right still
+switches spaces. Losing focus clears held controls and pauses rendering until
+that space is selected again; held keys need a fresh press after switching back.
+
+The application needs named `display` (DRAW), `keyboard` (INPUT), and `clock`
+(READ and SLEEP) grants. Movement uses monotonic elapsed time, with at most
+250 ms of catch-up per update. While moving, frames are paced to at most 30 per
+second; expensive views may render more slowly. Idle and unfocused states block
+on input. The renderer checks events every eight rows so Escape and focus changes do not
+need to wait for a complete frame. Zoom is bounded to widths of 1e-12 through 16
+in the complex plane. The normal image and SDK contain the application and the
+native display, keyboard and clock helpers.
 
 ## Authority and ownership
 
@@ -50,8 +60,9 @@ compositor in this milestone.
 
 The TTY keeps its own framebuffer and continues accepting output while graphics
 is selected. Its cursor is not composited over graphics. Releasing graphics or
-exiting restores the TTY on the next presentation. Input still uses the existing
-console stream; graphics ownership does not establish general input arbitration.
+exiting restores the TTY on the next presentation. Graphics ownership is
+independent of [keyboard capture](keyboard.md): Mandelbrot acquires both sessions,
+and captured input is withheld from the console stream.
 
 ## Mapping and teardown invariants
 
@@ -78,6 +89,6 @@ may temporarily retain only pixel backing. No application mapping survives exit.
 
 One buffer, one owner and one user mapping per space; fixed dimensions and native
 32-bit pixel layout. Cross-space presentation, shared application mappings,
-resize, dirty rectangles, frame completion, graphics-specific resource quotas
-and physical key events remain separate work. The single-CPU development fallback
-can use the same display protocol, while its TTY still shares kernel logs.
+resize, dirty rectangles, frame completion and graphics-specific resource quotas
+remain separate work. The single-CPU development fallback can use the same
+display protocol, while its TTY still shares kernel logs.
