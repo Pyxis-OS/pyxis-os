@@ -1,8 +1,8 @@
-# Virtio-fs transport and host setup
+# Virtio-fs client and host setup
 
-The optional virtio-fs device currently establishes a FUSE session with a host
+The optional virtio-fs device provides a read-only kernel FUSE client for a host
 service. It does **not** expose a mount or `host://` yet. Ordinary boot needs
-neither the device nor the daemon. Remaining client/backend/mount work is in
+neither the device nor the daemon. Remaining backend/mount work is in
 [the milestone](wip/virtio-fs.md).
 
 ## Start the host service
@@ -93,8 +93,9 @@ CPU virtual addresses are never used as descriptor addresses.
 Each split queue selects 16 descriptors, or the device's smaller supported
 power-of-two size; fewer than two is unsupported. One direct descriptor chain
 may be in flight per queue. There is no indirect-descriptor or event-index
-negotiation. The high-priority queue is configured but has no requests until the
-FUSE client needs interrupt/forget operations.
+negotiation. Ordinary requests and high-priority FORGET requests are serialized
+by the sole worker. FORGET has no writable descriptor or FUSE reply; its used-ring
+completion still returns ownership of the request buffer.
 
 Submission publishes the request and descriptors before the available index,
 then uses a full ordering barrier before inspecting device notification
@@ -119,6 +120,49 @@ runs with IF=0 and preserves interrupts arriving before parking. The worker runs
 with IF=1 otherwise; presentation and userspace continue to be scheduled.
 After successful INIT it retains the session and sleeps indefinitely for device
 activity. There are no public filesystem callers or background polling requests.
+
+## Read-only client contract
+
+`include/kernel/virtio/fs.h` exposes root acquisition, LOOKUP, GETATTR, OPEN,
+READ, OPENDIR, READDIR, RELEASE/RELEASEDIR and reference release. These functions
+run only on the existing BSP transport worker with interrupts enabled and no
+held locks. They neither allocate nor accept userspace pointers. Native caller
+handoff and capability integration belong to the next task; normal boot still
+only initializes the session and parks the worker.
+
+The caller supplies zeroed, stable node and open records. Each successful LOOKUP
+owns one host lookup reference, even if another record has the same node ID.
+Local node retains do not acquire more host references. An open retains its node;
+its close sends RELEASE or RELEASEDIR before dropping that retain. Final node
+release sends one FORGET on the high-priority queue. The implicit root has no
+acquired lookup reference. Node storage must outlive all of its opens. Close and
+final put consume their local records even if the session has failed.
+
+Lookup accepts one component of at most 255 bytes, excluding NUL, slash, `.` and
+`..`. Names need not be UTF-8. Only regular files and directories can be opened;
+symlinks are not followed and special files are unsupported. READDIR still
+reports their kinds, including unknown types, and skips dot entries. Reads use
+explicit offsets, transfer at most 4 KiB and preserve short reads and EOF. Each
+writable descriptor is sized to that operation's maximum reply, including its
+header. Protocol scratch is static to this worker, outside the kernel task stack.
+
+READDIR returns a checked batch of at most 4 KiB. Consume it with
+`virtio_fs_directory_next`; `VIRTIO_FS_END` means the batch is exhausted, whereas
+`batch.end` means the server returned EOF. Resume using `batch.next_cookie`,
+which includes skipped dot entries. Cookies are opaque and belong to that open
+directory: zero starts or restarts enumeration, and other values must not be
+incremented, ordered or reused with another open.
+
+There is no guest data or attribute cache. Host edits can affect later requests;
+a read-only export is not an immutable tree. Enumeration is not a snapshot and
+cannot reliably detect external changes. The native backend must settle how
+this fits the current `DIRECTORY_CHANGED` contract before exposing enumeration.
+
+Wire errors become `enum virtio_fs_result`; Linux errno values do not escape the
+client. Ordinary errors such as a missing or inaccessible file leave the session
+usable. Truncated/inconsistent replies, invalid directory records, transport
+failures and failed RELEASE/FORGET cleanup stop it. No writes, symlink traversal,
+reconnection or public mount API are implemented.
 
 ## Failure and lifetime
 
@@ -154,6 +198,16 @@ calling inferior functions under KVM. After initialization, inspect
 `filesystem.session`, `filesystem.interrupt_wait` and the queue indices. The
 worker should have no request in flight and should be sleeping. Read MMIO at its
 individual register widths; see [PCI inspection](pci.md#inspection-and-next-step).
+
+For manual client calls, use TCG (see [inferior calls](gdb.md)), allocate and zero
+caller records at `boot_start_cpus` while allocation is still safe, and stop in
+`filesystem_worker` immediately after successful INIT. Disable that breakpoint
+before calling client functions: they may sleep for real device completions.
+Use allocated storage for names too; GDB string arguments otherwise try to call
+an unavailable `malloc`. Do not call the client from an arbitrary stopped task
+or interrupt handler. After closing opens and putting nodes, both session
+ownership counters should be zero and both queues should be idle. These are
+manual debugger calls, not boot-time probes.
 
 References: [VirtIO 1.4 split queues and filesystem device](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.pdf),
 [virtiofsd 1.14.0 FUSE definitions](https://gitlab.com/virtio-fs/virtiofsd/-/blob/v1.14.0/src/fuse.rs),
