@@ -15,6 +15,8 @@ void virtio_fs_pci_start(void);
 /* BSP interrupt entry, IF=0. Records activity and wakes the sole worker;
  * arch acknowledges the APIC. No ISR-register read is needed with MSI-X. */
 void virtio_fs_pci_interrupt(void);
+/* BSP/IF=0: native work and deferred cleanup share the worker wake handoff. */
+void virtio_fs_pci_wake(void);
 
 /* Sole BSP worker, IF=1, no held locks. Copies into owned DMA storage and sleeps
  * for completion, bounded by five seconds. Transport/protocol failure stops

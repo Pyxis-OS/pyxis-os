@@ -5,6 +5,7 @@
 #include <arch/dma.h>
 #include <arch/pci.h>
 #include <kernel/log.h>
+#include <kernel/fs/hostfs.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <kernel/pci/registers.h>
@@ -124,15 +125,11 @@ static volatile struct virtio_pci_common *common_config(void)
   return (volatile struct virtio_pci_common *)filesystem.common.mapping.address;
 }
 
-void virtio_fs_pci_interrupt(void)
+void virtio_fs_pci_wake(void)
 {
   KASSERT(cpu_current() == cpu_bsp());
-  if (!filesystem.interrupt_ready) {
-    return;
-  }
-
-  /* Worker and IRQ both run on the BSP: IF=0 protects this handoff. Activity
-   * survives an interrupt before publication of the worker's wait record. */
+  /* IRQ, BSP request publication and worker all use IF=0. Remember work even
+   * after device failure: deferred local cleanup must still run. */
   filesystem.interrupt_pending = true;
   struct task_wait *wait = filesystem.interrupt_wait;
   filesystem.interrupt_wait = NULL;
@@ -141,11 +138,19 @@ void virtio_fs_pci_interrupt(void)
   }
 }
 
+void virtio_fs_pci_interrupt(void)
+{
+  KASSERT(cpu_current() == cpu_bsp());
+  if (filesystem.interrupt_ready) {
+    virtio_fs_pci_wake();
+  }
+}
+
 static void wait_interrupt(uint64_t deadline)
 {
   uint64_t flags = cpu_save_interrupts();
   KASSERT(cpu_current() == cpu_bsp() && (flags & RFLAGS_INTERRUPT_ENABLE));
-  KASSERT(filesystem.interrupt_ready && !filesystem.interrupt_wait);
+  KASSERT(!filesystem.interrupt_wait);
 
   while (!filesystem.interrupt_pending && !task_deadline_expired(deadline)) {
     struct task_wait *wait = task_wait_prepare();
@@ -568,20 +573,21 @@ static void filesystem_worker(void *argument)
   klog("virtio-fs: tag=\"%s\" FUSE %u.%u session ready, optional features=0\n",
        filesystem.tag, filesystem.session.major, filesystem.session.minor);
 
-  while (filesystem.session.ready) {
-    /* Native caller handoff belongs to backend integration. The client APIs
-     * currently run only in this worker's context; idle device events still
-     * need status and queue inspection. */
-    wait_interrupt(UINT64_MAX);
-    const char *failure = transport_failure();
-    size_t ignored;
-    if (!failure && (virtqueue_complete(&filesystem.hiprio, &ignored) != VIRTQUEUE_PENDING ||
-                     virtqueue_complete(&filesystem.request, &ignored) != VIRTQUEUE_PENDING)) {
-      failure = "unexpected completion while idle";
+  hostfs_start(&filesystem.session);
+  for (;;) {
+    if (filesystem.active) {
+      const char *failure = transport_failure();
+      size_t ignored;
+      if (!failure && (virtqueue_complete(&filesystem.hiprio, &ignored) != VIRTQUEUE_PENDING ||
+                       virtqueue_complete(&filesystem.request, &ignored) != VIRTQUEUE_PENDING)) {
+        failure = "unexpected completion while idle";
+      }
+      if (failure) {
+        stop_transport(failure);
+      }
     }
-    if (failure) {
-      stop_transport(failure);
-      return;
+    if (!hostfs_service()) {
+      wait_interrupt(UINT64_MAX);
     }
   }
 }

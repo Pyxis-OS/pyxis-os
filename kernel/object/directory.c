@@ -2,6 +2,7 @@
 #include <abi/file.h>
 #include <arch/smp.h>
 #include <kernel/memory.h>
+#include <kernel/fs/hostfs.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/directory.h>
 #include <kernel/panic.h>
@@ -30,6 +31,10 @@ static void unlock_mutation(void)
 static void destroy_directory(struct kernel_object *object)
 {
   struct directory_object *directory = (struct directory_object *)object;
+  if (directory->backing == DIRECTORY_HOST) {
+    hostfs_retire(directory->host);
+    return;
+  }
   struct directory_entry *entry = directory->first;
   while (entry) {
     struct directory_entry *next = entry->next;
@@ -43,7 +48,7 @@ static void destroy_directory(struct kernel_object *object)
 struct directory_object *directory_create(enum directory_backing backing)
 {
   KASSERT(arch_cpu_index() == 0);
-  KASSERT(backing == DIRECTORY_INITRD || backing == DIRECTORY_RAM);
+  KASSERT(backing == DIRECTORY_INITRD || backing == DIRECTORY_RAM || backing == DIRECTORY_HOST);
   struct directory_object *directory = kmalloc(sizeof(*directory));
   if (!directory) {
     return NULL;
@@ -234,18 +239,34 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
   }
 
   struct kernel_object *object = NULL;
-  lock_directory(directory);
-  struct directory_entry *entry = find_user_entry(directory, request->name, request->name_length);
-  if (!entry) {
-    status = CALL_NOT_FOUND;
-  } else if (entry_kind(entry) != request->kind) {
-    status = CALL_WRONG_TYPE;
-  } else if (!object_retain(entry->object)) {
-    status = CALL_LIMIT;
+  if (directory->backing == DIRECTORY_HOST) {
+    if (request->name_length > VIRTIO_FS_NAME_MAX) {
+      return (struct syscall_result){CALL_LIMIT, 0};
+    }
+    struct hostfs_request *pending = task_prepare_hostfs();
+    pending->operation = HOSTFS_LOOKUP;
+    pending->node = directory->host;
+    pending->kind = request->kind;
+    pending->count = request->name_length;
+    KASSERT(copy_from_user(pending->name, request->name, request->name_length));
+    task_submit_hostfs(pending);
+    status = pending->status;
+    object = pending->object;
+    pending->object = NULL;
   } else {
-    object = entry->object;
+    lock_directory(directory);
+    struct directory_entry *entry = find_user_entry(directory, request->name, request->name_length);
+    if (!entry) {
+      status = CALL_NOT_FOUND;
+    } else if (entry_kind(entry) != request->kind) {
+      status = CALL_WRONG_TYPE;
+    } else if (!object_retain(entry->object)) {
+      status = CALL_LIMIT;
+    } else {
+      object = entry->object;
+    }
+    unlock_directory(directory);
   }
-  unlock_directory(directory);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -520,6 +541,22 @@ static struct syscall_result enumerate(struct directory_object *directory,
   if (request->capacity && request->name < reply_address + sizeof(reply) &&
       reply_address < request->name + request->capacity) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (directory->backing == DIRECTORY_HOST) {
+    struct hostfs_request *pending = task_prepare_hostfs();
+    pending->operation = HOSTFS_ENUMERATE;
+    pending->node = directory->host;
+    pending->cursor = request->cursor;
+    pending->count = request->capacity;
+    task_submit_hostfs(pending);
+    if (pending->status != CALL_OK) {
+      return (struct syscall_result){pending->status, 0};
+    }
+    if (pending->entry.outcome == DIRECTORY_ENTRY) {
+      KASSERT(copy_to_user(request->name, pending->name, pending->entry.name_size));
+    }
+    KASSERT(copy_to_user(reply_address, &pending->entry, sizeof(pending->entry)));
+    return (struct syscall_result){CALL_OK, sizeof(pending->entry)};
   }
   if (!request->cursor.generation && request->cursor.position) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};

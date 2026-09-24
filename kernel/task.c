@@ -6,6 +6,7 @@
 #include <arch/user.h>
 #include <kernel/log.h>
 #include <kernel/fs/ramfs.h>
+#include <kernel/fs/hostfs.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/private.h>
@@ -49,6 +50,7 @@ struct task {
   uint64_t directory_kind;
   size_t directory_name_length;
   enum directory_action directory_action;
+  struct hostfs_request hostfs_request;
   struct file_wait file_wait;
   struct console_wait console_wait;
   struct process_wait process_wait;
@@ -100,6 +102,7 @@ static struct task *completed_head;
 static struct task *growth_head, *growth_tail;
 static struct task *directory_head, *directory_tail;
 static struct task *file_head, *file_tail;
+static struct hostfs_request *hostfs_head, *hostfs_tail;
 static struct task *memory_head, *memory_tail;
 static struct task *launch_head, *launch_tail;
 static struct task *display_head, *display_tail;
@@ -410,6 +413,43 @@ static void service_directory_requests(void)
     task_wait_wake(&task->wait_record);
     /* All result storage is published before waking; task may now exit. */
     task = next;
+  }
+}
+
+struct hostfs_request *task_prepare_hostfs(void)
+{
+  struct task_wait *wait = prepare_user_wait();
+  struct hostfs_request *request = &wait->task->hostfs_request;
+  *request = (struct hostfs_request){.wait = wait};
+  return request;
+}
+
+void task_submit_hostfs(struct hostfs_request *request)
+{
+  KASSERT(request == &local_scheduler()->current_task->hostfs_request);
+  lock_queues();
+  if (hostfs_tail) {
+    hostfs_tail->next = request;
+  } else {
+    hostfs_head = request;
+  }
+  hostfs_tail = request;
+  unlock_queues();
+  task_wait_sleep(request->wait);
+}
+
+static void service_hostfs_requests(void)
+{
+  lock_queues();
+  struct hostfs_request *request = hostfs_head;
+  hostfs_head = hostfs_tail = NULL;
+  unlock_queues();
+
+  while (request) {
+    struct hostfs_request *next = request->next;
+    hostfs_submit(request);
+    /* Submission can complete immediately; never access it after wakeup. */
+    request = next;
   }
 }
 
@@ -855,6 +895,7 @@ void kernel_task_sleep_until(uint64_t deadline)
       grow_requested_tables();
       service_directory_requests();
       service_file_requests();
+      service_hostfs_requests();
       service_memory_requests();
       service_display_requests();
       service_launch_requests();
@@ -950,7 +991,7 @@ void task_preempt(bool user_mode)
     (arch_cpu_index() == 0 &&
      (completed_head != NULL || growth_head != NULL || directory_head != NULL ||
       file_head != NULL || memory_head != NULL || launch_head != NULL ||
-      display_head != NULL));
+      display_head != NULL || hostfs_head != NULL));
   unlock_queues();
   if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;

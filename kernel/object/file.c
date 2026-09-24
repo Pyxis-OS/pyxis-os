@@ -2,6 +2,7 @@
 #include <arch/smp.h>
 #include <kernel/object/file.h>
 #include <kernel/initrd.h>
+#include <kernel/fs/hostfs.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
@@ -12,6 +13,10 @@ static void destroy_file(struct kernel_object *object)
 {
   struct file_object *file = (struct file_object *)object;
   KASSERT(!file->busy && !file->first_waiter);
+  if (file->backing == FILE_HOST) {
+    hostfs_retire(file->host);
+    return;
+  }
   if (file->backing == FILE_RAM) {
     kfree((void *)file->data);
   }
@@ -47,6 +52,15 @@ struct file_object *file_create_ram(void)
   return create_file(FILE_RAM);
 }
 
+struct file_object *file_create_host(struct hostfs_node *host)
+{
+  struct file_object *file = create_file(FILE_HOST);
+  if (file) {
+    file->host = host;
+  }
+  return file;
+}
+
 /* IF=0. Lock order is file -> scheduler queues. No allocation or sleep while
  * held; busy reserves the operation while its owner sleeps for BSP service. */
 static void lock_file(struct file_object *file)
@@ -63,6 +77,7 @@ static void unlock_file(struct file_object *file)
 
 void file_begin_operation(struct file_object *file)
 {
+  KASSERT(file->backing != FILE_HOST);
   lock_file(file);
   if (!file->busy) {
     file->busy = true;
@@ -151,6 +166,22 @@ static struct syscall_result read_file(struct file_object *file,
   if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE) ||
       !user_buffer_check(request->address, request->capacity, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+
+  if (file->backing == FILE_HOST) {
+    struct hostfs_request *pending = task_prepare_hostfs();
+    pending->operation = HOSTFS_READ;
+    pending->node = file->host;
+    pending->offset = request->offset;
+    pending->count = request->capacity < VIRTIO_FS_READ_MAX ? request->capacity : VIRTIO_FS_READ_MAX;
+    task_submit_hostfs(pending);
+    if (pending->status != CALL_OK) {
+      return (struct syscall_result){pending->status, 0};
+    }
+    reply.read = pending->count;
+    KASSERT(copy_to_user(request->address, pending->data, pending->count));
+    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
 
   file_begin_operation(file);
@@ -280,9 +311,20 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  file_begin_operation(file);
-  reply.size = file->size;
-  file_end_operation(file);
+  if (file->backing == FILE_HOST) {
+    struct hostfs_request *pending = task_prepare_hostfs();
+    pending->operation = HOSTFS_SIZE;
+    pending->node = file->host;
+    task_submit_hostfs(pending);
+    if (pending->status != CALL_OK) {
+      return (struct syscall_result){pending->status, 0};
+    }
+    reply.size = pending->offset;
+  } else {
+    file_begin_operation(file);
+    reply.size = file->size;
+    file_end_operation(file);
+  }
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
