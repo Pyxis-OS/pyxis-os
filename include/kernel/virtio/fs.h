@@ -80,7 +80,7 @@ struct virtio_fs_directory_batch {
 
 /* All operations run on the sole BSP transport worker, IF=1, without locks.
  * No allocation, user pointers, concurrent calls or private AP stack access.
- * Native caller handoff belongs to the later backend integration.
+ * The native hostfs backend hands off caller-owned task records to this worker.
  * Ordinary host errors leave the session usable. Transport/protocol failures
  * stop it; outstanding records still require close/put for local retirement. */
 enum virtio_fs_result virtio_fs_session_init(struct virtio_fs_session *session);

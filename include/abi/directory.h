@@ -28,6 +28,10 @@
 #define DIRECTORY_KIND_ANY UINT64_C(0)
 #define DIRECTORY_KIND_FILE UINT64_C(1)
 #define DIRECTORY_KIND_DIRECTORY UINT64_C(2)
+/* Enumeration only: lookup/create still request FILE or DIRECTORY. */
+#define DIRECTORY_KIND_UNKNOWN UINT64_C(3)
+#define DIRECTORY_KIND_SYMLINK UINT64_C(4)
+#define DIRECTORY_KIND_OTHER UINT64_C(5)
 
 /* Opaque, scoped to the directory being enumerated. Start with both fields
  * zero. No shared enumeration position exists in a handle or object. */
@@ -88,8 +92,9 @@ struct directory_child_reply {
 };
 
 /* These are successful enumeration outcomes, carried with CALL_OK. Ordinary
- * syscall errors still have no reply. Mutation invalidates prior cursors;
- * DIRECTORY_CHANGED requires an explicit restart with the zero cursor. */
+ * syscall errors still have no reply. Enumeration is a live view, not a
+ * snapshot. DIRECTORY_CHANGED reports detected invalidation and requires an
+ * explicit restart with the zero cursor; external changes may go undetected. */
 #define DIRECTORY_ENTRY UINT64_C(1)
 #define DIRECTORY_END UINT64_C(2)
 #define DIRECTORY_BUFFER_TOO_SMALL UINT64_C(3)
@@ -104,7 +109,8 @@ struct directory_enumerate_reply {
 
 /* ENTRY copies a whole NUL-terminated name and advances the cursor. A short
  * buffer reports the required name_size without touching the name or advancing.
- * END is repeatable; no name or handle is returned. Order is unspecified.
+ * END is repeatable while the directory is unchanged; no name or handle is
+ * returned. Order is unspecified; cursor fields are not numeric entry indices.
  * Name and reply destinations must not overlap. Enumeration grants no handles. */
 _Static_assert(sizeof(struct directory_cursor) == 16, "directory cursor layout");
 _Static_assert(sizeof(union directory_payload) == 48, "directory payload layout");

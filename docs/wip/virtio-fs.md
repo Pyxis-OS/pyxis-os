@@ -80,7 +80,8 @@ responses or perform filesystem operations.
 The event-wait API supports user tasks and BSP kernel tasks, preserving the
 wake-before-park ordering. The worker must check and publish its wait with
 producer access excluded so work arriving as it goes idle cannot be lost. The
-BSP-local IRQ handoff uses IF=0; cross-CPU producers will require a lock. See
+BSP-local IRQ handoff uses IF=0. Cross-CPU native requests use the scheduler
+queue lock, then BSP forwards them to the worker without doing host I/O. See
 [task waiting](../smp.md). Keep device queues and request state in the owning
 subsystem.
 
@@ -141,7 +142,8 @@ unmounting and live namespace replacement remain later work.
   reads/READDIR batches up to 4 KiB. No symlink following or data/attribute cache.
   Cookies are opaque per open directory; host edits do not produce a snapshot or
   reliable change notification. Wire errors become internal client results.
-  Native error/cursor translation remains a backend decision.
+  Native enumeration is a live view. `DIRECTORY_CHANGED` reports detected
+  invalidation; it cannot promise detection of external host changes.
 - Failure behavior: deadlines, caller exit, daemon disconnection, malformed
   replies, pending-call errors and resource reclamation after reset. Automatic
   reconnection need not be part of the first client.
@@ -210,14 +212,18 @@ grows. No later item is implied by completing an earlier one.
    batches and ordered RELEASE/FORGET cleanup on the sole BSP worker. The
    [client contract](../virtio-fs.md#read-only-client-contract) records limits
    and distinguishes ordinary host errors from session failures.
-8. [ ] **Native filesystem backend.** Connect the client to directory/file
+8. [x] **Native filesystem backend.** Connect the client to directory/file
    capabilities and their existing rights, waiting and destruction contracts.
    Completion: native lookup/enumeration/read dispatch to the backend without
    exposing FUSE details; unsupported mutations fail explicitly. Add native
    caller handoff to the BSP worker, including caller-exit and cleanup ownership.
    Explicitly reconcile the native `DIRECTORY_CHANGED` promise with opaque FUSE
    cookies and external host edits: read-only does not imply immutable, and the
-   client cannot reliably detect every change. Settle this before implementation.
+   client cannot reliably detect every change. The implemented contract is a
+   live view with CHANGED on detected invalidation. Native objects now own their
+   remote references, task records carry requests, and the worker handles deferred
+   final cleanup. Direct host executable launch remains explicitly unsupported.
+   See [the backend contract](../virtio-fs.md#native-directory-and-file-objects).
 9. [ ] **Init mount and session handoff.** Add the selected mount authority and
    request, pass `host://` through session startup, and document normal host
    setup and archive-only recovery. Completion: `ls` and `cat` operate on host

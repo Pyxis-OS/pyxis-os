@@ -15,6 +15,7 @@ struct memory_region;
 struct display_object;
 struct display_buffer;
 struct launch_capture;
+struct hostfs_request;
 
 /* Current user task or BSP kernel task, in task context with IF=0. Prepare its
  * wait record before publishing it under the resource lock, after checking the
@@ -87,6 +88,13 @@ enum call_status task_request_display(struct display_object *display,
 struct launch_capture *task_allocate_launch_capture(void);
 void task_discard_launch_capture(struct launch_capture *capture);
 enum call_status task_launch_process(struct launch_capture *capture, handle_t *child);
+
+/* Current user task, IF=0, no held locks. Fill the prepared shared record,
+ * then submit and block. Its capability and private mappings remain live;
+ * only this caller copies user memory. Consume the reply before preparing
+ * another request. There is no external task cancellation in this model. */
+struct hostfs_request *task_prepare_hostfs(void);
+void task_submit_hostfs(struct hostfs_request *request);
 
 /* BSP only, after boot_start_cpus(), VM and heap initialization. */
 void task_init(void);

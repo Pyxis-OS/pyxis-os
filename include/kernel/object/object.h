@@ -30,8 +30,9 @@ struct kernel_object {
 
 /* Initialize before publication with one owned reference. The callback runs
  * only on the BSP with IF=0, outside the retirement lock. It releases the
- * enclosing allocation and owned resources, and must not borrow a process or
- * capability entry that may already have been destroyed. */
+ * enclosing allocation and owned resources, or transfers final cleanup to a
+ * worker. It must not sleep or borrow a process/capability entry that may
+ * already have been destroyed. */
 void object_init(struct kernel_object *object, enum object_type type,
                  void (*destroy)(struct kernel_object *));
 

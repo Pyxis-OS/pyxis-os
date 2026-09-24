@@ -166,6 +166,12 @@ struct syscall_result launcher_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){CALL_WRONG_TYPE, 0};
   }
 
+  /* The loader currently borrows immutable/in-memory bytes on the BSP.
+   * Remote reads need a separate staging/lifetime contract before launch. */
+  if (((struct file_object *)image)->backing == FILE_HOST) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+
   struct launch_capture *capture = task_allocate_launch_capture();
   if (!capture) {
     return (struct syscall_result){CALL_NO_MEMORY, 0};

@@ -5,10 +5,12 @@
 #include <kernel/object/object.h>
 
 struct initrd_file;
+struct hostfs_node;
 
 enum file_backing {
   FILE_INITRD,
   FILE_RAM,
+  FILE_HOST,
 };
 
 struct task_wait;
@@ -25,6 +27,7 @@ struct file_wait {
 struct file_object {
   struct kernel_object object;
   enum file_backing backing;
+  struct hostfs_node *host; /* Owned by the deferred host worker destructor. */
   const void *data;
   size_t size, capacity;
   atomic_bool locked;
@@ -40,6 +43,9 @@ struct file_object *file_create_initrd(const struct initrd_file *view);
 
 /* BSP, IF=0. One owned reference to an empty RAM file, or NULL. */
 struct file_object *file_create_ram(void);
+
+/* BSP, IF=0. Worker supplies stable host state; no in-memory file data. */
+struct file_object *file_create_host(struct hostfs_node *host);
 
 /* IF=0, with an owned/borrowed live reference. Begin runs on a user task and
  * may sleep; end can run on BSP after a loan. Ownership keeps data/size stable

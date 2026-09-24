@@ -4,9 +4,12 @@
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
 
+struct hostfs_node;
+
 enum directory_backing {
   DIRECTORY_INITRD,
   DIRECTORY_RAM,
+  DIRECTORY_HOST,
 };
 
 struct directory_entry {
@@ -24,6 +27,7 @@ struct directory_entry {
 struct directory_object {
   struct kernel_object object;
   enum directory_backing backing;
+  struct hostfs_node *host; /* Owned by the deferred host worker destructor. */
   atomic_bool locked;
   bool detached;
   struct directory_entry *first, *last;
