@@ -1,3 +1,4 @@
+#include <kernel/object/keyboard.h>
 #include <abi/clock.h>
 #include <kernel/object/clock.h>
 #include <abi/launcher.h>
@@ -97,12 +98,14 @@ void user_launch_initial(void)
   }
 
   handle_t input, output, memory_handle, launcher_handle, display_handle, app, home;
-  handle_t clock_handle;
+  handle_t clock_handle, keyboard_handle;
   handle_t script_handle = HANDLE_INVALID;
   struct kernel_object *console = &process->space->console->object;
   if (capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &input) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, &output) != CAP_OK ||
       capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, &memory_handle) != CAP_OK ||
+      capability_install(&process->capabilities, &process->space->keyboard->object,
+          KEYBOARD_RIGHT_INPUT, &keyboard_handle) != CAP_OK ||
       capability_install(&process->capabilities, clock, CLOCK_RIGHTS, &clock_handle) != CAP_OK ||
       capability_install(&process->capabilities, launcher, LAUNCHER_RIGHT_LAUNCH, &launcher_handle) != CAP_OK ||
       capability_install(&process->capabilities, &process->space->display->object,
@@ -139,6 +142,7 @@ void user_launch_initial(void)
     {"launcher", launcher_handle},
     {"display", display_handle},
     {"clock", clock_handle},
+    {"keyboard", keyboard_handle},
     {"script", script_handle},
   };
   const struct process_binding roots[] = {{"app", app}, {"home", home}};

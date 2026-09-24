@@ -14,7 +14,7 @@ handoffs for this first milestone.
 ## Current programs
 
 Normal boot starts the [shell](shell.md) at home:// with terminal, launcher,
-memory, display, clock and app/home root grants. It launches foreground utilities
+memory, display, clock, keyboard and app/home root grants. It launches foreground utilities
 with explicit resources, waits for completion and returns to its prompt. Its space and TTY
 survive shell exit; no supervisor restarts it.
 
@@ -42,7 +42,7 @@ transfer independently. The endpoint exchange still uses directly supplied grant
 ## Objects, capabilities and handles
 
 An object is the underlying resource: a console, file, directory, memory
-service, display, clock, launcher, process-control object or endpoint. A capability
+service, display, clock, keyboard, launcher, process-control object or endpoint. A capability
 grants particular operations on that object. A handle is an opaque, process-local
 value naming an entry in the process's capability
 table. The kernel entry holds the object reference and rights; userspace cannot
@@ -133,8 +133,8 @@ record's bounds and initializes accessors before invoking `main(argc, argv)`.
 Its return value goes to exit. Programs use
 [the startup helpers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/startup.h) instead of decoding the
 record. The boot launcher supplies the shell's named input/output, memory,
-launcher, [display](graphics.md) and [clock](timekeeping.md) resources, app/home
-roots, a home directory chain, argv[0] and an OS_NAME environment entry.
+launcher, [display](graphics.md), [clock](timekeeping.md) and
+[keyboard](keyboard.md) resources, app/home roots, a home directory chain, argv[0] and an OS_NAME environment entry.
 
 ## First operation shapes
 

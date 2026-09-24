@@ -10,7 +10,7 @@ make image
 make run CPUS=4
 ```
 
-Select the application space with Alt+Right. From the shell's initial `home://`
+Select the application space with Super+Right. From the shell's initial `home://`
 directory, run `kilo hello.c` and enter:
 
 ```c

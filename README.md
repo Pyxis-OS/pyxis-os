@@ -32,7 +32,7 @@ Generic initialization creates the VM allocator and TLSF heap, brings APs onto
 owned stacks and paging, initializes framebuffer text output, and schedules
 [init](docs/init.md) on CPU 1 when available, or the BSP on a single-CPU boot.
 The default init script hands off to the interactive shell.
-Use Alt+Right to select CPU 1; the shell starts at `home://`. See
+Use Super+Right to select CPU 1; the shell starts at `home://`. See
 [the shell walkthrough](docs/shell.md).
 Local APIC timers preempt each CPU's pinned tasks and wake idle CPUs. The BSP
 owns allocation and completed-task cleanup; see `docs/smp.md`.

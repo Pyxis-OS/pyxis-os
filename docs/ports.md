@@ -42,7 +42,7 @@ and dispatch orchestration remain future work; there is no package manager.
 
 ## Editing in Pyxis
 
-Select CPU 1 with Alt+Right on a multicore boot. The shell starts at `home://`:
+Select CPU 1 with Super+Right on a multicore boot. The shell starts at `home://`:
 
 ```text
 kilo hello.c

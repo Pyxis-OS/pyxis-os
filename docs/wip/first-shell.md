@@ -746,7 +746,7 @@ Cursor editing and history remain userspace work; see `docs/keyboard.md` and
 Validation: ordinary image builds passed without warnings. Normal one- and
 four-CPU KVM boots ran the existing programs; hello waited for input, echoed a
 key and exited with status 0. Four-CPU inspection confirmed Caelum discards text,
-Alt+Right selects the application space, and Shift+A wakes its reader. Dimensions
+Super+Right selects the application space, and Shift+A wakes its reader. Dimensions
 matched the TTY area. Manual TCG/GDB inspection observed a parked reader with
 input/scheduler locks clear, wakeup and detached wait links, expected navigation
 sequences and Caps Lock/Shift/Control bytes. Zero-length reads succeeded; invalid

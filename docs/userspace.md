@@ -75,7 +75,7 @@ tree, and explicitly supplies grants, directory context and environment when
 launching foreground children. See [the shell contract](shell.md).
 
 Normal output targets the owning space's TTY; the kernel-log syscall targets
-Caelum and serial. On multicore boots use Alt+Right to select CPU 1 before typing;
+Caelum and serial. On multicore boots use Super+Right to select CPU 1 before typing;
 input on Caelum is discarded. The single-CPU fallback accepts input on Caelum,
 where kernel logs can disrupt the editor's display. See [keyboard input](keyboard.md)
 and [libterm](terminal.md) for input and editing behavior.

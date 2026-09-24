@@ -101,6 +101,14 @@ static void unlock_input(struct console_object *console)
   atomic_store_explicit(&console->input_locked, false, memory_order_release);
 }
 
+void console_discard_input(struct console_object *console)
+{
+  lock_input(console);
+  console->input_head = console->input_count = 0;
+  console->input_lost = false;
+  unlock_input(console);
+}
+
 static void wake_input_reader(struct console_object *console)
 {
   struct task_wait *wait = console->input_wait;
