@@ -2,12 +2,16 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
+#include <arch/dma.h>
 #include <arch/pci.h>
 #include <kernel/log.h>
+#include <kernel/memory.h>
 #include <kernel/panic.h>
 #include <kernel/pci/registers.h>
 #include <kernel/task.h>
 #include <kernel/virtio/pci.h>
+#include <kernel/virtio/fs.h>
+#include <kernel/virtio/queue.h>
 #include <stddef.h>
 
 #define VIRTIO_VENDOR_ID 0x1af4
@@ -42,9 +46,11 @@
 #define VIRTIO_F_VERSION_1 (UINT64_C(1) << 32)
 #define VIRTIO_STATUS_ACKNOWLEDGE 1u
 #define VIRTIO_STATUS_DRIVER 2u
+#define VIRTIO_STATUS_DRIVER_OK 4u
 #define VIRTIO_STATUS_FEATURES_OK 8u
 #define VIRTIO_STATUS_FAILED 128u
 #define VIRTIO_FS_MSIX_ENTRY 0
+#define VIRTIO_REQUEST_TIMEOUT_MS 5000u
 
 struct pci_msix_entry {
   uint32_t address_low, address_high, data, control;
@@ -53,8 +59,8 @@ struct pci_msix_entry {
 _Static_assert(sizeof(struct pci_msix_entry) == PCI_MSIX_ENTRY_BYTES,
                "PCI MSI-X table entry layout");
 
-/* Naturally aligned, little-endian registers in the common configuration.
- * The prefix ends before queue addresses, which this stage does not program. */
+/* Naturally aligned, little-endian registers. Queue addresses are written as
+ * low/high 32-bit halves while the queue is disabled, then queue_enable last. */
 struct virtio_pci_common {
   uint32_t device_feature_select, device_feature;
   uint32_t driver_feature_select, driver_feature;
@@ -62,6 +68,9 @@ struct virtio_pci_common {
   uint8_t device_status, config_generation;
   uint16_t queue_select, queue_size, queue_msix_vector, queue_enable;
   uint16_t queue_notify_off;
+  uint32_t queue_desc_low, queue_desc_high;
+  uint32_t queue_driver_low, queue_driver_high;
+  uint32_t queue_device_low, queue_device_high;
 };
 
 struct virtio_fs_config {
@@ -72,6 +81,10 @@ struct virtio_fs_config {
 _Static_assert(offsetof(struct virtio_pci_common, device_status) == 20 &&
                offsetof(struct virtio_pci_common, queue_notify_off) == 30,
                "VirtIO PCI common register layout");
+_Static_assert(sizeof(struct virtio_pci_common) == VIRTIO_COMMON_BYTES &&
+               offsetof(struct virtio_pci_common, queue_desc_low) == 32 &&
+               offsetof(struct virtio_pci_common, queue_device_low) == 48,
+               "VirtIO PCI queue address layout");
 _Static_assert(sizeof(struct virtio_fs_config) == VIRTIO_FS_CONFIG_BYTES,
                "VirtIO filesystem configuration layout");
 
@@ -97,8 +110,11 @@ static struct {
   uint64_t offered_features, accepted_features;
   char tag[VIRTIO_FS_TAG_BYTES + 1];
   uint32_t request_queues;
-  struct virtio_queue_info hiprio, request;
-  bool negotiated;
+  struct virtio_queue_info hiprio_info, request_info;
+  struct virtqueue hiprio, request;
+  struct virtio_fs_session session;
+  bool negotiated, prepared, active;
+  uint8_t config_generation;
   bool interrupt_ready, interrupt_pending;
   struct task_wait *interrupt_wait;
 } filesystem;
@@ -125,16 +141,20 @@ void virtio_fs_pci_interrupt(void)
   }
 }
 
-void virtio_fs_pci_wait_interrupt(void)
+static void wait_interrupt(uint64_t deadline)
 {
   uint64_t flags = cpu_save_interrupts();
   KASSERT(cpu_current() == cpu_bsp() && (flags & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(filesystem.interrupt_ready && !filesystem.interrupt_wait);
 
-  while (!filesystem.interrupt_pending) {
+  while (!filesystem.interrupt_pending && !task_deadline_expired(deadline)) {
     struct task_wait *wait = task_wait_prepare();
     filesystem.interrupt_wait = wait;
-    task_wait_sleep(wait);
+    if (deadline == UINT64_MAX) {
+      task_wait_sleep(wait);
+    } else {
+      task_wait_sleep_until(wait, deadline);
+    }
     filesystem.interrupt_wait = NULL;
   }
   filesystem.interrupt_pending = false;
@@ -308,8 +328,8 @@ static const char *negotiate_transport(void)
   }
   klog("virtio-fs PCI: tag=\"%s\", request queues=%u, transport queues=%u\n",
        filesystem.tag, filesystem.request_queues, queues);
-  if (!inspect_queue(VIRTIO_FS_HIPRIO_QUEUE, &filesystem.hiprio) ||
-      !inspect_queue(VIRTIO_FS_FIRST_REQUEST_QUEUE, &filesystem.request)) {
+  if (!inspect_queue(VIRTIO_FS_HIPRIO_QUEUE, &filesystem.hiprio_info) ||
+      !inspect_queue(VIRTIO_FS_FIRST_REQUEST_QUEUE, &filesystem.request_info)) {
     return "required queue unavailable, enabled or outside notification region";
   }
   if (common->device_status != status) {
@@ -317,6 +337,224 @@ static const char *negotiate_transport(void)
   }
   filesystem.negotiated = true;
   return NULL;
+}
+
+static bool configure_queue(struct virtqueue *queue)
+{
+  volatile struct virtio_pci_common *common = common_config();
+  common->queue_select = queue->index;
+  if (common->queue_enable) {
+    return false;
+  }
+  common->queue_size = queue->size;
+  phys_addr_t descriptors = virtqueue_descriptor_address(queue);
+  phys_addr_t available = virtqueue_available_address(queue);
+  phys_addr_t used = virtqueue_used_address(queue);
+  common->queue_desc_low = (uint32_t)descriptors;
+  common->queue_desc_high = descriptors >> 32;
+  common->queue_driver_low = (uint32_t)available;
+  common->queue_driver_high = available >> 32;
+  common->queue_device_low = (uint32_t)used;
+  common->queue_device_high = used >> 32;
+  if (common->queue_size != queue->size ||
+      common->queue_desc_low != (uint32_t)descriptors || common->queue_desc_high != descriptors >> 32 ||
+      common->queue_driver_low != (uint32_t)available || common->queue_driver_high != available >> 32 ||
+      common->queue_device_low != (uint32_t)used || common->queue_device_high != used >> 32 ||
+      common->queue_msix_vector != VIRTIO_FS_MSIX_ENTRY) {
+    return false;
+  }
+
+  dma_write_barrier();
+  common->queue_enable = 1;
+  if (common->queue_enable != 1) {
+    return false;
+  }
+  klog("virtio-fs PCI: queue %u size=%u descriptors=0x%lx available=0x%lx used=0x%lx\n",
+       (unsigned)queue->index, (unsigned)queue->size, descriptors, available, used);
+  return true;
+}
+
+static const char *prepare_queues(void)
+{
+  enum mm_result result = virtqueue_allocate(&filesystem.hiprio, VIRTIO_FS_HIPRIO_QUEUE,
+      filesystem.hiprio_info.max_size, filesystem.hiprio_info.notify_address);
+  if (result == MM_OK) {
+    result = virtqueue_allocate(&filesystem.request, VIRTIO_FS_FIRST_REQUEST_QUEUE,
+        filesystem.request_info.max_size, filesystem.request_info.notify_address);
+  }
+  if (result != MM_OK) {
+    klog("virtio-fs PCI: queue allocation failed (error %u)\n", (unsigned)result);
+    return "cannot allocate queue storage";
+  }
+  if (!configure_queue(&filesystem.hiprio) || !configure_queue(&filesystem.request)) {
+    return "queue configuration rejected";
+  }
+  filesystem.config_generation = common_config()->config_generation;
+  filesystem.prepared = true;
+  return NULL;
+}
+
+static bool activate_transport(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  struct pci_claim *claim = &filesystem.claim;
+  volatile struct virtio_pci_common *common = common_config();
+  unsigned expected = VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_FEATURES_OK;
+  bool ready = common->device_status == expected;
+  if (ready) {
+    uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
+    pci_write16(claim, PCI_COMMAND, command | PCI_COMMAND_MASTER);
+    ready = (pci_read16(claim->device->address, PCI_COMMAND) & PCI_COMMAND_MASTER) != 0;
+  }
+  if (ready) {
+    common->device_status |= VIRTIO_STATUS_DRIVER_OK;
+    ready = common->device_status == (expected | VIRTIO_STATUS_DRIVER_OK);
+  }
+  if (ready) {
+    volatile struct pci_msix_entry *table =
+      (volatile struct pci_msix_entry *)filesystem.msix_table.mapping.address;
+    table[VIRTIO_FS_MSIX_ENTRY].control &= ~PCI_MSIX_VECTOR_MASK;
+    ready = !(table[VIRTIO_FS_MSIX_ENTRY].control & PCI_MSIX_VECTOR_MASK);
+  }
+  if (ready) {
+    unsigned offset = filesystem.msix_capability + PCI_MSIX_CONTROL;
+    uint16_t control = pci_read16(claim->device->address, offset);
+    pci_write16(claim, offset, control & ~PCI_MSIX_FUNCTION_MASK);
+    control = pci_read16(claim->device->address, offset);
+    ready = (control & (PCI_MSIX_ENABLE | PCI_MSIX_FUNCTION_MASK)) == PCI_MSIX_ENABLE;
+  }
+  filesystem.active = ready;
+  cpu_restore_interrupts(flags);
+  return ready;
+}
+
+static const char *transport_failure(void)
+{
+  unsigned expected = VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER |
+    VIRTIO_STATUS_FEATURES_OK | VIRTIO_STATUS_DRIVER_OK;
+  if (common_config()->device_status != expected) {
+    return "device status changed or reset requested";
+  }
+  /* No live reconfiguration yet: a changed tag/queue layout needs a new session. */
+  if (common_config()->config_generation != filesystem.config_generation) {
+    return "device configuration changed";
+  }
+  return NULL;
+}
+
+const char *virtio_fs_pci_request(const void *request, size_t request_bytes,
+    void *reply, size_t reply_capacity, size_t *reply_bytes)
+{
+  KASSERT(cpu_current() == cpu_bsp());
+  *reply_bytes = 0;
+  if (!filesystem.active || filesystem.request.in_flight || !request_bytes ||
+      request_bytes > VIRTQUEUE_REQUEST_BYTES || reply_capacity > VIRTQUEUE_REPLY_BYTES) {
+    return "request unavailable or outside transfer buffer limits";
+  }
+  memcpy(filesystem.request.request, request, request_bytes);
+  if (!virtqueue_submit(&filesystem.request, request_bytes, reply_capacity)) {
+    return "cannot submit request";
+  }
+
+  uint64_t deadline = task_deadline_after_ms(VIRTIO_REQUEST_TIMEOUT_MS);
+  for (;;) {
+    const char *failure = transport_failure();
+    if (failure) {
+      return failure;
+    }
+    size_t ignored;
+    if (virtqueue_complete(&filesystem.hiprio, &ignored) != VIRTQUEUE_PENDING) {
+      return "unexpected high-priority queue completion";
+    }
+    enum virtqueue_result result = virtqueue_complete(&filesystem.request, reply_bytes);
+    if (result == VIRTQUEUE_BROKEN) {
+      return "invalid request queue completion";
+    }
+    if (result == VIRTQUEUE_COMPLETE) {
+      memcpy(reply, filesystem.request.reply, *reply_bytes);
+      return NULL;
+    }
+    if (task_deadline_expired(deadline)) {
+      return "request timed out";
+    }
+    wait_interrupt(deadline);
+  }
+}
+
+static void stop_transport(const char *failure)
+{
+  /* Shared kernel mappings stay live after AP startup. Even a successful reset
+   * does not authorize unmapping them without an SMP invalidation contract. */
+  uint64_t flags = cpu_save_interrupts();
+  filesystem.active = false;
+  filesystem.prepared = false;
+  filesystem.session.ready = false;
+  KASSERT(!filesystem.interrupt_wait);
+  volatile struct pci_msix_entry *table =
+    (volatile struct pci_msix_entry *)filesystem.msix_table.mapping.address;
+  table[VIRTIO_FS_MSIX_ENTRY].control |= PCI_MSIX_VECTOR_MASK;
+  (void)table[VIRTIO_FS_MSIX_ENTRY].control;
+  bool interrupts_disabled = disable_msix();
+  struct pci_claim *claim = &filesystem.claim;
+  uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
+  pci_write16(claim, PCI_COMMAND, command & ~PCI_COMMAND_MASTER);
+  bool dma_disabled = !(pci_read16(claim->device->address, PCI_COMMAND) & PCI_COMMAND_MASTER);
+  common_config()->device_status |= VIRTIO_STATUS_FAILED;
+  common_config()->device_status = 0;
+  cpu_restore_interrupts(flags);
+
+  uint64_t deadline = task_deadline_after_ms(VIRTIO_RESET_TIMEOUT_NS / UINT64_C(1000000));
+  while (common_config()->device_status && !task_deadline_expired(deadline)) {
+    kernel_task_sleep_until(task_deadline_after_ms(1));
+  }
+  bool reset = common_config()->device_status == 0;
+  if (reset) {
+    filesystem.hiprio.in_flight = false;
+    filesystem.request.in_flight = false;
+  }
+  klog("virtio-fs: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
+       "resources retained until reboot\n", failure, (unsigned)reset,
+       (unsigned)interrupts_disabled, (unsigned)dma_disabled);
+}
+
+static void filesystem_worker(void *argument)
+{
+  (void)argument;
+  if (!activate_transport()) {
+    stop_transport("cannot activate transport");
+    return;
+  }
+  const char *failure = virtio_fs_session_init(&filesystem.session);
+  if (!failure) {
+    klog("virtio-fs: tag=\"%s\" FUSE %u.%u session ready, optional features=0\n",
+         filesystem.tag, filesystem.session.major, filesystem.session.minor);
+  }
+
+  while (!failure) {
+    /* Retain the session and sleep for device activity. Filesystem callers and
+     * their request handoff are introduced with the read-only client. */
+    wait_interrupt(UINT64_MAX);
+    failure = transport_failure();
+    size_t ignored;
+    if (!failure && (virtqueue_complete(&filesystem.hiprio, &ignored) != VIRTQUEUE_PENDING ||
+                     virtqueue_complete(&filesystem.request, &ignored) != VIRTQUEUE_PENDING)) {
+      failure = "unexpected completion while idle";
+    }
+  }
+  stop_transport(failure);
+}
+
+void virtio_fs_pci_start(void)
+{
+  if (!filesystem.prepared) {
+    return;
+  }
+  enum mm_result result = kernel_task_create(filesystem_worker, NULL);
+  if (result != MM_OK) {
+    filesystem.prepared = false;
+    klog("virtio-fs: cannot create worker (error %u); DMA remains disabled, "
+         "resources retained until reboot\n", (unsigned)result);
+  }
 }
 
 /* A capability must name a BAR register, not the high half of a 64-bit BAR. */
@@ -612,15 +850,18 @@ void virtio_fs_pci_prepare(const struct boot_info *boot)
   if (!failure && !prepare_msix()) {
     failure = "MSI-X routing rejected";
   }
+  if (!failure) {
+    failure = prepare_queues();
+  }
   if (failure) {
+    filesystem.prepared = false;
     bool interrupts_disabled = disable_msix();
     filesystem.negotiated = false;
     klog("virtio-fs PCI: %s; marking FAILED and resetting\n", failure);
     common_config()->device_status |= VIRTIO_STATUS_FAILED;
     bool reset = reset_mapped_device();
     if (!reset || !interrupts_disabled) {
-      /* No queues or DMA buffers exist, but keep the failed function claimed:
-       * an unconfirmed reset must not look like an available device. */
+      /* Published queue storage cannot be released without confirmed reset. */
       klog("virtio-fs PCI: cleanup unconfirmed (reset=%u MSI-X disabled=%u); "
            "claim and mappings retained until reboot, DMA disabled\n",
            (unsigned)reset, (unsigned)interrupts_disabled);
@@ -628,11 +869,13 @@ void virtio_fs_pci_prepare(const struct boot_info *boot)
     }
     goto fail;
   }
-  klog("virtio-fs PCI: transport negotiated; queues inactive, DRIVER_OK clear\n");
+  klog("virtio-fs PCI: queues prepared; DMA and delivery disabled, awaiting BSP worker\n");
   return;
 
 fail:
   klog("virtio-fs PCI: %s; releasing resources with DMA and interrupts disabled\n", failure);
+  virtqueue_release(&filesystem.request);
+  virtqueue_release(&filesystem.hiprio);
   pci_release_device(claim);
   filesystem = (typeof(filesystem)){0};
 }

@@ -65,6 +65,8 @@ bool pci_capability_fits(const struct pci_claim *claim, unsigned offset, size_t 
 enum mm_result pci_map_bar(struct pci_claim *claim, unsigned bar, uint64_t offset,
                            size_t bytes, const struct boot_info *boot,
                            struct pci_mapping *mapping);
+/* Established owner, BSP/IF=0, including activation after AP startup. Does not
+ * change mappings; claim/release and BAR preparation remain boot-only. */
 void pci_write8(struct pci_claim *claim, unsigned offset, uint8_t value);
 void pci_write16(struct pci_claim *claim, unsigned offset, uint16_t value);
 void pci_write32(struct pci_claim *claim, unsigned offset, uint32_t value);

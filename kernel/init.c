@@ -38,6 +38,8 @@
 
   task_init();
 
+  virtio_fs_pci_start();
+
   enum mm_result result = kernel_task_create(space_present_task, NULL);
   if (result != MM_OK) {
     panic("cannot create presentation task (error %u)", (unsigned)result);
