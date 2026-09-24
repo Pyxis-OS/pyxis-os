@@ -26,8 +26,8 @@ milestone's remaining interface details before starting its code work.
 8. Complete: [zoneinfo-backed local time](../timezones.md), including the full
    pinned database, UTC for absent/empty `TZ`, named zones and `date -u`.
    Locale and reverse conversion remain deferred.
-9. [Guest Lua and configuration](lua-port.md): audit/port, scripts and REPL, then
-   init/session configuration for timezone selection and terminal tab width.
+9. Complete: [guest Lua](../lua.md), including scripts, REPL and default
+   [session configuration](../session-configuration.md) for timezone and tab width.
 10. [PCI, VirtIO and a host filesystem mount](virtio-fs.md): expose host files
     through an init-managed virtio-fs mount and native filesystem capabilities.
 
@@ -40,7 +40,7 @@ init. Each milestone should become several focused PRs where needed.
 website hosting, block storage, filesystem-format choices and an installer.
 The [edit/build/run workflow](../edit-build-run.md) now supports writing C in
 Pyxis, compiling it there and running the native P1F result. Guest Lua now has a
-concrete configuration consumer in the [staged worklist](lua-port.md).
+concrete configuration consumer in the [session launcher](../session-configuration.md).
 Clock/calendar functions and host Lua build tools
 remain independent of that port.
 

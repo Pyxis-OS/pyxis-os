@@ -6,8 +6,10 @@ Init is a native PXE executable or a script with a native interpreter in that
 same archive. This does not define a global PID 1 or per-space supervisor.
 
 The default [userspace/init.sh](https://git.internal/chronium/pyxis-userland/src/branch/main/init.sh) uses `app://shell.pxe` as
-its interpreter and hands off with `session app://shell.pxe`. Init then exits;
-the interactive shell retains its own resource references and launch authority.
+its interpreter and hands off with `session app://session.pxe`. Init then exits;
+the session launcher evaluates [configuration](session-configuration.md), applies
+terminal settings, and launches the interactive shell with the selected `TZ`.
+The shell retains its own resource references and launch authority.
 See [script execution](shell.md#script-mode) and
 [session handoff](shell.md#session-handoff) for command and failure behavior.
 
@@ -20,6 +22,10 @@ make run INIT=/tmp/init.sh CPUS=4     # build and boot that selection
 make image INIT=build/userspace/shell.pxe  # native PXE init, built first
 make image                          # restore the default, without cleaning
 ```
+
+Selecting `build/userspace/shell.pxe` directly bypasses session configuration,
+including for recovery from a configuration error. It receives the kernel's
+initial environment; absent `TZ` means UTC.
 
 `INIT` names one host file, relative to the repository root or absolute. It
 selects contents, not an archive path or kernel command line. The build stages

@@ -1,7 +1,8 @@
 # Foreground shell
 
 `make userspace` builds the SDK, shell and core utilities. Normal boot runs the
-default [init script](init.md), which hands off to one shell on CPU 1 when available,
+default [init script](init.md) and [session launcher](session-configuration.md),
+which hand off to one shell on CPU 1 when available,
 otherwise on the BSP, with `home://` as its working directory. On multicore boots
 use Super+Right to select CPU 1 before typing. The normal initrd contains init,
 shell, ls, cat, mkdir, rm, rmdir, mv, [Kilo and its license](ports.md), and `share/hello.txt`;
@@ -111,7 +112,8 @@ Script mode needs the same startup resources as interactive mode, including an
 explicit launcher grant. Ordinary shell children do not receive the launcher,
 so launching a shell script as an ordinary foreground command currently fails
 its resource check. Boot explicitly grants the init interpreter launch authority;
-the default init uses `session` to pass it to the interactive shell.
+the default init uses `session` to pass it to the configuration launcher, which
+then delegates it to the interactive shell.
 
 ## Session handoff
 

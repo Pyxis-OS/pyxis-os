@@ -108,7 +108,8 @@ Each TTY starts at eight columns. The setting is shared by its writers, survives
 clearing the screen and process exit, and changes only subsequent tabs. Updating
 it uses the output lock and preserves existing pixels, cursor position, pending
 wrap and escape-parser state. Other TTYs retain their own settings. Startup
-selection through [Lua configuration](wip/lua-port.md) is still pending.
+selection comes from [session configuration](session-configuration.md); the
+packaged file explicitly selects eight columns.
 
 Writing the rightmost cell leaves the cursor there with a pending wrap. Only the
 next printable character moves to the next row (scrolling at the bottom).
