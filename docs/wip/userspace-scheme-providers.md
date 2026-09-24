@@ -137,36 +137,42 @@ that an existing handle still owns.
 
 ## Future writes and shell operations
 
-Writable resources follow the initial read-only provider. Keep the intended
-operation explicit and preserve familiar file-operation meanings:
+Writable resources follow the initial read-only provider. For HTTP endpoints,
+writing means submitting a body for processing. Use this mapping consistently
+in the shell and libc:
 
 | Consumer operation | Proposed HTTP behavior |
 | --- | --- |
 | Read with `cat` or `fopen(..., "r")` | GET, returning a retained snapshot |
-| Replace with `>` or a file copy; save an editor buffer | PUT of the complete staged body |
+| Write with `>` or `fopen(..., "w")` | POST the complete staged body |
+| Write/read with `fopen(..., "w+")` | POST the staged body, then read its response |
+| Explicit replacement | PUT; API and shell spelling remain undecided |
 | Remove with `rm` | DELETE |
-| Submit a body for processing | Explicit POST operation |
 | Append with `>>` or `fopen(..., "a")` | Unsupported without a defined provider append contract |
 
-PUT expresses creation/replacement, while POST asks the resource to process a
-body according to its own semantics. POST is not a general remote append
-operation. See [HTTP methods](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.3).
+This is an intentional endpoint convention: `"w"` submits data rather than
+replacing a remote file. Ordinary local-file modes and redirections retain their
+existing meanings. PUT expresses creation/replacement, not append; neither PUT
+nor POST supplies a universal append operation.
+See [HTTP methods](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.3).
 
-Shell redirection supplies bytes; it does not itself define an HTTP method.
-There is no standard POST redirection operator; `>` replaces and `>>` appends
-(see [shell redirections](https://www.gnu.org/software/bash/manual/html_node/Redirections.html)).
-A small explicit command could use ordinary input redirection or a pipeline.
-Illustrative future syntax:
+Illustrative future syntax for posting a JSON body:
 
 ```sh
-printf '%s' '{}' > json+https://example.com/settings
-post json+https://example.com/jobs < body.json
+printf '%s' '{}' > json+https://example.com/jobs
 ```
 
-The first example proposes replacement with PUT. `post` is a proposed utility,
-not an existing Pyxis command or a standard shell operation. It would invoke the
-provider through its granted capability; HTTP remains in that userspace service.
-The command name, options and response-output conventions remain undecided.
+The userspace provider performs the POST. The JSON alias declares the body's
+media type; it does not select the method. An editor writing through the same
+write mode would also submit with POST; choosing replacement requires the
+explicit PUT operation rather than inferring it from an editor save.
+
+For `"w+"`, writes build the request body and reads consume the POST response,
+not a separate GET or a readback of the staged request. This is an endpoint
+transaction, not an ordinary seekable update stream. Define the submission
+boundary before implementing the libc adapter; an internal buffer flush must
+not accidentally submit a request. Exact commit, response-status and stream
+positioning interfaces remain open.
 
 A proposed write contract stages bytes under a budget and requires an explicit
 commit. Individual writes do not issue requests. Closing an uncommitted resource
