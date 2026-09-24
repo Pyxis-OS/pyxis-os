@@ -32,8 +32,8 @@ milestone's remaining interface details before starting its code work.
     through an init-managed read-only virtio-fs mount and native filesystem
     capabilities. The agreed Q35/ECAM, modern PCI, split-queue and BSP-worker
     direction is split into nine focused tasks. [PCI discovery and owned
-    resources](../pci.md) are complete; VirtIO feature negotiation and queue
-    inspection are next.
+    resources](../pci.md), VirtIO feature negotiation and queue inspection are
+    complete; kernel task event waits are next.
 
 This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO

@@ -125,8 +125,10 @@ unmounting and live namespace replacement remain later work.
 - PCI resources: the ECAM mapping, claim, reset and BAR preparation contracts
   are implemented in [PCI resources](../pci.md). MSI-X vector ownership and
   delivery remain for task 5.
-- Transport: queue and transfer-buffer sizes, supported feature mask and reset
-  completion checks. Keep ordinary allocation failure explicit.
+- Transport: initial negotiation accepts only `VIRTIO_F_VERSION_1`; reset and
+  configuration reads have one-second deadlines. The implemented boundary is in
+  [PCI setup](../pci.md#feature-negotiation-and-queue-inspection). Queue and
+  transfer-buffer sizes remain for task 6; keep allocation failure explicit.
 - Host setup: select and record a virtiofsd version and negotiated FUSE subset;
   define QEMU shared-memory/socket setup, read-only export enforcement and
   actionable dependency diagnostics. Do not automatically install host packages.
@@ -162,11 +164,15 @@ grows. No later item is implied by completing an earlier one.
    Initial VirtIO reset and capability discovery were brought forward here:
    OVMF leaves bus mastering enabled, so reset must be confirmed before probing
    BARs. DMA, INTx and MSI-X remain disabled; ordinary boot needs no device.
-3. [ ] **Modern VirtIO PCI setup.** Continue from the claimed, reset transport,
+3. [x] **Modern VirtIO PCI setup.** Continue from the claimed, reset transport,
    negotiate supported features and inspect queue information. Define reset
    and failure handling for this additional initialization state.
    Completion: readable transport diagnostics and defined failed-init cleanup;
    do not mark the device ready before its queues and handlers are ready.
+   Negotiates only `VIRTIO_F_VERSION_1`, snapshots the filesystem configuration
+   and inspects queues zero and one. Leaves `DRIVER_OK` clear and DMA/interrupts
+   disabled. Failure resets before resource release; an unconfirmed reset retains
+   the claim and mappings until reboot while normal boot continues.
 4. [ ] **Kernel task event waits.** Extend the existing prepare/park/wake
    contract to BSP kernel tasks. Completion: the upcoming worker can block on
    an event without polling sleeps or weakening wake-before-park guarantees.

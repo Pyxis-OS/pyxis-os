@@ -106,10 +106,45 @@ must still read zero. The ISR is not read merely for diagnostics because that
 would acknowledge interrupts. Preparation failures log a diagnostic and unwind
 without preventing the existing OS from booting.
 
-No features are negotiated, queues allocated, interrupts enabled or DMA started.
-MSI-X entries are counted and mapped but not programmed. The reference is
+### Feature negotiation and queue inspection
+
+Preparation continues by setting `ACKNOWLEDGE`, then `DRIVER`. It reads the first
+two device feature words and accepts only `VIRTIO_F_VERSION_1`; absence of that
+bit is an error. Other offered features are left unselected, including packed
+queues, indirect descriptors, event indices, platform DMA translation and
+filesystem notifications. This is the modern split-queue baseline for the
+current QEMU platform, not support for arbitrary hardware or IOMMU configurations.
+The driver sets `FEATURES_OK` and reads status back before proceeding.
+
+The filesystem tag and request-queue count are read between matching configuration
+generation values, retrying for at most one second. The tag may occupy all 36 wire
+bytes; the retained copy has a separate terminator. The request count must be
+nonzero and leave room for the high-priority queue within the transport's queue
+count. Only the high-priority queue and first request queue are inspected. Since
+filesystem notifications are not negotiated, those are queues zero and one.
+
+Each must be disabled and offer a nonzero power-of-two split-queue size. Its
+notification offset, multiplied with widened arithmetic, must leave room for a
+16-bit notification within the mapped notification region. Maximum sizes and
+notification addresses are retained for later queue setup; this stage does not
+write queue sizes, addresses, enable bits or notification registers.
+
+Success leaves `ACKNOWLEDGE | DRIVER | FEATURES_OK` set and `DRIVER_OK` clear.
+`filesystem.negotiated` records that boundary; it does not mean the device is
+running. Bus mastering, INTx and MSI-X remain disabled. MSI-X entries are counted
+and mapped but not programmed. No queue storage or DMA buffers exist yet.
+
+Negotiation or inspection failure marks `FAILED` and resets through the mapped
+status register, with a one-second deadline. Confirmed reset uses the resource
+unwind above. If reset times out, the driver retains the claim and mappings until
+reboot rather than exposing the failed device for reuse; DMA and interrupts remain
+disabled and normal boot continues. This is boot-only cleanup, not recovery of
+in-flight filesystem requests.
+
+The reference is
 [VirtIO 1.4](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.pdf),
-especially PCI configuration access (§4.1.4.9) and device initialization (§4.1.5).
+especially initialization (§3.1), PCI configuration (§4.1.4) and the filesystem
+device (§5.11).
 
 ## Inspection and next step
 
@@ -120,8 +155,11 @@ reads occur. ECAM page permissions can also be inspected through the recursive
 page tables. Break at `boot_start_cpus` to inspect completed preparation before
 APs start; use direct memory inspection rather than inferior function calls
 under KVM (see [GDB](gdb.md)).
+Read MMIO registers individually at their documented byte, word or dword width.
+A bulk structure read can combine neighboring registers into accesses the device
+does not support, producing misleading values even with correct field offsets.
 
-Feature negotiation and queue inspection are the next
+Kernel task event waits are the next
 [milestone task](wip/virtio-fs.md#focused-task-list). The opt-in host daemon/QEMU
 setup will become part of the normal build/run interface with the queue worker.
 Host filesystem access is not implemented yet.
