@@ -20,6 +20,10 @@ gameplay and demo playback. Other candidates are SQLite, a CHIP-8 interpreter,
 Frotz and NetHack. This is not an instruction to port the whole list. Neovim
 remains a later editor goal.
 
+GrafX2 is another candidate, alongside the [desktop and graphics direction](desktop-graphics.md).
+That draft records the global menu/dock/desktop ideas, software-rendering option
+and eventual compositor prerequisites; it does not authorize implementation.
+
 A custom linker remains a possible later investigation alongside application
 bundles/images. TCC already emits native P1F executables; a new linker or custom
 object/archive format is not required for the working development loop.
