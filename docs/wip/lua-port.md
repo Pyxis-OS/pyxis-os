@@ -1,9 +1,8 @@
 # Lua port milestones
 
-Status: runtime prerequisites in progress after
-[zoneinfo-backed local time](../timezones.md). Configuration is the first system
-integration: choose the default timezone and terminal tab
-width. Host Lua for build recipes and image manifests remains independent of
+Status: the expression interpreter is implemented; scripts and the REPL are next.
+Configuration is the first system integration: choose the default timezone and
+terminal tab width. Host Lua for build recipes and image manifests remains independent of
 this guest port. Libraries consume the [SDK](../sdk-and-repositories.md) and
 [port recipe setup](../ports.md).
 
@@ -18,19 +17,18 @@ without silently lowering Lua's recursion limits. Automatic growth is deferred.
 
 ## 1. Pin Lua and define the runtime slice
 
-The source audit used Lua 5.5.1 and the Pyxis SDK. The candidate interpreter pin
-is the [official Git mirror](https://github.com/lua/lua) commit
+The expression interpreter uses Lua 5.5.1 from the
+[official Git mirror](https://github.com/lua/lua), pinned to commit
 `7579fc9d7ed90240487251dfb69168f8e64e9294` (`v5.5.1`). Its C sources and headers
 match the release except that the mirror does not contain `luac.c`; the separate
 bytecode compiler is outside this slice. Preserve the MIT license in `lua.h`.
-Carry upstream's [negative-shift GC fix](https://github.com/lua/lua/commit/0b29f408433e92953cc72b1d3e06c7ac8139e439)
-as a recorded production-code patch when adding the recipe.
+The port carries upstream's [negative-shift GC fix](https://github.com/lua/lua/commit/0b29f408433e92953cc72b1d3e06c7ac8139e439)
+as a recorded production-code patch.
 
-Compilation and undefined-symbol inspection identified the requirements below.
-This was an audit, not a linked or booted interpreter. The ports build does not
-yet include Lua. Existing facilities include allocation, nonlocal jumps, file
-streams, `strtod`, floating-point `printf` and x87/SSE2. Keep Lua's normal 64-bit
-integers and double-precision numbers.
+The initial compile audit identified the runtime requirements below, now
+implemented in the SDK. Lua keeps its normal 64-bit integers and double-precision
+numbers. The normal ports build includes the executable and its MIT notice;
+see the [recipe notes](../../ports/lua/README.md) for source adaptations.
 
 Prerequisites and focused PR tasks:
 
@@ -44,38 +42,44 @@ Prerequisites and focused PR tasks:
   the pinned musl subset and its required internal helpers/tables. Lua's core
   needs these even without the standard `math` library; the full library is
   deferred.
-- [ ] Add the pinned recipe, license and ordered adaptations, then the expression
+- [x] Add the pinned recipe, license and ordered adaptations, then the expression
   execution slice below. Record fixed-C-locale decimal point and byte collation
   through Lua's existing hooks; no locale subsystem or signal stubs.
 - [ ] Add script loading and libterm REPL support after settling the file/module
   lookup and exit/cancellation behavior below.
 
-The first library candidates are base, coroutine, table, string and UTF-8;
-confirm registration when implementing the interpreter. Broad `io`/`os`, native
-dynamic modules and the full math library are not prerequisites. The `io`/`os`
+The interpreter registers base, coroutine, table, string and UTF-8. File-loading
+functions `loadfile` and `dofile` are absent from the base library. Broad `io`/`os`,
+native dynamic modules and the full math library are not prerequisites. The `io`/`os`
 audit found additional needs including pushback, temporary files, stream-buffer
 control, process CPU time and calendar formatting/conversion. Do not substitute
 wall time for CPU time or introduce successful stubs for missing operations.
 
-The auxiliary script loader also needs a `BUFSIZ` buffer size. Pyxis treats text
+Restoring the auxiliary script loader needs a `BUFSIZ` buffer size. Pyxis treats text
 and binary file modes identically, so opening in binary mode initially can avoid
 Lua's binary-mode `freopen` cycle as a documented local adaptation. Pure-Lua
 `require` still needs an explicit module search-path policy.
 
-Completion: a pinned source recipe/metadata, agreed initial library registration
-and the prerequisite tasks above. This does not authorize unrelated libc or
-kernel expansion.
+The pin, library selection and runtime prerequisites are complete. This does
+not authorize unrelated libc or kernel expansion.
 
 ## 2. Run Lua code in Pyxis
 
-Implement the agreed minimal runtime requirements in focused changes, then build
-the interpreter through the port recipe and SDK. Settle the exact execution
-interface before starting, for example running a supplied expression with output
-and an observable exit status. State which standard libraries are available.
+Implemented as `app://lua.pxe`, resolved as `lua` by the shell:
 
-Completion: ordinary builds and interactive boots demonstrate real Lua code
-executing, printing a result and reporting an error. No system-wide configuration
-integration, dynamic modules or complete standard-library promise is implied.
+```text
+lua -e 'print("Hello from Lua", 2 ^ 0.5)'
+```
+
+The small native driver accepts exactly one `-e` text chunk. It opens the five
+selected libraries and protects initialization, compilation and execution.
+Success exits zero; usage and execution errors exit one. Runtime errors include
+tracebacks. No arguments prints usage. Chunk return values are discarded.
+There is no script/REPL fallback, `arg` table or environment startup hook.
+
+The full image build and manual boot/debugger inspection cover real Lua
+execution and error reporting. This does not imply system-wide configuration,
+dynamic modules or complete standard-library support.
 
 ## 3. Scripts and an interactive REPL
 
