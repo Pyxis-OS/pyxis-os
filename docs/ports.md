@@ -97,6 +97,24 @@ GCC remains the compiler for the OS and maintained applications.
 See the [edit/build/run walkthrough](edit-build-run.md) and
 [TCC contract and limits](tcc.md).
 
+## Guest Lua
+
+The image includes `app://lua.pxe` and the upstream MIT notice at
+`app://share/licenses/lua/lua.h`. The first interpreter accepts one expression
+chunk through the shell:
+
+```text
+lua -e 'print("Hello from Lua", 2 ^ 0.5)'
+```
+
+Base, coroutine, table, string and UTF-8 libraries are available, with `loadfile`
+and `dofile` omitted. Errors return a nonzero process status; runtime errors
+include a traceback. No arguments prints usage. Script files, REPL, package
+loading, io/os, debug and the full math library remain deferred, as does
+signal-driven interruption. This does not replace the host Lua used by build
+recipes. See the [port notes](../ports/lua/README.md) and
+[remaining milestone tasks](wip/lua-port.md).
+
 ## Timezone data
 
 The `tzdata` recipe builds matching host zic and the pinned IANA database. The
