@@ -47,10 +47,12 @@ these tasks do not depend on virtio-fs.
 
 ## Networking and website hosting
 
-After virtio-fs, the next intended VirtIO driver is virtio-net, then virtio-blk.
-Hosting the Pyxis landing page remains a release goal. Networking, the server
-and their resource contracts need their own scoped plans. Revisit init
-supervision and restart policies when defining the first web-server milestone.
+The [initial networking milestone](initial-networking.md) covers loopback,
+virtio-net, manually configured IPv4 and ping. DHCP follows through the same
+configuration operations once UDP is available. TCP, DNS and server resource
+contracts still need separate scopes. Hosting the Pyxis landing page remains a
+release goal; revisit init supervision and restart policies when defining that
+web-server milestone. Virtio-blk remains the next intended VirtIO storage driver.
 
 ## Multiple users and restricted permissions
 

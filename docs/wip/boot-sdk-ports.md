@@ -33,13 +33,16 @@ milestone's remaining interface details before starting its code work.
     session launcher to the shell and children. Existing `ls`/`cat` use native
     directory/file capabilities; archive-only boot remains the default without
     a device/socket.
+11. [Initial networking](initial-networking.md): working loopback and virtio-net,
+    manual IPv4 configuration and native ping. DHCP follows later through the
+    same configuration interface; TCP and website hosting remain separate.
 
 This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO
 infrastructure can be developed independently, while its final mount setup uses
 init. Each milestone should become several focused PRs where needed.
 
-[Later directions](later-os-directions.md) park the remaining ports, networking,
+[Later directions](later-os-directions.md) park the remaining ports, later networking,
 website hosting, block storage, filesystem-format choices and an installer.
 The [edit/build/run workflow](../edit-build-run.md) now supports writing C in
 Pyxis, compiling it there and running the native P1F result. Guest Lua now has a
