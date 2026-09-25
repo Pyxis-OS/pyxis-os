@@ -1,7 +1,7 @@
 # Userspace URI scheme providers
 
 Status: agreed design direction for later work, not an implementation task or a
-frozen ABI. This does not expand the current loopback/IPv4 milestone. It builds
+frozen ABI. It builds
 on the [namespace direction](../vfs.md) and [named endpoints](../spaces.md#named-endpoints).
 
 ## Intended use
@@ -175,8 +175,9 @@ not accidentally submit a request. Exact commit, response-status and stream
 positioning interfaces remain open.
 
 A proposed write contract stages bytes under a budget and requires an explicit
-commit. Individual writes do not issue requests. Closing an uncommitted resource
-or cleaning up a failed process discards its staged body. Shell redirection could
+commit. Individual writes do not issue requests. Destroying an uncommitted resource
+discards its staged body; closing one copied grant does not destroy a resource
+still retained by another process. Shell redirection could
 commit after the producing command succeeds; an editor needs a save hook that
 commits and reports the result. Ordinary file writes alone do not provide these
 transaction boundaries, and editor temporary-file/rename saves need an explicit
@@ -188,6 +189,35 @@ there is no exactly-once guarantee, and POST must not be blindly retried. Settle
 commit ownership across copied handles, cancellation, conflict detection and
 failure reporting before implementation. Write, submit and delete authority must
 be explicit; a readable URI does not grant any of these operations.
+
+## Prepared requests and shell handoff
+
+A future `http` helper could prepare a request with URL, method and request-scoped
+headers, then return a capability to the shell. It uses the userspace provider;
+it does not contain another HTTP implementation. The shell can grant a body
+writer to `echo` or another producer, and later a response reader to `cat` or jq.
+This uses the same [capability-based stdio bindings](shell-streams.md) as pipes
+and ordinary file redirection. The commands only read/write their given streams.
+
+The helper must hand back a real grant through an authorized capability-transfer
+path, not print its numeric handle. The shell receives a local grant that keeps
+the resource alive after the helper exits. Initial copied grants are sufficient;
+there is no requirement to move ownership. Define the running helper-to-shell
+handoff separately from existing launch-time delegation and current request-side
+endpoint copies; printing a handle or embedding one in reply bytes cannot do it.
+
+The intended POST lifecycle is prepare, write the staged body, explicitly submit,
+then read the response. The shell could retain submission authority while granting
+the producer only body-write access, submit after successful producer completion,
+and discard an unsubmitted request on failure. Completion/flush of an individual
+write is not submission. Exact rights, response access and cancellation remain
+open; header policy, including credential handling across redirects, belongs to
+the provider and the specific request rather than a global default.
+
+A motivating workflow is to submit a login body, extract a bearer token with jq,
+and prepare another request with that Authorization header. Shell syntax for
+holding and reusing capabilities remains open; HTTP helpers and capability-valued
+variables are later ideas, not prerequisites for the first shell pipelines.
 
 ## Future response cache
 
@@ -235,6 +265,94 @@ pin content and use controlled dependency storage; a time-limited response cache
 does not itself make a moving URL reproducible. No compiler or toolchain changes
 are assigned by this idea.
 
+## SQLite views and query results
+
+SQLite is a second proposed provider consumer, after a native userspace library
+and CLI port. Start with read-only views or published queries whose serialized
+results are usable through ordinary file readers. Illustrative future syntax:
+
+```sh
+ls sqlite://catalog/
+cat json+sqlite://catalog/apps
+cat json+sqlite://catalog/apps | jq '.[].name'
+```
+
+Here `catalog` names a database binding and `apps` could name a table view or
+published query. These names and JSON representation are proposals, not an ABI;
+decide NULL/blob representation and row ordering when defining the first slice.
+Enumeration also needs an explicit directory/provider contract: supporting an
+HTTP open does not automatically implement `ls` for another scheme.
+
+The userspace provider receives authority over the database through capabilities
+and checks which views the caller may read. A database name does not grant access
+to arbitrary backing files or every table. SQL parsing, query execution and
+serialization stay in userspace; the kernel only handles generic routing, IPC
+and resource authority. In this provider, `json+sqlite` selects an output format,
+not HTTP headers or transport behavior.
+
+Each successful result open would expose a bounded, fully materialized read-only
+snapshot with stable size, contents and offsets until its last reference closes.
+Subsequent database changes do not rewrite an existing result. Set query time,
+row/output-byte and storage budgets before implementation. Read-only queries
+still consume resources; do not publish a truncated result as complete. A first
+slice can use fixed published views before admitting caller-supplied SQL.
+
+## Later database sessions
+
+A later endpoint could accept queries, parameters and mutations through an
+explicit session. The open session resource identifies the interaction; there
+is no need to infer a session from a PID or trust caller-supplied process identity.
+Separate opens create independent sessions. If copies are allowed, they refer
+to the same session, so sharing and serialization require a deliberate contract.
+
+The initial thought was to write SQL into a transaction handle, submit with a
+marker such as `go;`, then read the response from that handle. Keep the interaction
+idea, but prefer structured requests for statement submission, result fetching,
+commit and rollback. Writes can split or combine statements, and a textual marker
+can occur inside SQL; ordinary byte writes do not define request boundaries.
+Prepared statements and bound parameters should not need URI-string encoding.
+
+Mutations need explicit authority and commit. Uncommitted work should roll back
+when the session is destroyed, not when any one copied handle closes. Define
+provider/client failure, pending operations, transaction lifetime and commit
+outcome reporting before implementation. A lost reply must not prompt blind
+re-execution of a mutation. These are later database contracts, not requirements
+for the first read-only view.
+
+## Database worksheet experiment
+
+A future editor could open a worksheet such as:
+
+```text
+sqlite://catalog/worksheets/scratch
+```
+
+The motivating interaction is to type `SELECT * FROM apps;`, save/execute, and
+see the result appear in the editor. Preserve the query, result and error as
+separate state so the output does not destroy the query or a syntax error erase
+the user's work. Exact worksheet lifetime, names and editor UI remain open.
+
+Saving does not ordinarily make an editor reread a file. Investigate automatic
+change detection alongside explicit reload or a small editor integration.
+Neovim's current development documentation describes `autoread`, timestamp checks
+and libuv filesystem watchers; unmodified buffers can reload external changes.
+See [timestamp/change detection](https://github.com/neovim/neovim/blob/master/runtime/doc/editing.txt)
+and [autoread](https://github.com/neovim/neovim/blob/master/runtime/doc/options.txt).
+The selected Neovim port would need corresponding Pyxis metadata/notification
+support or an explicit provider-aware refresh. A synchronous result replacement
+during save can be mistaken for the editor's own completed write, so autoread
+alone does not establish a reliable submit/result sequence. Distinct query and
+result resources or an editor hook are candidates to resolve that ordering.
+Existing read-only result snapshots would still remain immutable; a refresh
+opens a new result. Temporary-file and
+rename-based saves also need deliberate handling rather than pretending they
+execute SQL. Neovim itself remains a separate future port.
+
+Restrict the first experiment to read-only queries. Any later mutating worksheet
+requires explicit execution/transaction controls: autosave must never commit a
+database change. This is a possible consumer of the session protocol above, not
+a command language or editor feature to implement alongside the first provider.
+
 ## Prerequisites and decisions
 
 Before an implementation milestone, settle:
@@ -253,7 +371,10 @@ Before an implementation milestone, settle:
   library choice.
 - HTTP status mapping, redirects, encoding, size/deadline limits and offset-read
   storage for the first read-only provider. Cache and compiler work come later.
+- For a later SQLite consumer: the [SQLite port](application-ports.md), view
+  grants and binding policy, consistent result generation, serialization and
+  query budgets. Session mutations and editor worksheets follow independently.
 
 This is a future consumer of networking, IPC and namespace work. It is not a
 reason to add placeholder syscalls, provider registries or protocol adapters to
-the current networking tasks.
+unrelated milestones.

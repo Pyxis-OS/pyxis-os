@@ -39,5 +39,11 @@ decisions, not an assumed single feature.
 [GrafX2](https://gitlab.com/GrafX2/grafX2) would exercise pointer input, image
 editing and file access. Its [compilation instructions](https://sources.debian.org/src/grafx2/2.9%2Bds-2/doc/COMPILING.txt)
 describe SDL/SDL_image and image libraries, with optional font/Lua support.
-Consider a reusable Pyxis SDL backend and a pinned dependency/compile probe when
-selecting that port. No SDL version, dependency subset or port schedule is chosen.
+SDL2 is the intended reusable library target: investigate a native Pyxis backend
+with software rendering, presentation, keyboard/mouse input and timing first.
+Choose the supported subsystems through a pinned GrafX2/dependency probe; audio,
+GPU support and a full desktop are not prerequisites for that initial scope.
+Keep upstream SDL2 with a platform backend rather than implementing a substitute
+subset of its API. The [port candidates](application-ports.md) also connect this
+work to DevilutionX and the future C AbyssEngine investigation. No port schedule
+or complete SDL subsystem contract is selected yet.
