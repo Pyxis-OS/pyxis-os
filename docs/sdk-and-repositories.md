@@ -2,7 +2,8 @@
 
 Pyxis pins [pyxis-userland](https://git.internal/chronium/pyxis-userland) as the
 `userspace` Git submodule and [pyxis-ports](https://git.internal/chronium/pyxis-ports)
-as `ports`. The committed gitlinks select exact revisions;
+as `ports`, and [pyxis-lwip](https://git.internal/chronium/pyxis-lwip) as
+`third_party/lwip`. The committed gitlinks select exact revisions;
 normal builds never follow a remote branch or update the pin automatically.
 
 ## Checkout and updates
@@ -10,13 +11,13 @@ normal builds never follow a remote branch or update the pin automatically.
 For an existing checkout:
 
 ```sh
-git submodule update --init userspace ports
+git submodule update --init userspace ports third_party/lwip
 make image
 ```
 
 New clones can use `git clone --recurse-submodules`. Run the submodule update
 again after pulling a parent commit that changes the pin. Commit and publish
-userland or ports changes in their repository before committing the corresponding gitlink
+dependency changes in their repository before committing the corresponding gitlink
 in Pyxis. A submodule checkout may be detached; create a branch there before
 starting work. Local uncommitted source edits are usable for development;
 the exported SDK manifest records dirty userland inputs.
@@ -24,8 +25,8 @@ the exported SDK manifest records dirty userland inputs.
 The relative URL in `.gitmodules` resolves beside the Pyxis repository, using
 the parent remote's host and transport. CI checks out submodules using the
 `PYXIS_SOURCE_READ_TOKEN` secret, which must grant repository read access to
-Pyxis, pyxis-userland and pyxis-ports. The existing workflow builds the integrated
-kernel and ISO. It does not build a compiler or follow either submodule's latest main.
+Pyxis, pyxis-userland, pyxis-ports and pyxis-lwip. The existing workflow builds the integrated
+kernel and ISO. It does not build a compiler or follow any submodule's latest main.
 
 ## Ownership and build order
 
@@ -34,6 +35,7 @@ kernel and ISO. It does not build a compiler or follow either submodule's latest
 | Pyxis | Kernel, public ABI/format headers, shared shebang parser, elf2pxe, compiler patches/container, SDK export and image assembly |
 | pyxis-userland | libc, libpyxis, libterm, startup/link support, applications, initial boot scripts and its TLSF vendor copy |
 | pyxis-ports | Host Lua runner, pinned third-party recipes, ordered patches and staged executables/licenses and development libraries/headers |
+| pyxis-lwip | Pinned lwIP source subset, license/provenance and any local upstream adaptations |
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime, then installs startup, libraries, linker support
@@ -43,6 +45,13 @@ so building it before userland introduces no cycle. `make image`
 includes both in initrd and ISO assembly. The parent passes
 explicit output directories, preserving `build/runtime` and `build/userspace`.
 See [SDK commands and layout](sdk.md) for standalone and focused builds.
+
+The lwIP configuration, private headers, allocator/clock hooks and build rules
+remain in Pyxis under `kernel/net/lwip`. Only the optional `make lwip-port`
+investigation target currently consumes the lwIP submodule; normal kernel/image
+builds do not use it. CI's recursive SDK, ports and userland checkouts need read
+access to pyxis-lwip; the kernel/image jobs do not need a submodule checkout yet.
+See [the port findings](wip/lwip-port.md) for the runtime integration boundary.
 
 The public ABI remains authoritative in Pyxis. Userland consumes it through the
 SDK, with no kernel-private include paths or copied ABI headers. The shared

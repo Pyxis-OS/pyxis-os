@@ -167,3 +167,5 @@ clean:
 	rm -rf build
 
 -include $(OBJECTS:.o=.d)
+
+include kernel/net/lwip/build.mk

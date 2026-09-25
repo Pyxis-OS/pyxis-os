@@ -17,9 +17,9 @@ running and persisting programs is an especially useful loop. Writable virtio-fs
 is a candidate for the next milestone after TCP, with its ownership/authority
 checkpoint first. It is not part of this implementation.
 
-Compare an existing stack before selecting the implementation. The
-[source review](tcp-stack-comparison.md) identifies lwIP as the first reuse
-candidate and recommends a bounded port-boundary investigation. Adoption, local
+The [stack comparison](tcp-stack-comparison.md) led to a bounded lwIP
+investigation. Its [build/link findings](lwip-port.md) establish freestanding
+compatibility and propose the remaining packet and policy adaptations. Adoption, local
 patches and any changes below TCP still need an explicit decision; no native
 rewrite or full-stack replacement is selected by this milestone document.
 
@@ -192,12 +192,14 @@ observed under naturally occurring traffic.
 
 ## Focused implementation tasks
 
-- [ ] **1. Stack integration decision.** Review the comparison and, if agreed,
-  pin/build the minimal lwIP subset and make its worker/packet/allocator boundary
-  concrete. Review local delivery, resource reclamation and every required patch
-  before committing to adoption. Stop for a scope decision if integration expands
-  into replacing working protocols. No public placeholder API. If native TCP is
-  chosen instead, rescope this task to wire/sequence handling before coding.
+- [ ] **1. Stack integration decision.** The [lwIP build/link investigation](lwip-port.md)
+  is complete: pinned sources, private freestanding port hooks and an isolated
+  linked artifact. Runtime adoption is still pending the routing, local-delivery,
+  queued-packet lifetime and resource-reclamation decisions recorded there.
+  Implement the agreed bridge/patches before proceeding to connection APIs;
+  stop for a scope decision if this expands into replacing working protocols.
+  No public placeholder API. If native TCP is chosen instead, rescope this task
+  to wire/sequence handling before coding.
 - [ ] **2. Connection ownership and transport identity.** Settle the proposed
   budgets, keyed primitive/secret preparation and tuple allocation. Add bounded
   worker-owned state, timer scheduling and retirement. Preserve the existing
