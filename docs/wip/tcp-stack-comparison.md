@@ -1,6 +1,6 @@
 # TCP implementation comparison
 
-Status: lwIP was selected for the [outbound TCP milestone](tcp.md). Rust
+Status: lwIP was selected for the [outbound TCP milestone](../tcp.md). Rust
 integration and picoTCP's licensing choice are deferred. The
 [implemented bridge](../lwip.md) records the selected ownership boundary and
 local adaptations; this comparison explains that choice against the original
