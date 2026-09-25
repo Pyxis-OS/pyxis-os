@@ -32,6 +32,11 @@ static enum call_status connection_status(struct tcp_connection *connection, err
 static void connection_error(void *argument, err_t error)
 {
   struct tcp_connection *connection = argument;
+  /* lwIP reports normal LAST_ACK completion as ERR_CLSD after TX-only
+   * shutdown. Preserve unread bytes and clean EOF after its PCB is gone. */
+  if (error == ERR_CLSD && connection->write_shutdown && connection->peer_fin) {
+    return;
+  }
   tcp_connection_discard_receive(connection);
   /* Reset reports the error before destruction; abort reports it afterward.
    * Latch only the result here, without inspecting or releasing the PCB. */
@@ -101,7 +106,9 @@ static void abort_connection(struct tcp_connection *connection, err_t reason)
     connection->error = reason;
     connection->terminal_status = connection_status(connection, reason);
   }
-  if (connection->pcb) {
+  /* Explicit abort discards application state, but must not permit early
+   * tuple reuse after the transport has already entered TIME_WAIT. */
+  if (connection->pcb && connection->pcb->state != TIME_WAIT) {
     tcp_abort(connection->pcb);
     KASSERT(!connection->pcb);
   }
@@ -138,15 +145,37 @@ void tcp_connection_start(struct tcp_connection *connection)
   }
 }
 
+enum call_status tcp_connection_shutdown_write(struct tcp_connection *connection)
+{
+  net_worker_assert_context();
+  if (connection->write_shutdown) {
+    return CALL_OK;
+  }
+  if (connection->terminal_status != CALL_OK) {
+    return connection->terminal_status;
+  }
+  KASSERT(connection->pcb && connection->connected);
+  err_t error = tcp_shutdown(connection->pcb, 0, 1);
+  if (error != ERR_OK) {
+    return error == ERR_CONN ? CALL_ENDPOINT_CLOSED : connection_status(connection, error);
+  }
+  /* ERR_OK also covers TF_CLOSEPEND: the timer will retry FIN allocation.
+   * Do not use TF_FIN as the authority to accept new application writes. */
+  connection->write_shutdown = true;
+  return CALL_OK;
+}
+
 void tcp_connection_inspect(struct tcp_connection *connection, struct tcp_connection_info *info)
 {
   net_worker_assert_context();
   *info = (struct tcp_connection_info){
     .local_address = connection->local, .remote_address = connection->remote,
     .local_port = connection->local_port, .remote_port = connection->remote_port,
-    .state = !connection->pcb ? TCP_STATE_CLOSED :
-        connection->pcb->state == CLOSE_WAIT ? TCP_STATE_PEER_CLOSED : TCP_STATE_CONNECTED,
+    .state = !connection->pcb || connection->pcb->state == TIME_WAIT ? TCP_STATE_CLOSED :
+        connection->peer_fin ? TCP_STATE_PEER_CLOSED : TCP_STATE_CONNECTED,
     .terminal_status = connection->terminal_status,
+    .flags = (connection->write_shutdown ? TCP_INFO_WRITE_SHUTDOWN : 0) |
+        (connection->peer_fin ? TCP_INFO_PEER_FIN : 0),
   };
 }
 
@@ -212,21 +241,24 @@ void net_tcp_release(struct tcp_connection *connection)
   net_worker_assert_context();
   KASSERT(connection && connection->owned);
   connection->owned = false;
-  tcp_connection_discard_receive(connection);
   struct tcp_pcb *pcb = connection->pcb;
+  bool unread = connection->receive_length || (pcb && (pcb->refused_data || pcb->ooseq));
+  /* Read slots retain the object until collected and credited, so final release
+   * cannot race a completed read whose bytes are still owed to its caller. */
+  tcp_connection_discard_receive(connection);
   if (!pcb) {
+    return;
+  }
+  if (!connection->write_shutdown || unread) {
+    tcp_connection_abort(connection, CALL_ENDPOINT_CLOSED);
     return;
   }
   if (pcb->state == TIME_WAIT) {
     return;
   }
-  if (!(pcb->flags & TF_FIN) || pcb->refused_data || pcb->rcv_wnd != TCP_WND) {
-    tcp_connection_abort(connection, CALL_ENDPOINT_CLOSED);
-    return;
-  }
   connection->orphan_deadline = task_deadline_after_ms(TCP_ORPHAN_TIMEOUT_MS);
-  /* FIN already queued by explicit shutdown. Mark RX closed as well, so later
-   * unread data aborts rather than silently disappearing after owner release. */
+  /* Mark RX closed, so new unread data aborts instead of silently disappearing.
+   * tcp_close also preserves/retries a previously deferred FIN. */
   if (tcp_close(pcb) != ERR_OK) {
     abort_connection(connection, ERR_ABRT);
   }
@@ -267,7 +299,7 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
   if (pcb->state != CLOSED && pcb->state != SYN_SENT) {
     connection->setup_deadline = 0;
   }
-  if (pcb->unacked || pcb->unsent) {
+  if (pcb->unacked || pcb->unsent || (pcb->flags & TF_CLOSEPEND)) {
     if (!connection->progress_deadline || pcb->lastack != connection->last_ack) {
       connection->last_ack = pcb->lastack;
       connection->progress_deadline = task_deadline_after_ms(TCP_PROGRESS_TIMEOUT_MS);

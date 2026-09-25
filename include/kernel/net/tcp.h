@@ -19,7 +19,7 @@ struct tcp_connection;
  * Active open and capability publication are separate from preparation. */
 enum net_result net_tcp_prepare(uint32_t destination, uint16_t port, uint64_t deadline,
     struct tcp_connection **connection);
-/* Release the one external owner. Abort unless FIN was explicitly queued and
+/* Release the one external owner. Abort unless write shutdown was committed and
  * all received data consumed; then retain bounded graceful teardown/TIME_WAIT.
  * Handle copies will share that external owner through object references.
  * This call consumes the pointer; actual metadata disposal is worker-deferred. */
@@ -31,6 +31,7 @@ enum call_status net_tcp_connect(struct capability_table *table, uint32_t addres
     uint16_t port, uint64_t deadline, struct tcp_connect_reply *reply);
 enum call_status net_tcp_inspect(struct kernel_object *object, struct tcp_connection_info *reply);
 enum call_status net_tcp_abort(struct kernel_object *object);
+enum call_status net_tcp_shutdown_write(struct kernel_object *object);
 enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
     uint64_t deadline, void *data, struct tcp_read_reply *reply);
 

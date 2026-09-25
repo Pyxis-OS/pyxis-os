@@ -15,8 +15,8 @@ make image
 
 The packet bridge and native outbound CONNECT capability are live. Init receives
 `tcp` authority, explicitly delegated through session and shell to foreground and
-background children. Streams expose INSPECT, READ, WRITE and ABORT; write
-shutdown remains in the next [TCP tasks](wip/tcp.md). No listener is exposed.
+background children. Streams expose INSPECT, READ, WRITE, SHUTDOWN_WRITE and ABORT. Native command-line
+consumers remain in the next [TCP task](wip/tcp.md). No listener is exposed.
 Traffic to closed ports still receives lwIP's normal reset response.
 
 ## Worker and memory ownership
@@ -119,7 +119,7 @@ Receive storage and window accounting are described below.
 
 `net_tcp_release` consumes the sole external ownership reference. Handle copies
 share it through object references. Release normally aborts. If an explicit
-write shutdown already queued FIN and no received bytes remain unread, teardown
+write shutdown was committed and no received bytes remain unread, teardown
 may continue without user pointers. Detached, unowned records are reclaimed on a
 worker pass, never from a lwIP callback.
 
@@ -140,15 +140,15 @@ its admission slot, including across link/address changes. No other deadline
 shortens it. Address removal, failed routing or an unavailable interface aborts
 affected live connections. Queued packet copies are canceled when the PCB dies.
 
-Graceful shutdown remains in the TCP milestone. Its interoperability checks
-follow when the operation becomes usable. Listening and a POSIX sockets layer remain outside the milestone.
+Native utilities remain in the TCP milestone. Listening and a POSIX sockets layer
+remain outside the milestone.
 
 ## Native active open
 
 `include/abi/tcp.h` defines `PROTOCOL_TCP_SERVICE` / CONNECT and `PROTOCOL_TCP` /
-INSPECT and ABORT. Libpyxis exports matching `tcp_connect`, `tcp_inspect` and
-`tcp_abort` helpers in `<tcp.h>`, taking explicit borrowed handles. The caller
-owns a successful CONNECT handle; normal copy/restrict/close operations apply.
+INSPECT, ABORT and SHUTDOWN_WRITE. Libpyxis exports matching `tcp_connect`,
+`tcp_inspect`, `tcp_abort` and `tcp_shutdown_write` helpers in `<tcp.h>`, taking
+explicit borrowed handles. The caller owns a successful CONNECT handle; normal copy/restrict/close operations apply.
 No new syscall, version field or socket layer is introduced.
 
 CONNECT takes a numeric IPv4 destination, nonzero port and absolute monotonic
@@ -162,9 +162,10 @@ Missing route, refusal, timeout and allocation/queue exhaustion remain distinct.
 requires ACK on a SYN-SENT reset, not just a matching numeric ACK field.
 
 The facade validates request size, rights, reserved fields and writable reply
-storage before submitting work. Eight shared slots cover CONNECT, INSPECT and
-ABORT, including completed replies until callers resume. Slots contain copied
-arguments and stable wait metadata, never user or syscall-stack buffers. A parked
+storage before submitting work. Eight shared slots cover CONNECT, INSPECT, ABORT
+and SHUTDOWN_WRITE, including completed replies until callers resume. Slots
+contain copied arguments and stable wait metadata, never user or syscall-stack
+buffers. A parked
 CONNECT caller lends its kernel-owned capability table exclusively to the worker.
 The worker allocates the stream wrapper and installs a private table entry before
 SYN; the caller cannot observe it while parked. Failure aborts transport and closes
@@ -176,8 +177,9 @@ reply storage untouched.
 Stream wrappers own one external connection reference and are included in lwIP
 allocation accounting. Copies share the wrapper; closing one does not close other
 copies. Final object retirement hands the wrapper to the network worker without
-allocating or consuming a call slot. Until explicit write shutdown is implemented,
-final release aborts. Transport records remain worker-owned until safe to reclaim.
+allocating or consuming a call slot. Final release aborts unless write shutdown
+was committed and no received bytes remain unread. Transport records remain
+worker-owned until safe to reclaim.
 
 INSPECT requires its own right and returns the tuple, CONNECTED / PEER_CLOSED /
 CLOSED state and latched terminal status, including after reset or abort. An orderly
@@ -210,7 +212,7 @@ lwIP validates sequence space and trims duplicates/overlaps. The receive callbac
 copies ordered data into a 16 KiB ring, allocated on first payload receipt, and
 frees the incoming pbuf. Allocation failure aborts with NO_MEMORY rather than
 silently discarding acknowledged data. Ring storage remains until failure/final
-release; an idle stream that has never received data allocates no ring. Reassembly
+release or until peer FIN and the last buffered byte have been consumed; an idle stream that has never received data allocates no ring. Reassembly
 uses lwIP's out-of-order queue, capped at 16 KiB and sixteen pbufs; excess is dropped
 for retransmission. The receive window covers ordered unread bytes, successful
 read replies not yet collected, and out-of-order sequence space together. READ
@@ -247,8 +249,8 @@ a peer acknowledgment nor proof that the peer application read them. After that
 commit, output errors cannot turn the call into a failure that invites duplicate
 sending: transport retries retain ownership, and a later terminal failure remains
 visible through INSPECT and subsequent I/O. Peer FIN does not stop WRITE. Final
-close still aborts; it must not be used to flush accepted data. Explicit graceful
-write shutdown follows in the next task.
+close without write shutdown still aborts; close must not be used as a flush or
+delivery acknowledgment. Explicit write shutdown is described below.
 
 Sixteen static write slots each reserve 4 KiB plus metadata, separately from the
 read slots and `lwip_memory`. They include staging, waiting and completed calls
@@ -283,3 +285,51 @@ size further. This ceiling is not path-MTU discovery or a guarantee for every
 route. No window scaling, timestamps, SACK, fragmentation or new ICMP error/PMTU
 handling is added. Throughput tuning belongs after the initial interoperability
 and graceful-lifecycle work.
+
+## Write shutdown and teardown
+
+`TCP_SHUTDOWN_WRITE` is a header-only control operation with its own right and no
+reply bytes. Libpyxis `tcp_shutdown_write` takes an explicit stream handle. The
+worker commits shared write shutdown, schedules FIN after previously accepted
+bytes and returns without waiting for allocation, transmission or acknowledgment.
+Reads remain usable. A queued or blocked WRITE that has not accepted bytes fails
+ENDPOINT_CLOSED; a completed WRITE retains its accepted count. Zero-length I/O
+retains its existing no-op contract. Copies share the shutdown state.
+
+A committed shutdown remains idempotent, even after a later transport failure;
+repeating it does not clear the latched error. A first shutdown on an already
+failed stream reports that failure. This uses the existing eight control slots,
+not a new queue or syscall. INSPECT independently reports WRITE_SHUTDOWN and
+PEER_FIN flags. PEER_FIN can coexist with unread bytes, and CLOSED describes the
+transport, including TIME_WAIT, rather than exhaustion of the receive buffer.
+
+The adapter records write shutdown separately from lwIP's FIN-queued flag. Under
+memory pressure lwIP can accept shutdown while deferring FIN allocation; new
+writes must already be closed. Its existing timer retries that allocation. The
+120-second no-progress deadline includes deferred FIN, as well as queued data/FIN;
+repeated shutdown does not reset it. Owned connections whose FIN was acknowledged
+can continue waiting for the peer while applications use bounded READ calls.
+
+Normal LAST_ACK completion arrives through lwIP's error callback as ERR_CLSD.
+For an orderly two-sided shutdown this is not a native error: buffered data stays
+readable, followed by EOF, after the PCB is destroyed. Likewise, entering
+TIME_WAIT does not discard unread bytes. The ring is released once those bytes
+are consumed; no receive credit is sent through a TIME_WAIT or destroyed PCB.
+Real resets/failures still discard unread bytes and remain visible as errors.
+
+Final handle release without shutdown, or with unread ordered/reassembly data,
+aborts. Otherwise the worker closes receive ownership and permits graceful
+teardown for at most 60 seconds; lwIP's existing 20-second timeout for fully
+closed FIN_WAIT_2 connections can reclaim one earlier. Data arriving after owner
+release causes abort;
+no process, task or user mapping is kept alive for transport teardown. Completed
+READ slots hold the object until collected and credited, so final release cannot
+race uncollected read data.
+
+lwIP owns FIN ordering, acknowledgment, retransmission, simultaneous close and
+TIME_WAIT. Its two-minute TIME_WAIT retains the tuple and one of the 32 transport
+slots even after final close, explicit ABORT or address/link invalidation. ABORT
+can discard application data and latch ENDPOINT_CLOSED, but cannot free that tuple
+early. Once the timer expires, PCB destruction detaches the transport and the
+worker reclaims the record when no object owns it. A retained handle can continue
+reporting closure/EOF afterward; repeated shutdown does not recreate transport.

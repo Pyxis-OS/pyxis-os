@@ -127,6 +127,7 @@ struct syscall_result tcp_call(struct kernel_object *object, uint64_t rights,
   case TCP_ABORT: required = TCP_RIGHT_ABORT; break;
   case TCP_READ: required = TCP_RIGHT_READ; break;
   case TCP_WRITE: required = TCP_RIGHT_WRITE; break;
+  case TCP_SHUTDOWN_WRITE: required = TCP_RIGHT_SHUTDOWN_WRITE; break;
   default: return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & required)) {
@@ -147,8 +148,14 @@ struct syscall_result tcp_call(struct kernel_object *object, uint64_t rights,
   }
 
   struct tcp_connection_info reply;
-  enum call_status status = operation == TCP_INSPECT ?
-      net_tcp_inspect(object, &reply) : net_tcp_abort(object);
+  enum call_status status;
+  if (operation == TCP_INSPECT) {
+    status = net_tcp_inspect(object, &reply);
+  } else if (operation == TCP_SHUTDOWN_WRITE) {
+    status = net_tcp_shutdown_write(object);
+  } else {
+    status = net_tcp_abort(object);
+  }
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

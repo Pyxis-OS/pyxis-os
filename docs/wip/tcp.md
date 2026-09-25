@@ -236,9 +236,13 @@ observed under naturally occurring traffic.
   and zero-window handling. The explicit 536-byte MSS ceiling can be reduced by
   the peer/local MTU; PMTU discovery remains deferred. See
   [send ownership and limits](../lwip.md#native-send-stream).
-- [ ] **6. Graceful shutdown and lifecycle completion.** SHUTDOWN_WRITE, FIN
-  retransmission, both closing orders, simultaneous close, TIME_WAIT and final
-  handle release. Confirm time bounds, invalidation and pending-call unwinding.
+- [x] **6. Graceful shutdown and lifecycle completion.** SHUTDOWN_WRITE and its
+  libpyxis helper commit shared write closure even while lwIP defers FIN. INSPECT
+  exposes local shutdown and peer FIN separately. Orderly LAST_ACK/TIME_WAIT
+  preserve unread data; final release distinguishes graceful teardown from unread
+  data/abort. Deferred FIN and orphan teardown remain bounded, and TIME_WAIT
+  survives close, abort and invalidation until normal expiry. See
+  [shutdown ownership and limits](../lwip.md#write-shutdown-and-teardown).
 - [ ] **7. Native tcp utility, ttcp transmitter and milestone completion.** Add the finite tool,
   reuse DNS, run the ordinary interoperability checks above, and document the
   stream contract and limitations. Follow with the agreed transmit-only ttcp
