@@ -5,6 +5,7 @@
 #include <kernel/net/echo.h>
 #include <kernel/net/icmp.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/udp.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/virtio/net.h>
@@ -103,6 +104,9 @@ enum net_result net_ipv4_configure(uint32_t address, unsigned prefix, uint32_t g
 
   net_arp_clear(NET_UNAVAILABLE);
   net_echo_invalidate(true);
+  if (configuration.address != address) {
+    net_udp_invalidate_address(configuration.address);
+  }
   configuration = (typeof(configuration)){
     .address = address, .mask = mask, .prefix = prefix, .gateway = gateway,
   };
@@ -114,6 +118,7 @@ void net_ipv4_clear(void)
   assert_worker_context();
   net_arp_clear(NET_UNAVAILABLE);
   net_echo_invalidate(true);
+  net_udp_invalidate_address(configuration.address);
   configuration = (typeof(configuration)){0};
 }
 

@@ -1,3 +1,4 @@
+#include <kernel/object/udp.h>
 #include <kernel/object/mount.h>
 #include <kernel/object/echo.h>
 #include <kernel/object/net_config.h>
@@ -144,6 +145,18 @@ static struct syscall_result call_object(handle_t handle,
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return mount_call(rights, header.operation, request_size, reply_address, reply_capacity);
+  case OBJECT_UDP_SERVICE:
+    if (header.protocol != PROTOCOL_UDP_SERVICE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return udp_service_call(rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
+  case OBJECT_UDP:
+    if (header.protocol != PROTOCOL_UDP) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return udp_call(object, rights, header.operation, request_size,
+        reply_address, reply_capacity);
   case OBJECT_NET_CONFIG:
     if (header.protocol != PROTOCOL_NET_CONFIG) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

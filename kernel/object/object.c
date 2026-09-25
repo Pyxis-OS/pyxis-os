@@ -1,3 +1,4 @@
+#include <abi/udp.h>
 #include <abi/mount.h>
 #include <abi/echo.h>
 #include <abi/net_config.h>
@@ -36,6 +37,10 @@ bool object_rights_valid(enum object_type type, uint64_t rights)
     return !(rights & ~KEYBOARD_RIGHT_INPUT);
   case OBJECT_MOUNT:
     return !(rights & ~MOUNT_RIGHT_OPEN_ROOT);
+  case OBJECT_UDP_SERVICE:
+    return !(rights & ~UDP_SERVICE_RIGHT_OPEN);
+  case OBJECT_UDP:
+    return !(rights & ~UDP_RIGHTS);
   case OBJECT_NET_CONFIG:
     return !(rights & ~NET_CONFIG_RIGHTS);
   case OBJECT_ECHO:
