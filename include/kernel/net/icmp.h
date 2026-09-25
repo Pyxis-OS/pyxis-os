@@ -6,11 +6,12 @@
 #define ICMP_ECHO_HEADER_SIZE 8
 #define ICMP_ECHO_MAX_PAYLOAD (NET_PACKET_MAX_BYTES - IPV4_HEADER_SIZE - ICMP_ECHO_HEADER_SIZE)
 
-/* BSP task/initialization context, IF=0. Copies payload into an owned packet
- * and queues an echo from 127.0.0.1. No retained caller storage. NET_OK means
- * queued, not answered; the echo service owns application reply matching. */
-enum net_result net_icmp_echo_send(uint32_t destination, uint16_t identifier,
-    uint16_t sequence, const void *payload, size_t length);
+/* Sole BSP worker, IF=1. Copies payload into an owned packet, queued locally
+ * or through ARP. NET_OK means queued, not answered; the echo service owns
+ * application reply matching and its deadline includes resolution. */
+enum net_result net_icmp_echo_send(uint32_t source, uint32_t destination,
+    uint16_t identifier, uint16_t sequence, const void *payload, size_t length,
+    uint64_t deadline, uint64_t token);
 
 /* Sole BSP network worker, IF=1. Borrows validated IPv4 payload for this call.
  * Checks ICMP before replying or dispatching replies to the echo service. */

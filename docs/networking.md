@@ -1,14 +1,16 @@
-# Networking: local IPv4 and ICMP echo
+# Networking: IPv4 and ICMP echo
 
 The kernel has one system-wide networking worker and a boot-lifetime interface
-named `lo`. Interfaces and future addresses/routes are shared across spaces;
+named `lo`, plus `net0` when a supported VirtIO NIC is present. Interfaces,
+addresses and routes are shared across spaces;
 capability-mediated access will not by itself provide network isolation.
 The implementation is in `kernel/net`, with kernel interfaces in
 `include/kernel/net`. The native echo capability supports userspace ping without raw-packet authority.
 
-The worker validates IPv4 packets and handles ICMP echo requests/replies over
-loopback. There is no external route or configurable address yet.
-No packets are allocated or transmitted automatically at boot. The
+The worker handles Ethernet, ARP and IPv4/ICMP, with deferred local delivery
+independent of the NIC. External configuration is currently worker-only; init
+authority and setup follow in task 6. No address is assigned or packet transmitted
+automatically at boot. The
 [networking milestone](wip/initial-networking.md) records the remaining tasks.
 
 ## Ownership and bounds
@@ -23,7 +25,8 @@ These software buffers are not DMA allocations.
 All live packets count against the budget, whether held by a caller, queued or
 being processed. Payload storage is therefore bounded by 48,000 bytes, plus
 packet and heap metadata. No unbounded allocation occurs while enqueueing.
-The loopback receive queue holds at most 16 packet pointers.
+The loopback receive queue holds at most 16 packet pointers. ARP holds at most
+16 waiting packets, counted within that same 32-packet budget.
 
 `net_transmit(&net_loopback, packet)` transfers ownership only on `NET_OK`.
 Success means queued, not accepted by an IP protocol or delivered to an
@@ -36,23 +39,49 @@ The caller must not read, modify, resend or release a successfully queued packet
 The worker takes ownership on dequeue, lends the packet to protocol processing
 for that call, then releases it on every path. No reference counting, retained
 payload pointers, packet registry or device buffer sharing is introduced. The
-sole interface is a constant descriptor, not a dynamically registered or removable
-device.
+interface descriptors are constant metadata, not a dynamic device registry.
 
-## Local IPv4 and echo
+## Routing and configuration
 
-`lo` uses `127.0.0.1/8`. All `127/8` destinations take the local route, and only
-loopback sources are accepted on this path. Other destinations return
-`NET_NO_ROUTE`; no route table or external-interface configuration is needed yet.
 Kernel address arguments are host-order integers (`0x7f000001` is `127.0.0.1`),
 while wire fields use network byte order. Header layouts remain kernel-private.
+The sole BSP network worker owns configuration and protocol state. With interrupts
+enabled, `net_ipv4_configure(address, prefix, gateway)` replaces the `net0` settings;
+`net_ipv4_clear()` removes them. Neither is an AP or arbitrary BSP-task interface.
+There is no userspace configuration ABI yet.
 
-`net_ipv4_transmit` takes an owned packet whose first 20 bytes are reserved for
-the IPv4 header and whose remaining payload is initialized. It fills that header
-and queues delivery, transferring ownership only on success. A failed call may
-have filled the header but retains caller ownership. Source and destination are
-explicit; the echo request helper selects `127.0.0.1` for new requests. Replies
-use the request's destination as their source, including other `127/8` addresses.
+Replacement validates all fields before changing state. Prefixes 1..32 are
+accepted; the address must be unicast, outside `0/8`, `127/8`, multicast and
+reserved high addresses. Network/broadcast addresses are rejected for prefixes
+through /30; /31 has two host addresses and /32 one. A nonzero gateway must be a
+distinct valid host on that connected subnet. Zero means no default route. Missing
+hardware returns `NET_UNAVAILABLE`; invalid settings return `NET_INVALID` and
+preserve the previous configuration.
+
+Routing uses this precedence:
+
+1. `127/8` stays on `lo`, selecting `127.0.0.1` for new requests.
+2. The configured NIC address is also delivered locally, selecting that address.
+3. Other unicast hosts on its subnet go through Ethernet, resolving the destination.
+4. Other unicast destinations use the optional gateway, resolving the gateway.
+5. Without a matching route, return `NET_NO_ROUTE`.
+
+Both local paths work with the physical link down. External sends select the
+configured address and return `NET_UNAVAILABLE` when the NIC/link is unavailable.
+Loopback sources and destinations never escape onto Ethernet. A caller-supplied
+source must match the selected route. Configuration replacement/clear invalidates
+ARP and completes outstanding non-loopback echo calls as unavailable, including
+calls to the previous local NIC address. In-flight DMA storage keeps its driver
+lifetime; reconfiguration cannot retract a frame already submitted. Ordinary
+link down/up preserves the assigned address and gateway.
+
+## IPv4 and echo
+
+`net_ipv4_transmit` takes an owned packet with 20 reserved header bytes followed
+by initialized payload, source/destination, protocol, deadline and echo token
+(zero for generated replies). It fills the header and selects local delivery or
+ARP/Ethernet. Success transfers ownership; failure may have filled the header
+but retains caller ownership. Replies use the request destination as their source.
 
 Receive checks version, header and total lengths, reserved flags and the header
 checksum before protocol dispatch. It ignores bytes beyond IPv4 total length,
@@ -64,8 +93,9 @@ Outgoing packets use TTL 64 and DF, with identification zero for atomic datagram
 There is no fragmentation, reassembly, forwarding or general ICMP error generation.
 These are explicit subset limits, not full IPv4 host conformance.
 
-`net_icmp_echo_send(destination, identifier, sequence, payload, length)` copies
-caller bytes, builds an echo request, and queues it. It needs BSP/IF=0 context.
+`net_icmp_echo_send` copies caller bytes, builds an echo request and queues it
+with the selected source, application deadline and non-reused echo token. It
+runs in the BSP network worker with interrupts enabled.
 Zero-length payloads are valid; the maximum is 1472 bytes within the 1500-byte
 IP MTU. Invalid arguments return `NET_INVALID`, packet allocation/budget failure
 returns `NET_NO_MEMORY`, and route/queue/worker errors propagate. The helper
@@ -73,9 +103,10 @@ releases its allocation on failure and never retains caller storage.
 
 ICMP receive validates length, checksum and the zero echo code. Each valid echo
 request creates a separate bounded reply carrying the unchanged identifier,
-sequence and payload. Replies enter the same deferred queue; a failed reply
-allocation or submission is counted and discarded. The original receive packet
-remains owned by the worker until processing returns. Echo replies are currently
+sequence and payload. Replies use the same routing path with a three-second
+deadline, including any ARP wait; failed allocation/submission is counted and
+discarded. Receive bytes are borrowed only for processing, whether from a local
+packet or a driver RX buffer. Echo replies are
 validated and offered to the echo service for matching. Unmatched replies are
 consumed without waking an application. Transport success never claims that a
 peer has answered.
@@ -91,18 +122,18 @@ Call `net_init` once on the BSP with interrupts disabled, after `task_init` and
 before scheduling begins. It creates the BSP worker; failure leaves sends
 unavailable and logs a diagnostic while ordinary boot continues.
 
-Allocation, release and transmission currently require BSP task or initialization
-context with IF=0. They are not AP, user-pointer or interrupt-entry interfaces.
-Future application calls will need the existing kind of explicit cross-CPU
-ownership handoff; this slice adds no scheduler request state.
+Packet allocation/release and local queue publication require BSP/IF=0.
+Protocol processing, configuration and Ethernet submission belong to the sole
+network worker with interrupts enabled. They are not AP, user-pointer or
+interrupt-entry interfaces. Application calls use explicit cross-CPU ownership
+handoff without adding scheduler request queues.
 
-The worker runs with interrupts enabled. It disables them around allocation,
-transmission, release and shared queue/wait operations. Receive parsing and
-validation run with IF=1 outside interrupt entry. Each turn scans at most 16 echo
-slots and delivers at most eight loopback packets. The optional NIC adds at most
-16 RX and 16 TX completions per turn. The worker yields if it serviced echo
-requests or exhausted either delivery budget. Local transmission never recursively
-enters receive and has no Ethernet, ARP, PCI or DMA dependency.
+Each turn handles at most 16 RX/TX completions, 16 echo slots, the bounded ARP
+cache/pending lists and eight local deliveries. The worker yields after starting
+or expiring echo calls or exhausting a receive/completion budget. It disables
+interrupts only around allocation/release and shared queue/wait operations.
+Local transmission never recursively enters receive and has no Ethernet, ARP,
+PCI or DMA dependency.
 
 Packet queue access remains BSP/IF=0. A separate small lock protects the worker's
 notification flag and wait pointer because AP callers may now submit echo work.
@@ -110,8 +141,8 @@ Submission publishes a request before notifying, with the request lock released.
 The remembered notification bridges the gap between inspecting deadlines and
 publishing the wait. Wake detaches the pointer under the notification lock;
 timeout resumption detaches under that same lock before reusing its wait record.
-The worker sleeps until new work or the earliest echo deadline, indefinitely
-when there is neither. No scheduler request queue or per-tick network polling
+The worker sleeps until new work or the earliest echo, ARP or driver deadline,
+indefinitely when there is neither. No scheduler request queue or per-tick network polling
 is added.
 
 ## Native echo capability
@@ -120,7 +151,7 @@ Init receives an `echo` resource. Session handoff and ordinary shell launches
 copy its ECHO_RIGHT_SEND grant. It authorizes ICMP echo exchanges only: no raw
 headers, user-selected source address, interface configuration or routing changes.
 The stack and request budget remain shared between spaces. Configuration
-capabilities are deferred until there is an external interface to configure.
+capabilities and init setup are the next task.
 
 [The echo protocol](../include/abi/echo.h) uses the existing CALL syscall with a
 tagged ECHO_EXCHANGE request. Its input is a host-order IPv4 destination and an
@@ -129,7 +160,8 @@ A past deadline returns CALL_TIMED_OUT; an excessive future deadline or nonzero
 reserved field is CALL_BAD_REQUEST. Capture/check all input and reply storage
 before publishing any work. Errors return no bytes and leave user storage alone.
 Success returns the peer address, wire identifier/sequence and round-trip
-nanoseconds, measured from transport submission through reply processing.
+nanoseconds, measured from local enqueue or copy into NIC storage through reply
+processing. ARP wait consumes the call deadline but is excluded from RTT.
 
 The kernel owns the fixed 32-byte payload and wire identifiers. Every request
 gets a nonzero 64-bit token that is never reused before reboot; exhaustion returns
@@ -149,8 +181,9 @@ The original caller copies the result and releases the slot before returning.
 A deadline covers time queued as well as time awaiting a reply. Replies processed
 at or beyond the deadline time out. Completion removes the slot from matching;
 late replies cannot wake its previous task or a new request. Packet ownership is
-independent: timeout never frees a packet already transferred to the transport.
-This is important for future device DMA as well as the current deferred queue.
+independent: timeout never reclaims a DMA buffer. ARP discards expired software
+packets before sending, even if a late resolution reply arrives. Its completion
+uses the non-reused token rather than a pointer to a reusable echo slot.
 
 Processes currently have one task and no external cancellation. The blocked
 call keeps its capability and private mappings alive; closing a copied grant
@@ -189,28 +222,12 @@ Debugger inspection can check `net_loopback`, the queue/counters in
 `'kernel/net/interface.c'::loopback`, and
 `'kernel/net/packet.c'::live_packets`. In an ordinary idle boot the queue and
 live-packet count are zero and `worker_wait` is published. The `pending` array
-in `kernel/net/echo.c` shows queued, sent and completed calls; after ping exits
+in `kernel/net/echo.c` shows queued, ARP-waiting, sent and completed calls; after ping exits
 all slots should be ECHO_FREE, with no retained waiter.
 
-For manual calls, use the BSP/IF=0 pre-scheduling stop described in
-[GDB](gdb.md), with TCG for inferior calls. `net_icmp_echo_send` exercises the
-normal transmit path without hand-encoding headers. For example, a zero-payload
-request needs no debugger-owned buffer:
-
-```gdb
-set scheduler-locking on
-p net_icmp_echo_send(0x7f000001, 1, 1, 0, 0)
-set scheduler-locking off
-hbreak net_icmp_receive
-continue
-```
-
-A breakpoint at `net_icmp_receive` observes the request and then the reply on
-the worker stack. Inspect `source`, `destination`, `message` and `length`; the
-ICMP type is 8 for a request and 0 for a reply. For payloads, allocate and fill
-kernel storage before calling, then free it after submission: the helper copies
-it. A GDB string literal otherwise tries to call an unavailable `malloc`.
-After continuing past both deliveries, live-packet count should return to zero.
+Use the worker stop and TCG calling rules in the configuration example below for
+manual setup. Packet allocation alone still requires BSP/IF=0; protocol entry
+points require the worker with interrupts enabled.
 
 `'kernel/net/ipv4.c'::ipv4_stats` separates malformed, unsupported and nonlocal
 input. `'kernel/net/icmp.c'::icmp_stats` records requests, replies and reply-send
@@ -263,10 +280,9 @@ idle worker without polling.
 The modern network header occupies twelve bytes even without merged buffers.
 Incoming data must fit that header plus an ordinary 14..1514-byte Ethernet frame
 and require neither segmentation nor checksum completion. Invalid packets are
-counted and discarded. Valid frames are also counted and discarded for now:
-Ethernet/ARP dispatch is the next task. After processing, the worker reposts each
-RX buffer. It does not retain DMA pointers or feed external frames into the
-loopback-only IP path.
+counted and discarded. Valid frames are borrowed by Ethernet/ARP/IPv4 until
+processing returns, then their RX buffers are reposted. Protocols never retain
+DMA pointers or allocate a software copy just to parse an incoming frame.
 
 `virtio_net_transmit(frame, length)` is a BSP network-worker interface, with
 interrupts enabled. It copies a complete checksummed Ethernet frame, without
@@ -274,8 +290,8 @@ FCS, into a free TX buffer and supplies the VirtIO header. All return paths leav
 caller storage owned by the caller. `NET_OK` means queued, `NET_QUEUE_FULL` means
 all sixteen buffers remain lent, and `NET_UNAVAILABLE` covers an inactive NIC,
 link-down or an unstable configuration. TX storage is reusable only after a
-checked completion; modern TX used lengths must be zero. No userspace syscall
-or ordinary Ethernet caller is introduced in this transport slice.
+checked completion; modern TX used lengths must be zero. Ethernet supplies the
+ordinary caller; applications have no raw-frame submission interface.
 
 One turn processes at most sixteen completions from each queue. Reaching either
 budget requests a yield after the worker also services echo and loopback work.
@@ -285,7 +301,7 @@ Idle RX has no timeout, heartbeat or timer polling.
 ### Failure and link changes
 
 Each outstanding TX buffer has a five-second completion deadline. The worker
-sleeps until the earliest echo, TX or exceptional configuration/reset deadline.
+sleeps until the earliest echo, ARP, TX or exceptional configuration/reset deadline.
 Scheduling can make expiry handling late. A timeout never returns DMA ownership.
 
 A broken completion, device status failure, activation failure, changed MAC or
@@ -298,8 +314,10 @@ No lock is held across sleep. Resources stay allocated and mapped until reboot,
 even after confirmed reset; there is no reconnect or runtime reclamation.
 
 Ordinary link-status changes are sampled on worker wake. Link-down prevents new
-transmissions, while already submitted buffers retain their completion deadlines.
-Link-up permits new submissions without rebuilding queues. In the absence of a
+transmissions and discards ARP state, completing external echo calls as unavailable.
+Already submitted buffers retain their completion deadlines. Delivery to the
+assigned local address and loopback continue. Link-up permits new submissions
+without rebuilding queues or losing the IP configuration. In the absence of a
 pending operation or device interrupt, an idle device failure is not polled for.
 
 Missing hardware is harmless. Failed boot preparation releases storage only
@@ -317,7 +335,7 @@ Read MMIO only at individual register widths; do not read the ISR merely for
 inspection because that acknowledges pending interrupts.
 
 `network.rx` and `network.tx` expose physical/virtual storage, ownership, ring
-indices and outstanding counts. `network.interrupts`, `received`, `dropped`,
+indices and outstanding counts. `network.interrupts`, `received`,
 `malformed`, `transmitted`, `completed` and `queue_full` are debugger diagnostics,
 not a public statistics ABI. An idle worker sleeps with all RX buffers posted
 and no TX in flight. Inspect real interrupts at `virtio_net_interrupt`.
@@ -329,9 +347,74 @@ bytes and does not wait. Continue normally to observe real device completions;
 do not call from an arbitrary stopped task or IRQ. No boot-time packets or
 validation hooks are built into the driver.
 
-There is still no external IP route or address configuration. Ethernet, ARP and
-manual IPv4 setup follow. QEMU's router at `10.0.2.2` is the intended first
-external ping target; ordinary Internet ICMP has additional backend limitations.
 
 References: [VirtIO 1.4 network device and PCI transport](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.pdf),
 [QEMU user networking](https://www.qemu.org/docs/master/system/devices/net.html).
+
+## Ethernet and ARP
+
+Ethernet accepts its own unicast destination and broadcast ARP. IPv4 must be
+unicast to the configured IP; external loopback, nonlocal, multicast and broadcast
+IP traffic is discarded. Frames use Ethernet II with IPv4/ARP types, padding to
+60 bytes before the hardware-supplied FCS. VLANs, multicast membership, forwarding,
+address conflict detection and gratuitous ARP are outside this slice.
+
+ARP validates Ethernet/IPv4 lengths, operation, matching Ethernet/ARP sender MAC
+and target IP. Replies must also name our MAC. Requests to our address may teach
+a neighbor; replies only update an existing entry. A sender of `0.0.0.0` may probe
+our address and receive a reply, but is never cached. Other senders must be valid
+on-link hosts. Unsolicited replies and gratuitous announcements are ignored.
+ARP remains unauthenticated; these checks are not protection against an on-link
+peer impersonating another host.
+
+The cache holds 16 neighbors and a separate list holds up to 16 owned software
+packets awaiting resolution. A resolved entry lasts 60 seconds. Resolution sends
+at most three probes, spaced one second apart, then fails remaining packets as
+`NET_TIMED_OUT` after the third response interval. TX queue pressure postpones a
+probe without counting it as transmitted. The packet's own deadline may expire
+first; ordinary `ping` uses one second. Resolved packets waiting for TX space
+retry on worker wake or their deadline. Idle cache entries require no timer wake.
+
+An entry with waiting packets cannot be evicted. Empty/expired entries are reused,
+then idle least-recently-used entries. Recently probed unresolved entries retain
+their cooldown after the last caller expires. Exhaustion returns `NET_QUEUE_FULL`;
+no packet or neighbor list grows dynamically. Configuration changes and link loss
+discard waiting packets and cache entries. DMA-submitted buffers are independent.
+
+References: [ARP](https://www.rfc-editor.org/rfc/rfc826.html),
+[ARP cache and retry requirements](https://www.rfc-editor.org/rfc/rfc1122.html#section-2.3.2),
+[/31 host addresses](https://www.rfc-editor.org/rfc/rfc3021.html).
+
+## Configuring the current slice in GDB
+
+Until init configuration lands, use TCG and stop at the network worker's first
+service call, after transport activation. Follow the [GDB calling constraints](gdb.md);
+do not call configuration from an arbitrary stopped task or interrupt.
+
+```sh
+make debug ACCEL=tcg VIRTIO_NET=1
+```
+
+```gdb
+target remote :1234
+hbreak virtio_net_service
+continue
+set scheduler-locking on
+print net_ipv4_configure(0x0a00020f, 24, 0x0a000202)
+set scheduler-locking off
+delete 1
+continue
+```
+
+This assigns `10.0.2.15/24` and gateway `10.0.2.2` for the default QEMU user
+backend. Switch to the shell space and run `ping 127.0.0.1`, `ping 10.0.2.15`,
+`ping 10.0.2.2` or `ping 1.1.1.1`. `net_ipv4_clear()` removes external settings;
+passing gateway zero replaces them with a connected route only. The static
+`configuration`, `neighbors`, `arp_stats` and packet/driver counters are useful
+read-only debugger views. Calls that mutate configuration must stay on the worker.
+
+Internet ICMP through QEMU user networking depends on host ping-socket permission
+and a reachable peer. On Linux, the QEMU user's group must be permitted by
+`net.ipv4.ping_group_range`; see [QEMU's host setup notes](https://www.qemu.org/docs/master/system/devices/net.html).
+The backend's gateway is the first diagnostic target; an external timeout alone
+does not identify a guest-stack failure. There is no DNS, DHCP, UDP or TCP yet.

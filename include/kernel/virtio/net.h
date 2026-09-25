@@ -25,8 +25,13 @@ void virtio_net_interrupt(void);
 /* Sole BSP network worker, IF=1. Copy a complete checksummed Ethernet frame
  * (14..1514 bytes, no FCS) into driver-owned storage. All returns leave caller
  * storage owned by the caller; NET_OK means queued, not delivered. A full queue
- * returns NET_QUEUE_FULL. No user pointers, allocation, waiting or cancellation.
- * Ethernet/ARP will supply the first ordinary caller in the next slice. */
+ * returns NET_QUEUE_FULL. No user pointers, allocation, waiting or cancellation. */
 enum net_result virtio_net_transmit(const void *frame, size_t length);
+
+/* Worker-only snapshots. The MAC is immutable while prepared/active and may
+ * be borrowed for the call; NULL means no usable device. Availability includes
+ * link state and stable configuration, unlike MAC/configuration presence. */
+const uint8_t *virtio_net_mac(void);
+bool virtio_net_available(void);
 
 #endif

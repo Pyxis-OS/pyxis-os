@@ -10,11 +10,12 @@
 
 #define ECHO_PENDING_LIMIT 16
 
-enum echo_state { ECHO_FREE, ECHO_QUEUED, ECHO_SENDING, ECHO_SENT, ECHO_DONE };
+enum echo_state { ECHO_FREE, ECHO_QUEUED, ECHO_SENDING, ECHO_WAITING, ECHO_SENT, ECHO_DONE };
 
 struct pending_echo {
   enum echo_state state;
-  uint32_t destination;
+  uint32_t source, destination;
+  bool external;
   uint64_t token, deadline, started;
   struct task_wait *wait;
   enum call_status status;
@@ -113,8 +114,67 @@ static enum call_status echo_send_status(enum net_result result)
   case NET_QUEUE_FULL: return CALL_QUEUE_FULL;
   case NET_UNAVAILABLE: return CALL_UNAVAILABLE;
   case NET_INVALID: return CALL_BAD_REQUEST;
+  case NET_TIMED_OUT: return CALL_TIMED_OUT;
   }
   return CALL_UNAVAILABLE;
+}
+
+static bool echo_active(const struct pending_echo *request)
+{
+  return request->state != ECHO_FREE && request->state != ECHO_DONE;
+}
+
+void net_echo_transmitted(uint64_t token)
+{
+  if (!token) {
+    return;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  lock_pending();
+  for (size_t i = 0; i < ECHO_PENDING_LIMIT; ++i) {
+    struct pending_echo *request = &pending[i];
+    if (request->token == token &&
+        (request->state == ECHO_SENDING || request->state == ECHO_WAITING)) {
+      request->started = arch_monotonic_ns();
+      request->state = ECHO_SENT;
+      break;
+    }
+  }
+  unlock_pending();
+  cpu_restore_interrupts(flags);
+}
+
+void net_echo_failed(uint64_t token, enum net_result result)
+{
+  if (!token) {
+    return;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  lock_pending();
+  for (size_t i = 0; i < ECHO_PENDING_LIMIT; ++i) {
+    if (pending[i].token == token && echo_active(&pending[i])) {
+      complete_echo(&pending[i], echo_send_status(result));
+      break;
+    }
+  }
+  unlock_pending();
+  cpu_restore_interrupts(flags);
+}
+
+void net_echo_invalidate(bool configuration_changed)
+{
+  uint64_t flags = cpu_save_interrupts();
+  lock_pending();
+  for (size_t i = 0; i < ECHO_PENDING_LIMIT; ++i) {
+    struct pending_echo *request = &pending[i];
+    bool affected = configuration_changed ? !net_ipv4_is_loopback(request->destination) :
+        request->external;
+    if (echo_active(request) && affected) {
+      complete_echo(request, CALL_UNAVAILABLE);
+    }
+  }
+  unlock_pending();
+  cpu_restore_interrupts(flags);
 }
 
 bool net_echo_service(void)
@@ -124,8 +184,7 @@ bool net_echo_service(void)
     uint64_t flags = cpu_save_interrupts();
     lock_pending();
     struct pending_echo *request = &pending[i];
-    if ((request->state == ECHO_QUEUED || request->state == ECHO_SENT) &&
-        task_deadline_expired(request->deadline)) {
+    if (echo_active(request) && task_deadline_expired(request->deadline)) {
       complete_echo(request, CALL_TIMED_OUT);
       worked = true;
     }
@@ -139,16 +198,28 @@ bool net_echo_service(void)
     /* Only this worker can complete SENDING. The caller stays parked; no
      * pending lock is held across allocation, transmission or worker wakeup. */
     unlock_pending();
-    uint8_t payload[ECHO_PAYLOAD_BYTES];
-    echo_payload(payload, request->token);
-    request->started = arch_monotonic_ns();
-    enum net_result sent = net_icmp_echo_send(request->destination,
-        request->token >> 16, request->token, payload, sizeof(payload));
-    lock_pending();
+    cpu_restore_interrupts(flags);
+
+    struct ipv4_route route;
+    enum net_result sent = net_ipv4_route(0, request->destination, &route);
     if (sent == NET_OK) {
-      request->state = ECHO_SENT;
-    } else {
+      request->source = route.source;
+      request->external = route.next_hop != 0;
+      uint8_t payload[ECHO_PAYLOAD_BYTES];
+      echo_payload(payload, request->token);
+      sent = net_icmp_echo_send(request->source, request->destination,
+          request->token >> 16, request->token, payload, sizeof(payload),
+          request->deadline, request->token);
+    }
+
+    flags = cpu_save_interrupts();
+    lock_pending();
+    if (sent != NET_OK) {
       complete_echo(request, echo_send_status(sent));
+    } else if (request->state == ECHO_SENDING) {
+      /* ARP owns the packet until it can copy it into NIC storage. Immediate
+       * transmission has already moved the request to SENT. */
+      request->state = ECHO_WAITING;
     }
     unlock_pending();
     cpu_restore_interrupts(flags);
@@ -167,7 +238,7 @@ bool net_echo_next_deadline(uint64_t *deadline)
       active = true;
       break;
     }
-    if (pending[i].state == ECHO_SENT) {
+    if (pending[i].state == ECHO_SENT || pending[i].state == ECHO_WAITING) {
       active = true;
       if (pending[i].deadline < *deadline) {
         *deadline = pending[i].deadline;
@@ -181,7 +252,7 @@ bool net_echo_next_deadline(uint64_t *deadline)
 void net_echo_receive(uint32_t source, uint32_t destination, uint16_t identifier,
     uint16_t sequence, const uint8_t *payload, size_t length)
 {
-  if (destination != IPV4_LOOPBACK_ADDRESS || length != ECHO_PAYLOAD_BYTES) {
+  if (length != ECHO_PAYLOAD_BYTES) {
     return;
   }
   uint64_t token = (uint64_t)net_read_u32(payload) << 32 | net_read_u32(payload + 4);
@@ -196,6 +267,7 @@ void net_echo_receive(uint32_t source, uint32_t destination, uint16_t identifier
   for (size_t i = 0; i < ECHO_PENDING_LIMIT; ++i) {
     struct pending_echo *request = &pending[i];
     if (request->state != ECHO_SENT || request->destination != source ||
+        request->source != destination ||
         request->token != token || identifier != (uint16_t)(token >> 16) ||
         sequence != (uint16_t)token) {
       continue;
