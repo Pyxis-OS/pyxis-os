@@ -497,6 +497,14 @@ The port namespace and resource bounds are system-wide, not isolated by space.
   A duplicate active address/port returns `CALL_ALREADY_EXISTS`; an address that
   is not currently local returns `CALL_UNAVAILABLE`. The same port can be bound
   on different local addresses.
+- `UDP_OPEN_ROUTE` uses the same service, OPEN right, request layout and reply
+  as OPEN, but the request address is a destination. The worker selects a local
+  source through the existing IPv4 routing policy and binds it in the same
+  operation. Loopback destinations select `127.0.0.1`; other destinations use
+  the configured NIC address when a usable route exists. Invalid destinations
+  return `CALL_BAD_REQUEST`, missing routes `CALL_NO_ROUTE`, and an unavailable
+  interface `CALL_UNAVAILABLE`. Port zero and duplicate bindings follow OPEN's
+  rules. Selection sends no packets and does not perform ARP or prove reachability.
 - `UDP_INSPECT` on `PROTOCOL_UDP` requires INSPECT and returns the original bound
   address/port and current state: BOUND, SHUTDOWN or UNAVAILABLE. This succeeds
   on stopped endpoints too. BOUND describes the binding, not NIC carrier.
@@ -508,8 +516,10 @@ New endpoints carry INSPECT, SEND, RECEIVE and SHUTDOWN rights. Existing handle
 copying and launch grants can reduce those rights. No echo server or automatic
 network traffic runs at boot.
 
-Libpyxis provides `udp_open`, `udp_inspect` and `udp_shutdown`. OPEN and INSPECT
-require output pointers and clear their outputs on failure; OPEN uses
+Libpyxis provides `udp_open`, `udp_open_route`, `udp_inspect` and `udp_shutdown`.
+`udp_open_route(service, destination, port, &reply)` returns the selected local
+address in `reply.local`. Both open helpers and INSPECT
+require output pointers and clear their outputs on failure; both open helpers use
 `HANDLE_INVALID`. At the raw CALL boundary, errors leave reply bytes untouched.
 Payloads and output mappings are checked before any work is published.
 
@@ -521,6 +531,13 @@ before publishing its binding. Installation failure frees the unpublished object
 no port is reserved. Other endpoint calls borrow the caller's live grant until
 completion. No user/private-stack pointers cross CPUs and no scheduler queue is
 added.
+
+Route selection and binding are serialized with configuration changes by that
+same worker. The endpoint retains only its concrete local binding, not the
+destination or a route snapshot: it is neither connected to a peer nor a
+wildcard listener. Later sends use their own destinations and current routing,
+subject to the bound source address. The existing invalidation and shutdown
+rules below apply to both ways of opening an endpoint.
 
 At most 16 endpoint objects may live, including stopped objects still held by
 handles and those awaiting final cleanup. Exhaustion is `CALL_LIMIT`; allocation
