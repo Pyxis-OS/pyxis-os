@@ -102,7 +102,7 @@ Standalone `kmalloc` throughput, PMM/VM subphase timings and system-wide account
 remain separate investigations. Measurements alone do not change scheduling or
 allocator behavior.
 
-## Initial observations
+## Initial observations before prompt BSP notification
 
 An ordinary QEMU 10.2.2 boot used Q35, KVM, `-cpu max`, four CPUs and 256 MiB,
 with the presenter and two shells running. The development host is itself a
@@ -137,3 +137,53 @@ unprofiled and 38.900 ms profiled. Queue sums fell to 4.467 ms for allocation an
 means were about 37 microseconds. Five timestamp reads per request across 128
 requests are already of the same order as the observed profiling overhead, so
 these elapsed intervals must not be presented as uninstrumented CPU costs.
+
+## Prompt BSP notification comparison
+
+Private-memory requests now notify the BSP through the existing rescheduling IPI
+after leaving the caller's task stack and address space and publishing the parked
+request. Allocation policy and service code are unchanged. Other BSP request
+queues retain their existing notification behavior; see [SMP scheduling](smp.md).
+
+A before/after comparison used baseline `7383e20` and notification commit
+`9d07838`, identical userspace, and the same four-CPU nested-KVM setup described
+above, with VirtIO networking through QEMU's user backend and VirtIO entropy.
+Commands ran sequentially in fresh processes on CPU 1. Each allocation entry
+below is one observation, with no allocation or release failures:
+
+| Command | Before | After |
+| --- | ---: | ---: |
+| `allocbench growth` | 697.017 ms | 36.983 ms |
+| `allocbench growth --profile` | 714.698 ms | 60.362 ms |
+| `allocbench pages` | 698.310 ms | 27.252 ms |
+| `allocbench pages --profile` | 699.340 ms | 40.225 ms |
+
+The growth profile accumulated 661.964 ms in the BSP queue before notification,
+versus 15.492 ms afterward. Service time was essentially unchanged: 27.195 ms
+before and 27.716 ms after. The page profile's allocation/release queue sums fell
+from 338.238/328.084 ms to 5.774/5.731 ms; corresponding service sums were
+9.976/3.972 ms before and 9.526/3.772 ms after. Counts and completed bytes matched:
+128 growth backing allocations totaling 9961472 bytes, or 64 page allocations
+and 64 releases totaling 4194304 bytes in each direction. These observations
+support reduced scheduling delay, not an increase in allocator service speed.
+Clock-call means were about 35–36 microseconds in this comparison.
+
+Three sequential `ttcp -t 10.0.2.2` runs per kernel sent the default 2048 buffers
+of 8192 bytes to a host `ttcp -r`. Every receiver confirmed 16777216 bytes:
+
+| Guest throughput, MiB/s | Before | After |
+| --- | ---: | ---: |
+| Run 1 | 1.373 | 1.377 |
+| Run 2 | 1.376 | 1.382 |
+| Run 3 | 1.386 | 1.376 |
+| Median | 1.376 | 1.377 |
+
+There was no material standalone TCP throughput change in these samples. `ttcp`
+allocates its buffer and establishes the connection before the timed transfer;
+TCP completion already uses prompt task wakeups. Concurrent allocation and network
+load was not measured. These nested-VM observations do not predict throughput on
+the development host or replace repeated measurements there.
+
+A separate single-CPU boot also completed `allocbench pages`: 64 allocations and
+64 releases, no failures, 16.066 ms unprofiled. This exercises the BSP caller path,
+which services its request directly without sending itself an IPI.

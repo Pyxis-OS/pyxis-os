@@ -48,9 +48,11 @@ the instrumentation itself reads HPET and perturbs timings.
 
 Standalone kernel `kmalloc`/`kfree` throughput and deeper PMM/VM timing remain
 unmeasured. Pool growth counters describe backing acquired during a measurement
-window, not total retained memory or a fragmentation metric. Revisit scheduling
-of BSP service requests using the measurements before changing allocation policy;
-no allocator or scheduling optimization is part of the benchmark milestone.
+window, not total retained memory or a fragmentation metric. Private-memory
+requests now [notify the BSP after publication](smp.md), removing their dependency
+on a later timer wakeup. Other BSP request queues retain their existing service
+paths; measure them separately before extending notification or changing
+allocation policy.
 
 ## Fixed userspace stacks
 
