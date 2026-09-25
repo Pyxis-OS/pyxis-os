@@ -8,7 +8,7 @@ init script selects it:
 
 ```text
 #!app://shell.pxe
-mount --optional host
+mount --optional --read-only host
 session app://session.pxe --configure-network
 ```
 
@@ -58,7 +58,7 @@ and `DNS_SERVER` with the selected resolver's numeric IPv4 address (default
 `1.1.1.1`). DNS selection applies even without a NIC or configuration authority;
 it does not perform a lookup or change kernel settings. It forwards the
 input/output, memory and launcher grants; app/home and optional
-read-only host roots;
+host roots with their actual queried grants;
 the working-directory chain and display path; and optional display, clock,
 [random](randomness.md) and keyboard resources, using the same rights as the shell's session handoff.
 The init shell explicitly delegates `net_config` through session handoff only.

@@ -47,10 +47,12 @@ See the [authority checkpoint](users-and-authority.md): the prototype boundary
 does not settle persistent per-user homes, cross-user sharing or authentication.
 
 Archive-only boots remain supported. `--optional` continues to tolerate only
-an absent mount resource, not a failed operation. Finalize mount syntax and
-what a writable request can establish about a host-read-only export before
-implementation; do not probe writability by creating a disposable file or
-silently fall back to read-only access.
+an absent mount resource, not a failed operation. `mount [--optional]
+[--read-only | --read-write] host` defaults to read-only. Read-write selects
+grants authorizing mutation attempts; it does not certify host writability.
+Do not probe writability by creating a disposable file or silently fall back
+to read-only access. A read-only handle-rights query exposes only the caller's
+grant mask; traversal and delegation use it rather than URI-based assumptions.
 
 ## Write progress and failures
 
@@ -105,7 +107,7 @@ launch execute from live host-backed mappings or claim snapshot isolation.
 
 ## Focused PR worklist
 
-1. [ ] **Mount access and delegation.** Define explicit read-only/read-write
+1. [x] **Mount access and delegation.** Define explicit read-only/read-write
    selection in the native mount request and shell command. Audit host root,
    descendant and working-directory grants through both launch paths. Keep the
    backend's current lack of writes explicit until subsequent tasks provide it;
