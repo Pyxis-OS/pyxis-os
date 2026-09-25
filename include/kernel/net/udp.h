@@ -13,6 +13,9 @@
  * no endpoint/binding behind. No caller stack or user pointers are retained. */
 enum call_status net_udp_open(struct capability_table *table, uint32_t address,
     uint16_t port, struct udp_open_reply *reply);
+/* Select and bind on the worker, serialized with address/route changes. */
+enum call_status net_udp_open_route(struct capability_table *table, uint32_t destination,
+    uint16_t port, struct udp_open_reply *reply);
 enum call_status net_udp_inspect(struct kernel_object *object, struct udp_endpoint_info *reply);
 enum call_status net_udp_shutdown(struct kernel_object *object);
 

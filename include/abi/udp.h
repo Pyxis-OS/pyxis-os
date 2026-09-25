@@ -6,6 +6,7 @@
 
 #define UDP_SERVICE_RIGHT_OPEN (UINT64_C(1) << 0)
 #define UDP_OPEN UINT64_C(1)
+#define UDP_OPEN_ROUTE UINT64_C(2)
 
 #define UDP_RIGHT_INSPECT (UINT64_C(1) << 0)
 #define UDP_RIGHT_SEND (UINT64_C(1) << 1)
@@ -24,9 +25,14 @@
 #define UDP_STATE_SHUTDOWN UINT32_C(2)
 #define UDP_STATE_UNAVAILABLE UINT32_C(3)
 
-/* OPEN uses PROTOCOL_UDP_SERVICE; address/port are host-order integers.
- * Bind an explicit 127/8 address or the assigned NIC address. Port zero selects
- * a free ephemeral port. No wildcard, reuse or privileged-port distinction.
+/* Both open operations use PROTOCOL_UDP_SERVICE and OPEN authority;
+ * address/port are host-order integers. OPEN binds an explicit 127/8 address or
+ * the assigned NIC address. OPEN_ROUTE treats address as the destination and
+ * selects a concrete local address through routing, then binds in the same
+ * worker operation. The destination is not retained or a restriction on peers.
+ * Invalid destinations are BAD_REQUEST, missing routes NO_ROUTE, and an
+ * unavailable interface UNAVAILABLE. Opening does not send packets or do ARP.
+ * Port zero selects a free ephemeral port. No wildcard, reuse or privileged-port distinction.
  * Success returns a new endpoint with UDP_RIGHTS; copies share its lifetime. */
 struct udp_open_request {
   struct message_header header;

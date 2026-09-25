@@ -110,7 +110,7 @@ produces a clear no-address result.
 
 ## Focused implementation tasks
 
-- [ ] **1. Route-aware UDP open.** Add the native operation and libpyxis helper,
+- [x] **1. Route-aware UDP open.** Add the native operation and libpyxis helper,
   retaining explicit binding and existing endpoint ownership. Build and boot;
   inspect selection/binding for loopback and the configured NIC through ordinary
   debugger use, including a no-route result. Update the UDP interface reference.
