@@ -1,3 +1,4 @@
+#include <abi/space.h>
 #include <abi/udp.h>
 #include <abi/tcp.h>
 #include <abi/random.h>
@@ -25,6 +26,8 @@ static atomic_bool retired_locked;
 bool object_rights_valid(enum object_type type, uint64_t rights)
 {
   switch (type) {
+  case OBJECT_SPACE:
+    return !(rights & ~SPACE_RIGHT_SET_TITLE);
   case OBJECT_CONSOLE:
     return !(rights & ~CONSOLE_RIGHTS);
   case OBJECT_FILE:

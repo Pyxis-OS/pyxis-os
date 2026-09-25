@@ -8,6 +8,7 @@
 #include <kernel/object/mount.h>
 #include <kernel/virtio/pci.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/space.h>
 #include <abi/clock.h>
 #include <abi/echo.h>
 #include <abi/net_config.h>
@@ -79,6 +80,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
   struct file_object *script_file = NULL;
+  struct kernel_object *space_control = NULL;
   struct kernel_object *mount = NULL, *echo = NULL, *net_config = NULL, *udp = NULL, *tcp = NULL, *random = NULL;
 
   if (!application_root) {
@@ -134,6 +136,17 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
           DISPLAY_RIGHT_DRAW, &display_handle) != CAP_OK) {
     goto fail;
   }
+  handle_t space_handle = HANDLE_INVALID;
+  /* Caelum stays kernel-owned, including the single-CPU shared-TTY fallback. */
+  if (cpu_index != 0) {
+    space_control = space_control_create(process->space);
+    if (!space_control || capability_install(&process->capabilities, space_control,
+          SPACE_RIGHT_SET_TITLE, &space_handle) != CAP_OK) {
+      goto fail;
+    }
+    object_release(space_control);
+    space_control = NULL;
+  }
   uint64_t app_rights = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE |
                         DIRECTORY_RIGHT_READ_FILES;
   uint64_t home_rights = app_rights | DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
@@ -178,7 +191,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[14] = {
+  struct process_binding resources[15] = {
     {"input", input},
     {"output", output},
     {"memory", memory_handle},
@@ -193,6 +206,9 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
     {"keyboard", keyboard_handle},
   };
   size_t resource_count = 12;
+  if (space_handle != HANDLE_INVALID) {
+    resources[resource_count++] = (struct process_binding){"space", space_handle};
+  }
   if (script_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"script", script_handle};
   }
@@ -228,6 +244,9 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   return;
 
 fail:
+  if (space_control) {
+    object_release(space_control);
+  }
   if (tcp) {
     object_release(tcp);
   }

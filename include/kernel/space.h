@@ -5,6 +5,8 @@
 #ifndef PYXIS_OS_SPACE_H
 #define PYXIS_OS_SPACE_H
 
+#include <abi/space.h>
+#include <stdatomic.h>
 #include <kernel/fb/fb.h>
 #include <kernel/fb/tty.h>
 #include <kernel/boot.h>
@@ -15,7 +17,8 @@ struct keyboard_object;
 
 struct space
 {
-  char *name;
+  char title[SPACE_TITLE_MAX + 1]; /* Access under title_locked after boot. */
+  atomic_bool title_locked;
   struct framebuffer *fb;
   struct tty *tty;
   struct keyboard_object *keyboard; /* Space retains the initial reference. */
@@ -24,6 +27,9 @@ struct space
 };
 
 void space_init_all(const struct boot_framebuffer *boot_fb);
+
+/* Copies a validated title without allocation. Preserves IF. */
+bool space_set_title(struct space *space, const char *title, size_t length);
 
 void space_present();
 /* BSP kernel-task entry; argument is unused. */
