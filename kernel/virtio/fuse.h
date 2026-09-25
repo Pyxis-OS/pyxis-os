@@ -41,17 +41,23 @@
 #define FUSE_ENOMEM 12
 #define FUSE_EACCES 13
 #define FUSE_EBUSY 16
+#define FUSE_EEXIST 17
 #define FUSE_ENOTDIR 20
 #define FUSE_EISDIR 21
 #define FUSE_EINVAL 22
 #define FUSE_EMFILE 24
+#define FUSE_EFBIG 27
+#define FUSE_ENOSPC 28
+#define FUSE_EROFS 30
 #define FUSE_ENAMETOOLONG 36
 #define FUSE_ENOSYS 38
+#define FUSE_ENOTEMPTY 39
 #define FUSE_ELOOP 40
 #define FUSE_EOVERFLOW 75
 #define FUSE_EOPNOTSUPP 95
 #define FUSE_ETIMEDOUT 110
 #define FUSE_ESTALE 116
+#define FUSE_EDQUOT 122
 
 /* FUSE 7.38, little-endian on this transport. These are wire structures, not
  * the native filesystem ABI. No optional INIT flags or header extensions. */

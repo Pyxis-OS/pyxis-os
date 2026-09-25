@@ -40,6 +40,12 @@ static enum call_status call_result(enum virtio_fs_result result)
   case VIRTIO_FS_INVALID: return CALL_BAD_REQUEST;
   case VIRTIO_FS_LIMIT: return CALL_LIMIT;
   case VIRTIO_FS_NO_MEMORY: return CALL_NO_MEMORY;
+  case VIRTIO_FS_NO_SPACE: return CALL_NO_SPACE;
+  case VIRTIO_FS_QUOTA: return CALL_QUOTA;
+  case VIRTIO_FS_FILE_TOO_LARGE: return CALL_FILE_TOO_LARGE;
+  case VIRTIO_FS_READ_ONLY: return CALL_READ_ONLY;
+  case VIRTIO_FS_ALREADY_EXISTS: return CALL_ALREADY_EXISTS;
+  case VIRTIO_FS_NOT_EMPTY: return CALL_NOT_EMPTY;
   case VIRTIO_FS_BUSY: return CALL_BUSY;
   case VIRTIO_FS_TIMED_OUT: return CALL_TIMED_OUT;
   case VIRTIO_FS_UNAVAILABLE: return CALL_UNAVAILABLE;

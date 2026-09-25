@@ -39,6 +39,12 @@ static enum virtio_fs_result host_error(int32_t error)
   case FUSE_EMFILE:
   case FUSE_EOVERFLOW: return VIRTIO_FS_LIMIT;
   case FUSE_ENOMEM: return VIRTIO_FS_NO_MEMORY;
+  case FUSE_ENOSPC: return VIRTIO_FS_NO_SPACE;
+  case FUSE_EDQUOT: return VIRTIO_FS_QUOTA;
+  case FUSE_EFBIG: return VIRTIO_FS_FILE_TOO_LARGE;
+  case FUSE_EROFS: return VIRTIO_FS_READ_ONLY;
+  case FUSE_EEXIST: return VIRTIO_FS_ALREADY_EXISTS;
+  case FUSE_ENOTEMPTY: return VIRTIO_FS_NOT_EMPTY;
   case FUSE_EBUSY: return VIRTIO_FS_BUSY;
   case FUSE_ETIMEDOUT: return VIRTIO_FS_TIMED_OUT;
   case FUSE_ESTALE: return VIRTIO_FS_UNAVAILABLE;
