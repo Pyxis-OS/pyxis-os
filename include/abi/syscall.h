@@ -35,6 +35,12 @@ enum call_status {
   CALL_BUFFER_TOO_SMALL = 21,
   CALL_CONNECTION_REFUSED = 22,
   CALL_CONNECTION_RESET = 23,
+  CALL_NO_SPACE = 24,
+  CALL_QUOTA = 25,
+  CALL_FILE_TOO_LARGE = 26,
+  /* A submitted mutation has no trustworthy completion. It may have taken
+   * effect: no known byte count, rollback guarantee or safe automatic retry. */
+  CALL_OUTCOME_UNKNOWN = 27,
   CALL_STATUS_COUNT, /* Validation bound, not a result. */
 };
 

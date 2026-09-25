@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 /* Operations use explicit offsets. SIZE accepts either READ or WRITE; WRITE
- * permits both mutation operations, but never changes read-only backing. */
+ * permits both mutation operations, subject to backend/host restrictions. */
 #define FILE_RIGHT_READ (UINT64_C(1) << 0)
 #define FILE_RIGHT_WRITE (UINT64_C(1) << 1)
 #define FILE_RIGHTS (FILE_RIGHT_READ | FILE_RIGHT_WRITE)
@@ -48,9 +48,15 @@ struct file_read_reply {
   uint64_t read;
 };
 
-/* WRITE is all-or-nothing, including writes beyond EOF. Gaps and ranges made
- * visible by RESIZE read as zero; shrinking permanently discards the tail.
- * A zero-byte write does not extend the file. RESIZE returns no reply bytes. */
+/* A successful nonempty WRITE reports 1..size bytes; advance offset/address by
+ * written and submit only the remaining suffix. A zero-byte WRITE validates
+ * authority and arguments, then returns zero without extending the file.
+ * Errors have no reply/count. OUTCOME_UNKNOWN means a submitted mutation may
+ * have taken effect; never automatically replay it. Earlier successful calls
+ * retain their known progress. RAM writes still complete in full or fail
+ * unchanged; this is not a guarantee for every backing store.
+ * Beyond-EOF gaps and RESIZE growth read as zero; shrink discards the tail.
+ * RESIZE returns no reply bytes and can also report OUTCOME_UNKNOWN. */
 struct file_write_reply {
   uint64_t written;
 };

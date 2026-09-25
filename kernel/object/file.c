@@ -220,23 +220,29 @@ static struct syscall_result write_file(struct file_object *file,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
+  if (!request->size) {
+    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
+  }
+  if (file->backing != FILE_RAM) {
+    return (struct syscall_result){CALL_READ_ONLY, 0};
+  }
+
   file_begin_operation(file);
-  if (request->size) {
-    size_t end = request->offset + request->size;
-    if (!reserve_buffer(file, end)) {
-      file_end_operation(file);
-      return (struct syscall_result){CALL_NO_MEMORY, 0};
-    }
-    uint8_t *data = (uint8_t *)file->data;
-    if (request->offset > file->size) {
-      memset(data + file->size, 0, request->offset - file->size);
-    }
-    /* All fallible work is complete. The sole user task cannot change its
-     * source or mappings while blocked; BSP never reads its private memory. */
-    KASSERT(copy_from_user(data + request->offset, request->address, request->size));
-    if (end > file->size) {
-      file->size = end;
-    }
+  size_t end = request->offset + request->size;
+  if (!reserve_buffer(file, end)) {
+    file_end_operation(file);
+    return (struct syscall_result){CALL_NO_MEMORY, 0};
+  }
+  uint8_t *data = (uint8_t *)file->data;
+  if (request->offset > file->size) {
+    memset(data + file->size, 0, request->offset - file->size);
+  }
+  /* All fallible work is complete. The sole user task cannot change its
+   * source or mappings while blocked; BSP never reads its private memory. */
+  KASSERT(copy_from_user(data + request->offset, request->address, request->size));
+  if (end > file->size) {
+    file->size = end;
   }
   file_end_operation(file);
 
@@ -294,12 +300,12 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   if (operation == FILE_READ) {
     return read_file(file, &request.read, reply_address, reply_capacity);
   }
-  if (operation == FILE_WRITE || operation == FILE_RESIZE) {
+  if (operation == FILE_WRITE) {
+    return write_file(file, &request.write, reply_address, reply_capacity);
+  }
+  if (operation == FILE_RESIZE) {
     if (file->backing != FILE_RAM) {
       return (struct syscall_result){CALL_READ_ONLY, 0};
-    }
-    if (operation == FILE_WRITE) {
-      return write_file(file, &request.write, reply_address, reply_capacity);
     }
     return resize_file(file, request.resize.size);
   }
