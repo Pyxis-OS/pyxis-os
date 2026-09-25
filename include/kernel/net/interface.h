@@ -7,13 +7,14 @@
 #define NET_RECEIVE_QUEUE_LIMIT 16
 
 /* Boot-lifetime metadata, immutable and safe to borrow after publication.
- * No address configuration, driver callbacks or per-space network domains yet. */
+ * Address configuration belongs to the sole network worker. No driver callbacks
+ * or per-space network domains yet. */
 struct net_interface {
   const char *name;
   size_t mtu;
 };
 
-/* The sole current interface carries IP packets, without link-layer headers.
+/* The local interface carries IP packets, without link-layer headers.
  * It exists independently of PCI and carries the local IPv4 /8 route. */
 extern const struct net_interface net_loopback;
 
@@ -24,6 +25,7 @@ enum net_result {
   NET_QUEUE_FULL,
   NET_NO_ROUTE,
   NET_NO_MEMORY,
+  NET_TIMED_OUT,
 };
 
 /* Once on BSP/IF=0 after task_init(), before scheduling starts. Failure leaves

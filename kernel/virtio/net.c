@@ -6,7 +6,7 @@
 #include <arch/pci.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
-#include <kernel/net/interface.h>
+#include <kernel/net/ethernet.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/virtio/net_queue.h>
@@ -26,8 +26,6 @@
 #define VIRTIO_NET_RECHECK_MS 1
 #define VIRTIO_NET_HDR_NEEDS_CSUM 1u
 #define VIRTIO_NET_GSO_NONE 0
-#define ETHERNET_HEADER_BYTES 14
-#define ETHERNET_FRAME_MAX (ETHERNET_HEADER_BYTES + 1500)
 #define VIRTIO_NET_READY (VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_FEATURES_OK)
 
 /* Modern transport includes num_buffers even without merged receive buffers.
@@ -63,7 +61,7 @@ static struct {
   uint64_t config_deadline, config_recheck, reset_deadline, reset_recheck;
   bool dma_disabled, interrupts_disabled;
   const char *stop_reason;
-  uint64_t interrupts, received, dropped, malformed, transmitted, completed, queue_full;
+  uint64_t interrupts, received, malformed, transmitted, completed, queue_full;
 } network;
 
 static bool sample_network_config(uint8_t mac[VIRTIO_NET_MAC_BYTES], bool *link_up,
@@ -462,9 +460,8 @@ bool virtio_net_service(void)
       ++network.malformed;
     } else {
       ++network.received;
-      /* Ethernet/ARP dispatch arrives in the next slice. Never pass an external
-       * frame into the loopback-only IPv4 path or retain a DMA buffer pointer. */
-      ++network.dropped;
+      /* Protocols borrow this frame only until its RX buffer is reposted. */
+      net_ethernet_receive((const uint8_t *)(header + 1), entry->length - sizeof(*header));
     }
     virtio_net_queue_post(&network.rx, entry->id, VIRTIO_NET_BUFFER_BYTES);
   }
@@ -502,4 +499,14 @@ enum net_result virtio_net_transmit(const void *frame, size_t length)
   virtio_net_queue_notify(&network.tx);
   ++network.transmitted;
   return NET_OK;
+}
+
+const uint8_t *virtio_net_mac(void)
+{
+  return network.prepared ? network.mac : NULL;
+}
+
+bool virtio_net_available(void)
+{
+  return network.active && !network.config_unstable && network.link_up;
 }

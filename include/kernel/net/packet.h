@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Initial software packet budget, independent of future device DMA buffers. */
+/* Initial software packet budget, independent of device DMA buffers. */
 #define NET_PACKET_MAX_BYTES 1500
 #define NET_PACKET_LIMIT 32
 

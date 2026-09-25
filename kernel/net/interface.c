@@ -2,6 +2,7 @@
 #include <arch/smp.h>
 #include <kernel/log.h>
 #include <kernel/net/interface.h>
+#include <kernel/net/arp.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/net/echo.h>
 #include <kernel/panic.h>
@@ -110,6 +111,11 @@ static void wait_for_work(void)
     deadline = transport_deadline;
     timed = true;
   }
+  uint64_t arp_deadline;
+  if (net_arp_next_deadline(&arp_deadline) && (!timed || arp_deadline < deadline)) {
+    deadline = arp_deadline;
+    timed = true;
+  }
   lock_worker();
   if (worker_notified || loopback.count || (timed && task_deadline_expired(deadline))) {
     worker_notified = false;
@@ -135,7 +141,7 @@ static void wait_for_work(void)
 static void receive_packet(struct net_packet *packet)
 {
   ++loopback.received;
-  net_ipv4_receive(packet);
+  net_ipv4_receive(&net_loopback, packet->data, packet->length);
 
   uint64_t flags = cpu_save_interrupts();
   net_packet_release(packet);
@@ -149,6 +155,7 @@ static void network_worker(void *argument)
   for (;;) {
     bool transport_busy = virtio_net_service();
     bool serviced = net_echo_service();
+    net_arp_service();
     unsigned handled = 0;
     while (handled < NET_WORK_BUDGET) {
       struct net_packet *packet = next_packet();
