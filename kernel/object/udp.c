@@ -24,7 +24,7 @@ struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation != UDP_OPEN) {
+  if (operation != UDP_OPEN && operation != UDP_OPEN_ROUTE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & UDP_SERVICE_RIGHT_OPEN)) {
@@ -44,8 +44,10 @@ struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
   }
 
   struct udp_open_reply reply;
-  enum call_status status = net_udp_open(&process_current()->capabilities,
-      request.address, request.port, &reply);
+  struct capability_table *table = &process_current()->capabilities;
+  enum call_status status = operation == UDP_OPEN_ROUTE ?
+      net_udp_open_route(table, request.address, request.port, &reply) :
+      net_udp_open(table, request.address, request.port, &reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

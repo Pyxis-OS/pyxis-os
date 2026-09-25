@@ -13,7 +13,7 @@
 #define UDP_EPHEMERAL_FIRST 49152
 #define UDP_EPHEMERAL_LAST 65535
 
-enum udp_control_operation { CONTROL_OPEN, CONTROL_INSPECT, CONTROL_SHUTDOWN };
+enum udp_control_operation { CONTROL_OPEN, CONTROL_OPEN_ROUTE, CONTROL_INSPECT, CONTROL_SHUTDOWN };
 enum udp_control_state { CONTROL_FREE, CONTROL_QUEUED, CONTROL_RUNNING, CONTROL_DONE };
 struct udp_control {
   enum udp_control_state state;
@@ -169,6 +169,19 @@ static enum call_status open_endpoint(struct udp_control *call)
 static enum call_status apply_control(struct udp_control *call)
 {
   switch (call->operation) {
+  case CONTROL_OPEN_ROUTE: {
+    struct ipv4_route route;
+    switch (net_ipv4_route(0, call->address, &route)) {
+    case NET_OK: break;
+    case NET_INVALID: return CALL_BAD_REQUEST;
+    case NET_NO_ROUTE: return CALL_NO_ROUTE;
+    default: return CALL_UNAVAILABLE;
+    }
+    /* The sole worker cannot apply configuration changes between selection
+     * and publication. The endpoint keeps only the concrete local binding. */
+    call->address = route.source;
+    return open_endpoint(call);
+  }
   case CONTROL_OPEN:
     return open_endpoint(call);
   case CONTROL_INSPECT:
@@ -225,6 +238,19 @@ enum call_status net_udp_open(struct capability_table *table, uint32_t address,
 {
   struct udp_control request = {
     .operation = CONTROL_OPEN, .table = table, .address = address, .port = port,
+  };
+  enum call_status status = exchange_control(&request);
+  if (status == CALL_OK) {
+    *reply = request.reply;
+  }
+  return status;
+}
+
+enum call_status net_udp_open_route(struct capability_table *table, uint32_t destination,
+    uint16_t port, struct udp_open_reply *reply)
+{
+  struct udp_control request = {
+    .operation = CONTROL_OPEN_ROUTE, .table = table, .address = destination, .port = port,
   };
   enum call_status status = exchange_control(&request);
   if (status == CALL_OK) {
