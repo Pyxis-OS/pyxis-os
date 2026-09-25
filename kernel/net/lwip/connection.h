@@ -15,12 +15,18 @@ struct tcp_connection {
   uint64_t setup_deadline, progress_deadline, orphan_deadline;
   uint32_t last_ack;
   err_t error;
-  bool owned, peer_fin;
+  bool owned, peer_fin, connected;
+  enum call_status terminal_status;
 };
 
 void tcp_connections_init(void);
 void tcp_connections_service(void);
 bool tcp_connections_next_deadline(uint64_t *deadline);
 uint64_t tcp_connection_generation(const struct tcp_pcb *pcb);
+
+/* All worker-only, outside callbacks. Completion does not publish a handle. */
+void tcp_connection_start(struct tcp_connection *connection);
+void tcp_connection_abort(struct tcp_connection *connection, enum call_status status);
+void tcp_connection_inspect(struct tcp_connection *connection, struct tcp_connection_info *info);
 
 #endif

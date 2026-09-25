@@ -13,6 +13,22 @@ static size_t connection_count;
 static uint64_t next_generation;
 static u8_t connection_arg;
 
+static enum call_status connection_status(struct tcp_connection *connection, err_t error)
+{
+  switch (error) {
+  case ERR_OK: return CALL_OK;
+  case ERR_RST: return connection->connected ? CALL_CONNECTION_RESET : CALL_CONNECTION_REFUSED;
+  case ERR_TIMEOUT:
+  case ERR_ABRT: return CALL_TIMED_OUT; /* lwIP retry exhaustion, absent a local reason. */
+  case ERR_RTE: return CALL_NO_ROUTE;
+  case ERR_IF: return CALL_UNAVAILABLE;
+  case ERR_MEM:
+  case ERR_BUF: return CALL_NO_MEMORY;
+  case ERR_CLSD: return CALL_ENDPOINT_CLOSED;
+  default: return CALL_IO;
+  }
+}
+
 static void connection_error(void *argument, err_t error)
 {
   struct tcp_connection *connection = argument;
@@ -20,6 +36,7 @@ static void connection_error(void *argument, err_t error)
    * Latch only the result here, without inspecting or releasing the PCB. */
   if (connection->error == ERR_OK) {
     connection->error = error;
+    connection->terminal_status = connection_status(connection, error);
   }
 }
 
@@ -96,11 +113,55 @@ static void abort_connection(struct tcp_connection *connection, err_t reason)
 {
   if (connection->error == ERR_OK) {
     connection->error = reason;
+    connection->terminal_status = connection_status(connection, reason);
   }
   if (connection->pcb) {
     tcp_abort(connection->pcb);
     KASSERT(!connection->pcb);
   }
+}
+
+void tcp_connection_abort(struct tcp_connection *connection, enum call_status status)
+{
+  net_worker_assert_context();
+  if (connection->terminal_status == CALL_OK) {
+    connection->error = ERR_ABRT;
+    connection->terminal_status = status;
+  }
+  abort_connection(connection, ERR_ABRT);
+}
+
+static err_t connected(void *argument, struct tcp_pcb *pcb, err_t error)
+{
+  (void)pcb;
+  KASSERT(error == ERR_OK);
+  struct tcp_connection *connection = argument;
+  connection->connected = true;
+  /* Publication still checks the original deadline outside the callback. */
+  return ERR_OK;
+}
+
+void tcp_connection_start(struct tcp_connection *connection)
+{
+  net_worker_assert_context();
+  KASSERT(connection->pcb && connection->owned && !connection->connected);
+  ip_addr_t remote = { .addr = lwip_htonl(connection->remote) };
+  err_t result = tcp_connect(connection->pcb, &remote, connection->remote_port, connected);
+  if (result != ERR_OK) {
+    abort_connection(connection, result);
+  }
+}
+
+void tcp_connection_inspect(struct tcp_connection *connection, struct tcp_connection_info *info)
+{
+  net_worker_assert_context();
+  *info = (struct tcp_connection_info){
+    .local_address = connection->local, .remote_address = connection->remote,
+    .local_port = connection->local_port, .remote_port = connection->remote_port,
+    .state = !connection->pcb ? TCP_STATE_CLOSED :
+        connection->peer_fin ? TCP_STATE_PEER_CLOSED : TCP_STATE_CONNECTED,
+    .terminal_status = connection->terminal_status,
+  };
 }
 
 enum net_result net_tcp_prepare(uint32_t destination, uint16_t port, uint64_t deadline,
@@ -173,7 +234,7 @@ void net_tcp_release(struct tcp_connection *connection)
     return;
   }
   if (!(pcb->flags & TF_FIN) || pcb->refused_data || pcb->rcv_wnd != TCP_WND) {
-    abort_connection(connection, ERR_ABRT);
+    tcp_connection_abort(connection, CALL_ENDPOINT_CLOSED);
     return;
   }
   connection->orphan_deadline = task_deadline_after_ms(TCP_ORPHAN_TIMEOUT_MS);

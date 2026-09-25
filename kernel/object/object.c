@@ -1,4 +1,5 @@
 #include <abi/udp.h>
+#include <abi/tcp.h>
 #include <abi/random.h>
 #include <abi/mount.h>
 #include <abi/echo.h>
@@ -40,6 +41,10 @@ bool object_rights_valid(enum object_type type, uint64_t rights)
     return !(rights & ~MOUNT_RIGHT_OPEN_ROOT);
   case OBJECT_RANDOM:
     return !(rights & ~RANDOM_RIGHT_READ);
+  case OBJECT_TCP_SERVICE:
+    return !(rights & ~TCP_SERVICE_RIGHT_CONNECT);
+  case OBJECT_TCP:
+    return !(rights & ~TCP_RIGHTS);
   case OBJECT_UDP_SERVICE:
     return !(rights & ~UDP_SERVICE_RIGHT_OPEN);
   case OBJECT_UDP:

@@ -151,7 +151,7 @@ void net_lwip_init(void)
   netif_set_up(&assigned_interface);
   netif_set_link_up(&assigned_interface);
   net_lwip_refresh_address();
-  klog("net: lwIP TCP packet bridge ready; connection service not enabled\n");
+  klog("net: lwIP TCP packet bridge and connection service ready\n");
 }
 
 void net_lwip_receive(const uint8_t *data, size_t length)
