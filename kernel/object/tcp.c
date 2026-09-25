@@ -88,6 +88,35 @@ static struct syscall_result read_stream(struct kernel_object *object,
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
+static struct syscall_result write_stream(struct kernel_object *object,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  struct tcp_write_request request = {0};
+  size_t payload_size = sizeof(request) - sizeof(request.header);
+  if (request_size != payload_size || reply_capacity < sizeof(struct tcp_write_reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request.buffer, request_address, payload_size) ||
+      !user_buffer_check(reply_address, sizeof(struct tcp_write_reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  size_t length = request.length < TCP_WRITE_MAX_BYTES ? request.length : TCP_WRITE_MAX_BYTES;
+  uint8_t data[TCP_WRITE_MAX_BYTES];
+  if (!copy_from_user(data, request.buffer, length)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+
+  struct tcp_write_reply reply;
+  enum call_status status = net_tcp_write(object, data, length, request.deadline_ns, &reply);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  /* Input is already captured; an overlapping count output is harmless. */
+  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
 struct syscall_result tcp_call(struct kernel_object *object, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
@@ -97,6 +126,7 @@ struct syscall_result tcp_call(struct kernel_object *object, uint64_t rights,
   case TCP_INSPECT: required = TCP_RIGHT_INSPECT; break;
   case TCP_ABORT: required = TCP_RIGHT_ABORT; break;
   case TCP_READ: required = TCP_RIGHT_READ; break;
+  case TCP_WRITE: required = TCP_RIGHT_WRITE; break;
   default: return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & required)) {
@@ -104,6 +134,9 @@ struct syscall_result tcp_call(struct kernel_object *object, uint64_t rights,
   }
   if (operation == TCP_READ) {
     return read_stream(object, request_address, request_size, reply_address, reply_capacity);
+  }
+  if (operation == TCP_WRITE) {
+    return write_stream(object, request_address, request_size, reply_address, reply_capacity);
   }
   size_t reply_size = operation == TCP_INSPECT ? sizeof(struct tcp_connection_info) : 0;
   if (request_size || reply_capacity < reply_size) {

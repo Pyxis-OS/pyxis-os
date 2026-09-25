@@ -12,4 +12,7 @@ struct tcp_stream {
 bool tcp_reads_service(void);
 bool tcp_reads_next_deadline(uint64_t *deadline);
 
+bool tcp_writes_service(void);
+bool tcp_writes_next_deadline(uint64_t *deadline);
+
 #endif

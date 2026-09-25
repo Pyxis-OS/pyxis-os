@@ -34,6 +34,9 @@ enum call_status net_tcp_abort(struct kernel_object *object);
 enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
     uint64_t deadline, void *data, struct tcp_read_reply *reply);
 
+enum call_status net_tcp_write(struct kernel_object *object, const void *data,
+    size_t length, uint64_t deadline, struct tcp_write_reply *reply);
+
 /* Sole network worker, IF=1, after packet/timer processing. */
 bool net_tcp_service(void);
 bool net_tcp_next_deadline(uint64_t *deadline);

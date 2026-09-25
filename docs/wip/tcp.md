@@ -229,11 +229,13 @@ observed under naturally occurring traffic.
   and out-of-order delivery within the shared 16 KiB window and a sixteen-pbuf
   reassembly ceiling. Window credit waits for caller consumption. See
   [receive ownership and allocation accounting](../lwip.md#native-receive-stream).
-- [ ] **5. Reliable send stream.** Native WRITE, retained bytes, segmentation,
-  acknowledgment processing, congestion control, RTT/RTO and zero-window
-  handling. With lwIP, expose and account its existing machinery rather than
-  duplicating it. Settle the conservative PMTU policy. Do not expose public-network
-  data sending without congestion control.
+- [x] **5. Reliable send stream.** Native WRITE and libpyxis helper accept short
+  copied prefixes into lwIP's 16 KiB send budget, with sixteen 4 KiB call slots
+  and one writer per shared stream. Backpressure parks until capacity, failure
+  or the original deadline. lwIP owns ACKs, congestion control, RTT/RTO, retries
+  and zero-window handling. The explicit 536-byte MSS ceiling can be reduced by
+  the peer/local MTU; PMTU discovery remains deferred. See
+  [send ownership and limits](../lwip.md#native-send-stream).
 - [ ] **6. Graceful shutdown and lifecycle completion.** SHUTDOWN_WRITE, FIN
   retransmission, both closing orders, simultaneous close, TIME_WAIT and final
   handle release. Confirm time bounds, invalidation and pending-call unwinding.
