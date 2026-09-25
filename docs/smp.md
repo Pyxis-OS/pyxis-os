@@ -96,8 +96,16 @@ are non-preemptible; kernel tasks run preemptibly on the BSP. An interrupt arriv
 while the scheduler is idle returns to its ready-queue loop. IF=0 and STI/HLT's
 interrupt shadow cover publication between the empty-queue check and halt.
 
-The periodic timer remains 120 Hz. Timed-wait expiry, sleeping tasks, BSP-only
-allocation request queues and exit cleanup retain their existing scheduler/timer
+Private-memory allocation/release requests also notify the BSP after publication.
+The requester has already left its private root and task stack before linking
+its parked task into the memory queue. Notification happens after unlocking and
+never dereferences that task again. The existing rescheduling handler can wake
+an idle BSP or preempt an eligible BSP task because it checks the memory queue.
+A BSP caller sends no self-IPI: its scheduler loop services the request directly.
+There is no remote allocation, change to VM ownership, or new interrupt handler.
+
+The periodic timer remains 120 Hz. Timed-wait expiry, sleeping tasks, other
+BSP-only request queues and exit cleanup retain their existing scheduler/timer
 service paths. Resource wakeups on the same CPU do not send a self-IPI; interrupt
 return, the current task's yield/block/return or timer preemption reaches the
 scheduler. This change adds no migration, priorities or tickless timers.

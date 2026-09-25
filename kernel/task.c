@@ -635,7 +635,9 @@ static void publish_memory_request(struct task *task)
   }
   memory_tail = task;
   unlock_queues();
-  /* Ownership is now with BSP; do not touch task or its private VM again. */
+  /* Ownership is now with BSP; do not touch task or its private VM again.
+   * Wake its scheduler after publication instead of waiting for a timer tick. */
+  notify_remote_cpu(0);
 }
 
 static void service_memory_requests(void)
