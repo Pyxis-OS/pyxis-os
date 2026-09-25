@@ -8,6 +8,7 @@
 #define APIC_VIRTIO_FS_VECTOR 34
 #define APIC_VIRTIO_NET_VECTOR 35
 #define APIC_VIRTIO_RNG_VECTOR 36
+#define APIC_RESCHEDULE_VECTOR 37
 #define APIC_SPURIOUS_VECTOR 255
 
 struct apic_msi_message {
@@ -26,5 +27,8 @@ void apic_init(void);
 void apic_timer_start(void);
 uint32_t apic_timer_remaining(void);
 void apic_end_interrupt(void);
+/* IF=0 serializes this CPU's ICR writes. Destination must be an online CPU.
+ * Requests scheduling; does not wait for the destination to run its handler. */
+void apic_send_reschedule(uint32_t destination);
 
 #endif

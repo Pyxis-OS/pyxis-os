@@ -30,7 +30,8 @@ struct hostfs_request;
 struct task_wait *task_wait_prepare(void);
 void task_wait_sleep(struct task_wait *wait);
 /* Any CPU, including interrupt entry, IF=0, after detaching the record under
- * its resource lock. Makes a parked task runnable; never switches to it here. */
+ * its resource lock. Makes a parked task runnable and notifies a remote CPU;
+ * never switches to it here. Early wakes only record notification. */
 void task_wait_wake(struct task_wait *wait);
 
 /* Absolute monotonic nanosecond deadlines. Relative conversion saturates on

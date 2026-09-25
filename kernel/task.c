@@ -168,11 +168,22 @@ static void enqueue_locked(struct scheduler *scheduler, struct task *task)
   scheduler->ready_tail = task;
 }
 
+static void notify_remote_cpu(size_t cpu_index)
+{
+  if (cpu_index != arch_cpu_index() &&
+      atomic_load_explicit(&started, memory_order_acquire)) {
+    arch_cpu_reschedule(cpu_index);
+  }
+}
+
 static void enqueue(struct scheduler *scheduler, struct task *task)
 {
+  size_t cpu_index = task->cpu_index;
   lock_queues();
   enqueue_locked(scheduler, task);
   unlock_queues();
+  /* Publication transfers ownership; only the saved CPU index is safe here. */
+  notify_remote_cpu(cpu_index);
 }
 
 struct task_wait *task_wait_prepare(void)
@@ -289,8 +300,15 @@ void task_wait_wake(struct task_wait *wait)
     wait->timeout_next = NULL;
     wait->timed = false;
   }
+  bool parked = wait->task->parked;
+  size_t cpu_index = wait->task->cpu_index;
   wake_wait_locked(wait);
   unlock_queues();
+  /* The target can consume its wait/task immediately after queue publication.
+   * An early wake needs no IPI: the running task observes notified when parking. */
+  if (parked) {
+    notify_remote_cpu(cpu_index);
+  }
 }
 
 static void expire_timed_waits(void)
@@ -918,8 +936,9 @@ void kernel_task_sleep_until(uint64_t deadline)
         ktrace("scheduler: CPU %zu no runnable tasks, idle\n", cpu_index);
         idle_reported = true;
       }
-      /* The local timer also bounds wakeup latency for cross-CPU submissions
-       * and BSP cleanup, including a submission just before STI/HLT. */
+      /* Remote ready-queue publication is followed by an IPI. With IF=0 here,
+       * STI/HLT also handles a notification arriving after the empty check.
+       * The timer still services deadlines and BSP-only request/cleanup queues. */
       cpu_wait_interrupt();
       continue;
     }

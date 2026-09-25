@@ -81,9 +81,25 @@ Entry receives its address in RDI. See the
 
 A short lock protects ready-list and completion-list links. It is never held
 across allocation, logging, a context switch or waiting for another CPU. The
-current task and saved scheduler stack are local to their CPU. Local timer
-interrupts wake idle CPUs to check for submissions and wake the BSP to collect
-completions, so these handoffs need no IPI and may wait about one timer period.
+current task and saved scheduler stack are local to their CPU. After scheduler
+startup, remote task creation and resource wakeups of parked tasks send a fixed
+xAPIC rescheduling IPI after releasing the queue lock. The sender retains only
+the destination CPU index after publication, not a borrowed task/wait pointer.
+The target checks its ready queue without waiting for its next timer tick.
+
+Vector 37 is reserved for rescheduling. Interrupt handlers release their locks
+and acknowledge EOI before checking for a context switch. Device interrupts also
+make this check, so an awakened BSP worker can preempt an eligible running task.
+The existing rules still apply: AP kernel execution and userspace syscall paths
+are non-preemptible; kernel tasks run preemptibly on the BSP. An interrupt arriving
+while the scheduler is idle returns to its ready-queue loop. IF=0 and STI/HLT's
+interrupt shadow cover publication between the empty-queue check and halt.
+
+The periodic timer remains 120 Hz. Timed-wait expiry, sleeping tasks, BSP-only
+allocation request queues and exit cleanup retain their existing scheduler/timer
+service paths. Resource wakeups on the same CPU do not send a self-IPI; interrupt
+return, the current task's yield/block/return or timer preemption reaches the
+scheduler. This change adds no migration, priorities or tickless timers.
 
 Blocking userspace syscalls and BSP kernel tasks use a wait record embedded in
 task metadata. The resource publishes it under its own lock and removes it before
@@ -100,7 +116,8 @@ still disabled. The process remains alive while blocked. User mappings stay
 stable except during an explicit private-memory loan after the task has left
 its address space.
 Only an explicit table-growth loan allows the BSP to modify its capability table.
-Remote wakeups use the existing timer-driven ready-queue check, with no IPI.
+A wake that precedes parking only records notification; it sends no IPI and
+does not make a still-running task available to another context.
 
 Exit and ordinary user faults return to the local scheduler. After switching
 to its permanent stack and reloading the kernel root, the CPU clears its task
