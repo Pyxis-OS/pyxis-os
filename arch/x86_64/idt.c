@@ -76,32 +76,43 @@ static void report_page_fault(uint64_t error, uint64_t address)
        (unsigned)((error & PAGE_FAULT_SHADOW_STACK) != 0));
 }
 
+static void finish_interrupt(const struct exception_frame *frame)
+{
+  /* Handlers have released their locks. EOI must precede a possible context
+   * switch, so this interrupt cannot block further delivery while suspended. */
+  apic_end_interrupt();
+  task_preempt((frame->cs & SELECTOR_RPL_MASK) == SELECTOR_RPL_USER);
+}
+
 void interrupt_handler(struct exception_frame *frame)
 {
   if (frame->vector == APIC_VIRTIO_NET_VECTOR) {
     virtio_net_interrupt();
-    apic_end_interrupt();
+    finish_interrupt(frame);
     return;
   }
   if (frame->vector == APIC_VIRTIO_RNG_VECTOR) {
     virtio_rng_interrupt();
-    apic_end_interrupt();
+    finish_interrupt(frame);
     return;
   }
   if (frame->vector == APIC_VIRTIO_FS_VECTOR) {
     virtio_fs_pci_interrupt();
-    apic_end_interrupt();
+    finish_interrupt(frame);
     return;
   }
   if (frame->vector == APIC_KEYBOARD_VECTOR) {
     ps2_keyboard_interrupt();
-    apic_end_interrupt();
+    finish_interrupt(frame);
     return;
   }
   if (frame->vector == APIC_TIMER_VECTOR) {
     atomic_fetch_add_explicit(&cpu_current()->timer_interrupts, 1, memory_order_relaxed);
-    apic_end_interrupt();
-    task_preempt((frame->cs & SELECTOR_RPL_MASK) == SELECTOR_RPL_USER);
+    finish_interrupt(frame);
+    return;
+  }
+  if (frame->vector == APIC_RESCHEDULE_VECTOR) {
+    finish_interrupt(frame);
     return;
   }
   if (frame->vector == APIC_SPURIOUS_VECTOR) {

@@ -19,6 +19,11 @@
 #define APIC_TASK_PRIORITY 0x080
 #define APIC_EOI 0x0b0
 #define APIC_SPURIOUS 0x0f0
+#define APIC_ICR_LOW 0x300
+#define APIC_ICR_HIGH 0x310
+#define APIC_ICR_DESTINATION_SHIFT 24
+#define APIC_ICR_SEND_PENDING (1u << 12)
+#define APIC_ICR_POLL_LIMIT 1000000u
 #define APIC_LVT_CMCI 0x2f0
 #define APIC_LVT_TIMER 0x320
 #define APIC_LVT_THERMAL 0x330
@@ -181,4 +186,22 @@ uint32_t apic_id(void)
 void apic_end_interrupt(void)
 {
   apic_write(APIC_EOI, 0);
+}
+
+void apic_send_reschedule(uint32_t destination)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(destination <= UINT8_MAX);
+
+  unsigned remaining = APIC_ICR_POLL_LIMIT;
+  while (apic_read(APIC_ICR_LOW) & APIC_ICR_SEND_PENDING) {
+    if (!--remaining) {
+      panic("local APIC IPI delivery stalled");
+    }
+    __asm__ volatile("pause");
+  }
+  /* Writing the low half sends the command. Zero mode fields select a physical
+   * destination, fixed delivery and edge triggering; no shorthand or broadcast. */
+  apic_write(APIC_ICR_HIGH, destination << APIC_ICR_DESTINATION_SHIFT);
+  apic_write(APIC_ICR_LOW, APIC_RESCHEDULE_VECTOR);
 }

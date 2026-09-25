@@ -134,3 +134,10 @@ struct cpu_local *arch_cpu_at(size_t index)
   atomic_store_explicit(&cpu->online, true, memory_order_release);
   task_schedule();
 }
+
+void arch_cpu_reschedule(size_t index)
+{
+  struct cpu_local *cpu = arch_cpu_at(index);
+  KASSERT(cpu && atomic_load_explicit(&cpu->online, memory_order_acquire));
+  apic_send_reschedule(cpu->lapic_id);
+}
