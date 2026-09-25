@@ -20,6 +20,9 @@
 #define PROTOCOL_UDP UINT64_C(15)
 #define PROTOCOL_RANDOM UINT64_C(16)
 
+#define PROTOCOL_TCP_SERVICE UINT64_C(17)
+#define PROTOCOL_TCP UINT64_C(18)
+
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */
 struct message_header {

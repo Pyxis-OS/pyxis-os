@@ -5,6 +5,7 @@
 #include <kernel/net/arp.h>
 #include <kernel/net/config.h>
 #include <kernel/net/udp.h>
+#include <kernel/net/tcp.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/net/lwip.h>
 #include <kernel/net/echo.h>
@@ -139,6 +140,11 @@ static void wait_for_work(void)
 {
   uint64_t deadline;
   bool timed = net_lwip_next_deadline(&deadline);
+  uint64_t tcp_deadline;
+  if (net_tcp_next_deadline(&tcp_deadline) && (!timed || tcp_deadline < deadline)) {
+    deadline = tcp_deadline;
+    timed = true;
+  }
   uint64_t flags = cpu_save_interrupts();
   uint64_t echo_deadline;
   if (net_echo_next_deadline(&echo_deadline) && (!timed || echo_deadline < deadline)) {
@@ -213,6 +219,7 @@ static void network_worker(void *argument)
       receive_packet(packet);
       ++handled;
     }
+    serviced |= net_tcp_service();
     if (transport_busy || serviced || handled == NET_WORK_BUDGET) {
       /* A past deadline yields without imposing an extra timer delay. */
       kernel_task_sleep_until(0);

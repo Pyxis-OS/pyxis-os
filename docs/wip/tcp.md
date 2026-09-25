@@ -181,6 +181,16 @@ silently promising a general netcat replacement. A user-supplied HTTP request
 file is bytes to this tool; HTTP parsing, TLS and URI providers remain userspace
 follow-ups.
 
+Finish the milestone with a transmit-only `ttcp` adaptation as a separate focused
+PR after stream operations and the request/response utility. Send a configurable
+finite amount of generated data from Pyxis to an ordinary host ttcp receiver;
+report byte count, monotonic elapsed time and throughput. Use native stream
+capabilities and short-write handling, not a POSIX socket compatibility layer.
+The host receiver's byte count establishes received throughput; local WRITE
+acceptance alone does not prove delivery. Settle completion measurement with
+SHUTDOWN_WRITE before implementing the tool. Pyxis receive/listen mode and the
+upstream tool's broader socket/resource options remain deferred.
+
 Use normal builds, QEMU boots, manual guest commands, ordinary host services and
 debugger inspection. Inspect handshake/data/close behavior with packet capture
 where useful. Exercise numeric and hostname connections, host data in both
@@ -205,10 +215,13 @@ observed under naturally occurring traffic.
   internal connection preparation explicitly binds randomized ephemeral ports.
   Allocation accounting includes lwIP metadata and retained packets. Connection
   deadlines join the worker wait. No native CONNECT or I/O is exposed yet.
-- [ ] **3. Active open and native connection capability.** Handshake, bounded
-  retry, refusal/reset validation, deadline cleanup, INSPECT/ABORT and service
-  delegation. Pair ABI/libpyxis changes with the kernel. No handle escapes on a
-  failed open; do not expose unimplemented READ/WRITE operations yet.
+- [x] **3. Active open and native connection capability.** CONNECT prepares
+  private handle storage before SYN and publishes only after handshake, within
+  its original deadline. Eight control slots retain completed replies. INSPECT,
+  ABORT, restricted copies and final-close retirement use the native object
+  lifecycle. Init/session/shell explicitly delegate the service. Libpyxis has
+  matching helpers; READ/WRITE remain unexposed. lwIP's SYN-SENT reset check now
+  requires the ACK flag as well as the matching acknowledgment number.
 - [ ] **4. Receive stream.** Ordered delivery, duplicates/overlap, chosen bounded
   reassembly policy, receive-window updates, peer FIN and native READ with
   short-result, timeout and EOF semantics.
@@ -220,9 +233,10 @@ observed under naturally occurring traffic.
 - [ ] **6. Graceful shutdown and lifecycle completion.** SHUTDOWN_WRITE, FIN
   retransmission, both closing orders, simultaneous close, TIME_WAIT and final
   handle release. Confirm time bounds, invalidation and pending-call unwinding.
-- [ ] **7. Native tcp utility and milestone completion.** Add the finite tool,
+- [ ] **7. Native tcp utility, ttcp transmitter and milestone completion.** Add the finite tool,
   reuse DNS, run the ordinary interoperability checks above, and document the
-  stream contract and limitations. Rewrite/move this file to `docs/tcp.md`,
+  stream contract and limitations. Follow with the agreed transmit-only ttcp
+  adaptation against a host receiver. Rewrite/move this file to `docs/tcp.md`,
   remove the completed checklist and update links.
 
 Each task is its own focused PR, paired across Pyxis/userland when needed. Build

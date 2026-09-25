@@ -22,6 +22,8 @@ enum object_type {
   OBJECT_UDP_SERVICE = 14,
   OBJECT_UDP = 15,
   OBJECT_RANDOM = 16,
+  OBJECT_TCP_SERVICE = 17,
+  OBJECT_TCP = 18,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.
