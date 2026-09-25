@@ -64,21 +64,25 @@ Kernel-only builds do not select or package init.
 The userland repository supplies three shebang scripts using `app://shell.pxe`:
 
 - `init/development.sh`, installed as `app://init`, opens the optional host export
-  and hands off with `session app://session.pxe --configure-network`.
+  with `mount --optional --read-write host` and hands off with
+  `session app://session.pxe --configure-network`.
 - `init/readonly.sh`, installed as `app://init-readonly`, opens the same optional
-  export and hands off with `session app://session.pxe`, leaving network settings
-  alone.
+  export with `mount --optional --read-only host` and hands off with
+  `session app://session.pxe`, leaving network settings alone.
 - `init/idle.sh`, installed as `app://init-idle`, exits immediately. No process
   remains; the scheduler uses its ordinary interruptible halt when idle. The
   space and its terminal remain available. This is not a machine shutdown or
   permanent CPU stop.
 
-Both interactive profiles explicitly mount with `--read-only`. Scripts can
-select `--read-write` grants for regular-file creation, writes, resize and the
-existing `mkdir`, `rm`, `rmdir` and `mv` commands on `host://`. The packaged
-development profile's mount selection is unchanged. With the existing launcher
-authority, a READ grant can load a native executable from `host://`. Both
-profiles keep writable access to the shared RAM home.
+The development profile delegates host write grants for regular-file creation,
+writes, resize and `mkdir`, `rm`, `rmdir` and `mv`; the read-only profile delegates
+only host read grants. Both still start in writable, shared RAM `home://` and
+must explicitly address or enter `host://` to use the export. A host READ grant
+can load a native executable with the existing launcher authority. An absent
+device leaves either optional mount unbound, while an operational mount error
+stops the script. The host daemon's `--readonly` and host file permissions
+independently restrict mutations; a guest read-write grant only authorizes
+attempts. See the [host setup and walkthrough](virtio-fs.md#start-the-host-service).
 
 The session launcher applies per-space [terminal/environment configuration](session-configuration.md)
 and starts the interactive shell. Only the development profile requests global
@@ -98,7 +102,8 @@ Each init receives its space's terminal, display and keyboard grants, private
 memory, launch, clock, randomness, networking services and network configuration,
 read-only app and writable home roots, an initial `home://` working directory and
 the initial environment. When virtio-fs is present it also receives `host_mount`,
-scoped to that export. No authority is chosen from a hard-coded CPU role.
+scoped to that export. CPU selection chooses which trusted init runs, not an
+authority ceiling; no authority is chosen from a hard-coded CPU role.
 
 Mount authority stays with init; the mounted root travels through session
 handoff. Network-configuration authority reaches the session launcher but not

@@ -10,7 +10,7 @@ Discuss the identity and authority model before committing persistent home
 ownership, writable shared mounts, cross-user resource discovery or remotely
 accessible services to a single-user assumption. Authentication and account UI
 can be separate implementation milestones; ownership and grant rules need an
-earlier checkpoint. The current init and read-only host-mount slices do not need
+earlier checkpoint. The current init and host-mount slices do not need
 a complete account system, but their prototype grants are not the eventual
 multi-user policy.
 
@@ -45,7 +45,7 @@ is reached.
 
 ## Writable host prototype boundary
 
-For the planned [writable virtio-fs milestone](writable-virtio-fs.md), trusted
+For the implemented [writable virtio-fs development mount](../virtio-fs.md), trusted
 boot-selected init scripts receive the available setup authority and delegate
 read-write or read-only roots over the same export to their sessions. The kernel
 enforces those grants and descendants cannot widen them. Mount authority stays

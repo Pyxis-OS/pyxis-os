@@ -33,8 +33,8 @@ tcc hello.c -o hello.pxe
 Reopen `kilo hello.c`, change the message, save and quit. Repeat the same compiler
 and launch commands to see the updated output. No ISO rebuild or host conversion
 is needed between edits. Use `cat hello.c` to inspect saved bytes as terminal
-output; literal tabs currently disappear because the TTY ignores them, while
-Kilo expands them for its own display.
+output; the TTY displays tabs at eight-column stops, while Kilo expands them
+for its own display.
 
 TCC reports compile and link errors through the terminal. Correct the source
 and rebuild before running the output again: a failed build may leave an older
@@ -43,9 +43,10 @@ child exit status. Kilo saves by truncating and rewriting, so a failed save can
 also leave partial content.
 
 Sources, objects and executables in `home://` are RAM-backed and disappear on
-reboot. `app://`, including `app://sdk`, is read-only. This workflow does not yet
-provide persistent storage, atomic saves, a package manager or toolchain
-self-hosting. GCC continues to build maintained OS/userland sources.
+reboot. For opt-in persistence, use the [writable host export](virtio-fs.md#persistent-development-walkthrough)
+and keep source and output under `host://`. `app://`, including `app://sdk`, is
+read-only. Atomic Kilo saves, a package manager and toolchain self-hosting
+remain unsupported. GCC continues to build maintained OS/userland sources.
 
 See [TCC's contract and limits](tcc.md), [Kilo controls](ports.md#editing-in-pyxis)
 and [terminal behavior](terminal.md) for details.

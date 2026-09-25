@@ -34,7 +34,6 @@ chmod 700 "$socket_dir"
 unshare -Ur -- /usr/libexec/virtiofsd \
   --shared-dir "$export_dir" \
   --socket-path "$socket_dir/fs.sock" \
-  --readonly \
   --sandbox namespace \
   --inode-file-handles=never \
   --no-announce-submounts \
@@ -48,8 +47,10 @@ access. The daemon can access only files that the launching host user can access
 Use the same host user for QEMU so it can connect to the socket. The private
 socket directory restricts access to that user.
 
-`--readonly` enforces read-only access at the host service, independently of the
-guest implementation. `--inode-file-handles=never` uses file descriptors rather
+This starts a writable development export. Add `--readonly` to the daemon
+command to restrict the service independently of guest grants, including the
+development init's read-write grant. The host user's file permissions also
+apply. `--inode-file-handles=never` uses file descriptors rather
 than privileged filesystem handles. Submount announcements are disabled because
 the guest does not negotiate them. `--rlimit-nofile=0` keeps the inherited host
 file-descriptor limit; it does not set the limit to zero.
@@ -72,7 +73,10 @@ not contain commas, which delimit QEMU options.
 Successful initialization logs the prepared queue addresses followed by a FUSE
 session-ready message. Default init selections start shells on CPUs 1 and 2
 when present; Super+Right selects their tabs. Each interactive init mounts the
-same export before session handoff. Both grants remain read-only.
+same export before session handoff. The development profile on CPU 1 delegates
+read-write grants; the read-only profile on CPU 2 delegates read-only grants.
+Both shells start in the shared RAM-backed `home://` directory, so use an
+explicit `host://` path or `cd host://` to reach the export.
 From the shell, try:
 
 ```text
@@ -83,8 +87,9 @@ ls .
 ```
 
 Create `hello.txt` in the exported host directory first. The prompt tracks the
-new working directory and children inherit it. Writes fail with a read-only
-grant. Native executables can be launched from readable host files; the loader
+new working directory and children inherit it. In the read-only session,
+writes fail with DENIED even while the development session can mutate the same
+export. Native executables can be launched from readable host files; the loader
 captures an owned image first. See [processes](processes.md#implemented-userspace-launch)
 for its size limit, errors and host-change contract.
 
@@ -100,29 +105,73 @@ Start a new daemon for each QEMU run. Do not remove a socket belonging to a live
 service. Omitting `VIRTIO_FS_SOCKET` returns to the ordinary archive-only boot.
 
 If `unshare` reports `Operation not permitted`, the host disallows this namespace
-setup; enable it through your host's policy or use an administrator-managed,
-read-only virtiofsd service. If QEMU reports connection refused, check the daemon
-terminal and remove a stale socket only after confirming that the daemon stopped.
+setup; enable it through your host's policy or use an administrator-managed
+virtiofsd service with the intended access. If QEMU reports connection refused,
+check the daemon terminal and remove a stale socket only after confirming that
+the daemon stopped.
 If the daemon reports too many open files later, increase its inherited file
 limit before launch. No socket option weakens the daemon's export permissions.
 
-## Opt-in host mutations
+## Persistent development walkthrough
 
-Keep the daemon command above for read-only use. To allow guest mutations, omit
-`--readonly` and select a read-write grant in a temporary init script, for example
-`build/host-write-init.sh`:
+With the writable daemon above and the default init selections, CPU 1 can use
+Kilo, TCC, `mkdir`, `rm`, `rmdir` and `mv` in the export. CPU 2 sees the live
+tree through read-only grants; its attempted mutations fail even when the host
+daemon permits writes. Neither CPU number nor the `host://` name sets authority:
+the selected trusted init delegates the root grants. See
+[init selection](init.md#boot-selection) and the
+[future user/authority checkpoint](wip/users-and-authority.md).
+
+In CPU 1's shell, create a directory and edit a source file there:
 
 ```text
-#!app://shell.pxe
-mount --read-write host
 cd host://
-session app://session.pxe
+mkdir work
+cd work
+kilo hello.c
 ```
 
-Boot with `make run INIT=build/host-write-init.sh VIRTIO_FS_SOCKET="$socket_dir/fs.sock"`.
-CPU 1 can now save files with Kilo, compile with TCC, and use `mkdir`, `rm`,
-`rmdir` and `mv` in the export. CPU 2 retains its packaged read-only session.
-Both packaged init defaults remain read-only.
+Enter this program, save with Ctrl-S and quit Kilo with Ctrl-Q:
+
+```c
+#include <stdio.h>
+
+int main(void)
+{
+  puts("Hello from host storage");
+  return 0;
+}
+```
+
+Compile and run it in the same shell, then request synchronization for both
+files and the affected directories:
+
+```text
+tcc hello.c -o hello.pxe
+./hello.pxe
+kilo hello.c
+tcc hello.c -o hello.pxe
+./hello.pxe
+sync host://work/hello.c host://work/hello.pxe host://work host://
+```
+
+On the second Kilo visit, change the message, save and quit before rebuilding.
+In CPU 2's shell, `cat host://work/hello.c` reads the same source. Attempts to
+`mkdir host://work/blocked`, remove or rename that source with `rm` or `mv`, or
+save an edit in Kilo fail under the read-only grant. Stop QEMU and the daemon
+as described above, start a fresh daemon and QEMU pair using the same export
+directory, then read and run the saved files again:
+
+```text
+cat host://work/hello.c
+host://work/hello.pxe
+```
+
+This is a manual persistence workflow, not a power-loss durability guarantee.
+Each sync covers only its named file or directory, and the host service and
+storage determine what an acknowledgement means. No write probe or read-only
+fallback occurs at mount time. An absent device is tolerated by `--optional`;
+an operational mount failure stops init.
 
 New regular files request mode `0644` under the existing host-service identity,
 with no guest chmod or umask API. Creation is exclusive: an existing name returns
@@ -361,7 +410,7 @@ The default init script is:
 
 ```text
 #!app://shell.pxe
-mount --optional --read-only host
+mount --optional --read-write host
 session app://session.pxe --configure-network
 ```
 
@@ -380,8 +429,9 @@ opening another root cannot widen existing handles. Read-write authorizes
 mutation attempts, not a promise of host writability. Host/backend errors still
 apply, with no write probe or silent read-only fallback. A validated zero-byte
 write is a backend-free no-op. Missing required rights fail with DENIED first.
-Both packaged inits still explicitly request read-only; the development default
-changes in the final [writable milestone task](wip/writable-virtio-fs.md).
+The packaged development init explicitly requests read-write access; the
+read-only init requests read-only access. Both use `--optional` and leave the
+initial working directory at `home://`.
 The mount operation uses the existing object-call ABI and creates neither a
 global namespace entry nor a kernel URI parser.
 

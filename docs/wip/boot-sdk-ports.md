@@ -29,7 +29,7 @@ milestone's remaining interface details before starting its code work.
 9. Complete: [guest Lua](../lua.md), including scripts, REPL and default
    [session configuration](../session-configuration.md) for timezone and tab width.
 10. Complete: [PCI and VirtIO host filesystem access](../virtio-fs.md).
-    Init opens the opt-in read-only export and delegates `host://` through the
+    Init opens the opt-in export and delegates `host://` through the
     session launcher to the shell and children. Existing `ls`/`cat` use native
     directory/file capabilities; archive-only boot remains the default without
     a device/socket.
@@ -51,12 +51,12 @@ milestone's remaining interface details before starting its code work.
     a request/response client and a transmit-only ttcp tool. Listening and application protocols follow separately.
 16. Complete: [per-CPU trusted init scripts](../init.md), with development,
     read-only and idle selections driven by Make/Limine configuration.
-17. Next: [writable virtio-fs](writable-virtio-fs.md), to persist the existing
-    edit/build/run workflow and exercise different host grants in two spaces.
-    Short native writes are agreed; resolve each task's remaining contracts
-    before implementation.
-18. After writable virtio-fs: a small space-title operation and init-shell
-    builtin, without changing fixed tab widths or navigation.
+17. Complete: [writable virtio-fs](../virtio-fs.md), with persistent host-backed
+    source and executables, and different grants in two spaces.
+18. Next: a small space-title operation and init-shell builtin such as
+    `title "Development"`. A bounded title for the caller's own space should
+    survive init exit. Keep fixed tab widths and current navigation; decide the
+    exact text limit, encoding and title authority in that follow-up.
 
 Everyday use for simple tasks guides this order. Website hosting remains one
 future application, not the primary completion target for the OS.
@@ -96,8 +96,8 @@ boundary or a replacement for the default boot archive.
 - The owner handles repository creation, dispatch integration and compiler
   container publication. Ordinary builds consume the prebuilt compiler and
   evolving SDK; they do not rebuild GCC/binutils.
-- The first host mount is read-only `host://`, mounted by init before launching
-  the shell and passed to the session as a directory capability.
+- Init mounts optional `host://` before launching the shell and passes the
+  selected directory grant to the session.
 - No container, workflow, repository or submodule changes are part of this draft.
 
 ## User and permission design checkpoint

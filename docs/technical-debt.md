@@ -49,8 +49,8 @@ heap does not hide expensive expansion.
 
 Record CPU count, QEMU KVM or TCG, and host/nested-virtualization context. Keep
 allocator execution cost separate from request parking, scheduling and BSP
-service latency. This is a deferred investigation, not a benchmark framework
-or allocator redesign in the writable virtio-fs milestone.
+service latency. This is a deferred investigation; no benchmark framework or
+allocator redesign is selected.
 
 ## Fixed userspace stacks
 
