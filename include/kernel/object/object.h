@@ -21,6 +21,7 @@ enum object_type {
   OBJECT_NET_CONFIG = 13,
   OBJECT_UDP_SERVICE = 14,
   OBJECT_UDP = 15,
+  OBJECT_RANDOM = 16,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.
