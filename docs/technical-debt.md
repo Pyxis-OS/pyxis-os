@@ -38,19 +38,19 @@ long-lived applications make retained capacity or copying material. The current
 allocator and errno assume one thread per process; add synchronization and
 thread-local errno when introducing userspace threads.
 
-## Deferred allocation throughput measurement
+## Allocation measurement follow-ups
 
-Measure the existing allocators before choosing performance changes. Separate
-kernel `kmalloc`/`kfree`, userspace `malloc`/`free` within already-backed pools,
-and heap growth that needs BSP service, physical pages and mappings. Report
-throughput and latency with allocation sizes, live working set, reuse patterns
-and fragmentation; include growth frequency and retained memory so a fast warm
-heap does not hide expensive expansion.
+The [allocation benchmark and caller-scoped memory profile](allocation-profiling.md)
+separate warm userspace heap throughput, heap expansion and direct private-page
+requests. Profiling splits parking/publication, BSP queue time, service and
+resumption. Report the accelerator, CPU count, live set and host/nested-VM context;
+the instrumentation itself reads HPET and perturbs timings.
 
-Record CPU count, QEMU KVM or TCG, and host/nested-virtualization context. Keep
-allocator execution cost separate from request parking, scheduling and BSP
-service latency. This is a deferred investigation; no benchmark framework or
-allocator redesign is selected.
+Standalone kernel `kmalloc`/`kfree` throughput and deeper PMM/VM timing remain
+unmeasured. Pool growth counters describe backing acquired during a measurement
+window, not total retained memory or a fragmentation metric. Revisit scheduling
+of BSP service requests using the measurements before changing allocation policy;
+no allocator or scheduling optimization is part of the benchmark milestone.
 
 ## Fixed userspace stacks
 

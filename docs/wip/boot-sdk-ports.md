@@ -57,6 +57,9 @@ milestone's remaining interface details before starting its code work.
     capability and `title` shell builtin. Labels survive init exit; fixed tab
     widths and navigation are unchanged.
 
+19. Complete: [allocation benchmarks and memory profiling](../allocation-profiling.md),
+    with native heap/growth/page workloads and opt-in caller-scoped BSP timing.
+
 Everyday use for simple tasks guides this order. Website hosting remains one
 future application, not the primary completion target for the OS.
 

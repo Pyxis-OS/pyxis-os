@@ -9,6 +9,7 @@
 #include <kernel/virtio/pci.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/space.h>
+#include <kernel/object/profile.h>
 #include <abi/clock.h>
 #include <abi/echo.h>
 #include <abi/net_config.h>
@@ -80,7 +81,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
   struct file_object *script_file = NULL;
-  struct kernel_object *space_control = NULL;
+  struct kernel_object *space_control = NULL, *profile = NULL;
   struct kernel_object *mount = NULL, *echo = NULL, *net_config = NULL, *udp = NULL, *tcp = NULL, *random = NULL;
 
   if (!application_root) {
@@ -112,15 +113,18 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   udp = udp_service_create();
   tcp = tcp_service_create();
   random = random_create();
-  if (!memory || !launcher || !clock || !echo || !net_config || !udp || !tcp || !random) {
+  profile = profile_create();
+  if (!memory || !launcher || !clock || !echo || !net_config || !udp || !tcp || !random || !profile) {
     goto fail;
   }
 
   handle_t input, output, memory_handle, launcher_handle, display_handle, app, home;
   handle_t clock_handle, keyboard_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
+  handle_t profile_handle;
   handle_t script_handle = HANDLE_INVALID;
   struct kernel_object *console = &process->space->console->object;
-  if (capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &input) != CAP_OK ||
+  if (capability_install(&process->capabilities, profile, PROFILE_RIGHT_MEMORY, &profile_handle) != CAP_OK ||
+      capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &input) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, &output) != CAP_OK ||
       capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, &memory_handle) != CAP_OK ||
       capability_install(&process->capabilities, &process->space->keyboard->object,
@@ -174,6 +178,8 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
     object_release(&script_file->object);
     script_file = NULL;
   }
+  object_release(profile);
+  profile = NULL;
   object_release(random);
   random = NULL;
   object_release(udp);
@@ -191,7 +197,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[15] = {
+  struct process_binding resources[16] = {
     {"input", input},
     {"output", output},
     {"memory", memory_handle},
@@ -204,8 +210,9 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
     {"random", random_handle},
     {"net_config", net_config_handle},
     {"keyboard", keyboard_handle},
+    {"profile", profile_handle},
   };
-  size_t resource_count = 12;
+  size_t resource_count = 13;
   if (space_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"space", space_handle};
   }
@@ -244,6 +251,9 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   return;
 
 fail:
+  if (profile) {
+    object_release(profile);
+  }
   if (space_control) {
     object_release(space_control);
   }
