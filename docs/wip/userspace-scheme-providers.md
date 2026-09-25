@@ -175,8 +175,9 @@ not accidentally submit a request. Exact commit, response-status and stream
 positioning interfaces remain open.
 
 A proposed write contract stages bytes under a budget and requires an explicit
-commit. Individual writes do not issue requests. Closing an uncommitted resource
-or cleaning up a failed process discards its staged body. Shell redirection could
+commit. Individual writes do not issue requests. Destroying an uncommitted resource
+discards its staged body; closing one copied grant does not destroy a resource
+still retained by another process. Shell redirection could
 commit after the producing command succeeds; an editor needs a save hook that
 commits and reports the result. Ordinary file writes alone do not provide these
 transaction boundaries, and editor temporary-file/rename saves need an explicit
@@ -188,6 +189,35 @@ there is no exactly-once guarantee, and POST must not be blindly retried. Settle
 commit ownership across copied handles, cancellation, conflict detection and
 failure reporting before implementation. Write, submit and delete authority must
 be explicit; a readable URI does not grant any of these operations.
+
+## Prepared requests and shell handoff
+
+A future `http` helper could prepare a request with URL, method and request-scoped
+headers, then return a capability to the shell. It uses the userspace provider;
+it does not contain another HTTP implementation. The shell can grant a body
+writer to `echo` or another producer, and later a response reader to `cat` or jq.
+This uses the same [capability-based stdio bindings](shell-streams.md) as pipes
+and ordinary file redirection. The commands only read/write their given streams.
+
+The helper must hand back a real grant through an authorized capability-transfer
+path, not print its numeric handle. The shell receives a local grant that keeps
+the resource alive after the helper exits. Initial copied grants are sufficient;
+there is no requirement to move ownership. Define the running helper-to-shell
+handoff separately from existing launch-time delegation and current request-side
+endpoint copies; printing a handle or embedding one in reply bytes cannot do it.
+
+The intended POST lifecycle is prepare, write the staged body, explicitly submit,
+then read the response. The shell could retain submission authority while granting
+the producer only body-write access, submit after successful producer completion,
+and discard an unsubmitted request on failure. Completion/flush of an individual
+write is not submission. Exact rights, response access and cancellation remain
+open; header policy, including credential handling across redirects, belongs to
+the provider and the specific request rather than a global default.
+
+A motivating workflow is to submit a login body, extract a bearer token with jq,
+and prepare another request with that Authorization header. Shell syntax for
+holding and reusing capabilities remains open; HTTP helpers and capability-valued
+variables are later ideas, not prerequisites for the first shell pipelines.
 
 ## Future response cache
 

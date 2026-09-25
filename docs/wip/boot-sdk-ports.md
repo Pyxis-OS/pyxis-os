@@ -91,8 +91,9 @@ for the persistent development loop or as a replacement for the boot archive.
 ## Choosing the next major milestone
 
 The following are alternatives for discussion after writable host storage,
-space titles and allocation profiling. Select one and split it into focused
-tasks; this table does not start parallel implementation tracks.
+space titles and allocation profiling. Shell streams and pipelines are selected
+as the next direction; the other paths remain parked. Split the selected work
+into focused tasks before implementation.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
@@ -110,9 +111,11 @@ DevilutionX and C AbyssEngine/Diablo II investigations. The
 database sessions and the editor worksheet idea. Their URI examples are future
 interactions, not supported shell syntax or a settled ABI.
 
-Proposed next focus: shell streams and pipelines, because they make existing
-tools more useful and give future jq, awk and scheme results a shared consumer
-path. This is a recommendation awaiting selection, not an approved milestone.
+Selected next focus: [shell streams and pipelines](shell-streams.md), because
+they make existing tools more useful and give future jq, awk and scheme results
+a shared consumer path. Pipes and redirection delegate actual capabilities;
+copied grants suffice, without requiring ownership moves. The detailed byte-I/O
+contract and implementation task list remain open.
 HTTP providers are a strong alternative for advancing the native resource model;
 SDL2/GrafX2 is the graphical alternative. A desktop/compositor remains a separate
 [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting
