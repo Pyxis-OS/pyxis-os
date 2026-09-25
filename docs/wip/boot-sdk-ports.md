@@ -49,8 +49,14 @@ milestone's remaining interface details before starting its code work.
 
 15. Complete: [outbound TCP streams](../tcp.md), native connection capabilities,
     a request/response client and a transmit-only ttcp tool. Listening and application protocols follow separately.
-    Writable virtio-fs is a candidate afterward, to persist the existing
-    edit/build/run workflow; discuss its ownership/authority boundary first.
+16. Complete: [per-CPU trusted init scripts](../init.md), with development,
+    read-only and idle selections driven by Make/Limine configuration.
+17. Next: [writable virtio-fs](writable-virtio-fs.md), to persist the existing
+    edit/build/run workflow and exercise different host grants in two spaces.
+    Short native writes are agreed; resolve each task's remaining contracts
+    before implementation.
+18. After writable virtio-fs: a small space-title operation and init-shell
+    builtin, without changing fixed tab widths or navigation.
 
 Everyday use for simple tasks guides this order. Website hosting remains one
 future application, not the primary completion target for the OS.

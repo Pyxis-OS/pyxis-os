@@ -31,10 +31,10 @@ contract alongside the [overlay design](../vfs.md) before implementation.
 
 ## Deferred work
 
-Writable host access needs a separate scope and the
-[user/authority checkpoint](users-and-authority.md). Explicit directory grants
-do not settle future guest-user ownership or host identity mapping. Accounts
-are not a prerequisite for this read-only mount.
+[Writable host access](writable-virtio-fs.md) now has its own milestone, without
+adding overlays. The [user/authority checkpoint](users-and-authority.md) still
+applies: explicit directory grants and a single host-service identity do not
+settle future guest-user ownership or host identity mapping.
 
 Networking, block storage, a disk format, installer, compositor and VirtIO GPU
 remain separate milestones. The agreed driver order is virtio-fs, virtio-net,

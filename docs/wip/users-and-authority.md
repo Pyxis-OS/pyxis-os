@@ -43,6 +43,21 @@ is reached.
 - How does a virtio-fs mount relate guest authority to the host service's access?
   Host permissions do not by themselves define the Pyxis user model.
 
+## Writable host prototype boundary
+
+For the planned [writable virtio-fs milestone](writable-virtio-fs.md), trusted
+boot-selected init scripts receive the available setup authority and delegate
+read-write or read-only roots over the same export to their sessions. The kernel
+enforces those grants and descendants cannot widen them. Mount authority stays
+out of ordinary sessions; existing handles keep their rights after init exits.
+
+The user explicitly selects the host export and daemon access. Guest operations
+use the existing single host-service identity, constrained independently by host
+permissions. This is a development mount, not persistent per-user home ownership
+or a mapping from guest users to host accounts. Do not add placeholder identity
+fields. Authentication, multiple guest identities, sharing/revocation policy
+and persistent ownership metadata remain open for the broader checkpoint below.
+
 ## Completion of the design checkpoint
 
 Write down a concrete ownership and grant model with examples: two users with
