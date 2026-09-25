@@ -194,10 +194,23 @@ BSP retirement path, so closing on an AP does not allocate or destroy objects.
 For a nonzero read capacity, successful zero-byte reads at or beyond the file's
 end indicate EOF. Reads can return fewer bytes than requested. Console writes
 report actual progress; a nonempty write cannot succeed with zero progress.
-RAM-file writes complete in full or leave the file unchanged. A transfer
-with zero data length succeeds with a zero count and does not dereference its
-data address. Request and reply validation still apply. Partial progress is
-success with the actual count; errors report no transferred bytes.
+Native file writes also permit short progress: a nonempty success reports
+1..requested bytes. Advance the source and offset by that count, then submit
+only the remaining suffix. RAM-file writes still complete in full or fail
+unchanged; this is a property of RAM backing, not the general file contract.
+A zero-length write validates authority, offset arithmetic and reply storage,
+then succeeds with zero without dereferencing its data address, extending the
+file or contacting the backend. A missing WRITE grant still fails.
+
+Errors carry no count for that call. OUTCOME_UNKNOWN means a submitted mutation
+has no trustworthy completion: it may already have changed the file. Do not
+infer zero effect, automatically replay it or roll back unrelated changes.
+Previously confirmed calls keep their progress. Libpyxis rejects impossible
+write counts (oversized, overflowing, or zero for nonempty input) and malformed
+write/resize replies as OUTCOME_UNKNOWN. This status does not claim that ordinary
+host errors undo earlier effects. NO_SPACE, QUOTA and FILE_TOO_LARGE distinguish
+storage limits from NO_MEMORY (allocation failure) and LIMIT (representation or
+implementation bounds).
 
 Status values for this slice are 0 for success, 1 for an invalid or stale handle,
 2 for denied rights, 3 for an unsupported protocol or operation, 4 for a malformed

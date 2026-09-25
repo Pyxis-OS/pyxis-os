@@ -67,8 +67,20 @@ within the RAM filesystem, not disk durability or a whole-path snapshot.
 `fread` and `fwrite` return complete element counts and check size/count overflow
 before I/O. A partial final element may have transferred bytes even though it
 is not included in that count. File position belongs to each FILE, with no
-shared seek position in the underlying capability. File writes use that offset;
-terminal output completes partial console writes until done or an error occurs.
+shared seek position in the underlying capability. File writes use that offset.
+Both file and terminal output continue positive short writes until complete or
+an error, submitting only the remaining suffix. Zero progress or an excessive
+count is rejected; file position advances only for confirmed bytes. On a later
+failure, the position includes any partial final element, the return counts
+only whole elements, and `ferror`/`errno` retain the failure. Neither `fwrite`
+nor formatting helpers automatically retry an error. Append re-queries the end
+before each native write and remains non-atomic across all these calls.
+
+OUTCOME_UNKNOWN maps to EIO: the current native mutation may have taken effect
+without a trustworthy reply. The stream can account for earlier confirmed
+writes only. Applications needing that distinction must use the native status;
+retrying the same bytes after EIO is not guaranteed safe. Zero-size/count
+`fwrite` remains a C no-op; it does not submit a native zero-byte write.
 
 `fgetc`/`getc`/`getchar`, `fgets`, `fputc`/`putc`/`putchar`, `fputs` and `puts` are
 provided. `fgets` retains a newline and terminates successful input. Capacity one
@@ -141,12 +153,15 @@ if reporting itself fails.
 | ENDPOINT_CLOSED | EPIPE |
 | BUSY | EBUSY |
 | NO_MEMORY | ENOMEM |
+| NO_SPACE | ENOSPC |
+| QUOTA | EDQUOT |
+| FILE_TOO_LARGE | EFBIG |
 | LIMIT | EOVERFLOW |
 | NOT_FOUND | ENOENT |
 | ALREADY_EXISTS | EEXIST |
 | READ_ONLY | EROFS |
 | NOT_EMPTY | ENOTEMPTY |
-| INPUT_LOST, unrecognized failure | EIO |
+| IO, OUTCOME_UNKNOWN, INPUT_LOST, unrecognized failure | EIO |
 
 The native WRONG_TYPE result does not distinguish a file from an intermediate
 directory mismatch, so libc does not invent that distinction. Permission checks

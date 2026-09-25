@@ -59,8 +59,18 @@ grant mask; traversal and delegation use it rather than URI-based assumptions.
 Permit short native file writes. A successful nonempty write returns a positive
 count no larger than the supplied extent; callers advance the offset and input
 by that count and submit only the remaining suffix. A zero-byte write still
-validates authority and arguments, then succeeds without extending the file. No caller may spin on successful zero progress for
-a nonempty request or accept a count larger than its request.
+validates authority and arguments, then succeeds without extending the file or
+contacting the backing store. No caller may spin on successful zero progress
+for a nonempty request or accept a count larger than its request.
+
+The first host WRITE will submit at most 4 KiB of data per native call, further
+bounded by the negotiated FUSE `max_write`. Reserve room for the FUSE request
+header and WRITE fields in addition to that payload: the current 4 KiB transport
+request area and small FUSE request scratch must grow in task 3. A large native
+request receives a
+short count, not an error just because it exceeds that per-transfer bound.
+Do not impose this host transport limit on RAM writes. Reject a zero negotiated
+write limit for nonempty writes without looping or inventing successful progress.
 
 RAM-backed writes can continue completing in full. Replace the public
 all-or-nothing promise rather than maintaining a second ABI or increasing a
@@ -71,10 +81,23 @@ C element-count returns must still obey their own contract.
 A timeout or lost reply can occur after the host performed a mutation. Reporting
 failure does not prove that the file or directory was unchanged. Do not fabricate
 a successful count, roll back unrelated host changes, or automatically replay
-WRITE, creation, removal or rename. Define caller-visible status semantics for
-this uncertainty before wiring mutations through the worker. Keep ordinary host
-errors distinct from malformed replies and transport failure. Disk-full/quota
-errors must not be mistaken for kernel heap exhaustion.
+WRITE, creation, removal or rename. Report CALL_OUTCOME_UNKNOWN when a mutation
+was published to the device but no trustworthy completion is available, including
+timeout, lost transport, malformed header/body or impossible write count. Track
+publication explicitly in task 3: pre-submission failures retain their ordinary
+status, and failures of preparatory OPEN/GETATTR must not imply that WRITE ran.
+A session already stopped before submission returns UNAVAILABLE. Earlier
+confirmed writes do not make a later failed call safe to replay; preserve only
+the progress actually acknowledged.
+
+A structurally valid host error reply retains its mapped status. This does not
+promise rollback or durability. ENOSPC maps to CALL_NO_SPACE / ENOSPC, EDQUOT to
+CALL_QUOTA / EDQUOT, and EFBIG to CALL_FILE_TOO_LARGE / EFBIG. ENOMEM remains
+CALL_NO_MEMORY / ENOMEM; CALL_LIMIT / EOVERFLOW remains for representation or
+implementation limits. CALL_OUTCOME_UNKNOWN maps to EIO in libc, with no known
+count for that call; native callers retain the distinction. Libpyxis also uses
+OUTCOME_UNKNOWN for malformed native write/resize replies. Never fabricate a
+count or automatically retry an uncertain mutation.
 
 There is no multi-call transaction. Host processes and other spaces may change
 the tree between requests. Existing non-atomic stdio append remains a documented
@@ -113,7 +136,7 @@ launch execute from live host-backed mappings or claim snapshot isolation.
    backend's current lack of writes explicit until subsequent tasks provide it;
    do not publish a development profile that promises working writes early.
 
-2. [ ] **Short-write contract and runtime consumers.** Replace the native
+2. [x] **Short-write contract and runtime consumers.** Replace the native
    all-or-nothing contract, specify counts and error/progress behavior, and
    update libpyxis/libc/direct callers. Decide transfer bounds and status mapping
    for host errors and uncertain mutation outcomes. Keep RAM behavior intact.
