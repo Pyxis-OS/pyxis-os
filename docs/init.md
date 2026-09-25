@@ -76,9 +76,9 @@ The userland repository supplies three shebang scripts using `app://shell.pxe`:
 Both interactive profiles explicitly mount with `--read-only`. Scripts can
 select `--read-write` grants for regular-file creation, writes, resize and the
 existing `mkdir`, `rm`, `rmdir` and `mv` commands on `host://`. The packaged
-development profile's mount selection is unchanged. Direct host executable
-loading remains pending. Both profiles keep writable access to the shared RAM
-home.
+development profile's mount selection is unchanged. With the existing launcher
+authority, a READ grant can load a native executable from `host://`. Both
+profiles keep writable access to the shared RAM home.
 
 The session launcher applies per-space [terminal/environment configuration](session-configuration.md)
 and starts the interactive shell. Only the development profile requests global

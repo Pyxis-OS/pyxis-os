@@ -237,9 +237,12 @@ The native enumeration ABI returns one name per call. The backend requests a
 fresh 4 KiB READDIR batch and discards unused entries, so a large listing can
 transfer the same trailing names repeatedly. There is no attribute/data cache
 or directory snapshot. Revisit batching with a concrete consumer and explicit
-host-change semantics. Direct executable loading also remains limited to
-in-memory files; remote launch needs bounded staging and a lifetime contract
-before allowing the BSP loader to consume host bytes.
+host-change semantics. Host executable loading captures at most 16 MiB per
+launch into owned memory; it does not provide a coherent snapshot if a host
+process edits the file in place during capture. Callers must avoid in-place
+changes while loading, and before/after size checks cannot prove snapshot
+consistency. Revisit the per-capture limit only with a bounded staging and
+concurrency design that preserves this lifetime contract.
 
 
 ## UDP ICMP errors and ephemeral selection

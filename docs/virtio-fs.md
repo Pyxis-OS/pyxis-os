@@ -3,8 +3,9 @@
 The optional virtio-fs device provides a `host://` root through native
 directory/file capabilities. Init opens the selected export and delegates its
 root through the session launcher to the shell and ordinary children. Existing
-`ls` and `cat` use it without PCI, VirtIO or FUSE knowledge. Read-write grants
-also support file/directory creation, file writes and resize, removal and file
+`ls` and `cat` use it without PCI, VirtIO or FUSE knowledge. Read-only grants
+can also launch native executables from host files. Read-write grants support
+file/directory creation, file writes and resize, removal and file
 rename/replacement. Ordinary boot needs neither the device nor the daemon.
 
 The supported platform is QEMU Q35 with firmware-assigned PCI resources, modern
@@ -82,8 +83,10 @@ ls .
 ```
 
 Create `hello.txt` in the exported host directory first. The prompt tracks the
-new working directory and children inherit it. Writes fail; native executable
-launch directly from a host file remains unsupported.
+new working directory and children inherit it. Writes fail with a read-only
+grant. Native executables can be launched from readable host files; the loader
+captures an owned image first. See [processes](processes.md#implemented-userspace-launch)
+for its size limit, errors and host-change contract.
 
 Exit QEMU with Ctrl-a x in its serial terminal, or use the monitor's `quit`.
 Stop the daemon with Ctrl+C if it remains running. After **both** have stopped,
@@ -118,8 +121,8 @@ session app://session.pxe
 
 Boot with `make run INIT=build/host-write-init.sh VIRTIO_FS_SOCKET="$socket_dir/fs.sock"`.
 CPU 1 can now save files with Kilo, compile with TCC, and use `mkdir`, `rm`,
-`rmdir` and `mv` in the export. CPU 2 retains its packaged read-only session. Native executable launch directly
-from `host://` remains a later task. Both packaged init defaults remain read-only.
+`rmdir` and `mv` in the export. CPU 2 retains its packaged read-only session.
+Both packaged init defaults remain read-only.
 
 New regular files request mode `0644` under the existing host-service identity,
 with no guest chmod or umask API. Creation is exclusive: an existing name returns
@@ -325,10 +328,9 @@ Rights checks precede dispatch and missing rights return DENIED. The existing
 root grants the required rights. Host rename captures both names before parking
 and borrows the live parent capabilities while the caller waits; the worker
 receives no caller-private pointers. Host I/O errors use CALL_IO (libc EIO); unavailable sessions
-and timeouts have their existing distinct statuses. Launching a native
-executable from a host file is explicitly rejected:
-the current kernel loader requires in-memory bytes. This does not prevent
-reading a script as data or copying a file into RAM first.
+and timeouts have their existing distinct statuses. Native executables and
+interpreters can be launched from host files through owned image capture; the
+loader never executes from live host mappings. See [the launch contract](processes.md#implemented-userspace-launch).
 
 A caller captures inputs in a record embedded in shared task metadata, then
 blocks through the existing wake-before-park contract. The BSP scheduler only
@@ -409,7 +411,7 @@ QEMU setup; a present device that cannot mount fails the init script rather than
 silently continuing. Selecting `INIT=build/userspace/shell.pxe` provides a native
 recovery shell without executing the mount command or session configuration.
 There is no mount attachment below directories, unmount, reconnection, live
-namespace replacement, host executable loader or overlay.
+namespace replacement or overlay.
 
 ## Failure and lifetime
 

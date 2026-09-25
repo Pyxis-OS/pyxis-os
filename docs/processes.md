@@ -537,13 +537,35 @@ startup layout use the existing startup validation. Empty arrays are ignored;
 working_path is optional and requires a nonempty directory chain. argv contains
 argc string addresses; the kernel adds the child's final NULL.
 
-The caller obtains staging storage from BSP, then captures all metadata on its
-own CPU/root. Source handles remain alive in its exclusively owned table while
-blocked. It acquires the file's existing operation ownership before lending the
-table and file to BSP. The image remains stable throughout validation and load:
-other reads/writes/resizes queue until loading releases ownership. No spinlock
-is held during loading, and no second whole-image snapshot is allocated. Later
-file changes cannot alter the child's copied image.
+For RAM/archive images, the caller obtains staging storage from BSP, then
+captures all metadata on its own CPU/root. Source handles remain alive in its
+exclusively owned table while blocked. It acquires the file's existing
+operation ownership before lending the table and file to BSP. The image remains
+stable throughout validation and load: other reads/writes/resizes queue until
+loading releases ownership. No spinlock is held during loading, and no second
+whole-image snapshot is allocated. Later file changes cannot alter the child's
+copied image.
+
+A caller still needs its existing LAUNCH-authorized launcher capability. A READ
+file handle is sufficient as the source for a host-backed binary or interpreter;
+the launcher creates the process in the caller's space on its assigned CPU and
+applies the caller's explicit grants. This uses the existing launcher request,
+with no new syscall, rights or image-format version. The host executable file
+limit is 16 MiB and reports CALL_LIMIT; it is not a process runtime memory
+limit. The host worker reads into an owned heap copy, then the existing BSP
+loader validates and maps that image. It accepts positive short reads. An empty
+or invalid image reports BAD_REQUEST. Premature EOF or a detected difference
+between file sizes before and after capture reports CALL_IO. Transport and
+other backend errors retain their status, and failed capture is not retried.
+The staging copy is freed on both success and failure. The process never runs
+from live host mappings.
+
+Capture retains the same host file node and open handle across its reads, so an
+atomic pathname replacement does not redirect an in-progress load. A caller
+must not modify the image in place while it is loading. Before/after size
+checks cannot prove that captured contents form a coherent snapshot. Script
+files retain their existing live READ-handle behavior; this capture path applies
+only to binary executables and interpreters.
 
 BSP creates an inactive process and initial stack using the same helper as boot
 setup, installs explicit grants and prepares startup. It installs a WAIT observer
