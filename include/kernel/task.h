@@ -84,8 +84,9 @@ enum call_status task_request_display(struct display_object *display,
     uint64_t operation, struct display_buffer *reply);
 
 /* Current user task, IF=0, no spinlocks. Staging allocation/disposal runs on
- * BSP. Launch consumes capture, borrows the caller's table and image operation,
- * and returns only after BSP releases both. No remote user/stack access. */
+ * BSP. Launch/discard consumes capture and any owned host image. Launch borrows
+ * the caller's table and any in-memory image operation, returning after their
+ * release. No remote user/stack access. */
 struct launch_capture *task_allocate_launch_capture(void);
 void task_discard_launch_capture(struct launch_capture *capture);
 enum call_status task_launch_process(struct launch_capture *capture, handle_t *child);

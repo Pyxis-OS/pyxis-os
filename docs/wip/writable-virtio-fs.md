@@ -1,9 +1,9 @@
 # Persistent development through writable virtio-fs
 
-Status: tasks 1–5 are complete. This document plans focused implementation PRs;
-it does not authorize implementing all tasks at once. Discuss unresolved
-interface choices before starting their task, and check off each task in the
-PR that completes it.
+Status: tasks 1–6 are complete. This document tracks the remaining focused work;
+it does not authorize implementing all remaining tasks at once. Discuss
+unresolved interface choices before starting their task, and check off each
+task in the PR that completes it.
 
 ## Result and boundary
 
@@ -106,20 +106,12 @@ limitation; short-write handling must not accidentally claim atomic append.
 
 ## Host-backed executable loading
 
-Executable loading needs owned, stable bytes before calling the existing PXE
-loader. Capture bytes through the host backend, validate the complete captured
-image, and unwind storage and references on failure. The FUSE worker must never
-access a caller's private pointers or mutate an active private address space.
-Avoid holding locks across blocking reads or adding a loader-specific scheduler
-framework.
-
-An owned copy is stable after capture but is not a coherent host snapshot if the
-source changes during capture. Size/metadata checks cannot prove otherwise.
-Define bounds and the short-read/change contract before implementation. For the
-initial workflow, require that an executable not be modified in place while
-being loaded; recommend publishing replacements by atomic rename. Existing
-handles retain their underlying file across replacement. Do not make program
-launch execute from live host-backed mappings or claim snapshot isolation.
+Native binaries and interpreters can be launched from a READ host file handle.
+The host worker captures an owned heap copy, then the existing BSP loader
+validates and maps it. The 16 MiB host file limit, capture errors and concurrency
+limits are documented in the [launch contract](../processes.md#implemented-userspace-launch).
+Scripts retain their existing live READ-handle behavior. In-place edits during
+capture are unsupported; atomic rename preserves the opened file's identity.
 
 ## Focused PR worklist
 
@@ -156,11 +148,10 @@ launch execute from live host-backed mappings or claim snapshot isolation.
    durability limits and safe publication ordering. Closing handles and
    `fflush` do not synchronize storage.
 
-6. [ ] **Host-backed executable launch.** Settle capture limits and concurrency
-   behavior, obtain owned bytes through the existing worker, and feed the
-   current loader. Update any userspace image-inspection paths that assume
-   in-memory backing. Preserve process ownership and failure unwinding. Run a
-   host-backed executable produced by the guest TCC.
+6. [x] **Host-backed executable launch.** Capture the host file into owned
+   memory through the existing worker, then use the existing loader. The
+   [launch contract](../processes.md#implemented-userspace-launch) records the
+   size bound, errors and source-change limits.
 
 7. [ ] **Init profiles, persistence walkthrough and completion.** Finish the
    packaged development/read-only mount selections, document writable daemon
