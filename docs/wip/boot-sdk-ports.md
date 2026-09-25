@@ -36,8 +36,9 @@ milestone's remaining interface details before starting its code work.
 11. Complete: [initial networking](../networking.md), with loopback and virtio-net,
     manual IPv4 configuration and native ping. DHCP follows later through the
     same configuration interface; TCP and website hosting remain separate.
-12. Next: [userspace UDP datagrams](udp-datagrams.md), with explicit-address
-    endpoint capabilities, bounded queues and loopback/host client-server use.
+12. Complete: [userspace UDP datagrams](../networking.md#udp-tools), with explicit
+    address binding, endpoint capabilities, bounded queues and loopback/host
+    client-server use.
     DHCP, DNS and TCP follow as separate milestones.
 
 This focus order does not commit to working on the milestones together.

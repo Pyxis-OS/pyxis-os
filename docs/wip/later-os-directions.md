@@ -57,8 +57,9 @@ these tasks do not depend on virtio-fs.
 ## Networking and website hosting
 
 The completed [initial networking milestone](../networking.md) provides loopback,
-virtio-net, manually configured IPv4 and ping. The next bounded milestone is
-[userspace UDP datagrams](udp-datagrams.md). DHCP follows through the same
+virtio-net, manually configured IPv4 and ping. Native
+[UDP endpoints and tools](../networking.md#udp-tools) now support bounded loopback
+and host exchanges. DHCP follows through the same
 configuration operations once UDP, broadcast handling and lease deadlines are
 available. Revisit existing network stacks before the TCP milestone; keep the
 [user/authority checkpoint](users-and-authority.md) ahead of remotely accessible

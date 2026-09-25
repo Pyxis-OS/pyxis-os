@@ -612,6 +612,106 @@ cannot be distinguished from traffic intended for its new owner.
 Unbound destination ports are silently dropped. ICMP error generation and
 application delivery are deferred, so an absent listener usually appears as a
 receive timeout. There is no fragmentation, reassembly, broadcast, multicast,
-retransmission, delivery/order guarantee or duplicate suppression. The
-[remaining milestone task](wip/udp-datagrams.md) adds ordinary client/server tools;
-DHCP, DNS and TCP remain separate work.
+retransmission, delivery/order guarantee or duplicate suppression. DHCP, DNS and TCP remain separate work.
+
+
+## UDP tools
+
+`udp-send LOCAL_IP DEST_IP PORT MESSAGE` binds an ephemeral local port and sends
+one datagram. Addresses are numeric dotted-decimal IPv4; destination ports are
+1..65535. The command accepts one string argument (quote spaces; `""` sends an
+empty datagram), up to 1472 bytes. Shell input limits may impose a smaller limit.
+It allows three seconds for send acceptance and then three seconds for a reply.
+Only a reply from the specified address/port is displayed; other peers do not
+extend the deadline. There is no retransmission or verification that the reply
+matches the sent payload. Output includes sender, byte length and a quoted
+payload with nonprintable bytes escaped as `\xNN`; received terminal escape
+sequences are never executed. A timeout or native error returns failure.
+
+`udp-echo LOCAL_IP PORT [--count N]` binds an explicit address/port and replies
+with exactly the received bytes, including empty/binary datagrams. It exits
+successfully after thirty seconds without an arrival or N successful echoes
+(1..65535). Each send has a three-second deadline; an operation failure ends the
+server unsuccessfully. Packets with source port zero cannot be replied to and
+are skipped. A count limit still has the idle timeout. Neither tool requires
+terminal input, and neither runs by default.
+
+### Loopback pair
+
+Start a background server using the shell's limited [trailing `&`](shell.md#background-commands):
+
+```text
+udp-echo 127.0.0.1 9000 --count 2 &
+```
+
+Wait for its listening message, then run:
+
+```text
+udp-send 127.0.0.1 127.0.0.1 9000 "hello"
+udp-send 127.0.0.1 127.0.0.1 9000 ""
+```
+
+The server exits after those two replies. This works without a NIC and on a
+single CPU. The shell remains usable while the server waits; its output may
+share a line with the prompt. No job control or readiness protocol is implied.
+
+### Guest client to host service
+
+With `socat` installed on the host, run this ordinary UDP echo service in a
+separate terminal:
+
+```sh
+socat -T 10 UDP4-RECVFROM:18080,bind=127.0.0.1,reuseaddr,fork EXEC:/bin/cat
+```
+
+Boot with `make run CPUS=4 VIRTIO_NET=1`. With the stock static configuration:
+
+```text
+udp-send 10.0.2.15 10.0.2.2 18080 "hello from Pyxis"
+```
+
+No forwarding option is needed for guest-initiated traffic. Stop the host
+service with Ctrl+C when finished.
+
+### Host client to guest server
+
+Opt into one UDP forwarding rule while booting:
+
+```sh
+make run CPUS=4 VIRTIO_NET=1 UDP_FORWARD=19000:9000
+```
+
+`UDP_FORWARD=HOST_PORT:GUEST_PORT` accepts decimal ports 1..65535 without leading
+zeros and requires `VIRTIO_NET=1`. It maps host `127.0.0.1:19000` to guest
+`10.0.2.15:9000`, matching the stock network configuration. It does not expose a
+host LAN listener or change guest routing. Omit it for the normal unforwarded
+boot. See [QEMU user networking](https://www.qemu.org/docs/master/system/devices/net.html).
+
+In Pyxis:
+
+```text
+udp-echo 10.0.2.15 9000 --count 1 &
+```
+
+After its listening message, run on the host:
+
+```sh
+printf 'hello from host\n' | socat -T 3 - UDP4:127.0.0.1:19000
+```
+
+The host receives its bytes back; the server exits after the echo. Regular ping
+and `ls`/`cat host://...` remain available with the
+[optional virtio-fs setup](virtio-fs.md). Echo listeners are development tools,
+not supervised public services.
+
+## Further networking work
+
+Wildcard/connected UDP, broadcast/multicast, fragmentation, IPv6, asynchronous
+send and waiting on multiple objects remain outside this implementation. DHCP
+needs unconfigured-address and broadcast handling as well as configuration
+authority and lease deadlines; explicit-address unicast UDP alone is insufficient.
+DNS and TCP need separate scopes. ICMP errors and ephemeral-port selection are
+tracked in [technical debt](technical-debt.md#udp-icmp-errors-and-ephemeral-selection).
+Keep the [users/authority checkpoint](wip/users-and-authority.md) ahead of broader
+remotely accessible services. [Network domains](wip/later-os-directions.md#device-ownership-and-network-domains),
+Retawq and userspace HTTP/HTTPS scheme providers remain future work.
