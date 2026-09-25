@@ -90,13 +90,9 @@ namespace fields are needed yet.
 
 Remaining decisions:
 
-- **External IPv4 routing:** local `127/8` routing and the limited IPv4/ICMP
-  subset are implemented in [networking](../networking.md). Before task 5, settle
-  source selection for external routes, local delivery to assigned external
-  addresses and precedence between local, directly connected and default routes.
 - **Configuration ABI:** the echo capability and native ping are implemented.
   Define separate init-only address/route configuration rights and requests when
-  external routing has a consumer (tasks 5/6); do not add mutable loopback setup
+  init gains configuration operations (task 6); do not add mutable loopback setup
   merely to populate an interface. New syscalls remain allowed for concrete needs,
   without placeholder asynchronous networking APIs.
 - **Host setup and init policy:** opt-in `VIRTIO_NET=1` uses QEMU user networking,
@@ -140,10 +136,17 @@ Remaining decisions:
      MTU, short BSP IRQ and bounded work in the existing network worker. No
      offloads, merged buffers, packed queues or control queue. Five-second TX
      deadlines, checked completion batches and incremental reset handling retain
-     runtime DMA storage until reboot. Frames are counted/discarded until task 5.
-5. [ ] **Ethernet, ARP and external routing.** Connect the device to IP through
-   Ethernet framing and bounded ARP resolution. Add the directly connected and
-   default-gateway paths, expiry/retry handling and explicit unavailable results.
+     runtime DMA storage until reboot. Task 5 connects frames to Ethernet/ARP/IP.
+5. [x] **Ethernet, ARP and external routing.** Added `net0`, worker-owned address/
+   prefix/gateway replacement and clear, source selection and routing in local,
+   connected, then default order. Delivery to the assigned address stays local
+   even with link down. ARP has 16 neighbors, 16 waiting packets within the shared
+   software budget, three one-second probes and 60-second cache expiry. Deadlines,
+   configuration changes and link loss discard waiting packets without reclaiming
+   DMA-owned buffers. Existing echo tokens carry asynchronous ARP completion.
+   Debugger-configured ordinary ping reached the QEMU gateway and `1.1.1.1`.
+   Configuration capability, helpers and init setup remain task 6. See
+   [networking](../networking.md) for the current contract and GDB setup.
 6. [ ] **Init configuration and external ping.** Wire manual configuration into
    init with explicit delegation to the session. Document the actual host setup
    and demonstrate ping to a reachable peer alongside loopback, using normal
