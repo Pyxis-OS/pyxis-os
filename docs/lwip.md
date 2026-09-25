@@ -15,8 +15,8 @@ make image
 
 The packet bridge and native outbound CONNECT capability are live. Init receives
 `tcp` authority, explicitly delegated through session and shell to foreground and
-background children. Streams expose INSPECT, READ and ABORT; WRITE and write
-shutdown remain in the next [TCP tasks](wip/tcp.md). No listener is exposed.
+background children. Streams expose INSPECT, READ, WRITE and ABORT; write
+shutdown remains in the next [TCP tasks](wip/tcp.md). No listener is exposed.
 Traffic to closed ports still receives lwIP's normal reset response.
 
 ## Worker and memory ownership
@@ -140,8 +140,8 @@ its admission slot, including across link/address changes. No other deadline
 shortens it. Address removal, failed routing or an unavailable interface aborts
 affected live connections. Queued packet copies are canceled when the PCB dies.
 
-WRITE and graceful shutdown remain in the TCP milestone. Their interoperability
-checks follow as those operations become usable. Listening and a POSIX sockets layer remain outside the milestone.
+Graceful shutdown remains in the TCP milestone. Its interoperability checks
+follow when the operation becomes usable. Listening and a POSIX sockets layer remain outside the milestone.
 
 ## Native active open
 
@@ -231,3 +231,55 @@ never fabricate clean EOF. The sole worker serializes completion, control calls,
 packet processing and timers; it never keeps user pointers or syscall-stack
 buffers. Completed reads cannot return new receive credit merely because their
 caller has been woken but has not yet run.
+
+## Native send stream
+
+`TCP_WRITE` requires `TCP_RIGHT_WRITE`. Libpyxis `tcp_write` borrows an explicit
+stream, input buffer/length and absolute monotonic deadline, and returns a count.
+The kernel checks the count output and copies the effective input before queueing
+work. Length is clamped to 4 KiB. A nonempty successful call always accepts a
+positive count, possibly short; the caller retries only the remaining suffix.
+Zero length validates authority, buffers and deadline but does not poll transport
+state. Failed calls accept nothing and leave the count output unchanged.
+
+Success means that lwIP copied the bytes into bounded send storage. It is neither
+a peer acknowledgment nor proof that the peer application read them. After that
+commit, output errors cannot turn the call into a failure that invites duplicate
+sending: transport retries retain ownership, and a later terminal failure remains
+visible through INSPECT and subsequent I/O. Peer FIN does not stop WRITE. Final
+close still aborts; it must not be used to flush accepted data. Explicit graceful
+write shutdown follows in the next task.
+
+Sixteen static write slots each reserve 4 KiB plus metadata, separately from the
+read slots and `lwip_memory`. They include staging, waiting and completed calls
+until their callers collect them. The caller's grant keeps the stream alive;
+slots contain no user or private-stack pointer. One writer per shared stream is
+allowed (otherwise BUSY), independently of its reader. Global slot exhaustion
+returns QUEUE_FULL. A full send byte/pbuf budget parks the writer until the worker
+processes ACKs, a terminal event or its original deadline, at most 30 seconds
+ahead. A timeout leaves data from earlier successful calls queued.
+
+The 16 KiB per-connection send budget covers accepted unsent and unacknowledged
+payload together. lwIP additionally caps queued pbufs with its existing
+`TCP_SND_QUEUELEN` formula (123 for this profile); heap accounting includes segment
+records, pbuf headers, spare tail capacity and allocator headers. Static staging
+copies and shared ARP/local/NIC packet copies have separate bounded storage.
+There is no second adapter retransmission queue. If a whole attempted copy does
+not fit, bounded halving attempts permit a short result; lwIP rolls failed copies
+back. With byte/pbuf room but not enough memory for even one byte, return NO_MEMORY
+without aborting earlier accepted writes.
+
+lwIP owns segmentation, ACK validation, congestion control, RTT/RTO estimation,
+retransmission backoff, Nagle coalescing and zero-window probes/reopening. Its
+existing timers and packet handling run in the sole worker before pending native
+calls are serviced. Caelum's separate 120-second no-ACK-progress deadline bounds
+retained send data; successful WRITE calls do not reset that deadline. Pending
+WRITE deadlines join the worker's earliest-deadline sleep, without polling loops
+or a second networking task.
+
+`TCP_MSS` is explicitly 536 bytes, retaining the conservative existing default.
+The peer's advertised MSS and local interface MTU can reduce the effective send
+size further. This ceiling is not path-MTU discovery or a guarantee for every
+route. No window scaling, timestamps, SACK, fragmentation or new ICMP error/PMTU
+handling is added. Throughput tuning belongs after the initial interoperability
+and graceful-lifecycle work.

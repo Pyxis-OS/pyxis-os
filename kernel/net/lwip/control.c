@@ -290,6 +290,9 @@ bool net_tcp_service(void)
   if (tcp_reads_service()) {
     worked = true;
   }
+  if (tcp_writes_service()) {
+    worked = true;
+  }
   return worked;
 }
 
@@ -318,6 +321,13 @@ bool net_tcp_next_deadline(uint64_t *deadline)
   if (tcp_reads_next_deadline(&read_deadline)) {
     if (read_deadline < next) {
       next = read_deadline;
+    }
+    found = true;
+  }
+  uint64_t write_deadline;
+  if (tcp_writes_next_deadline(&write_deadline)) {
+    if (write_deadline < next) {
+      next = write_deadline;
     }
     found = true;
   }
