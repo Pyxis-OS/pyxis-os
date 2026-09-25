@@ -1,4 +1,4 @@
-# Foreground shell
+# Shell
 
 `make userspace` builds the SDK, shell and core utilities. Normal boot runs the
 default [init script](init.md) and [session launcher](session-configuration.md),
@@ -55,9 +55,8 @@ limit is also rejected. The command buffer has room for 1023 bytes plus NUL;
 libterm's visible-area limit may be smaller. History and scrolling input beyond
 that visible area remain deferred.
 
-There is no expansion, substitution, globbing, piping, redirection or background
-execution. Characters such as `$`, `*`, `;`, `|` and `>` are literal argument
-bytes, not operators. Interactive input treats `#` literally too; script mode
+There is no expansion, substitution, globbing, piping or redirection. Characters
+such as `$`, `*`, `;`, `|` and `>` are literal argument bytes, not operators. Interactive input treats `#` literally too; script mode
 supports whole-line comments.
 
 `cd path` changes the shell's owned directory chain. It requires one argument;
@@ -86,6 +85,37 @@ at the exact destination path. It accepts exactly two operands, has no options,
 and does not append a basename when the destination is a directory. Directory
 moves and cross-filesystem copying are unsupported. It uses libc rename and
 reports failure without deleting the source or destination itself.
+
+## Background commands
+
+An unquoted, unescaped trailing `&` launches an external command without waiting:
+
+```text
+udp-echo 127.0.0.1 9000 --count 1 &
+```
+
+Whitespace before `&` is optional. Quoted `"&"` and escaped `\&` remain argument
+bytes. A bare `&`, `&&`, or text after an unquoted `&` is a syntax error; nothing
+on that line runs. Built-ins (`cd`, `exit`, `mount`, `session`) reject background
+execution.
+
+Background children receive no `input` or `keyboard` grant, so they cannot read
+the shell's terminal or physical-key stream. Their standard input is unavailable,
+not a fabricated EOF stream. Output, display and other ordinary child resources
+are retained; output may interrupt the prompt, and there is no coordinated
+redraw. The shell closes its process observer immediately. Existing process
+cleanup reclaims the child's execution resources when it exits.
+
+There is no job table, completion notification, exit-status collection, `jobs`,
+`fg`/`bg`, signal delivery or termination command. Ctrl+C still cancels only the
+shell's current input line. Use programs with their own bounded exit policy.
+Background launch also works in scripts: launch failure stops the script, while
+successful launch lets it continue regardless of the child's eventual result.
+Children may outlive the shell; leaving it does not stop them.
+
+Successful launch does not guarantee application readiness. For a UDP server,
+wait for its listening message before sending traffic. Nothing starts in the
+background during default boot.
 
 ## Script mode
 
@@ -176,7 +206,7 @@ Each foreground child receives explicit copies of terminal input/output, memory,
 with the rights above, and the current directory chain. It does not receive the
 shell's launcher. When available, the [display](graphics.md),
 [clock](timekeeping.md) and [keyboard](keyboard.md) grants are also forwarded
-to children and session successors.
+to foreground children and session successors; background children omit keyboard input.
 The immutable initial environment is forwarded in full using
 libpyxis's borrowed environment-array accessors. No environment mutation or PWD
 maintenance is implemented. Children receive the full current working-path

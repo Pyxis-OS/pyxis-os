@@ -10,7 +10,8 @@ CPUS ?= 1
 ACCEL ?= kvm
 VIRTIO_FS_SOCKET ?=
 VIRTIO_NET ?= 0
-export VIRTIO_FS_SOCKET VIRTIO_NET
+UDP_FORWARD ?=
+export VIRTIO_FS_SOCKET VIRTIO_NET UDP_FORWARD
 INIT ?=
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=

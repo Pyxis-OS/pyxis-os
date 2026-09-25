@@ -9,6 +9,7 @@ set -eu
 : "${OVMF_VARS:=/usr/share/OVMF/OVMF_VARS.fd}"
 : "${VIRTIO_FS_SOCKET:=}"
 : "${VIRTIO_NET:=0}"
+: "${UDP_FORWARD:=}"
 command -v "$QEMU" >/dev/null 2>&1 || {
   echo "Missing $QEMU: install QEMU or set QEMU, then run make run." >&2
   exit 1
@@ -27,9 +28,33 @@ if [ "$1" = debug ]; then
 else
   set --
 fi
+net_backend=user,id=pyxis_net
+if [ -n "$UDP_FORWARD" ]; then
+  [ "$VIRTIO_NET" = 1 ] || {
+    echo 'UDP_FORWARD requires VIRTIO_NET=1.' >&2
+    exit 1
+  }
+  case "$UDP_FORWARD" in
+    *:*) ;;
+    *) echo 'UDP_FORWARD must be HOST_PORT:GUEST_PORT.' >&2; exit 1 ;;
+  esac
+  host_port=${UDP_FORWARD%%:*}
+  guest_port=${UDP_FORWARD#*:}
+  for port in "$host_port" "$guest_port"; do
+    case "$port" in
+      ''|0*|*[!0-9]*) echo 'UDP_FORWARD ports must be decimal 1..65535 without leading zeros.' >&2; exit 1 ;;
+    esac
+    [ "${#port}" -le 5 ] && [ "$port" -le 65535 ] || {
+      echo 'UDP_FORWARD ports must be in 1..65535.' >&2
+      exit 1
+    }
+  done
+  # Match the stock network configuration. Expose only a host loopback port.
+  net_backend="$net_backend,hostfwd=udp:127.0.0.1:$host_port-10.0.2.15:$guest_port"
+fi
 case "$VIRTIO_NET" in
   0) set -- "$@" -nic none ;;
-  1) set -- "$@" -netdev user,id=pyxis_net \
+  1) set -- "$@" -netdev "$net_backend" \
        -device virtio-net-pci,netdev=pyxis_net,disable-legacy=on ;;
   *) echo 'VIRTIO_NET must be 0 or 1.' >&2; exit 1 ;;
 esac
