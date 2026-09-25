@@ -5,7 +5,7 @@
 #include <stddef.h>
 
 /* Operations use explicit offsets. SIZE accepts either READ or WRITE; WRITE
- * permits both mutation operations, subject to backend/host restrictions. */
+ * permits WRITE, RESIZE and SYNC, subject to backend/host restrictions. */
 #define FILE_RIGHT_READ (UINT64_C(1) << 0)
 #define FILE_RIGHT_WRITE (UINT64_C(1) << 1)
 #define FILE_RIGHTS (FILE_RIGHT_READ | FILE_RIGHT_WRITE)
@@ -14,6 +14,7 @@
 #define FILE_SIZE UINT64_C(2)
 #define FILE_WRITE UINT64_C(3)
 #define FILE_RESIZE UINT64_C(4)
+#define FILE_SYNC UINT64_C(5)
 
 struct file_read_request {
   uint64_t offset;
@@ -37,7 +38,7 @@ union file_payload {
   struct file_resize_request resize;
 };
 
-/* Send the complete structure for every operation. FILE_SIZE ignores body;
+/* Send the complete structure for every operation. SIZE and SYNC ignore body;
  * initialize messages to zero so unused payload bytes contain no stack data. */
 struct file_message {
   struct message_header header;
@@ -60,6 +61,12 @@ struct file_read_reply {
 struct file_write_reply {
   uint64_t written;
 };
+
+/* SYNC requires WRITE, has no payload fields and returns no reply. It requests
+ * full backing-store synchronization of this file, not its parent directory.
+ * Success on RAM is a no-op, not persistence. Host durability depends on the
+ * backing service/storage; OUTCOME_UNKNOWN means completion was not confirmed.
+ * Closing a handle and flushing a userspace stream do not imply SYNC. */
 
 /* FILE_SIZE has no payload fields. */
 struct file_size_reply {

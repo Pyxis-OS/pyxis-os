@@ -27,7 +27,7 @@ static bool mutation_request(uint32_t opcode)
 {
   return opcode == FUSE_WRITE || opcode == FUSE_SETATTR || opcode == FUSE_CREATE ||
     opcode == FUSE_MKDIR || opcode == FUSE_UNLINK || opcode == FUSE_RMDIR ||
-    opcode == FUSE_RENAME2;
+    opcode == FUSE_RENAME2 || opcode == FUSE_FSYNC || opcode == FUSE_FSYNCDIR;
 }
 
 static enum virtio_fs_result fail_session(struct virtio_fs_session *session,
@@ -520,6 +520,16 @@ enum virtio_fs_result virtio_fs_close(struct virtio_fs_open *opened)
   *opened = (struct virtio_fs_open){0};
   enum virtio_fs_result released = virtio_fs_node_put(node);
   return result == VIRTIO_FS_OK ? released : result;
+}
+
+enum virtio_fs_result virtio_fs_sync(struct virtio_fs_open *opened)
+{
+  struct virtio_fs_node *node = opened->node;
+  KASSERT(node && node->references);
+  /* Zero flags request full synchronization, including metadata, not datasync. */
+  struct fuse_fsync_in query = {.handle = opened->handle};
+  unsigned opcode = node->kind == VIRTIO_FS_DIRECTORY ? FUSE_FSYNCDIR : FUSE_FSYNC;
+  return fixed_reply(node->session, opcode, node->id, &query, sizeof(query), NULL, 0);
 }
 
 enum virtio_fs_result virtio_fs_write(struct virtio_fs_open *opened, uint64_t offset,

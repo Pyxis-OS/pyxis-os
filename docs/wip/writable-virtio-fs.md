@@ -1,6 +1,6 @@
 # Persistent development through writable virtio-fs
 
-Status: tasks 1–4 are complete. This document plans focused implementation PRs;
+Status: tasks 1–5 are complete. This document plans focused implementation PRs;
 it does not authorize implementing all tasks at once. Discuss unresolved
 interface choices before starting their task, and check off each task in the
 PR that completes it.
@@ -104,15 +104,7 @@ There is no multi-call transaction. Host processes and other spaces may change
 the tree between requests. Existing non-atomic stdio append remains a documented
 limitation; short-write handling must not accidentally claim atomic append.
 
-## Synchronization and executable loading
-
-A completed write, flushing a C stream, and requesting backing-storage
-synchronization are different operations. Add explicit native file and directory
-synchronization plus a small userspace command. Closing a capability or calling
-`fflush` must not silently promise crash durability. Define how synchronization
-errors reach callers; final-reference cleanup cannot be the only place to report
-them. Directory synchronization matters for created, removed and renamed names.
-The host filesystem/storage ultimately determines the durability of its reply.
+## Host-backed executable loading
 
 Executable loading needs owned, stable bytes before calling the existing PXE
 loader. Capture bytes through the host backend, validate the complete captured
@@ -158,11 +150,11 @@ launch execute from live host-backed mappings or claim snapshot isolation.
    parking, reserve returned-handle storage before creation, and preserve
    submitted-mutation uncertainty without retry or rollback.
 
-5. [ ] **Explicit synchronization.** Define file/directory requests, required
-   rights, runtime helpers and a small command with explicit target paths.
-   Document ordering for saving a file and publishing a renamed replacement.
-   Report errors separately from ordinary handle release; do not redefine libc
-   `fflush` as a disk-sync operation or imply a global sync from a single file.
+5. [x] **Explicit synchronization.** Add file and directory synchronization
+   requests, required rights, libpyxis helpers and the `sync` utility. The
+   [backend contract](../virtio-fs.md#synchronization) documents error handling,
+   durability limits and safe publication ordering. Closing handles and
+   `fflush` do not synchronize storage.
 
 6. [ ] **Host-backed executable launch.** Settle capture limits and concurrency
    behavior, obtain owned bytes through the existing worker, and feed the
@@ -194,7 +186,7 @@ spaces:
   The read-only view is live, not an immutable snapshot of CPU 1's files.
 - Request synchronization for the files and affected directories, exit QEMU,
   restart the daemon/guest normally, then read and run the saved files again.
-  A normal reboot check does not establish power-loss durability.
+  This workflow does not establish power-loss durability.
 - Boot without the host device to retain the existing optional-mount behavior.
 
 After this milestone, add space titles in their own PR: a bounded title for the

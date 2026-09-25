@@ -125,8 +125,9 @@ New regular files request mode `0644` under the existing host-service identity,
 with no guest chmod or umask API. Creation is exclusive: an existing name returns
 ALREADY_EXISTS rather than replacing or truncating it. Resize is a separate
 operation. Host permissions and a daemon's `--readonly` remain independent limits.
-A successful save or close does not promise durable storage; explicit file and
-directory synchronization is still pending.
+A successful save or close does not promise durable storage. Use explicit file
+and directory synchronization when the host service's durability contract
+matters; see [synchronization](#synchronization).
 
 ## Queue and worker contract
 
@@ -172,11 +173,11 @@ background polling requests.
 
 `include/kernel/virtio/fs.h` exposes root acquisition, LOOKUP, GETATTR, OPEN,
 READ, CREATE, WRITE, size-only SETATTR, MKDIR, UNLINK, RMDIR, RENAME2,
-OPENDIR, READDIR, RELEASE/RELEASEDIR and reference release. These functions run
-only on the existing BSP transport worker with interrupts enabled and no held
-locks. They neither allocate nor accept userspace pointers. The native backend
-below owns their records and performs allocation with BSP interrupts disabled,
-outside transport waits.
+OPENDIR, READDIR, FSYNC/FSYNCDIR, RELEASE/RELEASEDIR and reference release.
+These functions run only on the existing BSP transport worker with interrupts
+enabled and no held locks. They neither allocate nor accept userspace pointers.
+The native backend below owns their records and performs allocation with BSP
+interrupts disabled, outside transport waits.
 
 The caller supplies zeroed, stable node and open records. Each successful LOOKUP
 owns one host lookup reference, even if another record has the same node ID.
@@ -223,8 +224,8 @@ RAM directories retain their existing generation checks.
 Wire errors become `enum virtio_fs_result`; Linux errno values do not escape the
 client. Ordinary errors such as a missing or inaccessible file leave the session
 usable. Truncated/inconsistent replies, invalid directory records, transport
-failures and failed RELEASE/FORGET cleanup stop it. Directory creation, removal
-and regular-file rename use host FUSE operations. Synchronization, symlink
+failures and failed RELEASE/FORGET cleanup stop it. Directory creation, removal,
+regular-file rename and synchronization use host FUSE operations. Symlink
 traversal, reconnection and unmount remain unimplemented.
 
 Storage errors retain their meaning through the native layer: ENOSPC becomes
@@ -262,7 +263,42 @@ does not follow symlinks. Open native file handles retain their host objects
 after unlink or replacement, subject to ordinary host permissions. This is a
 live view, with no snapshot or durability promise. Automatic creation of missing
 parents, recursive deletion, directory moves and cross-filesystem moves are
-unsupported. No fsync operation is exposed.
+unsupported.
+
+## Synchronization
+
+`file_sync(handle)` requests full synchronization of a file's data and metadata;
+`directory_sync(handle)` requests synchronization of that directory's entries.
+Both return the operation's status to the caller. File sync requires WRITE
+authority. Directory sync requires either CREATE or REMOVE authority. A
+read-only grant therefore returns DENIED. The immutable archive backend does
+not support synchronization.
+
+The RAM backend accepts both operations as no-ops; success does not mean data is
+persistent. Host file sync sends FUSE FSYNC with flags zero, and host directory
+sync sends FSYNCDIR with flags zero through the existing worker. Files are
+opened lazily with write access for file sync and read access for directory
+sync. Preparatory open failures are ordinary errors. Once a sync request is
+submitted, a missing or malformed reply reports OUTCOME_UNKNOWN because the
+host may have completed it. Host errors are returned to the caller; uncertain
+requests are not retried automatically.
+
+The `sync` utility accepts explicit file and directory paths, processes them in
+argument order, continues after errors and exits unsuccessfully if any target
+fails. With no arguments it prints usage; successful operation is quiet. It
+resolves each path when invoked, so a concurrent rename can make a path name a
+different object. Code that needs object identity should call the libpyxis
+helpers on the already-held handle. Sync applies only to the named object; it
+does not sync a filesystem globally. `fflush` and closing a file handle retain
+their existing behavior and do not request synchronization, and libc exposes no
+`fsync` API.
+
+For publishing a replacement, write the temporary file and sync it through the
+same open handle while that identity is known, rename it to the final name, then
+sync the parent directory. If the rename crosses directories, sync both parent
+directories. A host acknowledgement establishes only what that host service and
+its storage promise. Concurrent host changes prevent treating the sequence as a
+snapshot or a multi-call transaction.
 
 ## Native directory and file objects
 

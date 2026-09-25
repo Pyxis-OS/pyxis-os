@@ -86,6 +86,18 @@ and does not append a basename when the destination is a directory. Directory
 moves and cross-filesystem copying are unsupported. It uses libc rename and
 reports failure without deleting the source or destination itself.
 
+`sync path...` requests synchronization for each explicit file or directory
+path, in argument order. It continues after an individual error and exits with
+failure if any target failed; with no arguments it prints usage and fails.
+Success is quiet. For example, after Kilo closes a saved file, run
+`sync host://work/hello.c host://work` to request file and parent-directory
+synchronization. The command resolves each path when invoked, so a concurrent
+rename can make it sync a different object. Native callers that must sync the
+same object they already hold can use libpyxis `file_sync(handle)` or
+`directory_sync(handle)`. Syncing one target does not sync the whole filesystem.
+See [the host synchronization contract](virtio-fs.md#synchronization) for
+permissions, errors and durability limits.
+
 ## Background commands
 
 An unquoted, unescaped trailing `&` launches an external command without waiting:

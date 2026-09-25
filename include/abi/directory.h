@@ -20,6 +20,7 @@
 #define DIRECTORY_CREATE UINT64_C(3)
 #define DIRECTORY_REMOVE UINT64_C(4)
 #define DIRECTORY_RENAME UINT64_C(5)
+#define DIRECTORY_SYNC UINT64_C(6)
 
 #define DIRECTORY_RENAME_NO_REPLACE UINT64_C(0)
 #define DIRECTORY_RENAME_REPLACE UINT64_C(1)
@@ -88,6 +89,11 @@ union directory_payload {
   struct directory_rename_request rename;
 };
 
+/* SYNC requires either CREATE or REMOVE. Send the complete zeroed message;
+ * it ignores the body and returns no reply. Synchronizes this directory's
+ * entries, not its children or the whole filesystem. RAM succeeds as a no-op;
+ * host durability depends on the service/storage. OUTCOME_UNKNOWN means the
+ * submitted synchronization has no trustworthy completion. */
 struct directory_message {
   struct message_header header;
   union directory_payload body;

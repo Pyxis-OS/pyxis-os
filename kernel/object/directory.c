@@ -675,6 +675,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   case DIRECTORY_CREATE:
     required = DIRECTORY_RIGHT_CREATE;
     break;
+  case DIRECTORY_SYNC:
+    required = DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_REMOVE;
+    break;
   case DIRECTORY_REMOVE:
   case DIRECTORY_RENAME:
     required = DIRECTORY_RIGHT_REMOVE;
@@ -703,6 +706,16 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (operation == DIRECTORY_RENAME) {
     return rename_child(directory, &request.rename);
+  }
+  if (operation == DIRECTORY_SYNC) {
+    if (directory->backing == DIRECTORY_HOST) {
+      struct hostfs_request *pending = task_prepare_hostfs();
+      pending->operation = HOSTFS_SYNC;
+      pending->node = directory->host;
+      task_submit_hostfs(pending);
+      return (struct syscall_result){pending->status, 0};
+    }
+    return (struct syscall_result){directory->backing == DIRECTORY_RAM ? CALL_OK : CALL_READ_ONLY, 0};
   }
   return enumerate(directory, &request.enumerate, reply_address, reply_capacity);
 }
