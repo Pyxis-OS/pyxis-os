@@ -47,8 +47,8 @@ milestone's remaining interface details before starting its code work.
     userspace client, route-aware UDP opening and a configured default resolver
     at `1.1.1.1`. Numeric ping remains independent of DNS and randomness.
 
-15. Next: [outbound TCP streams](tcp.md), native connection capabilities and a
-    small userspace client. Listening and application protocols follow separately.
+15. Complete: [outbound TCP streams](../tcp.md), native connection capabilities,
+    a request/response client and a transmit-only ttcp tool. Listening and application protocols follow separately.
     Writable virtio-fs is a candidate afterward, to persist the existing
     edit/build/run workflow; discuss its ownership/authority boundary first.
 

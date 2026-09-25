@@ -497,7 +497,8 @@ does not identify a guest-stack failure.
 
 The initial networking milestone is complete. DHCP needs UDP, broadcast support,
 lease deadlines and delegated configuration authority. [DNS](dns.md) is complete;
-[outbound TCP](wip/tcp.md) is the next milestone. IPv6, richer routing, network
+[outbound TCP](tcp.md) is available through native stream capabilities.
+IPv6, richer routing, network
 isolation and website hosting remain separate scopes in
 [later directions](wip/later-os-directions.md#networking-and-applications).
 This stack deliberately implements a bounded IPv4/ICMP subset, not complete
@@ -787,8 +788,8 @@ transfer buffer with no fixed file-size limit, but all sending precedes reading.
 A protocol requiring concurrent progress in both directions can stall and time
 out. There is no stdin pump, listener or total-runtime limit. Normal completion
 means response EOF, not proof that a remote application processed the request.
-See the [TCP milestone](wip/tcp.md) for transport limits and the remaining
-transmitter utility.
+See [outbound TCP](tcp.md) for transport limits and the transmit-only
+[`ttcp` utility](tcp.md#transmit-only-ttcp).
 
 ## Further networking work
 
@@ -796,8 +797,8 @@ Wildcard/connected UDP, broadcast/multicast, fragmentation, IPv6, asynchronous
 send and waiting on multiple objects remain outside this implementation. DHCP
 needs unconfigured-address and broadcast handling as well as configuration
 authority and lease deadlines; explicit-address unicast UDP alone is insufficient.
-DNS queries and hostname ping are implemented; [outbound TCP](wip/tcp.md) has its
-own milestone.
+DNS queries, hostname ping and [outbound TCP](tcp.md) are implemented.
+Listening and application protocols remain future work.
 ICMP errors and generic UDP ephemeral-port selection are
 tracked in [technical debt](technical-debt.md#udp-icmp-errors-and-ephemeral-selection).
 Keep the [users/authority checkpoint](wip/users-and-authority.md) ahead of broader

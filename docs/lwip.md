@@ -15,8 +15,8 @@ make image
 
 The packet bridge and native outbound CONNECT capability are live. Init receives
 `tcp` authority, explicitly delegated through session and shell to foreground and
-background children. Streams expose INSPECT, READ, WRITE, SHUTDOWN_WRITE and ABORT. Native command-line
-consumers remain in the next [TCP task](wip/tcp.md). No listener is exposed.
+background children. Streams expose INSPECT, READ, WRITE, SHUTDOWN_WRITE and ABORT.
+The [tcp and ttcp utilities](tcp.md) consume this interface. No listener is exposed.
 Traffic to closed ports still receives lwIP's normal reset response.
 
 ## Worker and memory ownership
@@ -140,8 +140,8 @@ its admission slot, including across link/address changes. No other deadline
 shortens it. Address removal, failed routing or an unavailable interface aborts
 affected live connections. Queued packet copies are canceled when the PCB dies.
 
-Native utilities remain in the TCP milestone. Listening and a POSIX sockets layer
-remain outside the milestone.
+Native [tcp and ttcp utilities](tcp.md) exercise these operations. Listening and
+a POSIX sockets layer remain outside this implementation.
 
 ## Native active open
 

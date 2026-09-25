@@ -56,17 +56,17 @@ these tasks do not depend on virtio-fs.
 
 ## Networking and applications
 
-[Outbound TCP](tcp.md) is the next bounded milestone. The priority is making
-Pyxis useful for simple daily tasks; website hosting is an eventual application,
-not the main project target.
+[Outbound TCP](../tcp.md) is implemented, including native tcp and ttcp tools.
+The priority is making Pyxis useful for simple daily tasks; website hosting is
+an eventual application, not the main project target.
 
 The completed [initial networking milestone](../networking.md) provides loopback,
 virtio-net, manually configured IPv4 and ping. Native
 [UDP endpoints and tools](../networking.md#udp-tools) now support bounded loopback
 and host exchanges. DHCP follows through the same
 configuration operations once broadcast handling and lease deadlines are
-available. [DNS queries and hostname ping](../dns.md) are complete. The TCP plan
-revisits native implementation versus stack reuse before code begins; keep the
+available. [DNS queries and hostname ping](../dns.md) are complete. The
+[lwIP integration](../lwip.md) owns the TCP engine; keep the
 [user/authority checkpoint](users-and-authority.md) ahead of remotely accessible
 services. Server resource contracts need their own scope. Hosting the Pyxis
 landing page remains an eventual application; revisit init supervision and
