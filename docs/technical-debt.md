@@ -199,6 +199,15 @@ teardown/reconnect lifecycle. Never free an outstanding DMA buffer solely becaus
 a request timed out. Idle daemon disconnection is not necessarily observable
 until the next request or device event; there is no heartbeat.
 
+## Virtio-net runtime resource retention
+
+The [network transport](networking.md#virtio-net-transport) uses two nine-page
+contiguous allocations for rings and packet buffers (72 KiB total). Runtime
+failure attempts reset and disables delivery/DMA, but retains the PCI claim,
+allocations and mappings until reboot, for the same shared-mapping lifetime
+reason as virtio-fs. No reconnect or repeated allocation occurs. Revisit both
+drivers' reclamation with a real teardown and SMP invalidation contract.
+
 ## Host filesystem request storage and enumeration
 
 The [native virtio-fs backend](virtio-fs.md#native-directory-and-file-objects)

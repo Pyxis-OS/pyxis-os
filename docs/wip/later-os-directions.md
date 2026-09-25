@@ -61,6 +61,29 @@ length: the provider completes a bounded download before returning a sized file.
 A bounded LRU response cache and remote compiler includes are later ideas.
 This does not add HTTP or TLS to the kernel.
 
+## Device ownership and network domains
+
+Future spaces could have exclusive devices or explicitly share the services
+provided by a device. For example, one NIC could serve two or three workload
+spaces while another serves a single space containing an isolated web-service
+environment. This is a future direction, not an extension of the current driver
+milestone or a commitment to particular objects/APIs.
+
+Keep device ownership, service state and access grants distinct. One driver owns
+a device's registers, queues, interrupts and reset. A proposed network domain
+would own its interfaces, addresses, routes, connections, loopback and resource
+budgets; spaces receive separate communication and configuration capabilities.
+Several spaces could intentionally share one domain. An isolated domain should
+have its own loopback, and dedicated hardware alone must not allow its workload
+to exhaust shared kernel resources.
+
+Sharing one physical NIC between isolated domains would need virtual interfaces
+and explicit packet routing/filtering. Direct device programming by an untrusted
+space would additionally need hardware DMA isolation. CPU placement and moving
+work off the BSP are separate decisions from these ownership boundaries. Device
+assignment/revocation, accounting, domain lifetime and sharing policy remain open.
+Do not introduce placeholder structures or restructure current drivers for this.
+
 ## Multiple users and restricted permissions
 
 Multi-user support is a requirement, with an earlier

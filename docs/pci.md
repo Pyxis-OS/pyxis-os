@@ -112,7 +112,7 @@ The shared reset, capability validation, mappings, queue inspection and masked
 MSI-X mechanics live in `kernel/virtio/transport.c`. Each driver keeps its own
 `virtio_pci_transport` at a stable address for the claim's lifetime. Feature
 policy, queue storage, activation and workers remain driver-owned. The
-[network preparation path](networking.md#virtio-net-preparation) uses these same
+[network transport](networking.md#virtio-net-transport) uses these same
 mechanisms with an independent claim and MSI-X vector.
 
 ### Feature negotiation and queue inspection

@@ -6,6 +6,7 @@
 #include <kernel/net/echo.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include <kernel/virtio/net.h>
 #include <stdatomic.h>
 
 #define NET_WORK_BUDGET 8
@@ -104,6 +105,11 @@ static void wait_for_work(void)
   uint64_t flags = cpu_save_interrupts();
   uint64_t deadline;
   bool timed = net_echo_next_deadline(&deadline);
+  uint64_t transport_deadline;
+  if (virtio_net_next_deadline(&transport_deadline) && (!timed || transport_deadline < deadline)) {
+    deadline = transport_deadline;
+    timed = true;
+  }
   lock_worker();
   if (worker_notified || loopback.count || (timed && task_deadline_expired(deadline))) {
     worker_notified = false;
@@ -139,7 +145,9 @@ static void receive_packet(struct net_packet *packet)
 static void network_worker(void *argument)
 {
   (void)argument;
+  virtio_net_start();
   for (;;) {
+    bool transport_busy = virtio_net_service();
     bool serviced = net_echo_service();
     unsigned handled = 0;
     while (handled < NET_WORK_BUDGET) {
@@ -150,7 +158,7 @@ static void network_worker(void *argument)
       receive_packet(packet);
       ++handled;
     }
-    if (serviced || handled == NET_WORK_BUDGET) {
+    if (transport_busy || serviced || handled == NET_WORK_BUDGET) {
       /* A past deadline yields without imposing an extra timer delay. */
       kernel_task_sleep_until(0);
     } else {
