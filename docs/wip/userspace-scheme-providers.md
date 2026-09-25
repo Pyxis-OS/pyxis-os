@@ -302,9 +302,19 @@ see the result appear in the editor. Preserve the query, result and error as
 separate state so the output does not destroy the query or a syntax error erase
 the user's work. Exact worksheet lifetime, names and editor UI remain open.
 
-Saving does not ordinarily make an editor reread a file. This needs an explicit
-reload or a small editor integration that submits the query and displays its
-result; scheme routing alone cannot replace a Neovim buffer. Temporary-file and
+Saving does not ordinarily make an editor reread a file. Investigate automatic
+change detection alongside explicit reload or a small editor integration.
+Neovim's current development documentation describes `autoread`, timestamp checks
+and libuv filesystem watchers; unmodified buffers can reload external changes.
+See [timestamp/change detection](https://github.com/neovim/neovim/blob/master/runtime/doc/editing.txt)
+and [autoread](https://github.com/neovim/neovim/blob/master/runtime/doc/options.txt).
+The selected Neovim port would need corresponding Pyxis metadata/notification
+support or an explicit provider-aware refresh. A synchronous result replacement
+during save can be mistaken for the editor's own completed write, so autoread
+alone does not establish a reliable submit/result sequence. Distinct query and
+result resources or an editor hook are candidates to resolve that ordering.
+Existing read-only result snapshots would still remain immutable; a refresh
+opens a new result. Temporary-file and
 rename-based saves also need deliberate handling rather than pretending they
 execute SQL. Neovim itself remains a separate future port.
 
