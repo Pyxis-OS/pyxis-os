@@ -93,16 +93,16 @@ silently claiming delivery. FIN acknowledgment, peer close and TIME_WAIT can
 outlive handles. Retired transport state must remain owned and counted until it
 is safe to reclaim; never reuse its tuple just because an application exited.
 
-## Proposed initial budgets
+## Agreed initial budgets
 
-These are conservative development limits, not permanent ABI commitments. Confirm
-them before the connection-state task; changing a limit later is not a reason to
-redesign the object model.
+These are conservative development limits, not permanent ABI commitments. They
+were agreed for task 2; changing a limit later does not require redesigning the
+object model. I/O and pending-call limits take effect in their respective tasks.
 
-| Resource | Initial proposal |
+| Resource | Agreed limit |
 | --- | --- |
 | Live transport records | 32 globally, including setup, closing and TIME_WAIT |
-| Per-connection byte storage | 16 KiB receive and 16 KiB send, allocated on demand during setup; release payload storage when only TIME_WAIT metadata remains |
+| Per-connection byte storage | 16 KiB receive and 16 KiB send, allocated on demand as bytes are queued; release payload storage when only TIME_WAIT metadata remains |
 | Per-call READ/WRITE extent | At most 4 KiB; larger application transfers use short-call loops |
 | Pending calls | Eight CONNECT/control slots, sixteen READ slots and sixteen WRITE slots; retirement and timers must not need a free user-call slot |
 | Caller deadlines | At most 30 seconds ahead; expired deadlines fail before doing work |
@@ -138,9 +138,10 @@ binding, with entropy supplied by the existing VirtIO source. Kernel transport
 identity must not depend on a caller-provided random grant. Preparation must not
 block the sole network worker waiting for entropy; missing entropy disables new
 TCP connections explicitly, while ordinary boot, UDP and numeric ping continue.
-Before that task, select the small keyed primitive, its source/license if borrowed,
-and the secret initialization/handoff. Do not invent a cryptographic function or
-add a general crypto/provider framework.
+Task 2 uses the pinned CC0 SipHash-2-4 reference in Pyxis, with two independent
+128-bit keys prepared by a short-lived BSP task and a five-second entropy deadline.
+Failure disables new TCP connections for that boot. No crypto/provider framework
+is introduced; see [the implementation](../lwip.md).
 
 Use RFC 9293 for wire validation, sequence-space comparisons, state transitions,
 MSS negotiation, duplicate handling, FIN/RST processing and TIME_WAIT. Bound and
@@ -158,8 +159,8 @@ caller deadlines are distinct. Timers remain monotonic, never wall-clock based.
 The initial slice has no window scaling, SACK, timestamps, ECN or keepalive API.
 Set a conservative effective send size within peer MSS and the current IP path's
 limits; do not assume Ethernet's MTU proves the end-to-end path MTU. Discuss the
-initial PMTU policy, out-of-order retention and exact TIME_WAIT duration before
-the corresponding task. Record interoperability limits explicitly instead of
+initial PMTU policy and out-of-order retention before the corresponding task.
+Task 2 preserves lwIP’s two-minute TIME_WAIT duration. Record interoperability limits explicitly instead of
 claiming complete Internet-host conformance. Existing IPv4 fragmentation and
 ICMP-error limitations remain visible in [technical debt](../technical-debt.md).
 
@@ -198,10 +199,12 @@ observed under naturally occurring traffic.
   PCB generation and are canceled on destruction. Timers join the worker wait.
   No connection capability or open/listen caller is exposed yet; see
   [the implemented boundary](../lwip.md).
-- [ ] **2. Connection ownership and transport identity.** Settle the proposed
-  budgets, keyed primitive/secret preparation and tuple allocation. Add bounded
-  worker-owned state, timer scheduling and retirement. Preserve the existing
-  cross-CPU allocation model; do not turn task.c into a TCP implementation.
+- [x] **2. Connection ownership and transport identity.** A 32-record worker-owned
+  list separates transport and external ownership, retains TIME_WAIT and defers
+  reclamation beyond callbacks. SipHash keys come from bounded boot preparation;
+  internal connection preparation explicitly binds randomized ephemeral ports.
+  Allocation accounting includes lwIP metadata and retained packets. Connection
+  deadlines join the worker wait. No native CONNECT or I/O is exposed yet.
 - [ ] **3. Active open and native connection capability.** Handshake, bounded
   retry, refusal/reset validation, deadline cleanup, INSPECT/ABORT and service
   delegation. Pair ABI/libpyxis changes with the kernel. No handle escapes on a
