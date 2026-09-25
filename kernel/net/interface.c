@@ -229,6 +229,7 @@ enum mm_result net_init(void)
   enum mm_result result = kernel_task_create(network_worker, NULL);
   if (result == MM_OK) {
     atomic_store_explicit(&worker_ready, true, memory_order_release);
+    net_lwip_identity_start();
     klog("net: lo 127.0.0.1/8 MTU=%zu, IPv4/ICMP/UDP worker ready\n", net_loopback.mtu);
   }
   return result;

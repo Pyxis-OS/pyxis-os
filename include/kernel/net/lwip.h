@@ -5,6 +5,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* BSP/IF=0 before scheduling: launch the one-shot entropy preparation task. */
+void net_lwip_identity_start(void);
+
 /* Sole BSP network worker, IF=1. Initialize once before processing packets.
  * Only validated, locally addressed TCP datagrams reach receive; bytes are
  * borrowed for the call and copied before entering lwIP. No inline delivery
