@@ -18,10 +18,12 @@
 #define FUSE_READ 15
 #define FUSE_WRITE 16
 #define FUSE_RELEASE 18
+#define FUSE_FSYNC 20
 #define FUSE_INIT 26
 #define FUSE_OPENDIR 27
 #define FUSE_READDIR 28
 #define FUSE_RELEASEDIR 29
+#define FUSE_FSYNCDIR 30
 #define FUSE_CREATE 35
 #define FUSE_RENAME2 45
 
@@ -145,6 +147,13 @@ struct fuse_release_in {
   uint32_t flags, release_flags;
   uint64_t lock_owner;
 };
+
+struct fuse_fsync_in {
+  uint64_t handle;
+  uint32_t flags, padding;
+};
+
+_Static_assert(sizeof(struct fuse_fsync_in) == 16, "FUSE fsync request");
 
 struct fuse_read_in {
   uint64_t handle, offset;

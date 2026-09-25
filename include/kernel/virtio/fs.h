@@ -130,6 +130,10 @@ enum virtio_fs_result virtio_fs_rename(struct virtio_fs_node *source,
 /* Close always consumes the open, releasing its node retain even on failure.
  * Failed RELEASE/FORGET stops the session rather than losing host ownership. */
 enum virtio_fs_result virtio_fs_close(struct virtio_fs_open *opened);
+/* Full synchronization of the opened file/directory, not a recursive/global
+ * flush. A published request without a trustworthy completion returns UNKNOWN.
+ * Keep the open and node alive on both success and failure. */
+enum virtio_fs_result virtio_fs_sync(struct virtio_fs_open *opened);
 /* Explicit byte offsets, short reads/EOF preserved, at most READ_MAX bytes. */
 enum virtio_fs_result virtio_fs_read(struct virtio_fs_open *opened, uint64_t offset,
     void *buffer, size_t capacity, size_t *read);

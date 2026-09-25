@@ -296,6 +296,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     break;
   case FILE_WRITE:
   case FILE_RESIZE:
+  case FILE_SYNC:
     required = FILE_RIGHT_WRITE;
     break;
   default:
@@ -317,6 +318,16 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   }
   if (operation == FILE_WRITE) {
     return write_file(file, &request.write, reply_address, reply_capacity);
+  }
+  if (operation == FILE_SYNC) {
+    if (file->backing == FILE_HOST) {
+      struct hostfs_request *pending = task_prepare_hostfs();
+      pending->operation = HOSTFS_SYNC;
+      pending->node = file->host;
+      task_submit_hostfs(pending);
+      return (struct syscall_result){pending->status, 0};
+    }
+    return (struct syscall_result){file->backing == FILE_RAM ? CALL_OK : CALL_READ_ONLY, 0};
   }
   if (operation == FILE_RESIZE) {
     if (file->backing == FILE_HOST) {

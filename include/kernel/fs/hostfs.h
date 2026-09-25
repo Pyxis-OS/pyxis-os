@@ -20,6 +20,7 @@ enum hostfs_operation {
   HOSTFS_WRITE,
   HOSTFS_RESIZE,
   HOSTFS_SIZE,
+  HOSTFS_SYNC,
   HOSTFS_ENUMERATE,
 };
 

@@ -331,6 +331,14 @@ static enum call_status open_node(struct hostfs_node *node)
   return call_result(virtio_fs_open(&node->node, VIRTIO_FS_ACCESS_READ, &node->opened));
 }
 
+static enum call_status open_writer(struct hostfs_node *node)
+{
+  if (node->writer.node) {
+    return CALL_OK;
+  }
+  return call_result(virtio_fs_open(&node->node, VIRTIO_FS_ACCESS_WRITE, &node->writer));
+}
+
 static enum call_status enumerate(struct hostfs_request *request)
 {
   struct hostfs_node *node = request->node;
@@ -404,15 +412,21 @@ static enum call_status perform(struct hostfs_request *request)
     }
     return call_result(result);
   }
+  case HOSTFS_SYNC: {
+    struct hostfs_node *node = request->node;
+    bool directory = node->node.kind == VIRTIO_FS_DIRECTORY;
+    enum call_status status = directory ? open_node(node) : open_writer(node);
+    if (status != CALL_OK) {
+      return status;
+    }
+    return call_result(virtio_fs_sync(directory ? &node->opened : &node->writer));
+  }
   case HOSTFS_WRITE:
   case HOSTFS_RESIZE: {
     struct hostfs_node *node = request->node;
-    if (!node->writer.node) {
-      enum virtio_fs_result result = virtio_fs_open(&node->node, VIRTIO_FS_ACCESS_WRITE,
-          &node->writer);
-      if (result != VIRTIO_FS_OK) {
-        return call_result(result);
-      }
+    enum call_status status = open_writer(node);
+    if (status != CALL_OK) {
+      return status;
     }
     if (request->operation == HOSTFS_RESIZE) {
       return call_result(virtio_fs_resize(&node->writer, request->offset));
