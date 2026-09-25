@@ -8,6 +8,9 @@
 #define LAUNCHER_RIGHT_LAUNCH (UINT64_C(1) << 0)
 #define LAUNCHER_LAUNCH UINT64_C(1)
 #define LAUNCH_CAPTURE_MAX_SIZE STARTUP_MAX_SIZE
+/* Host executables are copied before loading; this bounds staging bytes, not
+ * the child's mapped memory. RAM and archive images do not need that copy. */
+#define LAUNCH_HOST_IMAGE_MAX_SIZE (UINT64_C(16) * 1024 * 1024)
 
 struct launch_grant {
   handle_t source;
@@ -26,7 +29,11 @@ struct launch_binding {
  * resulting child startup region separately obeys STARTUP_MAX_SIZE including
  * page padding. No implicit grants, environment or directory inheritance. */
 struct launch_request {
-  handle_t image; /* READ file grant; not implicitly passed to the child. */
+  /* READ file grant; not implicitly passed to the child. Host capture accepts
+   * positive short reads, rejects early EOF/observed size changes with IO, and
+   * never retries a failed capture. Do not modify the file in place while it
+   * loads: even equal before/after sizes cannot establish a host snapshot. */
+  handle_t image;
   uint64_t grants, grant_count;
   uint64_t resources, resource_count;
   uint64_t roots, root_count;

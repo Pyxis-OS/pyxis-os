@@ -55,9 +55,13 @@ enum call_status launcher_start(struct launch_capture *capture, struct process *
   *result = HANDLE_INVALID;
   struct process *child;
   uintptr_t entry;
-  enum mm_result loaded = user_process_load(parent->space, capture->image->data,
-      capture->image->size, &child, &entry);
-  file_end_operation(capture->image);
+  bool host = capture->image->backing == FILE_HOST;
+  const void *bytes = host ? capture->host_image : capture->image->data;
+  size_t size = host ? capture->host_image_size : capture->image->size;
+  enum mm_result loaded = user_process_load(parent->space, bytes, size, &child, &entry);
+  if (!host) {
+    file_end_operation(capture->image);
+  }
   if (loaded != MM_OK) {
     return loaded == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
   }

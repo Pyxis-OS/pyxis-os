@@ -1,5 +1,6 @@
 #include <abi/file.h>
 #include <arch/smp.h>
+#include <kernel/fs/hostfs.h>
 #include <kernel/mm/heap.h>
 #include <kernel/memory.h>
 #include <kernel/object/file.h>
@@ -166,12 +167,6 @@ struct syscall_result launcher_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){CALL_WRONG_TYPE, 0};
   }
 
-  /* The loader currently borrows immutable/in-memory bytes on the BSP.
-   * Remote reads need a separate staging/lifetime contract before launch. */
-  if (((struct file_object *)image)->backing == FILE_HOST) {
-    return (struct syscall_result){CALL_BAD_OPERATION, 0};
-  }
-
   struct launch_capture *capture = task_allocate_launch_capture();
   if (!capture) {
     return (struct syscall_result){CALL_NO_MEMORY, 0};
@@ -183,11 +178,27 @@ struct syscall_result launcher_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){error, 0};
   }
   capture->image = (struct file_object *)image;
-  file_begin_operation(capture->image);
+  if (capture->image->backing == FILE_HOST) {
+    struct hostfs_request *pending = task_prepare_hostfs();
+    pending->operation = HOSTFS_CAPTURE;
+    pending->node = capture->image->host;
+    pending->count = LAUNCH_HOST_IMAGE_MAX_SIZE;
+    task_submit_hostfs(pending);
+    if (pending->status != CALL_OK) {
+      enum call_status error = pending->status;
+      task_discard_launch_capture(capture);
+      return (struct syscall_result){error, 0};
+    }
+    capture->host_image = pending->captured;
+    capture->host_image_size = pending->count;
+    pending->captured = NULL;
+  } else {
+    file_begin_operation(capture->image);
+  }
 
   /* No other task can close source handles or mutate caller mappings. The BSP
-   * borrows the table and file operation, releases the operation before child
-   * submission, and frees capture storage before waking this caller. */
+   * borrows the table and stable image, releases any file operation before
+   * child submission, and frees staging before waking this caller. */
   handle_t child;
   enum call_status status = task_launch_process(capture, &child);
   if (status != CALL_OK) {

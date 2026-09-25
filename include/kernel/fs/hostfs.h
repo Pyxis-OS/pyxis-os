@@ -17,6 +17,7 @@ enum hostfs_operation {
   HOSTFS_REMOVE,
   HOSTFS_RENAME,
   HOSTFS_READ,
+  HOSTFS_CAPTURE,
   HOSTFS_WRITE,
   HOSTFS_RESIZE,
   HOSTFS_SIZE,
@@ -34,6 +35,10 @@ struct hostfs_request {
   struct hostfs_node *node;
   uint64_t kind, offset;
   size_t count;
+  /* CAPTURE: count starts as a byte limit. Success transfers an owned heap
+   * buffer and sets count to its size; failure leaves captured NULL. The BSP
+   * must free it. No capture retry or coherent-host-snapshot guarantee. */
+  void *captured;
   struct directory_cursor cursor;
   char name[VIRTIO_FS_NAME_MAX + 1];
   /* RENAME borrows both parent nodes from the parked caller's capabilities. */

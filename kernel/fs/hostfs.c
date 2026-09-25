@@ -339,6 +339,71 @@ static enum call_status open_writer(struct hostfs_node *node)
   return call_result(virtio_fs_open(&node->node, VIRTIO_FS_ACCESS_WRITE, &node->writer));
 }
 
+static enum call_status capture_file(struct hostfs_request *request)
+{
+  struct hostfs_node *node = request->node;
+  enum call_status status = open_node(node);
+  if (status != CALL_OK) {
+    return status;
+  }
+  struct virtio_fs_attributes attributes;
+  status = call_result(virtio_fs_getattr(&node->node, &attributes));
+  if (status != CALL_OK) {
+    return status;
+  }
+  if (!attributes.size) {
+    return CALL_BAD_REQUEST;
+  }
+  if (attributes.size > request->count) {
+    return CALL_LIMIT;
+  }
+
+  size_t size = attributes.size;
+  uint64_t flags = cpu_save_interrupts();
+  uint8_t *bytes = kmalloc(size);
+  cpu_restore_interrupts(flags);
+  if (!bytes) {
+    return CALL_NO_MEMORY;
+  }
+
+  /* Keep using the retained node/open across reads, even if its pathname is
+   * replaced. This copy becomes stable, but is not a host-side snapshot. */
+  size_t offset = 0;
+  while (offset < size) {
+    size_t count = size - offset;
+    if (count > VIRTIO_FS_READ_MAX) {
+      count = VIRTIO_FS_READ_MAX;
+    }
+    status = call_result(virtio_fs_read(&node->opened, offset, bytes + offset, count, &count));
+    if (status != CALL_OK) {
+      goto fail;
+    }
+    if (!count) {
+      status = CALL_IO;
+      goto fail;
+    }
+    offset += count;
+  }
+
+  status = call_result(virtio_fs_getattr(&node->node, &attributes));
+  if (status != CALL_OK) {
+    goto fail;
+  }
+  if (attributes.size != size) {
+    status = CALL_IO;
+    goto fail;
+  }
+  request->captured = bytes;
+  request->count = size;
+  return CALL_OK;
+
+fail:
+  flags = cpu_save_interrupts();
+  kfree(bytes);
+  cpu_restore_interrupts(flags);
+  return status;
+}
+
 static enum call_status enumerate(struct hostfs_request *request)
 {
   struct hostfs_node *node = request->node;
@@ -404,6 +469,8 @@ static enum call_status perform(struct hostfs_request *request)
     return rename_child(request);
   case HOSTFS_ENUMERATE:
     return enumerate(request);
+  case HOSTFS_CAPTURE:
+    return capture_file(request);
   case HOSTFS_SIZE: {
     struct virtio_fs_attributes attributes;
     enum virtio_fs_result result = virtio_fs_getattr(&request->node->node, &attributes);

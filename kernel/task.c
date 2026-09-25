@@ -699,6 +699,7 @@ static void service_launch_requests(void)
       } else {
         KASSERT(task->launch_action == LAUNCH_DISCARD);
       }
+      kfree(task->launch_capture->host_image);
       kfree(task->launch_capture);
       task->launch_capture = NULL;
     }
