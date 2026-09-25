@@ -17,11 +17,11 @@ running and persisting programs is an especially useful loop. Writable virtio-fs
 is a candidate for the next milestone after TCP, with its ownership/authority
 checkpoint first. It is not part of this implementation.
 
-The proposed implementation is native TCP in the existing kernel network stack.
-The earlier networking notes deliberately left stack reuse open: confirm this
-choice before task 1, or first compare an existing stack's integration cost.
-Native implementation keeps current ownership and capabilities direct, at the
-cost of implementing and reviewing the transport machinery ourselves.
+Compare an existing stack before selecting the implementation. The
+[source review](tcp-stack-comparison.md) identifies lwIP as the first reuse
+candidate and recommends a bounded port-boundary investigation. Adoption, local
+patches and any changes below TCP still need an explicit decision; no native
+rewrite or full-stack replacement is selected by this milestone document.
 
 DNS and application protocols
 remain in userspace. No HTTP/TLS client, POSIX sockets layer, listener/accept API,
@@ -119,8 +119,9 @@ Do not evict a live TIME_WAIT record to make a new connection succeed.
 
 ## Transport and worker design
 
-Keep protocol state under `kernel/net`, with focused wire, connection and I/O
-files as needed. Object dispatch remains in `kernel/object`, ABI declarations in
+Keep first-party integration under `kernel/net`, with focused connection and
+I/O files as needed. A reused protocol engine remains pinned vendor code; do not
+reimplement its algorithms in the adapter. Object dispatch remains in `kernel/object`, ABI declarations in
 `include/abi`, and helpers in libpyxis. The existing BSP network worker owns state
 changes, packet processing and protocol timers. AP callers stage bounded data and
 wait; workers never retain user buffers or private syscall-stack pointers.
@@ -191,10 +192,12 @@ observed under naturally occurring traffic.
 
 ## Focused implementation tasks
 
-- [ ] **1. TCP wire handling.** First settle native implementation versus stack
-  reuse; the following tasks describe the native proposal. Add bounded decoding,
-  checksum handling and named sequence/flag operations. Keep IPv4 integration
-  concrete. Review MSS and sequence-wrap rules; no public placeholder API.
+- [ ] **1. Stack integration decision.** Review the comparison and, if agreed,
+  pin/build the minimal lwIP subset and make its worker/packet/allocator boundary
+  concrete. Review local delivery, resource reclamation and every required patch
+  before committing to adoption. Stop for a scope decision if integration expands
+  into replacing working protocols. No public placeholder API. If native TCP is
+  chosen instead, rescope this task to wire/sequence handling before coding.
 - [ ] **2. Connection ownership and transport identity.** Settle the proposed
   budgets, keyed primitive/secret preparation and tuple allocation. Add bounded
   worker-owned state, timer scheduling and retirement. Preserve the existing
@@ -208,7 +211,8 @@ observed under naturally occurring traffic.
   short-result, timeout and EOF semantics.
 - [ ] **5. Reliable send stream.** Native WRITE, retained bytes, segmentation,
   acknowledgment processing, congestion control, RTT/RTO and zero-window
-  handling. Settle the conservative PMTU policy. Do not expose public-network
+  handling. With lwIP, expose and account its existing machinery rather than
+  duplicating it. Settle the conservative PMTU policy. Do not expose public-network
   data sending without congestion control.
 - [ ] **6. Graceful shutdown and lifecycle completion.** SHUTDOWN_WRITE, FIN
   retransmission, both closing orders, simultaneous close, TIME_WAIT and final
