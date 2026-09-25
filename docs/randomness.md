@@ -87,10 +87,10 @@ hotplug, alternate source or provider framework is implemented.
 
 ## DNS consumer
 
-[The dig client](networking.md#dns-queries-with-dig) uses this capability to choose
+[Dig and hostname ping](dns.md) use this capability to choose
 transaction IDs and explicit randomized UDP source ports, with bounded collision
-retries. It fails when entropy is unavailable. The generic UDP ephemeral-port
-allocator is unchanged; hostname ping follows in the DNS milestone.
+retries. They fail when entropy is unavailable; numeric ping does not need
+randomness. The generic UDP ephemeral-port allocator is unchanged.
 Per-space accounting, fairness and broader random APIs remain future policy.
 
 References: [VirtIO 1.4 entropy device](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.html)
