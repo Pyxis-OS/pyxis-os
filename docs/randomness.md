@@ -93,5 +93,13 @@ retries. They fail when entropy is unavailable; numeric ping does not need
 randomness. The generic UDP ephemeral-port allocator is unchanged.
 Per-space accounting, fairness and broader random APIs remain future policy.
 
+## Kernel TCP consumer
+
+TCP identity preparation uses the same entropy service from a short-lived BSP
+kernel task, independently of userspace grants. A five-second read seeds separate
+SipHash keys for sequence numbers and ephemeral ports. Failure disables new TCP
+connections for that boot without blocking the network worker or other protocols.
+Successful preparation needs no continuing device reads; see [lwIP integration](lwip.md).
+
 References: [VirtIO 1.4 entropy device](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.html)
 and [QEMU RNG backends](https://www.qemu.org/docs/master/system/qemu-manpage.html).

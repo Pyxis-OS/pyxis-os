@@ -1,6 +1,8 @@
 #ifndef CAELUM_LWIPOPTS_H
 #define CAELUM_LWIPOPTS_H
 
+#include <kernel/net/tcp.h>
+
 /* The BSP network worker owns this IPv4/TCP instance. */
 #define NO_SYS 1
 #define SYS_LIGHTWEIGHT_PROT 0
@@ -31,11 +33,16 @@
 #define LWIP_HOOK_IP4_INPUT_ACCEPT caelum_lwip_accept
 #define LWIP_HOOK_TCP_PCB_ALLOCATED caelum_lwip_pcb_allocated
 #define LWIP_HOOK_TCP_OUTPUT caelum_lwip_output
-/* Active opens are not wired yet. Never silently use the predictable default. */
 #define LWIP_HOOK_TCP_ISN caelum_lwip_isn
 
-/* Use the existing kernel heap, not an additional lwIP arena or host libc.
- * Transport-wide accounting is a decision for the connection-state task. */
+#define TCP_WND NET_TCP_RECEIVE_BYTES
+#define TCP_SND_BUF NET_TCP_SEND_BYTES
+#define TCP_OOSEQ_MAX_BYTES NET_TCP_RECEIVE_BYTES
+#define SO_REUSE 0
+/* Keep the pinned 60-second MSL explicit: TIME_WAIT lasts two MSLs. */
+#define TCP_MSL 60000UL
+
+/* Existing kernel heap with aggregate allocation accounting, not another arena. */
 #define MEM_ALIGNMENT 16
 #define MEM_CUSTOM_ALLOCATOR 1
 #define MEM_CUSTOM_MALLOC caelum_lwip_malloc
