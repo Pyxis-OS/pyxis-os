@@ -112,11 +112,12 @@ leave it as account UI to bolt on after those interfaces are fixed.
 
 ## Persistent storage and installation
 
-Writable virtio-fs is a candidate after outbound TCP: it would let the existing
-Kilo/TCC workflow keep source and executables across boots without first choosing
-a disk filesystem. Scope writes and mutations as a focused milestone, with the
-[users/authority checkpoint](users-and-authority.md) before committing writable
-shared-mount ownership policy. This does not start a parallel storage track.
+[Writable virtio-fs](writable-virtio-fs.md) is the next selected milestone after
+outbound TCP and per-CPU init. It will let the Kilo/TCC workflow keep source and
+executables across boots without first choosing a disk filesystem. Trusted init
+selects access grants over one host-service identity; the
+[users/authority checkpoint](users-and-authority.md) records what that prototype
+boundary leaves open. Space titles follow in a separate small PR.
 
 Keep three choices separate: Pyxis file/directory capability requests, a backend
 operation interface, and the disk format. A FUSE-inspired backend need not force
