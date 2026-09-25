@@ -23,6 +23,17 @@ GrafX2 is another candidate, alongside the [desktop and graphics direction](desk
 That draft records the global menu/dock/desktop ideas, software-rendering option
 and eventual compositor prerequisites; it does not authorize implementation.
 
+[retawq](https://retawq.sourceforge.net/) is a future text-browser port candidate,
+starting with HTTP and leaving TLS optional. Terminal support needs a concrete
+choice: port a curses library, or evaluate its built-in `bicurses` backend before
+committing to ncurses. Upstream documents `--set-tg=bicurses` (terminfo-based,
+without color or mouse), optional TLS and `--set-threading=0`; see the
+[build options](https://retawq.sourceforge.net/docu/ctconfig.html). These options
+are leads for a compile probe, not a confirmed Pyxis port path. Audit terminal,
+libc and event/I/O requirements alongside the future TCP and name-resolution
+interfaces. Keep HTTP/TLS in userspace; this does not authorize starting the port
+or changing the current milestone order.
+
 A custom linker remains a possible later investigation alongside application
 bundles/images. TCC already emits native P1F executables; a new linker or custom
 object/archive format is not required for the working development loop.
