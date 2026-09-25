@@ -52,8 +52,11 @@ the state and configuration stream are closed before launch.
 Both files are decoded before applying settings. The network consumer owns its
 [configuration policy and authority](networking.md#boot-configuration-and-use).
 Network application precedes the first terminal change. The launcher preserves
-the startup environment except that it replaces any `TZ` entry with the selected
-name. It forwards the input/output, memory and launcher grants; app/home and optional
+the startup environment except that it replaces `TZ` with the selected timezone
+and `DNS_SERVER` with the selected resolver's numeric IPv4 address (default
+`1.1.1.1`). DNS selection applies even without a NIC or configuration authority;
+it does not perform a lookup or change kernel settings. It forwards the
+input/output, memory and launcher grants; app/home and optional
 read-only host roots;
 the working-directory chain and display path; and optional display, clock,
 [random](randomness.md) and keyboard resources, using the same rights as the shell's session handoff.
