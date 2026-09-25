@@ -62,12 +62,28 @@ without the CLI main; consumers choose which libraries to open. It is built
 against the selected SDK and carried in the [ports bundle](build-bundles.md).
 The SDK itself does not depend on Lua.
 
-The first-party session launcher embeds this library to evaluate
-`app://config/session.lua`. Default init uses that launcher to select Bucharest,
-apply eight-column tabs and start the shell. Its restricted evaluator, validation,
-defaults and recovery path are documented in [session configuration](session-configuration.md).
-Clock/calendar conversion and terminal operations remain usable without Lua.
+The first-party session launcher uses `userspace/libconfig` to evaluate
+`app://config/session.lua` and `app://config/network.lua`. Default init selects
+Bucharest, applies eight-column tabs and configures the optional QEMU NIC before
+starting the shell. Settings and recovery policies are documented in
+[session configuration](session-configuration.md) and [networking](networking.md).
+Clock/calendar, terminal and native network operations remain usable without Lua.
+
+`libconfig.a` is built with the application layer against the ports-provided Lua
+library; it introduces no Lua dependency into the SDK, libc or libpyxis. Its
+`config_read(path, decode, output)` creates a fresh state, loads text source in the
+restricted base environment, requires exactly one result table and invokes the
+consumer's decoder inside the protected call. The decoder receives the table at
+index 1 and the caller's output pointer as lightuserdata at index 2. It returns
+no Lua results. Source loading, evaluation, diagnostics and stream/state cleanup
+are shared; allowed keys, types, defaults and application policy stay with the
+consumer. Small helpers provide raw field access and allowed-key checks.
+
+Missing files are returned distinctly without a diagnostic. Errors are reported
+to stderr. Consumers own cleanup of partially populated native output even after
+an error; no Lua state or borrowed Lua strings escape. These are trusted boot
+files with no new execution-time or heap quota. There is no schema builder,
+native resource binding, live reload or module search framework.
 
 [Later Lua work](wip/later-os-directions.md#lua-follow-ups) includes broader
-libraries, module policy and extracting a shared C configuration library when
-another consumer needs one.
+libraries and module policy.

@@ -2,6 +2,7 @@
 #define KERNEL_NET_IPV4_H
 
 #include <stdbool.h>
+#include <abi/net_config.h>
 #include <kernel/net/interface.h>
 
 #define IPV4_HEADER_SIZE 20
@@ -21,6 +22,7 @@ struct ipv4_route {
  * Configuration survives link down/up; it does not configure the host backend. */
 enum net_result net_ipv4_configure(uint32_t address, unsigned prefix, uint32_t gateway);
 void net_ipv4_clear(void);
+void net_ipv4_snapshot(struct net_config_reply *reply);
 uint32_t net_ipv4_address(void);
 bool net_ipv4_is_neighbor(uint32_t address);
 bool net_ipv4_is_loopback(uint32_t address);

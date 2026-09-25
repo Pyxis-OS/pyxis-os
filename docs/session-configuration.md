@@ -1,7 +1,8 @@
 # Session configuration
 
 `app://session.pxe` is a native userspace launcher that evaluates
-`app://config/session.lua`, applies terminal tab spacing, and hands off to
+`app://config/session.lua` and optional `app://config/network.lua`, applies
+network settings and terminal tab spacing, and hands off to
 `app://shell.pxe`. It accepts no arguments. The default init script selects it:
 
 ```text
@@ -40,7 +41,7 @@ names must identify a packaged file under `app://share/zoneinfo` beginning with
 the TZif signature. Libc still validates the complete zone data when a child
 first uses local time. There is no second timezone parser in the launcher.
 
-The evaluator opens only Lua's base library, with `load`, `loadfile`, `dofile`,
+The shared `userspace/libconfig` evaluator opens only Lua's base library, with `load`, `loadfile`, `dofile`,
 `print` and `warn` removed. There are no io/os, package, debug, module search or
 native resource bindings. Configuration can use language arithmetic, loops,
 functions and tables, plus the remaining base helpers. It is trusted boot
@@ -48,18 +49,24 @@ configuration: execution time and Lua heap usage have no separate budget.
 All Lua initialization, loading and execution are protected against Lua errors;
 the state and configuration stream are closed before launch.
 
-Validation completes before the first terminal change. The launcher preserves
+Both files are decoded before applying settings. The network consumer owns its
+[configuration policy and authority](networking.md#boot-configuration-and-use).
+Network application precedes the first terminal change. The launcher preserves
 the startup environment except that it replaces any `TZ` entry with the selected
 name. It forwards the input/output, memory and launcher grants; app/home and optional
 read-only host roots;
 the working-directory chain and display path; and optional display, clock and
 keyboard resources, using the same rights as the shell's session handoff.
-It does not forward mount authority, arbitrary named resources or the interpreter's script handle.
+The init shell explicitly delegates `net_config` through session handoff only.
+The launcher applies network settings, then leaves that authority out of the
+interactive shell. It also does not forward mount authority, arbitrary named
+resources or the interpreter's script handle.
 
 The kernel copies launch metadata before returning. The launcher closes its
 child observer and exits without waiting or reading input; the shell owns its
 copied grants and environment. Tab spacing belongs to the shared TTY and survives
-that exit. If applying spacing fails, no shell is launched. If shell launch
+that exit. If applying spacing fails, no shell is launched; any already-applied network
+settings remain. If shell launch
 fails afterward, the applied spacing remains; there is no rollback or supervisor.
 `make run INIT=build/userspace/shell.pxe` bypasses configured startup for recovery.
 The packaged config remains present but is not evaluated. Live reload and

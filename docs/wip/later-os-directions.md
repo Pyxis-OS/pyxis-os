@@ -29,11 +29,9 @@ object/archive format is not required for the working development loop.
 
 ## Lua follow-ups
 
-When a second Lua configuration consumer appears, extract a small C library
-from the session evaluator. Share source loading, the restricted Lua environment,
-protected evaluation, diagnostics and state cleanup. Keep settings schemas,
-defaults, validation and application policy with each consumer; do not introduce
-a generic schema framework before there is a concrete need.
+The shared [C configuration helper](../lua.md#embedding-and-session-configuration)
+now serves session and network settings. Further consumers should keep their own
+schemas, defaults and application policy; a generic schema framework is not needed.
 
 Further interpreter work includes a module search policy for pure-Lua `require`,
 stdin scripts, and consuming the existing script capability for shebang launches.
@@ -47,9 +45,12 @@ these tasks do not depend on virtio-fs.
 
 ## Networking and website hosting
 
-The [initial networking milestone](initial-networking.md) covers loopback,
+The completed [initial networking milestone](../networking.md) provides loopback,
 virtio-net, manually configured IPv4 and ping. DHCP follows through the same
-configuration operations once UDP is available. TCP, DNS and server resource
+configuration operations once UDP, broadcast handling and lease deadlines are
+available. Revisit existing network stacks before the TCP milestone; keep the
+[user/authority checkpoint](users-and-authority.md) ahead of remotely accessible
+services. TCP, DNS and server resource
 contracts still need separate scopes. Hosting the Pyxis landing page remains a
 release goal; revisit init supervision and restart policies when defining that
 web-server milestone. Virtio-blk remains the next intended VirtIO storage driver.

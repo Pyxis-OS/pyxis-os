@@ -33,7 +33,7 @@ milestone's remaining interface details before starting its code work.
     session launcher to the shell and children. Existing `ls`/`cat` use native
     directory/file capabilities; archive-only boot remains the default without
     a device/socket.
-11. [Initial networking](initial-networking.md): working loopback and virtio-net,
+11. Complete: [initial networking](../networking.md), with loopback and virtio-net,
     manual IPv4 configuration and native ping. DHCP follows later through the
     same configuration interface; TCP and website hosting remain separate.
 
