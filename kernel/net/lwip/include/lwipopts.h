@@ -38,6 +38,7 @@
 #define TCP_WND NET_TCP_RECEIVE_BYTES
 #define TCP_SND_BUF NET_TCP_SEND_BYTES
 #define TCP_OOSEQ_MAX_BYTES NET_TCP_RECEIVE_BYTES
+#define TCP_OOSEQ_MAX_PBUFS 16
 #define SO_REUSE 0
 /* Keep the pinned 60-second MSL explicit: TIME_WAIT lasts two MSLs. */
 #define TCP_MSL 60000UL

@@ -222,9 +222,13 @@ observed under naturally occurring traffic.
   lifecycle. Init/session/shell explicitly delegate the service. Libpyxis has
   matching helpers; READ/WRITE remain unexposed. lwIP's SYN-SENT reset check now
   requires the ACK flag as well as the matching acknowledgment number.
-- [ ] **4. Receive stream.** Ordered delivery, duplicates/overlap, chosen bounded
-  reassembly policy, receive-window updates, peer FIN and native READ with
-  short-result, timeout and EOF semantics.
+- [x] **4. Receive stream.** Native READ and libpyxis helper return short ordered
+  data, timeout without consumption, and EOF only after peer FIN and buffered
+  bytes. Sixteen 4 KiB call slots retain replies until collected; one reader per
+  shared stream. A ring stores ordered bytes; lwIP handles duplicates/overlap
+  and out-of-order delivery within the shared 16 KiB window and a sixteen-pbuf
+  reassembly ceiling. Window credit waits for caller consumption. See
+  [receive ownership and allocation accounting](../lwip.md#native-receive-stream).
 - [ ] **5. Reliable send stream.** Native WRITE, retained bytes, segmentation,
   acknowledgment processing, congestion control, RTT/RTO and zero-window
   handling. With lwIP, expose and account its existing machinery rather than

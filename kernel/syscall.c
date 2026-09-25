@@ -163,7 +163,8 @@ static struct syscall_result call_object(handle_t handle,
     if (header.protocol != PROTOCOL_TCP) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    return tcp_call(object, rights, header.operation, request_size, reply_address, reply_capacity);
+    return tcp_call(object, rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
   case OBJECT_UDP_SERVICE:
     if (header.protocol != PROTOCOL_UDP_SERVICE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

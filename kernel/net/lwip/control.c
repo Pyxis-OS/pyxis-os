@@ -4,18 +4,12 @@
 #include <kernel/task.h>
 #include <caelum_hooks.h>
 #include <stdatomic.h>
-#include "connection.h"
+#include "stream.h"
 
 #define TCP_CONTROL_LIMIT 8
 
 enum control_operation { CONTROL_CONNECT, CONTROL_INSPECT, CONTROL_ABORT };
 enum control_state { CONTROL_FREE, CONTROL_QUEUED, CONTROL_ACTIVE, CONTROL_DONE };
-
-struct tcp_stream {
-  struct kernel_object object;
-  struct tcp_stream *retired_next;
-  struct tcp_connection *connection; /* Sole external transport owner. */
-};
 
 struct tcp_control {
   enum control_state state;
@@ -293,6 +287,9 @@ bool net_tcp_service(void)
     complete_control(call, status);
     worked = true;
   }
+  if (tcp_reads_service()) {
+    worked = true;
+  }
   return worked;
 }
 
@@ -317,6 +314,13 @@ bool net_tcp_next_deadline(uint64_t *deadline)
   }
   unlock_control();
   cpu_restore_interrupts(flags);
+  uint64_t read_deadline;
+  if (tcp_reads_next_deadline(&read_deadline)) {
+    if (read_deadline < next) {
+      next = read_deadline;
+    }
+    found = true;
+  }
   *deadline = next;
   return found;
 }
