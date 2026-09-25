@@ -54,8 +54,10 @@ struct directory_enumerate_request {
   uint64_t capacity;
 };
 
-/* Remove one name, requiring the selected kind (or ANY). Directories must be
- * empty. Existing child handles survive; no child rights or reply are needed. */
+/* Remove one name with the selected kind (or ANY). Directories must be empty.
+ * Host type checks precede a name-based operation; external replacement may
+ * change the affected object/type. Existing handles keep their objects.
+ * No child rights or reply are needed. Failure need not mean no host change. */
 struct directory_remove_request {
   uint64_t name;
   uint64_t name_length;
@@ -63,8 +65,12 @@ struct directory_remove_request {
 };
 
 /* Call the source parent with REMOVE. Destination is a handle in the caller's
- * table and needs CREATE, plus REMOVE when replacing another file. Files only;
- * success returns no reply. Names are counted single components. */
+ * table and needs CREATE, plus REMOVE when replacing another file. Host REPLACE
+ * always requires destination REMOVE, even if the name is absent. Regular files
+ * only at type check; host names/types can change before the atomic operation.
+ * Host NO_REPLACE includes the same name (ALREADY_EXISTS); RAM permits a no-op.
+ * Success returns no reply. Failure need not mean no host change. Names are
+ * counted single components. */
 struct directory_rename_request {
   uint64_t source_name;
   uint64_t source_length;

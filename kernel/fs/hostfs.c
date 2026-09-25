@@ -203,8 +203,12 @@ static enum call_status create_node(struct hostfs_request *request)
   return CALL_OK;
 }
 
-static enum call_status create_file(struct hostfs_request *request)
+static enum call_status create_child(struct hostfs_request *request)
 {
+  bool directory = request->kind == DIRECTORY_KIND_DIRECTORY;
+  if (directory && next_identity == UINT64_MAX) {
+    return CALL_LIMIT;
+  }
   uint64_t flags = cpu_save_interrupts();
   struct hostfs_node *node = kmalloc(sizeof(*node));
   if (!node) {
@@ -212,13 +216,24 @@ static enum call_status create_file(struct hostfs_request *request)
     return CALL_NO_MEMORY;
   }
   *node = (struct hostfs_node){0};
-  struct file_object *file = file_create_host(node);
-  if (!file) {
+  if (directory) {
+    struct directory_object *object = directory_create(DIRECTORY_HOST);
+    if (object) {
+      object->host = node;
+      node->object = &object->object;
+      node->cursor_identity = next_identity++;
+    }
+  } else {
+    struct file_object *file = file_create_host(node);
+    if (file) {
+      node->object = &file->object;
+    }
+  }
+  if (!node->object) {
     kfree(node);
     cpu_restore_interrupts(flags);
     return CALL_NO_MEMORY;
   }
-  node->object = &file->object;
   enum capability_result installed = capability_install(request->table, node->object,
       request->rights, &request->handle);
   cpu_restore_interrupts(flags);
@@ -229,9 +244,14 @@ static enum call_status create_file(struct hostfs_request *request)
   }
 
   /* The sole caller is parked and cannot use the installed handle until the
-   * worker wakes it. All local storage/slot allocation precedes host CREATE. */
-  enum virtio_fs_result result = virtio_fs_create(&request->node->node, request->name,
-      request->count, &node->node, &node->writer);
+   * worker wakes it. All local storage/slot allocation precedes host creation. */
+  enum virtio_fs_result result;
+  if (directory) {
+    result = virtio_fs_mkdir(&request->node->node, request->name, request->count, &node->node);
+  } else {
+    result = virtio_fs_create(&request->node->node, request->name,
+        request->count, &node->node, &node->writer);
+  }
   if (result != VIRTIO_FS_OK) {
     flags = cpu_save_interrupts();
     KASSERT(capability_close(request->table, request->handle) == CAP_OK);
@@ -242,6 +262,62 @@ static enum call_status create_file(struct hostfs_request *request)
   }
   object_release(node->object); /* Only the installed capability owns it now. */
   return CALL_OK;
+}
+
+/* Preflight observes a name, not a transaction with the later mutation.
+ * Retire the temporary lookup first so cleanup cannot hide an acknowledged
+ * mutation behind a subsequent FORGET failure. */
+static enum virtio_fs_result lookup_kind(struct hostfs_node *parent,
+    const char *name, size_t length, enum virtio_fs_kind *kind)
+{
+  struct virtio_fs_node child = {0};
+  enum virtio_fs_result result = virtio_fs_lookup(&parent->node, name, length, &child);
+  if (result != VIRTIO_FS_OK) {
+    return result;
+  }
+  *kind = child.kind;
+  return virtio_fs_node_put(&child);
+}
+
+static enum call_status remove_child(struct hostfs_request *request)
+{
+  enum virtio_fs_kind kind;
+  enum virtio_fs_result result = lookup_kind(request->node, request->name, request->count, &kind);
+  if (result != VIRTIO_FS_OK) {
+    return call_result(result);
+  }
+  if (request->kind != DIRECTORY_KIND_ANY && request->kind != native_kind(kind)) {
+    return CALL_WRONG_TYPE;
+  }
+  return call_result(virtio_fs_remove(&request->node->node, request->name,
+      request->count, kind == VIRTIO_FS_DIRECTORY));
+}
+
+static enum call_status rename_child(struct hostfs_request *request)
+{
+  enum virtio_fs_kind kind;
+  enum virtio_fs_result result = lookup_kind(request->node, request->name, request->count, &kind);
+  if (result != VIRTIO_FS_OK) {
+    return call_result(result);
+  }
+  if (kind != VIRTIO_FS_FILE) {
+    return CALL_WRONG_TYPE;
+  }
+  if (request->replace) {
+    result = lookup_kind(request->destination, request->destination_name,
+        request->destination_length, &kind);
+    if (result != VIRTIO_FS_OK && result != VIRTIO_FS_NOT_FOUND) {
+      return call_result(result);
+    }
+    if (result == VIRTIO_FS_OK && kind != VIRTIO_FS_FILE) {
+      return CALL_WRONG_TYPE;
+    }
+  }
+  /* NO_REPLACE is enforced by the host operation itself, including when a
+   * destination appears after preflight. Never emulate it with LOOKUP. */
+  return call_result(virtio_fs_rename(&request->node->node, request->name, request->count,
+      &request->destination->node, request->destination_name, request->destination_length,
+      request->replace));
 }
 
 static enum call_status open_node(struct hostfs_node *node)
@@ -313,7 +389,11 @@ static enum call_status perform(struct hostfs_request *request)
   case HOSTFS_LOOKUP:
     return create_node(request);
   case HOSTFS_CREATE:
-    return create_file(request);
+    return create_child(request);
+  case HOSTFS_REMOVE:
+    return remove_child(request);
+  case HOSTFS_RENAME:
+    return rename_child(request);
   case HOSTFS_ENUMERATE:
     return enumerate(request);
   case HOSTFS_SIZE: {
