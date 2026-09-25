@@ -13,10 +13,11 @@ git submodule update --init third_party/lwip
 make image
 ```
 
-The packet bridge and internal connection preparation are live, but no native
-connection capability, active-open caller or listener is exposed yet. Traffic to
-closed TCP ports reaches lwIP and can receive its normal reset response. The
-next [TCP tasks](wip/tcp.md) expose CONNECT and stream I/O.
+The packet bridge and native outbound CONNECT capability are live. Init receives
+`tcp` authority, explicitly delegated through session and shell to foreground and
+background children. Streams expose INSPECT and ABORT; READ/WRITE and write
+shutdown remain in the next [TCP tasks](wip/tcp.md). No listener is exposed.
+Traffic to closed ports still receives lwIP's normal reset response.
 
 ## Worker and memory ownership
 
@@ -106,8 +107,8 @@ port and an absolute deadline at most 30 seconds ahead, selects the authoritativ
 route, allocates one owned record/PCB and explicitly binds an available port.
 Failure leaves the output pointer untouched. Reuse is disabled: lwIP checks bound,
 active and TIME_WAIT tuples. With at most 32 records, 33 distinct candidates are
-sufficient. This internal API will be used by CONNECT; callers cannot choose an
-ISN or source address through a public interface.
+sufficient. CONNECT uses this internal API; callers cannot choose an ISN or source address
+through the public interface.
 
 The 32-record admission limit includes prepared, closing and TIME_WAIT records,
 and terminal records still retained by an owner. Exhaustion does not evict any
@@ -117,8 +118,8 @@ These are payload limits, not total heap limits: metadata is accounted separatel
 Receive callbacks currently refuse data so lwIP retains it without advancing
 credit; native READ and its reassembly accounting are the next receive task.
 
-`net_tcp_release` consumes the sole external ownership reference. Future handle
-copies share it through object references. Release normally aborts. If an explicit
+`net_tcp_release` consumes the sole external ownership reference. Handle copies
+share it through object references. Release normally aborts. If an explicit
 write shutdown already queued FIN and no received bytes remain unread, teardown
 may continue without user pointers. Detached, unowned records are reclaimed on a
 worker pass, never from a lwIP callback.
@@ -140,7 +141,51 @@ its admission slot, including across link/address changes. No other deadline
 shortens it. Address removal, failed routing or an unavailable interface aborts
 affected live connections. Queued packet copies are canceled when the PCB dies.
 
-Native operation queues, capability publication and stream I/O remain in the TCP
-milestone, including the 4 KiB per-call limit and pending-call budgets. Graceful
+Stream I/O remains in the TCP milestone, including the 4 KiB per-call limit and
+separate read/write call budgets. Graceful
 close/data interoperability still needs real exchanges as those operations become
 usable. Listening and a POSIX sockets layer remain outside the milestone.
+
+## Native active open
+
+`include/abi/tcp.h` defines `PROTOCOL_TCP_SERVICE` / CONNECT and `PROTOCOL_TCP` /
+INSPECT and ABORT. Libpyxis exports matching `tcp_connect`, `tcp_inspect` and
+`tcp_abort` helpers in `<tcp.h>`, taking explicit borrowed handles. The caller
+owns a successful CONNECT handle; normal copy/restrict/close operations apply.
+No new syscall, version field or socket layer is introduced.
+
+CONNECT takes a numeric IPv4 destination, nonzero port and absolute monotonic
+deadline at most 30 seconds ahead. It returns local/remote tuple metadata and a
+stream handle only after the handshake. Route selection, ARP, lwIP's bounded SYN
+retries and preparation share that deadline. Entropy not yet ready or unavailable
+returns UNAVAILABLE immediately; the worker never waits for the boot entropy task.
+Missing route, refusal, timeout and allocation/queue exhaustion remain distinct.
+`CALL_CONNECTION_REFUSED` denotes a validated reset before establishment;
+`CALL_CONNECTION_RESET` denotes one afterward. The pinned source adaptation
+requires ACK on a SYN-SENT reset, not just a matching numeric ACK field.
+
+The facade validates request size, rights, reserved fields and writable reply
+storage before submitting work. Eight shared slots cover CONNECT, INSPECT and
+ABORT, including completed replies until callers resume. Slots contain copied
+arguments and stable wait metadata, never user or syscall-stack buffers. A parked
+CONNECT caller lends its kernel-owned capability table exclusively to the worker.
+The worker allocates the stream wrapper and installs a private table entry before
+SYN; the caller cannot observe it while parked. Failure aborts transport and closes
+that entry before completing the call. Only successful completion publishes its
+handle. A connection can subsequently fail before the caller is scheduled again;
+INSPECT reports its current state. Failed native calls and libpyxis helpers leave
+reply storage untouched.
+
+Stream wrappers own one external connection reference and are included in lwIP
+allocation accounting. Copies share the wrapper; closing one does not close other
+copies. Final object retirement hands the wrapper to the network worker without
+allocating or consuming a call slot. Until explicit write shutdown is implemented,
+final release aborts. Transport records remain worker-owned until safe to reclaim.
+
+INSPECT requires its own right and returns the tuple, CONNECTED / PEER_CLOSED /
+CLOSED state and latched terminal status, including after reset or abort. An orderly
+peer FIN has CALL_OK status; retained data still has no native reader in this slice.
+ABORT requires its separate right, affects all copies and is idempotent. A local
+abort records ENDPOINT_CLOSED unless an earlier terminal error was already latched.
+It frees queued transport data and makes a best-effort reset; local completion does
+not wait for the peer. Shared-state operations serialize on the sole worker.
