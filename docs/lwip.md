@@ -15,7 +15,7 @@ make image
 
 The packet bridge and native outbound CONNECT capability are live. Init receives
 `tcp` authority, explicitly delegated through session and shell to foreground and
-background children. Streams expose INSPECT and ABORT; READ/WRITE and write
+background children. Streams expose INSPECT, READ and ABORT; WRITE and write
 shutdown remain in the next [TCP tasks](wip/tcp.md). No listener is exposed.
 Traffic to closed ports still receives lwIP's normal reset response.
 
@@ -115,8 +115,7 @@ and terminal records still retained by an owner. Exhaustion does not evict any
 connection. The configured receive window and send payload budget are each
 16 KiB. Payload is allocated as needed, not eagerly reserved at preparation.
 These are payload limits, not total heap limits: metadata is accounted separately.
-Receive callbacks currently refuse data so lwIP retains it without advancing
-credit; native READ and its reassembly accounting are the next receive task.
+Receive storage and window accounting are described below.
 
 `net_tcp_release` consumes the sole external ownership reference. Handle copies
 share it through object references. Release normally aborts. If an explicit
@@ -141,10 +140,8 @@ its admission slot, including across link/address changes. No other deadline
 shortens it. Address removal, failed routing or an unavailable interface aborts
 affected live connections. Queued packet copies are canceled when the PCB dies.
 
-Stream I/O remains in the TCP milestone, including the 4 KiB per-call limit and
-separate read/write call budgets. Graceful
-close/data interoperability still needs real exchanges as those operations become
-usable. Listening and a POSIX sockets layer remain outside the milestone.
+WRITE and graceful shutdown remain in the TCP milestone. Their interoperability
+checks follow as those operations become usable. Listening and a POSIX sockets layer remain outside the milestone.
 
 ## Native active open
 
@@ -184,8 +181,53 @@ final release aborts. Transport records remain worker-owned until safe to reclai
 
 INSPECT requires its own right and returns the tuple, CONNECTED / PEER_CLOSED /
 CLOSED state and latched terminal status, including after reset or abort. An orderly
-peer FIN has CALL_OK status; retained data still has no native reader in this slice.
+peer FIN has CALL_OK status; READ drains preceding bytes before returning EOF.
 ABORT requires its separate right, affects all copies and is idempotent. A local
 abort records ENDPOINT_CLOSED unless an earlier terminal error was already latched.
 It frees queued transport data and makes a best-effort reset; local completion does
 not wait for the peer. Shared-state operations serialize on the sole worker.
+
+## Native receive stream
+
+`TCP_READ` requires `TCP_RIGHT_READ`. Libpyxis `tcp_read` takes an explicit stream,
+output buffer/capacity, absolute monotonic deadline and transfer-count reply.
+Capacity is clamped to 4 KiB; available ordered bytes return immediately, possibly
+short. Otherwise the caller parks until data, peer FIN, terminal failure or its
+original deadline (at most 30 seconds ahead). A nonempty read returns zero only
+after peer FIN and preceding bytes. Zero capacity is a no-op after authority,
+buffer and deadline validation, including on a terminal stream; it does not poll
+EOF. Timeout consumes nothing and preserves the connection.
+
+The facade checks both output ranges and rejects overlap before submitting work.
+Failures leave data and count unchanged. Sixteen static read slots hold up to
+4 KiB each, plus call metadata; this fixed storage is separate from `lwip_memory`.
+One outstanding read per shared stream includes completed-but-uncollected replies;
+other readers get BUSY. Slot exhaustion returns QUEUE_FULL. Slots own an extra
+object reference until the worker has returned credit and reclaimed the slot.
+The sole caller task's existing grant and mappings remain live while it parks.
+
+lwIP validates sequence space and trims duplicates/overlaps. The receive callback
+copies ordered data into a 16 KiB ring, allocated on first payload receipt, and
+frees the incoming pbuf. Allocation failure aborts with NO_MEMORY rather than
+silently discarding acknowledged data. Ring storage remains until failure/final
+release; an idle stream that has never received data allocates no ring. Reassembly
+uses lwIP's out-of-order queue, capped at 16 KiB and sixteen pbufs; excess is dropped
+for retransmission. The receive window covers ordered unread bytes, successful
+read replies not yet collected, and out-of-order sequence space together. READ
+moves bytes from the ring to a slot without calling `tcp_recved`; only after the
+caller resumes and collects the result does the worker return that credit.
+
+The 16 KiB window bounds retained payload, not total allocated memory. Reserved
+ring space and read slots can coexist with reassembly pbufs. Ring allocations,
+pbuf storage/headers, segment records and allocator headers are all included in
+`lwip_memory`; static slots and shared packet/DMA budgets are separate. Packet
+processing can transiently own the incoming packet before enforcing reassembly
+limits. Ordered tiny segments do not accumulate per-packet metadata in the ring.
+
+Peer FIN preserves unread bytes. Reset, ABORT and permanent local failure discard
+unread ring/reassembly data and wake pending reads with the latched error. A read
+already completed successfully before the failure retains its result. Failures
+never fabricate clean EOF. The sole worker serializes completion, control calls,
+packet processing and timers; it never keeps user pointers or syscall-stack
+buffers. Completed reads cannot return new receive credit merely because their
+caller has been woken but has not yet run.

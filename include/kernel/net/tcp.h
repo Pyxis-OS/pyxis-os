@@ -31,6 +31,8 @@ enum call_status net_tcp_connect(struct capability_table *table, uint32_t addres
     uint16_t port, uint64_t deadline, struct tcp_connect_reply *reply);
 enum call_status net_tcp_inspect(struct kernel_object *object, struct tcp_connection_info *reply);
 enum call_status net_tcp_abort(struct kernel_object *object);
+enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
+    uint64_t deadline, void *data, struct tcp_read_reply *reply);
 
 /* Sole network worker, IF=1, after packet/timer processing. */
 bool net_tcp_service(void);

@@ -32,28 +32,13 @@ static enum call_status connection_status(struct tcp_connection *connection, err
 static void connection_error(void *argument, err_t error)
 {
   struct tcp_connection *connection = argument;
+  tcp_connection_discard_receive(connection);
   /* Reset reports the error before destruction; abort reports it afterward.
    * Latch only the result here, without inspecting or releasing the PCB. */
   if (connection->error == ERR_OK) {
     connection->error = error;
     connection->terminal_status = connection_status(connection, error);
   }
-}
-
-static err_t hold_receive(void *argument, struct tcp_pcb *pcb,
-    struct pbuf *buffer, err_t error)
-{
-  (void)pcb;
-  (void)error;
-  struct tcp_connection *connection = argument;
-  if (!buffer) {
-    connection->peer_fin = true;
-    return ERR_OK;
-  }
-  /* There is no stream consumer yet. Do not use lwIP's default callback,
-   * which consumes and discards data. Refusal retains the pbuf without
-   * advancing receive credit. */
-  return ERR_MEM;
 }
 
 static void destroy_pcb(u8_t id, void *data)
@@ -98,7 +83,7 @@ err_t caelum_lwip_pcb_allocated(struct tcp_pcb *pcb)
   tcp_ext_arg_set_callbacks(pcb, connection_arg, &connection_callbacks);
   tcp_arg(pcb, connection);
   tcp_err(pcb, connection_error);
-  tcp_recv(pcb, hold_receive);
+  tcp_recv(pcb, tcp_connection_receive);
   return ERR_OK;
 }
 
@@ -111,6 +96,7 @@ uint64_t tcp_connection_generation(const struct tcp_pcb *pcb)
 
 static void abort_connection(struct tcp_connection *connection, err_t reason)
 {
+  tcp_connection_discard_receive(connection);
   if (connection->error == ERR_OK) {
     connection->error = reason;
     connection->terminal_status = connection_status(connection, reason);
@@ -226,6 +212,7 @@ void net_tcp_release(struct tcp_connection *connection)
   net_worker_assert_context();
   KASSERT(connection && connection->owned);
   connection->owned = false;
+  tcp_connection_discard_receive(connection);
   struct tcp_pcb *pcb = connection->pcb;
   if (!pcb) {
     return;
