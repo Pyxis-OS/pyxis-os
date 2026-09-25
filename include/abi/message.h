@@ -18,6 +18,7 @@
 #define PROTOCOL_NET_CONFIG UINT64_C(13)
 #define PROTOCOL_UDP_SERVICE UINT64_C(14)
 #define PROTOCOL_UDP UINT64_C(15)
+#define PROTOCOL_RANDOM UINT64_C(16)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

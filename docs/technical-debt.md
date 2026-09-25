@@ -237,6 +237,7 @@ safe matching of quoted packets before claiming full UDP host conformance;
 keep completed/retired calls immune to late errors.
 
 Ephemeral binding currently scans 49152–65535 from a rotating cursor. Revisit
-unpredictable port selection alongside DNS and an entropy source; this allocator
+unpredictable port selection alongside DNS, using the available
+[host-backed randomness](randomness.md); this allocator
 is not a defense against off-path reply guessing. Network authority and resource
 bounds also remain system-wide rather than isolated by space.

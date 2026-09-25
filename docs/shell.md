@@ -205,7 +205,7 @@ rights. Crossing a retained ancestor boundary fails as in the native path API.
 Each foreground child receives explicit copies of terminal input/output, memory, available roots
 with the rights above, and the current directory chain. It does not receive the
 shell's launcher. When available, the [display](graphics.md),
-[clock](timekeeping.md) and [keyboard](keyboard.md) grants are also forwarded
+[clock](timekeeping.md), [random](randomness.md) and [keyboard](keyboard.md) grants are also forwarded
 to foreground children and session successors; background children omit keyboard input.
 The immutable initial environment is forwarded in full using
 libpyxis's borrowed environment-array accessors. No environment mutation or PWD

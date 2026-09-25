@@ -41,6 +41,10 @@ milestone's remaining interface details before starting its code work.
     client-server use.
     DHCP, DNS and TCP follow as separate milestones.
 
+13. Complete: [host-backed randomness](../randomness.md), using VirtIO entropy
+    and a bounded native READ capability. DNS is the next intended consumer;
+    its remaining scope decisions still need agreement.
+
 This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO
 infrastructure can be developed independently, while its final mount setup uses
