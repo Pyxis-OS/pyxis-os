@@ -114,7 +114,7 @@ produces a clear no-address result.
   retaining explicit binding and existing endpoint ownership. Build and boot;
   inspect selection/binding for loopback and the configured NIC through ordinary
   debugger use, including a no-route result. Update the UDP interface reference.
-- [ ] **2. Resolver configuration.** Extend session's network configuration,
+- [x] **2. Resolver configuration.** Extend session's network configuration,
   package `1.1.1.1`, and export `DNS_SERVER`. Confirm the ordinary shell sees the
   selected setting, missing settings default correctly, and invalid configuration
   is diagnosed. Document direct-init and override behavior.

@@ -431,6 +431,7 @@ The session launcher reads `app://config/network.lua`, installed from
 
 ```lua
 return {
+  dns = { server = "1.1.1.1" },
   net0 = {
     optional = true,
     address = "10.0.2.15",
@@ -446,13 +447,32 @@ four decimal octets; no DNS, shorthand or embedded NUL bytes. Unknown keys,
 incorrect types and prefixes outside 1..32 are errors. The kernel validates subnet
 and gateway relationships when applying replacement.
 
-A missing file or missing `net0` leaves existing settings alone (unconfigured on
+A missing file or missing `net0` leaves existing NIC settings alone (unconfigured on
 fresh boot). `net0 = false` explicitly clears them. `optional` defaults to false;
 true permits an absent NIC, but does not hide transport failure. A required absent
 device or invalid configuration prevents shell launch. A present but unavailable
 device or other runtime setup failure is diagnosed and the shell remains available
 for recovery. A launcher without the configuration grant reports that it is keeping
 current settings; this allows a later unprivileged session handoff.
+
+The optional `dns` table accepts only `server`, a numeric IPv4 string. Session
+exports it as `DNS_SERVER` in canonical dotted decimal, replacing any inherited
+entry. Missing files, `dns` or `server` select `1.1.1.1`; empty strings, wrong
+types, unknown keys, malformed addresses and embedded NUL bytes are errors.
+Addresses in 0/8, multicast and reserved high ranges (224/4 and above) are
+rejected; loopback is allowed for a future local resolver. This is address
+validation, not a check that a server is reachable or speaks DNS.
+
+DNS selection is independent of `net0`, NIC presence and network-configuration
+authority. `net0 = false` still exports the selected resolver. Both settings
+are decoded before network/terminal changes or shell launch; invalid DNS
+configuration prevents those effects. The resolver address is userspace policy:
+it is not sent to the kernel, and startup performs no DNS query or NIC enabling.
+Shell launches inherit it through the existing environment forwarding.
+
+Direct-init applications that bypass session do not receive a synthesized
+`DNS_SERVER`. Client-side server overrides and fallback to `1.1.1.1` when the
+variable is absent belong to the next [DNS milestone task](wip/dns.md).
 
 Session and network configuration use the same restricted [Lua evaluator](lua.md#embedding-and-session-configuration).
 Both files are read before applying settings. Network setup precedes terminal
