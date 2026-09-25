@@ -8,10 +8,11 @@ The implementation is in `kernel/net`, with kernel interfaces in
 `include/kernel/net`. The native echo capability supports userspace ping without raw-packet authority.
 
 The worker handles Ethernet, ARP and IPv4/ICMP, with deferred local delivery
-independent of the NIC. External configuration is currently worker-only; init
-authority and setup follow in task 6. No address is assigned or packet transmitted
-automatically at boot. The
-[networking milestone](wip/initial-networking.md) records the remaining tasks.
+independent of the NIC. Init receives separate configuration authority and
+passes it to the session launcher. The launcher reads the packaged Lua network
+settings before starting the shell. Default boot without a NIC remains usable;
+`make run VIRTIO_NET=1` enables QEMU user networking and the configured `net0`.
+There are no automatic ping probes.
 
 ## Ownership and bounds
 
@@ -48,7 +49,8 @@ while wire fields use network byte order. Header layouts remain kernel-private.
 The sole BSP network worker owns configuration and protocol state. With interrupts
 enabled, `net_ipv4_configure(address, prefix, gateway)` replaces the `net0` settings;
 `net_ipv4_clear()` removes them. Neither is an AP or arbitrary BSP-task interface.
-There is no userspace configuration ABI yet.
+The native configuration capability below serializes userspace requests onto
+that worker; direct kernel calls are only for the worker itself.
 
 Replacement validates all fields before changing state. Prefixes 1..32 are
 accepted; the address must be unicast, outside `0/8`, `127/8`, multicast and
@@ -128,9 +130,10 @@ network worker with interrupts enabled. They are not AP, user-pointer or
 interrupt-entry interfaces. Application calls use explicit cross-CPU ownership
 handoff without adding scheduler request queues.
 
-Each turn handles at most 16 RX/TX completions, 16 echo slots, the bounded ARP
+Each turn handles at most 16 RX/TX completions, eight configuration calls,
+16 echo slots, the bounded ARP
 cache/pending lists and eight local deliveries. The worker yields after starting
-or expiring echo calls or exhausting a receive/completion budget. It disables
+or expiring echo calls, servicing configuration or exhausting a receive/completion budget. It disables
 interrupts only around allocation/release and shared queue/wait operations.
 Local transmission never recursively enters receive and has no Ethernet, ARP,
 PCI or DMA dependency.
@@ -151,7 +154,7 @@ Init receives an `echo` resource. Session handoff and ordinary shell launches
 copy its ECHO_RIGHT_SEND grant. It authorizes ICMP echo exchanges only: no raw
 headers, user-selected source address, interface configuration or routing changes.
 The stack and request budget remain shared between spaces. Configuration
-capabilities and init setup are the next task.
+uses a distinct authority that ordinary applications do not inherit.
 
 [The echo protocol](../include/abi/echo.h) uses the existing CALL syscall with a
 tagged ECHO_EXCHANGE request. Its input is a host-order IPv4 destination and an
@@ -225,9 +228,10 @@ live-packet count are zero and `worker_wait` is published. The `pending` array
 in `kernel/net/echo.c` shows queued, ARP-waiting, sent and completed calls; after ping exits
 all slots should be ECHO_FREE, with no retained waiter.
 
-Use the worker stop and TCG calling rules in the configuration example below for
-manual setup. Packet allocation alone still requires BSP/IF=0; protocol entry
-points require the worker with interrupts enabled.
+Packet allocation requires BSP/IF=0; protocol entry points and direct kernel
+configuration require the sole network worker with interrupts enabled. Ordinary
+boot now applies configuration through the userspace capability. See [GDB](gdb.md)
+for debugger calling restrictions; do not mutate worker state from another task.
 
 `'kernel/net/ipv4.c'::ipv4_stats` separates malformed, unsupported and nonlocal
 input. `'kernel/net/icmp.c'::icmp_stats` records requests, replies and reply-send
@@ -385,36 +389,90 @@ References: [ARP](https://www.rfc-editor.org/rfc/rfc826.html),
 [ARP cache and retry requirements](https://www.rfc-editor.org/rfc/rfc1122.html#section-2.3.2),
 [/31 host addresses](https://www.rfc-editor.org/rfc/rfc3021.html).
 
-## Configuring the current slice in GDB
+## Native configuration capability
 
-Until init configuration lands, use TCG and stop at the network worker's first
-service call, after transport activation. Follow the [GDB calling constraints](gdb.md);
-do not call configuration from an arbitrary stopped task or interrupt.
+Init receives `net_config` authority for the single `net0` interface, even if no
+NIC is present. The object selects the interface; names in configuration do not
+grant authority. [The tagged protocol](../include/abi/net_config.h) uses CALL:
+
+- `NET_CONFIG_QUERY` requires READ and returns a snapshot of presence, transport
+  readiness, usable link, assigned address/prefix/gateway, MTU and MAC. Absence is
+  a successful snapshot, distinct from a discovered but failed device.
+- `NET_CONFIG_REPLACE` requires WRITE and supplies the complete address, prefix
+  and optional gateway. Invalid fields return `CALL_BAD_REQUEST` without mutation;
+  an unusable device returns `CALL_UNAVAILABLE`. A link-down prepared device can
+  still be configured.
+- `NET_CONFIG_CLEAR` requires WRITE and removes settings and ARP state. It works
+  without a NIC and returns no data, as does replacement.
+
+Libpyxis exposes `net_config_query`, `net_config_replace` and `net_config_clear`.
+Query clears caller output on failure. Scalar requests are captured and reply
+storage checked before parking the user task. Eight shared slots bound calls;
+exhaustion returns `CALL_QUEUE_FULL`. The worker processes each finite operation
+outside the slot lock; no device/peer response or application pointer is needed.
+Completion detaches and wakes under the slot lock, with the slot retained until
+its caller resumes. Settings survive closing authority; closing another copied
+grant does not cancel a blocked call. No new syscall or scheduler queue is added.
+
+The init shell passes this grant only through its explicit `session` handoff.
+The session launcher consumes it for setup and does not pass it to the interactive
+shell. Ordinary commands inherit echo authority, never configuration authority.
+This is delegation policy in those programs, not a restriction on a trusted holder
+intentionally granting its capability elsewhere. Interfaces remain system-wide;
+there is no per-space network isolation.
+
+## Boot configuration and use
+
+The session launcher reads `app://config/network.lua`, installed from
+`userspace/config/network.lua`. The packaged QEMU user-network settings are:
+
+```lua
+return {
+  net0 = {
+    optional = true,
+    address = "10.0.2.15",
+    prefix = 24,
+    gateway = "10.0.2.2",
+  },
+}
+```
+
+This is manual static configuration, not DHCP. The kernel and driver contain no
+QEMU address defaults. An omitted gateway means no default route. Addresses use
+four decimal octets; no DNS, shorthand or embedded NUL bytes. Unknown keys,
+incorrect types and prefixes outside 1..32 are errors. The kernel validates subnet
+and gateway relationships when applying replacement.
+
+A missing file or missing `net0` leaves existing settings alone (unconfigured on
+fresh boot). `net0 = false` explicitly clears them. `optional` defaults to false;
+true permits an absent NIC, but does not hide transport failure. A required absent
+device or invalid configuration prevents shell launch. A present but unavailable
+device or other runtime setup failure is diagnosed and the shell remains available
+for recovery. A launcher without the configuration grant reports that it is keeping
+current settings; this allows a later unprivileged session handoff.
+
+Session and network configuration use the same restricted [Lua evaluator](lua.md#embedding-and-session-configuration).
+Both files are read before applying settings. Network setup precedes terminal
+changes and shell launch; later failure does not roll back an applied address or
+route. There is no live reload, supervision or automatic retry. The default init
+still mounts optional `host://` before the session handoff.
 
 ```sh
-make debug ACCEL=tcg VIRTIO_NET=1
+make run VIRTIO_NET=1
+# Optionally also supply VIRTIO_FS_SOCKET=/path/to/fs.sock.
 ```
 
-```gdb
-target remote :1234
-hbreak virtio_net_service
-continue
-set scheduler-locking on
-print net_ipv4_configure(0x0a00020f, 24, 0x0a000202)
-set scheduler-locking off
-delete 1
-continue
-```
+In the shell, use `ping 127.0.0.1`, `ping 10.0.2.15`, `ping 10.0.2.2` and
+`ping 1.1.1.1`. Default no-NIC boot still supports loopback. Internet ICMP through
+QEMU user networking depends on host ping-socket permission and a reachable peer.
+On Linux, the QEMU user's group must be permitted by `net.ipv4.ping_group_range`;
+see [QEMU's host setup notes](https://www.qemu.org/docs/master/system/devices/net.html).
+The backend gateway is the first diagnostic target; an external timeout alone
+does not identify a guest-stack failure.
 
-This assigns `10.0.2.15/24` and gateway `10.0.2.2` for the default QEMU user
-backend. Switch to the shell space and run `ping 127.0.0.1`, `ping 10.0.2.15`,
-`ping 10.0.2.2` or `ping 1.1.1.1`. `net_ipv4_clear()` removes external settings;
-passing gateway zero replaces them with a connected route only. The static
-`configuration`, `neighbors`, `arp_stats` and packet/driver counters are useful
-read-only debugger views. Calls that mutate configuration must stay on the worker.
-
-Internet ICMP through QEMU user networking depends on host ping-socket permission
-and a reachable peer. On Linux, the QEMU user's group must be permitted by
-`net.ipv4.ping_group_range`; see [QEMU's host setup notes](https://www.qemu.org/docs/master/system/devices/net.html).
-The backend's gateway is the first diagnostic target; an external timeout alone
-does not identify a guest-stack failure. There is no DNS, DHCP, UDP or TCP yet.
+The initial networking milestone is complete. DHCP needs UDP, broadcast support,
+lease deadlines and delegated configuration authority; TCP, DNS, IPv6, richer
+routing, network isolation and website hosting remain separate scopes in
+[later directions](wip/later-os-directions.md#networking-and-website-hosting).
+This stack deliberately implements a bounded IPv4/ICMP subset, not complete
+Internet host conformance. See the limits above before adding another protocol.
