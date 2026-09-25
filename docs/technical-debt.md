@@ -238,7 +238,7 @@ keep completed/retired calls immune to late errors.
 
 Generic ephemeral binding currently scans 49152–65535 from a rotating cursor;
 this allocator is not a defense against off-path reply guessing. The
-[dig client](networking.md#dns-queries-with-dig) explicitly chooses random ports
+[DNS client shared by dig and ping](dns.md) explicitly chooses random ports
 using [host-backed randomness](randomness.md). Revisit the generic allocator's
 policy for other consumers. Network authority and resource
 bounds also remain system-wide rather than isolated by space.

@@ -205,7 +205,7 @@ protocol does not constrain future socket/endpoint or asynchronous network APIs.
 
 Libpyxis supplies `echo_exchange`, taking an echo handle, destination, deadline
 and reply pointer. Its reply is cleared on failure and native status is preserved.
-The initial utility needs the `echo` grant plus clock READ/SLEEP authority:
+The utility needs the `echo` grant plus clock READ/SLEEP authority:
 
 ```text
 ping 127.0.0.1
@@ -213,9 +213,11 @@ ping -c 10 127.0.0.2
 ```
 
 The default is four requests, with one-second deadlines and starts paced at least
-one second apart. `-c` accepts 1..65535. Addresses must have four decimal octets;
-no DNS or shorthand is supported. Each success prints peer, sequence and RTT;
-errors are explicit, followed by attempted/replied/unanswered counts and RTT
+one second apart. `-c` accepts 1..65535. Numeric addresses require four decimal
+octets; shorthand is unsupported. [Hostnames](dns.md#hostname-ping) are resolved
+once before the echo loop using additional UDP and random authority.
+Each success prints peer, sequence and RTT; errors are explicit, followed by
+attempted/replied/unanswered counts and RTT
 min/average/max when any replies arrived. Only timeouts continue to the next
 request; other errors stop. Success requires every requested exchange to succeed.
 There is no indefinite mode, signal/Ctrl+C cancellation or configurable payload
@@ -744,59 +746,14 @@ not supervised public services.
 
 ## DNS queries with dig
 
-The boot archive includes `dig [@SERVER_IP] NAME [A]`, a native userspace DNS
-diagnostic using UDP, clock and random capabilities. With `make run VIRTIO_NET=1`:
+The boot archive includes `dig [@SERVER_IP] NAME [A]` and hostname support in
+`ping`. They share a bounded userspace DNS client, using UDP, clock and random
+capabilities. The default resolver is `1.1.1.1`, configured by session through
+`DNS_SERVER`. Numeric ping bypasses DNS and randomness entirely.
 
-```text
-dig example.com
-dig @1.1.1.1 www.github.com A
-dig does-not-exist.invalid
-```
-
-Server selection is an explicit `@` argument, then `DNS_SERVER`, then `1.1.1.1`
-if the variable is absent. An explicit override bypasses the environment value;
-an empty or invalid selected value is an error. Only numeric unicast IPv4 server
-addresses are accepted, including loopback. The command never switches servers
-silently. Names use ASCII letters, digits and interior hyphens in nonempty
-labels, with an optional trailing dot. Labels are limited to 63 bytes and the
-encoded name to 255 bytes. There is no suffix search or Unicode conversion.
-
-One recursive `IN A` question is sent to UDP port 53. Each of two attempts has
-a three-second monotonic deadline covering source setup, send and receive.
-Host-backed randomness supplies a fresh 16-bit query ID and source port in
-49152–65535; at most sixteen random port choices are tried per attempt if binds
-collide. The endpoint binds through route-aware OPEN, then is shut down and
-closed after the attempt. Only timeouts trigger a second attempt. Missing random
-hardware fails explicitly rather than substituting predictable values.
-
-Replies must match the selected server address/port, query ID, response/opcode
-fields and the case-insensitive question name, type and class. Unrelated or
-malformed packets are discarded without extending the deadline. The parser
-bounds label expansion, compression traversal and record counts, validates all
-three record sections before exposing answers, and checks A/CNAME payloads it
-interprets. Other record data is skipped by its checked extent. Printed names
-escape control characters, whitespace, literal dots and backslashes in labels.
-
-Output includes server, question, DNS response status, answer count, TTLs, A
-addresses and CNAME targets. Unknown answer types/classes retain numeric labels.
-An empty answer section or valid negative response such as NXDOMAIN is a
-successful diagnostic exchange, not a transport error. Usage, native-call,
-timeout, output and supported-size failures return a nonzero process status.
-
-This slice uses classic 512-byte DNS messages without EDNS. A matching truncated
-response reports that TCP fallback is unavailable; oversized replies are also
-reported as unsupported. Neither exposes partial answers. Full supported UDP
-datagrams are consumed so an oversized DNS response cannot block the receive
-queue. Random matching fields do not authenticate DNS or provide DNSSEC.
-
-There is no cache, resolver daemon, libc resolver or extra query to follow a
-CNAME. DNS code currently lives under `userspace/dig`; sharing it with hostname
-ping is the final [DNS milestone task](wip/dns.md). `ping` still requires a numeric
-IPv4 address. TCP fallback, EDNS, other query types, IPv6 and DNSSEC remain later
-work. The kernel contains no DNS policy or packet parser.
-
-References: [DNS wire format (RFC 1035)](https://www.rfc-editor.org/rfc/rfc1035.html)
-and [query matching (RFC 5452)](https://www.rfc-editor.org/rfc/rfc5452.html).
+See [DNS queries and hostname ping](dns.md) for command examples, configuration,
+reply matching, CNAME selection and remaining limits. The kernel contains no
+DNS policy or packet parser.
 
 ## Further networking work
 
@@ -804,7 +761,7 @@ Wildcard/connected UDP, broadcast/multicast, fragmentation, IPv6, asynchronous
 send and waiting on multiple objects remain outside this implementation. DHCP
 needs unconfigured-address and broadcast handling as well as configuration
 authority and lease deadlines; explicit-address unicast UDP alone is insufficient.
-Hostname ping completes the current DNS milestone; TCP needs its own scope.
+DNS queries and hostname ping are implemented; TCP needs its own scope.
 ICMP errors and generic UDP ephemeral-port selection are
 tracked in [technical debt](technical-debt.md#udp-icmp-errors-and-ephemeral-selection).
 Keep the [users/authority checkpoint](wip/users-and-authority.md) ahead of broader

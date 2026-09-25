@@ -43,9 +43,9 @@ milestone's remaining interface details before starting its code work.
 
 13. Complete: [host-backed randomness](../randomness.md), using VirtIO entropy
     and a bounded native READ capability.
-14. Next: [DNS queries and hostname ping](dns.md), using a userspace client,
-    a configured default resolver at `1.1.1.1`, native `dig` and then DNS support
-    in `ping`. Route-aware UDP opening is the first prerequisite.
+14. Complete: [DNS queries and hostname ping](../dns.md), using a shared
+    userspace client, route-aware UDP opening and a configured default resolver
+    at `1.1.1.1`. Numeric ping remains independent of DNS and randomness.
 
 This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO
