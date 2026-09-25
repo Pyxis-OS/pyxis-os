@@ -1,9 +1,10 @@
 # TCP implementation comparison
 
-Status: source review for the [outbound TCP milestone](tcp.md). The selected
-follow-up was to investigate lwIP; Rust integration and picoTCP's licensing choice
-are deferred. The [build/link findings](lwip-port.md) now establish freestanding
-compatibility and identify the decisions still required for runtime adoption.
+Status: lwIP was selected for the [outbound TCP milestone](tcp.md). Rust
+integration and picoTCP's licensing choice are deferred. The
+[implemented bridge](../lwip.md) records the selected ownership boundary and
+local adaptations; this comparison explains that choice against the original
+upstream sources, not a claim that native connection support is complete.
 
 ## Candidates
 
@@ -23,8 +24,8 @@ security or maintenance audit of those projects.
 ## lwIP source reviewed
 
 Review point: `STABLE-2_2_1_RELEASE`, commit
-`77dcd25a72509eb83f72b033d219b1d40cd8eb95`. The investigation now pins this subset with its license and dependency record;
-no runtime adoption or upstream patches follow from the build alone.
+`77dcd25a72509eb83f72b033d219b1d40cd8eb95`. Pyxis pins the selected subset in
+pyxis-lwip with its license, provenance and explicit local adaptations.
 
 `NO_SYS=1` permits a single-context callback integration without sockets, netconn,
 a tcpip thread or OS mailbox emulation. That maps naturally to Caelum's existing
@@ -94,21 +95,15 @@ kernel-owned storage without importing host libc or allocating on APs. Include
 pbufs, segment metadata, reassembly and retired control blocks in the budget;
 setting only a send-buffer size is insufficient. See [configuration options](https://github.com/lwip-tcpip/lwip/blob/77dcd25a72509eb83f72b033d219b1d40cd8eb95/src/include/lwip/opt.h).
 
-## Recommendation and decision gate
+## Selected direction
 
-The focused lwIP build/link investigation is complete. Reuse could save the
-largest body of protocol work, and its callback model fits the worker. Runtime
-adoption remains conditional on the documented packet and policy boundary. The
-remaining cost is integration and policy work, not a POSIX ABI requirement or a
-need to change the process/capability model.
+lwIP supplies the protocol engine in the existing network worker. The implemented
+bridge preserves Caelum's routing, address acceptance and queued-packet ownership,
+with small recorded upstream adaptations. The remaining cost is connection
+ownership, budgets, identity and native capability integration, not a POSIX ABI
+requirement or a change to the process model.
 
-The first investigation pins/builds the minimal subset and documents the
-packet/timer/allocator boundary and required runtime adaptations. See its
-[findings and decision gate](lwip-port.md).
-No new public stream API is needed for that decision. Use ordinary builds,
-boots and debugger inspection, not a new probe application or test framework.
-
-Continue with lwIP only if the boundary remains small and readable. If it needs
-private IP-context manipulation, scattered protocol patches or a second routing
-policy, stop and discuss native TCP versus a separately scoped full-stack
-replacement. Do not decide that tradeoff merely to make the port compile.
+Keep that boundary small and readable as the remaining TCP tasks proceed. If
+integration starts requiring private IP-context manipulation, scattered protocol
+patches or a second routing policy, stop and discuss the scope instead of forcing
+reuse. See [the bridge and remaining connection work](../lwip.md).
