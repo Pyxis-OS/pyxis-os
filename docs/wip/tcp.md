@@ -166,19 +166,22 @@ ICMP-error limitations remain visible in [technical debt](../technical-debt.md).
 
 ## Utility and ordinary validation
 
-The proposed command is `tcp HOST PORT [REQUEST_FILE]`. Resolve a hostname once
+The boot archive includes `tcp HOST PORT [REQUEST_FILE]`. Resolve a hostname once
 using the existing DNS helper, or bypass DNS for a numeric address. Connect,
 stream the optional file with short-write handling, shut down the write direction
 and copy received bytes to stdout until EOF. With no file, send no request bytes.
-Use finite per-call deadlines and report failures to stderr with a nonzero exit
-status. This is a finite request/response tool, not an interactive terminal pump;
+Connect, each write and each read use a fresh ten-second monotonic deadline.
+Failures go to stderr with a nonzero exit status; a failed exchange aborts and
+closes its stream. Successful output contains only response bytes. This is a
+finite request/response tool, not an interactive terminal pump;
 concurrent stdin/socket waiting belongs with later wait/multiplexing work.
 
-Choose the tool's request-size/backpressure expectations before implementation:
-sequential send-then-read suits small requests, but arbitrary duplex protocols
-can require simultaneous reading and writing. State that limitation rather than
-silently promising a general netcat replacement. A user-supplied HTTP request
-file is bytes to this tool; HTTP parsing, TLS and URI providers remain userspace
+The request is streamed through a 4 KiB buffer without a file-size cap. Sending
+finishes before reading starts: this suits small requests, but protocols needing
+simultaneous reading and writing can stall and time out. The deadlines bound
+individual calls, not the total runtime of a peer that keeps making progress.
+EOF reports the end of the response, not an application-level acknowledgement
+of the request. A user-supplied HTTP request file is bytes to this tool; HTTP parsing, TLS and URI providers remain userspace
 follow-ups.
 
 Finish the milestone with a transmit-only `ttcp` adaptation as a separate focused
@@ -243,10 +246,10 @@ observed under naturally occurring traffic.
   data/abort. Deferred FIN and orphan teardown remain bounded, and TIME_WAIT
   survives close, abort and invalidation until normal expiry. See
   [shutdown ownership and limits](../lwip.md#write-shutdown-and-teardown).
-- [ ] **7. Native tcp utility, ttcp transmitter and milestone completion.** Add the finite tool,
-  reuse DNS, run the ordinary interoperability checks above, and document the
-  stream contract and limitations. Follow with the agreed transmit-only ttcp
-  adaptation against a host receiver. Rewrite/move this file to `docs/tcp.md`,
+- [ ] **7. Native tcp utility, ttcp transmitter and milestone completion.** The finite
+  `tcp` tool is implemented with shared hostname lookup, short writes, write
+  shutdown, response output and ten-second per-call deadlines. Follow with the
+  agreed transmit-only ttcp adaptation against a host receiver. Rewrite/move this file to `docs/tcp.md`,
   remove the completed checklist and update links.
 
 Each task is its own focused PR, paired across Pyxis/userland when needed. Build

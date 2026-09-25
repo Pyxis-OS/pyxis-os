@@ -756,6 +756,40 @@ See [DNS queries and hostname ping](dns.md) for command examples, configuration,
 reply matching, CNAME selection and remaining limits. The kernel contains no
 DNS policy or packet parser.
 
+## TCP request/response utility
+
+`tcp HOST PORT [REQUEST_FILE]` connects to an IPv4 address or resolves a hostname
+using the same DNS configuration as `ping`. It streams the optional file, shuts
+down its write half and copies response bytes to stdout until EOF. Without a
+file it sends no bytes. Request paths use the usual working directory or Pyxis
+URI. The current shell has no output redirection; stdout is the inherited
+console.
+
+For a host HTTP server, start `python3 -m http.server 18080` on the host and boot
+with `VIRTIO_NET=1`. Create a raw request in the directory exported through the
+[optional host filesystem](virtio-fs.md):
+
+```sh
+printf 'GET / HTTP/1.0\r\nHost: localhost\r\n\r\n' > "$export_dir/request"
+```
+
+Then run `tcp 10.0.2.2 18080 host://request` in the guest. A request saved in
+`home://` with an editor also works; ensure its final header line is followed by
+an empty line, and use line endings accepted by the chosen server.
+
+The response includes raw HTTP headers; this utility does not interpret HTTP.
+For a receive-only exchange, `tcp 10.0.2.2 18081` can receive a file from a host
+listener such as `nc --send-only -l 18081 < message.txt` (Ncat syntax).
+
+Each connect/read/write has a fresh ten-second deadline. Failures report to
+stderr, abort/close the stream and exit unsuccessfully. The request uses a 4 KiB
+transfer buffer with no fixed file-size limit, but all sending precedes reading.
+A protocol requiring concurrent progress in both directions can stall and time
+out. There is no stdin pump, listener or total-runtime limit. Normal completion
+means response EOF, not proof that a remote application processed the request.
+See the [TCP milestone](wip/tcp.md) for transport limits and the remaining
+transmitter utility.
+
 ## Further networking work
 
 Wildcard/connected UDP, broadcast/multicast, fragmentation, IPv6, asynchronous
