@@ -82,8 +82,10 @@ GCC's private headers. `-print-search-dirs` displays the configured paths.
   need a readable startup clock; the shell supplies it. Timezone selection is
   deferred. The unsigned millisecond benchmark interval must be under 49 days.
 - Output uses create/truncate streams. A failed write can leave a partial file;
-  atomic replacement and persistent storage remain separate work. `home://`
-  contents are lost on reboot.
+  compilation does not publish output by atomic replacement. `home://` contents
+  are lost on reboot;
+  an optional writable `host://` export can keep output across boots. See the
+  [persistence walkthrough](virtio-fs.md#persistent-development-walkthrough).
 - Each process has a fixed 1 MiB stack without growth and an unmapped guard
   page below it. Recursive parsing and larger inputs can exceed it. The largest fixed compiler frame observed in the
   GCC build was 2,720 bytes, not a bound on total stack use or source complexity.

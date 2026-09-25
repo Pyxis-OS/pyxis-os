@@ -112,8 +112,7 @@ leave it as account UI to bolt on after those interfaces are fixed.
 
 ## Persistent storage and installation
 
-[Writable virtio-fs](writable-virtio-fs.md) is the next selected milestone after
-outbound TCP and per-CPU init. It will let the Kilo/TCC workflow keep source and
+[Writable virtio-fs](../virtio-fs.md) lets the Kilo/TCC workflow keep source and
 executables across boots without first choosing a disk filesystem. Trusted init
 selects access grants over one host-service identity; the
 [users/authority checkpoint](users-and-authority.md) records what that prototype

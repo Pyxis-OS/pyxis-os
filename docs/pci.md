@@ -214,6 +214,7 @@ A bulk structure read can combine neighboring registers into accesses the device
 does not support, producing misleading values even with correct field offsets.
 
 The [init-managed mount](virtio-fs.md#init-mount-and-delegation) exposes the
-read-only export as `host://` through directory/file capabilities. The
+optional export as `host://` through directory/file capabilities with the
+selected init's grants. The
 [host setup](virtio-fs.md#start-the-host-service) documents the opt-in daemon and
 socket used by `make run`/`make debug`. Ordinary archive-only boot needs neither.

@@ -26,13 +26,13 @@ kernel image; overlays do not make incompatible userspace builds safe. Executabl
 loading from host-backed files and concurrent replacement must be accounted for
 before demonstrating launch through the composed view.
 
-The read-only [host mount](../virtio-fs.md) is implemented. Settle this experiment's
+The [host mount](../virtio-fs.md) is implemented. Settle this experiment's
 contract alongside the [overlay design](../vfs.md) before implementation.
 
 ## Deferred work
 
-[Writable host access](writable-virtio-fs.md) now has its own milestone, without
-adding overlays. The [user/authority checkpoint](users-and-authority.md) still
+[Writable host access](../virtio-fs.md) is available without an overlay. The
+[user/authority checkpoint](users-and-authority.md) still
 applies: explicit directory grants and a single host-service identity do not
 settle future guest-user ownership or host identity mapping.
 
@@ -40,4 +40,3 @@ Networking, block storage, a disk format, installer, compositor and VirtIO GPU
 remain separate milestones. The agreed driver order is virtio-fs, virtio-net,
 then virtio-blk. PCI/queue code should be reusable where concrete needs align,
 without designing every future driver in advance.
-
