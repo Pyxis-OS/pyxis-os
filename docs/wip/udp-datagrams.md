@@ -52,8 +52,8 @@ default routing and bounded ARP resolution.
 Ordinary link down/up preserves bindings. Removing a configured local address
 makes endpoints bound to it unavailable; they must be closed and reopened rather
 than silently revived if the address returns. Loopback bindings remain independent.
-Distinguish address removal from changing only the prefix or gateway; settle
-pending-send handling for those route changes in task 2.
+Changing only prefix/gateway preserves bindings and received data, but fails
+sends still waiting on the old ARP route; new work uses current configuration.
 
 ## Datagram operations
 
@@ -80,8 +80,8 @@ Receive waits for a queued datagram. An undersized destination buffer gets an
 explicit error and leaves that datagram queued, with no partial consumption or
 silent truncation. The caller can retry with the documented maximum. Capture
 and check user buffers before parking, and leave output untouched on failure.
-Settle exact status encodings, deadline limits and competing-waiter behavior
-before task 2; do not silently inherit stream EOF or socket semantics.
+Task 2 implements BUFFER_TOO_SMALL, five-second send and thirty-second receive
+deadline limits, and one outstanding call per direction per endpoint.
 
 ## Bounds, ownership and lifetime
 
@@ -91,7 +91,7 @@ receive bound is reached, preserving queued datagrams. Keep diagnostic drop
 counts without introducing a statistics framework. UDP receive queues must not
 consume the entire packet budget and permanently exclude other protocols.
 Task 1 bounds live endpoint objects at sixteen and control calls at eight;
-pending send/receive bounds remain for task 2.
+task 2 adds eight send and sixteen receive slots, separate from control slots.
 
 Keep protocol state, allocation policy and binding changes with the existing
 BSP network worker. AP callers hand over captured data in stable shared storage;
@@ -105,8 +105,9 @@ Closing one handle releases that reference without revoking other copies.
 Explicit SHUTDOWN, requiring its own right, stops the shared endpoint and wakes
 pending operations with a closed result. Final release cleans up the binding and
 queued storage. Shutdown releases the binding before successful completion;
-final close uses deferred worker cleanup. Order this against packet delivery in
-task 2. Outstanding DMA retains its existing driver-owned lifetime; neither shutdown nor final close can free it early.
+final close uses deferred worker cleanup. Pending ARP packets are cancelled
+before completing calls. Outstanding DMA retains its existing driver-owned
+lifetime; neither shutdown nor final close can free it early.
 
 A blocked call keeps its live grant and mappings, as in the current single-task
 process model. Other copies can request shutdown, but closing a copied grant
@@ -125,18 +126,16 @@ UDP can distinguish an old remote datagram from a new use of the same tuple.
    that releases the binding before returning. Stopped objects remain inspectable
    and count toward the object limit until final cleanup. See
    [the implemented contract](../networking.md#native-udp-endpoint-lifetime).
-   SEND/RECEIVE operations remain unimplemented until task 2.
+   SEND/RECEIVE operations are implemented by task 2.
 
-2. [ ] **Wire processing, bounded delivery and deadlines.** Add UDP parsing and
+2. [x] **Wire processing, bounded delivery and deadlines.** Add UDP parsing and
    checksums, binding lookup, bounded receive queues, tagged send/receive calls,
    wait/completion handling and integration with IPv4/ARP. Preserve echo behavior.
-   Settle pending-call bounds, simultaneous calls on shared endpoints, deadline
-   policy, undersized-buffer status and route-change ordering first. Audit the
-   current echo-specific transmit completion path and adapt it for the two
-   concrete consumers without a generic callback framework. Decide and document
-   treatment of unbound destination ports and ICMP errors rather than implying
-   full UDP host conformance. Validate with ordinary traffic and debugger
-   inspection; no packet-injection or self-test harness.
+   Implemented with separate bounded send/receive slots, CALL_BUSY for a second
+   call in the same direction, and BUFFER_TOO_SMALL preserving the queued head.
+   Explicit echo/UDP completion tags retain ping behavior; cancellation removes
+   unsent ARP packets before waking. Unbound ports are dropped and ICMP error
+   handling remains deferred. See [the implemented contract](../networking.md#udp-datagrams-and-deadlines).
 
 3. [ ] **Userspace tools and ordinary host use.** Add a small client and echo
    server, with bounded waits and a usable exit policy. Define their CLI and a
