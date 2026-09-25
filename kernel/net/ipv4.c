@@ -163,7 +163,7 @@ enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
 }
 
 enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
-    uint32_t destination, uint8_t protocol, uint64_t deadline, uint64_t token)
+    uint32_t destination, uint8_t protocol, uint64_t deadline, struct ipv4_completion completion)
 {
   assert_worker_context();
   if (!packet || packet->length < IPV4_HEADER_SIZE || packet->length > NET_PACKET_MAX_BYTES) {
@@ -193,13 +193,13 @@ enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
   net_write_u32(header->destination, destination);
   net_write_u16(header->checksum, net_checksum(packet->data, IPV4_HEADER_SIZE));
   if (route.next_hop) {
-    return net_arp_transmit(packet, route.next_hop, deadline, token);
+    return net_arp_transmit(packet, route.next_hop, deadline, completion);
   }
   uint64_t flags = cpu_save_interrupts();
   result = net_transmit(&net_loopback, packet);
   cpu_restore_interrupts(flags);
   if (result == NET_OK) {
-    net_echo_transmitted(token);
+    net_ipv4_transmitted(completion);
   }
   return result;
 }
@@ -256,12 +256,17 @@ void net_ipv4_receive(const struct net_interface *interface,
 
   /* This host delivers locally, never forwards. Do not decrement TTL or reject
    * an otherwise valid local packet merely because its TTL is below two. */
-  if (header->protocol != IPV4_PROTOCOL_ICMP) {
+  switch (header->protocol) {
+  case IPV4_PROTOCOL_ICMP:
+    net_icmp_receive(source, destination, data + header_length, total_length - header_length);
+    break;
+  case IPV4_PROTOCOL_UDP:
+    net_udp_receive_packet(source, destination, data + header_length, total_length - header_length);
+    break;
+  default:
     ++ipv4_stats.unsupported;
-    return;
+    break;
   }
-  net_icmp_receive(source, destination, data + header_length,
-      total_length - header_length);
 }
 
 void net_ipv4_snapshot(struct net_config_reply *reply)
@@ -286,5 +291,23 @@ void net_ipv4_snapshot(struct net_config_reply *reply)
   const uint8_t *mac = virtio_net_mac();
   if (mac) {
     memcpy(reply->mac, mac, sizeof(reply->mac));
+  }
+}
+
+void net_ipv4_transmitted(struct ipv4_completion completion)
+{
+  switch (completion.consumer) {
+  case IPV4_NOTIFY_ECHO: net_echo_transmitted(completion.token); break;
+  case IPV4_NOTIFY_UDP: net_udp_transmitted(completion.token); break;
+  case IPV4_NOTIFY_NONE: break;
+  }
+}
+
+void net_ipv4_failed(struct ipv4_completion completion, enum net_result result)
+{
+  switch (completion.consumer) {
+  case IPV4_NOTIFY_ECHO: net_echo_failed(completion.token, result); break;
+  case IPV4_NOTIFY_UDP: net_udp_failed(completion.token, result); break;
+  case IPV4_NOTIFY_NONE: break;
   }
 }

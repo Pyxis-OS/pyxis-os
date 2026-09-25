@@ -6,18 +6,12 @@
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <stdatomic.h>
+#include "udp_internal.h"
 
 #define UDP_ENDPOINT_LIMIT 16
 #define UDP_CONTROL_LIMIT 8
 #define UDP_EPHEMERAL_FIRST 49152
 #define UDP_EPHEMERAL_LAST 65535
-
-struct udp_endpoint {
-  struct kernel_object object;
-  struct udp_endpoint *next;
-  struct udp_endpoint *retired_next;
-  struct udp_endpoint_info local;
-};
 
 enum udp_control_operation { CONTROL_OPEN, CONTROL_INSPECT, CONTROL_SHUTDOWN };
 enum udp_control_state { CONTROL_FREE, CONTROL_QUEUED, CONTROL_RUNNING, CONTROL_DONE };
@@ -95,6 +89,7 @@ static bool reap_endpoints(void)
     *link = endpoint->next;
     --endpoint_count;
 
+    net_udp_discard_received(endpoint);
     flags = cpu_save_interrupts();
     kfree(endpoint);
     cpu_restore_interrupts(flags);
@@ -102,15 +97,15 @@ static bool reap_endpoints(void)
   return worked;
 }
 
-static bool port_bound(uint32_t address, uint16_t port)
+struct udp_endpoint *net_udp_find_endpoint(uint32_t address, uint16_t port)
 {
   for (struct udp_endpoint *endpoint = endpoints; endpoint; endpoint = endpoint->next) {
     if (endpoint->local.state == UDP_STATE_BOUND &&
         endpoint->local.address == address && endpoint->local.port == port) {
-      return true;
+      return endpoint;
     }
   }
-  return false;
+  return NULL;
 }
 
 static uint16_t ephemeral_port(uint32_t address)
@@ -118,7 +113,7 @@ static uint16_t ephemeral_port(uint32_t address)
   for (unsigned i = UDP_EPHEMERAL_FIRST; i <= UDP_EPHEMERAL_LAST; ++i) {
     uint16_t port = next_ephemeral;
     next_ephemeral = port == UDP_EPHEMERAL_LAST ? UDP_EPHEMERAL_FIRST : port + 1;
-    if (!port_bound(address, port)) {
+    if (!net_udp_find_endpoint(address, port)) {
       return port;
     }
   }
@@ -131,7 +126,7 @@ static enum call_status open_endpoint(struct udp_control *call)
       call->address != net_ipv4_address())) {
     return CALL_UNAVAILABLE;
   }
-  if (call->port && port_bound(call->address, call->port)) {
+  if (call->port && net_udp_find_endpoint(call->address, call->port)) {
     return CALL_ALREADY_EXISTS;
   }
   if (endpoint_count == UDP_ENDPOINT_LIMIT) {
@@ -182,6 +177,7 @@ static enum call_status apply_control(struct udp_control *call)
   case CONTROL_SHUTDOWN:
     /* Binding lookup ignores stopped objects, even while copied handles live. */
     call->endpoint->local.state = UDP_STATE_SHUTDOWN;
+    net_udp_stop_io(call->endpoint, CALL_ENDPOINT_CLOSED);
     return CALL_OK;
   }
   return CALL_BAD_OPERATION;
@@ -289,6 +285,7 @@ bool net_udp_service(void)
     cpu_restore_interrupts(flags);
     worked = true;
   }
+  worked |= net_udp_service_io();
   return worked;
 }
 
@@ -298,6 +295,7 @@ void net_udp_invalidate_address(uint32_t address)
   for (struct udp_endpoint *endpoint = endpoints; endpoint; endpoint = endpoint->next) {
     if (endpoint->local.state == UDP_STATE_BOUND && endpoint->local.address == address) {
       endpoint->local.state = UDP_STATE_UNAVAILABLE;
+      net_udp_stop_io(endpoint, CALL_UNAVAILABLE);
     }
   }
 }

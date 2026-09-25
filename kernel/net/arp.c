@@ -31,7 +31,8 @@ struct arp_neighbor {
 struct arp_pending {
   struct net_packet *packet;
   uint32_t next_hop;
-  uint64_t deadline, token;
+  uint64_t deadline;
+  struct ipv4_completion completion;
 };
 
 struct arp_message {
@@ -116,13 +117,25 @@ static void release_packet(struct net_packet *packet)
 
 static void finish_pending(struct arp_pending *entry, enum net_result result)
 {
-  uint64_t token = entry->token;
+  struct ipv4_completion completion = entry->completion;
   release_packet(entry->packet);
   *entry = (struct arp_pending){0};
   if (result == NET_OK) {
-    net_echo_transmitted(token);
+    net_ipv4_transmitted(completion);
   } else {
-    net_echo_failed(token, result);
+    net_ipv4_failed(completion, result);
+  }
+}
+
+void net_arp_cancel(struct ipv4_completion completion)
+{
+  for (size_t i = 0; i < ARP_PENDING_LIMIT; ++i) {
+    struct arp_pending *entry = &pending[i];
+    if (entry->packet && entry->completion.consumer == completion.consumer &&
+        entry->completion.token == completion.token) {
+      release_packet(entry->packet);
+      *entry = (struct arp_pending){0};
+    }
   }
 }
 
@@ -159,7 +172,7 @@ static enum net_result send_arp(uint16_t operation, uint32_t target,
 }
 
 enum net_result net_arp_transmit(struct net_packet *packet, uint32_t next_hop,
-    uint64_t deadline, uint64_t token)
+    uint64_t deadline, struct ipv4_completion completion)
 {
   if (task_deadline_expired(deadline)) {
     return NET_TIMED_OUT;
@@ -175,7 +188,7 @@ enum net_result net_arp_transmit(struct net_packet *packet, uint32_t next_hop,
     if (result == NET_OK) {
       neighbor->last_used = arch_monotonic_ns();
       release_packet(packet);
-      net_echo_transmitted(token);
+      net_ipv4_transmitted(completion);
     }
     return result;
   }
@@ -197,7 +210,7 @@ enum net_result net_arp_transmit(struct net_packet *packet, uint32_t next_hop,
   }
   neighbor->last_used = arch_monotonic_ns();
   *slot = (struct arp_pending){
-    .packet = packet, .next_hop = next_hop, .deadline = deadline, .token = token,
+    .packet = packet, .next_hop = next_hop, .deadline = deadline, .completion = completion,
   };
   return NET_OK;
 }
