@@ -130,20 +130,24 @@ void virtqueue_release(struct virtqueue *queue)
 
 bool virtqueue_submit(struct virtqueue *queue, size_t request_bytes, size_t reply_bytes)
 {
-  if (queue->in_flight || !request_bytes || request_bytes > VIRTQUEUE_REQUEST_BYTES ||
+  if (queue->in_flight || (!request_bytes && !reply_bytes) || request_bytes > VIRTQUEUE_REQUEST_BYTES ||
       reply_bytes > VIRTQUEUE_REPLY_BYTES) {
     return false;
   }
 
   volatile struct virtqueue_ring *ring = queue->ring;
-  ring->descriptors[VIRTQUEUE_REQUEST_DESCRIPTOR] = (struct virtqueue_descriptor){
-    .address = queue->physical + VIRTQUEUE_REQUEST_OFFSET,
-    .length = request_bytes,
-    .flags = reply_bytes ? VIRTQUEUE_DESC_NEXT : 0,
-    .next = VIRTQUEUE_REPLY_DESCRIPTOR,
-  };
+  if (request_bytes) {
+    ring->descriptors[VIRTQUEUE_REQUEST_DESCRIPTOR] = (struct virtqueue_descriptor){
+      .address = queue->physical + VIRTQUEUE_REQUEST_OFFSET,
+      .length = request_bytes,
+      .flags = reply_bytes ? VIRTQUEUE_DESC_NEXT : 0,
+      .next = VIRTQUEUE_REPLY_DESCRIPTOR,
+    };
+  }
   if (reply_bytes) {
-    ring->descriptors[VIRTQUEUE_REPLY_DESCRIPTOR] = (struct virtqueue_descriptor){
+    /* Entropy has no device-readable request: its writable buffer is the head. */
+    unsigned reply_index = request_bytes ? VIRTQUEUE_REPLY_DESCRIPTOR : VIRTQUEUE_REQUEST_DESCRIPTOR;
+    ring->descriptors[reply_index] = (struct virtqueue_descriptor){
       .address = queue->physical + VIRTQUEUE_REPLY_OFFSET,
       .length = reply_bytes,
       .flags = VIRTQUEUE_DESC_WRITE,

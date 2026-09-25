@@ -78,7 +78,8 @@ static inline volatile struct virtio_pci_common *virtio_pci_common(
 /* BSP/IF=0 before AP startup. Claims, resets before BAR probing and maps the
  * registers. DMA/INTx stay disabled. Failure releases this boot-only claim.
  * Device configuration size/alignment bound its required prefix; the full
- * advertised device region is mapped for optional negotiated fields. */
+ * advertised device region is mapped for optional negotiated fields. A zero
+ * size means the device type has no device-specific configuration to map. */
 bool virtio_pci_prepare(struct virtio_pci_transport *pci, struct pci_device *device,
     const struct boot_info *boot, size_t device_bytes, unsigned device_alignment);
 /* Program table entry zero and the config route while function/vector masked.

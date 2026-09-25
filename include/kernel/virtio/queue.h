@@ -42,7 +42,7 @@ phys_addr_t virtqueue_used_address(const struct virtqueue *queue);
 
 /* Fill request first. Successful submission lends both buffers to the device
  * until a checked completion or confirmed reset. A zero reply size supports
- * requests without a reply. No buffer access/reuse while in_flight is set. */
+ * requests without a reply; a zero request size supports writable-only buffers. No buffer access/reuse while in_flight is set. */
 bool virtqueue_submit(struct virtqueue *queue, size_t request_bytes, size_t reply_bytes);
 enum virtqueue_result virtqueue_complete(struct virtqueue *queue, size_t *reply_bytes);
 

@@ -254,6 +254,9 @@ static bool read_virtio_capability(struct virtio_pci_transport *pci, unsigned of
     alignment = 1;
     break;
   case VIRTIO_DEVICE_CONFIG:
+    if (!device_bytes) {
+      return true; /* This device type has no device-specific configuration. */
+    }
     region = &pci->device;
     minimum = device_bytes;
     alignment = device_alignment;
@@ -315,7 +318,7 @@ static bool read_msix_capability(struct virtio_pci_transport *pci, unsigned offs
   return region_fits(pci, &pci->msix_table) && region_fits(pci, &pci->msix_pba);
 }
 
-static bool regions_disjoint(const struct virtio_pci_transport *pci)
+static bool regions_disjoint(const struct virtio_pci_transport *pci, bool device_config)
 {
   const struct virtio_pci_region *regions[] = {
     &pci->common, &pci->notify, &pci->isr, &pci->device,
@@ -323,11 +326,17 @@ static bool regions_disjoint(const struct virtio_pci_transport *pci)
   };
   for (size_t i = 0; i < sizeof(regions) / sizeof(regions[0]); ++i) {
     const struct virtio_pci_region *a = regions[i];
+    if (a == &pci->device && !device_config) {
+      continue;
+    }
     if (!region_fits(pci, a)) {
       return false;
     }
     for (size_t j = 0; j < i; ++j) {
       const struct virtio_pci_region *b = regions[j];
+      if (!b->length) {
+        continue;
+      }
       if (a->bar == b->bar && a->offset < (uint64_t)b->offset + b->length &&
           b->offset < (uint64_t)a->offset + a->length) {
         return false;
@@ -384,7 +393,7 @@ bool virtio_pci_prepare(struct virtio_pci_transport *pci, struct pci_device *dev
       goto fail;
     }
   }
-  if (!pci->msix_capability || !regions_disjoint(pci)) {
+  if (!pci->msix_capability || !regions_disjoint(pci, device_bytes != 0)) {
     goto fail;
   }
 
@@ -392,7 +401,7 @@ bool virtio_pci_prepare(struct virtio_pci_transport *pci, struct pci_device *dev
   if (!map_region(pci, "common", &pci->common, VIRTIO_COMMON_BYTES, boot) ||
       !map_region(pci, "notify", &pci->notify, pci->notify.length, boot) ||
       !map_region(pci, "ISR", &pci->isr, VIRTIO_ISR_BYTES, boot) ||
-      !map_region(pci, "device", &pci->device, pci->device.length, boot) ||
+      (device_bytes && !map_region(pci, "device", &pci->device, pci->device.length, boot)) ||
       !map_region(pci, "MSI-X table", &pci->msix_table, pci->msix_table.length, boot) ||
       !map_region(pci, "MSI-X pending bits", &pci->msix_pba, pci->msix_pba.length, boot)) {
     goto fail;
