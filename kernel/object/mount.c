@@ -24,7 +24,8 @@ struct kernel_object *mount_create(void)
 }
 
 struct syscall_result mount_call(uint64_t rights, uint64_t operation,
-    size_t request_size, uintptr_t reply_address, size_t reply_capacity)
+    uintptr_t request_address, size_t request_size, uintptr_t reply_address,
+    size_t reply_capacity)
 {
   if (operation != MOUNT_OPEN_ROOT) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -32,13 +33,21 @@ struct syscall_result mount_call(uint64_t rights, uint64_t operation,
   if (!(rights & MOUNT_RIGHT_OPEN_ROOT)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
+  struct mount_open_request open;
   struct mount_reply reply;
-  if (request_size || reply_capacity < sizeof(reply)) {
+  if (request_size != sizeof(open) || reply_capacity < sizeof(reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
+  if (!copy_from_user(&open, request_address, sizeof(open)) ||
+      !user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
+
+  if (open.access != MOUNT_ACCESS_READ_ONLY && open.access != MOUNT_ACCESS_READ_WRITE) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  uint64_t directory_rights = open.access == MOUNT_ACCESS_READ_WRITE ? DIRECTORY_RIGHTS :
+      DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES;
 
   struct hostfs_request *request = task_prepare_hostfs();
   request->operation = HOSTFS_ROOT;
@@ -50,8 +59,6 @@ struct syscall_result mount_call(uint64_t rights, uint64_t operation,
   /* Keep the returned reference across capability-table growth. The mount
    * authority and the resulting directory have independent lifetimes. */
   struct kernel_object *root = request->object;
-  uint64_t directory_rights = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE |
-                             DIRECTORY_RIGHT_READ_FILES;
   enum capability_result result;
   for (;;) {
     result = capability_insert(&process_current()->capabilities, root,

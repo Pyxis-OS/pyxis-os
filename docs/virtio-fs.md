@@ -234,7 +234,7 @@ The default init script is:
 
 ```text
 #!app://shell.pxe
-mount --optional host
+mount --optional --read-only host
 session app://session.pxe --configure-network
 ```
 
@@ -244,11 +244,19 @@ that one boot-lifetime export; knowing the device tag supplies no authority.
 Presence is recorded before preparation, so a failed device is never confused
 with an absent one.
 
-`MOUNT_OPEN_ROOT` is a header-only synchronous request requiring
-`MOUNT_RIGHT_OPEN_ROOT`. It returns one owned directory handle granting exactly
-LOOKUP, ENUMERATE and READ_FILES. Libpyxis exposes it as `mount_open_root`.
-It creates neither a global namespace entry nor a kernel URI parser. There is
-no new syscall: it uses the existing object-call ABI.
+`MOUNT_OPEN_ROOT` is a synchronous request requiring `MOUNT_RIGHT_OPEN_ROOT`.
+Its `mount_open_request` selects `MOUNT_ACCESS_READ_ONLY` (LOOKUP, ENUMERATE,
+READ_FILES) or `MOUNT_ACCESS_READ_WRITE` (all directory rights). It returns one
+owned directory handle. Libpyxis exposes `mount_open_root(mount, access, &root)`.
+Access selects the returned grant, never a global mode on the shared export;
+opening another root cannot widen existing handles. Read-write authorizes
+mutation attempts, not a promise of host writability. Host/backend errors still
+apply, with no write probe or silent read-only fallback. The current backend
+still rejects mutations with READ_ONLY even through read-write grants; missing
+required rights fail with DENIED first. Both packaged inits explicitly request
+read-only until write support lands.
+The mount operation uses the existing object-call ABI and creates neither a
+global namespace entry nor a kernel URI parser.
 
 Mount requests arriving during initialization wait on the native request queue.
 The worker's bounded FUSE INIT completes them, or its failure wakes them with an
@@ -256,16 +264,17 @@ error. Failed preparation, worker creation or initialization does not leave
 callers parked indefinitely. Transport request deadlines are five seconds;
 stopping/reset may take up to one additional second, plus scheduling delay.
 
-The shell's `mount [--optional] host` binds the returned root locally. The only
+The shell's `mount [--optional] [--read-only | --read-write] host` binds the
+returned root locally, defaulting to read-only. The only
 optional success is a missing `host_mount` resource: any call failure reports an
 error and stops a script. An existing `host` binding is never replaced. Names and
 handles in a caller-supplied `path_context` root set are borrowed; a NULL set
 continues to resolve immutable startup bindings. The shell owns newly mounted
 roots until exit, and changing its bindings does not change a retained cwd chain.
 
-Session handoff and ordinary child launches copy the optional read-only host
-root alongside app/home. They never forward mount authority. The session
-launcher forwards that root to its interactive shell, whose `cd host://` and
+Session handoff and ordinary child launches query and preserve the actual
+grants on the optional host root, app/home roots and each cwd handle. They never
+forward mount authority. The session launcher forwards that root to its interactive shell, whose `cd host://` and
 child launches retain the same navigation boundary and rights. Mount authority,
 root directories and opened children have independent reference lifetimes;
 init exiting does not revoke the copies it delegated.

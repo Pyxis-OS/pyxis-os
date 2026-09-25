@@ -147,8 +147,10 @@ then delegates it to the interactive shell.
 
 ## Optional host mount
 
-`mount [--optional] host` uses init's scoped `host_mount` resource to open the
-selected read-only host export and bind `host://` in this shell. It rejects an
+`mount [--optional] [--read-only | --read-write] host` uses init's scoped
+`host_mount` resource to open the selected export and bind `host://` in this
+shell. Access defaults to read-only; write grants authorize mutation attempts
+but do not establish backend or host writability. It rejects an
 existing binding. Optional mode skips only a missing resource; any actual mount
 failure is an error, which stops a script. Ordinary shells receive the mounted
 root rather than mount authority. See [host setup and lifetime](virtio-fs.md).
@@ -186,24 +188,28 @@ or a terminal ownership protocol. It does not add supervision or `exec`.
 
 The shell expects named `input`, `output`, `memory` and `launcher` resources,
 plus `app` and `home` roots. Input/output are separate console READ/WRITE grants;
-memory permits MANAGE and launcher permits LAUNCH. The app root supplies LOOKUP,
-ENUMERATE and READ_FILES. Home additionally supplies CREATE, WRITE_FILES and REMOVE.
+memory permits MANAGE and launcher permits LAUNCH. Normally app supplies LOOKUP,
+ENUMERATE and READ_FILES, and home additionally supplies CREATE, WRITE_FILES and
+REMOVE. Directory grants can be restricted by the launcher; the shell queries
+and preserves their actual rights.
 An optional `display` resource supplies DRAW authority for the space. An optional
 `clock` resource supplies READ and SLEEP authority for monotonic time. An optional
 `keyboard` resource supplies INPUT authority for physical-key sessions.
-The optional `host` root supplies the same read-only rights as app.
-The shell has explicit policies for these three namespaces.
+The optional `host` root retains the access granted by init. Root names do not
+determine permissions.
 
 An initial directory chain is copied from startup, preserving its navigation
 boundary. A supplied chain requires a descriptive working path beginning with
-`app://`, `home://` or `host://` to select the requested rights. The path is not resolved to
+`app://`, `home://` or `host://` for prompt display. The path is not resolved to
 replace the chain: actual handles remain authoritative, and insufficient grants
 fail normally. With no initial chain the shell starts at `home://`. Explicit
-scheme changes select that scheme's rights; relative changes keep the current
-rights. Crossing a retained ancestor boundary fails as in the native path API.
+scheme changes use the bound root's actual grant; each descendant lookup retains
+its parent's grant. Crossing a retained ancestor boundary fails as in the native
+path API.
 
 Each foreground child receives explicit copies of terminal input/output, memory, available roots
-with the rights above, and the current directory chain. It does not receive the
+with their actual grants, and the current directory chain preserving each
+handle's rights independently. It does not receive the
 shell's launcher. When available, the [display](graphics.md),
 [clock](timekeeping.md), [random](randomness.md) and [keyboard](keyboard.md) grants are also forwarded
 to foreground children and session successors; background children omit keyboard input.

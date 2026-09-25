@@ -8,6 +8,7 @@
  * virtio-fs export. Creation does not wait for transport initialization. */
 struct kernel_object *mount_create(void);
 struct syscall_result mount_call(uint64_t rights, uint64_t operation,
-    size_t request_size, uintptr_t reply_address, size_t reply_capacity);
+    uintptr_t request_address, size_t request_size, uintptr_t reply_address,
+    size_t reply_capacity);
 
 #endif

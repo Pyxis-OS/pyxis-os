@@ -73,8 +73,9 @@ The userland repository supplies three shebang scripts using `app://shell.pxe`:
   space and its terminal remain available. This is not a machine shutdown or
   permanent CPU stop.
 
-Host access is still read-only in both interactive profiles. Writable virtio-fs
-and script-selected mount rights are the following milestone; the development
+Both interactive profiles explicitly mount with `--read-only`. Scripts can
+select `--read-write` grants, but the backend still rejects mutations until
+the subsequent writable virtio-fs tasks implement them. The development
 name does not grant writes before the backend supports them. Both profiles keep
 writable access to the shared RAM home.
 

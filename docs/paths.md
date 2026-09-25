@@ -33,8 +33,7 @@ the authority, regardless of the display string.
 ## Ownership and storage
 
 `path_context_init()` copies a borrowed directory chain into caller-provided
-storage, requesting the chosen directory rights on each handle. Those rights
-include LOOKUP and bound grants retained by later directory changes. Inputs may
+storage, preserving each handle's actual grant independently. Inputs may
 come from `startup_working_directories()` or a separately granted subtree.
 An empty initial chain is valid; relative lookup then reports UNAVAILABLE until
 an explicit scheme change establishes a working directory.
@@ -62,8 +61,11 @@ authority through intermediate directories. Resolving a path does not change
 the context.
 
 `path_change()` prepares an entire replacement chain in scratch storage before
-closing the old one. Missing names, denied rights, insufficient storage or a
-failed handle allocation leave the old context intact. A retained directory
+closing the old one. Existing ancestors retain their individual grants; each
+new child receives the rights queried from its parent handle. The final working
+directory must allow LOOKUP. URI spelling never determines access. Missing names,
+denied rights, insufficient storage or a failed handle allocation leave the old
+context intact. A retained directory
 continues referring to its object if its name later changes; displayed text is
 not used to rediscover it.
 

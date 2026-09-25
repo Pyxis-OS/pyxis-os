@@ -39,6 +39,27 @@ static struct syscall_result close_handle(handle_t handle)
   return (struct syscall_result){CALL_OK, 0};
 }
 
+static struct syscall_result handle_rights(handle_t handle, uintptr_t destination)
+{
+  struct process *process = process_current();
+  if (!process) {
+    return (struct syscall_result){CALL_BAD_HANDLE, 0};
+  }
+
+  struct kernel_object *object;
+  uint64_t rights;
+  enum capability_result result = capability_resolve(&process->capabilities,
+      handle, 0, &object, &rights);
+  if (result == CAP_BAD_HANDLE) {
+    return (struct syscall_result){CALL_BAD_HANDLE, 0};
+  }
+  KASSERT(result == CAP_OK);
+  if (!copy_to_user(destination, &rights, sizeof(rights))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  return (struct syscall_result){CALL_OK, sizeof(rights)};
+}
+
 static struct syscall_result copy_handle(handle_t source, uint64_t rights,
     uint64_t flags, uintptr_t destination)
 {
@@ -146,7 +167,8 @@ static struct syscall_result call_object(handle_t handle,
     if (header.protocol != PROTOCOL_MOUNT) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    return mount_call(rights, header.operation, request_size, reply_address, reply_capacity);
+    return mount_call(rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
   case OBJECT_RANDOM:
     if (header.protocol != PROTOCOL_RANDOM) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -240,6 +262,8 @@ struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t 
     return call_object(arg1, arg2, arg3, arg4, arg5);
   case SYSCALL_CLOSE:
     return close_handle(arg1);
+  case SYSCALL_HANDLE_RIGHTS:
+    return handle_rights(arg1, arg2);
   case SYSCALL_COPY:
     return copy_handle(arg1, arg2, arg3, arg4);
   case SYSCALL_LOG_PUTCHAR: {
