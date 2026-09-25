@@ -302,15 +302,13 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     return (struct syscall_result){status, 0};
   }
   if (directory->backing == DIRECTORY_HOST) {
-    if (request->kind != DIRECTORY_KIND_FILE) {
-      return (struct syscall_result){CALL_BAD_OPERATION, 0};
-    }
     if (request->name_length > VIRTIO_FS_NAME_MAX) {
       return (struct syscall_result){CALL_LIMIT, 0};
     }
     struct hostfs_request *pending = task_prepare_hostfs();
     pending->operation = HOSTFS_CREATE;
     pending->node = directory->host;
+    pending->kind = request->kind;
     pending->count = request->name_length;
     pending->table = &process_current()->capabilities;
     pending->rights = request->rights;
@@ -390,6 +388,19 @@ static struct syscall_result remove_child(struct directory_object *directory,
   enum call_status status = check_name(request->name, request->name_length);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
+  }
+  if (directory->backing == DIRECTORY_HOST) {
+    if (request->name_length > VIRTIO_FS_NAME_MAX) {
+      return (struct syscall_result){CALL_LIMIT, 0};
+    }
+    struct hostfs_request *pending = task_prepare_hostfs();
+    pending->operation = HOSTFS_REMOVE;
+    pending->node = directory->host;
+    pending->kind = request->kind;
+    pending->count = request->name_length;
+    KASSERT(copy_from_user(pending->name, request->name, request->name_length));
+    task_submit_hostfs(pending);
+    return (struct syscall_result){pending->status, 0};
   }
   if (directory->backing != DIRECTORY_RAM) {
     return (struct syscall_result){CALL_READ_ONLY, 0};
@@ -492,6 +503,33 @@ static struct syscall_result rename_child(struct directory_object *source,
   }
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
+  }
+  if (source->backing == DIRECTORY_HOST || destination->backing == DIRECTORY_HOST) {
+    if (source->backing != DIRECTORY_HOST || destination->backing != DIRECTORY_HOST) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    /* The host may create a destination after any lookup. Replacement must
+     * already be authorized when we submit the atomic name operation. */
+    bool replace = request->policy == DIRECTORY_RENAME_REPLACE;
+    if (replace && !(destination_rights & DIRECTORY_RIGHT_REMOVE)) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    if (request->source_length > VIRTIO_FS_NAME_MAX ||
+        request->destination_length > VIRTIO_FS_NAME_MAX) {
+      return (struct syscall_result){CALL_LIMIT, 0};
+    }
+    struct hostfs_request *pending = task_prepare_hostfs();
+    pending->operation = HOSTFS_RENAME;
+    pending->node = source->host;
+    pending->destination = destination->host;
+    pending->count = request->source_length;
+    pending->destination_length = request->destination_length;
+    pending->replace = replace;
+    KASSERT(copy_from_user(pending->name, request->source_name, request->source_length));
+    KASSERT(copy_from_user(pending->destination_name, request->destination_name,
+        request->destination_length));
+    task_submit_hostfs(pending);
+    return (struct syscall_result){pending->status, 0};
   }
   if (source->backing != DIRECTORY_RAM || destination->backing != DIRECTORY_RAM) {
     return (struct syscall_result){CALL_READ_ONLY, 0};

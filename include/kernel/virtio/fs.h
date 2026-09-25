@@ -115,6 +115,18 @@ enum virtio_fs_result virtio_fs_open(struct virtio_fs_node *node,
  * entry. Even failure can leave node ownership for the caller to put. */
 enum virtio_fs_result virtio_fs_create(struct virtio_fs_node *parent,
     const char *name, size_t length, struct virtio_fs_node *node, struct virtio_fs_open *opened);
+/* MKDIR uses fixed 0755 mode under the service identity. Success owns one
+ * lookup reference and no open handle. A failed mutation may have taken effect. */
+enum virtio_fs_result virtio_fs_mkdir(struct virtio_fs_node *parent,
+    const char *name, size_t length, struct virtio_fs_node *node);
+/* Names are checked by the host at use time. The caller may preflight types,
+ * but another host actor can replace a name before REMOVE or RENAME2 executes.
+ * RENAME2 uses atomic replace or RENAME_NOREPLACE; it has no older-op fallback. */
+enum virtio_fs_result virtio_fs_remove(struct virtio_fs_node *parent,
+    const char *name, size_t length, bool directory);
+enum virtio_fs_result virtio_fs_rename(struct virtio_fs_node *source,
+    const char *source_name, size_t source_length, struct virtio_fs_node *destination,
+    const char *destination_name, size_t destination_length, bool replace);
 /* Close always consumes the open, releasing its node retain even on failure.
  * Failed RELEASE/FORGET stops the session rather than losing host ownership. */
 enum virtio_fs_result virtio_fs_close(struct virtio_fs_open *opened);

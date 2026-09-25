@@ -1,9 +1,9 @@
 # Persistent development through writable virtio-fs
 
-Status: agreed milestone direction and short-write contract. This document
-plans focused implementation PRs; it does not authorize implementing all tasks
-at once. Discuss unresolved interface choices before starting their task, and
-check off each task in the PR that completes it.
+Status: tasks 1–4 are complete. This document plans focused implementation PRs;
+it does not authorize implementing all tasks at once. Discuss unresolved
+interface choices before starting their task, and check off each task in the
+PR that completes it.
 
 ## Result and boundary
 
@@ -149,13 +149,14 @@ launch execute from live host-backed mappings or claim snapshot isolation.
    ownership and failures explicitly. Exercise Kilo saves and TCC output on the
    host export through the supported mount path.
 
-4. [ ] **Directory creation, removal and file rename/replacement.** Extend
-   `mkdir`, `rm`, `rmdir` and `mv` through existing protocols and rights. Require
-   host atomic operations for promised replacement/no-replace semantics; never
-   emulate atomic replacement with delete-then-rename or no-replace with a racy
-   existence check. Discuss name/type races with external host mutations and
-   retained-handle behavior before finalizing the contract. Reject unsupported
-   guarantees explicitly rather than pretending to enforce them locally.
+4. [x] **Directory creation, removal and file rename/replacement.** Extend
+   `mkdir`, `rm`, `rmdir` and `mv` through existing protocols and rights. Host
+   directories request mode 0755. Use atomic RENAME2 replacement/no-replace with
+   no fallback; replacement always requires destination REMOVE authority.
+   Document name/type preflight races and retained-handle behavior in the
+   [backend contract](../virtio-fs.md#fuse-client-contract). Capture names before
+   parking, reserve returned-handle storage before creation, and preserve
+   submitted-mutation uncertainty without retry or rollback.
 
 5. [ ] **Explicit synchronization.** Define file/directory requests, required
    rights, runtime helpers and a small command with explicit target paths.

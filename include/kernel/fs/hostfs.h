@@ -14,6 +14,8 @@ enum hostfs_operation {
   HOSTFS_ROOT,
   HOSTFS_LOOKUP,
   HOSTFS_CREATE,
+  HOSTFS_REMOVE,
+  HOSTFS_RENAME,
   HOSTFS_READ,
   HOSTFS_WRITE,
   HOSTFS_RESIZE,
@@ -33,6 +35,11 @@ struct hostfs_request {
   size_t count;
   struct directory_cursor cursor;
   char name[VIRTIO_FS_NAME_MAX + 1];
+  /* RENAME borrows both parent nodes from the parked caller's capabilities. */
+  struct hostfs_node *destination;
+  char destination_name[VIRTIO_FS_NAME_MAX + 1];
+  size_t destination_length;
+  bool replace;
   enum call_status status;
   struct kernel_object *object;
   /* CREATE exclusively lends the blocked caller's table to the BSP worker.

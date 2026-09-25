@@ -4,8 +4,8 @@ The optional virtio-fs device provides a `host://` root through native
 directory/file capabilities. Init opens the selected export and delegates its
 root through the session launcher to the shell and ordinary children. Existing
 `ls` and `cat` use it without PCI, VirtIO or FUSE knowledge. Read-write grants
-also support regular-file creation, writes and resize. Ordinary boot needs
-neither the device nor the daemon.
+also support file/directory creation, file writes and resize, removal and file
+rename/replacement. Ordinary boot needs neither the device nor the daemon.
 
 The supported platform is QEMU Q35 with firmware-assigned PCI resources, modern
 VirtIO PCI transport and split queues. See [PCI discovery and resources](pci.md)
@@ -103,7 +103,7 @@ terminal and remove a stale socket only after confirming that the daemon stopped
 If the daemon reports too many open files later, increase its inherited file
 limit before launch. No socket option weakens the daemon's export permissions.
 
-## Opt-in regular-file writes
+## Opt-in host mutations
 
 Keep the daemon command above for read-only use. To allow guest mutations, omit
 `--readonly` and select a read-write grant in a temporary init script, for example
@@ -117,8 +117,8 @@ session app://session.pxe
 ```
 
 Boot with `make run INIT=build/host-write-init.sh VIRTIO_FS_SOCKET="$socket_dir/fs.sock"`.
-CPU 1 can now save files with Kilo and compile them with TCC into the export;
-CPU 2 retains its packaged read-only session. Native executable launch directly
+CPU 1 can now save files with Kilo, compile with TCC, and use `mkdir`, `rm`,
+`rmdir` and `mv` in the export. CPU 2 retains its packaged read-only session. Native executable launch directly
 from `host://` remains a later task. Both packaged init defaults remain read-only.
 
 New regular files request mode `0644` under the existing host-service identity,
@@ -171,11 +171,12 @@ background polling requests.
 ## FUSE client contract
 
 `include/kernel/virtio/fs.h` exposes root acquisition, LOOKUP, GETATTR, OPEN,
-READ, CREATE, WRITE, size-only SETATTR, OPENDIR, READDIR, RELEASE/RELEASEDIR
-and reference release. These functions run only on the existing BSP transport
-worker with interrupts enabled and no held locks. They neither allocate nor accept userspace pointers. The native
-backend below owns their records and performs allocation with BSP interrupts
-disabled, outside transport waits.
+READ, CREATE, WRITE, size-only SETATTR, MKDIR, UNLINK, RMDIR, RENAME2,
+OPENDIR, READDIR, RELEASE/RELEASEDIR and reference release. These functions run
+only on the existing BSP transport worker with interrupts enabled and no held
+locks. They neither allocate nor accept userspace pointers. The native backend
+below owns their records and performs allocation with BSP interrupts disabled,
+outside transport waits.
 
 The caller supplies zeroed, stable node and open records. Each successful LOOKUP
 owns one host lookup reference, even if another record has the same node ID.
@@ -222,9 +223,9 @@ RAM directories retain their existing generation checks.
 Wire errors become `enum virtio_fs_result`; Linux errno values do not escape the
 client. Ordinary errors such as a missing or inaccessible file leave the session
 usable. Truncated/inconsistent replies, invalid directory records, transport
-failures and failed RELEASE/FORGET cleanup stop it. Directory creation, removal,
-rename, synchronization, symlink traversal, reconnection and unmount remain
-unimplemented.
+failures and failed RELEASE/FORGET cleanup stop it. Directory creation, removal
+and regular-file rename use host FUSE operations. Synchronization, symlink
+traversal, reconnection and unmount remain unimplemented.
 
 Storage errors retain their meaning through the native layer: ENOSPC becomes
 NO_SPACE, EDQUOT becomes QUOTA, and EFBIG becomes FILE_TOO_LARGE. ENOMEM remains
@@ -233,9 +234,35 @@ their native equivalents rather than becoming generic I/O errors.
 
 A published mutation without a trustworthy completion returns OUTCOME_UNKNOWN
 (libc EIO): this includes transport loss, timeout, malformed reply or impossible
-write count. Pre-submission failures and preparatory OPEN failures retain their
-ordinary status. Structurally valid host error replies retain their mapped error.
-No failure promises rollback, and no uncertain mutation is automatically retried.
+write count. Pre-submission failures and preparatory lookup/open failures retain
+their ordinary status. Structurally valid host error replies retain their mapped
+error. No failure promises rollback, and no uncertain mutation is automatically
+retried.
+
+`mkdir` requests mode 0755 under the existing host-service identity. There is
+no guest chmod or umask interface. Creation is exclusive and has no rollback.
+MKDIR returns an owned lookup; if a host replacement changes its type before
+the reply, that lookup is retired and creation reports a type mismatch. No host
+name is deleted to undo it.
+
+Removal accepts native `FILE`, `DIRECTORY` and `ANY` requests, but preflight
+supports only regular files and directories; file removal uses UNLINK and
+directory removal uses RMDIR. Rename preflight supports only regular files and
+uses host atomic RENAME2, with its no-replace flag when requested. There is no
+delete-then-rename or local existence-check fallback. A host that lacks no-replace support returns its
+error. Replacement requires REMOVE and CREATE on the destination parent, and
+REMOVE on the source parent. No-replace rename to the same name follows the host
+operation and can return ALREADY_EXISTS rather than acting as a RAM same-entry
+no-op.
+
+Preflight and mutation are separate host requests. The host can change names or
+types between them, so these checks cannot guarantee the affected object or
+type; even a directory or symlink can replace a preflighted entry. The guest
+does not follow symlinks. Open native file handles retain their host objects
+after unlink or replacement, subject to ordinary host permissions. This is a
+live view, with no snapshot or durability promise. Automatic creation of missing
+parents, recursive deletion, directory moves and cross-filesystem moves are
+unsupported. No fsync operation is exposed.
 
 ## Native directory and file objects
 
@@ -257,10 +284,13 @@ unknown kinds; lookup still accepts only file/directory requests and never
 follows symlinks. Libpyxis validates replies without assuming numeric cursor
 increments. External changes may alter results, including after a prior EOF.
 
-Rights checks precede dispatch and missing rights return DENIED. Host directory
-creation returns BAD_OPERATION; removal and rename still return READ_ONLY until
-their milestone task. Host I/O errors use CALL_IO (libc EIO); unavailable sessions and timeouts have their existing distinct
-statuses. Launching a native executable from a host file is explicitly rejected:
+Rights checks precede dispatch and missing rights return DENIED. The existing
+`mkdir`, `rm`, `rmdir` and `mv` commands operate on the host when their mounted
+root grants the required rights. Host rename captures both names before parking
+and borrows the live parent capabilities while the caller waits; the worker
+receives no caller-private pointers. Host I/O errors use CALL_IO (libc EIO); unavailable sessions
+and timeouts have their existing distinct statuses. Launching a native
+executable from a host file is explicitly rejected:
 the current kernel loader requires in-memory bytes. This does not prevent
 reading a script as data or copying a file into RAM first.
 
@@ -274,8 +304,8 @@ after waking its owner. Requests hold no spinlock across a transport wait.
 
 Creation exclusively lends the parked caller's capability table to the BSP
 worker. It allocates the wrapper and installs the result handle before sending
-CREATE. The caller cannot use that handle until wakeup. Failure closes the
-private handle and retires any acquired FUSE ownership; success has no remaining
+CREATE or MKDIR. The caller cannot use that handle until wakeup. Failure closes
+the private handle and retires any acquired FUSE ownership; success has no remaining
 fallible local allocation. Write bytes are captured before parking, never read
 from a private mapping by the worker.
 
