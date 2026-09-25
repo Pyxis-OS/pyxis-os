@@ -4,3 +4,6 @@
 [submodule "ports"]
 	path = ports
 	url = ../pyxis-ports.git
+[submodule "third_party/lwip"]
+	path = third_party/lwip
+	url = ../pyxis-lwip.git
