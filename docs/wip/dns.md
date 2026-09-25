@@ -118,7 +118,7 @@ produces a clear no-address result.
   package `1.1.1.1`, and export `DNS_SERVER`. Confirm the ordinary shell sees the
   selected setting, missing settings default correctly, and invalid configuration
   is diagnosed. Document direct-init and override behavior.
-- [ ] **3. Native dig.** Add focused query, parser and command files in userland,
+- [x] **3. Native dig.** Add focused query, parser and command files in userland,
   package the utility, and implement the bounded exchange above. Exercise the
   default public resolver, an explicit numeric override, a negative answer and
   failure reporting in ordinary QEMU use. Keep DNS-specific code in the

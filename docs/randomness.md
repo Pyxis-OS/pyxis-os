@@ -85,11 +85,12 @@ and shared mappings remain until reboot regardless of reset success; a failed
 reset never authorizes reading or reusing the buffer. No runtime restart,
 hotplug, alternate source or provider framework is implemented.
 
-## DNS follow-up
+## DNS consumer
 
-DNS can use this capability to choose transaction IDs and explicit randomized
-UDP source ports, with bounded collision retries. Those consumers belong to the
-DNS milestone; this change does not alter UDP binding behavior or add `dig`.
+[The dig client](networking.md#dns-queries-with-dig) uses this capability to choose
+transaction IDs and explicit randomized UDP source ports, with bounded collision
+retries. It fails when entropy is unavailable. The generic UDP ephemeral-port
+allocator is unchanged; hostname ping follows in the DNS milestone.
 Per-space accounting, fairness and broader random APIs remain future policy.
 
 References: [VirtIO 1.4 entropy device](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.html)
