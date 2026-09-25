@@ -12,7 +12,7 @@ the native executable directly from `host://`. The second shell sees the same
 export through read-only grants: it can read those files but cannot modify them.
 After restarting Pyxis, the source and executable remain readable and runnable.
 
-The [read-only backend](../virtio-fs.md), [filesystem mutation protocols](../filesystem-mutations.md)
+The [host backend](../virtio-fs.md), [filesystem mutation protocols](../filesystem-mutations.md)
 and [per-CPU init selection](../init.md) are already implemented. Extend those
 paths without changing CPU pinning, BSP allocation ownership or the sole FUSE
 worker. Keep request buffers bounded and device-owned storage separate from
@@ -41,8 +41,9 @@ infer rights from the `host://` spelling or from a CPU index.
 The opt-in host daemon still limits access independently. A read-only daemon
 or inaccessible host file must not be bypassed. Guest requests initially use
 the existing single host-service identity; this does not map Pyxis users to
-host accounts. New-file mode/identity policy needs an explicit decision in the
-creation task. Do not introduce placeholder user IDs or permission models.
+host accounts. New regular files request mode 0644 with no guest chmod/umask API.
+Creation is exclusive and never truncates an existing name; resize is separate.
+Do not introduce placeholder user IDs or permission models.
 See the [authority checkpoint](users-and-authority.md): the prototype boundary
 does not settle persistent per-user homes, cross-user sharing or authentication.
 
@@ -63,12 +64,12 @@ validates authority and arguments, then succeeds without extending the file or
 contacting the backing store. No caller may spin on successful zero progress
 for a nonempty request or accept a count larger than its request.
 
-The first host WRITE will submit at most 4 KiB of data per native call, further
+Host WRITE submits at most 4 KiB of data per native call, further
 bounded by the negotiated FUSE `max_write`. Reserve room for the FUSE request
-header and WRITE fields in addition to that payload: the current 4 KiB transport
-request area and small FUSE request scratch must grow in task 3. A large native
-request receives a
-short count, not an error just because it exceeds that per-transfer bound.
+header and WRITE fields in addition to that payload: the transport request
+area is now 8 KiB and FUSE scratch holds the complete bounded request. A large
+native request receives a short count, not an error just because it exceeds that
+per-transfer bound.
 Do not impose this host transport limit on RAM writes. Reject a zero negotiated
 write limit for nonempty writes without looping or inventing successful progress.
 
@@ -84,7 +85,7 @@ a successful count, roll back unrelated host changes, or automatically replay
 WRITE, creation, removal or rename. Report CALL_OUTCOME_UNKNOWN when a mutation
 was published to the device but no trustworthy completion is available, including
 timeout, lost transport, malformed header/body or impossible write count. Track
-publication explicitly in task 3: pre-submission failures retain their ordinary
+publication explicitly: pre-submission failures retain their ordinary
 status, and failures of preparatory OPEN/GETATTR must not imply that WRITE ran.
 A session already stopped before submission returns UNAVAILABLE. Earlier
 confirmed writes do not make a later failed call safe to replay; preserve only
@@ -141,7 +142,7 @@ launch execute from live host-backed mappings or claim snapshot isolation.
    update libpyxis/libc/direct callers. Decide transfer bounds and status mapping
    for host errors and uncertain mutation outcomes. Keep RAM behavior intact.
 
-3. [ ] **File creation, write and resize.** Add the necessary FUSE operations
+3. [x] **File creation, write and resize.** Add the necessary FUSE operations
    and native backend dispatch. Settle new-file modes and open-handle access,
    preserve short progress, and account for protocol headers when bounding
    payloads. Capture write inputs before parking; handle returned-node/open

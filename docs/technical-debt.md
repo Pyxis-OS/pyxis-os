@@ -20,8 +20,9 @@ the heap's existing pools remain mapped.
 
 Reconsider this when larger files or memory pressure make those costs material.
 Chunked backing and a policy for releasing excess capacity are possible changes,
-not requirements for the current milestone. All-or-nothing writes are an
-intentional [file contract](processes.md#implemented-file-calls), not debt.
+not requirements for the current milestone. RAM writes retain full completion
+or unchanged-on-failure behavior; the general [file contract](processes.md#implemented-file-calls)
+also permits short writes.
 
 ## Retained userspace heap pools
 
@@ -36,6 +37,20 @@ allocations. Reconsider empty-pool release and in-place aligned growth when
 long-lived applications make retained capacity or copying material. The current
 allocator and errno assume one thread per process; add synchronization and
 thread-local errno when introducing userspace threads.
+
+## Deferred allocation throughput measurement
+
+Measure the existing allocators before choosing performance changes. Separate
+kernel `kmalloc`/`kfree`, userspace `malloc`/`free` within already-backed pools,
+and heap growth that needs BSP service, physical pages and mappings. Report
+throughput and latency with allocation sizes, live working set, reuse patterns
+and fragmentation; include growth frequency and retained memory so a fast warm
+heap does not hide expensive expansion.
+
+Record CPU count, QEMU KVM or TCG, and host/nested-virtualization context. Keep
+allocator execution cost separate from request parking, scheduling and BSP
+service latency. This is a deferred investigation, not a benchmark framework
+or allocator redesign in the writable virtio-fs milestone.
 
 ## Fixed userspace stacks
 
@@ -189,7 +204,7 @@ gameplay and demo playback. Wall-clock time is not a prerequisite.
 
 The first [virtio-fs transport](virtio-fs.md) reserves queue storage and device
 mappings before AP startup. A runtime failure masks interrupts, disables bus
-mastering and attempts reset, but retains the claim, two 16 KiB queue/buffer
+mastering and attempts reset, but retains the claim, two 20 KiB queue/buffer
 allocations and their mappings until reboot. Even a confirmed reset does not
 make it safe to change shared kernel mappings without a TLB invalidation and
 reader-lifetime contract. No reconnect or repeated allocation occurs.
@@ -211,7 +226,7 @@ drivers' reclamation with a real teardown and SMP invalidation contract.
 ## Host filesystem request storage and enumeration
 
 The [native virtio-fs backend](virtio-fs.md#native-directory-and-file-objects)
-keeps one bounded request record in each task, including a 4 KiB read buffer.
+keeps one bounded request record in each task, including a 4 KiB read/write buffer.
 This avoids allocating on APs or exposing private stacks to the worker, but
 charges that storage to every task even if it never accesses the host. Revisit
 lazy staging if task counts make the cost material; do not add another fixed

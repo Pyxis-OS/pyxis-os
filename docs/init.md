@@ -74,10 +74,10 @@ The userland repository supplies three shebang scripts using `app://shell.pxe`:
   permanent CPU stop.
 
 Both interactive profiles explicitly mount with `--read-only`. Scripts can
-select `--read-write` grants, but the backend still rejects mutations until
-the subsequent writable virtio-fs tasks implement them. The development
-name does not grant writes before the backend supports them. Both profiles keep
-writable access to the shared RAM home.
+select `--read-write` grants for regular-file creation, writes and resize;
+directory mutations and direct host executable loading remain pending. The
+packaged development profile changes in the final writable virtio-fs task. Both
+profiles keep writable access to the shared RAM home.
 
 The session launcher applies per-space [terminal/environment configuration](session-configuration.md)
 and starts the interactive shell. Only the development profile requests global

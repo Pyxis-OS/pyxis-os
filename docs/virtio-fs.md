@@ -1,9 +1,10 @@
 # Virtio-fs filesystem backend and host setup
 
-The optional virtio-fs device provides a read-only `host://` root through native
+The optional virtio-fs device provides a `host://` root through native
 directory/file capabilities. Init opens the selected export and delegates its
 root through the session launcher to the shell and ordinary children. Existing
-`ls` and `cat` use it without PCI, VirtIO or FUSE knowledge. Ordinary boot needs
+`ls` and `cat` use it without PCI, VirtIO or FUSE knowledge. Read-write grants
+also support regular-file creation, writes and resize. Ordinary boot needs
 neither the device nor the daemon.
 
 The supported platform is QEMU Q35 with firmware-assigned PCI resources, modern
@@ -102,11 +103,36 @@ terminal and remove a stale socket only after confirming that the daemon stopped
 If the daemon reports too many open files later, increase its inherited file
 limit before launch. No socket option weakens the daemon's export permissions.
 
+## Opt-in regular-file writes
+
+Keep the daemon command above for read-only use. To allow guest mutations, omit
+`--readonly` and select a read-write grant in a temporary init script, for example
+`build/host-write-init.sh`:
+
+```text
+#!app://shell.pxe
+mount --read-write host
+cd host://
+session app://session.pxe
+```
+
+Boot with `make run INIT=build/host-write-init.sh VIRTIO_FS_SOCKET="$socket_dir/fs.sock"`.
+CPU 1 can now save files with Kilo and compile them with TCC into the export;
+CPU 2 retains its packaged read-only session. Native executable launch directly
+from `host://` remains a later task. Both packaged init defaults remain read-only.
+
+New regular files request mode `0644` under the existing host-service identity,
+with no guest chmod or umask API. Creation is exclusive: an existing name returns
+ALREADY_EXISTS rather than replacing or truncating it. Resize is a separate
+operation. Host permissions and a daemon's `--readonly` remain independent limits.
+A successful save or close does not promise durable storage; explicit file and
+directory synchronization is still pending.
+
 ## Queue and worker contract
 
 `virtio_fs_pci_prepare` allocates and maps both queues on the BSP before AP
-startup. Each owns a contiguous 16 KiB physical extent: one page of ring storage,
-a 4 KiB request buffer and an 8 KiB reply buffer. Mappings are kernel-only,
+startup. Each owns a contiguous 20 KiB physical extent: one page of ring storage,
+an 8 KiB request buffer and an 8 KiB reply buffer. Mappings are kernel-only,
 read/write, non-executable, ordinary write-back RAM. Device MMIO remains uncached.
 CPU virtual addresses are never used as descriptor addresses.
 
@@ -142,12 +168,12 @@ After successful INIT it services native requests and deferred object cleanup,
 sleeping when neither work nor device activity is pending. There are no
 background polling requests.
 
-## Read-only client contract
+## FUSE client contract
 
 `include/kernel/virtio/fs.h` exposes root acquisition, LOOKUP, GETATTR, OPEN,
-READ, OPENDIR, READDIR, RELEASE/RELEASEDIR and reference release. These functions
-run only on the existing BSP transport worker with interrupts enabled and no
-held locks. They neither allocate nor accept userspace pointers. The native
+READ, CREATE, WRITE, size-only SETATTR, OPENDIR, READDIR, RELEASE/RELEASEDIR
+and reference release. These functions run only on the existing BSP transport
+worker with interrupts enabled and no held locks. They neither allocate nor accept userspace pointers. The native
 backend below owns their records and performs allocation with BSP interrupts
 disabled, outside transport waits.
 
@@ -167,6 +193,19 @@ explicit offsets, transfer at most 4 KiB and preserve short reads and EOF. Each
 writable descriptor is sized to that operation's maximum reply, including its
 header. Protocol scratch is static to this worker, outside the kernel task stack.
 
+WRITE submits at most 4 KiB of data, further limited by FUSE `max_write`;
+headers occupy additional transport storage. Nonempty success reports a positive
+count, possibly short. A zero negotiated write limit rejects nonempty writes.
+Offsets and resulting sizes must fit the host's signed 64-bit file range.
+SETATTR changes only size using the write handle. Its reply need not equal the
+requested size: another host writer can change the file before attributes are
+captured. Neither operation promises a transaction across requests.
+
+CREATE returns one owned lookup and one write-only open, both retained by the
+new native wrapper. If returned open semantics are unsupported, cleanup releases
+the open and lookup but leaves the created name alone: deleting it could remove
+a concurrent replacement. Errors never imply that the host tree is unchanged.
+
 READDIR returns a checked batch of at most 4 KiB. Consume it with
 `virtio_fs_directory_next`; `VIRTIO_FS_END` means the batch is exhausted, whereas
 `batch.end` means the server returned EOF. Resume using `batch.next_cookie`,
@@ -183,25 +222,29 @@ RAM directories retain their existing generation checks.
 Wire errors become `enum virtio_fs_result`; Linux errno values do not escape the
 client. Ordinary errors such as a missing or inaccessible file leave the session
 usable. Truncated/inconsistent replies, invalid directory records, transport
-failures and failed RELEASE/FORGET cleanup stop it. No writes, symlink traversal,
-reconnection or unmount operation are implemented.
+failures and failed RELEASE/FORGET cleanup stop it. Directory creation, removal,
+rename, synchronization, symlink traversal, reconnection and unmount remain
+unimplemented.
 
 Storage errors retain their meaning through the native layer: ENOSPC becomes
 NO_SPACE, EDQUOT becomes QUOTA, and EFBIG becomes FILE_TOO_LARGE. ENOMEM remains
 NO_MEMORY. Read-only, already-existing and nonempty-directory errors also retain
-their native equivalents rather than becoming generic I/O errors. These mappings
-prepare the [writable milestone](wip/writable-virtio-fs.md); no host mutation is
-submitted yet. Submitted-mutation uncertainty will be classified at the transport
-boundary when those operations are introduced, rather than guessing from a
-TIMED_OUT or IO result after losing whether a request was published.
+their native equivalents rather than becoming generic I/O errors.
+
+A published mutation without a trustworthy completion returns OUTCOME_UNKNOWN
+(libc EIO): this includes transport loss, timeout, malformed reply or impossible
+write count. Pre-submission failures and preparatory OPEN failures retain their
+ordinary status. Structurally valid host error replies retain their mapped error.
+No failure promises rollback, and no uncertain mutation is automatically retried.
 
 ## Native directory and file objects
 
 `kernel/fs/hostfs.c` connects the client to the existing directory and file
 protocols. Each successful native lookup creates an independently owned wrapper
-with one FUSE lookup reference. It acquires a read-only open handle lazily on
-first read or enumeration; size uses fresh GETATTR. Copying or granting a
-capability retains the same native object. Closing a parent does not invalidate
+with one FUSE lookup reference. It acquires independent read-only and write-only
+open handles lazily as needed; size uses fresh GETATTR. A write never requires
+host read permission, nor does a read require write permission. Copying or
+granting a capability retains the same native object. Closing a parent does not invalidate
 children. No host path, node ID or wire structure becomes an application request.
 
 File reads return at most 4 KiB per call, including when the supplied buffer is
@@ -214,9 +257,9 @@ unknown kinds; lookup still accepts only file/directory requests and never
 follows symlinks. Libpyxis validates replies without assuming numeric cursor
 increments. External changes may alter results, including after a prior EOF.
 
-Rights checks precede dispatch. Unsupported mutations report READ_ONLY when the
-caller has the required right, otherwise DENIED. Host I/O errors use CALL_IO
-(libc EIO); unavailable sessions and timeouts have their existing distinct
+Rights checks precede dispatch and missing rights return DENIED. Host directory
+creation returns BAD_OPERATION; removal and rename still return READ_ONLY until
+their milestone task. Host I/O errors use CALL_IO (libc EIO); unavailable sessions and timeouts have their existing distinct
 statuses. Launching a native executable from a host file is explicitly rejected:
 the current kernel loader requires in-memory bytes. This does not prevent
 reading a script as data or copying a file into RAM first.
@@ -228,6 +271,13 @@ user-buffer validation and copies happen on the caller's CPU. The worker never
 switches to a caller's root or accesses its private stack. Its reply and any new
 owned object are fully published before wakeup, and it never touches the record
 after waking its owner. Requests hold no spinlock across a transport wait.
+
+Creation exclusively lends the parked caller's capability table to the BSP
+worker. It allocates the wrapper and installs the result handle before sending
+CREATE. The caller cannot use that handle until wakeup. Failure closes the
+private handle and retires any acquired FUSE ownership; success has no remaining
+fallible local allocation. Write bytes are captured before parking, never read
+from a private mapping by the worker.
 
 There is one task per process and no external cancellation: a blocked caller
 cannot close its capability or exit until the operation finishes. Its capability
@@ -260,11 +310,10 @@ owned directory handle. Libpyxis exposes `mount_open_root(mount, access, &root)`
 Access selects the returned grant, never a global mode on the shared export;
 opening another root cannot widen existing handles. Read-write authorizes
 mutation attempts, not a promise of host writability. Host/backend errors still
-apply, with no write probe or silent read-only fallback. The current backend
-still rejects nonempty writes and other mutations with READ_ONLY even through
-read-write grants; a validated zero-byte write is a backend-free no-op. Missing
-required rights fail with DENIED first. Both packaged inits explicitly request
-read-only until write support lands.
+apply, with no write probe or silent read-only fallback. A validated zero-byte
+write is a backend-free no-op. Missing required rights fail with DENIED first.
+Both packaged inits still explicitly request read-only; the development default
+changes in the final [writable milestone task](wip/writable-virtio-fs.md).
 The mount operation uses the existing object-call ABI and creates neither a
 global namespace entry nor a kernel URI parser.
 
@@ -351,5 +400,6 @@ and closing children; a retained host root has no FUSE lookup reference.
 No debugger-injected capabilities are needed.
 
 References: [VirtIO 1.4 split queues and filesystem device](https://docs.oasis-open.org/virtio/virtio/v1.4/cs01/virtio-v1.4-cs01.pdf),
+[Linux v6.3 FUSE 7.38 wire definitions](https://github.com/torvalds/linux/blob/v6.3/include/uapi/linux/fuse.h),
 [virtiofsd 1.14.0 FUSE definitions](https://gitlab.com/virtio-fs/virtiofsd/-/blob/v1.14.0/src/fuse.rs),
 [virtiofsd host setup](https://gitlab.com/virtio-fs/virtiofsd/-/tree/v1.14.0).
