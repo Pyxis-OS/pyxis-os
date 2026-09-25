@@ -1,7 +1,7 @@
 # Userspace URI scheme providers
 
 Status: agreed design direction for later work, not an implementation task or a
-frozen ABI. This does not expand the current loopback/IPv4 milestone. It builds
+frozen ABI. It builds
 on the [namespace direction](../vfs.md) and [named endpoints](../spaces.md#named-endpoints).
 
 ## Intended use
@@ -235,6 +235,84 @@ pin content and use controlled dependency storage; a time-limited response cache
 does not itself make a moving URL reproducible. No compiler or toolchain changes
 are assigned by this idea.
 
+## SQLite views and query results
+
+SQLite is a second proposed provider consumer, after a native userspace library
+and CLI port. Start with read-only views or published queries whose serialized
+results are usable through ordinary file readers. Illustrative future syntax:
+
+```sh
+ls sqlite://catalog/
+cat json+sqlite://catalog/apps
+cat json+sqlite://catalog/apps | jq '.[].name'
+```
+
+Here `catalog` names a database binding and `apps` could name a table view or
+published query. These names and JSON representation are proposals, not an ABI;
+decide NULL/blob representation and row ordering when defining the first slice.
+Enumeration also needs an explicit directory/provider contract: supporting an
+HTTP open does not automatically implement `ls` for another scheme.
+
+The userspace provider receives authority over the database through capabilities
+and checks which views the caller may read. A database name does not grant access
+to arbitrary backing files or every table. SQL parsing, query execution and
+serialization stay in userspace; the kernel only handles generic routing, IPC
+and resource authority. In this provider, `json+sqlite` selects an output format,
+not HTTP headers or transport behavior.
+
+Each successful result open would expose a bounded, fully materialized read-only
+snapshot with stable size, contents and offsets until its last reference closes.
+Subsequent database changes do not rewrite an existing result. Set query time,
+row/output-byte and storage budgets before implementation. Read-only queries
+still consume resources; do not publish a truncated result as complete. A first
+slice can use fixed published views before admitting caller-supplied SQL.
+
+## Later database sessions
+
+A later endpoint could accept queries, parameters and mutations through an
+explicit session. The open session resource identifies the interaction; there
+is no need to infer a session from a PID or trust caller-supplied process identity.
+Separate opens create independent sessions. If copies are allowed, they refer
+to the same session, so sharing and serialization require a deliberate contract.
+
+The initial thought was to write SQL into a transaction handle, submit with a
+marker such as `go;`, then read the response from that handle. Keep the interaction
+idea, but prefer structured requests for statement submission, result fetching,
+commit and rollback. Writes can split or combine statements, and a textual marker
+can occur inside SQL; ordinary byte writes do not define request boundaries.
+Prepared statements and bound parameters should not need URI-string encoding.
+
+Mutations need explicit authority and commit. Uncommitted work should roll back
+when the session is destroyed, not when any one copied handle closes. Define
+provider/client failure, pending operations, transaction lifetime and commit
+outcome reporting before implementation. A lost reply must not prompt blind
+re-execution of a mutation. These are later database contracts, not requirements
+for the first read-only view.
+
+## Database worksheet experiment
+
+A future editor could open a worksheet such as:
+
+```text
+sqlite://catalog/worksheets/scratch
+```
+
+The motivating interaction is to type `SELECT * FROM apps;`, save/execute, and
+see the result appear in the editor. Preserve the query, result and error as
+separate state so the output does not destroy the query or a syntax error erase
+the user's work. Exact worksheet lifetime, names and editor UI remain open.
+
+Saving does not ordinarily make an editor reread a file. This needs an explicit
+reload or a small editor integration that submits the query and displays its
+result; scheme routing alone cannot replace a Neovim buffer. Temporary-file and
+rename-based saves also need deliberate handling rather than pretending they
+execute SQL. Neovim itself remains a separate future port.
+
+Restrict the first experiment to read-only queries. Any later mutating worksheet
+requires explicit execution/transaction controls: autosave must never commit a
+database change. This is a possible consumer of the session protocol above, not
+a command language or editor feature to implement alongside the first provider.
+
 ## Prerequisites and decisions
 
 Before an implementation milestone, settle:
@@ -253,7 +331,10 @@ Before an implementation milestone, settle:
   library choice.
 - HTTP status mapping, redirects, encoding, size/deadline limits and offset-read
   storage for the first read-only provider. Cache and compiler work come later.
+- For a later SQLite consumer: the [SQLite port](application-ports.md), view
+  grants and binding policy, consistent result generation, serialization and
+  query budgets. Session mutations and editor worksheets follow independently.
 
 This is a future consumer of networking, IPC and namespace work. It is not a
 reason to add placeholder syscalls, provider registries or protocol adapters to
-the current networking tasks.
+unrelated milestones.

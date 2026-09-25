@@ -15,7 +15,9 @@ milestone; this does not commit to Unix PID 1 semantics.
 
 Kilo and TCC provide the [edit/build/run workflow](../edit-build-run.md).
 [Guest Lua](../lua.md) now supplies scripts, a REPL and session configuration. The [Doom port](../doom.md) provides initial
-gameplay and demo playback. Other candidates are SQLite, a CHIP-8 interpreter,
+gameplay and demo playback. The [application and library port candidates](application-ports.md)
+record SQLite, zlib/libpng, SDL2, PDCurses, Mbed TLS, text utilities, awk, jq,
+Quake, DevilutionX, the C AbyssEngine investigation, a CHIP-8 interpreter,
 Frotz and NetHack. This is not an instruction to port the whole list. Neovim
 remains a later editor goal.
 
@@ -80,6 +82,10 @@ length: the provider completes a bounded download before returning a sized file.
 A bounded LRU response cache and remote compiler includes are later ideas.
 This does not add HTTP or TLS to the kernel.
 
+The same provider direction now includes [read-only SQLite views and query results](userspace-scheme-providers.md#sqlite-views-and-query-results).
+Structured database sessions and an editor-based query worksheet are later
+experiments, after the SQLite port and provider contract exist.
+
 ## Device ownership and network domains
 
 Future spaces could have exclusive devices or explicitly share the services
@@ -116,7 +122,7 @@ leave it as account UI to bolt on after those interfaces are fixed.
 executables across boots without first choosing a disk filesystem. Trusted init
 selects access grants over one host-service identity; the
 [users/authority checkpoint](users-and-authority.md) records what that prototype
-boundary leaves open. Space titles follow in a separate small PR.
+boundary leaves open. [Space titles](../init.md#space-titles) are also implemented.
 
 Keep three choices separate: Pyxis file/directory capability requests, a backend
 operation interface, and the disk format. A FUSE-inspired backend need not force

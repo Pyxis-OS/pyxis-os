@@ -59,6 +59,8 @@ milestone's remaining interface details before starting its code work.
 
 19. Complete: [allocation benchmarks and memory profiling](../allocation-profiling.md),
     with native heap/growth/page workloads and opt-in caller-scoped BSP timing.
+    The measured follow-up now notifies the BSP promptly after private-memory
+    publication, reducing queue delay without changing allocation policy.
 
 Everyday use for simple tasks guides this order. Website hosting remains one
 future application, not the primary completion target for the OS.
@@ -83,8 +85,39 @@ is not a prerequisite.
 
 VirtIO driver order is agreed: virtio-fs, then virtio-net, then virtio-blk.
 An opt-in [host-backed development overlay](host-development-overlay.md)
-is a follow-up experiment after the plain mount works, not part of its completion
-boundary or a replacement for the default boot archive.
+remains postponed: programs can already run from `host://`, so it is not needed
+for the persistent development loop or as a replacement for the boot archive.
+
+## Choosing the next major milestone
+
+The following are alternatives for discussion after writable host storage,
+space titles and allocation profiling. Select one and split it into focused
+tasks; this table does not start parallel implementation tracks.
+
+| Path | First concrete completion point | Decisions and supporting work |
+| --- | --- | --- |
+| Shell streams and pipelines | Connect two ordinary utilities, with usable redirection, EOF and cleanup when either child exits. | Delegated stdin/stdout/stderr, bounded byte streams, backpressure, broken-reader behavior and launch/exit ownership. Add a small text utility as the consumer; jq/awk can follow. |
+| Userspace scheme services and HTTP | `cat http://...` obtains a bounded, stable response from a userspace provider. | Endpoint reply grants, request transport, provider lifetime/cancellation and scoped registration/authority. HTTPS adds a TLS library and trust policy later. |
+| SDL2 and graphical applications | A native software-rendered SDL2 backend supports a selected GrafX2 edit/save workflow. | Probe the pinned application first; settle input/presentation and image-library needs. zlib/libpng are useful shared candidates. Compositor and GPU support stay separate. |
+| SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
+| Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
+| Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
+| Native disk storage | Virtio-blk reaches a bounded block-I/O milestone before filesystem/installation work. | Block capability/backend contract, flush/error semantics and later disk-format selection; retain the user/ownership checkpoint before durable home policy. |
+
+The [application port candidates](application-ports.md) include longer-term
+DevilutionX and C AbyssEngine/Diablo II investigations. The
+[scheme-provider notes](userspace-scheme-providers.md) record SQLite views,
+database sessions and the editor worksheet idea. Their URI examples are future
+interactions, not supported shell syntax or a settled ABI.
+
+Proposed next focus: shell streams and pipelines, because they make existing
+tools more useful and give future jq, awk and scheme results a shared consumer
+path. This is a recommendation awaiting selection, not an approved milestone.
+HTTP providers are a strong alternative for advancing the native resource model;
+SDL2/GrafX2 is the graphical alternative. A desktop/compositor remains a separate
+[graphics direction](desktop-graphics.md), and users/authority is a cross-cutting
+[design checkpoint](users-and-authority.md), not something a port should define
+implicitly.
 
 ## Agreed boundaries
 
