@@ -48,6 +48,9 @@ _Static_assert(offsetof(struct virtio_net_config, status) == VIRTIO_NET_MAC_BYTE
                sizeof(struct virtio_net_config) == 8,
                "VirtIO network configuration prefix");
 
+/* Discovery survives a failed preparation/reset, unlike the live transport. */
+static bool hardware_present;
+
 static struct {
   struct virtio_pci_transport pci;
   uint64_t offered_features, accepted_features;
@@ -224,6 +227,7 @@ void virtio_net_prepare(const struct boot_info *boot)
   if (!device) {
     return;
   }
+  hardware_present = true;
   network.pci.name = "virtio-net";
   if (!virtio_pci_prepare(&network.pci, device, boot, VIRTIO_NET_MAC_BYTES, 2)) {
     return;
@@ -509,4 +513,14 @@ const uint8_t *virtio_net_mac(void)
 bool virtio_net_available(void)
 {
   return network.active && !network.config_unstable && network.link_up;
+}
+
+bool virtio_net_present(void)
+{
+  return hardware_present;
+}
+
+bool virtio_net_ready(void)
+{
+  return network.active && !network.config_unstable;
 }

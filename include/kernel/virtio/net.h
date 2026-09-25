@@ -33,5 +33,9 @@ enum net_result virtio_net_transmit(const void *frame, size_t length);
  * link state and stable configuration, unlike MAC/configuration presence. */
 const uint8_t *virtio_net_mac(void);
 bool virtio_net_available(void);
+/* Discovery remains true after failed preparation. Ready means active and
+ * stable, independent of carrier; neither call reads device registers. */
+bool virtio_net_present(void);
+bool virtio_net_ready(void);
 
 #endif

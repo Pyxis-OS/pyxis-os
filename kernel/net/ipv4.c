@@ -1,6 +1,7 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/net/arp.h>
+#include <kernel/memory.h>
 #include <kernel/net/echo.h>
 #include <kernel/net/icmp.h>
 #include <kernel/net/ipv4.h>
@@ -256,4 +257,29 @@ void net_ipv4_receive(const struct net_interface *interface,
   }
   net_icmp_receive(source, destination, data + header_length,
       total_length - header_length);
+}
+
+void net_ipv4_snapshot(struct net_config_reply *reply)
+{
+  assert_worker_context();
+  *reply = (struct net_config_reply){
+    .address = configuration.address, .prefix = configuration.prefix,
+    .gateway = configuration.gateway, .mtu = net_ethernet.mtu,
+  };
+  if (virtio_net_present()) {
+    reply->flags |= NET_CONFIG_PRESENT;
+  }
+  if (virtio_net_ready()) {
+    reply->flags |= NET_CONFIG_READY;
+  }
+  if (virtio_net_available()) {
+    reply->flags |= NET_CONFIG_LINK_UP;
+  }
+  if (configuration.address) {
+    reply->flags |= NET_CONFIG_ASSIGNED;
+  }
+  const uint8_t *mac = virtio_net_mac();
+  if (mac) {
+    memcpy(reply->mac, mac, sizeof(reply->mac));
+  }
 }

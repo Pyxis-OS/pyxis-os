@@ -1,0 +1,128 @@
+#include <arch/cpu.h>
+#include <kernel/net/config.h>
+#include <kernel/net/ipv4.h>
+#include <kernel/panic.h>
+#include <kernel/task.h>
+#include <stdatomic.h>
+
+#define CONFIG_PENDING_LIMIT 8
+
+enum config_state { CONFIG_FREE, CONFIG_QUEUED, CONFIG_RUNNING, CONFIG_DONE };
+struct config_call {
+  enum config_state state;
+  uint64_t operation;
+  struct net_config_request request;
+  struct net_config_reply reply;
+  enum call_status status;
+  struct task_wait *wait;
+};
+
+static struct config_call pending[CONFIG_PENDING_LIMIT];
+static atomic_bool pending_locked;
+
+static void lock_pending(void)
+{
+  while (atomic_exchange_explicit(&pending_locked, true, memory_order_acquire)) {
+    __asm__ volatile("pause");
+  }
+}
+
+static void unlock_pending(void)
+{
+  atomic_store_explicit(&pending_locked, false, memory_order_release);
+}
+
+enum call_status net_config_exchange(uint64_t operation,
+    const struct net_config_request *request, struct net_config_reply *reply)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!net_worker_available()) {
+    return CALL_UNAVAILABLE;
+  }
+  lock_pending();
+  struct config_call *call = NULL;
+  for (size_t i = 0; i < CONFIG_PENDING_LIMIT; ++i) {
+    if (pending[i].state == CONFIG_FREE) {
+      call = &pending[i];
+      break;
+    }
+  }
+  if (!call) {
+    unlock_pending();
+    return CALL_QUEUE_FULL;
+  }
+  struct task_wait *wait = task_wait_prepare();
+  *call = (struct config_call){
+    .state = CONFIG_QUEUED, .operation = operation, .request = *request, .wait = wait,
+  };
+  unlock_pending();
+  net_worker_notify();
+  task_wait_sleep(wait);
+
+  lock_pending();
+  KASSERT(call->state == CONFIG_DONE && !call->wait);
+  enum call_status status = call->status;
+  if (status == CALL_OK && operation == NET_CONFIG_QUERY) {
+    *reply = call->reply;
+  }
+  call->state = CONFIG_FREE;
+  unlock_pending();
+  return status;
+}
+
+static enum call_status configure(struct config_call *call)
+{
+  switch (call->operation) {
+  case NET_CONFIG_QUERY:
+    net_ipv4_snapshot(&call->reply);
+    return CALL_OK;
+  case NET_CONFIG_CLEAR:
+    net_ipv4_clear();
+    return CALL_OK;
+  case NET_CONFIG_REPLACE: {
+    enum net_result result = net_ipv4_configure(call->request.address,
+        call->request.prefix, call->request.gateway);
+    switch (result) {
+    case NET_OK: return CALL_OK;
+    case NET_INVALID: return CALL_BAD_REQUEST;
+    default: return CALL_UNAVAILABLE;
+    }
+  }
+  default:
+    return CALL_BAD_OPERATION;
+  }
+}
+
+bool net_config_service(void)
+{
+  bool worked = false;
+  for (size_t i = 0; i < CONFIG_PENDING_LIMIT; ++i) {
+    uint64_t flags = cpu_save_interrupts();
+    lock_pending();
+    struct config_call *call = &pending[i];
+    if (call->state != CONFIG_QUEUED) {
+      unlock_pending();
+      cpu_restore_interrupts(flags);
+      continue;
+    }
+    call->state = CONFIG_RUNNING;
+    unlock_pending();
+    cpu_restore_interrupts(flags);
+
+    /* RUNNING keeps the caller parked. Only this worker touches its payload;
+     * no request lock spans ARP cleanup or another protocol's completion. */
+    enum call_status status = configure(call);
+
+    flags = cpu_save_interrupts();
+    lock_pending();
+    call->status = status;
+    call->state = CONFIG_DONE;
+    struct task_wait *wait = call->wait;
+    call->wait = NULL;
+    task_wait_wake(wait);
+    unlock_pending();
+    cpu_restore_interrupts(flags);
+    worked = true;
+  }
+  return worked;
+}

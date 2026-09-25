@@ -3,6 +3,7 @@
 #include <kernel/log.h>
 #include <kernel/net/interface.h>
 #include <kernel/net/arp.h>
+#include <kernel/net/config.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/net/echo.h>
 #include <kernel/panic.h>
@@ -154,7 +155,8 @@ static void network_worker(void *argument)
   virtio_net_start();
   for (;;) {
     bool transport_busy = virtio_net_service();
-    bool serviced = net_echo_service();
+    bool serviced = net_config_service();
+    serviced |= net_echo_service();
     net_arp_service();
     unsigned handled = 0;
     while (handled < NET_WORK_BUDGET) {
