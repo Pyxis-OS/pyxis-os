@@ -23,9 +23,10 @@ void virtio_fs_pci_wake(void);
 /* Sole BSP worker, IF=1, no held locks. Copies into owned DMA storage and sleeps
  * for completion, bounded by five seconds. Transport/protocol failure stops
  * the session before returning; storage remains mapped until reboot.
- * No concurrent callers, allocation, user pointers or request cancellation. */
+ * *submitted records whether the descriptor chain was published, even on
+ * failure. No concurrent callers, allocation, user pointers or cancellation. */
 enum virtio_fs_result virtio_fs_pci_request(const void *request, size_t request_bytes,
-    void *reply, size_t reply_capacity, size_t *reply_bytes);
+    void *reply, size_t reply_capacity, size_t *reply_bytes, bool *submitted);
 /* High-priority FORGET with no device-writable payload; waits for used-ring
  * completion, not a FUSE reply. Serialized with ordinary requests. */
 enum virtio_fs_result virtio_fs_pci_forget(const void *request, size_t request_bytes);

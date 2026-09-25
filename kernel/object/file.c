@@ -224,6 +224,21 @@ static struct syscall_result write_file(struct file_object *file,
     KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
+  if (file->backing == FILE_HOST) {
+    struct hostfs_request *pending = task_prepare_hostfs();
+    pending->operation = HOSTFS_WRITE;
+    pending->node = file->host;
+    pending->offset = request->offset;
+    pending->count = request->size < VIRTIO_FS_WRITE_MAX ? request->size : VIRTIO_FS_WRITE_MAX;
+    KASSERT(copy_from_user(pending->data, request->address, pending->count));
+    task_submit_hostfs(pending);
+    if (pending->status != CALL_OK) {
+      return (struct syscall_result){pending->status, 0};
+    }
+    reply.written = pending->count;
+    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
+  }
   if (file->backing != FILE_RAM) {
     return (struct syscall_result){CALL_READ_ONLY, 0};
   }
@@ -304,6 +319,14 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     return write_file(file, &request.write, reply_address, reply_capacity);
   }
   if (operation == FILE_RESIZE) {
+    if (file->backing == FILE_HOST) {
+      struct hostfs_request *pending = task_prepare_hostfs();
+      pending->operation = HOSTFS_RESIZE;
+      pending->node = file->host;
+      pending->offset = request.resize.size;
+      task_submit_hostfs(pending);
+      return (struct syscall_result){pending->status, 0};
+    }
     if (file->backing != FILE_RAM) {
       return (struct syscall_result){CALL_READ_ONLY, 0};
     }

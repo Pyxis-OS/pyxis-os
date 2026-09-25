@@ -20,7 +20,7 @@ enum capability_result {
 
 /* Zero initialization creates an empty table. It has one exclusive owner:
  * the BSP before submission/after retirement, otherwise the executing user
- * task with IF=0. During a growth, launch or network-open request the task lends
+ * task with IF=0. During a growth, launch, network-open or host-create request the task lends
  * the table to the BSP until completion. No concurrent lookup, close, install or teardown. */
 struct capability_table {
   struct capability_entry *entries;

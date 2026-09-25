@@ -6,6 +6,7 @@
 
 #define VIRTIO_FS_NAME_MAX 255
 #define VIRTIO_FS_READ_MAX 4096
+#define VIRTIO_FS_WRITE_MAX 4096
 
 enum virtio_fs_result {
   VIRTIO_FS_OK,
@@ -28,6 +29,7 @@ enum virtio_fs_result {
   VIRTIO_FS_TIMED_OUT,
   VIRTIO_FS_UNAVAILABLE,
   VIRTIO_FS_PROTOCOL,
+  VIRTIO_FS_OUTCOME_UNKNOWN,
 };
 
 enum virtio_fs_kind {
@@ -61,9 +63,15 @@ struct virtio_fs_node {
   bool lookup_owned;
 };
 
+enum virtio_fs_access {
+  VIRTIO_FS_ACCESS_READ,
+  VIRTIO_FS_ACCESS_WRITE,
+};
+
 struct virtio_fs_open {
   struct virtio_fs_node *node; /* Retained; node storage must outlive this open. */
   uint64_t handle;
+  uint32_t flags; /* Open flags are retained for WRITE and RELEASE. */
 };
 
 struct virtio_fs_dirent {
@@ -99,13 +107,25 @@ enum virtio_fs_result virtio_fs_node_get(struct virtio_fs_node *node);
 /* Final put sends FORGET after all open handles have released their retains.
  * Always retires the final local record, including on a failed session. */
 enum virtio_fs_result virtio_fs_node_put(struct virtio_fs_node *node);
-enum virtio_fs_result virtio_fs_open(struct virtio_fs_node *node, struct virtio_fs_open *opened);
+enum virtio_fs_result virtio_fs_open(struct virtio_fs_node *node,
+    enum virtio_fs_access access, struct virtio_fs_open *opened);
+/* Exclusive regular-file creation, fixed 0644 mode under the service identity.
+ * Success owns both a lookup reference and a write-only open. Failure can leave
+ * a created host name; never try to undo it by removing a potentially replaced
+ * entry. Even failure can leave node ownership for the caller to put. */
+enum virtio_fs_result virtio_fs_create(struct virtio_fs_node *parent,
+    const char *name, size_t length, struct virtio_fs_node *node, struct virtio_fs_open *opened);
 /* Close always consumes the open, releasing its node retain even on failure.
  * Failed RELEASE/FORGET stops the session rather than losing host ownership. */
 enum virtio_fs_result virtio_fs_close(struct virtio_fs_open *opened);
 /* Explicit byte offsets, short reads/EOF preserved, at most READ_MAX bytes. */
 enum virtio_fs_result virtio_fs_read(struct virtio_fs_open *opened, uint64_t offset,
     void *buffer, size_t capacity, size_t *read);
+/* One bounded write; size must be nonzero. No retry on any failure. Confirmed
+ * progress may be short; UNKNOWN means published but no trustworthy completion. */
+enum virtio_fs_result virtio_fs_write(struct virtio_fs_open *opened, uint64_t offset,
+    const void *buffer, size_t size, size_t *written);
+enum virtio_fs_result virtio_fs_resize(struct virtio_fs_open *opened, uint64_t size);
 /* Opaque cookie zero starts/restarts. No arithmetic or ordering of cookies.
  * Host mutation may affect results; no snapshot or reliable change detection. */
 enum virtio_fs_result virtio_fs_readdir(struct virtio_fs_open *opened, uint64_t cookie,
