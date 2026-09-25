@@ -53,10 +53,9 @@ milestone's remaining interface details before starting its code work.
     read-only and idle selections driven by Make/Limine configuration.
 17. Complete: [writable virtio-fs](../virtio-fs.md), with persistent host-backed
     source and executables, and different grants in two spaces.
-18. Next: a small space-title operation and init-shell builtin such as
-    `title "Development"`. A bounded title for the caller's own space should
-    survive init exit. Keep fixed tab widths and current navigation; decide the
-    exact text limit, encoding and title authority in that follow-up.
+18. Complete: [space titles](../init.md#space-titles), with a caller-space
+    capability and `title` shell builtin. Labels survive init exit; fixed tab
+    widths and navigation are unchanged.
 
 Everyday use for simple tasks guides this order. Website hosting remains one
 future application, not the primary completion target for the OS.

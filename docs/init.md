@@ -69,7 +69,7 @@ The userland repository supplies three shebang scripts using `app://shell.pxe`:
 - `init/readonly.sh`, installed as `app://init-readonly`, opens the same optional
   export with `mount --optional --read-only host` and hands off with
   `session app://session.pxe`, leaving network settings alone.
-- `init/idle.sh`, installed as `app://init-idle`, exits immediately. No process
+- `init/idle.sh`, installed as `app://init-idle`, sets its title and exits. No process
   remains; the scheduler uses its ordinary interruptible halt when idle. The
   space and its terminal remain available. This is not a machine shutdown or
   permanent CPU stop.
@@ -90,6 +90,32 @@ network setup. Boot does not order init execution or wait for one init's setup
 before running another; select a single network-setup owner. Other sessions may
 start before networking is configured. Super+Left/Right switches the active tab.
 
+## Space titles
+
+`title "Development"` sets the caller's tab label. Packaged init scripts set
+`Development`, `Read-only` and `Idle`, respectively, before mounting or handing
+off. They use `title --optional` so the single-CPU fallback, which has no title
+capability, keeps the pinned `Caelum` name and continues startup. The optional
+form ignores only a missing capability; malformed text and operation failures
+still stop a script.
+
+The initial `space` resource grants `SPACE_RIGHT_SET_TITLE`. It is bound to
+that init's space, and the kernel also requires the caller to belong to the
+same space. No title resource is issued for Caelum. The shell's `session`
+handoff passes this grant to the session launcher, which passes it to the
+interactive shell. Ordinary foreground/background commands receive no title
+grant. An explicit native launcher can delegate it within its space using the
+existing capability machinery.
+
+The [space protocol](../include/abi/space.h) accepts 1–63 printable ASCII bytes,
+including spaces, and returns no payload. Invalid requests leave the previous
+title unchanged. Libpyxis exposes `space_set_title(handle, text)` through
+`<space.h>`. The space owns the copied text: process exit and closing the last
+handle do not reset it. Titles may repeat; they are display labels, not names
+for lookup, identity or authority. Longer labels are clipped visually to the
+existing tab width, without altering the stored text. The presenter snapshots
+the title under a short lock before drawing; updates do not allocate.
+
 ## Startup grants and lifetime
 
 An init path must name an exact `app://` archive entry. Native init receives
@@ -98,12 +124,14 @@ the selected init URI as `argv[1]`, and a READ resource named `script`.
 Interpreter lookup stays inside the boot archive and does not recursively
 interpret scripts. LF/CRLF and bounds follow the [script-launch contract](script-launch.md).
 
-Each init receives its space's terminal, display and keyboard grants, private
-memory, launch, clock, randomness, networking services and network configuration,
+Each workload init receives its space's title, terminal, display and keyboard
+grants, private memory, launch, clock, randomness, networking services and
+network configuration,
 read-only app and writable home roots, an initial `home://` working directory and
 the initial environment. When virtio-fs is present it also receives `host_mount`,
-scoped to that export. CPU selection chooses which trusted init runs, not an
-authority ceiling; no authority is chosen from a hard-coded CPU role.
+scoped to that export. The BSP fallback omits the title grant. Workload CPU
+selection chooses which trusted init runs, not an authority ceiling; no workload
+authority is chosen from a hard-coded CPU role.
 
 Mount authority stays with init; the mounted root travels through session
 handoff. Network-configuration authority reaches the session launcher but not

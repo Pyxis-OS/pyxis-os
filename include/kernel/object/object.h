@@ -24,6 +24,7 @@ enum object_type {
   OBJECT_RANDOM = 16,
   OBJECT_TCP_SERVICE = 17,
   OBJECT_TCP = 18,
+  OBJECT_SPACE = 19,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.

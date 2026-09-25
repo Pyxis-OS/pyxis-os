@@ -94,25 +94,22 @@ static struct tty *tty_alloc(const struct framebuffer *fb) {
 
 void space_init_all(const struct boot_framebuffer *boot_fb)
 {
-  char *name;
-  struct space *space;
-
   screen = boot_fb;
 
   for (size_t i = 0; i < arch_cpu_count(); ++i) {
-    if (i == 0) {
-      name = strndup(KERNEL_NAME, strlen(KERNEL_NAME));
-    } else {
-      char buf[256];
-      sprintf(buf, "CPU %ld", i);
-      name = strndup(buf, strlen(buf));
+    struct space *space = kmalloc(sizeof(*space));
+    if (!space) {
+      panic("cannot allocate space");
     }
-
-    klog("Initializing Space: %s\n", name);
-
-    space = (struct space *)kmalloc(sizeof(struct space));
-
-    space->name = name;
+    *space = (struct space){0};
+    atomic_init(&space->title_locked, false);
+    if (i == 0) {
+      static_assert(sizeof(KERNEL_NAME) <= sizeof(space->title));
+      memcpy(space->title, KERNEL_NAME, sizeof(KERNEL_NAME));
+    } else {
+      sprintf(space->title, "CPU %zu", i);
+    }
+    klog("Initializing Space: %s\n", space->title);
 
     space->fb = fb_alloc(boot_fb, boot_fb->width, 
         boot_fb->height - SPACES_NAV_HEIGHT);
@@ -143,6 +140,49 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
   spaces_nav_fb = fb_alloc(boot_fb, boot_fb->width, SPACES_NAV_HEIGHT);
 }
 
+static void lock_title(struct space *space)
+{
+  while (atomic_exchange_explicit(&space->title_locked, true, memory_order_acquire)) {
+    __asm__ volatile("pause");
+  }
+}
+
+static void unlock_title(struct space *space)
+{
+  atomic_store_explicit(&space->title_locked, false, memory_order_release);
+}
+
+bool space_set_title(struct space *space, const char *title, size_t length)
+{
+  if (!length || length > SPACE_TITLE_MAX) {
+    return false;
+  }
+  for (size_t i = 0; i < length; ++i) {
+    if ((unsigned char)title[i] < 0x20 || (unsigned char)title[i] > 0x7e) {
+      return false;
+    }
+  }
+
+  uint64_t flags = cpu_save_interrupts();
+  lock_title(space);
+  memcpy(space->title, title, length);
+  space->title[length] = '\0';
+  unlock_title(space);
+  cpu_restore_interrupts(flags);
+  return true;
+}
+
+static void snapshot_title(struct space *space, char title[SPACE_TITLE_MAX + 1])
+{
+  /* An AP can rename while the BSP presents. Copy under a short lock, with
+   * preemption disabled; drawing never borrows the mutable title buffer. */
+  uint64_t flags = cpu_save_interrupts();
+  lock_title(space);
+  memcpy(title, space->title, SPACE_TITLE_MAX + 1);
+  unlock_title(space);
+  cpu_restore_interrupts(flags);
+}
+
 static void draw_spaces_nav()
 {
   const size_t tab_width = spaces_nav_fb->width / SPACES_NAV_COUNT;
@@ -155,13 +195,15 @@ static void draw_spaces_nav()
         aardvark_scheme.palette[8]);
 
     if (i < arch_cpu_count()) {
-      const struct space *space = arch_cpu_at(i)->space;
+      struct space *space = arch_cpu_at(i)->space;
+      char title[SPACE_TITLE_MAX + 1];
+      snapshot_title(space, title);
 
       size_t padding = bizcat.height / 2;
-      size_t len = MIN(strlen(space->name), max_len);
+      size_t len = MIN(strlen(title), max_len);
 
       for (size_t j = 0; j < len; j++) {
-        tty_plot_char_raw(spaces_nav_fb, &bizcat, space->name[j],
+        tty_plot_char_raw(spaces_nav_fb, &bizcat, title[j],
             tab_width * i + padding + j * bizcat.width, padding,
             aardvark_scheme.foreground, aardvark_scheme.palette[0]);
       }

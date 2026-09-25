@@ -22,6 +22,7 @@
 
 #define PROTOCOL_TCP_SERVICE UINT64_C(17)
 #define PROTOCOL_TCP UINT64_C(18)
+#define PROTOCOL_SPACE UINT64_C(19)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

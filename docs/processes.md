@@ -14,7 +14,8 @@ handoffs for this first milestone.
 ## Current programs
 
 Normal boot starts the [shell](shell.md) at home:// with terminal, launcher,
-memory, display, clock, keyboard and app/home root grants. It launches foreground utilities
+memory, display, clock, keyboard, optional [space-title authority](init.md#space-titles)
+and app/home root grants. It launches foreground utilities
 with explicit resources, waits for completion and returns to its prompt. Its space and TTY
 survive shell exit; no supervisor restarts it.
 

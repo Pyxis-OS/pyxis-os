@@ -65,6 +65,14 @@ no arguments and ends the shell successfully. Interactive command failures do
 not accumulate into the shell's exit status; unrecoverable terminal, wait or
 cleanup failures terminate it with failure.
 
+`title [--optional] name` sets the current space's tab label; quote names with
+spaces, for example `title "Source editing"`. It accepts 1–63 printable ASCII
+characters and clips the visible label to the fixed tab width. An error leaves
+the old title unchanged. `--optional` only tolerates a missing title grant, as
+on the single-CPU Caelum fallback. Titles survive shell exit, and only session
+handoff inherits the grant by default. See [space titles](init.md#space-titles).
+Like the other builtins, `title` cannot run with `&`.
+
 A command without `/` is a bare name: `cat` opens `app://cat.pxe`. There is no
 PATH search or fallback. Names already ending in `.pxe` still receive the suffix
 when bare; use `app://cat.pxe` or `./cat.pxe` to name an image directly. Paths
