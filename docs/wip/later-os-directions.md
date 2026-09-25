@@ -54,19 +54,24 @@ Dynamic modules, live configuration reload and per-user/space settings policy
 also remain deferred. Existing initrd/RAM filesystems suffice for Lua scripts;
 these tasks do not depend on virtio-fs.
 
-## Networking and website hosting
+## Networking and applications
+
+[Outbound TCP](tcp.md) is the next bounded milestone. The priority is making
+Pyxis useful for simple daily tasks; website hosting is an eventual application,
+not the main project target.
 
 The completed [initial networking milestone](../networking.md) provides loopback,
 virtio-net, manually configured IPv4 and ping. Native
 [UDP endpoints and tools](../networking.md#udp-tools) now support bounded loopback
 and host exchanges. DHCP follows through the same
-configuration operations once UDP, broadcast handling and lease deadlines are
-available. Revisit existing network stacks before the TCP milestone; keep the
+configuration operations once broadcast handling and lease deadlines are
+available. [DNS queries and hostname ping](../dns.md) are complete. The TCP plan
+revisits native implementation versus stack reuse before code begins; keep the
 [user/authority checkpoint](users-and-authority.md) ahead of remotely accessible
-services. TCP, DNS and server resource
-contracts still need separate scopes. Hosting the Pyxis landing page remains a
-release goal; revisit init supervision and restart policies when defining that
-web-server milestone. Virtio-blk remains the next intended VirtIO storage driver.
+services. Server resource contracts need their own scope. Hosting the Pyxis
+landing page remains an eventual application; revisit init supervision and
+restart policies when defining that web-server milestone. Virtio-blk remains
+the next intended VirtIO storage driver.
 
 [Userspace URI scheme providers](userspace-scheme-providers.md) are a separate
 future consumer: scoped kernel routing to userspace HTTP/HTTPS services, with
@@ -106,6 +111,12 @@ checkpoint ahead of persistent ownership and broader sharing decisions; do not
 leave it as account UI to bolt on after those interfaces are fixed.
 
 ## Persistent storage and installation
+
+Writable virtio-fs is a candidate after outbound TCP: it would let the existing
+Kilo/TCC workflow keep source and executables across boots without first choosing
+a disk filesystem. Scope writes and mutations as a focused milestone, with the
+[users/authority checkpoint](users-and-authority.md) before committing writable
+shared-mount ownership policy. This does not start a parallel storage track.
 
 Keep three choices separate: Pyxis file/directory capability requests, a backend
 operation interface, and the disk format. A FUSE-inspired backend need not force

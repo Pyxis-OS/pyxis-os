@@ -39,13 +39,21 @@ milestone's remaining interface details before starting its code work.
 12. Complete: [userspace UDP datagrams](../networking.md#udp-tools), with explicit
     address binding, endpoint capabilities, bounded queues and loopback/host
     client-server use.
-    DHCP, DNS and TCP follow as separate milestones.
+    DHCP and TCP follow as separate milestones.
 
 13. Complete: [host-backed randomness](../randomness.md), using VirtIO entropy
     and a bounded native READ capability.
 14. Complete: [DNS queries and hostname ping](../dns.md), using a shared
     userspace client, route-aware UDP opening and a configured default resolver
     at `1.1.1.1`. Numeric ping remains independent of DNS and randomness.
+
+15. Next: [outbound TCP streams](tcp.md), native connection capabilities and a
+    small userspace client. Listening and application protocols follow separately.
+    Writable virtio-fs is a candidate afterward, to persist the existing
+    edit/build/run workflow; discuss its ownership/authority boundary first.
+
+Everyday use for simple tasks guides this order. Website hosting remains one
+future application, not the primary completion target for the OS.
 
 This focus order does not commit to working on the milestones together.
 Ports depend on the SDK; init does not need the repository split. PCI/VirtIO

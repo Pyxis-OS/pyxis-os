@@ -496,9 +496,10 @@ The backend gateway is the first diagnostic target; an external timeout alone
 does not identify a guest-stack failure.
 
 The initial networking milestone is complete. DHCP needs UDP, broadcast support,
-lease deadlines and delegated configuration authority; TCP, DNS, IPv6, richer
-routing, network isolation and website hosting remain separate scopes in
-[later directions](wip/later-os-directions.md#networking-and-website-hosting).
+lease deadlines and delegated configuration authority. [DNS](dns.md) is complete;
+[outbound TCP](wip/tcp.md) is the next milestone. IPv6, richer routing, network
+isolation and website hosting remain separate scopes in
+[later directions](wip/later-os-directions.md#networking-and-applications).
 This stack deliberately implements a bounded IPv4/ICMP subset, not complete
 Internet host conformance. See the limits above before adding another protocol.
 
@@ -761,7 +762,8 @@ Wildcard/connected UDP, broadcast/multicast, fragmentation, IPv6, asynchronous
 send and waiting on multiple objects remain outside this implementation. DHCP
 needs unconfigured-address and broadcast handling as well as configuration
 authority and lease deadlines; explicit-address unicast UDP alone is insufficient.
-DNS queries and hostname ping are implemented; TCP needs its own scope.
+DNS queries and hostname ping are implemented; [outbound TCP](wip/tcp.md) has its
+own milestone.
 ICMP errors and generic UDP ephemeral-port selection are
 tracked in [technical debt](technical-debt.md#udp-icmp-errors-and-ephemeral-selection).
 Keep the [users/authority checkpoint](wip/users-and-authority.md) ahead of broader
