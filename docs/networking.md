@@ -471,8 +471,8 @@ it is not sent to the kernel, and startup performs no DNS query or NIC enabling.
 Shell launches inherit it through the existing environment forwarding.
 
 Direct-init applications that bypass session do not receive a synthesized
-`DNS_SERVER`. Client-side server overrides and fallback to `1.1.1.1` when the
-variable is absent belong to the next [DNS milestone task](wip/dns.md).
+`DNS_SERVER`. The [dig client](#dns-queries-with-dig) also defaults to `1.1.1.1`
+when that variable is absent and accepts an explicit numeric server override.
 
 Session and network configuration use the same restricted [Lua evaluator](lua.md#embedding-and-session-configuration).
 Both files are read before applying settings. Network setup precedes terminal
@@ -649,7 +649,8 @@ cannot be distinguished from traffic intended for its new owner.
 Unbound destination ports are silently dropped. ICMP error generation and
 application delivery are deferred, so an absent listener usually appears as a
 receive timeout. There is no fragmentation, reassembly, broadcast, multicast,
-retransmission, delivery/order guarantee or duplicate suppression. DHCP, DNS and TCP remain separate work.
+retransmission, delivery/order guarantee or duplicate suppression. DHCP and TCP
+remain separate work; the DNS client below owns its bounded query retries.
 
 
 ## UDP tools
@@ -741,13 +742,70 @@ and `ls`/`cat host://...` remain available with the
 [optional virtio-fs setup](virtio-fs.md). Echo listeners are development tools,
 not supervised public services.
 
+## DNS queries with dig
+
+The boot archive includes `dig [@SERVER_IP] NAME [A]`, a native userspace DNS
+diagnostic using UDP, clock and random capabilities. With `make run VIRTIO_NET=1`:
+
+```text
+dig example.com
+dig @1.1.1.1 www.github.com A
+dig does-not-exist.invalid
+```
+
+Server selection is an explicit `@` argument, then `DNS_SERVER`, then `1.1.1.1`
+if the variable is absent. An explicit override bypasses the environment value;
+an empty or invalid selected value is an error. Only numeric unicast IPv4 server
+addresses are accepted, including loopback. The command never switches servers
+silently. Names use ASCII letters, digits and interior hyphens in nonempty
+labels, with an optional trailing dot. Labels are limited to 63 bytes and the
+encoded name to 255 bytes. There is no suffix search or Unicode conversion.
+
+One recursive `IN A` question is sent to UDP port 53. Each of two attempts has
+a three-second monotonic deadline covering source setup, send and receive.
+Host-backed randomness supplies a fresh 16-bit query ID and source port in
+49152–65535; at most sixteen random port choices are tried per attempt if binds
+collide. The endpoint binds through route-aware OPEN, then is shut down and
+closed after the attempt. Only timeouts trigger a second attempt. Missing random
+hardware fails explicitly rather than substituting predictable values.
+
+Replies must match the selected server address/port, query ID, response/opcode
+fields and the case-insensitive question name, type and class. Unrelated or
+malformed packets are discarded without extending the deadline. The parser
+bounds label expansion, compression traversal and record counts, validates all
+three record sections before exposing answers, and checks A/CNAME payloads it
+interprets. Other record data is skipped by its checked extent. Printed names
+escape control characters, whitespace, literal dots and backslashes in labels.
+
+Output includes server, question, DNS response status, answer count, TTLs, A
+addresses and CNAME targets. Unknown answer types/classes retain numeric labels.
+An empty answer section or valid negative response such as NXDOMAIN is a
+successful diagnostic exchange, not a transport error. Usage, native-call,
+timeout, output and supported-size failures return a nonzero process status.
+
+This slice uses classic 512-byte DNS messages without EDNS. A matching truncated
+response reports that TCP fallback is unavailable; oversized replies are also
+reported as unsupported. Neither exposes partial answers. Full supported UDP
+datagrams are consumed so an oversized DNS response cannot block the receive
+queue. Random matching fields do not authenticate DNS or provide DNSSEC.
+
+There is no cache, resolver daemon, libc resolver or extra query to follow a
+CNAME. DNS code currently lives under `userspace/dig`; sharing it with hostname
+ping is the final [DNS milestone task](wip/dns.md). `ping` still requires a numeric
+IPv4 address. TCP fallback, EDNS, other query types, IPv6 and DNSSEC remain later
+work. The kernel contains no DNS policy or packet parser.
+
+References: [DNS wire format (RFC 1035)](https://www.rfc-editor.org/rfc/rfc1035.html)
+and [query matching (RFC 5452)](https://www.rfc-editor.org/rfc/rfc5452.html).
+
 ## Further networking work
 
 Wildcard/connected UDP, broadcast/multicast, fragmentation, IPv6, asynchronous
 send and waiting on multiple objects remain outside this implementation. DHCP
 needs unconfigured-address and broadcast handling as well as configuration
 authority and lease deadlines; explicit-address unicast UDP alone is insufficient.
-DNS and TCP need separate scopes. ICMP errors and ephemeral-port selection are
+Hostname ping completes the current DNS milestone; TCP needs its own scope.
+ICMP errors and generic UDP ephemeral-port selection are
 tracked in [technical debt](technical-debt.md#udp-icmp-errors-and-ephemeral-selection).
 Keep the [users/authority checkpoint](wip/users-and-authority.md) ahead of broader
 remotely accessible services. [Network domains](wip/later-os-directions.md#device-ownership-and-network-domains),
