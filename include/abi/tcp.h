@@ -13,11 +13,14 @@
 #define TCP_RIGHT_ABORT (UINT64_C(1) << 1)
 #define TCP_RIGHT_READ (UINT64_C(1) << 2)
 #define TCP_RIGHT_WRITE (UINT64_C(1) << 3)
-#define TCP_RIGHTS (TCP_RIGHT_INSPECT | TCP_RIGHT_ABORT | TCP_RIGHT_READ | TCP_RIGHT_WRITE)
+#define TCP_RIGHT_SHUTDOWN_WRITE (UINT64_C(1) << 4)
+#define TCP_RIGHTS (TCP_RIGHT_INSPECT | TCP_RIGHT_ABORT | TCP_RIGHT_READ | TCP_RIGHT_WRITE | \
+    TCP_RIGHT_SHUTDOWN_WRITE)
 #define TCP_INSPECT UINT64_C(1)
 #define TCP_ABORT UINT64_C(2)
 #define TCP_READ UINT64_C(3)
 #define TCP_WRITE UINT64_C(4)
+#define TCP_SHUTDOWN_WRITE UINT64_C(5)
 #define TCP_READ_MAX_BYTES UINT64_C(4096)
 #define TCP_READ_MAX_WAIT_NS UINT64_C(30000000000)
 #define TCP_WRITE_MAX_BYTES UINT64_C(4096)
@@ -26,6 +29,9 @@
 #define TCP_STATE_CONNECTED UINT32_C(1)
 #define TCP_STATE_PEER_CLOSED UINT32_C(2)
 #define TCP_STATE_CLOSED UINT32_C(3)
+
+#define TCP_INFO_WRITE_SHUTDOWN (UINT32_C(1) << 0)
+#define TCP_INFO_PEER_FIN (UINT32_C(1) << 1)
 
 /* PROTOCOL_TCP_SERVICE: numeric, host-order IPv4/port and an absolute monotonic
  * deadline, at most 30 seconds ahead. Nonzero peer port; no source selection.
@@ -47,7 +53,7 @@ struct tcp_connection_info {
   uint16_t remote_port;
   uint32_t state;
   uint32_t terminal_status; /* call_status; CALL_OK includes an orderly peer FIN. */
-  uint32_t reserved;
+  uint32_t flags; /* Local write shutdown and peer FIN are independent. */
 };
 
 struct tcp_connect_reply {
@@ -55,11 +61,23 @@ struct tcp_connect_reply {
   struct tcp_connection_info connection;
 };
 
-/* PROTOCOL_TCP: header-only INSPECT/ABORT with separate rights. INSPECT returns
- * tcp_connection_info even after failure. ABORT is idempotent, affects copies,
- * and returns no bytes; the first terminal failure remains visible. Final close
- * also aborts. Closing one copy does not stop a connection owned by other copies.
- * No write-shutdown operation is exposed yet. */
+/* PROTOCOL_TCP: header-only INSPECT/ABORT/SHUTDOWN_WRITE, with separate rights.
+ * INSPECT returns tcp_connection_info even after failure. CLOSED describes the
+ * transport (including TIME_WAIT); READ can still drain buffered bytes. PEER_FIN
+ * does not mean EOF until those bytes are consumed. No raw TCP state is exposed.
+ *
+ * SHUTDOWN_WRITE commits shared write shutdown and schedules FIN after accepted
+ * bytes; it does not wait for FIN allocation, transmission or acknowledgment.
+ * Reads stay usable. Unaccepted/future nonempty writes fail ENDPOINT_CLOSED.
+ * Repeating a committed shutdown succeeds, even after later failure; it does not
+ * clear terminal_status. A first shutdown after terminal failure reports it.
+ *
+ * ABORT is idempotent, affects copies, discards unread bytes and preserves the
+ * first failure. Final close without shutdown, or with unread data, also aborts.
+ * Otherwise final close permits bounded graceful teardown. TIME_WAIT survives
+ * abort/close until normal expiry. Closing one copy does not close other copies.
+ * Neither shutdown nor close proves delivery. Both header-only mutators return
+ * no reply bytes. */
 
 /* READ clamps capacity to TCP_READ_MAX_BYTES and returns available ordered
  * bytes, possibly short. A nonempty read returns zero only after peer FIN and
@@ -89,7 +107,7 @@ struct tcp_read_reply {
  * queued. Zero length is a no-op after authority/buffer/deadline validation.
  * One outstanding writer per shared stream (otherwise BUSY), sixteen globally
  * including completed replies. READ proceeds independently; peer FIN permits
- * further writes. Final close still aborts and is not a flush. */
+ * further writes until local shutdown. Final close is not a flush. */
 struct tcp_write_request {
   struct message_header header;
   uint64_t buffer;

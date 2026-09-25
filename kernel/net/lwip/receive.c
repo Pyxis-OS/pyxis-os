@@ -50,6 +50,9 @@ err_t tcp_connection_receive(void *argument, struct tcp_pcb *pcb,
   KASSERT(connection->pcb == pcb && error == ERR_OK);
   if (!buffer) {
     connection->peer_fin = true;
+    if (!connection->receive_length) {
+      tcp_connection_discard_receive(connection);
+    }
     return ERR_OK;
   }
   if (!connection->receive_data) {
@@ -91,13 +94,19 @@ static size_t read_ordered(struct tcp_connection *connection, void *data, size_t
     memcpy((uint8_t *)data + first, connection->receive_data, length - first);
     connection->receive_head = (connection->receive_head + length) % NET_TCP_RECEIVE_BYTES;
     connection->receive_length -= length;
+    if (!connection->receive_length && connection->peer_fin) {
+      tcp_connection_discard_receive(connection);
+    }
   }
   return length;
 }
 
 static void return_receive_credit(struct tcp_connection *connection, size_t length)
 {
-  if (length && connection->pcb && connection->terminal_status == CALL_OK) {
+  /* TIME_WAIT no longer receives stream data; tcp_output on that PCB is not
+   * part of the active send path. The last credit may arrive after its FIN. */
+  if (length && connection->pcb && connection->pcb->state != TIME_WAIT &&
+      connection->terminal_status == CALL_OK) {
     tcp_recved(connection->pcb, length);
   }
 }

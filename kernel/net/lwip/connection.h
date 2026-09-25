@@ -16,6 +16,7 @@ struct tcp_connection {
   uint32_t last_ack;
   err_t error;
   bool owned, peer_fin, connected;
+  bool write_shutdown; /* Committed even while lwIP defers FIN allocation. */
   enum call_status terminal_status;
   uint8_t *receive_data;
   size_t receive_head, receive_length;
@@ -30,6 +31,7 @@ uint64_t tcp_connection_generation(const struct tcp_pcb *pcb);
  * return ERR_ABRT. Starting a connection does not publish a handle. */
 void tcp_connection_start(struct tcp_connection *connection);
 void tcp_connection_abort(struct tcp_connection *connection, enum call_status status);
+enum call_status tcp_connection_shutdown_write(struct tcp_connection *connection);
 void tcp_connection_inspect(struct tcp_connection *connection, struct tcp_connection_info *info);
 
 /* Receive callback and payload cleanup share the worker-owned record. */

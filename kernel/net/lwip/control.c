@@ -8,7 +8,7 @@
 
 #define TCP_CONTROL_LIMIT 8
 
-enum control_operation { CONTROL_CONNECT, CONTROL_INSPECT, CONTROL_ABORT };
+enum control_operation { CONTROL_CONNECT, CONTROL_INSPECT, CONTROL_ABORT, CONTROL_SHUTDOWN_WRITE };
 enum control_state { CONTROL_FREE, CONTROL_QUEUED, CONTROL_ACTIVE, CONTROL_DONE };
 
 struct tcp_control {
@@ -240,6 +240,14 @@ enum call_status net_tcp_abort(struct kernel_object *object)
   return exchange_control(&request);
 }
 
+enum call_status net_tcp_shutdown_write(struct kernel_object *object)
+{
+  struct tcp_control request = {
+    .operation = CONTROL_SHUTDOWN_WRITE, .stream = (struct tcp_stream *)object,
+  };
+  return exchange_control(&request);
+}
+
 bool net_tcp_service(void)
 {
   net_worker_assert_context();
@@ -259,12 +267,15 @@ bool net_tcp_service(void)
       continue;
     }
     if (call->operation != CONTROL_CONNECT) {
+      enum call_status status = CALL_OK;
       if (call->operation == CONTROL_INSPECT) {
         tcp_connection_inspect(call->stream->connection, &call->reply.connection);
+      } else if (call->operation == CONTROL_SHUTDOWN_WRITE) {
+        status = tcp_connection_shutdown_write(call->stream->connection);
       } else {
         tcp_connection_abort(call->stream->connection, CALL_ENDPOINT_CLOSED);
       }
-      complete_control(call, CALL_OK);
+      complete_control(call, status);
       worked = true;
       continue;
     }

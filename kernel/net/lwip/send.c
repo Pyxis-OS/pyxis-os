@@ -124,12 +124,12 @@ static bool queue_write(struct tcp_write_call *call, enum call_status *status)
     *status = CALL_TIMED_OUT;
     return true;
   }
-  struct tcp_pcb *pcb = connection->pcb;
-  KASSERT(pcb);
-  if (pcb->flags & TF_FIN) {
+  if (connection->write_shutdown) {
     *status = CALL_ENDPOINT_CLOSED;
     return true;
   }
+  struct tcp_pcb *pcb = connection->pcb;
+  KASSERT(pcb);
   size_t available = tcp_sndbuf(pcb);
   if (!available || tcp_sndqueuelen(pcb) >= TCP_SND_QUEUELEN) {
     return false;
