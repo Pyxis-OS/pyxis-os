@@ -382,9 +382,9 @@ entries still open, while the space keeps its own console reference.
 
 ### Implemented file calls
 
-The [file layouts](../include/abi/file.h) define SIZE, READ, WRITE and RESIZE.
+The [file layouts](../include/abi/file.h) define SIZE, READ, WRITE, RESIZE and SYNC.
 Reads and writes use explicit offsets; neither objects nor handles carry a seek
-position. READ requires READ authority; WRITE and RESIZE require WRITE without
+position. READ requires READ authority; WRITE, RESIZE and SYNC require WRITE without
 requiring READ. SIZE accepts either right. No lookup or append operation is
 implicit in a file call. Directory grants control which file rights can be
 obtained through LOOKUP/CREATE.
@@ -402,13 +402,19 @@ or beyond EOF return zero without forming a data pointer. The reply is written
 last and wins over overlapping data. SIZE returns one serialized size observation,
 not a snapshot covering subsequent reads.
 
-WRITE checks offset/length overflow, the entire source and reply storage before
+RAM WRITE checks offset/length overflow, the entire source and reply storage before
 mutation. Success reports the full requested count; failure leaves contents and
 logical size unchanged. A nonempty write beyond EOF zero-fills the gap. A
 zero-length write ignores the data address and does not extend the file, even
 at an offset beyond EOF. It still checks authority, backing and reply storage.
 RESIZE returns no reply bytes. Growth exposes zero-filled bytes; shrink discards
 the tail permanently, including when later growth reuses retained capacity.
+
+SYNC returns no reply bytes. RAM files accept it as a no-op; host files request
+full backing-storage synchronization. Parent directories require separate sync
+requests, and neither close nor `fflush` implicitly syncs storage. See the
+[host synchronization contract](virtio-fs.md#synchronization) for ordering and
+durability limits.
 
 A RAM file uses one heap buffer, with geometric capacity growth and an exact-size
 retry if spare capacity cannot be allocated. Nonzero shrink retains capacity;
