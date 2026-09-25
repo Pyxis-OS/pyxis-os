@@ -9,6 +9,7 @@ set -eu
 : "${OVMF_VARS:=/usr/share/OVMF/OVMF_VARS.fd}"
 : "${VIRTIO_FS_SOCKET:=}"
 : "${VIRTIO_NET:=0}"
+: "${VIRTIO_RNG:=1}"
 : "${UDP_FORWARD:=}"
 command -v "$QEMU" >/dev/null 2>&1 || {
   echo "Missing $QEMU: install QEMU or set QEMU, then run make run." >&2
@@ -57,6 +58,12 @@ case "$VIRTIO_NET" in
   1) set -- "$@" -netdev "$net_backend" \
        -device virtio-net-pci,netdev=pyxis_net,disable-legacy=on ;;
   *) echo 'VIRTIO_NET must be 0 or 1.' >&2; exit 1 ;;
+esac
+case "$VIRTIO_RNG" in
+  0) ;;
+  1) set -- "$@" -object rng-random,id=pyxis_rng,filename=/dev/urandom \
+       -device virtio-rng-pci,rng=pyxis_rng,disable-legacy=on ;;
+  *) echo 'VIRTIO_RNG must be 0 or 1.' >&2; exit 1 ;;
 esac
 machine=q35
 if [ -n "$VIRTIO_FS_SOCKET" ]; then

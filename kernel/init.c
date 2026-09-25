@@ -14,6 +14,7 @@
 #include <kernel/pci.h>
 #include <kernel/virtio/pci.h>
 #include <kernel/virtio/net.h>
+#include <kernel/virtio/rng.h>
 #include <kernel/task.h>
 #include <kernel/space.h>
 
@@ -34,6 +35,7 @@
   pci_discover();
   virtio_fs_pci_prepare(boot);
   virtio_net_prepare(boot);
+  virtio_rng_prepare(boot);
 
   boot_start_cpus();
 
@@ -42,6 +44,7 @@
   task_init();
 
   virtio_fs_pci_start();
+  virtio_rng_start();
 
   enum mm_result result = net_init();
   if (result != MM_OK) {

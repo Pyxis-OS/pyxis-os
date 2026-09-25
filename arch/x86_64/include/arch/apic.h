@@ -7,6 +7,7 @@
 #define APIC_KEYBOARD_VECTOR 33
 #define APIC_VIRTIO_FS_VECTOR 34
 #define APIC_VIRTIO_NET_VECTOR 35
+#define APIC_VIRTIO_RNG_VECTOR 36
 #define APIC_SPURIOUS_VECTOR 255
 
 struct apic_msi_message {

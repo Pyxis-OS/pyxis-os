@@ -9,6 +9,7 @@
 #include <kernel/task.h>
 #include <kernel/virtio/pci.h>
 #include <kernel/virtio/net.h>
+#include <kernel/virtio/rng.h>
 #include <stddef.h>
 
 #define IDT_GATE_PRESENT (1u << 7)
@@ -79,6 +80,11 @@ void interrupt_handler(struct exception_frame *frame)
 {
   if (frame->vector == APIC_VIRTIO_NET_VECTOR) {
     virtio_net_interrupt();
+    apic_end_interrupt();
+    return;
+  }
+  if (frame->vector == APIC_VIRTIO_RNG_VECTOR) {
+    virtio_rng_interrupt();
     apic_end_interrupt();
     return;
   }
