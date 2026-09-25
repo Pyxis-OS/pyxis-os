@@ -186,6 +186,15 @@ usable. Truncated/inconsistent replies, invalid directory records, transport
 failures and failed RELEASE/FORGET cleanup stop it. No writes, symlink traversal,
 reconnection or unmount operation are implemented.
 
+Storage errors retain their meaning through the native layer: ENOSPC becomes
+NO_SPACE, EDQUOT becomes QUOTA, and EFBIG becomes FILE_TOO_LARGE. ENOMEM remains
+NO_MEMORY. Read-only, already-existing and nonempty-directory errors also retain
+their native equivalents rather than becoming generic I/O errors. These mappings
+prepare the [writable milestone](wip/writable-virtio-fs.md); no host mutation is
+submitted yet. Submitted-mutation uncertainty will be classified at the transport
+boundary when those operations are introduced, rather than guessing from a
+TIMED_OUT or IO result after losing whether a request was published.
+
 ## Native directory and file objects
 
 `kernel/fs/hostfs.c` connects the client to the existing directory and file
@@ -252,7 +261,8 @@ Access selects the returned grant, never a global mode on the shared export;
 opening another root cannot widen existing handles. Read-write authorizes
 mutation attempts, not a promise of host writability. Host/backend errors still
 apply, with no write probe or silent read-only fallback. The current backend
-still rejects mutations with READ_ONLY even through read-write grants; missing
+still rejects nonempty writes and other mutations with READ_ONLY even through
+read-write grants; a validated zero-byte write is a backend-free no-op. Missing
 required rights fail with DENIED first. Both packaged inits explicitly request
 read-only until write support lands.
 The mount operation uses the existing object-call ABI and creates neither a
