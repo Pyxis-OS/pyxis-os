@@ -59,6 +59,31 @@ provider bindings would be a new facility, not a description of existing code.
 Keep ordinary directory traversal and the provider-open contract distinct; an
 HTTP URI need not be represented as a tree of remote directory objects.
 
+## Discoverable resource representations
+
+Higher-priority design work for the provider milestone: let consumers discover
+the representations a resource offers and explicitly select one. The exact
+metadata, negotiation and byte/structured-data contracts remain open; this does
+not add a new interface to the current streams milestone.
+
+For example, `json+sqlite://catalog/apps` explicitly requests serialized JSON.
+An explorer opening `sqlite://catalog/` could discover the `apps` view, then ask
+for rows with column names and types when the user opens it. Ordinary readers
+could use a text representation, while jq consumes JSON. Directory discovery and
+result representation are distinct: listing a view does not describe its columns.
+
+These are representations of the same authorized resource. Selecting a format
+must not broaden access, execute a mutation or require the consumer to guess from
+a filename. A prefix is a convenient explicit selection; discoverable metadata
+lets a consumer choose without knowing the prefix convention. Complete aliases
+remain scoped bindings, not a kernel parser for composable URI prefixes.
+
+This could allow a generic explorer/table viewer to display database results
+without SQLite-specific UI. Keep provider serialization and interpretation in
+userspace, and define unsupported-format errors when designing the contract.
+Record the consumer examples now; do not build a general negotiation framework
+or require an explorer before the first provider exists.
+
 ## Media-type scheme aliases
 
 Use `json+http://` and `json+https://` as explicit userspace provider conventions.
@@ -296,6 +321,20 @@ Subsequent database changes do not rewrite an existing result. Set query time,
 row/output-byte and storage budgets before implementation. Read-only queries
 still consume resources; do not publish a truncated result as complete. A first
 slice can use fixed published views before admitting caller-supplied SQL.
+
+## Git scheme: lowest-priority parked idea
+
+`git://pyxis` could name a repository registered in the caller's namespace,
+backed initially by a local repository grant rather than a remote URL. Future
+examples include `ls git://pyxis/branches`, `cat git://pyxis/HEAD`, reading
+`git://pyxis/commits/main/tree/src/main.c`, inspecting
+`json+git://pyxis/commits/main` with jq, and comparing two revision paths with diff.
+Resolve a branch to a commit when opening a resource and retain that revision
+for consistent reads. Names alone grant no repository authority; Git stays in
+the userspace provider. Prepared mutation capabilities could follow much later,
+with explicit execution and expected-revision checks. This has the lowest
+priority among these provider ideas and must not drive current interfaces;
+resource representation is the earlier design concern.
 
 ## Later database sessions
 
