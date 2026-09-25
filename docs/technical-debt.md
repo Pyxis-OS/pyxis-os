@@ -225,3 +225,18 @@ or directory snapshot. Revisit batching with a concrete consumer and explicit
 host-change semantics. Direct executable loading also remains limited to
 in-memory files; remote launch needs bounded staging and a lifetime contract
 before allowing the BSP loader to consume host bytes.
+
+
+## UDP ICMP errors and ephemeral selection
+
+The first [UDP implementation](networking.md#udp-datagrams-and-deadlines) silently
+drops traffic for unbound ports and does not deliver received ICMP errors to
+applications. A remote absent listener can therefore look like packet loss until
+a receive deadline expires. Add bounded, rate-limited ICMP error generation and
+safe matching of quoted packets before claiming full UDP host conformance;
+keep completed/retired calls immune to late errors.
+
+Ephemeral binding currently scans 49152–65535 from a rotating cursor. Revisit
+unpredictable port selection alongside DNS and an entropy source; this allocator
+is not a defense against off-path reply guessing. Network authority and resource
+bounds also remain system-wide rather than isolated by space.

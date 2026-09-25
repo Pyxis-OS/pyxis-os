@@ -108,6 +108,11 @@ static void wait_for_work(void)
   uint64_t flags = cpu_save_interrupts();
   uint64_t deadline;
   bool timed = net_echo_next_deadline(&deadline);
+  uint64_t udp_deadline;
+  if (net_udp_next_deadline(&udp_deadline) && (!timed || udp_deadline < deadline)) {
+    deadline = udp_deadline;
+    timed = true;
+  }
   uint64_t transport_deadline;
   if (virtio_net_next_deadline(&transport_deadline) && (!timed || transport_deadline < deadline)) {
     deadline = transport_deadline;
@@ -185,7 +190,7 @@ enum mm_result net_init(void)
   enum mm_result result = kernel_task_create(network_worker, NULL);
   if (result == MM_OK) {
     atomic_store_explicit(&worker_ready, true, memory_order_release);
-    klog("net: lo 127.0.0.1/8 MTU=%zu, IPv4/ICMP worker ready\n", net_loopback.mtu);
+    klog("net: lo 127.0.0.1/8 MTU=%zu, IPv4/ICMP/UDP worker ready\n", net_loopback.mtu);
   }
   return result;
 }

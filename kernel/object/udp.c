@@ -54,16 +54,86 @@ struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
-struct syscall_result udp_call(struct kernel_object *object, uint64_t rights,
-    uint64_t operation, size_t request_size,
+static struct syscall_result send_datagram(struct kernel_object *object,
+    uintptr_t request_address, size_t request_size)
+{
+  struct udp_send_request request = {0};
+  size_t payload_size = sizeof(request) - sizeof(request.header);
+  if (request_size != payload_size) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request.address, request_address, payload_size)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (request.reserved || !request.port) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (request.length > UDP_MAX_PAYLOAD) {
+    return (struct syscall_result){CALL_LIMIT, 0};
+  }
+  uint8_t data[UDP_MAX_PAYLOAD];
+  if (!copy_from_user(data, request.buffer, request.length)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  enum call_status status = net_udp_send(object, request.address, request.port,
+      data, request.length, request.deadline_ns);
+  return (struct syscall_result){status, 0};
+}
+
+static struct syscall_result receive_datagram(struct kernel_object *object,
+    uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation != UDP_INSPECT && operation != UDP_SHUTDOWN) {
-    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  struct udp_receive_request request = {0};
+  size_t payload_size = sizeof(request) - sizeof(request.header);
+  if (request_size != payload_size || reply_capacity < sizeof(struct udp_receive_reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  uint64_t required = operation == UDP_INSPECT ? UDP_RIGHT_INSPECT : UDP_RIGHT_SHUTDOWN;
+  if (!copy_from_user(&request.buffer, request_address, payload_size)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  size_t capacity = request.capacity < UDP_MAX_PAYLOAD ? request.capacity : UDP_MAX_PAYLOAD;
+  if (!user_buffer_check(request.buffer, capacity, USER_BUFFER_WRITE) ||
+      !user_buffer_check(reply_address, sizeof(struct udp_receive_reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  /* Checked ranges cannot overflow. Overlapping outputs could otherwise make
+   * successful metadata overwrite the payload just returned to the caller. */
+  if (capacity && request.buffer < reply_address + sizeof(struct udp_receive_reply) &&
+      reply_address < request.buffer + capacity) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  uint8_t data[UDP_MAX_PAYLOAD];
+  struct udp_receive_reply reply;
+  enum call_status status = net_udp_receive(object, capacity, request.deadline_ns, data, &reply);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  KASSERT(copy_to_user(request.buffer, data, reply.length));
+  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
+struct syscall_result udp_call(struct kernel_object *object, uint64_t rights,
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  uint64_t required;
+  switch (operation) {
+  case UDP_INSPECT: required = UDP_RIGHT_INSPECT; break;
+  case UDP_SHUTDOWN: required = UDP_RIGHT_SHUTDOWN; break;
+  case UDP_SEND: required = UDP_RIGHT_SEND; break;
+  case UDP_RECEIVE: required = UDP_RIGHT_RECEIVE; break;
+  default: return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (operation == UDP_SEND) {
+    return send_datagram(object, request_address, request_size);
+  }
+  if (operation == UDP_RECEIVE) {
+    return receive_datagram(object, request_address, request_size, reply_address, reply_capacity);
   }
   size_t reply_size = operation == UDP_INSPECT ? sizeof(struct udp_endpoint_info) : 0;
   if (request_size || reply_capacity < reply_size) {

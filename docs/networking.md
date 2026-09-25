@@ -1,14 +1,15 @@
-# Networking: IPv4, ICMP echo and UDP endpoints
+# Networking: IPv4, ICMP echo and UDP
 
 The kernel has one system-wide networking worker and a boot-lifetime interface
 named `lo`, plus `net0` when a supported VirtIO NIC is present. Interfaces,
 addresses and routes are shared across spaces;
 capability-mediated access will not by itself provide network isolation.
 The implementation is in `kernel/net`, with kernel interfaces in
-`include/kernel/net`. The native echo capability supports userspace ping without raw-packet authority.
+`include/kernel/net`. The native echo capability supports userspace ping without
+raw-packet authority; UDP endpoints exchange bounded datagrams through the same stack.
 
-The worker handles Ethernet, ARP and IPv4/ICMP, with deferred local delivery
-independent of the NIC. Init receives separate configuration authority and
+The worker handles Ethernet, ARP, IPv4, ICMP and UDP. Deferred local delivery
+remains independent of the NIC. Init receives separate configuration authority and
 passes it to the session launcher. The launcher reads the packaged Lua network
 settings before starting the shell. Default boot without a NIC remains usable;
 `make run VIRTIO_NET=1` enables QEMU user networking and the configured `net0`.
@@ -80,16 +81,16 @@ link down/up preserves the assigned address and gateway.
 ## IPv4 and echo
 
 `net_ipv4_transmit` takes an owned packet with 20 reserved header bytes followed
-by initialized payload, source/destination, protocol, deadline and echo token
-(zero for generated replies). It fills the header and selects local delivery or
+by initialized payload, source/destination, protocol, deadline and a completion
+tag/token (NONE for generated replies). It fills the header and selects local delivery or
 ARP/Ethernet. Success transfers ownership; failure may have filled the header
 but retains caller ownership. Replies use the request destination as their source.
 
 Receive checks version, header and total lengths, reserved flags and the header
 checksum before protocol dispatch. It ignores bytes beyond IPv4 total length,
 so trailing link padding cannot become echo payload. Options, fragments and
-protocols other than ICMP are counted and discarded. Only an ordinary 20-byte
-IPv4 header is supported; DF is allowed, MF and nonzero fragment offsets are not.
+protocols other than ICMP and UDP are counted and discarded. Only an ordinary
+20-byte IPv4 header is supported; DF is allowed, MF and nonzero fragment offsets are not.
 Local delivery does not decrement TTL or reject a packet solely for a low TTL.
 Outgoing packets use TTL 64 and DF, with identification zero for atomic datagrams.
 There is no fragmentation, reassembly, forwarding or general ICMP error generation.
@@ -130,10 +131,11 @@ network worker with interrupts enabled. They are not AP, user-pointer or
 interrupt-entry interfaces. Application calls use explicit cross-CPU ownership
 handoff without adding scheduler request queues.
 
-Each turn handles at most 16 RX/TX completions, eight configuration calls,
-eight UDP control slots, 16 echo slots, the bounded ARP cache/pending lists and
-eight local deliveries. The worker yields after starting or expiring echo calls,
-servicing configuration/UDP control work or exhausting a receive/completion budget.
+Each turn budgets 16 RX/TX completions, eight configuration calls, eight UDP
+control slots, 16 echo slots, the bounded ARP cache/pending lists and eight local
+deliveries. The UDP I/O pass examines eight send and sixteen receive slots; each
+datagram arrival also checks parked receivers. The worker yields after starting
+or completing protocol/control work or exhausting a receive/completion budget.
 It disables interrupts around allocation/release, capability installation and
 shared queue/wait operations.
 Local transmission never recursively enters receive and has no Ethernet, ARP,
@@ -145,7 +147,7 @@ Submission publishes a request before notifying, with the request lock released.
 The remembered notification bridges the gap between inspecting deadlines and
 publishing the wait. Wake detaches the pointer under the notification lock;
 timeout resumption detaches under that same lock before reusing its wait record.
-The worker sleeps until new work or the earliest echo, ARP or driver deadline,
+The worker sleeps until new work or the earliest echo, UDP, ARP or driver deadline,
 indefinitely when there is neither. No scheduler request queue or per-tick network polling
 is added.
 
@@ -503,9 +505,8 @@ The port namespace and resource bounds are system-wide, not isolated by space.
   acquire it while handles to the old object still exist.
 
 New endpoints carry INSPECT, SEND, RECEIVE and SHUTDOWN rights. Existing handle
-copying and launch grants can reduce those rights. SEND/RECEIVE rights are defined
-for delegation, but their operations and UDP packet processing are not implemented
-yet. This task does not add an echo server or any automatic network traffic.
+copying and launch grants can reduce those rights. No echo server or automatic
+network traffic runs at boot.
 
 Libpyxis provides `udp_open`, `udp_inspect` and `udp_shutdown`. OPEN and INSPECT
 require output pointers and clear their outputs on failure; OPEN uses
@@ -534,5 +535,83 @@ Removing or replacing the NIC's address marks its bound endpoints UNAVAILABLE
 and releases their bindings. Restoring the same address does not revive them.
 Changing only prefix/gateway preserves bindings, as does link down/up. Loopback
 bindings are independent of NIC configuration. Explicit shutdown also works on
-an unavailable endpoint. UDP datagram delivery and deadline behavior follow in
-[the remaining milestone tasks](wip/udp-datagrams.md).
+an unavailable endpoint.
+
+
+## UDP datagrams and deadlines
+
+Libpyxis `udp_send(endpoint, address, port, data, length, deadline_ns)` sends one
+complete datagram from the endpoint's bound address/port. Destination port zero
+is invalid. Payloads may contain zero through 1472 bytes; larger sends return
+`CALL_LIMIT`. SEND uses the endpoint's SEND right and returns no reply bytes.
+Success means deferred local-queue or NIC acceptance, including any preceding
+ARP wait. It does not promise remote delivery or wait for a reply.
+
+`udp_receive(endpoint, data, capacity, deadline_ns, &reply)` requires RECEIVE.
+Success copies one complete datagram and returns its sender IPv4 address, port
+and payload length. An empty datagram is success with length zero, never EOF.
+Source port zero may appear on received traffic, although SEND cannot reply to
+port zero. The kernel validates only `min(capacity, UDP_MAX_PAYLOAD)` bytes and
+requires data/reply ranges not to overlap. `CALL_BUFFER_TOO_SMALL` leaves the
+head datagram queued; retry with the maximum buffer. No truncation or size-only
+error reply is provided. Raw CALL failures leave both outputs untouched.
+Libpyxis clears reply metadata on failure except for invalid overlapping outputs,
+which it rejects before writing either range. It never clears the data buffer.
+
+Both requests take absolute deadlines in CLOCK_NOW's monotonic epoch, including
+time queued before the worker runs. SEND accepts up to five seconds ahead and
+RECEIVE up to thirty; a larger interval is `CALL_BAD_REQUEST`. Past deadlines
+return `CALL_TIMED_OUT`, even when a datagram is already queued. Empty receive
+queues sleep without polling. Receive timeout does not consume queued data.
+Applications may repeat bounded receives; no infinite-wait or poll sentinel is
+provided. Queue exhaustion can fail immediately rather than waiting for space.
+
+Each endpoint admits one outstanding call per direction, across all copied
+handles. Another call in the same direction is `CALL_BUSY`. Separate global
+limits of eight sends and sixteen receives leave the eight control slots
+available for shutdown/inspection. Slots include completed calls until their
+original callers resume and consume results. Their fixed payload staging uses
+35,328 bytes plus metadata, separate from the existing software packet budget.
+Caller input is captured before parking; only shared kernel copies and a live
+endpoint reference cross CPUs. The worker never borrows a user buffer or private
+syscall stack. Immediate transmit acceptance records completion before waking,
+so the submitting stack cannot still be reading a slot that its caller reuses.
+
+Receive queues hold four datagrams per endpoint and sixteen globally, counted
+within the existing 32-packet software budget. They own copies of UDP header and
+payload; DMA receive bytes are copied before reposting the descriptor. New
+arrivals are dropped when either receive bound or packet allocation is exhausted.
+Existing queued data is preserved. Diagnostic counters record delivery, unbound
+ports, queue pressure, allocation failure, malformed lengths and checksum failure.
+
+The wire path checks the eight-byte header and declared length against the IPv4
+payload, and never delivers bytes beyond that length. Every outgoing datagram
+has an IPv4 pseudo-header checksum; a computed zero is encoded as all ones.
+Incoming nonzero checksums are verified; an omitted IPv4 UDP checksum is accepted.
+Odd payload lengths use zero padding only for checksum calculation.
+See [RFC 768](https://www.rfc-editor.org/rfc/rfc768.html).
+
+Shutdown discards queued receive data, removes an ARP-waiting send and wakes
+pending I/O with `CALL_ENDPOINT_CLOSED`. Worker processing serializes delivery
+and shutdown; already completed calls keep their results even if their callers
+have not resumed. Address removal does the same with
+`CALL_UNAVAILABLE`. Final close discards remaining receive packets. Prefix/gateway
+replacement preserves the endpoint and its receive queue, but clearing the old
+ARP state fails sends awaiting transmission under that route as unavailable;
+new work routes against current configuration. Link loss fails external pending
+ARP sends while preserving bindings, received data and local delivery.
+
+ARP identifies waiting consumers with an explicit echo/UDP tag and a token that
+is never reused by that consumer. UDP cancellation removes its unsent ARP packet
+before completing the call. Late completion cannot target a reused call slot.
+Successful local submission has already transferred packet ownership, and
+submitted DMA keeps its driver lifetime: timeout/shutdown cannot recall either
+or revoke a completed send. Likewise, datagrams arriving after a port is rebound
+cannot be distinguished from traffic intended for its new owner.
+
+Unbound destination ports are silently dropped. ICMP error generation and
+application delivery are deferred, so an absent listener usually appears as a
+receive timeout. There is no fragmentation, reassembly, broadcast, multicast,
+retransmission, delivery/order guarantee or duplicate suppression. The
+[remaining milestone task](wip/udp-datagrams.md) adds ordinary client/server tools;
+DHCP, DNS and TCP remain separate work.

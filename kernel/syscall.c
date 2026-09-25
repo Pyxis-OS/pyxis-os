@@ -155,7 +155,7 @@ static struct syscall_result call_object(handle_t handle,
     if (header.protocol != PROTOCOL_UDP) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    return udp_call(object, rights, header.operation, request_size,
+    return udp_call(object, rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
   case OBJECT_NET_CONFIG:
     if (header.protocol != PROTOCOL_NET_CONFIG) {

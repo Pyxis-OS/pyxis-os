@@ -52,7 +52,8 @@ static enum net_result send_echo(uint32_t source, uint32_t destination,
       ICMP_ECHO_HEADER_SIZE + length));
 
   enum net_result result = net_ipv4_transmit(packet, source, destination,
-      IPV4_PROTOCOL_ICMP, deadline, token);
+      IPV4_PROTOCOL_ICMP, deadline,
+      (struct ipv4_completion){token ? IPV4_NOTIFY_ECHO : IPV4_NOTIFY_NONE, token});
   if (result != NET_OK) {
     flags = cpu_save_interrupts();
     net_packet_release(packet);
