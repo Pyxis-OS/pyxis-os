@@ -31,9 +31,9 @@ a handle shares the same endpoint and queues; it does not create another binding
 
 Creation authority, endpoint authority and network-configuration authority are
 distinct. An address or port number identifies a binding, never permission.
-Choose startup delegation of creation authority in task 1; do not implicitly
-reuse the echo or configuration grants. The stack and port namespace remain
-system-wide, with no new per-space isolation model.
+Init delegates the separate `udp` OPEN grant through session and shell launches;
+it is independent of echo and configuration grants. The stack and port namespace
+remain system-wide, with no new per-space isolation model.
 
 ## Binding and routing
 
@@ -90,7 +90,8 @@ counted within the existing software packet budget. Drop new arrivals when a
 receive bound is reached, preserving queued datagrams. Keep diagnostic drop
 counts without introducing a statistics framework. UDP receive queues must not
 consume the entire packet budget and permanently exclude other protocols.
-Endpoint count and pending-call limits still need concrete bounds in task 1/2.
+Task 1 bounds live endpoint objects at sixteen and control calls at eight;
+pending send/receive bounds remain for task 2.
 
 Keep protocol state, allocation policy and binding changes with the existing
 BSP network worker. AP callers hand over captured data in stable shared storage;
@@ -103,9 +104,9 @@ and retirement machinery where applicable.
 Closing one handle releases that reference without revoking other copies.
 Explicit SHUTDOWN, requiring its own right, stops the shared endpoint and wakes
 pending operations with a closed result. Final release cleans up the binding and
-queued storage. Define exactly when shutdown releases the port and how it orders
-against worker delivery before implementing it. Outstanding DMA retains its
-existing driver-owned lifetime; neither shutdown nor final close can free it early.
+queued storage. Shutdown releases the binding before successful completion;
+final close uses deferred worker cleanup. Order this against packet delivery in
+task 2. Outstanding DMA retains its existing driver-owned lifetime; neither shutdown nor final close can free it early.
 
 A blocked call keeps its live grant and mappings, as in the current single-task
 process model. Other copies can request shutdown, but closing a copied grant
@@ -115,16 +116,16 @@ UDP can distinguish an old remote datagram from a new use of the same tuple.
 
 ## Focused tasks
 
-1. [ ] **Endpoint creation, binding, rights and lifetime.** Define the tagged
+1. [x] **Endpoint creation, binding, rights and lifetime.** Define the tagged
    service/endpoint ABI and libpyxis helpers for opening, inspecting and shutting
    down endpoints. Add explicit startup delegation, worker-owned binding changes,
    ephemeral allocation, capability installation/unwind and final cleanup.
-   Before implementation, settle the endpoint limit, creation-authority policy,
-   inspection rights, ephemeral selection and shutdown/port-release ordering.
-   The dynamic range in [RFC 6335](https://www.rfc-editor.org/rfc/rfc6335.html#section-6)
-   is a starting point for ephemeral selection, not an allocation algorithm.
-   Validate ordinary creation/lifetime paths with builds, boots and debugger
-   inspection. Do not add successful placeholder send/receive operations.
+   Implemented with sixteen live objects, eight control slots, separate INSPECT
+   rights, rotating ephemeral selection in 49152–65535 and idempotent shutdown
+   that releases the binding before returning. Stopped objects remain inspectable
+   and count toward the object limit until final cleanup. See
+   [the implemented contract](../networking.md#native-udp-endpoint-lifetime).
+   SEND/RECEIVE operations remain unimplemented until task 2.
 
 2. [ ] **Wire processing, bounded delivery and deadlines.** Add UDP parsing and
    checksums, binding lookup, bounded receive queues, tagged send/receive calls,
