@@ -25,7 +25,9 @@ _Static_assert(sizeof(request) <= VIRTQUEUE_REQUEST_BYTES, "FUSE request DMA cap
 
 static bool mutation_request(uint32_t opcode)
 {
-  return opcode == FUSE_WRITE || opcode == FUSE_SETATTR || opcode == FUSE_CREATE;
+  return opcode == FUSE_WRITE || opcode == FUSE_SETATTR || opcode == FUSE_CREATE ||
+    opcode == FUSE_MKDIR || opcode == FUSE_UNLINK || opcode == FUSE_RMDIR ||
+    opcode == FUSE_RENAME2;
 }
 
 static enum virtio_fs_result fail_session(struct virtio_fs_session *session,
@@ -46,6 +48,7 @@ static enum virtio_fs_result host_error(int32_t error)
   case FUSE_EISDIR: return VIRTIO_FS_WRONG_TYPE;
   case FUSE_ENOSYS:
   case FUSE_EOPNOTSUPP:
+  case FUSE_EXDEV:
   case FUSE_ELOOP: return VIRTIO_FS_UNSUPPORTED;
   case FUSE_EINVAL: return VIRTIO_FS_INVALID;
   case FUSE_ENAMETOOLONG:
@@ -396,6 +399,106 @@ enum virtio_fs_result virtio_fs_create(struct virtio_fs_node *parent,
   /* The two references belong to the native wrapper and the returned open.
    * A rejected open is released; the caller still retires the lookup. */
   return check_open_flags(opened, reply.opened.flags);
+}
+
+enum virtio_fs_result virtio_fs_mkdir(struct virtio_fs_node *parent,
+    const char *name, size_t length, struct virtio_fs_node *node)
+{
+  KASSERT(parent->references && !node->references);
+  if (length > VIRTIO_FS_NAME_MAX) {
+    return VIRTIO_FS_LIMIT;
+  }
+  if (!ordinary_name(name, length) || dot_name(name, length)) {
+    return VIRTIO_FS_INVALID;
+  }
+  if (parent->kind != VIRTIO_FS_DIRECTORY) {
+    return VIRTIO_FS_WRONG_TYPE;
+  }
+  struct virtio_fs_session *session = parent->session;
+  if (session->lookup_refs == UINT64_MAX) {
+    return VIRTIO_FS_LIMIT;
+  }
+  /* The service identity creates a fixed 0755 directory with no guest umask. */
+  struct {
+    struct fuse_mkdir_in header;
+    char name[VIRTIO_FS_NAME_MAX + 1];
+  } query = {.header = {.mode = FUSE_MODE_DIRECTORY | 0755u}};
+  memcpy(query.name, name, length);
+  query.name[length] = 0;
+  struct fuse_entry_out entry;
+  enum virtio_fs_result result = fixed_reply(session, FUSE_MKDIR, parent->id,
+      &query, sizeof(query.header) + length + 1, &entry, sizeof(entry));
+  if (result != VIRTIO_FS_OK) {
+    return result;
+  }
+  if (!entry.node_id || entry.node_id == FUSE_ROOT_ID) {
+    return fail_session(session, VIRTIO_FS_OUTCOME_UNKNOWN, "invalid FUSE created directory");
+  }
+  ++session->lookup_refs;
+  *node = (struct virtio_fs_node){
+    .session = session, .id = entry.node_id, .generation = entry.generation,
+    .kind = mode_kind(entry.attr.mode), .references = 1, .lookup_owned = true,
+  };
+  if (node->kind != VIRTIO_FS_DIRECTORY) {
+    /* The host can replace the new name between mkdir and its lookup. This
+     * is an ordinary type mismatch, not evidence of a broken session. */
+    result = virtio_fs_node_put(node);
+    return result == VIRTIO_FS_OK ? VIRTIO_FS_WRONG_TYPE : result;
+  }
+  return VIRTIO_FS_OK;
+}
+
+enum virtio_fs_result virtio_fs_remove(struct virtio_fs_node *parent,
+    const char *name, size_t length, bool directory)
+{
+  KASSERT(parent->references);
+  if (length > VIRTIO_FS_NAME_MAX) {
+    return VIRTIO_FS_LIMIT;
+  }
+  if (!ordinary_name(name, length) || dot_name(name, length)) {
+    return VIRTIO_FS_INVALID;
+  }
+  if (parent->kind != VIRTIO_FS_DIRECTORY) {
+    return VIRTIO_FS_WRONG_TYPE;
+  }
+  char component[VIRTIO_FS_NAME_MAX + 1];
+  memcpy(component, name, length);
+  component[length] = 0;
+  return fixed_reply(parent->session, directory ? FUSE_RMDIR : FUSE_UNLINK,
+      parent->id, component, length + 1, NULL, 0);
+}
+
+enum virtio_fs_result virtio_fs_rename(struct virtio_fs_node *source,
+    const char *source_name, size_t source_length, struct virtio_fs_node *destination,
+    const char *destination_name, size_t destination_length, bool replace)
+{
+  KASSERT(source->references && destination->references);
+  if (source_length > VIRTIO_FS_NAME_MAX || destination_length > VIRTIO_FS_NAME_MAX) {
+    return VIRTIO_FS_LIMIT;
+  }
+  if (!ordinary_name(source_name, source_length) || dot_name(source_name, source_length) ||
+      !ordinary_name(destination_name, destination_length) ||
+      dot_name(destination_name, destination_length)) {
+    return VIRTIO_FS_INVALID;
+  }
+  if (source->kind != VIRTIO_FS_DIRECTORY || destination->kind != VIRTIO_FS_DIRECTORY) {
+    return VIRTIO_FS_WRONG_TYPE;
+  }
+  if (source->session != destination->session) {
+    return VIRTIO_FS_UNSUPPORTED;
+  }
+  struct {
+    struct fuse_rename2_in header;
+    char names[2 * (VIRTIO_FS_NAME_MAX + 1)];
+  } query = {.header = {
+    .newdir = destination->id, .flags = replace ? 0 : FUSE_RENAME_NOREPLACE,
+  }};
+  memcpy(query.names, source_name, source_length);
+  query.names[source_length] = 0;
+  memcpy(query.names + source_length + 1, destination_name, destination_length);
+  query.names[source_length + destination_length + 1] = 0;
+  return fixed_reply(source->session, FUSE_RENAME2, source->id,
+      &query, sizeof(query.header) + source_length + destination_length + 2, NULL, 0);
 }
 
 enum virtio_fs_result virtio_fs_close(struct virtio_fs_open *opened)

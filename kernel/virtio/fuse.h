@@ -11,6 +11,9 @@
 #define FUSE_FORGET 2
 #define FUSE_GETATTR 3
 #define FUSE_SETATTR 4
+#define FUSE_MKDIR 9
+#define FUSE_UNLINK 10
+#define FUSE_RMDIR 11
 #define FUSE_OPEN 14
 #define FUSE_READ 15
 #define FUSE_WRITE 16
@@ -20,6 +23,9 @@
 #define FUSE_READDIR 28
 #define FUSE_RELEASEDIR 29
 #define FUSE_CREATE 35
+#define FUSE_RENAME2 45
+
+#define FUSE_RENAME_NOREPLACE 1u
 
 #define FUSE_OPEN_READ_ONLY 0
 #define FUSE_OPEN_WRITE_ONLY 1
@@ -52,6 +58,7 @@
 #define FUSE_EACCES 13
 #define FUSE_EBUSY 16
 #define FUSE_EEXIST 17
+#define FUSE_EXDEV 18
 #define FUSE_ENOTDIR 20
 #define FUSE_EISDIR 21
 #define FUSE_EINVAL 22
@@ -150,6 +157,15 @@ struct fuse_create_in {
   uint32_t flags, mode, umask, open_flags;
 };
 
+struct fuse_mkdir_in {
+  uint32_t mode, umask;
+};
+
+struct fuse_rename2_in {
+  uint64_t newdir;
+  uint32_t flags, padding;
+};
+
 struct fuse_create_out {
   struct fuse_entry_out entry;
   struct fuse_open_out opened;
@@ -157,6 +173,8 @@ struct fuse_create_out {
 
 _Static_assert(sizeof(struct fuse_create_in) == 16, "FUSE create request prefix");
 _Static_assert(sizeof(struct fuse_create_out) == 144, "FUSE create reply");
+_Static_assert(sizeof(struct fuse_mkdir_in) == 8, "FUSE mkdir request prefix");
+_Static_assert(sizeof(struct fuse_rename2_in) == 16, "FUSE rename2 request prefix");
 
 struct fuse_write_in {
   uint64_t handle, offset;
