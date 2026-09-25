@@ -1,9 +1,9 @@
 # TCP implementation comparison
 
-Status: source review for the [outbound TCP milestone](tcp.md), not a selected
-backend or completed port. No stack was added to Pyxis or compiled for it.
-The next decision is whether to attempt the bounded lwIP integration described
-below before committing to native TCP implementation.
+Status: source review for the [outbound TCP milestone](tcp.md). The selected
+follow-up was to investigate lwIP; Rust integration and picoTCP's licensing choice
+are deferred. The [build/link findings](lwip-port.md) now establish freestanding
+compatibility and identify the decisions still required for runtime adoption.
 
 ## Candidates
 
@@ -23,8 +23,8 @@ security or maintenance audit of those projects.
 ## lwIP source reviewed
 
 Review point: `STABLE-2_2_1_RELEASE`, commit
-`77dcd25a72509eb83f72b033d219b1d40cd8eb95`. A selected dependency would be pinned
-and carry its license and local adaptation record; this review does not vendor it.
+`77dcd25a72509eb83f72b033d219b1d40cd8eb95`. The investigation now pins this subset with its license and dependency record;
+no runtime adoption or upstream patches follow from the build alone.
 
 `NO_SYS=1` permits a single-context callback integration without sockets, netconn,
 a tcpip thread or OS mailbox emulation. That maps naturally to Caelum's existing
@@ -96,14 +96,15 @@ setting only a send-buffer size is insufficient. See [configuration options](htt
 
 ## Recommendation and decision gate
 
-Try a focused lwIP port-boundary investigation before choosing native TCP. Reuse
-could save the largest body of protocol work, and its callback model fits the
-worker. The remaining cost is real integration and policy work, not a POSIX ABI
-requirement or a need to change the process/capability model.
+The focused lwIP build/link investigation is complete. Reuse could save the
+largest body of protocol work, and its callback model fits the worker. Runtime
+adoption remains conditional on the documented packet and policy boundary. The
+remaining cost is integration and policy work, not a POSIX ABI requirement or a
+need to change the process/capability model.
 
-If approved, the first implementation PR should pin/build the minimal subset,
-make the packet/timer/allocator ownership concrete, enumerate every required
-patch, and demonstrate that the existing network paths retain their behavior.
+The first investigation pins/builds the minimal subset and documents the
+packet/timer/allocator boundary and required runtime adaptations. See its
+[findings and decision gate](lwip-port.md).
 No new public stream API is needed for that decision. Use ordinary builds,
 boots and debugger inspection, not a new probe application or test framework.
 
