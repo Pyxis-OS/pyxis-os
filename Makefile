@@ -14,6 +14,10 @@ VIRTIO_RNG ?= 1
 UDP_FORWARD ?=
 export VIRTIO_FS_SOCKET VIRTIO_NET UDP_FORWARD VIRTIO_RNG
 INIT ?=
+INIT_DEFAULT ?= app://init-idle
+INIT_PRIMARY ?= app://init
+INIT_CPUS ?= 2=app://init-readonly
+export INIT_DEFAULT INIT_PRIMARY INIT_CPUS
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
@@ -150,10 +154,13 @@ build/%.o: %.S | check-toolchain
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
+build/limine.conf: boot/limine/limine.conf scripts/configure-boot.sh FORCE
+	./scripts/configure-boot.sh
+
 image: build/pyxis.iso
 
 build/pyxis.iso: build/caelum.elf build/initrd.cpio \
-                 boot/limine/limine.conf scripts/make-image.sh \
+                 build/limine.conf scripts/make-image.sh \
                  third_party/limine/BOOTX64.EFI third_party/limine/limine-uefi-cd.bin | image-inputs
 	./scripts/make-image.sh
 

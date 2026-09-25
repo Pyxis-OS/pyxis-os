@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #define BOOT_MAX_REGIONS 256
+#define BOOT_COMMAND_LINE_SIZE 4096
 
 enum boot_region_type {
   BOOT_USABLE,
@@ -54,6 +55,7 @@ struct boot_info {
   uint64_t acpi_rsdp; /* Physical; zero when the bootloader found no ACPI. */
   int64_t utc_seconds; /* Unix seconds from Limine; not an exact handoff sample. */
   bool utc_available;
+  char command_line[BOOT_COMMAND_LINE_SIZE];
   struct boot_module initrd;
   struct boot_framebuffer framebuffer;
   size_t region_count;

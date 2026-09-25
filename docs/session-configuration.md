@@ -2,13 +2,14 @@
 
 `app://session.pxe` is a native userspace launcher that evaluates
 `app://config/session.lua` and optional `app://config/network.lua`, applies
-network settings and terminal tab spacing, and hands off to
-`app://shell.pxe`. It accepts no arguments. The default init script selects it:
+terminal tab spacing, and hands off to `app://shell.pxe`. The optional
+`--configure-network` argument also applies shared NIC settings. The development
+init script selects it:
 
 ```text
 #!app://shell.pxe
 mount --optional host
-session app://session.pxe
+session app://session.pxe --configure-network
 ```
 
 `make run` uses this path without overrides. `INIT=/path/to/init.sh` can still
@@ -51,8 +52,8 @@ the state and configuration stream are closed before launch.
 
 Both files are decoded before applying settings. The network consumer owns its
 [configuration policy and authority](networking.md#boot-configuration-and-use).
-Network application precedes the first terminal change. The launcher preserves
-the startup environment except that it replaces `TZ` with the selected timezone
+When requested, network application precedes the first terminal change. The
+launcher preserves the startup environment except that it replaces `TZ` with the selected timezone
 and `DNS_SERVER` with the selected resolver's numeric IPv4 address (default
 `1.1.1.1`). DNS selection applies even without a NIC or configuration authority;
 it does not perform a lookup or change kernel settings. It forwards the
@@ -61,9 +62,12 @@ read-only host roots;
 the working-directory chain and display path; and optional display, clock,
 [random](randomness.md) and keyboard resources, using the same rights as the shell's session handoff.
 The init shell explicitly delegates `net_config` through session handoff only.
-The launcher applies network settings, then leaves that authority out of the
-interactive shell. It also does not forward mount authority, arbitrary named
-resources or the interpreter's script handle.
+The launcher applies network settings only with `--configure-network`, then
+leaves that authority out of the interactive shell. The read-only init omits
+the option, so starting its session does not reconfigure the shared NIC. DNS
+and terminal/environment configuration are still read and applied per session.
+It also does not forward mount authority, arbitrary named resources or the
+interpreter's script handle.
 
 The kernel copies launch metadata before returning. The launcher closes its
 child observer and exits without waiting or reading input; the shell owns its

@@ -18,8 +18,12 @@ struct space;
 enum mm_result user_process_load(struct space *space, const void *bytes, size_t size,
                                   struct process **process, uintptr_t *entry);
 
-/* BSP, IF=0, before scheduler startup. Loads the shell, grants resources
- * and submits it on CPU 1 (or the BSP alone). Failure unwinds the process. */
-void user_launch_initial(void);
+/* BSP, IF=0, before scheduler startup. Select one trusted init per workload
+ * CPU from the copied boot command line. CPU 0 is used only on a single CPU. */
+void user_launch_initial(const char *command_line);
+
+/* Boot startup only: load one archive image/script with full bootstrap grants.
+ * App and RAM home roots are shared between initial processes. Fatal on failure. */
+void user_launch_init(size_t cpu_index, const char *image_uri);
 
 #endif

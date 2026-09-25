@@ -33,9 +33,9 @@ Boot installs serial and a kernel stack, copies boot information, installs
 GDT/IDT/TSS, initializes the bitmap PMM, and switches to kernel-owned paging.
 Generic initialization creates the VM allocator and TLSF heap, brings APs onto
 owned stacks and paging, initializes framebuffer text output, and schedules
-[init](docs/init.md) on CPU 1 when available, or the BSP on a single-CPU boot.
-The default init applies [session configuration](docs/session-configuration.md)
-before handing off to the interactive shell.
+[per-CPU init](docs/init.md): shells on CPUs 1 and 2 when present, idle scripts
+on further CPUs, or one shell on the BSP for a single-CPU boot. Init selects
+[session configuration](docs/session-configuration.md) before shell handoff.
 Use Super+Right to select CPU 1; the shell starts at `home://`. See
 [the shell walkthrough](docs/shell.md).
 Local APIC timers preempt each CPU's pinned tasks and wake idle CPUs. The BSP

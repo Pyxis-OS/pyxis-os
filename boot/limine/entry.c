@@ -44,6 +44,11 @@ static volatile struct limine_executable_address_request address_request = {
 };
 
 __attribute__((used, section(".limine_requests")))
+static volatile struct limine_executable_cmdline_request command_line_request = {
+  .id = LIMINE_EXECUTABLE_CMDLINE_REQUEST_ID,
+};
+
+__attribute__((used, section(".limine_requests")))
 static volatile struct limine_module_request module_request = {
   .id = LIMINE_MODULE_REQUEST_ID,
 };
@@ -289,6 +294,21 @@ static void copy_framebuffer(void)
   };
 }
 
+static void copy_command_line(void)
+{
+  if (!command_line_request.response || !command_line_request.response->cmdline) {
+    panic("Limine did not supply a kernel command line");
+  }
+  const char *source = command_line_request.response->cmdline;
+  for (size_t i = 0; i < sizeof(boot.command_line); ++i) {
+    boot.command_line[i] = source[i];
+    if (!source[i]) {
+      return;
+    }
+  }
+  panic("kernel command line exceeds %zu bytes", sizeof(boot.command_line) - 1);
+}
+
 [[noreturn]] void limine_entry(void);
 
 [[noreturn]] void limine_entry(void)
@@ -296,6 +316,7 @@ static void copy_framebuffer(void)
   early_init();
 
   validate_responses();
+  copy_command_line();
   copy_executable_placement();
   copy_memory_map();
   copy_acpi_address();

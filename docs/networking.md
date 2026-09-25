@@ -420,8 +420,10 @@ its caller resumes. Settings survive closing authority; closing another copied
 grant does not cancel a blocked call. No new syscall or scheduler queue is added.
 
 The init shell passes this grant only through its explicit `session` handoff.
-The session launcher consumes it for setup and does not pass it to the interactive
-shell. Ordinary commands inherit echo authority, never configuration authority.
+The session launcher consumes it for setup only with `--configure-network`
+and does not pass it to the interactive shell. The development init requests
+setup; other packaged init scripts leave shared network settings alone. Ordinary
+commands inherit echo authority, never configuration authority.
 This is delegation policy in those programs, not a restriction on a trusted holder
 intentionally granting its capability elsewhere. Interfaces remain system-wide;
 there is no per-space network isolation.
@@ -477,9 +479,9 @@ Direct-init applications that bypass session do not receive a synthesized
 when that variable is absent and accepts an explicit numeric server override.
 
 Session and network configuration use the same restricted [Lua evaluator](lua.md#embedding-and-session-configuration).
-Both files are read before applying settings. Network setup precedes terminal
-changes and shell launch; later failure does not roll back an applied address or
-route. There is no live reload, supervision or automatic retry. The default init
+Both files are read before applying settings. When requested, network setup
+precedes terminal changes and shell launch; later failure does not roll back
+an applied address or route. There is no live reload, supervision or automatic retry. The default init
 still mounts optional `host://` before the session handoff.
 
 ```sh
