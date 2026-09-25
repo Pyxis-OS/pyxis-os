@@ -68,8 +68,9 @@ device tagged `pyxis-host`. The memfd size follows `MEMORY`. Socket paths must
 not contain commas, which delimit QEMU options.
 
 Successful initialization logs the prepared queue addresses followed by a FUSE
-session-ready message. The shell remains on CPU 1 when available; Super+Right
-selects that tab. The default init mounts the export before session handoff.
+session-ready message. Default init selections start shells on CPUs 1 and 2
+when present; Super+Right selects their tabs. Each interactive init mounts the
+same export before session handoff. Both grants remain read-only.
 From the shell, try:
 
 ```text
@@ -234,7 +235,7 @@ The default init script is:
 ```text
 #!app://shell.pxe
 mount --optional host
-session app://session.pxe
+session app://session.pxe --configure-network
 ```
 
 When the selected modern virtio-fs device is present, native init or its script

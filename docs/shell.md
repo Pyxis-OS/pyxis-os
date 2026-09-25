@@ -2,8 +2,8 @@
 
 `make userspace` builds the SDK, shell and core utilities. Normal boot runs the
 default [init script](init.md) and [session launcher](session-configuration.md),
-which hand off to one shell on CPU 1 when available,
-otherwise on the BSP, with `home://` as its working directory. On multicore boots
+which by default start separate shells on CPUs 1 and 2 when present,
+or one on the BSP for a single-CPU boot, with shared `home://` as their working directory. On multicore boots
 use Super+Right to select CPU 1 before typing. The normal initrd contains init,
 shell, ls, cat, mkdir, rm, rmdir, mv, [Kilo and its license](ports.md), and `share/hello.txt`;
 home is initially empty and its RAM

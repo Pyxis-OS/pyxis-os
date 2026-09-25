@@ -69,7 +69,7 @@
   klog("heap: TLSF pools=%zu bytes=%zu, alignment=16, live allocations=%zu\n",
        heap.pools, heap.pool_bytes, heap.live_allocations);
 
-  user_launch_initial();
+  user_launch_initial(boot->command_line);
   klog("Caelum ready: starting preemptive userspace\n");
   task_schedule();
 }
