@@ -6,6 +6,7 @@
 #include <kernel/net/config.h>
 #include <kernel/net/udp.h>
 #include <kernel/net/ipv4.h>
+#include <kernel/net/lwip.h>
 #include <kernel/net/echo.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
@@ -32,6 +33,16 @@ static struct {
 static atomic_bool worker_ready, worker_locked;
 static struct task_wait *worker_wait;
 static bool worker_notified;
+
+static void network_worker(void *argument);
+
+void net_worker_assert_context(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT((flags & RFLAGS_INTERRUPT_ENABLE) && kernel_task_is_current(network_worker));
+  cpu_restore_interrupts(flags);
+}
 
 static void lock_worker(void)
 {
@@ -88,6 +99,27 @@ enum net_result net_transmit(const struct net_interface *interface,
   return NET_OK;
 }
 
+void net_loopback_cancel_tcp(uint64_t generation)
+{
+  net_worker_assert_context();
+  KASSERT(generation);
+  uint64_t flags = cpu_save_interrupts();
+  size_t kept = 0;
+  for (size_t i = 0; i < loopback.count; ++i) {
+    size_t index = (loopback.head + i) % NET_RECEIVE_QUEUE_LIMIT;
+    struct net_packet *packet = loopback.packets[index];
+    loopback.packets[index] = NULL;
+    if (packet->tcp_generation == generation) {
+      net_packet_release(packet);
+    } else {
+      loopback.packets[(loopback.head + kept) % NET_RECEIVE_QUEUE_LIMIT] = packet;
+      ++kept;
+    }
+  }
+  loopback.count = kept;
+  cpu_restore_interrupts(flags);
+}
+
 /* Sole BSP worker, IF=1. Packet ownership remains serialized by BSP/IF=0. */
 static struct net_packet *next_packet(void)
 {
@@ -105,9 +137,14 @@ static struct net_packet *next_packet(void)
 
 static void wait_for_work(void)
 {
-  uint64_t flags = cpu_save_interrupts();
   uint64_t deadline;
-  bool timed = net_echo_next_deadline(&deadline);
+  bool timed = net_lwip_next_deadline(&deadline);
+  uint64_t flags = cpu_save_interrupts();
+  uint64_t echo_deadline;
+  if (net_echo_next_deadline(&echo_deadline) && (!timed || echo_deadline < deadline)) {
+    deadline = echo_deadline;
+    timed = true;
+  }
   uint64_t udp_deadline;
   if (net_udp_next_deadline(&udp_deadline) && (!timed || udp_deadline < deadline)) {
     deadline = udp_deadline;
@@ -158,12 +195,14 @@ static void receive_packet(struct net_packet *packet)
 static void network_worker(void *argument)
 {
   (void)argument;
+  net_lwip_init();
   virtio_net_start();
   for (;;) {
     bool transport_busy = virtio_net_service();
     bool serviced = net_config_service();
     serviced |= net_udp_service();
     serviced |= net_echo_service();
+    net_lwip_service();
     net_arp_service();
     unsigned handled = 0;
     while (handled < NET_WORK_BUDGET) {

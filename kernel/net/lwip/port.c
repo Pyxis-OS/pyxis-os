@@ -2,16 +2,13 @@
 #include <lwip/sys.h>
 #include <arch/clock.h>
 #include <arch/cpu.h>
-#include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/net/interface.h>
 
 void caelum_lwip_assert_context(void)
 {
-  KASSERT(arch_cpu_index() == 0);
-  uint64_t flags = cpu_save_interrupts();
-  cpu_restore_interrupts(flags);
-  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
+  net_worker_assert_context();
 }
 
 void *caelum_lwip_malloc(size_t bytes)

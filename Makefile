@@ -47,6 +47,9 @@ C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/user/*
 ASM_SOURCES := $(wildcard boot/limine/*.S arch/x86_64/*.S)
 OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM_SOURCES))
 
+.DEFAULT_GOAL := all
+include kernel/net/lwip/build.mk
+
 .PHONY: all kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools sdk sdk-headers userspace ports initrd image run debug clean check-toolchain FORCE
 all: kernel
 
@@ -167,5 +170,3 @@ clean:
 	rm -rf build
 
 -include $(OBJECTS:.o=.d)
-
-include kernel/net/lwip/build.mk

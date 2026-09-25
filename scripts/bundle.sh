@@ -62,6 +62,7 @@ case "$action" in
       printf 'builder_image=%s\n' "${BUILDER_IMAGE:-local}"
       case "$component" in
         kernel)
+          source_info lwip third_party/lwip
           printf 'abi_sha256=%s\n' "$(interface_id include)"
           printf 'log_level=%s\n' "${LOG_LEVEL:-info}"
           printf 'cppflags=%s\ncflags=%s\nldflags=%s\n' "${CPPFLAGS:-}" "${CFLAGS:-}" "${LDFLAGS:-}"

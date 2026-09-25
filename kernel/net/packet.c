@@ -20,6 +20,7 @@ struct net_packet *net_packet_allocate(size_t length)
     return NULL;
   }
   packet->length = length;
+  packet->tcp_generation = 0;
   ++live_packets;
   return packet;
 }

@@ -10,6 +10,8 @@
 
 struct net_packet {
   size_t length;
+  /* Zero for stateless/non-TCP output; never contains a connection pointer. */
+  uint64_t tcp_generation;
   uint8_t data[];
 };
 

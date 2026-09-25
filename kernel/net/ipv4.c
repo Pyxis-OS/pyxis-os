@@ -6,6 +6,7 @@
 #include <kernel/net/icmp.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/net/udp.h>
+#include <kernel/net/lwip.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/virtio/net.h>
@@ -110,6 +111,7 @@ enum net_result net_ipv4_configure(uint32_t address, unsigned prefix, uint32_t g
   configuration = (typeof(configuration)){
     .address = address, .mask = mask, .prefix = prefix, .gateway = gateway,
   };
+  net_lwip_refresh_address();
   return NET_OK;
 }
 
@@ -120,6 +122,7 @@ void net_ipv4_clear(void)
   net_echo_invalidate(true);
   net_udp_invalidate_address(configuration.address);
   configuration = (typeof(configuration)){0};
+  net_lwip_refresh_address();
 }
 
 enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
@@ -192,6 +195,36 @@ enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
   net_write_u32(header->source, route.source);
   net_write_u32(header->destination, destination);
   net_write_u16(header->checksum, net_checksum(packet->data, IPV4_HEADER_SIZE));
+  return net_ipv4_submit(packet, deadline, completion);
+}
+
+enum net_result net_ipv4_submit(struct net_packet *packet, uint64_t deadline,
+    struct ipv4_completion completion)
+{
+  assert_worker_context();
+  if (!packet || packet->length < IPV4_HEADER_SIZE || packet->length > NET_PACKET_MAX_BYTES) {
+    return NET_INVALID;
+  }
+  const struct ipv4_header *header = (const void *)packet->data;
+  if (header->version_length != ((IPV4_VERSION << IPV4_VERSION_SHIFT) |
+      (IPV4_HEADER_SIZE / IPV4_HEADER_WORD_BYTES)) ||
+      net_read_u16(header->total_length) != packet->length ||
+      (net_read_u16(header->fragment) & ~IPV4_FLAG_DONT_FRAGMENT) ||
+      net_checksum(packet->data, IPV4_HEADER_SIZE)) {
+    return NET_INVALID;
+  }
+  if (task_deadline_expired(deadline)) {
+    return NET_TIMED_OUT;
+  }
+  uint32_t source = net_read_u32(header->source);
+  struct ipv4_route route;
+  enum net_result result = net_ipv4_route(source, net_read_u32(header->destination), &route);
+  if (result != NET_OK) {
+    return result;
+  }
+  if (source != route.source) {
+    return NET_INVALID;
+  }
   if (route.next_hop) {
     return net_arp_transmit(packet, route.next_hop, deadline, completion);
   }
@@ -202,6 +235,14 @@ enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
     net_ipv4_transmitted(completion);
   }
   return result;
+}
+
+void net_ipv4_cancel_tcp(uint64_t generation)
+{
+  net_worker_assert_context();
+  KASSERT(generation);
+  net_arp_cancel((struct ipv4_completion){ IPV4_NOTIFY_TCP, generation });
+  net_loopback_cancel_tcp(generation);
 }
 
 void net_ipv4_receive(const struct net_interface *interface,
@@ -260,6 +301,9 @@ void net_ipv4_receive(const struct net_interface *interface,
   case IPV4_PROTOCOL_ICMP:
     net_icmp_receive(source, destination, data + header_length, total_length - header_length);
     break;
+  case IPV4_PROTOCOL_TCP:
+    net_lwip_receive(data, total_length);
+    break;
   case IPV4_PROTOCOL_UDP:
     net_udp_receive_packet(source, destination, data + header_length, total_length - header_length);
     break;
@@ -299,6 +343,8 @@ void net_ipv4_transmitted(struct ipv4_completion completion)
   switch (completion.consumer) {
   case IPV4_NOTIFY_ECHO: net_echo_transmitted(completion.token); break;
   case IPV4_NOTIFY_UDP: net_udp_transmitted(completion.token); break;
+  /* Queue acceptance/loss is not a peer ACK. lwIP owns retransmission. */
+  case IPV4_NOTIFY_TCP:
   case IPV4_NOTIFY_NONE: break;
   }
 }
@@ -308,6 +354,8 @@ void net_ipv4_failed(struct ipv4_completion completion, enum net_result result)
   switch (completion.consumer) {
   case IPV4_NOTIFY_ECHO: net_echo_failed(completion.token, result); break;
   case IPV4_NOTIFY_UDP: net_udp_failed(completion.token, result); break;
+  /* Queue acceptance/loss is not a peer ACK. lwIP owns retransmission. */
+  case IPV4_NOTIFY_TCP:
   case IPV4_NOTIFY_NONE: break;
   }
 }
