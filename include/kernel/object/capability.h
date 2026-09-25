@@ -20,8 +20,8 @@ enum capability_result {
 
 /* Zero initialization creates an empty table. It has one exclusive owner:
  * the BSP before submission/after retirement, otherwise the executing user
- * task with IF=0. During a growth or launch request that task lends the table
- * to the BSP until completion. No concurrent lookup, close, install or teardown. */
+ * task with IF=0. During a growth, launch or UDP-open request the task lends
+ * the table to the BSP until completion. No concurrent lookup, close, install or teardown. */
 struct capability_table {
   struct capability_entry *entries;
   size_t capacity;
@@ -42,7 +42,7 @@ enum capability_result capability_install(struct capability_table *table,
 enum capability_result capability_insert(struct capability_table *table,
     struct kernel_object *object, uint64_t rights, handle_t *handle);
 
-/* BSP, IF=0, exclusive ownership (including growth/launch loans).
+/* BSP, IF=0, exclusive ownership (including caller loans).
  * Preserves entries, generations and references; failure leaves them intact. */
 enum capability_result capability_grow(struct capability_table *table);
 

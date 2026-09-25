@@ -16,6 +16,8 @@
 #define PROTOCOL_MOUNT UINT64_C(11)
 #define PROTOCOL_ECHO UINT64_C(12)
 #define PROTOCOL_NET_CONFIG UINT64_C(13)
+#define PROTOCOL_UDP_SERVICE UINT64_C(14)
+#define PROTOCOL_UDP UINT64_C(15)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

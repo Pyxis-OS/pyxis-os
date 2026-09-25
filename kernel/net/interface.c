@@ -4,6 +4,7 @@
 #include <kernel/net/interface.h>
 #include <kernel/net/arp.h>
 #include <kernel/net/config.h>
+#include <kernel/net/udp.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/net/echo.h>
 #include <kernel/panic.h>
@@ -156,6 +157,7 @@ static void network_worker(void *argument)
   for (;;) {
     bool transport_busy = virtio_net_service();
     bool serviced = net_config_service();
+    serviced |= net_udp_service();
     serviced |= net_echo_service();
     net_arp_service();
     unsigned handled = 0;

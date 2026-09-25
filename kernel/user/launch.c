@@ -1,3 +1,5 @@
+#include <abi/udp.h>
+#include <kernel/object/udp.h>
 #include <abi/mount.h>
 #include <kernel/object/mount.h>
 #include <kernel/virtio/pci.h>
@@ -77,7 +79,7 @@ void user_launch_initial(void)
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
   struct file_object *script_file = NULL;
-  struct kernel_object *mount = NULL, *echo = NULL, *net_config = NULL;
+  struct kernel_object *mount = NULL, *echo = NULL, *net_config = NULL, *udp = NULL;
 
   if (initrd_tree_create(&application_root) != INITRD_OK) {
     goto fail;
@@ -103,12 +105,13 @@ void user_launch_initial(void)
   clock = clock_create();
   echo = echo_create();
   net_config = net_config_create();
-  if (!memory || !launcher || !clock || !echo || !net_config) {
+  udp = udp_service_create();
+  if (!memory || !launcher || !clock || !echo || !net_config || !udp) {
     goto fail;
   }
 
   handle_t input, output, memory_handle, launcher_handle, display_handle, app, home;
-  handle_t clock_handle, keyboard_handle, echo_handle, net_config_handle;
+  handle_t clock_handle, keyboard_handle, echo_handle, net_config_handle, udp_handle;
   handle_t script_handle = HANDLE_INVALID;
   struct kernel_object *console = &process->space->console->object;
   if (capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &input) != CAP_OK ||
@@ -117,6 +120,7 @@ void user_launch_initial(void)
       capability_install(&process->capabilities, &process->space->keyboard->object,
           KEYBOARD_RIGHT_INPUT, &keyboard_handle) != CAP_OK ||
       capability_install(&process->capabilities, net_config, NET_CONFIG_RIGHTS, &net_config_handle) != CAP_OK ||
+      capability_install(&process->capabilities, udp, UDP_SERVICE_RIGHT_OPEN, &udp_handle) != CAP_OK ||
       capability_install(&process->capabilities, echo, ECHO_RIGHT_SEND, &echo_handle) != CAP_OK ||
       capability_install(&process->capabilities, clock, CLOCK_RIGHTS, &clock_handle) != CAP_OK ||
       capability_install(&process->capabilities, launcher, LAUNCHER_RIGHT_LAUNCH, &launcher_handle) != CAP_OK ||
@@ -151,6 +155,8 @@ void user_launch_initial(void)
     object_release(&script_file->object);
     script_file = NULL;
   }
+  object_release(udp);
+  udp = NULL;
   object_release(net_config);
   net_config = NULL;
   object_release(echo);
@@ -162,7 +168,7 @@ void user_launch_initial(void)
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[11] = {
+  struct process_binding resources[12] = {
     {"input", input},
     {"output", output},
     {"memory", memory_handle},
@@ -170,10 +176,11 @@ void user_launch_initial(void)
     {"display", display_handle},
     {"clock", clock_handle},
     {"echo", echo_handle},
+    {"udp", udp_handle},
     {"net_config", net_config_handle},
     {"keyboard", keyboard_handle},
   };
-  size_t resource_count = 9;
+  size_t resource_count = 10;
   if (script_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"script", script_handle};
   }
@@ -209,6 +216,9 @@ void user_launch_initial(void)
   return;
 
 fail:
+  if (udp) {
+    object_release(udp);
+  }
   if (net_config) {
     object_release(net_config);
   }

@@ -19,6 +19,8 @@ enum object_type {
   OBJECT_MOUNT = 11,
   OBJECT_ECHO = 12,
   OBJECT_NET_CONFIG = 13,
+  OBJECT_UDP_SERVICE = 14,
+  OBJECT_UDP = 15,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.

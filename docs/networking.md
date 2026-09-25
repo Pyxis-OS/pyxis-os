@@ -1,4 +1,4 @@
-# Networking: IPv4 and ICMP echo
+# Networking: IPv4, ICMP echo and UDP endpoints
 
 The kernel has one system-wide networking worker and a boot-lifetime interface
 named `lo`, plus `net0` when a supported VirtIO NIC is present. Interfaces,
@@ -131,15 +131,16 @@ interrupt-entry interfaces. Application calls use explicit cross-CPU ownership
 handoff without adding scheduler request queues.
 
 Each turn handles at most 16 RX/TX completions, eight configuration calls,
-16 echo slots, the bounded ARP
-cache/pending lists and eight local deliveries. The worker yields after starting
-or expiring echo calls, servicing configuration or exhausting a receive/completion budget. It disables
-interrupts only around allocation/release and shared queue/wait operations.
+eight UDP control slots, 16 echo slots, the bounded ARP cache/pending lists and
+eight local deliveries. The worker yields after starting or expiring echo calls,
+servicing configuration/UDP control work or exhausting a receive/completion budget.
+It disables interrupts around allocation/release, capability installation and
+shared queue/wait operations.
 Local transmission never recursively enters receive and has no Ethernet, ARP,
 PCI or DMA dependency.
 
 Packet queue access remains BSP/IF=0. A separate small lock protects the worker's
-notification flag and wait pointer because AP callers may now submit echo work.
+notification flag and wait pointer because AP callers also submit network work.
 Submission publishes a request before notifying, with the request lock released.
 The remembered notification bridges the gap between inspecting deadlines and
 publishing the wait. Wake detaches the pointer under the notification lock;
@@ -476,3 +477,62 @@ routing, network isolation and website hosting remain separate scopes in
 [later directions](wip/later-os-directions.md#networking-and-website-hosting).
 This stack deliberately implements a bounded IPv4/ICMP subset, not complete
 Internet host conformance. See the limits above before adding another protocol.
+
+## Native UDP endpoint lifetime
+
+Init receives a separate `udp` service grant. Session and shell explicitly copy
+its OPEN right into child startup resources, independently of echo and
+configuration authority. The service authorizes binding any available port on an
+explicit local IPv4 address: any address in `127/8`, or the configured NIC address.
+There are no wildcard bindings, shared bindings or privileged-port distinctions.
+The port namespace and resource bounds are system-wide, not isolated by space.
+
+[The UDP protocols](../include/abi/udp.h) use tagged CALL requests:
+
+- `UDP_OPEN` on `PROTOCOL_UDP_SERVICE` takes a host-order address and port. Zero
+  port selects a free ephemeral port using a rotating scan of 49152–65535.
+  Success returns an owned endpoint handle and its bound address/port/state.
+  A duplicate active address/port returns `CALL_ALREADY_EXISTS`; an address that
+  is not currently local returns `CALL_UNAVAILABLE`. The same port can be bound
+  on different local addresses.
+- `UDP_INSPECT` on `PROTOCOL_UDP` requires INSPECT and returns the original bound
+  address/port and current state: BOUND, SHUTDOWN or UNAVAILABLE. This succeeds
+  on stopped endpoints too. BOUND describes the binding, not NIC carrier.
+- `UDP_SHUTDOWN` requires SHUTDOWN, returns no bytes and is idempotent. The worker
+  releases the binding before completing the call; another endpoint may then
+  acquire it while handles to the old object still exist.
+
+New endpoints carry INSPECT, SEND, RECEIVE and SHUTDOWN rights. Existing handle
+copying and launch grants can reduce those rights. SEND/RECEIVE rights are defined
+for delegation, but their operations and UDP packet processing are not implemented
+yet. This task does not add an echo server or any automatic network traffic.
+
+Libpyxis provides `udp_open`, `udp_inspect` and `udp_shutdown`. OPEN and INSPECT
+require output pointers and clear their outputs on failure; OPEN uses
+`HANDLE_INVALID`. At the raw CALL boundary, errors leave reply bytes untouched.
+Payloads and output mappings are checked before any work is published.
+
+The network worker owns bindings and endpoint state. Eight shared control slots
+include completed calls until their callers resume; exhaustion is
+`CALL_QUEUE_FULL`. OPEN lends the parked task's kernel-owned capability table to
+the BSP worker, which allocates and installs the endpoint with interrupts disabled
+before publishing its binding. Installation failure frees the unpublished object;
+no port is reserved. Other endpoint calls borrow the caller's live grant until
+completion. No user/private-stack pointers cross CPUs and no scheduler queue is
+added.
+
+At most 16 endpoint objects may live, including stopped objects still held by
+handles and those awaiting final cleanup. Exhaustion is `CALL_LIMIT`; allocation
+failure is `CALL_NO_MEMORY`. Closing one handle only releases its reference.
+Final close uses object retirement to hand the allocation to the network worker,
+which removes its binding and frees it. That cleanup needs no control slot, but
+may be deferred past CLOSE's return. Use SHUTDOWN when immediate binding release
+is needed. A surviving copied handle continues to refer to the same object,
+never a later endpoint that reuses its port.
+
+Removing or replacing the NIC's address marks its bound endpoints UNAVAILABLE
+and releases their bindings. Restoring the same address does not revive them.
+Changing only prefix/gateway preserves bindings, as does link down/up. Loopback
+bindings are independent of NIC configuration. Explicit shutdown also works on
+an unavailable endpoint. UDP datagram delivery and deadline behavior follow in
+[the remaining milestone tasks](wip/udp-datagrams.md).
