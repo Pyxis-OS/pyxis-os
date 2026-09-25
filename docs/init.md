@@ -126,7 +126,7 @@ interpret scripts. LF/CRLF and bounds follow the [script-launch contract](script
 
 Each workload init receives its space's title, terminal, display and keyboard
 grants, private memory, launch, clock, randomness, networking services and
-network configuration,
+network configuration, caller-scoped [memory profiling](allocation-profiling.md),
 read-only app and writable home roots, an initial `home://` working directory and
 the initial environment. When virtio-fs is present it also receives `host_mount`,
 scoped to that export. The BSP fallback omits the title grant. Workload CPU
