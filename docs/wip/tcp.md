@@ -17,11 +17,10 @@ running and persisting programs is an especially useful loop. Writable virtio-fs
 is a candidate for the next milestone after TCP, with its ownership/authority
 checkpoint first. It is not part of this implementation.
 
-The [stack comparison](tcp-stack-comparison.md) led to a bounded lwIP
-investigation. Its [build/link findings](lwip-port.md) establish freestanding
-compatibility and propose the remaining packet and policy adaptations. Adoption, local
-patches and any changes below TCP still need an explicit decision; no native
-rewrite or full-stack replacement is selected by this milestone document.
+The [stack comparison](tcp-stack-comparison.md) led to adopting lwIP as the
+IPv4/TCP engine behind Caelum's existing network worker. The
+[implemented bridge](../lwip.md) preserves Caelum's route/address authority and
+queued-packet ownership. UDP, ICMP, ARP and NIC ownership remain in Caelum.
 
 DNS and application protocols
 remain in userspace. No HTTP/TLS client, POSIX sockets layer, listener/accept API,
@@ -192,14 +191,13 @@ observed under naturally occurring traffic.
 
 ## Focused implementation tasks
 
-- [ ] **1. Stack integration decision.** The [lwIP build/link investigation](lwip-port.md)
-  is complete: pinned sources, private freestanding port hooks and an isolated
-  linked artifact. Runtime adoption is still pending the routing, local-delivery,
-  queued-packet lifetime and resource-reclamation decisions recorded there.
-  Implement the agreed bridge/patches before proceeding to connection APIs;
-  stop for a scope decision if this expands into replacing working protocols.
-  No public placeholder API. If native TCP is chosen instead, rescope this task
-  to wire/sequence handling before coding.
+- [x] **1. Stack integration and packet bridge.** The pinned lwIP source subset
+  builds in the normal kernel and runs in the sole network worker. Reviewed
+  upstream adaptations preserve authoritative routing, 127/8 acceptance and
+  allocation failure without eviction. Owned packet copies carry a never-reused
+  PCB generation and are canceled on destruction. Timers join the worker wait.
+  No connection capability or open/listen caller is exposed yet; see
+  [the implemented boundary](../lwip.md).
 - [ ] **2. Connection ownership and transport identity.** Settle the proposed
   budgets, keyed primitive/secret preparation and tuple allocation. Add bounded
   worker-owned state, timer scheduling and retirement. Preserve the existing

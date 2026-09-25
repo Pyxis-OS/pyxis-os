@@ -47,11 +47,11 @@ explicit output directories, preserving `build/runtime` and `build/userspace`.
 See [SDK commands and layout](sdk.md) for standalone and focused builds.
 
 The lwIP configuration, private headers, allocator/clock hooks and build rules
-remain in Pyxis under `kernel/net/lwip`. Only the optional `make lwip-port`
-investigation target currently consumes the lwIP submodule; normal kernel/image
-builds do not use it. CI's recursive SDK, ports and userland checkouts need read
-access to pyxis-lwip; the kernel/image jobs do not need a submodule checkout yet.
-See [the port findings](wip/lwip-port.md) for the runtime integration boundary.
+remain in Pyxis under `kernel/net/lwip`. Normal kernel builds consume the pinned
+source submodule and record its revision/local state in the kernel bundle
+manifest. CI's kernel job therefore checks out submodules too. The image job
+can still assemble prebuilt bundles without source submodules.
+See [the port boundary](lwip.md) for worker and packet ownership.
 
 The public ABI remains authoritative in Pyxis. Userland consumes it through the
 SDK, with no kernel-private include paths or copied ABI headers. The shared

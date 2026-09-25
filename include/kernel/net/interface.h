@@ -36,6 +36,10 @@ enum mm_result net_init(void);
  * publish work before notifying, without holding the protocol's own lock. */
 bool net_worker_available(void);
 void net_worker_notify(void);
+/* Sole BSP worker with IF=1, outside interrupt/fault entry. */
+void net_worker_assert_context(void);
+/* Worker, IF=1. Discard deferred local TCP copies owned by this generation. */
+void net_loopback_cancel_tcp(uint64_t generation);
 
 /* BSP task/initialization context, IF=0. Only net_loopback is supported.
  * Success transfers packet ownership to deferred receive; it means queued,

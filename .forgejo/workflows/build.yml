@@ -20,11 +20,11 @@ jobs:
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
         with:
-          submodules: false
+          submodules: recursive
           token: ${{ secrets.PYXIS_SOURCE_READ_TOKEN }}
           persist-credentials: false
       - name: Build kernel bundle
-        run: make -j4 bundle-kernel
+        run: make -j16 bundle-kernel
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'
@@ -47,7 +47,7 @@ jobs:
           token: ${{ secrets.PYXIS_SOURCE_READ_TOKEN }}
           persist-credentials: false
       - name: Build sdk bundle
-        run: make -j4 bundle-sdk
+        run: make -j16 bundle-sdk
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'
@@ -87,7 +87,7 @@ jobs:
       - name: Extract ports bundle
         run: tar -xf build/bundles/ports.tar
       - name: Build userland bundle
-        run: make -j4 bundle-userspace PREBUILT="sdk ports"
+        run: make -j16 bundle-userspace PREBUILT="sdk ports"
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'
@@ -119,7 +119,7 @@ jobs:
       - name: Extract SDK bundle
         run: tar -xf build/bundles/sdk.tar
       - name: Build ports bundle
-        run: make -j4 bundle-ports PREBUILT=sdk
+        run: make -j16 bundle-ports PREBUILT=sdk
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'
@@ -172,7 +172,7 @@ jobs:
           tar -xf build/bundles/sdk.tar
           tar -xf build/bundles/userspace.tar
           tar -xf build/bundles/ports.tar
-          make image PREBUILT="kernel sdk userspace ports"
+          make -j16 image PREBUILT="kernel sdk userspace ports"
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'

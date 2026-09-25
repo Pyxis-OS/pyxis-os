@@ -138,6 +138,13 @@ struct process *process_current(void)
   return task && task->kind == TASK_USER ? task->process : NULL;
 }
 
+bool kernel_task_is_current(void (*entry)(void *))
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct task *task = schedulers ? local_scheduler()->current_task : NULL;
+  return task && task->kind == TASK_KERNEL && task->kernel_entry == entry;
+}
+
 void task_init(void)
 {
   KASSERT(arch_cpu_index() == 0 && !schedulers);

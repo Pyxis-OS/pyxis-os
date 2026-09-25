@@ -7,6 +7,7 @@
 
 #define IPV4_HEADER_SIZE 20
 #define IPV4_PROTOCOL_ICMP 1
+#define IPV4_PROTOCOL_TCP 6
 #define IPV4_PROTOCOL_UDP 17
 #define IPV4_LOOPBACK_ADDRESS UINT32_C(0x7f000001)
 
@@ -16,9 +17,9 @@ struct ipv4_route {
 };
 
 /* Worker, IF=1. Concrete consumers of local-queue/NIC acceptance, not DMA completion.
- * Token zero with NONE is for generated replies. Consumer tokens are never
+ * Zero with NONE or TCP denotes a stateless reply. Nonzero tokens are never
  * reused, so delayed ARP completion cannot target a later request. */
-enum ipv4_notify { IPV4_NOTIFY_NONE, IPV4_NOTIFY_ECHO, IPV4_NOTIFY_UDP };
+enum ipv4_notify { IPV4_NOTIFY_NONE, IPV4_NOTIFY_ECHO, IPV4_NOTIFY_UDP, IPV4_NOTIFY_TCP };
 struct ipv4_completion {
   enum ipv4_notify consumer;
   uint64_t token;
@@ -48,6 +49,14 @@ enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
  * Deadline includes ARP wait; completion names the concrete waiting consumer. */
 enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
     uint32_t destination, uint8_t protocol, uint64_t deadline, struct ipv4_completion completion);
+
+/* Worker, IF=1. Submit an already complete IPv4 datagram without rewriting
+ * headers. Validates its shape/checksum and rechecks source/route authority.
+ * Success consumes the packet; failure leaves it unchanged and caller-owned. */
+enum net_result net_ipv4_submit(struct net_packet *packet, uint64_t deadline,
+    struct ipv4_completion completion);
+/* Cancel unsent ARP and local-queue copies; DMA submissions cannot be recalled. */
+void net_ipv4_cancel_tcp(uint64_t generation);
 
 /* Worker, IF=1. Borrows bytes only for the call, including DMA-backed RX bytes. */
 void net_ipv4_receive(const struct net_interface *interface,
