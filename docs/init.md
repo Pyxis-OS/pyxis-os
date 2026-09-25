@@ -54,6 +54,7 @@ LF/CRLF and shebang bounds follow the shared [script-launch contract](script-lau
 The native format is PXE, not the ELF used as converter input.
 
 Init explicitly receives terminal input/output, private-memory management,
+[host-backed randomness](randomness.md),
 [display authority](graphics.md), [clock authority](timekeeping.md), [keyboard authority](keyboard.md), launch authority, read-only `app` and writable RAM-backed `home` roots, an
 initial `home://` working directory and the initial environment. Ordinary shell
 commands do not inherit launch authority; `session` delegates it explicitly.

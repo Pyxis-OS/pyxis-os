@@ -55,8 +55,8 @@ Network application precedes the first terminal change. The launcher preserves
 the startup environment except that it replaces any `TZ` entry with the selected
 name. It forwards the input/output, memory and launcher grants; app/home and optional
 read-only host roots;
-the working-directory chain and display path; and optional display, clock and
-keyboard resources, using the same rights as the shell's session handoff.
+the working-directory chain and display path; and optional display, clock,
+[random](randomness.md) and keyboard resources, using the same rights as the shell's session handoff.
 The init shell explicitly delegates `net_config` through session handoff only.
 The launcher applies network settings, then leaves that authority out of the
 interactive shell. It also does not forward mount authority, arbitrary named
