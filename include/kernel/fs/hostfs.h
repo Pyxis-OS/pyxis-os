@@ -6,13 +6,17 @@
 #include <kernel/virtio/fs.h>
 
 struct kernel_object;
+struct capability_table;
 struct task_wait;
 struct hostfs_node;
 
 enum hostfs_operation {
   HOSTFS_ROOT,
   HOSTFS_LOOKUP,
+  HOSTFS_CREATE,
   HOSTFS_READ,
+  HOSTFS_WRITE,
+  HOSTFS_RESIZE,
   HOSTFS_SIZE,
   HOSTFS_ENUMERATE,
 };
@@ -31,8 +35,13 @@ struct hostfs_request {
   char name[VIRTIO_FS_NAME_MAX + 1];
   enum call_status status;
   struct kernel_object *object;
+  /* CREATE exclusively lends the blocked caller's table to the BSP worker.
+   * Install the result before host mutation; no fallible local work follows. */
+  struct capability_table *table;
+  uint64_t rights;
+  handle_t handle;
   struct directory_enumerate_reply entry;
-  uint8_t data[VIRTIO_FS_READ_MAX];
+  uint8_t data[VIRTIO_FS_READ_MAX > VIRTIO_FS_WRITE_MAX ? VIRTIO_FS_READ_MAX : VIRTIO_FS_WRITE_MAX];
 };
 
 /* BSP/IF=0 before the worker can run. Submissions wait through bounded INIT.

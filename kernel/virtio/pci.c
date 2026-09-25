@@ -303,10 +303,12 @@ static enum virtio_fs_result request_failure(enum virtio_fs_result result, const
 }
 
 static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virtqueue *other,
-    const void *request, size_t request_bytes, void *reply, size_t reply_capacity, size_t *reply_bytes)
+    const void *request, size_t request_bytes, void *reply, size_t reply_capacity,
+    size_t *reply_bytes, bool *submitted)
 {
   KASSERT(cpu_current() == cpu_bsp());
   *reply_bytes = 0;
+  *submitted = false;
   if (!filesystem.active) {
     return VIRTIO_FS_UNAVAILABLE;
   }
@@ -319,6 +321,7 @@ static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virt
   if (!virtqueue_submit(queue, request_bytes, reply_capacity)) {
     return VIRTIO_FS_INVALID;
   }
+  *submitted = true;
 
   for (;;) {
     const char *failure = transport_failure();
@@ -347,18 +350,19 @@ static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virt
 }
 
 enum virtio_fs_result virtio_fs_pci_request(const void *request, size_t request_bytes,
-    void *reply, size_t reply_capacity, size_t *reply_bytes)
+    void *reply, size_t reply_capacity, size_t *reply_bytes, bool *submitted)
 {
   return exchange_queue(&filesystem.request, &filesystem.hiprio,
-      request, request_bytes, reply, reply_capacity, reply_bytes);
+      request, request_bytes, reply, reply_capacity, reply_bytes, submitted);
 }
 
 enum virtio_fs_result virtio_fs_pci_forget(const void *request, size_t request_bytes)
 {
   size_t ignored;
+  bool submitted;
   /* No FUSE reply, but the used-ring completion still returns DMA ownership. */
   return exchange_queue(&filesystem.hiprio, &filesystem.request,
-      request, request_bytes, NULL, 0, &ignored);
+      request, request_bytes, NULL, 0, &ignored, &submitted);
 }
 
 static void stop_transport(const char *failure)

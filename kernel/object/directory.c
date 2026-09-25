@@ -301,6 +301,28 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
+  if (directory->backing == DIRECTORY_HOST) {
+    if (request->kind != DIRECTORY_KIND_FILE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    if (request->name_length > VIRTIO_FS_NAME_MAX) {
+      return (struct syscall_result){CALL_LIMIT, 0};
+    }
+    struct hostfs_request *pending = task_prepare_hostfs();
+    pending->operation = HOSTFS_CREATE;
+    pending->node = directory->host;
+    pending->count = request->name_length;
+    pending->table = &process_current()->capabilities;
+    pending->rights = request->rights;
+    KASSERT(copy_from_user(pending->name, request->name, request->name_length));
+    task_submit_hostfs(pending);
+    if (pending->status != CALL_OK) {
+      return (struct syscall_result){pending->status, 0};
+    }
+    struct directory_child_reply reply = {.handle = pending->handle};
+    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
+  }
   if (directory->backing != DIRECTORY_RAM) {
     return (struct syscall_result){CALL_READ_ONLY, 0};
   }

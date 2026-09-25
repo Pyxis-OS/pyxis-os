@@ -2,18 +2,31 @@
 #include <kernel/panic.h>
 #include <kernel/virtio/fs.h>
 #include <kernel/virtio/pci.h>
+#include <kernel/virtio/queue.h>
 #include "fuse.h"
 
 /* One worker/session, no concurrent calls. Keep bounded wire scratch off the
  * kernel task stack, including when a caller owns a full directory batch. */
 static struct {
   struct fuse_in_header header;
-  uint8_t payload[VIRTIO_FS_NAME_MAX + 1];
+  uint8_t payload[sizeof(struct fuse_write_in) + VIRTIO_FS_WRITE_MAX];
 } request;
 static struct {
   struct fuse_out_header header;
   uint8_t payload[VIRTIO_FS_READ_MAX];
 } response;
+
+static struct {
+  struct fuse_write_in header;
+  uint8_t data[VIRTIO_FS_WRITE_MAX];
+} write_request;
+
+_Static_assert(sizeof(request) <= VIRTQUEUE_REQUEST_BYTES, "FUSE request DMA capacity");
+
+static bool mutation_request(uint32_t opcode)
+{
+  return opcode == FUSE_WRITE || opcode == FUSE_SETATTR || opcode == FUSE_CREATE;
+}
 
 static enum virtio_fs_result fail_session(struct virtio_fs_session *session,
     enum virtio_fs_result result, const char *reason)
@@ -75,19 +88,25 @@ static enum virtio_fs_result exchange(struct virtio_fs_session *session, uint32_
     return virtio_fs_pci_forget(&request, request.header.length);
   }
   size_t length;
+  bool submitted;
   enum virtio_fs_result result = virtio_fs_pci_request(&request, request.header.length,
-      &response, sizeof(response.header) + reply_capacity, &length);
+      &response, sizeof(response.header) + reply_capacity, &length, &submitted);
   if (result != VIRTIO_FS_OK) {
+    if (submitted && mutation_request(opcode)) {
+      return VIRTIO_FS_OUTCOME_UNKNOWN;
+    }
     return result;
   }
   if (length < sizeof(response.header) || response.header.length != length ||
       response.header.unique != unique || response.header.error > 0 ||
       response.header.error < -FUSE_ERRNO_MAX) {
-    return fail_session(session, VIRTIO_FS_PROTOCOL, "invalid FUSE reply header");
+    return fail_session(session, mutation_request(opcode) ?
+        VIRTIO_FS_OUTCOME_UNKNOWN : VIRTIO_FS_PROTOCOL, "invalid FUSE reply header");
   }
   if (response.header.error) {
     if (length != sizeof(response.header)) {
-      return fail_session(session, VIRTIO_FS_PROTOCOL, "FUSE error reply has a payload");
+      return fail_session(session, mutation_request(opcode) ?
+        VIRTIO_FS_OUTCOME_UNKNOWN : VIRTIO_FS_PROTOCOL, "FUSE error reply has a payload");
     }
     return host_error(response.header.error);
   }
@@ -105,7 +124,8 @@ static enum virtio_fs_result fixed_reply(struct virtio_fs_session *session, uint
     return result;
   }
   if (bytes != expected) {
-    return fail_session(session, VIRTIO_FS_PROTOCOL, "incorrect FUSE reply size");
+    return fail_session(session, mutation_request(opcode) ?
+        VIRTIO_FS_OUTCOME_UNKNOWN : VIRTIO_FS_PROTOCOL, "incorrect FUSE reply size");
   }
   if (expected) {
     memcpy(reply, response.payload, expected);
@@ -280,7 +300,21 @@ enum virtio_fs_result virtio_fs_getattr(struct virtio_fs_node *node,
   return VIRTIO_FS_OK;
 }
 
-enum virtio_fs_result virtio_fs_open(struct virtio_fs_node *node, struct virtio_fs_open *opened)
+static enum virtio_fs_result check_open_flags(struct virtio_fs_open *opened, uint32_t flags)
+{
+  /* Cache hints do not oblige us to cache. Stream/nonseekable and unknown
+   * semantics cannot satisfy explicit-offset I/O; release before rejecting. */
+  unsigned supported = FUSE_OPEN_DIRECT_IO | FUSE_OPEN_KEEP_CACHE |
+    FUSE_OPEN_CACHE_DIR | FUSE_OPEN_NOFLUSH;
+  if (flags & ~supported) {
+    enum virtio_fs_result result = virtio_fs_close(opened);
+    return result == VIRTIO_FS_OK ? VIRTIO_FS_UNSUPPORTED : result;
+  }
+  return VIRTIO_FS_OK;
+}
+
+enum virtio_fs_result virtio_fs_open(struct virtio_fs_node *node,
+    enum virtio_fs_access access, struct virtio_fs_open *opened)
 {
   KASSERT(node->references && !opened->node);
   if (node->kind != VIRTIO_FS_FILE && node->kind != VIRTIO_FS_DIRECTORY) {
@@ -290,7 +324,13 @@ enum virtio_fs_result virtio_fs_open(struct virtio_fs_node *node, struct virtio_
   if (session->open_handles == UINT64_MAX || node->references == SIZE_MAX) {
     return VIRTIO_FS_LIMIT;
   }
-  struct fuse_open_in query = {.flags = FUSE_OPEN_READ_ONLY};
+  if ((access != VIRTIO_FS_ACCESS_READ && access != VIRTIO_FS_ACCESS_WRITE) ||
+      (node->kind == VIRTIO_FS_DIRECTORY && access != VIRTIO_FS_ACCESS_READ)) {
+    return VIRTIO_FS_INVALID;
+  }
+  struct fuse_open_in query = {
+    .flags = access == VIRTIO_FS_ACCESS_WRITE ? FUSE_OPEN_WRITE_ONLY : FUSE_OPEN_READ_ONLY,
+  };
   struct fuse_open_out reply;
   unsigned opcode = node->kind == VIRTIO_FS_DIRECTORY ? FUSE_OPENDIR : FUSE_OPEN;
   enum virtio_fs_result result = fixed_reply(session, opcode, node->id,
@@ -300,17 +340,62 @@ enum virtio_fs_result virtio_fs_open(struct virtio_fs_node *node, struct virtio_
   }
   KASSERT(virtio_fs_node_get(node) == VIRTIO_FS_OK);
   ++session->open_handles;
-  *opened = (struct virtio_fs_open){.node = node, .handle = reply.handle};
+  *opened = (struct virtio_fs_open){.node = node, .handle = reply.handle, .flags = query.flags};
 
-  /* Cache hints do not oblige us to cache. Stream/nonseekable and unknown
-   * semantics cannot satisfy explicit-offset reads; release before rejecting. */
-  unsigned supported = FUSE_OPEN_DIRECT_IO | FUSE_OPEN_KEEP_CACHE |
-    FUSE_OPEN_CACHE_DIR | FUSE_OPEN_NOFLUSH;
-  if (reply.flags & ~supported) {
-    result = virtio_fs_close(opened);
-    return result == VIRTIO_FS_OK ? VIRTIO_FS_UNSUPPORTED : result;
+  return check_open_flags(opened, reply.flags);
+}
+
+enum virtio_fs_result virtio_fs_create(struct virtio_fs_node *parent,
+    const char *name, size_t length, struct virtio_fs_node *node, struct virtio_fs_open *opened)
+{
+  KASSERT(parent->references && !node->references && !opened->node);
+  if (length > VIRTIO_FS_NAME_MAX) {
+    return VIRTIO_FS_LIMIT;
   }
-  return VIRTIO_FS_OK;
+  if (!ordinary_name(name, length) || dot_name(name, length)) {
+    return VIRTIO_FS_INVALID;
+  }
+  if (parent->kind != VIRTIO_FS_DIRECTORY) {
+    return VIRTIO_FS_WRONG_TYPE;
+  }
+  struct virtio_fs_session *session = parent->session;
+  if (session->lookup_refs == UINT64_MAX || session->open_handles == UINT64_MAX) {
+    return VIRTIO_FS_LIMIT;
+  }
+
+  /* Fixed prototype policy: service identity, 0644, no executable bits or
+   * guest umask. O_EXCL makes creation atomic with respect to an existing name. */
+  struct {
+    struct fuse_create_in header;
+    char name[VIRTIO_FS_NAME_MAX + 1];
+  } query = {.header = {
+    .flags = FUSE_OPEN_WRITE_ONLY | FUSE_OPEN_CREATE | FUSE_OPEN_EXCLUSIVE,
+    .mode = FUSE_MODE_FILE | 0644u,
+  }};
+  memcpy(query.name, name, length);
+  query.name[length] = 0;
+  struct fuse_create_out reply;
+  enum virtio_fs_result result = fixed_reply(session, FUSE_CREATE, parent->id,
+      &query, sizeof(query.header) + length + 1, &reply, sizeof(reply));
+  if (result != VIRTIO_FS_OK) {
+    return result;
+  }
+  if (!reply.entry.node_id || reply.entry.node_id == FUSE_ROOT_ID ||
+      mode_kind(reply.entry.attr.mode) != VIRTIO_FS_FILE) {
+    return fail_session(session, VIRTIO_FS_OUTCOME_UNKNOWN, "invalid FUSE created file");
+  }
+  ++session->lookup_refs;
+  ++session->open_handles;
+  *node = (struct virtio_fs_node){
+    .session = session, .id = reply.entry.node_id, .generation = reply.entry.generation,
+    .kind = VIRTIO_FS_FILE, .references = 2, .lookup_owned = true,
+  };
+  *opened = (struct virtio_fs_open){
+    .node = node, .handle = reply.opened.handle, .flags = query.header.flags,
+  };
+  /* The two references belong to the native wrapper and the returned open.
+   * A rejected open is released; the caller still retires the lookup. */
+  return check_open_flags(opened, reply.opened.flags);
 }
 
 enum virtio_fs_result virtio_fs_close(struct virtio_fs_open *opened)
@@ -320,7 +405,7 @@ enum virtio_fs_result virtio_fs_close(struct virtio_fs_open *opened)
   struct virtio_fs_session *session = node->session;
   enum virtio_fs_result result = VIRTIO_FS_UNAVAILABLE;
   if (session->ready) {
-    struct fuse_release_in query = {.handle = opened->handle, .flags = FUSE_OPEN_READ_ONLY};
+    struct fuse_release_in query = {.handle = opened->handle, .flags = opened->flags};
     unsigned opcode = node->kind == VIRTIO_FS_DIRECTORY ? FUSE_RELEASEDIR : FUSE_RELEASE;
     result = fixed_reply(session, opcode, node->id, &query, sizeof(query), NULL, 0);
     if (result != VIRTIO_FS_OK) {
@@ -332,6 +417,65 @@ enum virtio_fs_result virtio_fs_close(struct virtio_fs_open *opened)
   *opened = (struct virtio_fs_open){0};
   enum virtio_fs_result released = virtio_fs_node_put(node);
   return result == VIRTIO_FS_OK ? released : result;
+}
+
+enum virtio_fs_result virtio_fs_write(struct virtio_fs_open *opened, uint64_t offset,
+    const void *buffer, size_t size, size_t *written)
+{
+  struct virtio_fs_node *node = opened->node;
+  KASSERT(node && node->references && size);
+  KASSERT((opened->flags & FUSE_OPEN_ACCESS_MASK) == FUSE_OPEN_WRITE_ONLY);
+  *written = 0;
+  if (!node->session->ready) {
+    return VIRTIO_FS_UNAVAILABLE;
+  }
+  if (!node->session->max_write) {
+    return VIRTIO_FS_UNSUPPORTED;
+  }
+  size_t amount = size < VIRTIO_FS_WRITE_MAX ? size : VIRTIO_FS_WRITE_MAX;
+  if (amount > node->session->max_write) {
+    amount = node->session->max_write;
+  }
+  if (offset > INT64_MAX || amount > INT64_MAX - offset) {
+    return VIRTIO_FS_FILE_TOO_LARGE;
+  }
+  write_request.header = (struct fuse_write_in){
+    .handle = opened->handle, .offset = offset, .size = amount, .flags = opened->flags,
+  };
+  memcpy(write_request.data, buffer, amount);
+  struct fuse_write_out reply;
+  enum virtio_fs_result result = fixed_reply(node->session, FUSE_WRITE, node->id,
+      &write_request, sizeof(write_request.header) + amount, &reply, sizeof(reply));
+  if (result != VIRTIO_FS_OK) {
+    return result;
+  }
+  if (!reply.size || reply.size > amount) {
+    return fail_session(node->session, VIRTIO_FS_OUTCOME_UNKNOWN, "invalid FUSE write count");
+  }
+  *written = reply.size;
+  return VIRTIO_FS_OK;
+}
+
+enum virtio_fs_result virtio_fs_resize(struct virtio_fs_open *opened, uint64_t size)
+{
+  struct virtio_fs_node *node = opened->node;
+  KASSERT(node && node->references);
+  KASSERT((opened->flags & FUSE_OPEN_ACCESS_MASK) == FUSE_OPEN_WRITE_ONLY);
+  if (size > INT64_MAX) {
+    return VIRTIO_FS_FILE_TOO_LARGE;
+  }
+  struct fuse_setattr_in query = {
+    .valid = FUSE_ATTR_SIZE | FUSE_ATTR_HANDLE, .handle = opened->handle, .size = size,
+  };
+  struct fuse_attr_out reply;
+  enum virtio_fs_result result = fixed_reply(node->session, FUSE_SETATTR, node->id,
+      &query, sizeof(query), &reply, sizeof(reply));
+  if (result == VIRTIO_FS_OK && mode_kind(reply.attr.mode) != VIRTIO_FS_FILE) {
+    return fail_session(node->session, VIRTIO_FS_OUTCOME_UNKNOWN, "invalid FUSE resize type");
+  }
+  /* An external writer can change size before the returned attributes are
+   * captured. Acknowledged SETATTR suffices; equality would invent a transaction. */
+  return result;
 }
 
 enum virtio_fs_result virtio_fs_read(struct virtio_fs_open *opened, uint64_t offset,

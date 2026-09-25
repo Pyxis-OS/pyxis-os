@@ -4,7 +4,8 @@
 #include <kernel/mm/types.h>
 
 #define VIRTQUEUE_DESCRIPTORS 16
-#define VIRTQUEUE_REQUEST_BYTES 4096
+/* One 4 KiB WRITE payload plus its FUSE request fields. */
+#define VIRTQUEUE_REQUEST_BYTES 8192
 #define VIRTQUEUE_REPLY_BYTES 8192
 
 struct virtqueue_ring;

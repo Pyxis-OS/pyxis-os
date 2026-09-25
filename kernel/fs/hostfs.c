@@ -4,6 +4,7 @@
 #include <kernel/fs/hostfs.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/object/capability.h>
 #include <kernel/object/directory.h>
 #include <kernel/object/file.h>
 #include <kernel/panic.h>
@@ -14,7 +15,7 @@ struct hostfs_node {
   struct hostfs_node *next;
   struct kernel_object *object;
   struct virtio_fs_node node;
-  struct virtio_fs_open opened;
+  struct virtio_fs_open opened, writer;
   uint64_t cursor_identity;
 };
 
@@ -48,6 +49,7 @@ static enum call_status call_result(enum virtio_fs_result result)
   case VIRTIO_FS_NOT_EMPTY: return CALL_NOT_EMPTY;
   case VIRTIO_FS_BUSY: return CALL_BUSY;
   case VIRTIO_FS_TIMED_OUT: return CALL_TIMED_OUT;
+  case VIRTIO_FS_OUTCOME_UNKNOWN: return CALL_OUTCOME_UNKNOWN;
   case VIRTIO_FS_UNAVAILABLE: return CALL_UNAVAILABLE;
   default: return CALL_IO;
   }
@@ -132,6 +134,9 @@ static void destroy_node(struct hostfs_node *node)
   if (node->opened.node) {
     virtio_fs_close(&node->opened);
   }
+  if (node->writer.node) {
+    virtio_fs_close(&node->writer);
+  }
   if (node->node.references) {
     virtio_fs_node_put(&node->node);
   }
@@ -198,6 +203,47 @@ static enum call_status create_node(struct hostfs_request *request)
   return CALL_OK;
 }
 
+static enum call_status create_file(struct hostfs_request *request)
+{
+  uint64_t flags = cpu_save_interrupts();
+  struct hostfs_node *node = kmalloc(sizeof(*node));
+  if (!node) {
+    cpu_restore_interrupts(flags);
+    return CALL_NO_MEMORY;
+  }
+  *node = (struct hostfs_node){0};
+  struct file_object *file = file_create_host(node);
+  if (!file) {
+    kfree(node);
+    cpu_restore_interrupts(flags);
+    return CALL_NO_MEMORY;
+  }
+  node->object = &file->object;
+  enum capability_result installed = capability_install(request->table, node->object,
+      request->rights, &request->handle);
+  cpu_restore_interrupts(flags);
+  if (installed != CAP_OK) {
+    KASSERT(installed == CAP_NO_MEMORY || installed == CAP_LIMIT);
+    destroy_node(node);
+    return installed == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+  }
+
+  /* The sole caller is parked and cannot use the installed handle until the
+   * worker wakes it. All local storage/slot allocation precedes host CREATE. */
+  enum virtio_fs_result result = virtio_fs_create(&request->node->node, request->name,
+      request->count, &node->node, &node->writer);
+  if (result != VIRTIO_FS_OK) {
+    flags = cpu_save_interrupts();
+    KASSERT(capability_close(request->table, request->handle) == CAP_OK);
+    cpu_restore_interrupts(flags);
+    request->handle = HANDLE_INVALID;
+    destroy_node(node);
+    return call_result(result);
+  }
+  object_release(node->object); /* Only the installed capability owns it now. */
+  return CALL_OK;
+}
+
 static enum call_status open_node(struct hostfs_node *node)
 {
   if (!session->ready) {
@@ -206,7 +252,7 @@ static enum call_status open_node(struct hostfs_node *node)
   if (node->opened.node) {
     return CALL_OK;
   }
-  return call_result(virtio_fs_open(&node->node, &node->opened));
+  return call_result(virtio_fs_open(&node->node, VIRTIO_FS_ACCESS_READ, &node->opened));
 }
 
 static enum call_status enumerate(struct hostfs_request *request)
@@ -266,6 +312,8 @@ static enum call_status perform(struct hostfs_request *request)
   case HOSTFS_ROOT:
   case HOSTFS_LOOKUP:
     return create_node(request);
+  case HOSTFS_CREATE:
+    return create_file(request);
   case HOSTFS_ENUMERATE:
     return enumerate(request);
   case HOSTFS_SIZE: {
@@ -275,6 +323,22 @@ static enum call_status perform(struct hostfs_request *request)
       request->offset = attributes.size;
     }
     return call_result(result);
+  }
+  case HOSTFS_WRITE:
+  case HOSTFS_RESIZE: {
+    struct hostfs_node *node = request->node;
+    if (!node->writer.node) {
+      enum virtio_fs_result result = virtio_fs_open(&node->node, VIRTIO_FS_ACCESS_WRITE,
+          &node->writer);
+      if (result != VIRTIO_FS_OK) {
+        return call_result(result);
+      }
+    }
+    if (request->operation == HOSTFS_RESIZE) {
+      return call_result(virtio_fs_resize(&node->writer, request->offset));
+    }
+    return call_result(virtio_fs_write(&node->writer, request->offset,
+        request->data, request->count, &request->count));
   }
   case HOSTFS_READ: {
     enum call_status status = open_node(request->node);

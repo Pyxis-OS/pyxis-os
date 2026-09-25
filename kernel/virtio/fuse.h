@@ -10,15 +10,25 @@
 #define FUSE_LOOKUP 1
 #define FUSE_FORGET 2
 #define FUSE_GETATTR 3
+#define FUSE_SETATTR 4
 #define FUSE_OPEN 14
 #define FUSE_READ 15
+#define FUSE_WRITE 16
 #define FUSE_RELEASE 18
 #define FUSE_INIT 26
 #define FUSE_OPENDIR 27
 #define FUSE_READDIR 28
 #define FUSE_RELEASEDIR 29
+#define FUSE_CREATE 35
 
 #define FUSE_OPEN_READ_ONLY 0
+#define FUSE_OPEN_WRITE_ONLY 1
+#define FUSE_OPEN_ACCESS_MASK 3
+#define FUSE_OPEN_CREATE 0100u
+#define FUSE_OPEN_EXCLUSIVE 0200u
+
+#define FUSE_ATTR_SIZE (1u << 3)
+#define FUSE_ATTR_HANDLE (1u << 6)
 #define FUSE_OPEN_DIRECT_IO 1u
 #define FUSE_OPEN_KEEP_CACHE 2u
 #define FUSE_OPEN_CACHE_DIR 8u
@@ -135,6 +145,39 @@ struct fuse_read_in {
   uint64_t lock_owner;
   uint32_t flags, padding;
 };
+
+struct fuse_create_in {
+  uint32_t flags, mode, umask, open_flags;
+};
+
+struct fuse_create_out {
+  struct fuse_entry_out entry;
+  struct fuse_open_out opened;
+};
+
+_Static_assert(sizeof(struct fuse_create_in) == 16, "FUSE create request prefix");
+_Static_assert(sizeof(struct fuse_create_out) == 144, "FUSE create reply");
+
+struct fuse_write_in {
+  uint64_t handle, offset;
+  uint32_t size, write_flags;
+  uint64_t lock_owner;
+  uint32_t flags, padding;
+};
+
+struct fuse_write_out {
+  uint32_t size, padding;
+};
+
+struct fuse_setattr_in {
+  uint32_t valid, padding;
+  uint64_t handle, size, lock_owner, atime, mtime, ctime;
+  uint32_t atime_nsec, mtime_nsec, ctime_nsec, mode, unused4, uid, gid, unused5;
+};
+
+_Static_assert(sizeof(struct fuse_write_in) == 40, "FUSE write request prefix");
+_Static_assert(sizeof(struct fuse_write_out) == 8, "FUSE write reply");
+_Static_assert(sizeof(struct fuse_setattr_in) == 88, "FUSE setattr request");
 
 struct fuse_dirent {
   uint64_t inode, next_cookie;
