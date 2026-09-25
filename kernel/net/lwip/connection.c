@@ -159,7 +159,7 @@ void tcp_connection_inspect(struct tcp_connection *connection, struct tcp_connec
     .local_address = connection->local, .remote_address = connection->remote,
     .local_port = connection->local_port, .remote_port = connection->remote_port,
     .state = !connection->pcb ? TCP_STATE_CLOSED :
-        connection->peer_fin ? TCP_STATE_PEER_CLOSED : TCP_STATE_CONNECTED,
+        connection->pcb->state == CLOSE_WAIT ? TCP_STATE_PEER_CLOSED : TCP_STATE_CONNECTED,
     .terminal_status = connection->terminal_status,
   };
 }
