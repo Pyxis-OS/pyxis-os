@@ -1,53 +1,127 @@
 # Pyxis OS / Caelum development
 
-## Scope and workflow
+## Starting or resuming work
 
-- BOOTSTRAP.md records the initial bring-up assignment, not today's milestone
-  boundary. Pyxis now has SMP, interrupts, userspace, capabilities and drivers.
-  Follow the user's current task and relevant docs; do not reapply obsolete
-  single-CPU, interrupts-disabled or halt-after-initialization restrictions.
-- Work through bounded milestones with focused, reviewable PRs. Unless the user
-  requests otherwise, start from current main on a new branch, make focused
-  commits, and open a PR. Do not merge it yourself. Keep dependent repository
-  changes and submodule pins explicit.
-- Discuss unresolved behavior, authority, lifetime and policy decisions before
-  implementing the affected task. Use judgment for routine implementation details.
-  A future idea or WIP note does not authorize code or placeholder interfaces.
-- Preserve architecture and subsystem boundaries outside the assigned change.
-  The goal is a useful OS shaped by concrete needs, not conformance to POSIX,
-  difference for its own sake, or reproducing another OS. Familiar library/tool
-  interfaces may adapt to the native ABI without dictating the kernel model.
+- Pyxis OS is the operating system; Caelum is its kernel. This file describes
+  how to collaborate. Architecture and future design belong in docs, not here.
+- BOOTSTRAP.md is the historical bring-up assignment, not today's scope. Do not
+  reapply its single-CPU, interrupts-disabled or halt-after-initialization limits.
+- Check the working directory, branch, worktrees, local changes and submodule
+  state before editing. The initial checkout can be old; find the active work
+  rather than assuming it is main. Preserve user changes and local commits,
+  including documentation intentionally saved for the next PR.
+- Use docs/wip/boot-sdk-ports.md as the milestone index. Read the selected
+  milestone, its unchecked task and relevant subsystem docs/code, not the entire
+  planning backlog. Milestone order is flexible; the user's current choice wins.
+- A new thread should recover scope from the user's request, milestone checklist,
+  Git history and open PRs. Do not rely on private chat history for a decision.
+  Check whether a prior PR was merged before selecting the next task. If that
+  cannot be established, ask one focused question instead of guessing.
 
-## Implementation and ownership
+## Discussion, decisions and implementation
 
-- Use freestanding GNU C23, snake_case, two spaces, K&R control braces and
-  function braces on their own line. Preserve upstream vendor formatting. Use
-  names and logical separator lines for readability; keep comments sparse and
-  reserve them for constraints, ownership and non-obvious ordering.
-- Keep Limine in its adapter, hardware details in arch, and allocation policy
-  in kernel/mm. Early initialization and fault reporting cannot use the heap.
+- Keep one bounded milestone moving through focused tasks to completion. Do not
+  start unrelated tracks, chase the port backlog or add features just because a
+  dependency or future design might eventually need them.
+- Brainstorming, proposals and code-review requests do not authorize implementation.
+  For discussion, explain the proposed contract and tradeoffs without editing or
+  creating branches unless asked. For review, report concrete findings first;
+  write fixes when requested. Once implementation is authorized, carry that task
+  through validation, commits and PR without repeated routine permission requests.
+- Before implementing a task, identify unresolved behavior, authority, lifetime
+  and policy decisions. Propose a concrete small scope and stop to discuss those
+  decisions. Routine implementation choices do not require approval. Do not turn
+  an unanswered suggestion into an accepted requirement.
+- The user reviews the code to understand the system. Prefer explicit, readable
+  changes and explain material decisions. State assumptions and limitations
+  plainly; distinguish measured behavior, code inspection and speculation.
+- Preserve subsystem boundaries and existing behavior outside the assigned change.
+  Solve concrete needs without forcing POSIX compatibility, novelty for its own
+  sake, or another OS's architecture. Port through native interfaces; do not bend
+  the kernel around an individual application or add successful fake operations.
+
+## Branches, repositories and delivery
+
+- Unless directed otherwise, fetch current main, create a task branch, make focused
+  commits, push and open a PR. Reuse the branch for requested follow-ups to an open
+  PR. The user merges; do not merge or push directly to main unless asked. Respect
+  explicit exceptions such as leaving a local commit for the next PR.
+- Use the installed Forgejo CLI, fj, for PRs, comments and existing CI status.
+  Check its help for syntax when needed. If access fails, report the actual error;
+  do not assume a missing comment means there was no review or expose credentials.
+- Pyxis owns the kernel, public ABI, SDK export, toolchain integration and image
+  assembly. userspace, ports and third_party/lwip are separately versioned
+  repositories. Consult docs/sdk-and-repositories.md before crossing a boundary.
+- Check for detached submodule HEADs and local edits. Publish dependency commits
+  and open focused PRs in their repositories before updating the parent gitlink;
+  never pin an unpublished commit. Link dependent PRs and state merge order. Do
+  not silently follow upstream main or update unrelated pins.
+- The owner creates repositories and builds/publishes compiler containers. Explain
+  exactly when a container rebuild is needed. Ordinary builds use the existing
+  compiler and evolving SDK; they should not rebuild GCC/binutils in CI.
+- End with PR links, what changed, validation performed, material limits and any
+  required owner action. For a task in a milestone, update its checkbox in that
+  PR. Do not describe an unrun check as passed or start the next task implicitly.
+
+## Implementation style and ownership
+
+- Use freestanding GNU C23, snake_case, two spaces, K&R control braces and function
+  braces on their own line. Preserve upstream vendor formatting. Use logical
+  blank lines; compactness and fewer lines are not goals.
+- Name hardware constants, flags, masks and selectors. Prefer straightforward
+  code and small focused helpers over opaque encodings, generic builders, callback
+  frameworks or indirection. Keep comments sparse, explaining constraints,
+  invariants, ownership and non-obvious ordering rather than restating code.
+- Keep Limine in its adapter, hardware details in arch, and allocation policy in
+  kernel/mm. Place new files with their subsystem rather than growing a flat
+  kernel directory. Early initialization and fault reporting cannot use the heap.
   Do not link kernel or target userspace against host libc; host tools are native.
 - Physical addresses are not C pointers. Keep ownership, overflow checks and
   failure unwinding explicit. Follow the current BSP allocation/VM-mutation and
-  scheduler handoff rules in docs/smp.md and docs/memory.md; do not casually add
-  allocator locks or remote mutations. Publish only after the required stack/VM
-  handoff, and do not access references after relinquishing ownership.
-- Pin dependencies and record local changes and licenses. Do not preserve
-  backwards compatibility unless requested: replace obsolete interfaces, formats
-  and implementations, updating in-tree consumers together. Do not increment
-  versions merely because implementation changed; do so only when versions must
+  scheduler handoff contracts in docs/smp.md and docs/memory.md. Do not casually
+  add allocator locks, remote mutations or access after relinquishing ownership.
+- Pin dependencies and record local changes and licenses. Do not preserve backwards
+  compatibility unless requested. Replace obsolete interfaces, formats and
+  implementations, updating in-tree consumers together. Do not increment versions
+  merely because implementation changed; do so only when versions must
   intentionally coexist or migration is required.
 
-## Validation and documentation
+## Validation and efficient work
 
-- Validate implementation with ordinary builds, QEMU boots and debugger
+- Validate implementation with ordinary builds, interactive QEMU boots and debugger
   inspection. Do not add tests, self-tests, fault injection, CI or boot/output
-  automation unless explicitly requested. Use existing required build checks.
-  Documentation-only changes need document/link review, not a gratuitous boot.
-- Keep README short and practical; document interface invariants beside code.
-  Mark proposals, selected decisions and implemented behavior distinctly.
-- On milestone completion, rewrite its docs/wip document as concise documentation
-  of implemented behavior, interfaces and limits, move it into docs and update
-  links. Remove completed worklists and superseded discussion; Git preserves the
-  history. Carry relevant deferred work into WIP or technical debt, without
-  keeping duplicate archive copies.
+  automation unless explicitly requested. Documentation-only changes need document
+  and link review, not a gratuitous boot.
+- Start with README.md and relevant build/run documentation for commands and options.
+  Use make -j16 where appropriate. Match CPU count, devices and accelerator to the
+  feature being checked; report the configuration and distinguish nested-VM
+  measurements from the owner's host results. Clean up your own QEMU/debugger jobs.
+- Inspect existing CI for the exact submitted revision, including dependent repo
+  jobs when relevant. Report pending, failed or unavailable checks honestly.
+  Existing independent bundles can avoid unnecessary rebuilds; follow
+  docs/build-bundles.md and never substitute stale artifacts for changed inputs.
+- Read/search only relevant files and summarize build output. Avoid repeatedly
+  reading whole documents, polling excessively or rerunning checks after a pass
+  without a new change or unresolved concern. Keep progress updates concise.
+- Delegate bounded independent work when useful: prefer gpt-6-sol at high effort
+  for implementation/review, and gpt-6-luna at high effort for simple checks,
+  monitoring or small documentation tasks. The primary agent owns design,
+  integration and review. Give explicit scope; avoid overlapping edits and use
+  isolated worktrees for parallel code work. Delegation is optional, not ceremony.
+
+## Durable documentation and handoff
+
+- Keep decisions outside chat: mark agreed choices, proposals and implemented
+  behavior distinctly in the relevant milestone/subsystem docs. Record accepted
+  limitations in docs/technical-debt.md with their consequence and revisit point.
+  WIP ideas do not authorize code or placeholder APIs.
+- Keep README short and practical; no roadmap prose, directory trees, marketing
+  language or emojis. Put interface invariants beside code and usage in docs.
+- On milestone completion, rewrite its docs/wip document as concise implemented
+  behavior, interfaces and limits; move it into docs and update links. Remove
+  completed worklists and superseded discussion; Git preserves history. Carry
+  relevant deferred work into WIP or technical debt without duplicate archives.
+- Before ending unfinished work or handing off to another thread, leave a concise
+  recoverable status: branch/PR and dependency revisions, completed work, remaining
+  steps or decisions, validation results and any active tool processes. Keep this
+  task-specific state in the handoff or milestone notes, not in AGENTS.md.
