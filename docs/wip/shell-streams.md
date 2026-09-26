@@ -1,9 +1,9 @@
 # Capability-backed standard streams, redirection and pipelines
 
-Status: task 1 implemented. Independent standard-stream bindings use explicit
-protocol information and dedicated handles adopted directly by libc. File
-redirection before pipes remains agreed. The later pipe/shell policies below are proposals with decision
-gates. Discuss unresolved choices before their implementation task; this document
+Status: tasks 1 and 2 implemented. Independent standard-stream bindings use
+explicit protocol information and dedicated handles adopted directly by libc.
+Foreground file redirection and cat stdin consumption are available. The later
+pipe/pipeline policies below remain proposals with decision gates. Discuss unresolved choices before their implementation task; this document
 does not authorize starting code work.
 
 ## Intended result
@@ -87,30 +87,49 @@ Background launch omits stdin and continues withholding terminal/keyboard input.
 Shebang forwarding preserves the same stream indices. Detailed ownership and
 errors are documented in [stdio](../stdio.md) and [launch](../processes.md).
 
-## Proposed file-redirection scope
+## Implemented task 2 contract
 
-Begin with foreground external commands and `<`, `>` and `2>`. Unredirected
-stderr stays on the terminal. Input opens an existing readable file; output
-creates or truncates a writable file under the shell's directory authority.
-The shell resolves/opens the resource and delegates its grant; the child does
-not reopen the pathname. Existing file backends and permission errors apply.
+Foreground external commands accept `<`, `>` and `2>` after the command name,
+interspersed with arguments. The interactive and script paths share the parser.
+Unquoted operators need no surrounding whitespace; quotes and escapes keep them
+literal. `2>` selects stderr only with an unquoted token-start `2` immediately
+before `>`; `2 > file` keeps `2` as an argument. Other descriptor prefixes and
+unsupported combinations (`>>`, `<<`, `<>`, `2>&1`, pipelines) are errors.
+Each redirect needs one nonempty filename word; duplicate redirects for a stream,
+leading redirects and redirect-only commands are rejected. Builtins, `session`
+and background commands reject redirection before any file is opened.
 
-Settle quoting, operator recognition, duplicate redirects and malformed syntax
-before task 2. Parse errors must be detected before opening/truncating targets.
-Decide when truncation occurs relative to executable validation and launch, and
-state that a later launch failure cannot generally restore overwritten contents.
+The complete line is parsed first, then the executable is resolved/opened.
+The shell opens every redirect target in source order, without truncating existing
+files. Input needs an existing readable file; output opens or creates a writable
+file. Only after all opens succeed does it truncate the output targets in source
+order and invoke the existing launch operation. Relative paths use the shell's
+current directory and grants, including changes from `cd` and mount setup.
+The child receives actual file capabilities and never reopens redirect names.
+The shell closes temporary handles on success and failure, before waiting.
 
-Defer append redirection while the existing append operation remains non-atomic.
-No descriptor duplication (`2>&1`), here-documents, expansion, command substitution
-or redirection of shell builtins in this first scope. Explicitly reject unsupported
-operator combinations rather than interpreting them as a supported shorter form.
-Interactive commands and the existing script parser must have a deliberate,
-consistent relationship; do not change the shell into a POSIX interpreter.
+Creation may leave empty files after a later open failure. After truncation begins,
+a failed resize, malformed image, missing interpreter, allocation or launch failure
+may leave outputs truncated; there is no rollback. Redirecting onto an input file
+can destroy its contents, including `cat file > file` and `cat < file > file`.
+There is no same-file/alias check. stdout and stderr have independent positions
+even when they name the same underlying file; writes can overwrite one another.
+These are accepted limitations, not shared-offset or transactional semantics.
 
-`cat` needs a stdin-consuming mode for these examples. Decide no-operand and `-`
-behavior in task 2 while preserving explicit-path reads. Terminal input remains
-raw with its current lack of an EOF convention; this milestone does not silently
-introduce terminal line discipline or Ctrl+D semantics.
+Unredirected streams preserve the shell's startup bindings. Preparation errors use
+the shell's own stderr; `2>` selects only child diagnostics. `<` withholds named
+terminal input and keyboard grants so the child cannot bypass stdin. Explicit
+terminal output remains separate authority. Append, descriptor duplication,
+here-documents, expansion, command substitution, pipelines and builtin/background
+redirection are deferred.
+
+`cat` without operands reads stdin; each `-` operand reads that same stream at its
+current position without closing or rewinding it. Explicit paths retain their
+existing behavior; `./-` names a literal dash file. Cat reads terminal stdin one
+byte at a time for immediate output, retaining bulk reads for files and redirected
+file stdin. Terminal stdin remains raw and blocking, with no EOF convention or
+child interruption from Ctrl+C. This task does not introduce line discipline or
+Ctrl+D semantics.
 
 ## Proposed pipe contract
 
@@ -167,7 +186,7 @@ of that choice; keep it focused on the pipeline's actual needs.
   file/console backends, and update init, session, shell and other in-tree launch
   consumers. Ordinary terminal boot remains the visible behavior. Keep terminal
   resources distinct; no pipe object or new shell syntax in this PR.
-- [ ] **2. File redirection and stdin consumer.** Resolve the parser/truncation
+- [x] **2. File redirection and stdin consumer.** Resolve the parser/truncation
   decisions, implement the selected foreground redirections and cat stdin mode,
   and demonstrate separate stderr. Carry actual grants through launch and unwind
   failures. This is the first visible use of file-backed standard streams.

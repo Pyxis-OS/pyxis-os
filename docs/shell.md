@@ -55,9 +55,10 @@ limit is also rejected. The command buffer has room for 1023 bytes plus NUL;
 libterm's visible-area limit may be smaller. History and scrolling input beyond
 that visible area remain deferred.
 
-There is no expansion, substitution, globbing, piping or redirection. Characters
-such as `$`, `*`, `;`, `|` and `>` are literal argument bytes, not operators. Interactive input treats `#` literally too; script mode
-supports whole-line comments.
+There is no expansion, substitution or globbing. `$`, `*` and `;` remain literal
+argument bytes. Unquoted `<`, `>` and `2>` select file redirection as described
+below; pipes and unsupported operator combinations are errors. Interactive input
+treats `#` literally; script mode supports whole-line comments.
 
 `cd path` changes the shell's owned directory chain. It requires one argument;
 failure preserves the old chain, its rights and the displayed path. `exit` takes
@@ -105,6 +106,63 @@ same object they already hold can use libpyxis `file_sync(handle)` or
 `directory_sync(handle)`. Syncing one target does not sync the whole filesystem.
 See [the host synchronization contract](virtio-fs.md#synchronization) for
 permissions, errors and durability limits.
+
+## File redirection and stdin
+
+Foreground external commands accept `< file`, `> file` and `2> file`. For example:
+
+```text
+cat app://share/hello.txt > home://copy.txt
+cat < home://copy.txt
+cat missing 2> home://errors.txt
+cat home://errors.txt
+mkdir notes
+cd notes
+cat < ../copy.txt > "another copy.txt"
+```
+
+Redirects follow the command name and may appear between arguments. Whitespace
+around operators is optional: `cat<copy.txt>another.txt` works. A redirect consumes
+one nonempty filename word using the ordinary quotes/escapes; quoted or escaped
+operators are literal. `2>` selects stderr only when the unquoted `2` begins a
+word and immediately precedes `>`: `cat 2 > out` instead passes a file operand
+`2` and redirects stdout. Other descriptor prefixes, missing filenames, duplicate
+redirects for one stream and leading/standalone redirects are rejected.
+
+`>>`, `<<`, `<>`, `2>&1`, pipes and other unsupported operator combinations are
+errors. Builtins (including `session`) and background commands reject redirects.
+The whole command is parsed and these restrictions checked before opening files.
+Interactive commands and scripts use the same redirection rules.
+
+Paths use the shell's current directory and root grants. The shell first opens the
+executable, then opens all redirect targets in written order. Input must exist;
+output is opened or created without truncation. Only after every target is open
+are output files truncated, in written order, and the child launched. The child
+receives independent native file grants, not filenames to reopen. Temporary shell
+handles close after launch or failure. `<` withholds terminal input and keyboard
+grants; the separate terminal-output grant remains available for explicit terminal
+operations. Unredirected standard streams retain their inherited bindings.
+
+A syntax error or missing executable path does not touch redirect targets. A later
+open failure can leave newly created files, but existing outputs have not yet been
+truncated. Once truncation starts, a resize error, malformed executable, missing
+shebang interpreter, allocation or launch failure may leave outputs truncated.
+There is no rollback or atomic multi-file update. Shell preparation errors use the
+shell's own stderr; `2>` redirects the child's stderr only.
+
+There is no same-file protection: `cat file > file` and `cat < file > file` truncate
+the input before it is consumed. Different path spellings may alias the same file.
+stdout and stderr each start at offset zero, even for `> out 2> out`; their
+independent writes can overwrite one another. This is not a merged output stream.
+
+`cat` with no operands reads stdin to EOF. A `-` operand reads stdin among ordinary
+file operands; repeated `-` continues the same stream without closing or rewinding
+it. Use `./-` for a file literally named `-`. Terminal stdin is read one byte at
+a time so typing is copied immediately, without waiting for a full transfer
+buffer or Enter. File operands and file-backed stdin keep bulk reads and normal
+EOF. Terminal input remains raw and blocking, without a Ctrl+D EOF convention.
+Ctrl+C cancels shell editing, not a running cat. No options or terminal line
+discipline are added.
 
 ## Background commands
 

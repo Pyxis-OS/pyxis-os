@@ -262,3 +262,19 @@ this allocator is not a defense against off-path reply guessing. The
 using [host-backed randomness](randomness.md). Revisit the generic allocator's
 policy for other consumers. Network authority and resource
 bounds also remain system-wide rather than isolated by space.
+
+## Shell redirection side effects and file aliases
+
+File redirection opens all targets before truncating outputs, but creation,
+truncation and child launch are separate operations. A failed open can leave
+newly created files; a failed resize or later launch can leave truncated outputs.
+There is no rollback. Redirecting an output onto an input file destroys its
+contents before the child consumes it, even through different path aliases.
+No object-identity/same-file check is provided.
+
+stdout and stderr retain independent per-FILE offsets when both refer to the same
+file. Their writes can overwrite each other; this does not implement descriptor
+duplication or merged output. These limitations are accepted for the first
+redirection scope. Revisit if alias-safe copying or shared-position output becomes
+an explicit requirement; task 4's pipeline launch lifecycle does not by itself
+promise filesystem rollback. See [shell redirection](shell.md#file-redirection-and-stdin).
