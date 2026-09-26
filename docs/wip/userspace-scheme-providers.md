@@ -61,6 +61,20 @@ HTTP URI need not be represented as a tree of remote directory objects.
 
 ## Discoverable resource representations
 
+The working conceptual model separates the resource from the caller's grant:
+
+- A resource has identity, lifetime, supported operations and, where useful,
+  available representations.
+- A capability holds a resource reference and granted rights. Handles name
+  those grants in a process's table; names resolve within a namespace.
+
+Representations describe how content or results can be consumed; they are not
+required for every resource. A process-control resource may chiefly expose
+operations. This is a design guide, not a universal kernel class or framework;
+the current [object/capability contract](../processes.md#objects-capabilities-and-handles)
+already defines references and rights, while representation discovery is future
+work.
+
 Higher-priority design work for the provider milestone: let consumers discover
 the representations a resource offers and explicitly select one. The exact
 metadata, negotiation and byte/structured-data contracts remain open; this does
