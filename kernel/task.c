@@ -41,7 +41,11 @@ struct task_wait {
   struct task_wait *timeout_next;
 };
 
-enum launch_action { LAUNCH_ALLOCATE, LAUNCH_DISCARD, LAUNCH_START };
+enum launch_action {
+  LAUNCH_ALLOCATE, LAUNCH_DISCARD, LAUNCH_START,
+  LAUNCH_GROUP_CREATE, LAUNCH_GROUP_PREPARE, LAUNCH_GROUP_PUBLISH,
+  LAUNCH_GROUP_DISCARD,
+};
 enum directory_action { DIRECTORY_ALLOCATE_ENTRY, DIRECTORY_ALLOCATE_NAME, DIRECTORY_DISCARD };
 
 struct task {
@@ -68,8 +72,10 @@ struct task {
   struct task *launch_next;
   enum launch_action launch_action;
   struct launch_capture *launch_capture;
+  struct launch_group *launch_group;
   enum call_status launch_result;
   handle_t launch_child;
+  handle_t launch_children[LAUNCH_BATCH_MAX];
   /* Only the caller updates aggregates. The parked request lends timestamps
    * to the BSP until wakeup transfers ownership back. */
   struct profile_snapshot profile;
@@ -805,12 +811,13 @@ static void service_display_requests(void)
 }
 
 static struct task *request_launch_service(enum launch_action action,
-                                            struct launch_capture *capture)
+    struct launch_capture *capture, struct launch_group *group)
 {
   struct task_wait *wait = prepare_user_wait();
   struct task *task = wait->task;
   task->launch_action = action;
   task->launch_capture = capture;
+  task->launch_group = group;
   task->launch_child = HANDLE_INVALID;
 
   lock_queues();
@@ -828,7 +835,7 @@ static struct task *request_launch_service(enum launch_action action,
 
 struct launch_capture *task_allocate_launch_capture(void)
 {
-  struct task *task = request_launch_service(LAUNCH_ALLOCATE, NULL);
+  struct task *task = request_launch_service(LAUNCH_ALLOCATE, NULL, NULL);
   struct launch_capture *capture = task->launch_capture;
   task->launch_capture = NULL;
   return capture;
@@ -836,14 +843,40 @@ struct launch_capture *task_allocate_launch_capture(void)
 
 void task_discard_launch_capture(struct launch_capture *capture)
 {
-  request_launch_service(LAUNCH_DISCARD, capture);
+  request_launch_service(LAUNCH_DISCARD, capture, NULL);
 }
 
 enum call_status task_launch_process(struct launch_capture *capture, handle_t *child)
 {
-  struct task *task = request_launch_service(LAUNCH_START, capture);
+  struct task *task = request_launch_service(LAUNCH_START, capture, NULL);
   *child = task->launch_child;
   return task->launch_result;
+}
+
+struct launch_group *task_create_launch_group(void)
+{
+  struct task *task = request_launch_service(LAUNCH_GROUP_CREATE, NULL, NULL);
+  struct launch_group *group = task->launch_group;
+  task->launch_group = NULL;
+  return group;
+}
+
+enum call_status task_prepare_launch_group(struct launch_group *group,
+    struct launch_capture *capture)
+{
+  struct task *task = request_launch_service(LAUNCH_GROUP_PREPARE, capture, group);
+  return task->launch_result;
+}
+
+void task_publish_launch_group(struct launch_group *group, handle_t *children)
+{
+  struct task *task = request_launch_service(LAUNCH_GROUP_PUBLISH, NULL, group);
+  memcpy(children, task->launch_children, sizeof(task->launch_children));
+}
+
+void task_discard_launch_group(struct launch_group *group)
+{
+  request_launch_service(LAUNCH_GROUP_DISCARD, NULL, group);
 }
 
 static void service_launch_requests(void)
@@ -860,10 +893,23 @@ static void service_launch_requests(void)
       if (task->launch_capture) {
         memset(task->launch_capture, 0, sizeof(*task->launch_capture));
       }
+    } else if (task->launch_action == LAUNCH_GROUP_CREATE) {
+      task->launch_group = launcher_group_create();
+    } else if (task->launch_action == LAUNCH_GROUP_PUBLISH) {
+      memset(task->launch_children, 0, sizeof(task->launch_children));
+      launcher_group_publish(task->launch_group, task->launch_children);
+      launcher_group_discard(task->launch_group);
+      task->launch_group = NULL;
+    } else if (task->launch_action == LAUNCH_GROUP_DISCARD) {
+      launcher_group_discard(task->launch_group);
+      task->launch_group = NULL;
     } else {
       if (task->launch_action == LAUNCH_START) {
         task->launch_result = launcher_start(task->launch_capture, task->process,
             task->cpu_index, &task->launch_child);
+      } else if (task->launch_action == LAUNCH_GROUP_PREPARE) {
+        task->launch_result = launcher_group_prepare(task->launch_group,
+            task->launch_capture, task->process, task->cpu_index);
       } else {
         KASSERT(task->launch_action == LAUNCH_DISCARD);
       }
@@ -948,10 +994,12 @@ enum mm_result kernel_task_create(void (*entry)(void *), void *argument)
   return MM_OK;
 }
 
-enum mm_result user_task_create_on(size_t cpu_index, struct process *process,
-                                   uintptr_t entry, uintptr_t stack_top)
+enum mm_result user_task_prepare_on(size_t cpu_index, struct process *process,
+                                    uintptr_t entry, uintptr_t stack_top,
+                                    struct task **result)
 {
   KASSERT(arch_cpu_index() == 0);
+  *result = NULL;
   if (!schedulers || cpu_index >= arch_cpu_count() || !process ||
       !process->startup_address ||
       process->space != arch_cpu_at(cpu_index)->space ||
@@ -968,9 +1016,9 @@ enum mm_result user_task_create_on(size_t cpu_index, struct process *process,
   }
 
   struct task *task;
-  enum mm_result result = allocate_task(&task);
-  if (result != MM_OK) {
-    return result;
+  enum mm_result status = allocate_task(&task);
+  if (status != MM_OK) {
+    return status;
   }
 
   task->kind = TASK_USER;
@@ -979,8 +1027,40 @@ enum mm_result user_task_create_on(size_t cpu_index, struct process *process,
   task->user_stack = stack_top;
   task->cpu_index = cpu_index;
   arch_user_state_init(&task->cpu);
-  /* Publishing the queue link transfers the process and all private mappings.
-   * The BSP must not touch the task or process again until completion. */
+  *result = task;
+  return MM_OK;
+}
+
+void user_task_discard_prepared(struct task *task)
+{
+  KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
+  KASSERT(vm_free(vm_kernel_space(), task->kernel_stack, TASK_STACK_SIZE) == MM_OK);
+  kfree(task);
+}
+
+void user_task_publish_group(struct task **tasks, size_t count)
+{
+  KASSERT(arch_cpu_index() == 0 && count && count <= LAUNCH_BATCH_MAX);
+  size_t cpu_index = tasks[0]->cpu_index;
+  lock_queues();
+  for (size_t i = 0; i < count; ++i) {
+    KASSERT(tasks[i] && tasks[i]->cpu_index == cpu_index);
+    enqueue_locked(&schedulers[cpu_index], tasks[i]);
+  }
+  unlock_queues();
+  notify_remote_cpu(cpu_index);
+}
+
+enum mm_result user_task_create_on(size_t cpu_index, struct process *process,
+                                   uintptr_t entry, uintptr_t stack_top)
+{
+  struct task *task;
+  enum mm_result status = user_task_prepare_on(cpu_index, process, entry,
+      stack_top, &task);
+  if (status != MM_OK) {
+    return status;
+  }
+  /* Publication transfers process and stack ownership. */
   enqueue(&schedulers[cpu_index], task);
   return MM_OK;
 }

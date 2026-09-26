@@ -616,6 +616,61 @@ The optional client/server example requires a readable server image and endpoint
 grants in addition to its launcher. Endpoint creation from userspace is separate
 work.
 
+## Batch launch
+
+`LAUNCHER_LAUNCH_BATCH` accepts an array of one through eight ordinary launch
+requests under the same caller-scoped LAUNCH authority. It prepares every image,
+child grant table, startup region, kernel task stack and WAIT observer before
+publishing any child. Each request retains the existing image and startup limits;
+there is no implicit inheritance or new target-space/CPU selection.
+
+The full reply range is validated before side effects. The kernel installs all
+observers and prepares their ordered result array before publication. Caller
+mappings remain stable throughout the operation, so delivery of that prepared
+result cannot introduce an error after children become runnable. Publication
+contains no allocation, validation or other fallible work. It makes every child
+runnable, not simultaneous: a child may already have finished before return.
+Single-child launching shares the same preparation and publication machinery.
+
+Image operation ownership ends after each stage's preparation, before acquiring
+the next image. Repeating the same executable in a batch is therefore valid.
+There are no public prepared-process handles and no partially runnable batch.
+
+On any preparation failure, all prepared children and their task stacks are
+released, all provisional observer handles are removed, and no child executes.
+Source handles remain valid, including caller-owned pipe ends. Installed child
+endpoint references are released through normal deferred destruction, without
+retaining unused copies in staging. As with single launch, grown capability-table
+storage may remain available for reuse.
+
+The fixed `launch_batch_reply` holds `failed_index` and eight child-handle slots.
+Success fills the first requested slots in request order, zeroes unused slots,
+and sets the index to `LAUNCH_NO_STAGE`. Failure zeroes all child slots. The index
+is the zero-based request responsible for an image, grant, startup, task-setup or
+observer-installation failure; batch-wide failures use `LAUNCH_NO_STAGE`.
+
+This operation has a narrow exception to ordinary CALL error replies: after
+validating output storage it can return the complete reply alongside a nonzero
+native error status. Dispatch failures and unusable reply storage return no
+reply bytes. The userspace helper initializes outputs to invalid handles and
+`LAUNCH_NO_STAGE`, so a failure without metadata cannot leave a stale stage index.
+
+`launcher_launch_batch` submits native PXE requests. `program_launch_batch`
+prepares each request's optional single-level shebang interpreter first, then
+submits the whole batch. Script-prefix, interpreter-resolution and preparation
+errors identify the corresponding input index without starting any children.
+Temporary interpreter grants, arrays and strings are released on every path;
+appending the script grant preserves dedicated standard-stream indices. Mutable
+images retain the existing per-image capture limits, not a cross-image snapshot.
+
+After success, each child has its ordinary independent lifetime. Observers only
+wait; their closure, launcher exit or a sibling fault does not terminate another
+child. Normal exit and faults reclaim that child's resources and pipe ends.
+The caller must close its own unused pipe copies before waiting for EOF-dependent
+children. Previously created or truncated files are not rolled back on failure.
+Shell pipeline syntax and redirection precedence remain later tasks in the
+[shell-streams milestone](wip/shell-streams.md).
+
 ## Later operations and open decisions
 
 The broader ABI vocabulary under discussion is `create`, `call`, `send`, `recv`,

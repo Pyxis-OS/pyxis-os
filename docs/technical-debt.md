@@ -289,3 +289,14 @@ of unused endpoint copies can delay EOF or EPIPE indefinitely. There are no
 nonblocking operations, deadlines, wait sets or cancellation. Revisit these
 limits when a concrete multi-producer or multiplexed consumer needs them; shell
 pipeline launch safety is a separate task in [shell streams](wip/shell-streams.md).
+
+## Batch launch after publication
+
+Batch launch protects preparation: all one through eight children are prepared
+before any can execute, and failure starts none. It does not cancel a running
+child when a sibling faults, an observer closes or the launcher exits. A child
+waiting on terminal input or doing unrelated work may therefore keep running
+indefinitely after a peer finishes. Filesystem creations/truncations before
+launch remain visible after preparation failure. Revisit scoped cancellation or
+larger batches only for a concrete lifecycle requirement; foreground pipeline
+syntax is the next task in [shell streams](wip/shell-streams.md).

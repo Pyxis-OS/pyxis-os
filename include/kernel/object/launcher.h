@@ -8,6 +8,7 @@
 struct kernel_object;
 struct file_object;
 struct process;
+struct launch_group;
 
 /* Heap storage shared with BSP, never a remote task stack. Bindings/directory
  * entries initially hold grant indices; BSP replaces them with child handles.
@@ -40,5 +41,13 @@ struct syscall_result launcher_call(uint64_t rights, uint64_t operation,
  * bytes remain owned by the launch service until it frees both. */
 enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
                                  size_t cpu_index, handle_t *result);
+
+/* BSP service internals. A group owns prepared processes and task stacks until
+ * publication; abort removes provisional observers and all child grants. */
+struct launch_group *launcher_group_create(void);
+enum call_status launcher_group_prepare(struct launch_group *group,
+    struct launch_capture *capture, struct process *parent, size_t cpu_index);
+void launcher_group_publish(struct launch_group *group, handle_t *children);
+void launcher_group_discard(struct launch_group *group);
 
 #endif

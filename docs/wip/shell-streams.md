@@ -1,9 +1,9 @@
 # Capability-backed standard streams, redirection and pipelines
 
-Status: tasks 1 through 3 implemented. Independent standard-stream bindings use
+Status: tasks 1 through 4 implemented. Independent standard-stream bindings use
 explicit protocol information and dedicated handles adopted directly by libc.
 Foreground file redirection, native pipes and cat read-some consumption are
-available. The later pipeline lifecycle and syntax policies remain proposals
+available, together with bounded batch launch. Shell pipeline syntax policies remain proposals
 with decision gates. Discuss unresolved choices before their implementation task;
 this document does not authorize starting code work.
 
@@ -38,8 +38,8 @@ Named terminal resources remain separate.
 [Launch](../processes.md) already delegates restricted copies into a child's
 handle table. The shell currently launches and waits for one foreground child;
 its simple background mode drops input authority. A process observer only waits
-for completion: closing it does not terminate the child. There is no general
-process cancellation or atomic multi-child launch to assume for pipeline cleanup.
+for completion: closing it does not terminate the child. Batch launch prepares all children before publication; there is no general
+process cancellation to assume for cleanup after publication.
 
 ## Agreed standard-stream and authority contract
 
@@ -170,22 +170,48 @@ result reports EIO. Existing EOF suppresses further backend reads until cleared.
 Zero capacity changes no indicators. Errors set the sticky error indicator and
 errno; no hidden stream-handle copies or read-ahead are introduced.
 
-## Pipeline launch and failure gate
+## Implemented task 4 launch contract
 
-Proposed shell scope: foreground external-command pipelines. Launch all stages
-before waiting, reap every child, keep stderr separate, and use the last stage's
-exit status for the pipeline. Pipeline length limits, redirection precedence,
-input/keyboard ownership and existing background/session syntax need agreement.
-Background pipelines, builtins in pipelines and full job control are deferred.
+A single caller-scoped batch operation accepts one through eight launch requests.
+The kernel prepares every image, child capability table, startup record, task
+stack and completion observer before any child becomes runnable. It validates
+the complete reply buffer before side effects and prepares the observer array
+before publication. Stable caller mappings make final reply delivery infallible.
+Each image operation ends before the next stage starts, including repeated uses
+of the same file. Preparation remains internal, without public prepared handles.
 
-A failure launching a later stage can leave earlier stages running. Closing pipe
-ends resolves I/O waits but cannot stop a child doing unrelated work or reading
-the terminal. Waiting blindly can hang the shell, and closing process observers
-is not cancellation. Before task 4, choose a concrete bounded solution, such as
-preparing children before making them runnable or explicit scoped cancellation.
-These are alternatives to discuss, not instructions to build either mechanism.
-Define cleanup for failed preparation, faults, observation and shell exit as part
-of that choice; keep it focused on the pipeline's actual needs.
+Publication makes the whole batch runnable on the caller's assigned CPU in its
+space. It cannot allocate or otherwise fail. Success does not mean simultaneous
+execution; a child can finish before the caller receives its result. Each child
+has an independent WAIT observer in request order. Closing observers does not
+terminate children.
+
+Any preparation failure destroys every prepared task/process and removes every
+provisional observer, including all installed endpoint grants. No child runs and
+caller source handles remain intact. Child-specific errors report a zero-based
+request index, including image loading, grants, startup, task allocation and
+observer installation. Batch-wide failures use `LAUNCH_NO_STAGE`. The batch reply
+can accompany a native error status; an unusable reply buffer or dispatch failure
+returns no metadata, so the userspace helper leaves the index at the sentinel.
+
+Single-command launching shares preparation/publication internals. Userspace
+provides native and shebang-aware batch helpers. The latter finishes all script
+preparation before submission and releases temporary interpreter handles and
+arrays on all paths. Prepared endpoints and startup bindings introduce no hidden copies.
+
+After success, normal exit and faults release each child's own resources. They
+do not cancel its peers, and shell exit closes shell-owned handles without
+terminating launched children. Files created or truncated before batch launch
+are not rolled back. These are accepted limits of preparation safety.
+
+## Proposed shell pipeline contract
+
+Foreground external-command pipelines will use batch launch before waiting,
+reap every child, keep stderr separate, and use the last stage's exit status.
+The launch limit is eight children. Redirection precedence, terminal/keyboard
+ownership and interactions with existing session syntax still need discussion
+before task 5. Background pipelines, builtins in pipelines and job control remain
+deferred. No pipeline parser changes belong to task 4.
 
 ## Focused PR tasks
 
@@ -202,7 +228,7 @@ of that choice; keep it focused on the pipeline's actual needs.
   READ/WRITE operations and libc support, with reference-based EOF, blocked-peer
   wakeup and cleanup. Document the protocol beside its ABI; no shell pipelines
   yet. Validate through ordinary build/boot and debugger inspection as appropriate.
-- [ ] **4. Safe multi-child launch lifecycle.** Discuss and implement the selected
+- [x] **4. Safe multi-child launch lifecycle.** Discuss and implement the selected
   preparation/failure strategy before exposing pipeline syntax. Extend only the
   process/launch operations actually required, with explicit ownership of child
   observers and inherited endpoint references.
