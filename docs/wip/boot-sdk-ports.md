@@ -94,14 +94,12 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Choosing the next major milestone
 
-The following are alternatives for discussion after writable host storage,
-space titles and allocation profiling. Shell streams and pipelines are selected
-as the next direction; the other paths remain parked. Split the selected work
-into focused tasks before implementation.
+With [shell streams and pipelines](../shell-streams.md) complete, the following
+remain candidates for discussion. No next milestone is selected. Choose a
+concrete scope and split it into focused tasks before implementation.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
-| Shell streams and pipelines | Connect two ordinary utilities, with usable redirection, EOF and cleanup when either child exits. | Delegated stdin/stdout/stderr, bounded byte streams, backpressure, broken-reader behavior and launch/exit ownership. Add a small text utility as the consumer; jq/awk can follow. |
 | Userspace scheme services and HTTP | `cat http://...` obtains a bounded, stable response from a userspace provider. | Endpoint reply grants, request transport, provider lifetime/cancellation and scoped registration/authority. HTTPS adds a TLS library and trust policy later. |
 | SDL2 and graphical applications | A native software-rendered SDL2 backend supports a selected GrafX2 edit/save workflow. | Probe the pinned application first; settle input/presentation and image-library needs. zlib/libpng are useful shared candidates. Compositor and GPU support stay separate. |
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
