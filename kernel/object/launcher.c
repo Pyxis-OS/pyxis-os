@@ -1,5 +1,6 @@
 #include <abi/file.h>
 #include <abi/console.h>
+#include <abi/pipe.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/mm/heap.h>
@@ -122,6 +123,9 @@ static void capture_streams(struct launch_capture *capture,
     } else if (stream->protocol == PROTOCOL_FILE) {
       type = OBJECT_FILE;
       rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
+    } else if (stream->protocol == PROTOCOL_PIPE) {
+      type = OBJECT_PIPE;
+      rights = i == STARTUP_STDIN ? PIPE_RIGHT_READ : PIPE_RIGHT_WRITE;
     } else {
       capture->error = CALL_BAD_REQUEST;
       return;

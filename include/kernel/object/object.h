@@ -26,6 +26,8 @@ enum object_type {
   OBJECT_TCP = 18,
   OBJECT_SPACE = 19,
   OBJECT_PROFILE = 20,
+  OBJECT_PIPE_SERVICE = 21,
+  OBJECT_PIPE = 22,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.

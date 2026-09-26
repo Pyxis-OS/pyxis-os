@@ -106,8 +106,9 @@ names may alias a handle; close each owned handle once. Missing resources are
 omitted, and lookup returns HANDLE_INVALID. Closing a handle does not update the
 immutable snapshot, so a later lookup can return its stale value.
 
-Standard streams are fixed stdin/stdout/stderr slots with explicit console or
-file protocol tags. Absent slots use `STARTUP_STREAM_NONE` and an invalid handle.
+Standard streams are fixed stdin/stdout/stderr slots with explicit console, file
+or [pipe](pipes.md) protocol tags. Absent slots use `STARTUP_STREAM_NONE` and an
+invalid handle.
 Each present slot owns a distinct handle, disjoint from all named resources,
 roots and working-directory bindings, with exactly its protocol's READ right
 for stdin or WRITE right for output. Libc adopts these handles directly before

@@ -1,4 +1,5 @@
 #include <abi/profile.h>
+#include <abi/pipe.h>
 #include <abi/space.h>
 #include <abi/udp.h>
 #include <abi/tcp.h>
@@ -27,6 +28,10 @@ static atomic_bool retired_locked;
 bool object_rights_valid(enum object_type type, uint64_t rights)
 {
   switch (type) {
+  case OBJECT_PIPE_SERVICE:
+    return !(rights & ~PIPE_SERVICE_RIGHT_CREATE);
+  case OBJECT_PIPE:
+    return !(rights & ~(PIPE_RIGHT_READ | PIPE_RIGHT_WRITE));
   case OBJECT_PROFILE:
     return !(rights & ~PROFILE_RIGHT_MEMORY);
   case OBJECT_SPACE:

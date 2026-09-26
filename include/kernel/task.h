@@ -12,6 +12,8 @@ struct file_object;
 struct file_wait;
 struct process_wait;
 struct console_wait;
+struct pipe_wait;
+struct pipe_create_reply;
 struct memory_region;
 struct display_object;
 struct display_buffer;
@@ -68,6 +70,11 @@ struct file_wait *task_prepare_file_wait(void);
 /* Same lifetime as the file wait record, for completion observers and readers. */
 struct process_wait *task_prepare_process_wait(void);
 struct console_wait *task_prepare_console_wait(void);
+struct pipe_wait *task_prepare_pipe_wait(void);
+
+/* Current user task lends its table to the BSP for atomic pipe creation and
+ * installation. Failure installs neither handle. */
+enum call_status task_create_pipe(struct pipe_create_reply *reply);
 
 /* Current user task, IF=0, no spinlocks held. Lend exclusive file operation
  * ownership to the BSP to replace/release backing; return it after completion. */

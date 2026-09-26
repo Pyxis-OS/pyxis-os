@@ -1,5 +1,6 @@
 #include <abi/memory.h>
 #include <abi/profile.h>
+#include <abi/pipe.h>
 #include <kernel/object/display.h>
 #include <arch/cpu.h>
 #include <arch/clock.h>
@@ -17,6 +18,7 @@
 #include <kernel/object/console.h>
 #include <kernel/object/process.h>
 #include <kernel/object/launcher.h>
+#include <kernel/object/pipe.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/user.h>
@@ -55,6 +57,10 @@ struct task {
   struct file_wait file_wait;
   struct console_wait console_wait;
   struct process_wait process_wait;
+  struct pipe_wait pipe_wait;
+  struct task *pipe_next;
+  struct pipe_create_reply pipe_reply;
+  enum call_status pipe_result;
   struct task *file_next;
   struct file_object *file;
   size_t file_capacity;
@@ -112,6 +118,7 @@ static struct hostfs_request *hostfs_head, *hostfs_tail;
 static struct task *memory_head, *memory_tail;
 static struct task *launch_head, *launch_tail;
 static struct task *display_head, *display_tail;
+static struct task *pipe_head, *pipe_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
 static struct task_wait *timed_waits; /* queues_locked, expired by the BSP. */
@@ -224,6 +231,14 @@ struct console_wait *task_prepare_console_wait(void)
   struct task_wait *wait = prepare_user_wait();
   struct console_wait *record = &wait->task->console_wait;
   *record = (struct console_wait){.wait = wait};
+  return record;
+}
+
+struct pipe_wait *task_prepare_pipe_wait(void)
+{
+  struct task_wait *wait = prepare_user_wait();
+  struct pipe_wait *record = &wait->task->pipe_wait;
+  *record = (struct pipe_wait){.wait = wait};
   return record;
 }
 
@@ -369,6 +384,72 @@ static void grow_requested_tables(void)
     task->growth_result = capability_grow(&task->process->capabilities);
     task_wait_wake(&task->wait_record);
     /* Waking returns table ownership; the task may immediately exit. */
+    task = next;
+  }
+}
+
+enum call_status task_create_pipe(struct pipe_create_reply *reply)
+{
+  struct task_wait *wait = prepare_user_wait();
+  struct task *task = wait->task;
+  lock_queues();
+  task->pipe_next = NULL;
+  if (pipe_tail) {
+    pipe_tail->pipe_next = task;
+  } else {
+    pipe_head = task;
+  }
+  pipe_tail = task;
+  unlock_queues();
+  task_wait_sleep(wait);
+  if (task->pipe_result == CALL_OK) {
+    *reply = task->pipe_reply;
+  }
+  return task->pipe_result;
+}
+
+static enum call_status pipe_install_status(enum capability_result result)
+{
+  if (result == CAP_NO_MEMORY) {
+    return CALL_NO_MEMORY;
+  }
+  KASSERT(result == CAP_LIMIT);
+  return CALL_LIMIT;
+}
+
+static void service_pipe_requests(void)
+{
+  lock_queues();
+  struct task *task = pipe_head;
+  pipe_head = pipe_tail = NULL;
+  unlock_queues();
+
+  while (task) {
+    struct task *next = task->pipe_next;
+    struct pipe_end *reader, *writer;
+    task->pipe_result = CALL_NO_MEMORY;
+    if (pipe_pair_create(&reader, &writer)) {
+      handle_t read_handle, write_handle;
+      enum capability_result result = capability_install(&task->process->capabilities,
+          &reader->object, PIPE_RIGHT_READ, &read_handle);
+      if (result == CAP_OK) {
+        result = capability_install(&task->process->capabilities,
+            &writer->object, PIPE_RIGHT_WRITE, &write_handle);
+        if (result == CAP_OK) {
+          task->pipe_reply = (struct pipe_create_reply){read_handle, write_handle};
+          task->pipe_result = CALL_OK;
+        } else {
+          KASSERT(capability_close(&task->process->capabilities, read_handle) == CAP_OK);
+          task->pipe_result = pipe_install_status(result);
+        }
+      } else {
+        task->pipe_result = pipe_install_status(result);
+      }
+      object_release(&reader->object);
+      object_release(&writer->object);
+    }
+    task_wait_wake(&task->wait_record);
+    /* The caller owns its table again and may immediately exit. */
     task = next;
   }
 }
@@ -1006,6 +1087,7 @@ void kernel_task_sleep_until(uint64_t deadline)
     if (cpu_index == 0) {
       expire_timed_waits();
       grow_requested_tables();
+      service_pipe_requests();
       service_directory_requests();
       service_file_requests();
       service_hostfs_requests();
@@ -1103,7 +1185,8 @@ void task_preempt(bool user_mode)
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
-     (completed_head != NULL || growth_head != NULL || directory_head != NULL ||
+     (completed_head != NULL || growth_head != NULL || pipe_head != NULL ||
+      directory_head != NULL ||
       file_head != NULL || memory_head != NULL || launch_head != NULL ||
       display_head != NULL || hostfs_head != NULL));
   unlock_queues();
