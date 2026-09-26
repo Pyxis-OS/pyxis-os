@@ -30,9 +30,9 @@ fallback, Caelum logs and shell output share a TTY and can disrupt line editing.
 
 ## Commands and quoting
 
-The shell uses libterm's line editor and waits for one foreground child at a
-time. The prompt shows the working path, for example `home://notes> `. Long
-paths show an ellipsis and their tail, keeping at least half the first row for
+The shell uses libterm's line editor and waits for the complete foreground
+command or pipeline. The prompt shows the working path, for example
+`home://notes> `. Long paths show an ellipsis and their tail, keeping at least half the first row for
 input; control and non-ASCII bytes display as `?`. Whitespace separates
 arguments. Single and double quotes preserve whitespace and allow empty
 arguments; adjacent quoted/unquoted
@@ -57,8 +57,8 @@ that visible area remain deferred.
 
 There is no expansion, substitution or globbing. `$`, `*` and `;` remain literal
 argument bytes. Unquoted `<`, `>` and `2>` select file redirection as described
-below; pipes and unsupported operator combinations are errors. Interactive input
-treats `#` literally; script mode supports whole-line comments.
+below; `|` connects foreground external commands as described under pipelines.
+Unsupported operator combinations are errors. Interactive input treats `#` literally; script mode supports whole-line comments.
 
 `cd path` changes the shell's owned directory chain. It requires one argument;
 failure preserves the old chain, its rights and the displayed path. `exit` takes
@@ -129,7 +129,7 @@ word and immediately precedes `>`: `cat 2 > out` instead passes a file operand
 `2` and redirects stdout. Other descriptor prefixes, missing filenames, duplicate
 redirects for one stream and leading/standalone redirects are rejected.
 
-`>>`, `<<`, `<>`, `2>&1`, pipes and other unsupported operator combinations are
+`>>`, `<<`, `<>`, `2>&1` and other unsupported operator combinations are
 errors. Builtins (including `session`) and background commands reject redirects.
 The whole command is parsed and these restrictions checked before opening files.
 Interactive commands and scripts use the same redirection rules.
@@ -163,6 +163,67 @@ its transfer buffer. File operands and file-backed stdin keep bulk reads and
 normal EOF. Terminal input remains raw and blocking, without a Ctrl+D EOF convention.
 Ctrl+C cancels shell editing, not a running cat. No options or terminal line
 discipline are added.
+
+## Foreground pipelines
+
+Connect two through eight external commands with `|`:
+
+```text
+cat app://share/hello.txt | cat > home://copy.txt
+cat < home://copy.txt | cat | cat
+cat missing 2> home://errors.txt | cat > home://empty.txt
+```
+
+Whitespace around `|` is optional. Quotes and escapes keep it literal. Every
+stage needs a nonempty command name; leading, trailing or adjacent pipes are
+errors. `||`, `|&`, background pipelines and builtin stages (`cd`, `exit`, `mount`,
+`title`, `session`) are rejected before any file is opened. Redirections retain
+their ordinary per-stage syntax and duplicate-stream checks. Interactive input
+and script lines use the same rules and their existing total line-length limits.
+
+By default stdout flows to the next stage's stdin. The first stage inherits the
+shell's stdin, the last inherits its stdout, and each stage inherits stderr
+separately. Explicit redirects override that stage's defaults:
+
+- `cat source > saved | cat` writes `saved`; the second cat receives EOF.
+- `cat source | cat < other` reads `other`; the first cat has no pipe reader and
+  gets EPIPE if it writes.
+- `cat missing 2> errors | cat` writes child errors to `errors`, leaving the
+  pipeline's byte stream independent of stderr.
+
+Only the first stage, when its selected stdin is a console, receives named
+terminal-input and keyboard grants. Other stages cannot bypass their stdin with
+those grants. Separate terminal-output and display capabilities retain the
+ordinary child policy. Programs explicitly using those capabilities can still
+write to or draw on the terminal. Ordinary stages receive neither launcher nor
+pipe-creation authority; shebang adaptation does not add authority.
+
+The shell parses and validates the entire pipeline, then opens all executable
+images before opening redirect targets. It opens redirects in written order
+across stages, creates the needed pipes and prepares grant storage, then truncates
+outputs in written order. The batch launcher prepares every child before making
+any runnable. A preparation failure starts none and identifies the failing stage
+where available. Files created or truncated before failure remain changed, with
+the same aliasing and independent-position limits described above.
+
+Children receive only their selected endpoints. Unused ends close without being
+delegated; after launch the shell closes every temporary pipe, image and redirect
+handle before waiting. This lets a consumer reach EOF after its writers finish,
+and a producer observe EPIPE after its readers finish.
+
+The shell waits for every child and closes every observer before prompting.
+Diagnostics identify stages, numbered from one, with nonzero exits or faults.
+The **last stage**
+determines pipeline success; an earlier failure does not override a successful
+last stage. There is no pipefail option. In scripts, a failed last stage stops
+the script, while an earlier failure followed by a successful last stage permits
+the next line. Wait, cleanup and diagnostic I/O errors remain fatal to the shell.
+An unknown launch outcome is also fatal because terminal input cannot safely
+resume.
+
+There is no cancellation, job control or terminal EOF convention. Ctrl+C cannot
+interrupt a running pipeline. A child that waits on terminal input or ignores
+its pipe can keep the shell waiting even after its peers finish.
 
 ## Background commands
 
@@ -211,8 +272,10 @@ before LF is stripped. A final line without LF is executed too. Oversized lines
 and embedded NUL bytes are rejected without executing that line; comments have
 the same bounds. A trailing backslash is an error, not line continuation.
 
-The first malformed command, failed `cd` or launch, nonzero child exit, child
-fault or read failure stops the script with failure. Shell diagnostics include
+The first malformed command, failed `cd` or launch, nonzero foreground-command
+exit, foreground-command fault or read failure stops the script with failure.
+For pipelines, the last stage determines success as described above. Shell
+diagnostics include
 `script-name:line:` (lines start at one); child diagnostics retain their own
 format. EOF or `exit` succeeds. Neither falls back to an interactive prompt.
 
@@ -285,17 +348,20 @@ scheme changes use the bound root's actual grant; each descendant lookup retains
 its parent's grant. Crossing a retained ancestor boundary fails as in the native
 path API.
 
-Each child receives independent copies of the shell's startup standard streams,
-with their declared console/file protocols. Background children omit stdin.
+Each child receives independent standard-stream grants selected from the shell's
+bindings, explicit redirects and pipe connections, with their declared
+console/file/pipe protocols. Background children omit stdin.
 Missing streams remain absent; stderr never falls back to stdout or the terminal.
 The script interpreter and session handoff preserve these bindings too.
 
-Each foreground child receives explicit copies of terminal input/output, memory, available roots
-with their actual grants, and the current directory chain preserving each
-handle's rights independently. It does not receive the
-shell's launcher. When available, the [display](graphics.md),
+Each foreground child receives explicit copies of terminal output, memory and
+available roots with their actual grants, and the current directory chain
+preserving each
+handle's rights independently. Terminal input and keyboard are withheld for
+file/pipe stdin and downstream pipeline stages as described above. It does not
+receive the shell's launcher. When available, the [display](graphics.md),
 [clock](timekeeping.md), [random](randomness.md) and [keyboard](keyboard.md) grants are also forwarded
-to foreground children and session successors; background children omit keyboard input.
+to eligible foreground children and session successors; background children omit keyboard input.
 The immutable initial environment is forwarded in full using
 libpyxis's borrowed environment-array accessors. No environment mutation or PWD
 maintenance is implemented. Children receive the full current working-path
@@ -304,8 +370,8 @@ redundant separators and dot components, but lookup still walks the original
 input: `missing/..` fails rather than skipping the missing directory.
 
 The shell never reads terminal input while waiting. Successful wait means child
-resources have been reclaimed; it then closes the process observer, reports a
-nonzero exit or fault, and prompts again. The terminal advances to a fresh line
+resources have been reclaimed; it closes the observers, reports nonzero exits or
+faults, and prompts again after every foreground child has completed. The terminal advances to a fresh line
 only when its cursor is not already at column zero, preserving unterminated child
 output without inserting an extra blank line after newline-terminated output.
 Failed launch returns to the prompt; failed wait ends the shell because

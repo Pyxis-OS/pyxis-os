@@ -298,5 +298,8 @@ child when a sibling faults, an observer closes or the launcher exits. A child
 waiting on terminal input or doing unrelated work may therefore keep running
 indefinitely after a peer finishes. Filesystem creations/truncations before
 launch remain visible after preparation failure. Revisit scoped cancellation or
-larger batches only for a concrete lifecycle requirement; foreground pipeline
-syntax is the next task in [shell streams](wip/shell-streams.md).
+larger batches only for a concrete lifecycle requirement. Foreground pipelines
+wait for all children; an unrelated or terminal-blocked stage can therefore keep
+the shell waiting even when the last stage has finished. Last-stage success does
+not hide earlier diagnostics, but it permits scripts to continue; no pipefail
+policy is provided. See [shell pipelines](shell.md#foreground-pipelines).
