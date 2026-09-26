@@ -122,10 +122,14 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   handle_t clock_handle, keyboard_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
   handle_t profile_handle;
   handle_t script_handle = HANDLE_INVALID;
+  handle_t standard_input, standard_output, standard_error;
   struct kernel_object *console = &process->space->console->object;
   if (capability_install(&process->capabilities, profile, PROFILE_RIGHT_MEMORY, &profile_handle) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &input) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, &output) != CAP_OK ||
+      capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &standard_input) != CAP_OK ||
+      capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, &standard_output) != CAP_OK ||
+      capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, &standard_error) != CAP_OK ||
       capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, &memory_handle) != CAP_OK ||
       capability_install(&process->capabilities, &process->space->keyboard->object,
           KEYBOARD_RIGHT_INPUT, &keyboard_handle) != CAP_OK ||
@@ -226,6 +230,11 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   const char *arguments[] = {script.data ? interpreter : image_uri, image_uri};
   const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
   const struct process_startup startup = {
+    .streams = {
+      [STARTUP_STDIN] = {STREAM_PROTOCOL_CONSOLE, standard_input},
+      [STARTUP_STDOUT] = {STREAM_PROTOCOL_CONSOLE, standard_output},
+      [STARTUP_STDERR] = {STREAM_PROTOCOL_CONSOLE, standard_error},
+    },
     .resources = resources,
     .resource_count = resource_count,
     .roots = roots,
