@@ -62,6 +62,10 @@ milestone's remaining interface details before starting its code work.
     The measured follow-up now notifies the BSP promptly after private-memory
     publication, reducing queue delay without changing allocation policy.
 
+20. Complete: [standard streams, redirection and pipelines](../shell-streams.md),
+    with dedicated capability grants, bounded native pipes, all-or-none batch
+    preparation, foreground shell pipelines and exact bounded `head` consumption.
+
 Everyday use for simple tasks guides this order. Website hosting remains one
 future application, not the primary completion target for the OS.
 
@@ -90,14 +94,12 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Choosing the next major milestone
 
-The following are alternatives for discussion after writable host storage,
-space titles and allocation profiling. Shell streams and pipelines are selected
-as the next direction; the other paths remain parked. Split the selected work
-into focused tasks before implementation.
+With [shell streams and pipelines](../shell-streams.md) complete, the following
+remain candidates for discussion. No next milestone is selected. Choose a
+concrete scope and split it into focused tasks before implementation.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
-| Shell streams and pipelines | Connect two ordinary utilities, with usable redirection, EOF and cleanup when either child exits. | Delegated stdin/stdout/stderr, bounded byte streams, backpressure, broken-reader behavior and launch/exit ownership. Add a small text utility as the consumer; jq/awk can follow. |
 | Userspace scheme services and HTTP | `cat http://...` obtains a bounded, stable response from a userspace provider. | Endpoint reply grants, request transport, provider lifetime/cancellation and scoped registration/authority. HTTPS adds a TLS library and trust policy later. |
 | SDL2 and graphical applications | A native software-rendered SDL2 backend supports a selected GrafX2 edit/save workflow. | Probe the pinned application first; settle input/presentation and image-library needs. zlib/libpng are useful shared candidates. Compositor and GPU support stay separate. |
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
@@ -116,12 +118,9 @@ library over native capabilities, with a future userspace descriptor adapter for
 common port requirements. The aim is minimal changes to simple C programs;
 implementation slices and compatibility semantics remain decisions for later work.
 
-Selected next focus: [shell streams and pipelines](shell-streams.md), because
-they make existing tools more useful and give future jq, awk and scheme results
-a shared consumer path. Pipes and redirection delegate actual capabilities;
-copied grants suffice, without requiring ownership moves. The detailed byte-I/O
-contract has decision gates in the milestone draft, which now contains the
-focused PR task list. File redirection comes before pipe integration.
+The [shell-streams milestone](../shell-streams.md) is complete. No subsequent
+implementation milestone is selected; discuss the next concrete scope before
+starting another track.
 HTTP providers are a strong alternative for advancing the native resource model;
 SDL2/GrafX2 is the graphical alternative. A desktop/compositor remains a separate
 [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting

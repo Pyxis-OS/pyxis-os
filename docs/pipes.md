@@ -3,8 +3,9 @@
 A pipe is a bounded, unidirectional byte stream. Its read and write endpoints are
 separately owned capabilities using `PROTOCOL_PIPE`. The
 [public ABI](../include/abi/pipe.h) defines creation, operation limits and replies.
-Shell pipeline syntax and safe multi-child launch are later tasks in the
-[shell-streams milestone](wip/shell-streams.md).
+The shell uses these endpoints with [batch launch](processes.md#batch-launch)
+for [foreground pipelines](shell.md#foreground-pipelines). See the
+[stream reference](shell-streams.md) for ownership across launch and libc.
 
 ## Creation and authority
 
@@ -83,3 +84,8 @@ forwarding terminal and pipe input promptly. A positive short read is not EOF;
 a nonempty zero read sets EOF only when the backend actually reports it. Missing
 input is EBADF and an unexpected zero terminal result is EIO. Existing EOF stays
 sticky until cleared, and zero capacity changes no stream indicators.
+
+[Head](shell.md#bounded-input-with-head) closes its input at an exact line/byte
+limit. An upstream producer can then receive EPIPE, including when already
+blocked on a full pipe. No cancellation is needed to release that pipe wait;
+other kinds of work or waits remain independent.

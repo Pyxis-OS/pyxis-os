@@ -1,7 +1,8 @@
 # Standard C libc over the native ABI
 
 Status: agreed direction, with implementation scope and sequencing still open.
-This note does not expand the active shell-streams milestone.
+The shell-streams milestone is complete; this note does not authorize a libc
+implementation milestone.
 
 ## Intended result
 
@@ -83,8 +84,8 @@ need, rather than importing a descriptor syscall layer wholesale.
 
 ## Sequencing and open decisions
 
-Finish the selected [shell streams and pipelines](shell-streams.md) tasks first.
-The proposed fread_some extension remains useful for native FILE consumers and
+The completed [shell streams and pipelines](../shell-streams.md) provide the
+implemented fread_some extension. It remains useful for native FILE consumers and
 does not require descriptor support. Avoid permanently replacing every upstream
 read call with Pyxis-specific code as the port collection grows.
 

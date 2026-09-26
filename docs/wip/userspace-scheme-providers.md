@@ -235,7 +235,7 @@ A future `http` helper could prepare a request with URL, method and request-scop
 headers, then return a capability to the shell. It uses the userspace provider;
 it does not contain another HTTP implementation. The shell can grant a body
 writer to `echo` or another producer, and later a response reader to `cat` or jq.
-This uses the same [capability-based stdio bindings](shell-streams.md) as pipes
+This uses the same [capability-based stdio bindings](../shell-streams.md) as pipes
 and ordinary file redirection. The commands only read/write their given streams.
 
 The helper must hand back a real grant through an authorized capability-transfer

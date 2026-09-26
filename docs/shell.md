@@ -5,7 +5,7 @@ default [init script](init.md) and [session launcher](session-configuration.md),
 which by default start separate shells on CPUs 1 and 2 when present,
 or one on the BSP for a single-CPU boot, with shared `home://` as their working directory. On multicore boots
 use Super+Right to select CPU 1 before typing. The normal initrd contains init,
-shell, ls, cat, mkdir, rm, rmdir, mv, [Kilo and its license](ports.md), and `share/hello.txt`;
+shell, ls, cat, head, mkdir, rm, rmdir, mv, [Kilo and its license](ports.md), and `share/hello.txt`;
 home is initially empty and its RAM
 contents disappear on reboot.
 
@@ -163,6 +163,49 @@ its transfer buffer. File operands and file-backed stdin keep bulk reads and
 normal EOF. Terminal input remains raw and blocking, without a Ctrl+D EOF convention.
 Ctrl+C cancels shell editing, not a running cat. No options or terminal line
 discipline are added.
+
+## Bounded input with head
+
+```text
+head [-n N | -c N] [file|-]
+```
+
+Head copies the first ten lines by default. `-n N` selects a line count; `-c N`
+selects a byte count. An omitted input or `-` reads stdin; otherwise it opens one
+file through the ordinary path grants. Options precede the file operand. Use
+`--` before a filename beginning with `-`; `./-` names a literal dash file.
+
+Counts contain decimal digits only, from zero through UINT64_MAX. Signs,
+suffixes, attached option values, repeated/conflicting count options and multiple
+input files are rejected before opening input. A zero count performs no reads or
+stdout writes; an explicit file is still opened, so invalid paths fail normally.
+Open/close errors still fail, including closing an unavailable standard binding.
+
+Line mode counts newline bytes and preserves all bytes, including CR and NUL.
+A final unterminated line is copied unchanged; EOF before the requested count is
+successful. Input closes at the limit, EOF or an I/O error, before a final output
+write or error diagnostic can block. Errors in
+reading, writing or closing report to stderr and return failure.
+
+Head never consumes past its selected boundary. Line mode reads one byte at a
+time, at the cost of more native calls for long lines; byte mode uses
+`fread_some` with at most 4 KiB and never more than its remaining count. Neither
+mode dispatches on the input backend. Line output is staged until a newline,
+EOF/error or 4 KiB; byte output forwards each available read.
+
+For example:
+
+```text
+cat app://share/hello.txt | head -n 2
+cat app://tcc.pxe | head -c 16 > home://prefix
+head -c 0 home://copy.txt
+```
+
+Closing the reader early discards unread pipe bytes and makes further upstream
+writes fail with EPIPE. The shell reports earlier-stage failures while retaining
+the last stage's result. There are no multiple-file headers or additional head
+options. Terminal input still has no EOF convention: line mode needs its requested
+newlines or an input error, and byte mode needs its requested bytes or an error.
 
 ## Foreground pipelines
 
