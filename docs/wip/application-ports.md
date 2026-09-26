@@ -22,7 +22,7 @@ should improve daily use or exercise a reusable OS facility.
 | Mbed TLS | Evaluate a pinned userspace TLS release for HTTPS, including its crypto dependency, entropy, clock, transport callbacks, certificate trust and verification policy. No TLS in the kernel. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
 | awk | Text filtering, field processing and small scripts; select an implementation after a libc/dependency probe. |
-| grep, head, tail, wc, sort, uniq, hexdump | Small everyday commands that remain useful alongside awk. Decide which to port or implement separately; this is not a commitment to a complete Unix utility suite. |
+| grep, tail, wc, sort, uniq, hexdump | Small everyday commands that remain useful alongside awk. Decide which to port or implement separately; this is not a commitment to a complete Unix utility suite. |
 | jq | JSON inspection and transformation, initially on local files. Audit libc/math and the selected regex configuration/dependency. |
 
 SDL2 means an upstream library port with a Pyxis platform backend, not a growing
@@ -45,9 +45,10 @@ eventually make this illustrative command possible:
 cat json+http://example.com/apps | jq '.[].name'
 ```
 
-Neither pipelines nor scheme providers are implemented by adding jq. Streaming
-stdio, EOF, backpressure, reader closure and child cleanup need concrete contracts
-before treating these tools as a connected pipeline.
+[Shell pipelines and native head](../shell-streams.md) are implemented. The
+[libc milestone](libc-portability.md) next targets upstream cksum and optionally
+tee through conventional descriptor APIs. The HTTP provider and jq port remain
+separate work; adding jq alone does not implement a scheme provider.
 
 ## Graphical applications and games
 
@@ -81,6 +82,13 @@ proposed [database worksheet experiment](userspace-scheme-providers.md#database-
 One possible ordering is to alternate a practical usability milestone with an
 enjoyable port. This is a suggestion awaiting selection, not permission to start
 parallel tracks or to port every dependency speculatively.
+
+## Distant candidates
+
+The [toolchain and runtime notes](toolchains-and-runtimes.md) record Go and C++
+prerequisites, **wild possible future idea: Tailscale** for tailnet access, and
+**wilder even later idea: Ladybird** as a graphical browser. Both need independent
+probes and milestones; neither is an immediate port assignment.
 
 ## Upstream investigation references
 
