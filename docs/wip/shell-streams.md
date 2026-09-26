@@ -125,9 +125,11 @@ redirection are deferred.
 
 `cat` without operands reads stdin; each `-` operand reads that same stream at its
 current position without closing or rewinding it. Explicit paths retain their
-existing behavior; `./-` names a literal dash file. Terminal stdin remains raw and
-blocking, with no EOF convention or child interruption from Ctrl+C. This task does
-not introduce line discipline or Ctrl+D semantics.
+existing behavior; `./-` names a literal dash file. Cat reads terminal stdin one
+byte at a time for immediate output, retaining bulk reads for files and redirected
+file stdin. Terminal stdin remains raw and blocking, with no EOF convention or
+child interruption from Ctrl+C. This task does not introduce line discipline or
+Ctrl+D semantics.
 
 ## Proposed pipe contract
 

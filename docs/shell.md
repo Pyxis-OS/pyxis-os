@@ -157,10 +157,12 @@ independent writes can overwrite one another. This is not a merged output stream
 
 `cat` with no operands reads stdin to EOF. A `-` operand reads stdin among ordinary
 file operands; repeated `-` continues the same stream without closing or rewinding
-it. Use `./-` for a file literally named `-`. File input supplies normal EOF;
-terminal input remains raw and blocking, without a Ctrl+D EOF convention. Ctrl+C
-cancels shell editing, not a running cat. No options or terminal line discipline
-are added.
+it. Use `./-` for a file literally named `-`. Terminal stdin is read one byte at
+a time so typing is copied immediately, without waiting for a full transfer
+buffer or Enter. File operands and file-backed stdin keep bulk reads and normal
+EOF. Terminal input remains raw and blocking, without a Ctrl+D EOF convention.
+Ctrl+C cancels shell editing, not a running cat. No options or terminal line
+discipline are added.
 
 ## Background commands
 
