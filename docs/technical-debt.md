@@ -278,3 +278,14 @@ duplication or merged output. These limitations are accepted for the first
 redirection scope. Revisit if alias-safe copying or shared-position output becomes
 an explicit requirement; task 4's pipeline launch lifecycle does not by itself
 promise filesystem rollback. See [shell redirection](shell.md#file-redirection-and-stdin).
+
+## Pipe scheduling and resource limits
+
+Native pipes have fixed 64 KiB storage and 4 KiB per-call transfer limits. Copied
+readers compete for bytes and copied writers may interleave transfers, without
+a guaranteed atomic write size or strict fairness. Creation uses normal kernel
+allocation limits; there is no separate per-process pipe-memory quota. A holder
+of unused endpoint copies can delay EOF or EPIPE indefinitely. There are no
+nonblocking operations, deadlines, wait sets or cancellation. Revisit these
+limits when a concrete multi-producer or multiplexed consumer needs them; shell
+pipeline launch safety is a separate task in [shell streams](wip/shell-streams.md).

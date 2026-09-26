@@ -16,6 +16,9 @@ struct pipe_pair {
   uint8_t data[PIPE_CAPACITY];
 };
 
+/* IF=0; pipe lock may nest scheduler locks. Only bounded kernel-buffer copies
+ * run while held, never allocation, user access or a context switch. The pair
+ * outlives either end without retaining a reference to the opposite endpoint. */
 static void lock_pipe(struct pipe_pair *pair)
 {
   while (atomic_exchange_explicit(&pair->locked, true, memory_order_acquire)) {

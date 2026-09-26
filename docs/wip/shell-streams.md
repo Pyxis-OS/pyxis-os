@@ -1,10 +1,11 @@
 # Capability-backed standard streams, redirection and pipelines
 
-Status: tasks 1 and 2 implemented. Independent standard-stream bindings use
+Status: tasks 1 through 3 implemented. Independent standard-stream bindings use
 explicit protocol information and dedicated handles adopted directly by libc.
-Foreground file redirection and cat stdin consumption are available. The later
-pipe/pipeline policies below remain proposals with decision gates. Discuss unresolved choices before their implementation task; this document
-does not authorize starting code work.
+Foreground file redirection, native pipes and cat read-some consumption are
+available. The later pipeline lifecycle and syntax policies remain proposals
+with decision gates. Discuss unresolved choices before their implementation task;
+this document does not authorize starting code work.
 
 ## Intended result
 
@@ -125,42 +126,49 @@ redirection are deferred.
 
 `cat` without operands reads stdin; each `-` operand reads that same stream at its
 current position without closing or rewinding it. Explicit paths retain their
-existing behavior; `./-` names a literal dash file. Cat reads terminal stdin one
-byte at a time for immediate output, retaining bulk reads for files and redirected
-file stdin. Terminal stdin remains raw and blocking, with no EOF convention or
+existing behavior; `./-` names a literal dash file. Task 3 replaces the initial one-byte terminal special case with the uniform
+read-some helper below, preserving bulk reads for files. Terminal stdin remains raw and blocking, with no EOF convention or
 child interruption from Ctrl+C. This task does not introduce line discipline or
 Ctrl+D semantics.
 
-## Proposed pipe contract
+## Implemented task 3 contract
 
-Create a kernel-owned bounded byte stream with separately granted read and write
-endpoints. Proposed capacity: 64 KiB per pipe, allocated at creation under the
-existing BSP allocation rules. Allocation failure must unwind both endpoints.
-Capacity, per-call limits and creation authority need agreement before task 3.
+A dedicated `pipe` creation capability creates a kernel-owned 64 KiB byte stream
+and returns separate read and write handles together, or neither on failure.
+Init and session launchers forward creation authority to the shell; ordinary
+children receive selected endpoints without creation authority by default.
+Allocation and reclamation follow the existing BSP ownership rules. The
+[pipe reference](../pipes.md) describes the ABI, lifetime and stdio behavior.
 
-Proposed native behavior:
+Native reads and writes transfer at most 4 KiB per call, clamping larger requests.
+Reads return available bytes, possibly short, and wait only when empty while
+writers remain. After the final writer closes, buffered bytes drain before EOF.
+Writes return positive partial progress when space exists and wait when full.
+Final-reader closure wakes blocked writers with ENDPOINT_CLOSED, mapped to EPIPE
+without signals. Zero-length operations are no-ops after handle/authority
+validation, independent of peer closure. A failed native operation transfers no
+bytes; successful counts are authoritative. Pipes cannot seek.
 
-- A nonempty read returns available bytes, potentially short. Empty storage waits
-  while writers remain. After the final writer closes, drain buffered bytes and
-  then return zero for EOF. A zero-length read is a no-op, not an EOF observation.
-- A nonempty write can return positive partial progress when space exists; a full
-  buffer waits for space. Last-reader closure wakes writers with a defined
-  broken-pipe status, translated to EPIPE by libc, without adding signals.
-- libc continues short transfers according to fread/fwrite semantics; seeking a
-  pipe reports ESPIPE. Define errors after prior progress without losing or
-  replaying confirmed bytes.
-- Endpoint references govern closure, including copied startup grants and libc's
-  own references. The shell and unrelated children must not retain unused writers
-  and prevent EOF, or retain unused readers and hide peer closure.
-- Synchronize parked waiters, user-buffer access and object teardown using current
-  scheduler/VM ownership rules. Do not retain another CPU's user pointers or task
-  stack as durable queue storage. No lock spans a context switch.
+Copied readers compete for bytes; copied writers share the stream and large
+transfers can interleave between calls. No message boundaries, guaranteed atomic
+write size, strict fairness, nonblocking mode, deadlines, wait sets or growth are
+promised. Each waiting task has its own queue record. Final-peer closure wakes
+all affected waiters; condition checks and registration share the pipe lock.
+Wait records are detached before wake, with no lock across a context switch or
+user copy. Shared storage ownership does not retain either endpoint: bookkeeping
+must not postpone EOF or EPIPE. Process exit and faults release remaining handles
+through normal deferred cleanup, including copied startup grants.
 
-Before implementation, decide multiple-reader/writer behavior, write interleaving,
-zero-length writes, fairness expectations and process-exit cleanup. The first
-shell use is one producer and one consumer per pipe, but copied grants still need
-safe behavior. No message boundaries, PIPE_BUF-style atomicity, nonblocking mode,
-wait sets or dynamic buffer growth are assumed.
+Libc retains fread/fwrite element-count and short-transfer continuation semantics.
+The Pyxis extension `fread_some(buffer, capacity, stream)` returns bytes from one
+backend transfer, waiting for initial data/EOF/error but never trying to fill the
+buffer after positive progress. Files retain bulk reads at their FILE offset;
+console and pipe input return available data. Cat uses this helper uniformly.
+A positive short read does not set EOF. A nonempty zero result sets EOF only for
+a backend EOF; unavailable streams report EBADF, and an unexpected zero terminal
+result reports EIO. Existing EOF suppresses further backend reads until cleared.
+Zero capacity changes no indicators. Errors set the sticky error indicator and
+errno; no hidden stream-handle copies or read-ahead are introduced.
 
 ## Pipeline launch and failure gate
 
@@ -190,7 +198,7 @@ of that choice; keep it focused on the pipeline's actual needs.
   decisions, implement the selected foreground redirections and cat stdin mode,
   and demonstrate separate stderr. Carry actual grants through launch and unwind
   failures. This is the first visible use of file-backed standard streams.
-- [ ] **3. Bounded native pipe endpoints.** Resolve the pipe contract, add creation,
+- [x] **3. Bounded native pipe endpoints.** Resolve the pipe contract, add creation,
   READ/WRITE operations and libc support, with reference-based EOF, blocked-peer
   wakeup and cleanup. Document the protocol beside its ABI; no shell pipelines
   yet. Validate through ordinary build/boot and debugger inspection as appropriate.

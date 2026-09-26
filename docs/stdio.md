@@ -68,7 +68,7 @@ within the RAM filesystem, not disk durability or a whole-path snapshot.
 before I/O. A partial final element may have transferred bytes even though it
 is not included in that count. File position belongs to each FILE, with no
 shared seek position in the underlying capability. File writes use that offset.
-Both file and terminal output continue positive short writes until complete or
+File, terminal and pipe output continue positive short writes until complete or
 an error, submitting only the remaining suffix. Zero progress or an excessive
 count is rejected; file position advances only for confirmed bytes. On a later
 failure, the position includes any partial final element, the return counts
@@ -82,6 +82,18 @@ writes only. Applications needing that distinction must use the native status;
 retrying the same bytes after EIO is not guaranteed safe. Zero-size/count
 `fwrite` remains a C no-op; it does not submit a native zero-byte write.
 
+`fread_some(buffer, capacity, stream)` is a Pyxis byte-oriented extension. It
+returns after one successful backend transfer, up to capacity and the backend's
+per-call limit; it does not keep reading to fill a short result. Empty terminal
+or pipe input waits for initial data, EOF where supported, or error. File reads
+retain bulk transfers and advance their FILE offset by the confirmed byte count.
+Zero capacity is a no-op. A nonempty zero result reports backend EOF through
+`feof`, or failure through `ferror` and errno; unavailable input is EBADF, and
+an unexpected zero-byte terminal result is EIO. A positive short result does not
+establish EOF. Existing EOF suppresses backend reads until cleared. The helper
+shares backend dispatch and indicator handling with `fread`, whose complete
+element counts and fill-request behavior are unchanged. There is no extra handle or read-ahead.
+
 `fgetc`/`getc`/`getchar`, `fgets`, `fputc`/`putc`/`putchar`, `fputs` and `puts` are
 provided. `fgets` retains a newline and terminates successful input. Capacity one
 produces an empty string without consuming input; a nonpositive capacity fails.
@@ -91,8 +103,8 @@ error; fgets stops at newline/capacity. Neither echoes or edits. Interactive lin
 editing remains an explicit [libterm](terminal.md) operation. Do not read from
 stdin while a foreground child or another reader owns that input stream.
 
-A zero-byte file read for a nonempty request sets EOF. Merely reading exactly to
-the end does not set it until a later read attempts more. Terminal input has no
+A successful zero-byte file or pipe read for a nonempty request sets EOF. Merely
+reading exactly to the end does not set it until a later read attempts more. Terminal input has no
 EOF convention; input loss sets EIO and the error indicator. `feof` and `ferror`
 remain set until cleared: `clearerr` clears both, successful `fseek` clears EOF,
 and `rewind` clears both. Indicators do not reset errno. An error does not itself
@@ -101,15 +113,15 @@ prevent retrying I/O; EOF suppresses reads until cleared or repositioned.
 `fseek` supports SET/CUR/END on files, including past the current end. Subsequent
 writes can create zero-filled gaps through the native file operation. Negative
 resulting positions are rejected. `ftell` fails with EOVERFLOW if the current
-offset cannot fit in long. Terminal seeks fail with ESPIPE. Update streams have
-no buffered direction state; ordinary C code can still use fseek/fflush at the
+offset cannot fit in long. Terminal and pipe seeks fail with ESPIPE. Update
+streams have no buffered direction state; ordinary C code can still use fseek/fflush at the
 required read/write transitions.
 
 ## Standard streams, formatting and exit
 
 Startup supplies independent stdin, stdout and stderr bindings. Each declares
-`PROTOCOL_CONSOLE` or `PROTOCOL_FILE` and owns a distinct child handle with only
-READ authority for stdin or WRITE authority for stdout/stderr. Runtime adopts
+`PROTOCOL_CONSOLE`, `PROTOCOL_FILE` or `PROTOCOL_PIPE` and owns a distinct child
+handle with only READ authority for stdin or WRITE authority for stdout/stderr. Runtime adopts
 these handles directly, before heap initialization: it allocates no backing and
 retains no hidden startup copy. Closing stdout cannot close stderr or a named
 terminal grant. Normal boot binds all three to the space console.
@@ -122,9 +134,11 @@ no-ops. Unknown protocols and malformed bindings are rejected during launch/star
 
 The [shell](shell.md#file-redirection-and-stdin) can supply these bindings through
 foreground file redirects. File-backed standard streams start at offset zero,
-with independent per-FILE positions. Adoption does not open, truncate or append to the file. Two output
-streams backed by the same object can overwrite one another because their
-positions are independent. Console streams remain sequential and cannot seek.
+with independent per-FILE positions. Adoption does not open, truncate or append
+to the file. Two output streams backed by the same object can overwrite one
+another because their positions are independent. Console and pipe streams remain
+sequential and cannot seek. [Pipes](pipes.md) use reference-based EOF and report
+EPIPE when their last reader closes.
 
 `startup_stream(index)` borrows the handle owned by the corresponding FILE;
 native code must not close it independently. `fclose` leaves the immutable
