@@ -26,6 +26,26 @@ but many otherwise small C programs use them. Support useful subsets as actual
 ports require them, without committing to full POSIX compatibility, Unix process
 semantics or binary compatibility with another OS.
 
+## Boundary for application patches
+
+Prefer implementing conventional library behavior over patching each application
+to use native APIs. Ordinary file reading, writing, seeking and allocation should
+work through the application's existing library calls. Missing libc support is
+a shared compatibility gap to address, not a reason to permanently rewrite those
+operations in every port.
+
+Pyxis-specific application changes are appropriate for platform integration and
+intentional features. For example, teaching TCC's include-path handling to accept
+URI schemes for future `http://` imports is useful integration. Replacing its
+ordinary file reads solely because libc lacks the expected interface or semantics
+is a workaround. Keep URI resolution and resource access in shared libraries or
+providers where possible; a compiler should not need its own HTTP client.
+
+When a bounded milestone needs a temporary workaround, record the missing library
+or OS support and the condition for removing the patch as technical debt. This
+direction does not require retroactively rewriting existing ports in this PR or
+silently expanding the current implementation task.
+
 ## Userspace file-descriptor adapter
 
 A future libc-owned table can map process-local integer descriptors to owned
