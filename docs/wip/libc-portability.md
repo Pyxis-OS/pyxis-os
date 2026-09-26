@@ -1,9 +1,9 @@
 # Standard C libc over the native ABI
 
-Status: next milestone after shell streams and pipelines. The result is a small
-libc descriptor layer exercised by an upstream cksum port, with tee as a
-conditional second consumer. Resolve the decisions below before implementing
-each task; this document does not authorize the whole compatibility backlog.
+Status: task 1 complete: the source probe and initial descriptor contract are
+recorded. Task 2 implementation has not started. The result is a small libc
+descriptor layer exercised by an upstream cksum port, with tee as a conditional
+second consumer. This document does not authorize the whole compatibility backlog.
 
 ## Intended result
 
@@ -148,18 +148,18 @@ is evidence of the remaining symbol closure, not successful application builds
 or runtime validation. No executable stubs, host libc, tests or boot automation
 were introduced. Neither command was booted.
 
-For reproduction, fetch the revision above; compile the listed sources with
-`share/pyxis.mk`'s PYXIS_CPPFLAGS and PYXIS_CFLAGS, keeping compiler builtin and
-SDK headers as the only system includes. The raw probe requires no patches.
-The isolated closure probe additionally needs the private util.h reduction,
-BUFSIZ and missing declarations described above. Link each command with its
-listed helpers using the SDK startup and target libraries. Do not treat the
-scratch declarations as an installable compatibility layer.
+The [exact reproduction recipe](libc-probe/README.md) includes the original
+compile/link flags, source list and [scratch patch](libc-probe/scratch.patch).
+The patch preserves every replacement header and the reduced util.h used by
+the isolated probe. It applies only to a disposable copy of the pinned sbase
+source, never to the SDK. Neither it nor the commands are test infrastructure
+or an installable compatibility layer.
 
-## Proposed public slice for review
+## Accepted initial public slice
 
-The ownership constraints above are agreed. These remaining interface choices
-are proposals to settle before marking task 1 complete:
+The initial slice below is accepted for tasks 2 and 3. The close-failure
+contract is specified immediately afterward; task 2 chooses the internal
+representation and invalidation mechanism.
 
 - Add `int open(const char *path, int flags, ...)`, `int close(int fd)`,
   `ssize_t read(int fd, void *buffer, size_t count)` and
@@ -184,12 +184,66 @@ are proposals to settle before marking task 1 complete:
   without backend I/O. Reject counts above the signed return type's maximum
   with EINVAL. Nonempty file/pipe zero reads mean EOF; the console's unexpected
   zero progress remains EIO. A nonempty zero write remains EIO. Closing a
-  descriptor invalidates its association even if native release reports failure;
-  define that cleanup path explicitly in task 2.
-- Supply BUFSIZ (proposed 8192) and the fixed-width output-format macros in
+  descriptor invalidates its association even if native release reports failure.
+  See the close-failure contract below.
+- Supply BUFSIZ (8192) and the fixed-width output-format macros in
   inttypes.h needed to use existing stdint.h types without consumer-local
   format workarounds. The probe requires PRIu32; broader integer conversions,
   scanning and unrelated inttypes functions are not prerequisites.
+
+### Close failure and cleanup
+
+Code inspection of [close_handle](../../kernel/syscall.c) and
+[capability_close](../../kernel/object/capability.c) establishes the current
+native contract: CLOSE returns CALL_OK after removing the capability entry and
+releasing its reference, or CALL_BAD_HANDLE if no matching entry exists. Both
+return zero reply bytes. Closing requires no access right and does not perform
+file sync or report storage writeback errors. Final object destruction can
+still wait for the existing BSP retirement path.
+
+Libc's internal release path must inspect `syscall_close()` from the exported
+syscall.h. The current `handle_close()` convenience helper reduces every
+failure to -1 and discards both the status and malformed-reply distinction;
+it cannot provide this translation. No new kernel syscall or public libpyxis
+helper is required for this slice.
+
+- An invalid/already-closed descriptor returns -1 with EBADF without a native
+  call. For a valid descriptor, detach its native handle and invalidate the
+  entry and every associated FILE before making one native close attempt.
+  The descriptor remains free for reuse regardless of that result.
+- CALL_OK with zero reply bytes returns 0 and leaves errno unchanged.
+  CALL_BAD_HANDLE with zero reply bytes returns -1/EBADF. Neither current
+  outcome leaves a native capability owned by that entry: success released it;
+  BAD_HANDLE says it was already absent. Do not retry either outcome.
+- A different in-range failure with zero reply bytes returns -1 using
+  libc_call_errno. It is not an outcome produced by today's CLOSE path, and
+  libc must not infer that it released the reference. An out-of-range status
+  or nonzero reply_size is a malformed CLOSE result: return -1/EIO, including
+  when status claims success. Reply validation precedes status translation.
+- In the unexpected/malformed cases, any surviving native capability may
+  remain until the kernel reclaims the process's capability table at exit,
+  including `_Exit` or a fatal fault. That residual kernel reference could
+  delay pipe peer closure until then. Libc does not retain a hidden native
+  copy, retry list or live descriptor to make an uncertain release look like
+  success. This is a failure-containment rule, not normal deferred close.
+- Discard the closed entry's open-state metadata without allocation or another
+  release attempt. An existing FILE may retain only the metadata needed for
+  its invalid association and indicators until fclose/exit; it owns no native
+  reference. Later fclose of that stale FILE returns EOF/EBADF and disposes of
+  the wrapper without touching a reused descriptor. Fclose of a live FILE
+  applies the same release policy, disposes of its wrapper even on failure,
+  and reports EOF with the release errno if close fails. Static standard FILE
+  storage stays allocated but invalid.
+- Normal exit closes each remaining live descriptor once, including those
+  without FILE wrappers, then reclaims invalid FILE metadata. Cleanup errors
+  do not replace the process's requested exit status. There is no exit-time
+  retry of descriptors already invalidated by close/fclose; the kernel's
+  process teardown reclaims any residual native entries.
+
+The same release primitive is used for rollback of an internal open failure,
+while preserving that open failure's errno. A failed rollback release has the
+same process-exit reclamation limit. Successful close is not a durability
+promise; the existing explicit file-sync contract is unchanged.
 
 ### Tee checkpoint after cksum
 
@@ -203,7 +257,7 @@ atomicity is not supplied by stdio's separate SIZE/WRITE sequence. `-i` invokes
 signal(SIGINT, SIG_IGN); no-op signal handling is not support.
 
 The writeall helper already loops over positive short writes. It treats zero
-as a return, so the proposed nonempty zero-write error rule matters. Tee marks
+as a return, so the nonempty zero-write error rule matters. Tee marks
 failed outputs inactive but does not close their descriptors, and keeps reading
 input even after every output has failed. It relies on exit for descriptor
 cleanup. Revisit whether that lifetime and downstream-closure behavior is
@@ -236,29 +290,25 @@ requires one. No speculative stubs or retroactive rewrite of every existing port
 
 ## Focused tasks
 
-- [ ] **1. Pin and probe the consumers; settle the descriptor contract.** Inventory
-  the selected cksum and tee sources, transitive helpers and headers against the
-  SDK. Propose the exact initial declarations, flags, errno mappings and omitted
-  behavior. Decide descriptor allocation/growth, ownership, standard descriptors
-  0/1/2, absent streams and FILE integration before implementation. Record
-  tee's actual gaps now and revisit its scope after cksum. The source probe and
-  agreed ownership constraints are recorded above; the remaining public-slice
-  proposals still need review, so this task remains unchecked. A compile probe
-  is evidence gathering, not a new test framework.
+- [x] **1. Pin and probe the consumers; settle the descriptor contract.** The
+  source/helper inventory, accepted initial slice and close-failure policy are
+  recorded above; exact commands and scratch patch are preserved in the
+  [probe recipe](libc-probe/README.md). Tee's measured gaps are recorded for a
+  scope decision after cksum. No descriptor implementation is part of this task.
 - [ ] **2. Add descriptor ownership and standard-stream integration.** Implement
   the agreed process-local table and shared open state in libc. Standard FILE
   objects and descriptors must use one deliberate ownership/position model;
-  avoid retaining an extra pipe writer. Settle fdopen/fileno semantics before
-  exposing them; if deferred, document that boundary. Verify close, exit and
-  absent-stream behavior while preserving existing native launch grants.
+  avoid retaining an extra pipe writer. Public fdopen/fileno remain deferred.
+  Verify the specified close/exit policy, stale FILE invalidation and absent
+  streams while preserving existing native launch grants and writable stdio.
 - [ ] **3. Add the conventional I/O slice.** Implement open/read/write/close and
   the headers/types/flags selected in task 1 over native file, console and pipe
   protocols. Read returns available progress without trying to fill the buffer;
   write reports actual progress, including short writes. Reuse capability path
   resolution and shared error handling rather than duplicating them in ports.
-  Agree creation/truncation, permission-mode handling and unsupported flags
-  before adding writable open; do not pretend Unix permissions are enforced.
-  Seeking is included only if selected by the probe, and must reject pipes.
+  Public open is read-only in this slice; preserve internal writable fopen
+  and its existing seeks. Public writable-open flags, creation-mode policy and
+  public seeking are deferred; revisit tee requirements after cksum.
 - [ ] **4. Port cksum as the first final consumer.** Build and package the pinned
   utility with its ordinary I/O calls intact. Keep adaptations to build/platform
   integration and agreed library gaps. Check named files, stdin, empty input,
