@@ -120,8 +120,9 @@ sets the error indicator; missing stdin is not EOF. There is no fallback to a
 terminal, another standard stream or the kernel log. Zero-size transfers remain
 no-ops. Unknown protocols and malformed bindings are rejected during launch/startup.
 
-File-backed standard streams start at offset zero, with independent per-FILE
-positions. Adoption does not open, truncate or append to the file. Two output
+The [shell](shell.md#file-redirection-and-stdin) can supply these bindings through
+foreground file redirects. File-backed standard streams start at offset zero,
+with independent per-FILE positions. Adoption does not open, truncate or append to the file. Two output
 streams backed by the same object can overwrite one another because their
 positions are independent. Console streams remain sequential and cannot seek.
 
