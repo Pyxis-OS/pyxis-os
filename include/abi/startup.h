@@ -21,7 +21,7 @@ enum startup_stream_index {
  * aliased by resources, roots or working directories. Libc adopts each handle
  * directly; native access borrows it, and fclose leaves this snapshot stale. */
 struct startup_stream {
-  uint64_t protocol; /* STARTUP_STREAM_NONE, PROTOCOL_CONSOLE or PROTOCOL_FILE. */
+  uint64_t protocol; /* STARTUP_STREAM_NONE, PROTOCOL_CONSOLE, PROTOCOL_FILE or PROTOCOL_PIPE. */
   handle_t handle;
 };
 

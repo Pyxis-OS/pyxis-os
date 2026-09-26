@@ -1,6 +1,7 @@
 #include <abi/startup.h>
 #include <abi/console.h>
 #include <abi/file.h>
+#include <abi/pipe.h>
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -86,6 +87,9 @@ static bool validate_streams(struct process *process,
     } else if (stream->protocol == PROTOCOL_FILE) {
       type = OBJECT_FILE;
       expected_rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
+    } else if (stream->protocol == PROTOCOL_PIPE) {
+      type = OBJECT_PIPE;
+      expected_rights = i == STARTUP_STDIN ? PIPE_RIGHT_READ : PIPE_RIGHT_WRITE;
     } else {
       return false;
     }

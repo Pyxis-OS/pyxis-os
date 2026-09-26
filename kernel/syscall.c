@@ -7,6 +7,7 @@
 #include <kernel/object/keyboard.h>
 #include <kernel/object/space.h>
 #include <kernel/object/profile.h>
+#include <kernel/object/pipe.h>
 #include <kernel/object/clock.h>
 #include <abi/message.h>
 #include <kernel/object/display.h>
@@ -141,6 +142,18 @@ static struct syscall_result call_object(handle_t handle,
   uintptr_t request_address = message_address + sizeof(header);
   size_t request_size = message_size - sizeof(header);
   switch (object->type) {
+  case OBJECT_PIPE_SERVICE:
+    if (header.protocol != PROTOCOL_PIPE_SERVICE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return pipe_service_call(rights, header.operation, request_size,
+        reply_address, reply_capacity);
+  case OBJECT_PIPE:
+    if (header.protocol != PROTOCOL_PIPE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return pipe_call((struct pipe_end *)object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
   case OBJECT_CONSOLE:
     if (header.protocol != PROTOCOL_CONSOLE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
