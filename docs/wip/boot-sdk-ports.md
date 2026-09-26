@@ -115,7 +115,8 @@ Selected next focus: [shell streams and pipelines](shell-streams.md), because
 they make existing tools more useful and give future jq, awk and scheme results
 a shared consumer path. Pipes and redirection delegate actual capabilities;
 copied grants suffice, without requiring ownership moves. The detailed byte-I/O
-contract and implementation task list remain open.
+contract has decision gates in the milestone draft, which now contains the
+focused PR task list. File redirection comes before pipe integration.
 HTTP providers are a strong alternative for advancing the native resource model;
 SDL2/GrafX2 is the graphical alternative. A desktop/compositor remains a separate
 [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting
