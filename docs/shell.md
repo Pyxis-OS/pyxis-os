@@ -227,6 +227,11 @@ scheme changes use the bound root's actual grant; each descendant lookup retains
 its parent's grant. Crossing a retained ancestor boundary fails as in the native
 path API.
 
+Each child receives independent copies of the shell's startup standard streams,
+with their declared console/file protocols. Background children omit stdin.
+Missing streams remain absent; stderr never falls back to stdout or the terminal.
+The script interpreter and session handoff preserve these bindings too.
+
 Each foreground child receives explicit copies of terminal input/output, memory, available roots
 with their actual grants, and the current directory chain preserving each
 handle's rights independently. It does not receive the

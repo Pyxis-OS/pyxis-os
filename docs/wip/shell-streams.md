@@ -1,8 +1,8 @@
 # Capability-backed standard streams, redirection and pipelines
 
-Status: milestone draft. Independent standard-stream bindings with explicit
-protocol information, copied capability grants, and file redirection before
-pipes are agreed. The later pipe/shell policies below are proposals with decision
+Status: task 1 implemented. Independent standard-stream bindings use explicit
+protocol information and dedicated handles adopted directly by libc. File
+redirection before pipes remains agreed. The later pipe/shell policies below are proposals with decision
 gates. Discuss unresolved choices before their implementation task; this document
 does not authorize starting code work.
 
@@ -30,8 +30,9 @@ closure must not leave the other side asleep on a dead peer.
 
 [Stdio](../stdio.md) already distinguishes files and consoles. File positions
 belong to each FILE and native operations use explicit offsets. Standard streams
-currently assume console grants: stdin copies `input`, while stdout and stderr
-independently copy `output`. They need no initial user heap allocation.
+use independent protocol/handle bindings and directly adopt dedicated handles,
+without retaining startup copies. They need no initial user heap allocation.
+Named terminal resources remain separate.
 
 [Launch](../processes.md) already delegates restricted copies into a child's
 handle table. The shell currently launches and waits for one foreground child;
@@ -42,7 +43,7 @@ process cancellation or atomic multi-child launch to assume for pipeline cleanup
 ## Agreed standard-stream and authority contract
 
 - Provide independent stdin, stdout and stderr startup bindings with explicit
-  protocol information. The precise ABI layout belongs to task 1. Protocol
+  protocol information in fixed launch/startup slots. Protocol
   metadata selects the userspace adapter; it neither grants rights nor overrides
   kernel validation of object type and authority.
 - Keep existing file and console protocols. Libc dispatches to the declared
@@ -68,6 +69,23 @@ process cancellation or atomic multi-child launch to assume for pipeline cleanup
   compatibility or a version increment solely for the layout change. Preserve
   ownership cleanup for normal exit and faults, and keep early stdio usable
   before heap initialization.
+
+## Implemented task 1 contract
+
+Launch selects three optional standard-stream grant indices; startup publishes
+protocol/handle pairs. Console and file protocols use the existing protocol tags.
+Every present stream index is exclusive: it cannot also appear in another stream,
+resource, root or working-directory binding. Installation creates one child
+handle per grant entry, and libc adopts it without copying. Explicit terminal
+grants remain separately owned. Stream handles have exactly READ authority for
+stdin or WRITE authority for stdout/stderr.
+
+Missing streams are unavailable with EBADF on nonempty I/O, not EOF or a fallback.
+File positions start independently at zero; adoption never truncates or appends.
+The init script, session, shell and native launch examples forward actual streams.
+Background launch omits stdin and continues withholding terminal/keyboard input.
+Shebang forwarding preserves the same stream indices. Detailed ownership and
+errors are documented in [stdio](../stdio.md) and [launch](../processes.md).
 
 ## Proposed file-redirection scope
 
@@ -144,7 +162,7 @@ of that choice; keep it focused on the pipeline's actual needs.
 
 ## Focused PR tasks
 
-- [ ] **1. Independent standard-stream bindings.** Define the explicit protocol
+- [x] **1. Independent standard-stream bindings.** Define the explicit protocol
   metadata and missing-stream behavior in launch/startup, adapt libc's existing
   file/console backends, and update init, session, shell and other in-tree launch
   consumers. Ordinary terminal boot remains the visible behavior. Keep terminal

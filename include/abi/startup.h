@@ -2,6 +2,7 @@
 #define ABI_STARTUP_H
 
 #include <abi/handle.h>
+#include <abi/message.h>
 #include <stddef.h>
 
 #define STARTUP_VERSION 1
@@ -14,15 +15,13 @@ enum startup_stream_index {
   STARTUP_STREAM_COUNT,
 };
 
-#define STREAM_PROTOCOL_NONE UINT64_C(0)
-#define STREAM_PROTOCOL_CONSOLE UINT64_C(1)
-#define STREAM_PROTOCOL_FILE UINT64_C(2)
+#define STARTUP_STREAM_NONE UINT64_C(0)
 
 /* NONE requires HANDLE_INVALID. Present streams own distinct handles, never
  * aliased by resources, roots or working directories. Libc adopts each handle
  * directly; native access borrows it, and fclose leaves this snapshot stale. */
 struct startup_stream {
-  uint64_t protocol;
+  uint64_t protocol; /* STARTUP_STREAM_NONE, PROTOCOL_CONSOLE or PROTOCOL_FILE. */
   handle_t handle;
 };
 

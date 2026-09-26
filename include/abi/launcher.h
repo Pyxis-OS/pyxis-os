@@ -23,7 +23,7 @@ struct launch_binding {
 };
 
 struct launch_stream {
-  uint64_t protocol;
+  uint64_t protocol; /* Same protocol tags as startup_stream. */
   uint64_t grant; /* Grant-list index; NONE requires zero and installs nothing. */
 };
 
@@ -31,9 +31,9 @@ struct launch_stream {
  * root or working-directory binding. That entry installs exactly one handle,
  * adopted by child libc, with only the protocol's READ (stdin) or WRITE rights.
  * Repeated source handles in separate entries deliberately create separate
- * grants, including any explicitly delegated terminal resources. */
-
-/* All addresses are in the caller. Environment uses startup_variable;
+ * grants, including any explicitly delegated terminal resources.
+ *
+ * All addresses are in the caller. Environment uses startup_variable;
  * argv is an array of string addresses, working_directories an array of grant
  * indices. Empty arrays are ignored. working_path is optional (zero = absent).
  * Arrays, strings and alignment together have a 64 KiB capture budget; the

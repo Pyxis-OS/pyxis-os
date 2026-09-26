@@ -106,7 +106,7 @@ static void capture_streams(struct launch_capture *capture,
   struct process_startup *startup = &capture->startup;
   for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
     const struct launch_stream *stream = &source->streams[i];
-    if (stream->protocol == STREAM_PROTOCOL_NONE) {
+    if (stream->protocol == STARTUP_STREAM_NONE) {
       if (stream->grant != 0) {
         capture->error = CALL_BAD_REQUEST;
         return;
@@ -116,10 +116,10 @@ static void capture_streams(struct launch_capture *capture,
 
     enum object_type type;
     uint64_t rights;
-    if (stream->protocol == STREAM_PROTOCOL_CONSOLE) {
+    if (stream->protocol == PROTOCOL_CONSOLE) {
       type = OBJECT_CONSOLE;
       rights = i == STARTUP_STDIN ? CONSOLE_RIGHT_READ : CONSOLE_RIGHT_WRITE;
-    } else if (stream->protocol == STREAM_PROTOCOL_FILE) {
+    } else if (stream->protocol == PROTOCOL_FILE) {
       type = OBJECT_FILE;
       rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
     } else {
@@ -133,7 +133,7 @@ static void capture_streams(struct launch_capture *capture,
       return;
     }
     for (size_t j = 0; j < i; ++j) {
-      if (startup->streams[j].protocol != STREAM_PROTOCOL_NONE &&
+      if (startup->streams[j].protocol != STARTUP_STREAM_NONE &&
           stream->grant == startup->streams[j].handle) {
         capture->error = CALL_BAD_REQUEST;
         return;

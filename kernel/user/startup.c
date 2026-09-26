@@ -71,7 +71,7 @@ static bool validate_streams(struct process *process,
 {
   for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
     const struct startup_stream *stream = &source->streams[i];
-    if (stream->protocol == STREAM_PROTOCOL_NONE) {
+    if (stream->protocol == STARTUP_STREAM_NONE) {
       if (stream->handle != HANDLE_INVALID) {
         return false;
       }
@@ -80,10 +80,10 @@ static bool validate_streams(struct process *process,
 
     enum object_type type;
     uint64_t expected_rights;
-    if (stream->protocol == STREAM_PROTOCOL_CONSOLE) {
+    if (stream->protocol == PROTOCOL_CONSOLE) {
       type = OBJECT_CONSOLE;
       expected_rights = i == STARTUP_STDIN ? CONSOLE_RIGHT_READ : CONSOLE_RIGHT_WRITE;
-    } else if (stream->protocol == STREAM_PROTOCOL_FILE) {
+    } else if (stream->protocol == PROTOCOL_FILE) {
       type = OBJECT_FILE;
       expected_rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
     } else {

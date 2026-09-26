@@ -92,7 +92,8 @@ including page padding. Only the required pages are allocated. Version remains
 1, with the old fixed-role layout replaced outright; rebuild in-tree programs
 together with the kernel.
 
-The read-only portion contains the header, named resource bindings, scheme-root
+The read-only portion contains the header with three standard-stream bindings,
+named resource bindings, scheme-root
 bindings, working-directory context and environment. The writable portion holds
 `argv`, its final NULL and argument strings. Both portions are non-executable
 and survive until address-space destruction. Read-only metadata records the
@@ -104,6 +105,15 @@ No new reference is acquired when recording or looking up a binding. Different
 names may alias a handle; close each owned handle once. Missing resources are
 omitted, and lookup returns HANDLE_INVALID. Closing a handle does not update the
 immutable snapshot, so a later lookup can return its stale value.
+
+Standard streams are fixed stdin/stdout/stderr slots with explicit console or
+file protocol tags. Absent slots use `STARTUP_STREAM_NONE` and an invalid handle.
+Each present slot owns a distinct handle, disjoint from all named resources,
+roots and working-directory bindings, with exactly its protocol's READ right
+for stdin or WRITE right for output. Libc adopts these handles directly before
+heap initialization; startup lookup borrows them and creates no extra reference.
+Closing a FILE releases that handle, leaving its startup entry stale. The kernel
+still reclaims remaining handles on exit or fault. See [stdio](stdio.md).
 
 Scheme roots have their own name/handle table. Preparation checks that each root
 is an installed directory capability and that root names are nonempty, unique
@@ -133,7 +143,8 @@ The shared assembly entry calls the native C startup routine, which checks the
 record's bounds and initializes accessors before invoking `main(argc, argv)`.
 Its return value goes to exit. Programs use
 [the startup helpers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/startup.h) instead of decoding the
-record. The boot launcher supplies the shell's named input/output, memory,
+record. The boot launcher supplies three dedicated console stream handles in
+addition to the shell's named terminal input/output, memory,
 launcher, [display](graphics.md), [clock](timekeeping.md) and
 [keyboard](keyboard.md) resources, app/home roots, a home directory chain, argv[0] and an OS_NAME environment entry.
 
@@ -523,12 +534,26 @@ implicit access to files or other resources. A launcher can itself be delegated
 through an explicit grant, authorizing the recipient to launch in its own space.
 
 The [request](../include/abi/launcher.h) supplies a READ file handle for the P1F
-image, source-handle/right pairs, arguments, environment, named resources,
+image, source-handle/right pairs, arguments, environment, standard streams, named resources,
 scheme roots and working-directory context. Source grants are copied with equal
 or reduced rights. Bindings and working-directory entries refer to grant-list
 indices; repeated references share one child handle, while separate grant-list
 entries produce separate handles. No resources, roots, environment or launcher
 are inherited implicitly. The image handle is not passed unless listed.
+
+Each present standard stream references an exclusive grant-list index. It cannot
+share that index with another stream, a named resource, a root or a working
+directory. The existing grant installation creates exactly one child handle for
+that entry, and startup records it directly; there is no second retained copy.
+Separate entries may deliberately copy the same source object, as for console
+stdout/stderr and explicit terminal resources. No terminal grants are synthesized
+from stream metadata.
+
+Unknown protocols, nonzero indices for absent streams, out-of-range/aliased
+indices and masks other than the exact direction right fail with BAD_REQUEST.
+Missing source authority reports BAD_HANDLE or DENIED; an object/protocol
+mismatch reports WRONG_TYPE. Validation precedes child submission. An absent
+stream is valid and does not cause implicit inheritance.
 
 All nested addresses belong to the caller. Arrays, copied strings and alignment
 have a combined 64 KiB capture budget; the final startup region separately has

@@ -231,9 +231,9 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
   const struct process_startup startup = {
     .streams = {
-      [STARTUP_STDIN] = {STREAM_PROTOCOL_CONSOLE, standard_input},
-      [STARTUP_STDOUT] = {STREAM_PROTOCOL_CONSOLE, standard_output},
-      [STARTUP_STDERR] = {STREAM_PROTOCOL_CONSOLE, standard_error},
+      [STARTUP_STDIN] = {PROTOCOL_CONSOLE, standard_input},
+      [STARTUP_STDOUT] = {PROTOCOL_CONSOLE, standard_output},
+      [STARTUP_STDERR] = {PROTOCOL_CONSOLE, standard_error},
     },
     .resources = resources,
     .resource_count = resource_count,
