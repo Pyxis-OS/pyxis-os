@@ -6,6 +6,19 @@
 #include <kernel/process.h>
 #include <kernel/user.h>
 #include <kernel/user/launch.h>
+#include <kernel/mm/heap.h>
+
+struct launch_prepared {
+  struct process *process;
+  struct task *task;
+  handle_t observer;
+};
+
+struct launch_group {
+  struct process *parent;
+  size_t count;
+  struct launch_prepared stages[LAUNCH_BATCH_MAX];
+};
 
 static enum call_status capability_status(enum capability_result result)
 {
@@ -54,11 +67,34 @@ static enum call_status install_grants(struct launch_capture *capture,
   return CALL_OK;
 }
 
-enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
-                                 size_t cpu_index, handle_t *result)
+static void launcher_group_abort(struct launch_group *group)
+{
+  for (size_t i = group->count; i > 0; --i) {
+    struct launch_prepared *stage = &group->stages[i - 1];
+    KASSERT(capability_close(&group->parent->capabilities, stage->observer) == CAP_OK);
+    user_task_discard_prepared(stage->task);
+    KASSERT(process_destroy(stage->process) == MM_OK);
+  }
+  group->count = 0;
+}
+
+struct launch_group *launcher_group_create(void)
 {
   KASSERT(arch_cpu_index() == 0);
-  *result = HANDLE_INVALID;
+  struct launch_group *group = kmalloc(sizeof(*group));
+  if (group) {
+    *group = (struct launch_group){0};
+  }
+  return group;
+}
+
+enum call_status launcher_group_prepare(struct launch_group *group,
+    struct launch_capture *capture, struct process *parent, size_t cpu_index)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(group && group->count < LAUNCH_BATCH_MAX);
+  KASSERT(!group->parent || group->parent == parent);
+  group->parent = parent;
   struct process *child;
   uintptr_t entry;
   bool host = capture->image->backing == FILE_HOST;
@@ -82,26 +118,60 @@ enum call_status launcher_start(struct launch_capture *capture, struct process *
     goto fail;
   }
 
+  struct task *task;
+  enum mm_result submitted = user_task_prepare_on(cpu_index, child, entry,
+      USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE, &task);
+  if (submitted != MM_OK) {
+    status = submitted == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
+    goto fail;
+  }
+
   handle_t observer;
   enum capability_result installed = capability_install(&parent->capabilities,
       &child->control->object, PROCESS_RIGHT_WAIT, &observer);
   if (installed != CAP_OK) {
+    user_task_discard_prepared(task);
     status = capability_status(installed);
     goto fail;
   }
-  enum mm_result submitted = user_task_create_on(cpu_index, child, entry,
-      USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE);
-  if (submitted != MM_OK) {
-    KASSERT(capability_close(&parent->capabilities, observer) == CAP_OK);
-    status = submitted == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
-    goto fail;
-  }
-  /* Submission transfers child ownership. It may run/exit before this return;
-   * the parent's observer already retains the independent completion object. */
-  *result = observer;
+  group->stages[group->count++] = (struct launch_prepared){child, task, observer};
   return CALL_OK;
 
 fail:
   KASSERT(process_destroy(child) == MM_OK);
+  return status;
+}
+
+void launcher_group_publish(struct launch_group *group, handle_t *children)
+{
+  KASSERT(arch_cpu_index() == 0 && group->count);
+  struct task *tasks[LAUNCH_BATCH_MAX];
+  size_t count = group->count;
+  for (size_t i = 0; i < count; ++i) {
+    children[i] = group->stages[i].observer;
+    tasks[i] = group->stages[i].task;
+  }
+  user_task_publish_group(tasks, count);
+  group->count = 0;
+}
+
+void launcher_group_discard(struct launch_group *group)
+{
+  KASSERT(arch_cpu_index() == 0 && group);
+  launcher_group_abort(group);
+  kfree(group);
+}
+
+enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
+                                size_t cpu_index, handle_t *result)
+{
+  struct launch_group group = {0};
+  *result = HANDLE_INVALID;
+  enum call_status status = launcher_group_prepare(&group, capture, parent, cpu_index);
+  if (status == CALL_OK) {
+    launcher_group_publish(&group, result);
+  } else {
+    launcher_group_abort(&group);
+  }
   return status;
 }

@@ -7,6 +7,9 @@
 
 #define LAUNCHER_RIGHT_LAUNCH (UINT64_C(1) << 0)
 #define LAUNCHER_LAUNCH UINT64_C(1)
+#define LAUNCHER_LAUNCH_BATCH UINT64_C(2)
+#define LAUNCH_BATCH_MAX 8
+#define LAUNCH_NO_STAGE UINT64_MAX
 #define LAUNCH_CAPTURE_MAX_SIZE STARTUP_MAX_SIZE
 /* Host executables are copied before loading; this bounds staging bytes, not
  * the child's mapped memory. RAM and archive images do not need that copy. */
@@ -60,6 +63,27 @@ struct launch_message {
   struct launch_request body;
 };
 
+/* requests is a caller address of count launch_request records. All children
+ * are prepared before any becomes runnable. On failure no child is runnable,
+ * source handles survive, and children[] is entirely zero. File writes and
+ * other external effects are not rolled back. A valid batch call
+ * returns the fixed reply even on an operation error; failed_index names the
+ * zero-based failing stage, or LAUNCH_NO_STAGE for a whole-batch error. */
+struct launch_batch_request {
+  uint64_t requests;
+  uint64_t count;
+};
+
+struct launch_batch_message {
+  struct message_header header;
+  struct launch_batch_request body;
+};
+
+struct launch_batch_reply {
+  uint64_t failed_index;
+  handle_t children[LAUNCH_BATCH_MAX];
+};
+
 /* Reply is one WAIT-authorized process-control handle. Failure returns no
  * handle or runnable child, and preserves source grants. A successful child
  * belongs to the caller's space and runs on the caller's assigned CPU. */
@@ -68,5 +92,8 @@ _Static_assert(sizeof(struct launch_binding) == 16, "launch binding layout");
 _Static_assert(sizeof(struct launch_stream) == 16, "launch stream layout");
 _Static_assert(sizeof(struct launch_request) == 160, "launch request layout");
 _Static_assert(sizeof(struct launch_message) == 176, "launch message layout");
+_Static_assert(sizeof(struct launch_batch_request) == 16, "launch batch request layout");
+_Static_assert(sizeof(struct launch_batch_message) == 32, "launch batch message layout");
+_Static_assert(sizeof(struct launch_batch_reply) == 72, "launch batch reply layout");
 
 #endif

@@ -4,6 +4,7 @@
 #include <kernel/mm/types.h>
 
 struct process;
+struct task;
 
 /* Queue one user task with a private kernel stack. On success, transfers sole
  * ownership of the unsubmitted process to the task; failure leaves it with the
@@ -21,6 +22,16 @@ enum mm_result user_task_create(struct process *process, uintptr_t entry,
  * even if the task has not run yet. May submit while other CPUs are scheduling. */
 enum mm_result user_task_create_on(size_t cpu_index, struct process *process,
                                    uintptr_t entry, uintptr_t stack_top);
+
+/* BSP only. Preparation owns its stack but borrows the inactive process until
+ * publication. Discard prepared tasks before destroying their processes. All
+ * tasks in a group must be ready before publication; afterward neither tasks
+ * nor processes may be inspected by the caller. */
+enum mm_result user_task_prepare_on(size_t cpu_index, struct process *process,
+                                    uintptr_t entry, uintptr_t stack_top,
+                                    struct task **result);
+void user_task_discard_prepared(struct task *task);
+void user_task_publish_group(struct task **tasks, size_t count);
 
 /* Abandon the current task's kernel-entry stack. The scheduler switches to
  * its own stack and the kernel space before returning ownership to the BSP. */

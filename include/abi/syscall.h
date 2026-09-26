@@ -50,7 +50,9 @@ enum call_status {
  * HANDLE_RIGHTS takes a handle and uint64_t output address in RDI/RSI; success
  * writes its granted, object-specific rights mask and returns eight bytes.
  * It exposes no object identity and requires no right beyond holding the handle.
- * The C x86_64 ABI returns this two-word structure in those same registers. */
+ * The C x86_64 ABI returns this two-word structure in those same registers.
+ * LAUNCHER_LAUNCH_BATCH is a narrow exception: after reply-buffer validation it
+ * returns its fixed reply on operation failure too, with status still in RAX. */
 struct syscall_result {
   uint64_t status;
   uint64_t reply_size;

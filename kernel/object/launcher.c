@@ -221,43 +221,29 @@ static void capture_startup(struct launch_capture *capture, const struct launch_
   }
 }
 
-struct syscall_result launcher_call(uint64_t rights, uint64_t operation,
-    uintptr_t request_address, size_t request_size,
-    uintptr_t reply_address, size_t reply_capacity)
+static enum call_status capture_launch_request(const struct launch_request *request,
+                                               struct launch_capture **result)
 {
-  if (operation != LAUNCHER_LAUNCH) {
-    return (struct syscall_result){CALL_BAD_OPERATION, 0};
-  }
-  if (!(rights & LAUNCHER_RIGHT_LAUNCH)) {
-    return (struct syscall_result){CALL_DENIED, 0};
-  }
-  struct launch_request request;
-  if (request_size != sizeof(request) || reply_capacity < sizeof(handle_t)) {
-    return (struct syscall_result){CALL_BAD_REQUEST, 0};
-  }
-  if (!copy_from_user(&request, request_address, sizeof(request)) ||
-      !user_buffer_check(reply_address, sizeof(handle_t), USER_BUFFER_WRITE)) {
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
-  }
+  *result = NULL;
   struct kernel_object *image;
   enum capability_result lookup = capability_resolve(&process_current()->capabilities,
-      request.image, FILE_RIGHT_READ, &image, NULL);
+      request->image, FILE_RIGHT_READ, &image, NULL);
   if (lookup != CAP_OK) {
-    return (struct syscall_result){lookup == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED, 0};
+    return lookup == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
   }
   if (image->type != OBJECT_FILE) {
-    return (struct syscall_result){CALL_WRONG_TYPE, 0};
+    return CALL_WRONG_TYPE;
   }
 
   struct launch_capture *capture = task_allocate_launch_capture();
   if (!capture) {
-    return (struct syscall_result){CALL_NO_MEMORY, 0};
+    return CALL_NO_MEMORY;
   }
-  capture_startup(capture, &request);
+  capture_startup(capture, request);
   if (capture->error != CALL_OK) {
     enum call_status error = capture->error;
     task_discard_launch_capture(capture);
-    return (struct syscall_result){error, 0};
+    return error;
   }
   capture->image = (struct file_object *)image;
   if (capture->image->backing == FILE_HOST) {
@@ -269,7 +255,7 @@ struct syscall_result launcher_call(uint64_t rights, uint64_t operation,
     if (pending->status != CALL_OK) {
       enum call_status error = pending->status;
       task_discard_launch_capture(capture);
-      return (struct syscall_result){error, 0};
+      return error;
     }
     capture->host_image = pending->captured;
     capture->host_image_size = pending->count;
@@ -278,14 +264,109 @@ struct syscall_result launcher_call(uint64_t rights, uint64_t operation,
     file_begin_operation(capture->image);
   }
 
+  *result = capture;
+  return CALL_OK;
+}
+
+static struct syscall_result launch_one(uintptr_t request_address, size_t request_size,
+                                        uintptr_t reply_address, size_t reply_capacity)
+{
+  struct launch_request request;
+  if (request_size != sizeof(request) || reply_capacity < sizeof(handle_t)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request, request_address, sizeof(request)) ||
+      !user_buffer_check(reply_address, sizeof(handle_t), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+
+  struct launch_capture *capture;
+  enum call_status status = capture_launch_request(&request, &capture);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+
   /* No other task can close source handles or mutate caller mappings. The BSP
    * borrows the table and stable image, releases any file operation before
    * child submission, and frees staging before waking this caller. */
   handle_t child;
-  enum call_status status = task_launch_process(capture, &child);
+  status = task_launch_process(capture, &child);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
   KASSERT(copy_to_user(reply_address, &child, sizeof(child)));
   return (struct syscall_result){CALL_OK, sizeof(child)};
+}
+
+static struct syscall_result batch_reply(uintptr_t address,
+    const struct launch_batch_reply *reply, enum call_status status)
+{
+  KASSERT(copy_to_user(address, reply, sizeof(*reply)));
+  return (struct syscall_result){status, sizeof(*reply)};
+}
+
+static struct syscall_result launch_batch(uintptr_t request_address, size_t request_size,
+                                          uintptr_t reply_address, size_t reply_capacity)
+{
+  if (reply_capacity < sizeof(struct launch_batch_reply) ||
+      !user_buffer_check(reply_address, sizeof(struct launch_batch_reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+
+  struct launch_batch_reply reply = {.failed_index = LAUNCH_NO_STAGE};
+  if (request_size != sizeof(struct launch_batch_request)) {
+    return batch_reply(reply_address, &reply, CALL_BAD_REQUEST);
+  }
+  struct launch_batch_request batch;
+  if (!copy_from_user(&batch, request_address, sizeof(batch))) {
+    return batch_reply(reply_address, &reply, CALL_BAD_BUFFER);
+  }
+  if (!batch.count || batch.count > LAUNCH_BATCH_MAX) {
+    return batch_reply(reply_address, &reply, CALL_BAD_REQUEST);
+  }
+
+  struct launch_request requests[LAUNCH_BATCH_MAX];
+  if (!copy_from_user(requests, batch.requests,
+      batch.count * sizeof(*requests))) {
+    return batch_reply(reply_address, &reply, CALL_BAD_BUFFER);
+  }
+
+  struct launch_group *group = task_create_launch_group();
+  if (!group) {
+    return batch_reply(reply_address, &reply, CALL_NO_MEMORY);
+  }
+
+  for (size_t i = 0; i < batch.count; ++i) {
+    struct launch_capture *capture;
+    enum call_status status = capture_launch_request(&requests[i], &capture);
+    if (status == CALL_OK) {
+      /* The BSP releases this stage's image operation before the next stage
+       * acquires one, including repeated reads of the same file object. */
+      status = task_prepare_launch_group(group, capture);
+    }
+    if (status != CALL_OK) {
+      reply.failed_index = i;
+      task_discard_launch_group(group);
+      return batch_reply(reply_address, &reply, status);
+    }
+  }
+
+  task_publish_launch_group(group, reply.children);
+  return batch_reply(reply_address, &reply, CALL_OK);
+}
+
+struct syscall_result launcher_call(uint64_t rights, uint64_t operation,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (operation != LAUNCHER_LAUNCH && operation != LAUNCHER_LAUNCH_BATCH) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (!(rights & LAUNCHER_RIGHT_LAUNCH)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (operation == LAUNCHER_LAUNCH_BATCH) {
+    return launch_batch(request_address, request_size, reply_address, reply_capacity);
+  }
+  return launch_one(request_address, request_size, reply_address, reply_capacity);
 }
