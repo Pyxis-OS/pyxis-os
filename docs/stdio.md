@@ -1,8 +1,9 @@
-# File and terminal stdio
+# File, terminal and pipe stdio
 
 The freestanding C library exposes an unbuffered `FILE` subset in
-[`stdio.h`](https://git.internal/chronium/pyxis-userland/src/branch/main/libc/include/stdio.h). It uses native file, directory and
-console capabilities; there is no kernel descriptor table or POSIX syscall layer.
+[`stdio.h`](https://git.internal/chronium/pyxis-userland/src/branch/main/libc/include/stdio.h). It uses native file, directory,
+console and pipe capabilities; there is no kernel descriptor table or POSIX
+syscall layer.
 Libpyxis still returns native statuses. Libc translates failures into `errno`.
 
 ## Opening and ownership
@@ -133,8 +134,11 @@ terminal, another standard stream or the kernel log. Zero-size transfers remain
 no-ops. Unknown protocols and malformed bindings are rejected during launch/startup.
 
 The [shell](shell.md#file-redirection-and-stdin) can supply these bindings through
-foreground file redirects. File-backed standard streams start at offset zero,
-with independent per-FILE positions. Adoption does not open, truncate or append
+foreground file redirects and [pipelines](shell.md#foreground-pipelines).
+The [stream reference](shell-streams.md) describes delegation and lifetime;
+[head](shell.md#bounded-input-with-head) provides exact bounded consumption.
+File-backed standard streams start at offset zero, with independent per-FILE
+positions. Adoption does not open, truncate or append
 to the file. Two output streams backed by the same object can overwrite one
 another because their positions are independent. Console and pipe streams remain
 sequential and cannot seek. [Pipes](pipes.md) use reference-based EOF and report

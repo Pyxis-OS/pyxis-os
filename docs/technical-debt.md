@@ -276,8 +276,8 @@ stdout and stderr retain independent per-FILE offsets when both refer to the sam
 file. Their writes can overwrite each other; this does not implement descriptor
 duplication or merged output. These limitations are accepted for the first
 redirection scope. Revisit if alias-safe copying or shared-position output becomes
-an explicit requirement; task 4's pipeline launch lifecycle does not by itself
-promise filesystem rollback. See [shell redirection](shell.md#file-redirection-and-stdin).
+an explicit requirement; batch launch does not promise filesystem rollback.
+See [shell redirection](shell.md#file-redirection-and-stdin).
 
 ## Pipe scheduling and resource limits
 
@@ -287,8 +287,8 @@ a guaranteed atomic write size or strict fairness. Creation uses normal kernel
 allocation limits; there is no separate per-process pipe-memory quota. A holder
 of unused endpoint copies can delay EOF or EPIPE indefinitely. There are no
 nonblocking operations, deadlines, wait sets or cancellation. Revisit these
-limits when a concrete multi-producer or multiplexed consumer needs them; shell
-pipeline launch safety is a separate task in [shell streams](wip/shell-streams.md).
+limits when a concrete multi-producer or multiplexed consumer needs them.
+[Shell streams](shell-streams.md) documents the implemented launch ownership.
 
 ## Batch launch after publication
 
@@ -303,3 +303,13 @@ wait for all children; an unrelated or terminal-blocked stage can therefore keep
 the shell waiting even when the last stage has finished. Last-stage success does
 not hide earlier diagnostics, but it permits scripts to continue; no pipefail
 policy is provided. See [shell pipelines](shell.md#foreground-pipelines).
+
+## Exact line limits in head
+
+Head's line mode reads one byte per backend call so it never consumes past the
+requested newline. With unbuffered stdio this increases syscall overhead for long
+lines. Byte mode retains bounded bulk reads. Revisit buffering or a native
+bounded-delimiter read only when a concrete consumer needs both throughput and
+exact stream consumption; do not silently discard read-ahead. Multi-file output
+headers and additional head options are outside the current consumer scope.
+See [head usage](shell.md#bounded-input-with-head).

@@ -668,8 +668,9 @@ wait; their closure, launcher exit or a sibling fault does not terminate another
 child. Normal exit and faults reclaim that child's resources and pipe ends.
 The caller must close its own unused pipe copies before waiting for EOF-dependent
 children. Previously created or truncated files are not rolled back on failure.
-Shell pipeline syntax and redirection precedence remain later tasks in the
-[shell-streams milestone](wip/shell-streams.md).
+The [shell pipeline guide](shell.md#foreground-pipelines) specifies stream
+selection, redirection precedence and child completion policy. The
+[stream reference](shell-streams.md) connects these launch and I/O contracts.
 
 ## Later operations and open decisions
 
