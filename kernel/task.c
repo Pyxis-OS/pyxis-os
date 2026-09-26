@@ -1185,7 +1185,8 @@ void task_preempt(bool user_mode)
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
-     (completed_head != NULL || growth_head != NULL || directory_head != NULL ||
+     (completed_head != NULL || growth_head != NULL || pipe_head != NULL ||
+      directory_head != NULL ||
       file_head != NULL || memory_head != NULL || launch_head != NULL ||
       display_head != NULL || hostfs_head != NULL));
   unlock_queues();
