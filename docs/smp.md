@@ -69,6 +69,17 @@ sole ownership of the process to the task; failure leaves it with the caller.
 The target CPU must host the process's owning space. Do not inspect or mutate
 the process or its address space after transfer. There is one task per process.
 
+Batch launch splits submission into BSP-only `user_task_prepare_on()` and
+`user_task_publish_group()`. Preparation allocates and initializes each task and
+kernel stack without enqueueing it; its process remains inactive and owned by
+the preparer. `user_task_discard_prepared()` releases only that task and stack,
+leaving process destruction to the preparer. Publication enqueues the complete
+group under the queue lock and transfers every process and task together. It
+allocates nothing; after unlocking, the BSP retains only the destination CPU
+index for notification. All observer handles and result slots exist before this
+transfer. The blocked caller lends its capability table to BSP preparation;
+cross-CPU requests and results live in task metadata, never remote stack pointers.
+
 `process_create(owner, address_space, &process)` takes ownership of an inactive
 private address space only on success. `process_destroy(process)` releases an
 unsubmitted process and its address space if subsequent setup fails. Neither
