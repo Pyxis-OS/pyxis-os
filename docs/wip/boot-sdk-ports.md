@@ -111,6 +111,11 @@ DevilutionX and C AbyssEngine/Diablo II investigations. The
 database sessions and the editor worksheet idea. Their URI examples are future
 interactions, not supported shell syntax or a settled ABI.
 
+[Libc portability](libc-portability.md) records the direction toward a standard C
+library over native capabilities, with a future userspace descriptor adapter for
+common port requirements. The aim is minimal changes to simple C programs;
+implementation slices and compatibility semantics remain decisions for later work.
+
 Selected next focus: [shell streams and pipelines](shell-streams.md), because
 they make existing tools more useful and give future jq, awk and scheme results
 a shared consumer path. Pipes and redirection delegate actual capabilities;
