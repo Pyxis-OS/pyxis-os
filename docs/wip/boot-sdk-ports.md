@@ -92,11 +92,14 @@ An opt-in [host-backed development overlay](host-development-overlay.md)
 remains postponed: programs can already run from `host://`, so it is not needed
 for the persistent development loop or as a replacement for the boot archive.
 
-## Choosing the next major milestone
+## Next milestone and later candidates
 
-With [shell streams and pipelines](../shell-streams.md) complete, the following
-remain candidates for discussion. No next milestone is selected. Choose a
-concrete scope and split it into focused tasks before implementation.
+Next is [libc portability](libc-portability.md): a small userspace descriptor
+layer, upstream cksum as the final consumer and an optional tee port. Start with
+the source probe and ownership decisions; do not implement the whole worklist
+without the usual task-by-task discussion.
+
+The following remain alternatives for later milestones.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
@@ -113,14 +116,11 @@ DevilutionX and C AbyssEngine/Diablo II investigations. The
 database sessions and the editor worksheet idea. Their URI examples are future
 interactions, not supported shell syntax or a settled ABI.
 
-[Libc portability](libc-portability.md) records the direction toward a standard C
-library over native capabilities, with a future userspace descriptor adapter for
-common port requirements. The aim is minimal changes to simple C programs;
-implementation slices and compatibility semantics remain decisions for later work.
+[Hosted toolchains and language runtimes](toolchains-and-runtimes.md) park
+binutils/P1F investigation, the GCC-versus-LLVM choice, C++ userspace, Go cross
+compilation and a later hosted Go toolchain. Rust, Tailscale and Ladybird are
+future directions, not additions to the libc milestone.
 
-The [shell-streams milestone](../shell-streams.md) is complete. No subsequent
-implementation milestone is selected; discuss the next concrete scope before
-starting another track.
 HTTP providers are a strong alternative for advancing the native resource model;
 SDL2/GrafX2 is the graphical alternative. A desktop/compositor remains a separate
 [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting

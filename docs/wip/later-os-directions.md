@@ -40,6 +40,14 @@ A custom linker remains a possible later investigation alongside application
 bundles/images. TCC already emits native P1F executables; a new linker or custom
 object/archive format is not required for the working development loop.
 
+## Toolchains and language runtimes
+
+[Hosted toolchains and language runtimes](toolchains-and-runtimes.md) records
+binutils/P1F investigation, the open GCC-versus-LLVM choice, C++ userspace, a Go
+cross compiler and later hosted Go tools. Rust is a separate possible direction.
+Tailscale is a wild later candidate; Ladybird is a wilder, much later one. These
+are parked alongside the ports, not extra tasks in the libc milestone.
+
 ## Lua follow-ups
 
 The shared [C configuration helper](../lua.md#embedding-and-session-configuration)
