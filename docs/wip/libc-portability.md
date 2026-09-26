@@ -1,8 +1,9 @@
 # Standard C libc over the native ABI
 
-Status: agreed direction, with implementation scope and sequencing still open.
-The shell-streams milestone is complete; this note does not authorize a libc
-implementation milestone.
+Status: next milestone after shell streams and pipelines. The result is a small
+libc descriptor layer exercised by an upstream cksum port, with tee as a
+conditional second consumer. Resolve the decisions below before implementing
+each task; this document does not authorize the whole compatibility backlog.
 
 ## Intended result
 
@@ -82,27 +83,86 @@ a process-local table alone cannot provide them. Preserve explicit capability
 delegation at launch. Any necessary native support must solve a concrete semantic
 need, rather than importing a descriptor syscall layer wholesale.
 
-## Sequencing and open decisions
+## Milestone boundary
 
-The completed [shell streams and pipelines](../shell-streams.md) provide the
-implemented fread_some extension. It remains useful for native FILE consumers and
-does not require descriptor support. Avoid permanently replacing every upstream
-read call with Pyxis-specific code as the port collection grows.
+The completed [shell streams and pipelines](../shell-streams.md) provide native
+pipes and dedicated startup streams. Preserve their ownership and closure
+behavior while making conventional descriptor I/O available in libc. Keep
+fread_some as a useful extension; ports should not need to replace read with it.
 
-Before an implementation milestone:
+Use a small upstream utility as the acceptance consumer rather than writing a
+new Pyxis command with the same name. The proposed source is
+[sbase cksum](https://git.suckless.org/sbase/file/cksum.c.html): it uses open,
+read and close for input, with stdio for output. Probe its shared helpers and
+headers too; the command source alone is not the dependency list. Pin the
+selected revision and preserve its license through the normal ports workflow.
 
-1. Pick representative simple programs and inventory their ISO C and additional
-   API requirements. Agree the intended C library baseline and known omissions.
-2. Select a small descriptor slice and settle ownership, shared positions,
-   startup integration and FILE interoperability before implementing wrappers.
-3. Add missing behavior in focused PRs, keeping reusable library work separate
-   from port patches. Record unsupported semantics and native prerequisites.
-4. Demonstrate the selected programs with minimal adaptations, then document
-   the supported contract and remaining gaps.
+[sbase tee](https://git.suckless.org/sbase/file/tee.c.html) is the conditional
+second consumer, exercising descriptor output and file creation. Its append and
+signal options introduce separate policy questions. Do not expand this milestone
+into signals or promise atomic append merely to claim a complete tee port.
 
-Libc implementation belongs in userland; Pyxis exports matching ABI headers and
-assembles the SDK. This direction does not select a replacement libc, introduce
-a compatibility subsystem, or change the current stream ownership contract.
-Existing [stdio behavior](../stdio.md) and
-[directory API gaps](../technical-debt.md#directory-apis-in-libpyxis) remain the
-starting point.
+This is not a full ISO C or POSIX conformance milestone, a libc replacement, or
+a kernel descriptor ABI. Fork/exec, descriptor inheritance across processes,
+dup/dup2, polling, nonblocking I/O, general signals, directory APIs and buffered
+stdio remain outside the initial slice unless a separately agreed prerequisite
+requires one. No speculative stubs or retroactive rewrite of every existing port.
+
+## Focused tasks
+
+- [ ] **1. Pin and probe the consumers; settle the descriptor contract.** Inventory
+  the selected cksum and tee sources, transitive helpers and headers against the
+  SDK. Propose the exact initial declarations, flags, errno mappings and omitted
+  behavior. Decide descriptor allocation/growth, ownership, standard descriptors
+  0/1/2, absent streams and FILE integration before implementation. Record whether
+  tee fits, needs an explicitly restricted option set, or should be deferred.
+  A compile probe is evidence gathering, not a new test framework.
+- [ ] **2. Add descriptor ownership and standard-stream integration.** Implement
+  the agreed process-local table and shared open state in libc. Standard FILE
+  objects and descriptors must use one deliberate ownership/position model;
+  avoid retaining an extra pipe writer. Settle fdopen/fileno semantics before
+  exposing them; if deferred, document that boundary. Verify close, exit and
+  absent-stream behavior while preserving existing native launch grants.
+- [ ] **3. Add the conventional I/O slice.** Implement open/read/write/close and
+  the headers/types/flags selected in task 1 over native file, console and pipe
+  protocols. Read returns available progress without trying to fill the buffer;
+  write reports actual progress, including short writes. Reuse capability path
+  resolution and shared error handling rather than duplicating them in ports.
+  Agree creation/truncation, permission-mode handling and unsupported flags
+  before adding writable open; do not pretend Unix permissions are enforced.
+  Seeking is included only if selected by the probe, and must reject pipes.
+- [ ] **4. Port cksum as the first final consumer.** Build and package the pinned
+  utility with its ordinary I/O calls intact. Keep adaptations to build/platform
+  integration and agreed library gaps. Check named files, stdin, empty input,
+  missing files, redirection and pipeline use on ordinary QEMU boots; compare
+  checksum and byte count with a host implementation on identical bytes.
+- [ ] **5. Port tee if the agreed scope fits.** Exercise stdin to stdout and named
+  output files, short transfers, read-only grants and a downstream reader that
+  closes early. Resolve append and interrupt-option behavior before coding: the
+  existing separate SIZE/WRITE append is not atomic, and no-op signal handling
+  is not support. Any restricted port needs explicit agreement and documented
+  limitations; otherwise record the reason for deferring this optional consumer.
+- [ ] **6. Complete the handoff.** Document the supported libc contract and port
+  adaptations, carry missing semantics into technical debt, and move this WIP
+  document into docs as an implementation reference. Record tee as implemented
+  or explicitly deferred, not an unresolved requirement for completion.
+
+Tasks are intended as focused PRs; split a task further if review warrants it.
+Libc belongs in userland, recipes in ports, and matching SDK/ABI export and pins
+in Pyxis. A missing native primitive is a decision checkpoint, not permission to
+reshape the kernel. Validate code through normal builds and manual boots/debugger
+inspection without adding test infrastructure.
+
+The final manual workflow should include commands such as these once packaged:
+
+```sh
+cksum host://hello.c
+cat host://hello.c | cksum
+cksum < host://hello.c > home://checksum.txt
+cat host://hello.c | tee home://copy.c | cksum
+```
+
+The last command depends on accepting the tee slice. Existing
+[stdio behavior](../stdio.md), [append limitations](../technical-debt.md#non-atomic-stdio-append)
+and [directory API gaps](../technical-debt.md#directory-apis-in-libpyxis) remain
+explicit starting constraints, not promises this milestone resolves them all.
