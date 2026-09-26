@@ -1,9 +1,9 @@
 # Standard C libc over the native ABI
 
-Status: next milestone after shell streams and pipelines. The result is a small
-libc descriptor layer exercised by an upstream cksum port, with tee as a
-conditional second consumer. Resolve the decisions below before implementing
-each task; this document does not authorize the whole compatibility backlog.
+Status: task 1 complete: the source probe and initial descriptor contract are
+recorded. Task 2 implementation has not started. The result is a small libc
+descriptor layer exercised by an upstream cksum port, with tee as a conditional
+second consumer. This document does not authorize the whole compatibility backlog.
 
 ## Intended result
 
@@ -48,40 +48,220 @@ or OS support and the condition for removing the patch as technical debt. This
 direction does not require retroactively rewriting existing ports in this PR or
 silently expanding the current implementation task.
 
-## Userspace file-descriptor adapter
+## Agreed descriptor and FILE constraints
 
-A future libc-owned table can map process-local integer descriptors to owned
-native capabilities and the state needed to implement their operations. A
-descriptor is not a kernel handle or evidence of authority. File, console and
-pipe operations continue through their native protocols; closing an owned entry
-releases its reference. Copied references must preserve peer-closure semantics.
+These are design constraints for tasks 2 and 3, not implemented behavior.
+Libc owns process-local descriptor entries over native file, console and pipe
+capabilities. A descriptor number is neither a kernel handle nor authority.
 
-Start with a bounded consumer and agree the required operations before coding.
-Potential initial APIs include open, read, write, close and seek where supported,
-with standard descriptors supplied from explicit startup streams. Decide absent
-stream behavior, flags, error translation and descriptor allocation together.
-Unsupported operations must fail honestly rather than silently approximate a
-contract that the backend cannot provide.
+- A descriptor and its associated FILE use one open state, including the native
+  handle, access mode and file cursor. The FILE association adds no owning native
+  reference. Closing the descriptor releases that handle even while the FILE
+  wrapper still exists; it cannot keep a pipe writer or reader alive.
+- Closing an entry permanently invalidates its existing FILE association.
+  For example, after `close(1)`, nonempty output through the old stdout fails
+  with EBADF. Reusing descriptor 1 never reconnects that stdout to the new
+  resource. Later cleanup of the stale FILE must not close the new descriptor.
+  Task 2 chooses the invalidation mechanism; sharing a descriptor number alone
+  is insufficient.
+- `fclose` releases the associated live descriptor and FILE metadata exactly
+  once. Normal exit also releases descriptors without FILE wrappers. `_Exit`
+  and fatal faults still rely on kernel process-resource reclamation. No hidden
+  startup or adapter copy may delay peer closure.
+- Standard entries use static storage and adopt the exclusive startup handles
+  before heap initialization. Later descriptor storage may grow on the heap.
+  Missing startup streams remain unavailable to their FILE wrappers, with EBADF
+  on nonempty I/O and no fallback authority.
+- Public read-only open does not remove writable stdio. Existing `fopen` r/w/a
+  modes, their update forms, creation/truncation, append, seeking and cleanup
+  continue through the same internal open state and backend machinery. Do not
+  maintain a second ownership/cursor system for APIs arriving in different tasks.
+  Preserve allocation/authority checks before truncation and the documented
+  non-atomic append limitation.
+- FILE EOF/error indicators remain FILE state. Current unbuffered transfers,
+  `fread` element/fill semantics and `fread_some` prompt progress remain intact.
+  Descriptor reads do not inherit a sticky FILE EOF indicator or fill a request
+  by repeatedly reading; they return available progress. Descriptor writes
+  report actual progress, including successful short writes.
+- Supported operations, selected access mode and granted native rights are
+  separate. A readable/writable backend does not confer missing authority.
+  Adopted handles retain their rights; path opens resolve only through existing
+  grants. Distinguish invalid/closed entries, wrong access modes, native denials
+  and other backend failures from successful short transfers. Reuse the native
+  errno translation; do not fabricate rights or report failure as EOF.
 
-FILE and descriptor ownership need one deliberate design before adding fdopen,
-fileno or duplication:
+Public fdopen, fileno and duplication are deferred. Internal FILE support must
+already satisfy the constraints above; deferring those functions is not a
+reason to split ownership or positions. Cross-process shared offsets and
+inheritance remain separate decisions. No kernel descriptor ABI is proposed.
 
-- fdopen must establish who owns the descriptor and what fclose releases.
-  fileno exposes the associated descriptor without creating a hidden reference.
-- dup-style entries need shared open state where the promised semantics require
-  it, including file position. Copying a native file capability alone currently
-  does not supply that shared cursor.
-- Reads through FILE and descriptors must account for any future buffering,
-  read-ahead and seek synchronization. Do not maintain two independent positions
-  while claiming that both interfaces access one open stream.
-- Endpoint references must close predictably on explicit close, normal exit and
-  faults. No extra startup or adapter reference may keep a pipe writer alive
-  after its final owner closes it.
+## Pinned source probe
 
-Cross-process shared offsets and descriptor inheritance need separate decisions;
-a process-local table alone cannot provide them. Preserve explicit capability
-delegation at launch. Any necessary native support must solve a concrete semantic
-need, rather than importing a descriptor syscall layer wholesale.
+Investigated sbase revision `c546c3a5724c81cee9a11d816a38ccdf17472129`
+(2026-05-25), from `https://git.suckless.org/sbase`. This is the selected source
+revision for this investigation and subsequent consumer work; no recipe is
+installed yet. Keep its MIT LICENSE, contributor notices and individual source
+notices, including arg.h, when packaging it in ports.
+
+| Consumer | Source/helper closure | Gaps against the current SDK |
+| --- | --- | --- |
+| cksum | cksum.c, libutil/eprintf.c, libutil/fshut.c; arg.h and util.h | fcntl.h, unistd.h, ssize_t, open/read/close, O_RDONLY, inttypes.h/PRIu32 and stdio BUFSIZ |
+| tee | tee.c, libutil/eprintf.c, libutil/ealloc.c, libutil/writeall.c; arg.h and util.h | Descriptor headers/types, open/read/write, writable create/truncate/append flags and creation mode; BUFSIZ; signal.h, signal and SIGINT handling for -i |
+
+The upstream Makefile builds all of libutil and libutf even for these commands.
+Neither consumer needs that full library set. The util.h umbrella includes
+sys/types.h and regex.h and declares unrelated mode_t/off_t/regex_t APIs;
+compat.h also defines a hostname-limit fallback unused by these consumers.
+A focused ports build and narrowed private helper header can avoid these unused
+dependencies without adding speculative libc declarations. The actual public
+ssize_t declaration is still required. Ealloc's complete object also references
+malloc/realloc/strdup/strndup and the matching diagnostics; these already resolve
+in the SDK. Reallocarray and UTF helpers are not in either selected closure.
+
+### Measured build results
+
+Built the SDK with `make -j16 sdk` using the existing Pyxis GCC 16.2.0 and
+binutils 2.47.20260726. Inputs were Pyxis
+`54873691f7ee0ee00115e77c84b3153d102cfa5b` and userland
+`1263b5c5081239deb1d9831462a07032adb96d49`. The SDK manifest reports the parent
+as modified because its submodules were advanced to remote merge commits;
+all three submodule trees match the committed pins, and userland is clean.
+
+Unmodified command compilation stops at missing fcntl.h; diagnostic/allocation
+helpers stop at sys/types.h through util.h, and writeall stops at unistd.h.
+To inspect the remaining closure, a separate scratch copy narrowed util.h to
+its existing selected-helper declarations, supplied declaration-only missing
+headers and defined BUFSIZ as 8192. No function bodies or SDK changes were added.
+The scratch inttypes.h supplied stdint.h and PRIu32 as "u", matching the SDK's
+unsigned-int uint32_t. Scratch flag/signal values were parsing aids only, not
+proposed ABI constants or support for those operations.
+
+With those explicitly artificial declarations, both commands and all selected
+helpers compile under the SDK's GNU C23 freestanding flags. Existing source has
+signedness warnings. Linking against only the target SDK leaves:
+
+- cksum: unresolved open, read and close.
+- tee: unresolved open, read, write and signal.
+
+The diagnostic, formatting, shutdown and allocation dependencies resolve. This
+is evidence of the remaining symbol closure, not successful application builds
+or runtime validation. No executable stubs, host libc, tests or boot automation
+were introduced. Neither command was booted.
+
+The [exact reproduction recipe](libc-probe/README.md) includes the original
+compile/link flags, source list and [scratch patch](libc-probe/scratch.patch).
+The patch preserves every replacement header and the reduced util.h used by
+the isolated probe. It applies only to a disposable copy of the pinned sbase
+source, never to the SDK. Neither it nor the commands are test infrastructure
+or an installable compatibility layer.
+
+## Accepted initial public slice
+
+The initial slice below is accepted for tasks 2 and 3. The close-failure
+contract is specified immediately afterward; task 2 chooses the internal
+representation and invalidation mechanism.
+
+- Add `int open(const char *path, int flags, ...)`, `int close(int fd)`,
+  `ssize_t read(int fd, void *buffer, size_t count)` and
+  `ssize_t write(int fd, const void *buffer, size_t count)`.
+  Use signed long for ssize_t on the current LP64 target, declared once through
+  sys/types.h and included by unistd.h. Supply STDIN_FILENO/STDOUT_FILENO/
+  STDERR_FILENO as 0/1/2. No public seek call is required by this source closure.
+- Initially accept only O_RDONLY (value 0) in public open; reject other flag
+  values with EINVAL before path lookup. This does not restrict internal fopen
+  modes. Writable public opens and mode_t/permission-mode policy remain part
+  of the later tee decision.
+- Allocate the lowest free descriptor, including closed or initially absent
+  standard slots. FILE association invalidation still applies when those slots
+  are reused. Grow storage as needed within int descriptor-number limits;
+  report ENOMEM for allocation failure and a new EMFILE for number exhaustion.
+- Invalid descriptors and wrong access modes return -1/EBADF, native denied
+  authority remains EACCES, unsupported native operations remain ENOTSUP, and
+  other backend failures use libc_call_errno. These distinct causes need not
+  all have distinct errno numbers. A successful short transfer returns its
+  positive byte count, without inventing an error or completing the remainder.
+- Check descriptor/access validity even for count zero, then return zero
+  without backend I/O. Reject counts above the signed return type's maximum
+  with EINVAL. Nonempty file/pipe zero reads mean EOF; the console's unexpected
+  zero progress remains EIO. A nonempty zero write remains EIO. Closing a
+  descriptor invalidates its association even if native release reports failure.
+  See the close-failure contract below.
+- Supply BUFSIZ (8192) and the fixed-width output-format macros in
+  inttypes.h needed to use existing stdint.h types without consumer-local
+  format workarounds. The probe requires PRIu32; broader integer conversions,
+  scanning and unrelated inttypes functions are not prerequisites.
+
+### Close failure and cleanup
+
+Code inspection of [close_handle](../../kernel/syscall.c) and
+[capability_close](../../kernel/object/capability.c) establishes the current
+native contract: CLOSE returns CALL_OK after removing the capability entry and
+releasing its reference, or CALL_BAD_HANDLE if no matching entry exists. Both
+return zero reply bytes. Closing requires no access right and does not perform
+file sync or report storage writeback errors. Final object destruction can
+still wait for the existing BSP retirement path.
+
+Libc's internal release path must inspect `syscall_close()` from the exported
+syscall.h. The current `handle_close()` convenience helper reduces every
+failure to -1 and discards both the status and malformed-reply distinction;
+it cannot provide this translation. No new kernel syscall or public libpyxis
+helper is required for this slice.
+
+- An invalid/already-closed descriptor returns -1 with EBADF without a native
+  call. For a valid descriptor, detach its native handle and invalidate the
+  entry and every associated FILE before making one native close attempt.
+  The descriptor remains free for reuse regardless of that result.
+- CALL_OK with zero reply bytes returns 0 and leaves errno unchanged.
+  CALL_BAD_HANDLE with zero reply bytes returns -1/EBADF. Neither current
+  outcome leaves a native capability owned by that entry: success released it;
+  BAD_HANDLE says it was already absent. Do not retry either outcome.
+- A different in-range failure with zero reply bytes returns -1 using
+  libc_call_errno. It is not an outcome produced by today's CLOSE path, and
+  libc must not infer that it released the reference. An out-of-range status
+  or nonzero reply_size is a malformed CLOSE result: return -1/EIO, including
+  when status claims success. Reply validation precedes status translation.
+- In the unexpected/malformed cases, any surviving native capability may
+  remain until the kernel reclaims the process's capability table at exit,
+  including `_Exit` or a fatal fault. That residual kernel reference could
+  delay pipe peer closure until then. Libc does not retain a hidden native
+  copy, retry list or live descriptor to make an uncertain release look like
+  success. This is a failure-containment rule, not normal deferred close.
+- Discard the closed entry's open-state metadata without allocation or another
+  release attempt. An existing FILE may retain only the metadata needed for
+  its invalid association and indicators until fclose/exit; it owns no native
+  reference. Later fclose of that stale FILE returns EOF/EBADF and disposes of
+  the wrapper without touching a reused descriptor. Fclose of a live FILE
+  applies the same release policy, disposes of its wrapper even on failure,
+  and reports EOF with the release errno if close fails. Static standard FILE
+  storage stays allocated but invalid.
+- Normal exit closes each remaining live descriptor once, including those
+  without FILE wrappers, then reclaims invalid FILE metadata. Cleanup errors
+  do not replace the process's requested exit status. There is no exit-time
+  retry of descriptors already invalidated by close/fclose; the kernel's
+  process teardown reclaims any residual native entries.
+
+The same release primitive is used for rollback of an internal open failure,
+while preserving that open failure's errno. A failed rollback release has the
+same process-exit reclamation limit. Successful close is not a durability
+promise; the existing explicit file-sync contract is unchanged.
+
+### Tee checkpoint after cksum
+
+Record the gaps now and revisit scope after cksum works. No choice has been
+made between adding writable opens, restricting options or deferring tee.
+
+The default command needs O_WRONLY|O_CREAT|O_TRUNC and a 0666 creation-mode
+argument. Native capability grants do not implement Unix permission bits;
+handling that argument must be agreed. `-a` adds O_APPEND, whose conventional
+atomicity is not supplied by stdio's separate SIZE/WRITE sequence. `-i` invokes
+signal(SIGINT, SIG_IGN); no-op signal handling is not support.
+
+The writeall helper already loops over positive short writes. It treats zero
+as a return, so the nonempty zero-write error rule matters. Tee marks
+failed outputs inactive but does not close their descriptors, and keeps reading
+input even after every output has failed. It relies on exit for descriptor
+cleanup. Revisit whether that lifetime and downstream-closure behavior is
+acceptable as part of the consumer review; do not silently change it now.
 
 ## Milestone boundary
 
@@ -91,7 +271,7 @@ behavior while making conventional descriptor I/O available in libc. Keep
 fread_some as a useful extension; ports should not need to replace read with it.
 
 Use a small upstream utility as the acceptance consumer rather than writing a
-new Pyxis command with the same name. The proposed source is
+new Pyxis command with the same name. The pinned source above provides
 [sbase cksum](https://git.suckless.org/sbase/file/cksum.c.html): it uses open,
 read and close for input, with stdio for output. Probe its shared helpers and
 headers too; the command source alone is not the dependency list. Pin the
@@ -110,27 +290,25 @@ requires one. No speculative stubs or retroactive rewrite of every existing port
 
 ## Focused tasks
 
-- [ ] **1. Pin and probe the consumers; settle the descriptor contract.** Inventory
-  the selected cksum and tee sources, transitive helpers and headers against the
-  SDK. Propose the exact initial declarations, flags, errno mappings and omitted
-  behavior. Decide descriptor allocation/growth, ownership, standard descriptors
-  0/1/2, absent streams and FILE integration before implementation. Record whether
-  tee fits, needs an explicitly restricted option set, or should be deferred.
-  A compile probe is evidence gathering, not a new test framework.
+- [x] **1. Pin and probe the consumers; settle the descriptor contract.** The
+  source/helper inventory, accepted initial slice and close-failure policy are
+  recorded above; exact commands and scratch patch are preserved in the
+  [probe recipe](libc-probe/README.md). Tee's measured gaps are recorded for a
+  scope decision after cksum. No descriptor implementation is part of this task.
 - [ ] **2. Add descriptor ownership and standard-stream integration.** Implement
   the agreed process-local table and shared open state in libc. Standard FILE
   objects and descriptors must use one deliberate ownership/position model;
-  avoid retaining an extra pipe writer. Settle fdopen/fileno semantics before
-  exposing them; if deferred, document that boundary. Verify close, exit and
-  absent-stream behavior while preserving existing native launch grants.
+  avoid retaining an extra pipe writer. Public fdopen/fileno remain deferred.
+  Verify the specified close/exit policy, stale FILE invalidation and absent
+  streams while preserving existing native launch grants and writable stdio.
 - [ ] **3. Add the conventional I/O slice.** Implement open/read/write/close and
   the headers/types/flags selected in task 1 over native file, console and pipe
   protocols. Read returns available progress without trying to fill the buffer;
   write reports actual progress, including short writes. Reuse capability path
   resolution and shared error handling rather than duplicating them in ports.
-  Agree creation/truncation, permission-mode handling and unsupported flags
-  before adding writable open; do not pretend Unix permissions are enforced.
-  Seeking is included only if selected by the probe, and must reject pipes.
+  Public open is read-only in this slice; preserve internal writable fopen
+  and its existing seeks. Public writable-open flags, creation-mode policy and
+  public seeking are deferred; revisit tee requirements after cksum.
 - [ ] **4. Port cksum as the first final consumer.** Build and package the pinned
   utility with its ordinary I/O calls intact. Keep adaptations to build/platform
   integration and agreed library gaps. Check named files, stdin, empty input,

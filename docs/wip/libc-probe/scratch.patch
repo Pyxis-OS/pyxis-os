@@ -1,0 +1,116 @@
+--- a/util.h
++++ b/util.h
+@@ -1,25 +1,9 @@
+-/* See LICENSE file for copyright and license details. */
+-#include <sys/types.h>
+-
+-#include <regex.h>
++/* Probe-only subset of upstream util.h. */
+ #include <stddef.h>
+ #include <stdio.h>
+ #include <stdarg.h>
+-
++#include <unistd.h>
+ #include "arg.h"
+-#include "compat.h"
+-
+-#define UTF8_POINT(c) (((c) & 0xc0) != 0x80)
+-
+-#undef MIN
+-#define MIN(x,y)  ((x) < (y) ? (x) : (y))
+-#undef MAX
+-#define MAX(x,y)  ((x) > (y) ? (x) : (y))
+-#undef LIMIT
+-#define LIMIT(x, a, b)  (x) = (x) < (a) ? (a) : (x) > (b) ? (b) : (x)
+-
+-#define LEN(x) (sizeof (x) / sizeof *(x))
+-
+ extern char *argv0;
+
+ void *ecalloc(size_t, size_t);
+@@ -46,52 +30,4 @@
+ void weprintf(const char *, ...);
+ void xvprintf(const char *, va_list);
+
+-int confirm(const char*, ...);
+-
+-double estrtod(const char *);
+-
+-#undef strcasestr
+-#define strcasestr xstrcasestr
+-char *strcasestr(const char *, const char *);
+-
+-#undef strlcat
+-#define strlcat xstrlcat
+-size_t strlcat(char *, const char *, size_t);
+-size_t estrlcat(char *, const char *, size_t);
+-#undef strlcpy
+-#define strlcpy xstrlcpy
+-size_t strlcpy(char *, const char *, size_t);
+-size_t estrlcpy(char *, const char *, size_t);
+-
+-#undef strsep
+-#define strsep xstrsep
+-char *strsep(char **, const char *);
+-
+-void strnsubst(char **, const char *, const char *, size_t);
+-
+-/* regex */
+-int enregcomp(int, regex_t *, const char *, int);
+-int eregcomp(regex_t *, const char *, int);
+-
+-/* io */
+ ssize_t writeall(int, const void *, size_t);
+-int concat(int, const char *, int, const char *);
+-
+-/* misc */
+-void enmasse(int, char **, int (*)(const char *, const char *, int));
+-void fnck(const char *, const char *, int (*)(const char *, const char *, int), int);
+-mode_t getumask(void);
+-char *humansize(off_t);
+-mode_t parsemode(const char *, mode_t, mode_t);
+-off_t parseoffset(const char *);
+-void putword(FILE *, const char *);
+-#undef strtonum
+-#define strtonum xstrtonum
+-long long strtonum(const char *, long long, long long, const char **);
+-long long enstrtonum(int, const char *, long long, long long);
+-long long estrtonum(const char *, long long, long long);
+-size_t unescape(char *);
+-int mkdirp(const char *, mode_t, mode_t);
+-#undef memmem
+-#define memmem xmemmem
+-void *memmem(const void *, size_t, const void *, size_t);
+--- /dev/null
++++ b/probe-headers/fcntl.h
+@@ -0,0 +1,6 @@
++#define O_RDONLY 0
++#define O_WRONLY 1
++#define O_CREAT 64
++#define O_TRUNC 512
++#define O_APPEND 1024
++int open(const char *, int, ...);
+--- /dev/null
++++ b/probe-headers/inttypes.h
+@@ -0,0 +1,2 @@
++#include <stdint.h>
++#define PRIu32 "u"
+--- /dev/null
++++ b/probe-headers/signal.h
+@@ -0,0 +1,5 @@
++typedef void (*probe_handler)(int);
++#define SIGINT 2
++#define SIG_IGN ((probe_handler)1)
++#define SIG_ERR ((probe_handler)-1)
++probe_handler signal(int, probe_handler);
+--- /dev/null
++++ b/probe-headers/unistd.h
+@@ -0,0 +1,8 @@
++#ifndef PROBE_UNISTD_H
++#define PROBE_UNISTD_H
++#include <stddef.h>
++typedef long ssize_t;
++ssize_t read(int, void *, size_t);
++ssize_t write(int, const void *, size_t);
++int close(int);
++#endif
