@@ -22,6 +22,17 @@ struct launch_binding {
   uint64_t grant; /* Index into grants, not a handle. */
 };
 
+struct launch_stream {
+  uint64_t protocol;
+  uint64_t grant; /* Grant-list index; NONE requires zero and installs nothing. */
+};
+
+/* Each present stream selects a distinct grant entry, referenced by no resource,
+ * root or working-directory binding. That entry installs exactly one handle,
+ * adopted by child libc, with only the protocol's READ (stdin) or WRITE rights.
+ * Repeated source handles in separate entries deliberately create separate
+ * grants, including any explicitly delegated terminal resources. */
+
 /* All addresses are in the caller. Environment uses startup_variable;
  * argv is an array of string addresses, working_directories an array of grant
  * indices. Empty arrays are ignored. working_path is optional (zero = absent).
@@ -41,6 +52,7 @@ struct launch_request {
   uint64_t working_path;
   uint64_t environment, environment_count;
   uint64_t argv, argc;
+  struct launch_stream streams[STARTUP_STREAM_COUNT];
 };
 
 struct launch_message {
@@ -53,7 +65,8 @@ struct launch_message {
  * belongs to the caller's space and runs on the caller's assigned CPU. */
 _Static_assert(sizeof(struct launch_grant) == 16, "launch grant layout");
 _Static_assert(sizeof(struct launch_binding) == 16, "launch binding layout");
-_Static_assert(sizeof(struct launch_request) == 112, "launch request layout");
-_Static_assert(sizeof(struct launch_message) == 128, "launch message layout");
+_Static_assert(sizeof(struct launch_stream) == 16, "launch stream layout");
+_Static_assert(sizeof(struct launch_request) == 160, "launch request layout");
+_Static_assert(sizeof(struct launch_message) == 176, "launch message layout");
 
 #endif
