@@ -1,11 +1,10 @@
 # Capability-backed standard streams, redirection and pipelines
 
-Status: tasks 1 through 4 implemented. Independent standard-stream bindings use
-explicit protocol information and dedicated handles adopted directly by libc.
-Foreground file redirection, native pipes and cat read-some consumption are
-available, together with bounded batch launch. Shell pipeline syntax policies remain proposals
-with decision gates. Discuss unresolved choices before their implementation task;
-this document does not authorize starting code work.
+Status: tasks 1 through 5 implemented. Dedicated standard streams, foreground
+file redirection, native pipes, prompt cat forwarding, batch launch and foreground
+shell pipelines are available. Task 6 remains: select a bounded consumer and
+finish the milestone handoff. Discuss that consumer's scope before implementing
+it; this document does not authorize the next task.
 
 ## Intended result
 
@@ -13,7 +12,7 @@ An ordinary program can use libc stdin/stdout/stderr with terminal, file or pipe
 resources selected by its launcher. The shell can redirect files and connect
 foreground external programs without the programs knowing the backing resource.
 
-Illustrative completion examples, subject to the syntax decisions below:
+Implemented examples:
 
 ```sh
 cat app://share/hello.txt > home://copy.txt
@@ -36,10 +35,11 @@ without retaining startup copies. They need no initial user heap allocation.
 Named terminal resources remain separate.
 
 [Launch](../processes.md) already delegates restricted copies into a child's
-handle table. The shell currently launches and waits for one foreground child;
-its simple background mode drops input authority. A process observer only waits
-for completion: closing it does not terminate the child. Batch launch prepares all children before publication; there is no general
-process cancellation to assume for cleanup after publication.
+handle table. The shell launches foreground pipelines as a batch and waits for
+every child; its simple background mode drops input authority. A process observer only waits
+for completion: closing it does not terminate the child. Batch launch prepares
+all children before publication; there is no general process cancellation to
+assume for cleanup after publication.
 
 ## Agreed standard-stream and authority contract
 
@@ -204,14 +204,40 @@ do not cancel its peers, and shell exit closes shell-owned handles without
 terminating launched children. Files created or truncated before batch launch
 are not rolled back. These are accepted limits of preparation safety.
 
-## Proposed shell pipeline contract
+## Implemented task 5 pipeline contract
 
-Foreground external-command pipelines will use batch launch before waiting,
-reap every child, keep stderr separate, and use the last stage's exit status.
-The launch limit is eight children. Redirection precedence, terminal/keyboard
-ownership and interactions with existing session syntax still need discussion
-before task 5. Background pipelines, builtins in pipelines and job control remain
-deferred. No pipeline parser changes belong to task 4.
+Foreground external commands accept up to eight stages separated by unquoted
+`|`, with or without surrounding whitespace. Quoted and escaped operators remain
+literal. Empty stages, `||`, `|&`, background pipelines and any builtin stage,
+including `session`, are rejected before opening files. Interactive and script
+execution share the parser. Existing single-command behavior remains available.
+
+Each stage's stdout defaults to the next stage's stdin. The first stage inherits
+stdin, the last inherits stdout, and every stage inherits stderr independently.
+Explicit `<`, `>` and `2>` override a stage's stream defaults. An overridden
+writer leaves the next stage at EOF; an overridden reader leaves the preceding
+writer with EPIPE. Unused endpoints are closed without being delegated, and no
+ordinary startup grant duplicates a dedicated stream endpoint. Only the first
+stage with console stdin may receive named terminal-input and keyboard grants;
+downstream stages receive neither. Separate terminal-output and display grants
+retain their existing policy. Ordinary stages receive no launcher or pipe-creation
+authority, including shebang interpreters.
+
+The shell validates the whole line and opens all executable images before any
+redirect target. Redirects are opened in written order across the pipeline;
+pipes and grant storage are prepared before output truncation. Outputs are then
+truncated in written order and the shebang-aware batch helper submits all stages.
+Any batch failure starts none and identifies its stage where available. Temporary
+shell handles close before waiting, on both success and failure. Existing creation,
+truncation, same-file and independent-position limitations remain unchanged.
+
+The shell waits for every child and closes every observer before prompting.
+Nonzero exits and faults identify their stages, but the last stage determines
+pipeline success; there is no pipefail mode. Scripts stop on a failed last stage
+and continue after an earlier failure if the last stage succeeds. Wait, cleanup
+or diagnostic I/O failure remains fatal. An unknown launch outcome cannot safely
+resume terminal input. There is no cancellation: a child waiting on terminal
+input or doing unrelated work can keep the pipeline waiting indefinitely.
 
 ## Focused PR tasks
 
@@ -232,7 +258,7 @@ deferred. No pipeline parser changes belong to task 4.
   preparation/failure strategy before exposing pipeline syntax. Extend only the
   process/launch operations actually required, with explicit ownership of child
   observers and inherited endpoint references.
-- [ ] **5. Foreground shell pipelines.** Connect stages using delegated pipe
+- [x] **5. Foreground shell pipelines.** Connect stages using delegated pipe
   grants, launch before waiting, close unused copies and observe all children.
   Integrate agreed redirection precedence, exit status and partial-launch handling
   in both interactive and script paths. No background pipelines or job control.
