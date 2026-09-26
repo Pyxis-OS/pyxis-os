@@ -1,4 +1,6 @@
 #include <abi/startup.h>
+#include <abi/console.h>
+#include <abi/file.h>
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -64,6 +66,60 @@ static bool measure_bindings(struct process *process,
   return true;
 }
 
+static bool validate_streams(struct process *process,
+                             const struct process_startup *source)
+{
+  for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
+    const struct startup_stream *stream = &source->streams[i];
+    if (stream->protocol == STARTUP_STREAM_NONE) {
+      if (stream->handle != HANDLE_INVALID) {
+        return false;
+      }
+      continue;
+    }
+
+    enum object_type type;
+    uint64_t expected_rights;
+    if (stream->protocol == PROTOCOL_CONSOLE) {
+      type = OBJECT_CONSOLE;
+      expected_rights = i == STARTUP_STDIN ? CONSOLE_RIGHT_READ : CONSOLE_RIGHT_WRITE;
+    } else if (stream->protocol == PROTOCOL_FILE) {
+      type = OBJECT_FILE;
+      expected_rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
+    } else {
+      return false;
+    }
+
+    struct kernel_object *object;
+    uint64_t rights;
+    if (capability_resolve(&process->capabilities, stream->handle, expected_rights,
+          &object, &rights) != CAP_OK || object->type != type || rights != expected_rights) {
+      return false;
+    }
+    for (size_t j = 0; j < i; ++j) {
+      if (stream->handle == source->streams[j].handle) {
+        return false;
+      }
+    }
+    for (size_t j = 0; j < source->resource_count; ++j) {
+      if (stream->handle == source->resources[j].handle) {
+        return false;
+      }
+    }
+    for (size_t j = 0; j < source->root_count; ++j) {
+      if (stream->handle == source->roots[j].handle) {
+        return false;
+      }
+    }
+    for (size_t j = 0; j < source->working_directory_count; ++j) {
+      if (stream->handle == source->working_directories[j]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 static bool measure_startup(struct process *process,
                              const struct process_startup *source,
                              struct startup_sizes *sizes)
@@ -79,7 +135,8 @@ static bool measure_startup(struct process *process,
       (source->resource_count && !source->resources) ||
       (source->root_count && !source->roots) ||
       (source->environment_count && !source->environment) ||
-      (source->argc && !source->argv)) {
+      (source->argc && !source->argv) ||
+      !validate_streams(process, source)) {
     return false;
   }
 
@@ -165,6 +222,7 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
     .argc = source->argc,
     .argv = address + sizes->metadata,
   };
+  memcpy(info->streams, source->streams, sizeof(info->streams));
 
   size_t offset = sizeof(*info);
   struct startup_binding *resources = (struct startup_binding *)(buffer + offset);

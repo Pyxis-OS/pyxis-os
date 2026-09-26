@@ -107,11 +107,30 @@ required read/write transitions.
 
 ## Standard streams, formatting and exit
 
-Runtime initialization makes private console-handle copies: stdin from `input`,
-and separate stdout/stderr copies from `output`. They need no user heap backing.
-Closing stdout cannot close stderr or a native startup handle. Missing authority
-leaves a stream unavailable; its first I/O reports the saved initialization
-failure. This does not prevent a program without terminal I/O from running.
+Startup supplies independent stdin, stdout and stderr bindings. Each declares
+`PROTOCOL_CONSOLE` or `PROTOCOL_FILE` and owns a distinct child handle with only
+READ authority for stdin or WRITE authority for stdout/stderr. Runtime adopts
+these handles directly, before heap initialization: it allocates no backing and
+retains no hidden startup copy. Closing stdout cannot close stderr or a named
+terminal grant. Normal boot binds all three to the space console.
+
+`STARTUP_STREAM_NONE` with `HANDLE_INVALID` makes that stream unavailable without
+preventing the process from running. Its first nonempty I/O fails with EBADF and
+sets the error indicator; missing stdin is not EOF. There is no fallback to a
+terminal, another standard stream or the kernel log. Zero-size transfers remain
+no-ops. Unknown protocols and malformed bindings are rejected during launch/startup.
+
+File-backed standard streams start at offset zero, with independent per-FILE
+positions. Adoption does not open, truncate or append to the file. Two output
+streams backed by the same object can overwrite one another because their
+positions are independent. Console streams remain sequential and cannot seek.
+
+`startup_stream(index)` borrows the handle owned by the corresponding FILE;
+native code must not close it independently. `fclose` leaves the immutable
+startup snapshot stale. Native code may explicitly copy a borrowed handle when
+it needs a separately owned reference, but is then responsible for closing it.
+Named `input`/`output` console grants, plus `keyboard`, remain separate terminal
+resources; libc never uses them to fill a missing standard-stream binding.
 
 All streams are unbuffered. `fflush`, including `fflush(NULL)`, has no pending
 bytes or read-ahead to synchronize and does not clear an earlier error indicator.

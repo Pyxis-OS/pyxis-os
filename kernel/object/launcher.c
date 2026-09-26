@@ -1,4 +1,5 @@
 #include <abi/file.h>
+#include <abi/console.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/mm/heap.h>
@@ -96,6 +97,82 @@ static struct process_binding *capture_bindings(struct launch_capture *capture,
   return bindings;
 }
 
+static void capture_streams(struct launch_capture *capture,
+                            const struct launch_request *source)
+{
+  if (capture->error != CALL_OK) {
+    return;
+  }
+  struct process_startup *startup = &capture->startup;
+  for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
+    const struct launch_stream *stream = &source->streams[i];
+    if (stream->protocol == STARTUP_STREAM_NONE) {
+      if (stream->grant != 0) {
+        capture->error = CALL_BAD_REQUEST;
+        return;
+      }
+      continue;
+    }
+
+    enum object_type type;
+    uint64_t rights;
+    if (stream->protocol == PROTOCOL_CONSOLE) {
+      type = OBJECT_CONSOLE;
+      rights = i == STARTUP_STDIN ? CONSOLE_RIGHT_READ : CONSOLE_RIGHT_WRITE;
+    } else if (stream->protocol == PROTOCOL_FILE) {
+      type = OBJECT_FILE;
+      rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
+    } else {
+      capture->error = CALL_BAD_REQUEST;
+      return;
+    }
+
+    if (stream->grant >= capture->grant_count ||
+        capture->grants[stream->grant].rights != rights) {
+      capture->error = CALL_BAD_REQUEST;
+      return;
+    }
+    for (size_t j = 0; j < i; ++j) {
+      if (startup->streams[j].protocol != STARTUP_STREAM_NONE &&
+          stream->grant == startup->streams[j].handle) {
+        capture->error = CALL_BAD_REQUEST;
+        return;
+      }
+    }
+    for (size_t j = 0; j < startup->resource_count; ++j) {
+      if (stream->grant == startup->resources[j].handle) {
+        capture->error = CALL_BAD_REQUEST;
+        return;
+      }
+    }
+    for (size_t j = 0; j < startup->root_count; ++j) {
+      if (stream->grant == startup->roots[j].handle) {
+        capture->error = CALL_BAD_REQUEST;
+        return;
+      }
+    }
+    for (size_t j = 0; j < startup->working_directory_count; ++j) {
+      if (stream->grant == startup->working_directories[j]) {
+        capture->error = CALL_BAD_REQUEST;
+        return;
+      }
+    }
+
+    struct kernel_object *object;
+    enum capability_result found = capability_resolve(&process_current()->capabilities,
+        capture->grants[stream->grant].source, rights, &object, NULL);
+    if (found != CAP_OK) {
+      capture->error = found == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
+      return;
+    }
+    if (object->type != type) {
+      capture->error = CALL_WRONG_TYPE;
+      return;
+    }
+    startup->streams[i] = (struct startup_stream){stream->protocol, stream->grant};
+  }
+}
+
 static void capture_startup(struct launch_capture *capture, const struct launch_request *source)
 {
   capture->grant_count = source->grant_count;
@@ -114,6 +191,7 @@ static void capture_startup(struct launch_capture *capture, const struct launch_
       capture->error = CALL_BAD_REQUEST;
     }
   }
+  capture_streams(capture, source);
   if (source->working_path) {
     startup->working_path = capture_string(capture, source->working_path);
   }

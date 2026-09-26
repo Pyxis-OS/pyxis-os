@@ -2,7 +2,10 @@
 
 [`libterm`](https://git.internal/chronium/pyxis-userland/src/branch/main/include/term.h) builds terminal behavior on libpyxis's
 console calls. A `struct terminal` borrows explicit input and output handles;
-it neither allocates nor closes them. Input/output, partial writes, write-all,
+it neither allocates nor closes them. The named startup `input`/`output` console
+grants are separate from libc's dedicated standard-stream handles. Redirecting
+or closing a standard stream does not change these explicit terminal grants;
+launchers must decide whether to delegate them. Input/output, partial writes, write-all,
 size queries and control helpers preserve native call statuses. Console output
 wrappers now preserve those statuses too, rather than reducing failures to -1.
 

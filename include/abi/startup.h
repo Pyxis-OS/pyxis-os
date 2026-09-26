@@ -2,10 +2,28 @@
 #define ABI_STARTUP_H
 
 #include <abi/handle.h>
+#include <abi/message.h>
 #include <stddef.h>
 
 #define STARTUP_VERSION 1
 #define STARTUP_MAX_SIZE UINT64_C(65536)
+
+enum startup_stream_index {
+  STARTUP_STDIN,
+  STARTUP_STDOUT,
+  STARTUP_STDERR,
+  STARTUP_STREAM_COUNT,
+};
+
+#define STARTUP_STREAM_NONE UINT64_C(0)
+
+/* NONE requires HANDLE_INVALID. Present streams own distinct handles, never
+ * aliased by resources, roots or working directories. Libc adopts each handle
+ * directly; native access borrows it, and fclose leaves this snapshot stale. */
+struct startup_stream {
+  uint64_t protocol; /* STARTUP_STREAM_NONE, PROTOCOL_CONSOLE or PROTOCOL_FILE. */
+  handle_t handle;
+};
 
 struct startup_binding {
   uint64_t name;
@@ -38,11 +56,14 @@ struct startup_info {
   uint64_t environment_count;
   uint64_t argc;
   uint64_t argv;
+  struct startup_stream streams[STARTUP_STREAM_COUNT];
 };
 
 _Static_assert(sizeof(struct startup_binding) == 16, "startup binding layout");
 _Static_assert(sizeof(struct startup_variable) == 16, "startup variable layout");
-_Static_assert(sizeof(struct startup_info) == 104, "startup record layout");
+_Static_assert(sizeof(struct startup_stream) == 16, "startup stream layout");
+_Static_assert(offsetof(struct startup_info, streams) == 104, "startup streams offset");
+_Static_assert(sizeof(struct startup_info) == 152, "startup record layout");
 _Static_assert(offsetof(struct startup_info, resources) == 16, "startup resources offset");
 _Static_assert(offsetof(struct startup_info, argv) == 96, "startup argv offset");
 

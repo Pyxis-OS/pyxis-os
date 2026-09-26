@@ -2,7 +2,7 @@
 #define KERNEL_USER_STARTUP_H
 
 #include <kernel/mm/types.h>
-#include <abi/handle.h>
+#include <abi/startup.h>
 
 struct process;
 
@@ -17,6 +17,7 @@ struct process_variable {
 };
 
 struct process_startup {
+  struct startup_stream streams[STARTUP_STREAM_COUNT];
   const struct process_binding *resources;
   size_t resource_count;
   const struct process_binding *roots;
@@ -38,9 +39,10 @@ struct process_startup {
  * Working-directory handles also reference installed directories; the launcher
  * chooses their order and navigation boundary. No ancestry is inferred or added.
  * A display path requires a nonempty chain and never grants access. Bindings may
- * alias handles; copying metadata acquires no references. The 64 KiB budget
- * includes both mappings' page padding. MM_INVALID
- * covers malformed/oversized data; MM_NO_MEMORY covers allocation exhaustion.
+ * alias handles except for streams, whose handles are exclusively owned by libc
+ * and carry exactly their direction right. Copying metadata acquires no references.
+ * The 64 KiB budget includes both mappings' page padding. MM_INVALID covers
+ * malformed/oversized data; MM_NO_MEMORY covers allocation exhaustion.
  * Success publishes startup_address once; failure frees partial backing and
  * changes neither startup_address nor capability ownership. */
 enum mm_result process_prepare_startup(struct process *process,
