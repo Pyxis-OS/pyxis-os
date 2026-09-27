@@ -256,21 +256,25 @@ registration can leave startup waiting; this remains [technical debt](../technic
 
 ## File protocol and open bridge
 
-Make the file protocol itself safe for process-to-process delivery. Today's FILE
-messages contain caller buffer addresses; those must not reach a remote provider.
-Read requests carry an explicit offset and count; replies carry count and copied
-bytes. Writes carry offset and copied bytes. Protocol metadata counts against the
-4 KiB payload limit, so usable byte extents are slightly smaller than one page.
-SIZE/RESIZE/SYNC remain protocol operations, with their existing authority and
-side-effect contracts where implemented.
+Task 6 replaces caller buffer addresses in FILE payloads with copied bytes.
+READ requests carry an explicit offset and capacity; replies carry count and
+inline bytes. WRITE requests carry offset, count and inline bytes. Request/reply
+payload metadata counts against the 4 KiB limit: reads transfer at most 4,088
+bytes and writes at most 4,080. The native protocol/operation header is outside
+that payload, as is the equivalent metadata on exported endpoint delivery.
+SIZE and SYNC have empty request payloads; RESIZE carries its new size. Existing
+authority and backend side-effect contracts are preserved.
 
-Migrate kernel-backed files and exported file delivery together, retaining public
-libc/libpyxis function signatures. Do not add a competing HTTP-file adapter or a
-generic kernel description language for marshaling pointers. Larger operations
-use short transfers as appropriate. Audit native callers for partial progress;
-do not assume their old requested extents still complete in one call. Preserve
-stdio loops, positions, errors, uncertain-mutation handling and allocation policy.
-No compatibility version or backward-compatibility implementation is required.
+Initrd, RAM and host-backed files use this format, with unchanged public
+libc/libpyxis function signatures. Each low-level helper performs one bounded
+transfer; larger requests return short counts. Callers continue from confirmed
+progress. Stdio preserves its fill loops, positions, EOF/error handling and
+uncertain-mutation rules. Helpers use bounded stack scratch without a new heap
+dependency. Native kernel paths keep private user mappings stable across waits
+and do not allocate payload-sized stack buffers. Native and exported files will
+share this wire format; task 7 adds exported dispatch and the OPEN bridge with a
+working provider. No compatibility layout, HTTP-file adapter or generic kernel
+pointer-marshaling description language is introduced.
 
 Provider OPEN returns an actual resource grant with a declared interface and
 representation. Initially support byte-readable files with optional media-type
@@ -416,7 +420,7 @@ task; avoid publishing interfaces with fake successful operations.
   Exercise restricted namespaces, retained old grants and provider exit. Define
   the small init-facing publication/handoff commands through existing launch/IPC;
   no supervisor framework or implicit authority.
-- [ ] **6. IPC-safe file messages.** Replace pointer-bearing FILE wire payloads
+- [x] **6. IPC-safe file messages.** Replace pointer-bearing FILE wire payloads
   with bounded copied bytes for native files and helpers. Preserve public C
   signatures and all existing backends; audit native callers and stdio for short
   transfers. Build/boot existing file utilities and ports before adding a provider.

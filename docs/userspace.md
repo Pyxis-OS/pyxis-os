@@ -90,17 +90,26 @@ its helpers finish partial writes. The kernel renders bounded chunks under the
 output lock. Terminal input is blocking, with no EOF convention.
 
 CALL takes a handle, a tagged message and its size, then a reply buffer and
-capacity. Shared protocol headers define the tag and payload union. Rights are
+capacity. Shared protocol headers define the tag and operation payloads. Rights are
 checked against the handle's object type, so the same bit may mean console
 WRITE or file READ. Kernel and userspace are rebuilt together against the
 shared ABI headers. Older layouts are not supported.
 
 The [file wrappers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/file.h) query size, read/write at explicit
-offsets and resize RAM files. They preserve native error statuses and check reply
-lengths/counts. Writes complete in full or leave the file unchanged; gaps and
-newly grown ranges read as zero. A short read is allowed and zero bytes with
-nonzero capacity means EOF. Cat uses libc stdio to copy bytes without assuming
-NUL-terminated content or allocating a buffer the size of the file.
+offsets, resize and synchronize files. FILE payloads contain copied bytes rather
+than caller buffer addresses. Each wrapper performs one bounded transfer: reads
+return at most 4,088 bytes and writes submit at most 4,080 bytes, leaving room for
+metadata within the 4 KiB payload limit. Larger requests may return short counts;
+callers advance by confirmed progress and continue with the remaining suffix.
+The wrappers preserve native error statuses and validate reply lengths/counts.
+RAM writes complete the submitted chunk or leave the file unchanged; other
+backends may report partial progress or an uncertain mutation, which must not be
+automatically retried. Gaps and newly grown ranges read as zero. Zero bytes with
+nonzero read capacity means EOF. Cat uses libc stdio to copy bytes without assuming
+NUL-terminated content or allocating a buffer the size of the file. The helpers
+use bounded stack storage and require valid caller buffers; copying adds no heap
+or memory-service dependency. Exported-file routing and provider OPEN remain the
+next [userspace-services task](wip/userspace-services.md#focused-implementation-tasks).
 
 The [handle wrapper](https://git.internal/chronium/pyxis-userland/src/branch/main/include/handle.h) releases the calling process's
 reference. A closed handle is immediately stale; other owners, including the
