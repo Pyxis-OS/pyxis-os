@@ -1,9 +1,9 @@
 # Hosted toolchains and language runtimes
 
 Status: future directions, not an implementation milestone or a fixed sequence.
-The current [libc milestone](libc-portability.md) stays bounded to simple C
-consumers. Promote one result below into a separate milestone after a pinned
-build probe and discussion of missing OS contracts.
+The completed [libc portability milestone](../libc-portability.md) supports
+cksum and restricted tee. Promote one result below into a separate milestone
+after a pinned build probe and discussion of missing OS contracts.
 
 ## Distinct results
 

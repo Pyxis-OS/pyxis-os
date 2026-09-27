@@ -65,6 +65,10 @@ milestone's remaining interface details before starting its code work.
 20. Complete: [standard streams, redirection and pipelines](../shell-streams.md),
     with dedicated capability grants, bounded native pipes, all-or-none batch
     preparation, foreground shell pipelines and exact bounded `head` consumption.
+21. Complete: [libc portability](../libc-portability.md), with descriptor ownership
+    shared with stdio, public open/read/write/close, and packaged sbase cksum and
+    restricted tee. The documentation handoff is complete; accepted compatibility
+    limits and their revisit points are recorded in technical debt.
 
 Everyday use for simple tasks guides this order. Website hosting remains one
 future application, not the primary completion target for the OS.
@@ -94,15 +98,8 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Next milestone and later candidates
 
-The current milestone is [libc portability](libc-portability.md): a small
-userspace descriptor layer and upstream cksum and restricted tee consumers.
-Tasks 1–5 provide descriptor ownership shared with stdio, public
-open/read/write/close, read-only and write-only opens with create/truncate, and
-both packaged consumers. Creation mode 0666 selects native policy; permissions,
-append and signals remain deferred. Next is task 6's documentation handoff and
-milestone closeout. Keep the usual task-by-task discussion.
-
-The following remain alternatives for later milestones.
+The libc portability milestone is complete. No successor is selected; the
+following remain alternatives for discussion as separate bounded milestones.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

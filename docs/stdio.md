@@ -91,7 +91,7 @@ stdout, and fclose of that stale wrapper cannot close the replacement.
 
 Close invalidates its descriptor even on release failure and never retries.
 Success returns zero without changing errno; invalid descriptors return
--1/EBADF. Other failures follow the [close contract](wip/libc-portability.md#close-failure-and-cleanup),
+-1/EBADF. Other failures follow the [close contract](libc-portability.md#close-failure-and-cleanup),
 including uncertain native release surviving until process exit. Normal exit
 closes remaining descriptors, including opens without FILE wrappers.
 
@@ -245,7 +245,7 @@ an unknown status or malformed reply reports EIO. In those unexpected cases a
 surviving native reference may remain until process exit and delay pipe peer
 closure. There is no hidden copy or retry list. Open rollback uses the same
 single-attempt release policy while preserving the open failure's errno. See
-[the close-failure contract](wip/libc-portability.md#close-failure-and-cleanup)
+[the close-failure contract](libc-portability.md#close-failure-and-cleanup)
 and [its cleanup limit](technical-debt.md#unexpected-native-close-failures).
 
 `printf`/`fprintf` and their va_list forms share the existing snprintf formatter

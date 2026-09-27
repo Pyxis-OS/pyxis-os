@@ -127,14 +127,41 @@ on screen. History, Unicode widths and larger-line viewports are not implemented
 ## Console input completion
 
 The console input protocol waits for bytes and provides no EOF operation.
-Consequently EOF-driven consumers such as cksum cannot finish normally with
+Consequently EOF-driven consumers such as cksum and tee cannot finish normally with
 terminal-only stdin. For now they require finite file input or a pipe whose
 last writer closes. A zero console transfer is still an error, not fabricated
 EOF, and Ctrl-D is not a libc substitute for a terminal protocol decision.
 
 Revisit console input completion and its interaction with line editing when
 interactive EOF-driven tools are explicitly in scope. The cksum port preserves
-upstream behavior and does not add terminal controls or signal handling.
+upstream behavior; neither cksum nor restricted tee adds terminal controls or
+signal handling.
+
+## Libc compatibility gaps
+
+The completed [descriptor portability slice](libc-portability.md) supplies
+open/read/write/close for cksum and restricted tee. Public O_RDWR, seeking,
+fdopen/fileno and duplication remain absent even though fopen supports update
+modes and stdio seeking internally. Consumers requiring those interfaces need
+a separately agreed extension. Revisit them against a pinned consumer's actual
+needs; duplication must settle shared open-state/cursor ownership before adding
+new descriptor aliases. Descriptor inheritance and cross-process shared offsets
+are not supplied by the existing dedicated startup-stream grants.
+
+Signals are absent, so tee rejects -i and broken pipes report EPIPE without
+SIGPIPE. Revisit signal disposition, delivery and lifetime when a selected
+consumer needs them; a successful no-op handler would misrepresent support.
+Public O_APPEND is also absent, so tee rejects -a; the
+[stdio append limitation](#non-atomic-stdio-append) needs a native atomic operation
+before an atomic append contract can be offered.
+
+Polling/nonblocking descriptor I/O, fork/exec-style process semantics and buffered
+stdio are outside this slice. Current streams are unbuffered and supply no
+buffering controls, pushback, scanning or wide I/O. Fixed-width inttypes output
+macros do not imply scanning or other integer-type families. Revisit these gaps
+only for a concrete consumer, defining native blocking/lifetime behavior or the
+library semantics it actually requires. No successful placeholder APIs exist
+for the missing operations.
 
 ## Public open creation mode
 
@@ -177,7 +204,7 @@ open rollback applies the same policy while retaining the original open errno.
 This limit is accepted for unexpected failures, not ordinary deferred release.
 Revisit it if CLOSE gains additional outcomes or asynchronous release semantics;
 define whether ownership remains before introducing retries or pending-close
-storage. The [close contract](wip/libc-portability.md#close-failure-and-cleanup)
+storage. The [close contract](libc-portability.md#close-failure-and-cleanup)
 records the current status and errno rules.
 
 ## Directory APIs in libpyxis
