@@ -124,6 +124,25 @@ needed before treating that fallback as a normal interactive environment.
 The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
 on screen. History, Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](terminal.md).
 
+## Process termination and Ctrl-C
+
+There is no operation to kill another process. Process handles permit waiting
+for completion; closing one does not stop execution. A process must exit itself
+or fault, so a hung or indefinitely blocked program cannot be terminated by its
+launcher. Ctrl-C cannot currently interrupt or terminate foreground work.
+
+Revisit this when adding native process termination and interactive cancellation.
+Include Ctrl-C support in that work, with explicit termination authority and
+foreground targeting for commands and pipelines. Define safe teardown of running
+and blocked tasks, outstanding IPC and other waits, resource reclamation, and
+the completion result visible to waiters. Native termination need not require a
+general POSIX signal implementation.
+
+The [userspace-service deadline task](wip/userspace-services.md#deadlines-and-cancellation)
+does not add process kill: expiring a call releases its caller, not the provider
+process. Integrate externally terminated callers with IPC cancellation when the
+termination operation exists.
+
 ## Console input completion
 
 The console input protocol waits for bytes and provides no EOF operation.
