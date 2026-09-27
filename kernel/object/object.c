@@ -73,7 +73,7 @@ bool object_rights_valid(enum object_type type, uint64_t rights)
   case OBJECT_ENDPOINT_SERVICE:
     return !(rights & ~ENDPOINT_SERVICE_RIGHT_CREATE);
   case OBJECT_ENDPOINT:
-    return !(rights & ~ENDPOINT_RIGHT_CALL);
+    return !(rights & ~(ENDPOINT_RIGHT_SEND | ENDPOINT_RIGHT_RECEIVE));
   case OBJECT_ENDPOINT_RECEIVER:
     return !(rights & ~ENDPOINT_RIGHT_RECEIVE);
   case OBJECT_ENDPOINT_RECEIPT:

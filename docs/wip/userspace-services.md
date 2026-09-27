@@ -1,9 +1,9 @@
 # Userspace services and the first HTTP provider
 
 Status: agreed next milestone after [libc portability](../libc-portability.md).
-Task 1 is implemented; see [the endpoint contract](../endpoints.md). Endpoint
+Tasks 1 and 2 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
 creation and process-owned receiver teardown moved forward from task 4 so the
-first delivery slice has a real consumer. Task 2 is the next unchecked task.
+first delivery slice has a real consumer. Task 3 is the next unchecked task.
 This document records the selected contracts for handoff between agents; the
 [broader provider ideas](userspace-scheme-providers.md) remain future directions where they exceed this scope. Work through the focused
 tasks in order, updating their checkboxes in the corresponding PRs. Discuss a
@@ -68,6 +68,16 @@ syscall numbers and C layout names belong to implementation, not this draft.
 | receive | Obtain one delivery or lifecycle notification, blocking when none is available. One active receiver per endpoint. |
 | reply | Complete one delivered call using its single-use receipt authority. |
 | finish/close receipt | Finish a one-way delivery; abandoning an unanswered call wakes its caller with an explicit abandonment result. |
+
+Client SEND requires send authority; CALL requires send and receive authority.
+Client receive authority permits only that call's response, never reading the
+provider's queue. The separate process-owned receiver requires receive authority
+for incoming work. There is no dedicated call right or standalone receive
+operation on a client handle.
+
+RECEIVE supplies the kernel-authenticated CALL/SEND kind. A SEND receipt has no
+reply authority; a rejected REPLY leaves it live. Receipt completion uses CLOSE
+through the `endpoint_finish()` helper; no separate finish operation is needed.
 
 A provider can receive further work before completing earlier deliveries. Normal
 messages are delivered in admission order; completion order is independent.
@@ -351,7 +361,7 @@ task; avoid publishing interfaces with fake successful operations.
   migrate existing endpoint examples. Include explicit endpoint creation authority
   and process-owned receiver teardown, brought forward from task 4. Land a
   functioning call/receive/reply slice.
-- [ ] **2. One-way delivery.** Add send and receipt completion using the same
+- [x] **2. One-way delivery.** Add send and receipt completion using the same
   machinery. Exercise sender close/exit after admission, queue exhaustion and
   retained attachment/target lifetime without waiting for a reply.
 - [ ] **3. Deadlines and lifecycle delivery.** Add absolute call deadlines,
