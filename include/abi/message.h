@@ -31,6 +31,9 @@
 #define PROTOCOL_ENDPOINT_RECEIVER UINT64_C(24)
 #define PROTOCOL_ENDPOINT_RECEIPT UINT64_C(25)
 
+#define PROTOCOL_NAMESPACE_SERVICE UINT64_C(27)
+#define PROTOCOL_NAMESPACE UINT64_C(28)
+
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */
 struct message_header {

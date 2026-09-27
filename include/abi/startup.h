@@ -57,13 +57,14 @@ struct startup_info {
   uint64_t argc;
   uint64_t argv;
   struct startup_stream streams[STARTUP_STREAM_COUNT];
+  handle_t namespace; /* Optional explicit namespace grant; zero means absent. */
 };
 
 _Static_assert(sizeof(struct startup_binding) == 16, "startup binding layout");
 _Static_assert(sizeof(struct startup_variable) == 16, "startup variable layout");
 _Static_assert(sizeof(struct startup_stream) == 16, "startup stream layout");
 _Static_assert(offsetof(struct startup_info, streams) == 104, "startup streams offset");
-_Static_assert(sizeof(struct startup_info) == 152, "startup record layout");
+_Static_assert(sizeof(struct startup_info) == 160, "startup record layout");
 _Static_assert(offsetof(struct startup_info, resources) == 16, "startup resources offset");
 _Static_assert(offsetof(struct startup_info, argv) == 96, "startup argv offset");
 
