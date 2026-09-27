@@ -1,7 +1,8 @@
 # Standard C libc over the native ABI
 
-Status: task 1 complete: the source probe and initial descriptor contract are
-recorded. Task 2 implementation has not started. The result is a small libc
+Status: tasks 1 and 2 complete: the source probe, descriptor ownership and stdio
+integration are implemented and validated. Public descriptor I/O remains task 3
+and has not started. The intended result is a small libc
 descriptor layer exercised by an upstream cksum port, with tee as a conditional
 second consumer. This document does not authorize the whole compatibility backlog.
 
@@ -50,7 +51,8 @@ silently expanding the current implementation task.
 
 ## Agreed descriptor and FILE constraints
 
-These are design constraints for tasks 2 and 3, not implemented behavior.
+Task 2 implements the private ownership and stdio machinery below. Public
+descriptor calls, including the `close(1)` example, remain task-3 behavior.
 Libc owns process-local descriptor entries over native file, console and pipe
 capabilities. A descriptor number is neither a kernel handle nor authority.
 
@@ -62,8 +64,8 @@ capabilities. A descriptor number is neither a kernel handle nor authority.
   For example, after `close(1)`, nonempty output through the old stdout fails
   with EBADF. Reusing descriptor 1 never reconnects that stdout to the new
   resource. Later cleanup of the stale FILE must not close the new descriptor.
-  Task 2 chooses the invalidation mechanism; sharing a descriptor number alone
-  is insufficient.
+  The entry's non-owning FILE back-pointer clears the wrapper's descriptor
+  association before the slot can be reused.
 - `fclose` releases the associated live descriptor and FILE metadata exactly
   once. Normal exit also releases descriptors without FILE wrappers. `_Exit`
   and fatal faults still rely on kernel process-resource reclamation. No hidden
@@ -90,10 +92,56 @@ capabilities. A descriptor number is neither a kernel handle nor authority.
   and other backend failures from successful short transfers. Reuse the native
   errno translation; do not fabricate rights or report failure as EOF.
 
-Public fdopen, fileno and duplication are deferred. Internal FILE support must
-already satisfy the constraints above; deferring those functions is not a
-reason to split ownership or positions. Cross-process shared offsets and
+Public fdopen, fileno and duplication are deferred. Internal FILE support uses
+one ownership/position model. Cross-process shared offsets and
 inheritance remain separate decisions. No kernel descriptor ABI is proposed.
+
+### Task 2 implementation and validation
+
+Userland's private `libc/descriptor.c` owns native handles, backend kinds, access
+modes, append policy and cursors directly in entries. The lowest free slot is
+reserved for an open, including closed or absent standard slots. Descriptors 0–2
+start in static storage before heap initialization; growth copies the table to
+heap storage. FILE stores a number, never a pointer into the relocatable table,
+and each entry has at most one non-owning FILE back-pointer. Closing clears the
+association before releasing the entry. Shared open-state allocation and
+duplication are not implemented.
+
+Fopen allocates its FILE and reserves descriptor capacity before opening or
+truncating. Path workspace allocation and authority resolution also precede
+truncation. A successful truncate is followed by allocation-free publication;
+failure releases reservations and attempts to release any opened handle under
+the close policy below. Existing r/w/a modes, their writable update forms, seeks
+and non-atomic append use this same private state.
+Backend transfers report one result without touching FILE indicators; stdio
+alone owns EOF/error updates and its fread/fwrite loops.
+
+Standard entries adopt the existing native grants without copying or changing
+their rights. `startup_stream()` remains an immutable borrowed snapshot: it
+retains no reference, becomes stale when the owning descriptor closes, and must
+then neither be used nor forwarded to a child. Number reuse never refreshes it.
+The release and exit implementation follows the close-failure contract below.
+The supported behavior is described in [stdio](../stdio.md).
+
+Validation used the installed toolchain with `make -j16 image`, then interactive
+QEMU q35/KVM boots with 256 MiB and one/four CPUs in the development VM. Both
+boots reached the shell and ran a `cat | head` pipeline. The four-CPU boot used
+virtio-fs and virtio-rng; Kilo saved `host://hello.c`, guest TCC compiled it, and
+the resulting executable printed its message. Additional manual checks covered
+independent stdout/stderr file redirection, missing input, rejection of a TCC
+output open in read-only `app://`, and early pipe closure reporting EPIPE to cat.
+A full `cat app://tcc.pxe | cat > host://tcc-copy.pxe` copy matched the source
+SHA-256 on the host.
+
+GDB observed the table grow from three static entries to six heap entries and
+reuse descriptor 3 after close during TCC compilation. A successful close left
+the entry free and its live FILE association at -1, preserving the prior errno.
+Head's stdin close also invalidated its FILE while leaving the borrowed startup
+snapshot unchanged. No debugger calls or fault injection were used. Absent
+startup bindings, allocation-failure unwinding and exceptional CLOSE responses
+were inspected in code, not forced at runtime. Public descriptor functions and
+headers remain unimplemented; their signed-count checks and end-to-end
+`close(1)` checks belong to task 3.
 
 ## Pinned source probe
 
@@ -157,9 +205,9 @@ or an installable compatibility layer.
 
 ## Accepted initial public slice
 
-The initial slice below is accepted for tasks 2 and 3. The close-failure
-contract is specified immediately afterward; task 2 chooses the internal
-representation and invalidation mechanism.
+The initial slice below is accepted for tasks 2 and 3. Task 2 implements the
+private representation and invalidation mechanism; the public API remains task
+3. The implemented close-failure contract is specified immediately afterward.
 
 - Add `int open(const char *path, int flags, ...)`, `int close(int fd)`,
   `ssize_t read(int fd, void *buffer, size_t count)` and
@@ -201,7 +249,7 @@ return zero reply bytes. Closing requires no access right and does not perform
 file sync or report storage writeback errors. Final object destruction can
 still wait for the existing BSP retirement path.
 
-Libc's internal release path must inspect `syscall_close()` from the exported
+Libc's internal release path inspects `syscall_close()` from the exported
 syscall.h. The current `handle_close()` convenience helper reduces every
 failure to -1 and discards both the status and malformed-reply distinction;
 it cannot provide this translation. No new kernel syscall or public libpyxis
@@ -295,12 +343,13 @@ requires one. No speculative stubs or retroactive rewrite of every existing port
   recorded above; exact commands and scratch patch are preserved in the
   [probe recipe](libc-probe/README.md). Tee's measured gaps are recorded for a
   scope decision after cksum. No descriptor implementation is part of this task.
-- [ ] **2. Add descriptor ownership and standard-stream integration.** Implement
-  the agreed process-local table and shared open state in libc. Standard FILE
-  objects and descriptors must use one deliberate ownership/position model;
-  avoid retaining an extra pipe writer. Public fdopen/fileno remain deferred.
-  Verify the specified close/exit policy, stale FILE invalidation and absent
-  streams while preserving existing native launch grants and writable stdio.
+- [x] **2. Add descriptor ownership and standard-stream integration.** Private
+  entries own native handles and cursors; FILE associations are non-owning and
+  explicitly invalidated on close. Static startup storage, heap growth,
+  reservation before truncation and the close/exit policy are implemented while
+  retaining writable stdio and native launch grants. Build, interactive guest
+  and debugger validation is recorded above. Public descriptor APIs and
+  fdopen/fileno remain deferred.
 - [ ] **3. Add the conventional I/O slice.** Implement open/read/write/close and
   the headers/types/flags selected in task 1 over native file, console and pipe
   protocols. Read returns available progress without trying to fill the buffer;
