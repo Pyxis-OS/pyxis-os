@@ -12,7 +12,8 @@ Libpyxis still returns native statuses. Libc translates failures into `errno`.
 or after `+` and has no effect. Other extensions and duplicated mode letters are
 rejected. `r` requires an existing readable file; `w` creates or truncates a
 writable file; `a` creates if absent and chooses the current end before each
-write. `+` adds both read and write authority. `a+` starts reading at offset zero;
+write. `+` requests both read and write access through the caller's existing
+grants; it creates no authority. `a+` starts reading at offset zero;
 `a` starts at the existing end. Seeking never disables append-on-write.
 
 Paths use the existing [capability path rules](paths.md), including scheme roots
@@ -26,8 +27,24 @@ Only the final file may be created; intermediate directories must exist. Lookup
 of an existing writable file does not require CREATE. A competing creator is
 handled by opening the entry it published. Temporary path storage is allocated
 from the path length and initial chain depth, without a fixed path/depth limit.
-Allocation and authority resolution precede truncation. Closing a FILE releases
-its owned handle and metadata, not the file's directory entry.
+The FILE wrapper and descriptor storage are reserved before opening or truncating
+the file. Path workspace allocation and authority resolution also precede
+truncation. Publishing a successfully truncated stream requires no allocation;
+failure releases the wrapper and slot reservation, and attempts to release any
+opened file handle under the close policy below.
+
+A private process-local descriptor entry owns the native handle, access mode,
+append policy and file cursor. FILE has a non-owning, invalidatable association
+with that entry and owns its EOF/error indicators. The association adds no native
+reference. Closing the entry invalidates the FILE before releasing the handle or
+reusing its number; the old FILE cannot access or close a later occupant. Closing
+a FILE releases its live descriptor and wrapper metadata, not the directory entry.
+
+Descriptors use the lowest free number, including absent or closed standard
+slots. The first three entries use static storage; later growth uses the heap.
+Storage exhaustion reports ENOMEM, and descriptor-number exhaustion reports
+EMFILE. Public open/read/write/close, fdopen, fileno and duplication are not yet
+exposed. Writable fopen already uses this same internal ownership/cursor model.
 
 Append currently performs separate SIZE and WRITE calls. Concurrent appenders
 can choose the same end and overwrite one another. This is explicitly not an
@@ -44,8 +61,7 @@ name fails unless another entry has been created there. Roots and final `.` or
 `..` are rejected, and a trailing slash requires a directory.
 
 Nonempty directories report ENOTEMPTY. This is nonrecursive removal, without
-unlink/rmdir syscall adapters or a process-wide file descriptor table. Persistent
-storage remains separate work.
+unlink/rmdir syscall adapters. Persistent storage remains separate work.
 
 ## Rename
 
@@ -67,8 +83,9 @@ within the RAM filesystem, not disk durability or a whole-path snapshot.
 
 `fread` and `fwrite` return complete element counts and check size/count overflow
 before I/O. A partial final element may have transferred bytes even though it
-is not included in that count. File position belongs to each FILE, with no
-shared seek position in the underlying capability. File writes use that offset.
+is not included in that count. File position belongs to the associated descriptor,
+with no shared seek position in the underlying capability. File writes use that
+offset.
 File, terminal and pipe output continue positive short writes until complete or
 an error, submitting only the remaining suffix. Zero progress or an excessive
 count is rejected; file position advances only for confirmed bytes. On a later
@@ -87,13 +104,21 @@ retrying the same bytes after EIO is not guaranteed safe. Zero-size/count
 returns after one successful backend transfer, up to capacity and the backend's
 per-call limit; it does not keep reading to fill a short result. Empty terminal
 or pipe input waits for initial data, EOF where supported, or error. File reads
-retain bulk transfers and advance their FILE offset by the confirmed byte count.
+retain bulk transfers and advance their descriptor offset by the confirmed byte
+count.
 Zero capacity is a no-op. A nonempty zero result reports backend EOF through
 `feof`, or failure through `ferror` and errno; unavailable input is EBADF, and
 an unexpected zero-byte terminal result is EIO. A positive short result does not
 establish EOF. Existing EOF suppresses backend reads until cleared. The helper
 shares backend dispatch and indicator handling with `fread`, whose complete
 element counts and fill-request behavior are unchanged. There is no extra handle or read-ahead.
+
+Private descriptor transfers return one backend result: progress or an error.
+FILE alone updates EOF/error indicators and implements the fread/fwrite loops.
+A FILE's sticky EOF does not suppress a descriptor transfer. Selected access
+mode and native rights remain separate: invalid entries and wrong modes report
+EBADF, while native authority denial remains EACCES and unsupported operations
+remain ENOTSUP. A successful short transfer remains successful progress.
 
 `fgetc`/`getc`/`getchar`, `fgets`, `fputc`/`putc`/`putchar`, `fputs` and `puts` are
 provided. `fgets` retains a newline and terminates successful input. Capacity one
@@ -122,41 +147,61 @@ required read/write transitions.
 
 Startup supplies independent stdin, stdout and stderr bindings. Each declares
 `PROTOCOL_CONSOLE`, `PROTOCOL_FILE` or `PROTOCOL_PIPE` and owns a distinct child
-handle with only READ authority for stdin or WRITE authority for stdout/stderr. Runtime adopts
-these handles directly, before heap initialization: it allocates no backing and
-retains no hidden startup copy. Closing stdout cannot close stderr or a named
-terminal grant. Normal boot binds all three to the space console.
+handle with only READ authority for stdin or WRITE authority for stdout/stderr.
+Runtime adopts these handles into descriptors 0, 1 and 2 before heap
+initialization, using static storage. It retains no hidden startup copy.
+Closing stdout cannot close stderr or a named terminal grant. Normal boot binds
+all three to the space console.
 
 `STARTUP_STREAM_NONE` with `HANDLE_INVALID` makes that stream unavailable without
 preventing the process from running. Its first nonempty I/O fails with EBADF and
 sets the error indicator; missing stdin is not EOF. There is no fallback to a
 terminal, another standard stream or the kernel log. Zero-size transfers remain
-no-ops. Unknown protocols and malformed bindings are rejected during launch/startup.
+no-ops. Later allocation of the absent stream's descriptor number does not make
+its FILE available. Unknown protocols and malformed bindings are rejected during
+launch/startup.
 
 The [shell](shell.md#file-redirection-and-stdin) can supply these bindings through
 foreground file redirects and [pipelines](shell.md#foreground-pipelines).
 The [stream reference](shell-streams.md) describes delegation and lifetime;
 [head](shell.md#bounded-input-with-head) provides exact bounded consumption.
-File-backed standard streams start at offset zero, with independent per-FILE
+File-backed standard streams start at offset zero, with independent per-descriptor
 positions. Adoption does not open, truncate or append
 to the file. Two output streams backed by the same object can overwrite one
 another because their positions are independent. Console and pipe streams remain
 sequential and cannot seek. [Pipes](pipes.md) use reference-based EOF and report
 EPIPE when their last reader closes.
 
-`startup_stream(index)` borrows the handle owned by the corresponding FILE;
-native code must not close it independently. `fclose` leaves the immutable
-startup snapshot stale. Native code may explicitly copy a borrowed handle when
-it needs a separately owned reference, but is then responsible for closing it.
+`startup_stream(index)` borrows the handle owned by the corresponding descriptor;
+the immutable snapshot retains no reference, and native code must not close its
+handle independently. After the owner closes, the snapshot is stale and must
+neither be used nor forwarded to a child. Descriptor-number reuse does not
+refresh it. Before owner close, native code may explicitly copy a borrowed handle
+when it needs a separately owned reference, but must close that copy itself.
 Named `input`/`output` console grants, plus `keyboard`, remain separate terminal
 resources; libc never uses them to fill a missing standard-stream binding.
 
 All streams are unbuffered. `fflush`, including `fflush(NULL)`, has no pending
 bytes or read-ahead to synchronize and does not clear an earlier error indicator.
-Normal exit calls it and closes all registered streams. `_Exit` and fatal faults
-bypass libc cleanup; the kernel still reclaims process resources. There are no
+Normal exit calls it, closes each live descriptor once, then disposes of FILE
+metadata, including invalid associations. Cleanup errors do not replace the
+requested exit status. `_Exit` and fatal faults bypass libc cleanup; the kernel
+still reclaims process resources. There are no
 atexit callbacks, buffering controls, pushback, scanning, wide I/O or fd adapters
 in this slice.
+
+`fclose` invalidates the association and makes one native close attempt. Success
+returns zero without changing errno. Failure returns EOF with the translated
+errno and still disposes of the wrapper; static standard wrappers remain invalid.
+Closing a stale FILE returns EOF/EBADF without touching a reused descriptor.
+Native CLOSE currently returns only success or BAD_HANDLE; neither leaves an
+owned native entry. Other native failures retain their errno translation, while
+an unknown status or malformed reply reports EIO. In those unexpected cases a
+surviving native reference may remain until process exit and delay pipe peer
+closure. There is no hidden copy or retry list. Open rollback uses the same
+single-attempt release policy while preserving the open failure's errno. See
+[the close-failure contract](wip/libc-portability.md#close-failure-and-cleanup)
+and [its cleanup limit](technical-debt.md#unexpected-native-close-failures).
 
 `printf`/`fprintf` and their va_list forms share the existing snprintf formatter
 and its supported conversions. Floating conversions `f/F/e/E/g/G/a/A` support

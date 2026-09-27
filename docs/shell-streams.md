@@ -17,18 +17,26 @@ cat missing 2> home://errors | cat > home://empty
 Launch selects dedicated stream grants with explicit protocol tags. Each stdin
 handle has READ authority; stdout and stderr have WRITE authority. A stream's
 grant index cannot also be used by another stream or an ordinary startup binding.
-Libc adopts those handles directly, without leaving unused startup copies.
+Libc descriptors adopt those handles directly, without leaving unused startup
+copies. Each FILE has a non-owning association that is invalidated before the
+descriptor closes or its number is reused; the wrapper cannot keep a pipe alive.
 Missing bindings remain unavailable with EBADF; they do not become EOF or fall
 back to another output or the terminal. Named terminal capabilities are separate.
 See [stdio](stdio.md#standard-streams-formatting-and-exit) and
 [process launch](processes.md) for the interfaces.
 
-File positions belong to each FILE. Copying a grant does not create a shared
-position; stdout and stderr targeting the same file can overwrite one another.
+File positions belong to each libc descriptor. Copying a grant does not create a
+shared position; stdout and stderr targeting the same file can overwrite one
+another.
 Console and pipe streams are sequential. `fread` retains fill-request semantics;
 `fread_some` returns one available backend transfer, with sticky EOF/error
 indicators and no read-ahead. Cat uses it to forward terminal and pipe data
 promptly while retaining bulk file reads.
+
+`startup_stream()` returns an immutable borrowed snapshot. It keeps no native
+reference alive. After its owning descriptor closes, the snapshot must not be
+used or forwarded to a child; descriptor-number reuse does not refresh it.
+Existing launch consumers may borrow it only while that owner remains live.
 
 ## Pipe and launch lifetime
 

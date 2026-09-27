@@ -94,11 +94,12 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Next milestone and later candidates
 
-Next is [libc portability](libc-portability.md): a small userspace descriptor
-layer, upstream cksum as the final consumer and an optional tee port. The source
-probe and initial descriptor contract are recorded; task 2 will implement shared
-descriptor/stdio ownership. Implementation has not started; keep the usual
-task-by-task discussion.
+The current milestone is [libc portability](libc-portability.md): a small
+userspace descriptor layer, upstream cksum as the final consumer and an optional
+tee port. The source probe and initial descriptor contract are recorded. Task 2
+implements and validates private descriptor ownership shared with stdio. Public
+descriptor I/O remains task 3 and has not started. Keep the usual task-by-task
+discussion.
 
 The following remain alternatives for later milestones.
 

@@ -139,6 +139,22 @@ but large formatted output requires temporary memory. Revisit bounded streaming
 when real consumers make that cost material. All FILE streams are unbuffered;
 there are no pending writes to flush yet.
 
+## Unexpected native close failures
+
+Libc invalidates a descriptor and its FILE association before one native CLOSE
+attempt. Today's native success/BAD_HANDLE outcomes leave no owned capability
+entry. If a future native failure or malformed reply makes release uncertain,
+libc reports the error and discards its metadata without retrying. Any residual
+native capability survives until kernel process teardown and can delay pipe EOF
+or EPIPE until then. Normal exit does not retry previously invalidated entries;
+open rollback applies the same policy while retaining the original open errno.
+
+This limit is accepted for unexpected failures, not ordinary deferred release.
+Revisit it if CLOSE gains additional outcomes or asynchronous release semantics;
+define whether ownership remains before introducing retries or pending-close
+storage. The [close contract](wip/libc-portability.md#close-failure-and-cleanup)
+records the current status and errno rules.
+
 ## Directory APIs in libpyxis
 
 The first ls and mkdir use native libpyxis enumeration and creation helpers,
@@ -272,9 +288,9 @@ There is no rollback. Redirecting an output onto an input file destroys its
 contents before the child consumes it, even through different path aliases.
 No object-identity/same-file check is provided.
 
-stdout and stderr retain independent per-FILE offsets when both refer to the same
-file. Their writes can overwrite each other; this does not implement descriptor
-duplication or merged output. These limitations are accepted for the first
+stdout and stderr retain independent per-descriptor offsets when both refer to
+the same file. Their writes can overwrite each other; this does not implement
+descriptor duplication or merged output. These limitations are accepted for the first
 redirection scope. Revisit if alias-safe copying or shared-position output becomes
 an explicit requirement; batch launch does not promise filesystem rollback.
 See [shell redirection](shell.md#file-redirection-and-stdin).
