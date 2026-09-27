@@ -78,6 +78,7 @@ struct pipe_wait *task_prepare_pipe_wait(void);
 
 /* Current user task lends its table to the BSP for atomic pipe creation and
  * installation. Failure installs neither handle. */
+enum call_status task_create_namespace(handle_t *handle);
 enum call_status task_create_pipe(struct pipe_create_reply *reply);
 enum call_status task_create_endpoint(struct endpoint_create_reply *reply);
 enum call_status task_export_endpoint(const struct endpoint_export_message *request,

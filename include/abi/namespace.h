@@ -43,6 +43,7 @@ struct namespace_reply {
   handle_t handle;
 };
 
+_Static_assert(sizeof(struct namespace_reply) == 8, "namespace reply layout");
 _Static_assert(sizeof(struct namespace_name_message) == 80, "namespace name layout");
 _Static_assert(sizeof(struct namespace_bind_message) == 104, "namespace bind layout");
 

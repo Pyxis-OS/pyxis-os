@@ -1,3 +1,4 @@
+#include <abi/namespace.h>
 #include <abi/profile.h>
 #include <abi/pipe.h>
 #include <abi/space.h>
@@ -47,6 +48,10 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   }
 
   switch (object->type) {
+  case OBJECT_NAMESPACE_SERVICE:
+    return !(rights & ~NAMESPACE_SERVICE_RIGHT_CREATE);
+  case OBJECT_NAMESPACE:
+    return !(rights & ~NAMESPACE_RIGHTS);
   case OBJECT_PIPE_SERVICE:
     return !(rights & ~PIPE_SERVICE_RIGHT_CREATE);
   case OBJECT_PIPE:

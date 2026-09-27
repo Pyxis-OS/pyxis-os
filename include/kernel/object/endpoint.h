@@ -21,6 +21,8 @@ enum call_status endpoint_export_create(struct process *owner,
     const struct endpoint_export_message *request, struct endpoint_export_reply *reply);
 bool endpoint_export_authority_valid(const struct kernel_object *object,
     uint64_t rights, uint64_t transport);
+/* IF=0, held export reference; closure can still race after this snapshot. */
+bool endpoint_export_available(struct kernel_object *object);
 struct kernel_object *endpoint_service_create(void);
 /* BSP, IF=0, before destroying an inactive process's capabilities. Closes all
  * owned receivers even when messages or client grants retain their objects. */
