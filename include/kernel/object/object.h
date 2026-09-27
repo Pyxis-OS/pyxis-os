@@ -28,6 +28,9 @@ enum object_type {
   OBJECT_PROFILE = 20,
   OBJECT_PIPE_SERVICE = 21,
   OBJECT_PIPE = 22,
+  OBJECT_ENDPOINT_SERVICE = 23,
+  OBJECT_ENDPOINT_RECEIVER = 24,
+  OBJECT_ENDPOINT_RECEIPT = 25,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.

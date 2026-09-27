@@ -1,3 +1,4 @@
+#include <kernel/object/endpoint.h>
 #include <kernel/object/keyboard.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
@@ -46,6 +47,7 @@ enum mm_result process_destroy(struct process *process)
   if (result != MM_OK) {
     return result;
   }
+  endpoint_process_exit(process);
   private_memory_discard_records(process);
   capability_table_destroy(&process->capabilities);
   if (process->control) {

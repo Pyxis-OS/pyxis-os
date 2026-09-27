@@ -39,9 +39,10 @@ sole Limine module. A boot-time [tree builder](../include/kernel/fs/initrd_tree.
 exposes its entries as read-only directory/file objects without extracting file
 contents or adding a block device. The text asset is `share/hello.txt`.
 
-Hello, client and server remain optional build targets, for example
-`make -C userspace SDK=../build/sdk BUILD=../build/userspace hello client server`. They are not packaged or launched by
-normal boot and still require their example-specific startup grants.
+The image packages the endpoint client and server examples. From the shell,
+`session app://server.pxe` launches a server and two clients with explicit
+startup grants; `--wide` exercises full-size payloads and four attachments,
+and `--abandon` demonstrates receipt closure. See [endpoints](endpoints.md).
 
 The image loader creates an inactive private address space, copies the program
 into owned backing and applies its permissions. Failure releases partial

@@ -14,6 +14,7 @@ struct process_wait;
 struct console_wait;
 struct pipe_wait;
 struct pipe_create_reply;
+struct endpoint_create_reply;
 struct memory_region;
 struct display_object;
 struct display_buffer;
@@ -76,6 +77,7 @@ struct pipe_wait *task_prepare_pipe_wait(void);
 /* Current user task lends its table to the BSP for atomic pipe creation and
  * installation. Failure installs neither handle. */
 enum call_status task_create_pipe(struct pipe_create_reply *reply);
+enum call_status task_create_endpoint(struct endpoint_create_reply *reply);
 
 /* Current user task, IF=0, no spinlocks held. Lend exclusive file operation
  * ownership to the BSP to replace/release backing; return it after completion. */

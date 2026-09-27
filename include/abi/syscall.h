@@ -41,6 +41,7 @@ enum call_status {
   /* A submitted mutation has no trustworthy completion. It may have taken
    * effect: no known byte count, rollback guarantee or safe automatic retry. */
   CALL_OUTCOME_UNKNOWN = 27,
+  CALL_ABANDONED = 28,
   CALL_STATUS_COUNT, /* Validation bound, not a result. */
 };
 
@@ -52,7 +53,9 @@ enum call_status {
  * It exposes no object identity and requires no right beyond holding the handle.
  * The C x86_64 ABI returns this two-word structure in those same registers.
  * LAUNCHER_LAUNCH_BATCH is a narrow exception: after reply-buffer validation it
- * returns its fixed reply on operation failure too, with status still in RAX. */
+ * returns its fixed reply on operation failure too, with status still in RAX.
+ * ENDPOINT_CALL similarly returns delivery metadata after output validation,
+ * including on transport failure; application results are separate. */
 struct syscall_result {
   uint64_t status;
   uint64_t reply_size;

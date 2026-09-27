@@ -70,9 +70,14 @@ bool object_rights_valid(enum object_type type, uint64_t rights)
     return !(rights & ~DISPLAY_RIGHT_DRAW);
   case OBJECT_LAUNCHER:
     return !(rights & ~LAUNCHER_RIGHT_LAUNCH);
+  case OBJECT_ENDPOINT_SERVICE:
+    return !(rights & ~ENDPOINT_SERVICE_RIGHT_CREATE);
   case OBJECT_ENDPOINT:
-    return !(rights & ~(ENDPOINT_RIGHT_CALL | ENDPOINT_RIGHT_RECEIVE |
-                       ENDPOINT_RIGHT_REPLY));
+    return !(rights & ~ENDPOINT_RIGHT_CALL);
+  case OBJECT_ENDPOINT_RECEIVER:
+    return !(rights & ~ENDPOINT_RIGHT_RECEIVE);
+  case OBJECT_ENDPOINT_RECEIPT:
+    return !(rights & ~ENDPOINT_RIGHT_REPLY);
   default:
     return false;
   }
