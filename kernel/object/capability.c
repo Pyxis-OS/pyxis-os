@@ -13,6 +13,7 @@
 struct capability_entry {
   struct kernel_object *object;
   uint64_t rights;
+  uint64_t transport;
   uint32_t generation; /* Zero retires the slot permanently after wrap. */
 };
 
@@ -49,12 +50,14 @@ enum capability_result capability_grow(struct capability_table *table)
 }
 
 enum capability_result capability_insert(struct capability_table *table,
-    struct kernel_object *object, uint64_t rights, handle_t *handle)
+    struct kernel_object *object, uint64_t rights, uint64_t transport,
+    handle_t *handle)
 {
   if (handle) {
     *handle = HANDLE_INVALID;
   }
-  if (!table || !object || !handle || !object_rights_valid(object->type, rights)) {
+  if (!table || !object || !handle ||
+      !object_authority_valid(object, rights, transport)) {
     return CAP_INVALID;
   }
 
@@ -74,6 +77,7 @@ enum capability_result capability_insert(struct capability_table *table,
   struct capability_entry *entry = &table->entries[index];
   entry->object = object;
   entry->rights = rights;
+  entry->transport = transport;
   *handle = ((uint64_t)entry->generation << HANDLE_INDEX_BITS) | index;
   return CAP_OK;
 }
@@ -94,8 +98,8 @@ size_t capability_free_slots(const struct capability_table *table)
 }
 
 enum capability_result capability_insert_batch(struct capability_table *table,
-    struct kernel_object *const *objects, const uint64_t *rights, size_t count,
-    handle_t *handles)
+    struct kernel_object *const *objects, const uint64_t *rights,
+    const uint64_t *transport, size_t count, handle_t *handles)
 {
   if (count > CAPABILITY_BATCH_MAX) {
     return CAP_INVALID;
@@ -105,12 +109,12 @@ enum capability_result capability_insert_batch(struct capability_table *table,
       handles[i] = HANDLE_INVALID;
     }
   }
-  if (!table || (count && (!objects || !rights || !handles))) {
+  if (!table || (count && (!objects || !rights || !transport || !handles))) {
     return CAP_INVALID;
   }
 
   for (size_t i = 0; i < count; ++i) {
-    if (!objects[i] || !object_rights_valid(objects[i]->type, rights[i])) {
+    if (!objects[i] || !object_authority_valid(objects[i], rights[i], transport[i])) {
       return CAP_INVALID;
     }
   }
@@ -140,16 +144,19 @@ enum capability_result capability_insert_batch(struct capability_table *table,
     struct capability_entry *entry = &table->entries[slots[i]];
     entry->object = objects[i];
     entry->rights = rights[i];
+    entry->transport = transport[i];
     handles[i] = ((uint64_t)entry->generation << HANDLE_INDEX_BITS) | slots[i];
   }
   return CAP_OK;
 }
 
 enum capability_result capability_install(struct capability_table *table,
-    struct kernel_object *object, uint64_t rights, handle_t *handle)
+    struct kernel_object *object, uint64_t rights, uint64_t transport,
+    handle_t *handle)
 {
   KASSERT(arch_cpu_index() == 0);
-  enum capability_result result = capability_insert(table, object, rights, handle);
+  enum capability_result result = capability_insert(table, object, rights,
+      transport, handle);
   if (result != CAP_FULL) {
     return result;
   }
@@ -157,7 +164,7 @@ enum capability_result capability_install(struct capability_table *table,
   if (result != CAP_OK) {
     return result;
   }
-  return capability_insert(table, object, rights, handle);
+  return capability_insert(table, object, rights, transport, handle);
 }
 
 static struct capability_entry *find_entry(struct capability_table *table,
@@ -177,11 +184,14 @@ static struct capability_entry *find_entry(struct capability_table *table,
 }
 
 enum capability_result capability_resolve(struct capability_table *table,
-    handle_t handle, uint64_t required_rights, struct kernel_object **object,
-    uint64_t *rights)
+    handle_t handle, uint64_t required_rights, uint64_t required_transport,
+    struct kernel_object **object, uint64_t *rights, uint64_t *transport)
 {
   if (rights) {
     *rights = 0;
+  }
+  if (transport) {
+    *transport = 0;
   }
   if (!object) {
     return CAP_INVALID;
@@ -192,12 +202,16 @@ enum capability_result capability_resolve(struct capability_table *table,
   if (!entry) {
     return CAP_BAD_HANDLE;
   }
-  if ((entry->rights & required_rights) != required_rights) {
+  if ((entry->rights & required_rights) != required_rights ||
+      (entry->transport & required_transport) != required_transport) {
     return CAP_DENIED;
   }
   *object = entry->object;
   if (rights) {
     *rights = entry->rights;
+  }
+  if (transport) {
+    *transport = entry->transport;
   }
   return CAP_OK;
 }
@@ -213,6 +227,7 @@ enum capability_result capability_close(struct capability_table *table,
   struct kernel_object *object = entry->object;
   entry->object = NULL;
   entry->rights = 0;
+  entry->transport = 0;
   /* Unsigned wrap gives zero, which install skips rather than resurrecting
    * any handle previously issued for this slot. */
   ++entry->generation;
@@ -222,7 +237,7 @@ enum capability_result capability_close(struct capability_table *table,
 
 enum capability_result capability_grant(struct capability_table *destination,
     struct capability_table *source, handle_t handle, uint64_t rights,
-    handle_t *result)
+    uint64_t transport, handle_t *result)
 {
   KASSERT(arch_cpu_index() == 0);
   if (!result) {
@@ -231,7 +246,7 @@ enum capability_result capability_grant(struct capability_table *destination,
   *result = HANDLE_INVALID;
   struct kernel_object *object;
   enum capability_result status = capability_resolve(source, handle, rights,
-      &object, NULL);
+      transport, &object, NULL, NULL);
   if (status != CAP_OK) {
     return status;
   }
@@ -239,7 +254,7 @@ enum capability_result capability_grant(struct capability_table *destination,
       object->type == OBJECT_ENDPOINT_RECEIVER) {
     return CAP_DENIED;
   }
-  return capability_install(destination, object, rights, result);
+  return capability_install(destination, object, rights, transport, result);
 }
 
 void capability_table_destroy(struct capability_table *table)

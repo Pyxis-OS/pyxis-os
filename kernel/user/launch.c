@@ -129,26 +129,26 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   handle_t script_handle = HANDLE_INVALID;
   handle_t standard_input, standard_output, standard_error;
   struct kernel_object *console = &process->space->console->object;
-  if (capability_install(&process->capabilities, service, ENDPOINT_SERVICE_RIGHT_CREATE, &service_handle) != CAP_OK ||
-      capability_install(&process->capabilities, profile, PROFILE_RIGHT_MEMORY, &profile_handle) != CAP_OK ||
-      capability_install(&process->capabilities, pipe, PIPE_SERVICE_RIGHT_CREATE, &pipe_handle) != CAP_OK ||
-      capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &input) != CAP_OK ||
-      capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, &output) != CAP_OK ||
-      capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, &standard_input) != CAP_OK ||
-      capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, &standard_output) != CAP_OK ||
-      capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, &standard_error) != CAP_OK ||
-      capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, &memory_handle) != CAP_OK ||
+  if (capability_install(&process->capabilities, service, ENDPOINT_SERVICE_RIGHT_CREATE, 0, &service_handle) != CAP_OK ||
+      capability_install(&process->capabilities, profile, PROFILE_RIGHT_MEMORY, 0, &profile_handle) != CAP_OK ||
+      capability_install(&process->capabilities, pipe, PIPE_SERVICE_RIGHT_CREATE, 0, &pipe_handle) != CAP_OK ||
+      capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, 0, &input) != CAP_OK ||
+      capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &output) != CAP_OK ||
+      capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, 0, &standard_input) != CAP_OK ||
+      capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &standard_output) != CAP_OK ||
+      capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &standard_error) != CAP_OK ||
+      capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, 0, &memory_handle) != CAP_OK ||
       capability_install(&process->capabilities, &process->space->keyboard->object,
-          KEYBOARD_RIGHT_INPUT, &keyboard_handle) != CAP_OK ||
-      capability_install(&process->capabilities, net_config, NET_CONFIG_RIGHTS, &net_config_handle) != CAP_OK ||
-      capability_install(&process->capabilities, random, RANDOM_RIGHT_READ, &random_handle) != CAP_OK ||
-      capability_install(&process->capabilities, tcp, TCP_SERVICE_RIGHT_CONNECT, &tcp_handle) != CAP_OK ||
-      capability_install(&process->capabilities, udp, UDP_SERVICE_RIGHT_OPEN, &udp_handle) != CAP_OK ||
-      capability_install(&process->capabilities, echo, ECHO_RIGHT_SEND, &echo_handle) != CAP_OK ||
-      capability_install(&process->capabilities, clock, CLOCK_RIGHTS, &clock_handle) != CAP_OK ||
-      capability_install(&process->capabilities, launcher, LAUNCHER_RIGHT_LAUNCH, &launcher_handle) != CAP_OK ||
+          KEYBOARD_RIGHT_INPUT, 0, &keyboard_handle) != CAP_OK ||
+      capability_install(&process->capabilities, net_config, NET_CONFIG_RIGHTS, 0, &net_config_handle) != CAP_OK ||
+      capability_install(&process->capabilities, random, RANDOM_RIGHT_READ, 0, &random_handle) != CAP_OK ||
+      capability_install(&process->capabilities, tcp, TCP_SERVICE_RIGHT_CONNECT, 0, &tcp_handle) != CAP_OK ||
+      capability_install(&process->capabilities, udp, UDP_SERVICE_RIGHT_OPEN, 0, &udp_handle) != CAP_OK ||
+      capability_install(&process->capabilities, echo, ECHO_RIGHT_SEND, 0, &echo_handle) != CAP_OK ||
+      capability_install(&process->capabilities, clock, CLOCK_RIGHTS, 0, &clock_handle) != CAP_OK ||
+      capability_install(&process->capabilities, launcher, LAUNCHER_RIGHT_LAUNCH, 0, &launcher_handle) != CAP_OK ||
       capability_install(&process->capabilities, &process->space->display->object,
-          DISPLAY_RIGHT_DRAW, &display_handle) != CAP_OK) {
+          DISPLAY_RIGHT_DRAW, 0, &display_handle) != CAP_OK) {
     goto fail;
   }
   handle_t space_handle = HANDLE_INVALID;
@@ -156,7 +156,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   if (cpu_index != 0) {
     space_control = space_control_create(process->space);
     if (!space_control || capability_install(&process->capabilities, space_control,
-          SPACE_RIGHT_SET_TITLE, &space_handle) != CAP_OK) {
+          SPACE_RIGHT_SET_TITLE, 0, &space_handle) != CAP_OK) {
       goto fail;
     }
     object_release(space_control);
@@ -166,15 +166,15 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
                         DIRECTORY_RIGHT_READ_FILES;
   uint64_t home_rights = app_rights | DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
                          DIRECTORY_RIGHT_REMOVE;
-  if (capability_install(&process->capabilities, &application_root->object, app_rights, &app) != CAP_OK ||
-      capability_install(&process->capabilities, &home_root->object, home_rights, &home) != CAP_OK) {
+  if (capability_install(&process->capabilities, &application_root->object, app_rights, 0, &app) != CAP_OK ||
+      capability_install(&process->capabilities, &home_root->object, home_rights, 0, &home) != CAP_OK) {
     goto fail;
   }
   handle_t mount_handle = HANDLE_INVALID;
   if (virtio_fs_pci_present()) {
     mount = mount_create();
     if (!mount || capability_install(&process->capabilities, mount,
-          MOUNT_RIGHT_OPEN_ROOT, &mount_handle) != CAP_OK) {
+          MOUNT_RIGHT_OPEN_ROOT, 0, &mount_handle) != CAP_OK) {
       goto fail;
     }
     object_release(mount);
@@ -183,7 +183,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   if (script.data) {
     script_file = file_create_initrd(&script);
     if (!script_file || capability_install(&process->capabilities, &script_file->object,
-          FILE_RIGHT_READ, &script_handle) != CAP_OK) {
+          FILE_RIGHT_READ, 0, &script_handle) != CAP_OK) {
       goto fail;
     }
     object_release(&script_file->object);

@@ -35,7 +35,8 @@ static struct syscall_result close_handle(handle_t handle)
   }
 
   struct kernel_object *object;
-  if (capability_resolve(&process->capabilities, handle, 0, &object, NULL) != CAP_OK) {
+  if (capability_resolve(&process->capabilities, handle, 0, 0,
+        &object, NULL, NULL) != CAP_OK) {
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
   }
   endpoint_handle_close(object);
@@ -55,28 +56,28 @@ static struct syscall_result handle_rights(handle_t handle, uintptr_t destinatio
   }
 
   struct kernel_object *object;
-  uint64_t rights;
+  struct handle_authority authority;
   enum capability_result result = capability_resolve(&process->capabilities,
-      handle, 0, &object, &rights);
+      handle, 0, 0, &object, &authority.rights, &authority.transport);
   if (result == CAP_BAD_HANDLE) {
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
   }
   KASSERT(result == CAP_OK);
-  if (!copy_to_user(destination, &rights, sizeof(rights))) {
+  if (!copy_to_user(destination, &authority, sizeof(authority))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  return (struct syscall_result){CALL_OK, sizeof(rights)};
+  return (struct syscall_result){CALL_OK, sizeof(authority)};
 }
 
 static struct syscall_result copy_handle(handle_t source, uint64_t rights,
-    uint64_t flags, uintptr_t destination)
+    uint64_t transport, uint64_t flags, uintptr_t destination)
 {
   struct process *process = process_current();
   if (!process) {
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
   }
   if (flags & ~HANDLE_COPY_SAME_RIGHTS ||
-      ((flags & HANDLE_COPY_SAME_RIGHTS) && rights)) {
+      ((flags & HANDLE_COPY_SAME_RIGHTS) && (rights || transport))) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (!user_buffer_check(destination, sizeof(handle_t), USER_BUFFER_WRITE)) {
@@ -85,8 +86,9 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
 
   struct kernel_object *object;
   uint64_t granted;
+  uint64_t granted_transport;
   enum capability_result result = capability_resolve(&process->capabilities,
-      source, rights, &object, &granted);
+      source, rights, transport, &object, &granted, &granted_transport);
   if (result != CAP_OK) {
     KASSERT(result == CAP_BAD_HANDLE || result == CAP_DENIED);
     return (struct syscall_result){result == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED, 0};
@@ -96,13 +98,15 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
   }
   if (flags & HANDLE_COPY_SAME_RIGHTS) {
     rights = granted;
+    transport = granted_transport;
   }
 
   /* The source slot keeps the object alive across a BSP table-growth loan.
    * Keep no entry pointer: growth replaces the table's storage. */
   handle_t handle;
   for (;;) {
-    result = capability_insert(&process->capabilities, object, rights, &handle);
+    result = capability_insert(&process->capabilities, object, rights,
+        transport, &handle);
     if (result != CAP_FULL) {
       break;
     }
@@ -131,8 +135,9 @@ static struct syscall_result call_object(handle_t handle,
 
   struct kernel_object *object;
   uint64_t rights;
+  uint64_t transport;
   enum capability_result lookup = capability_resolve(&process->capabilities,
-      handle, 0, &object, &rights);
+      handle, 0, 0, &object, &rights, &transport);
   if (lookup == CAP_BAD_HANDLE) {
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
   }
@@ -279,16 +284,19 @@ static struct syscall_result call_object(handle_t handle,
     if (header.protocol != PROTOCOL_ENDPOINT_SERVICE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    return endpoint_service_call(rights, header.operation, request_size, reply_address, reply_capacity);
+    return endpoint_service_call(rights, header.operation, request_address,
+        request_size, reply_address, reply_capacity);
   case OBJECT_ENDPOINT_RECEIVER:
   case OBJECT_ENDPOINT_RECEIPT:
   case OBJECT_ENDPOINT:
+  case OBJECT_ENDPOINT_EXPORT:
     if ((object->type == OBJECT_ENDPOINT && header.protocol != PROTOCOL_ENDPOINT) ||
+        (object->type == OBJECT_ENDPOINT_EXPORT && header.protocol != PROTOCOL_ENDPOINT) ||
         (object->type == OBJECT_ENDPOINT_RECEIVER && header.protocol != PROTOCOL_ENDPOINT_RECEIVER) ||
         (object->type == OBJECT_ENDPOINT_RECEIPT && header.protocol != PROTOCOL_ENDPOINT_RECEIPT)) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    return endpoint_call(object, handle, rights, header.operation,
+    return endpoint_call(object, handle, rights, transport, header.operation,
         request_address, request_size, reply_address, reply_capacity);
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -299,7 +307,6 @@ struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t 
                          uint64_t arg3, uint64_t arg4, uint64_t arg5,
                          uint64_t arg6)
 {
-  (void)arg6;
   switch (number) {
   case SYSCALL_CALL:
     return call_object(arg1, arg2, arg3, arg4, arg5);
@@ -308,7 +315,7 @@ struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t 
   case SYSCALL_HANDLE_RIGHTS:
     return handle_rights(arg1, arg2);
   case SYSCALL_COPY:
-    return copy_handle(arg1, arg2, arg3, arg4);
+    return copy_handle(arg1, arg2, arg3, arg4, arg5);
   case SYSCALL_LOG_PUTCHAR: {
     bool locked = log_begin();
     log_putc((char)arg1);

@@ -40,7 +40,8 @@ static enum call_status install_grants(struct launch_capture *capture,
     /* Capture switches from parent source handles to installed child handles;
      * the actual parent grants survive both success and failure. */
     enum capability_result result = capability_grant(&child->capabilities,
-        &parent->capabilities, grant->source, grant->rights, &grant->source);
+        &parent->capabilities, grant->source, grant->rights,
+        grant->transport, &grant->source);
     if (result != CAP_OK) {
       return capability_status(result);
     }
@@ -128,7 +129,7 @@ enum call_status launcher_group_prepare(struct launch_group *group,
 
   handle_t observer;
   enum capability_result installed = capability_install(&parent->capabilities,
-      &child->control->object, PROCESS_RIGHT_WAIT, &observer);
+      &child->control->object, PROCESS_RIGHT_WAIT, 0, &observer);
   if (installed != CAP_OK) {
     user_task_discard_prepared(task);
     status = capability_status(installed);

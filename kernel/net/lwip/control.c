@@ -102,7 +102,7 @@ static enum call_status prepare_connect(struct tcp_control *call)
    * Failed preparation removes it, so there can be no half-open user handle. */
   uint64_t flags = cpu_save_interrupts();
   enum capability_result installed = capability_install(call->table, &stream->object,
-      TCP_RIGHTS, &call->reply.handle);
+      TCP_RIGHTS, 0, &call->reply.handle);
   cpu_restore_interrupts(flags);
   if (installed != CAP_OK) {
     KASSERT(installed == CAP_NO_MEMORY || installed == CAP_LIMIT);

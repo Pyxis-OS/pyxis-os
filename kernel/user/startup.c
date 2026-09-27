@@ -54,8 +54,9 @@ static bool measure_bindings(struct process *process,
       }
     }
     struct kernel_object *object;
-    if (capability_resolve(&process->capabilities, binding->handle, 0,
-          &object, NULL) != CAP_OK || (directories && object->type != OBJECT_DIRECTORY)) {
+    if (capability_resolve(&process->capabilities, binding->handle, 0, 0,
+          &object, NULL, NULL) != CAP_OK ||
+        (directories && object->type != OBJECT_DIRECTORY)) {
       return false;
     }
     for (size_t j = 0; j < i; ++j) {
@@ -97,7 +98,8 @@ static bool validate_streams(struct process *process,
     struct kernel_object *object;
     uint64_t rights;
     if (capability_resolve(&process->capabilities, stream->handle, expected_rights,
-          &object, &rights) != CAP_OK || object->type != type || rights != expected_rights) {
+          0, &object, &rights, NULL) != CAP_OK ||
+        object->type != type || rights != expected_rights) {
       return false;
     }
     for (size_t j = 0; j < i; ++j) {
@@ -163,7 +165,7 @@ static bool measure_startup(struct process *process,
   for (size_t i = 0; i < source->working_directory_count; ++i) {
     struct kernel_object *object;
     if (capability_resolve(&process->capabilities, source->working_directories[i],
-          0, &object, NULL) != CAP_OK || object->type != OBJECT_DIRECTORY) {
+          0, 0, &object, NULL, NULL) != CAP_OK || object->type != OBJECT_DIRECTORY) {
       return false;
     }
   }

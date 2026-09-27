@@ -31,6 +31,7 @@ enum object_type {
   OBJECT_ENDPOINT_SERVICE = 23,
   OBJECT_ENDPOINT_RECEIVER = 24,
   OBJECT_ENDPOINT_RECEIPT = 25,
+  OBJECT_ENDPOINT_EXPORT = 26,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.
@@ -51,9 +52,11 @@ struct kernel_object {
 void object_init(struct kernel_object *object, enum object_type type,
                  void (*destroy)(struct kernel_object *));
 
-/* Rights have meaning only within the object's protocol. Zero grants no
- * operations; unknown types or bits are not valid grants. */
-bool object_rights_valid(enum object_type type, uint64_t rights);
+/* Resource rights have meaning within the object's protocol; transport
+ * authority controls SEND/CALL on endpoint clients. Zero grants no operation.
+ * Unknown types, bits and grants above an export's ceiling are invalid. */
+bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
+                            uint64_t transport);
 
 /* Caller owns a live reference throughout retain. False means count overflow;
  * no reference is acquired. Release consumes one owned reference. IF=0 for
