@@ -14,7 +14,7 @@ enum delivery_state { DELIVERY_FREE, DELIVERY_FILLING, DELIVERY_QUEUED,
 /* Exactly the public prefix, without putting a page-sized packet on a stack. */
 struct packet_header {
   handle_t receipt;
-  uint64_t delivery, result, size, grant_count;
+  uint64_t delivery, kind, result, size, grant_count;
   struct endpoint_grant grants[ENDPOINT_GRANTS_MAX];
 };
 _Static_assert(sizeof(struct packet_header) == ENDPOINT_PACKET_HEADER_SIZE,
@@ -26,6 +26,7 @@ struct endpoint_delivery_record {
   struct endpoint_delivery_record *next;
   struct task_wait *wait;
   enum delivery_state state;
+  enum endpoint_message_kind kind;
   enum call_status status;
   bool caller_active, receipt_live, delivered;
   uint64_t request_size, reply_size, result;
@@ -106,7 +107,7 @@ static void destroy_receipt(struct kernel_object *object)
   KASSERT(record->receipt_live);
   if (record->state == DELIVERY_RECEIVED) {
     record->state = DELIVERY_COMPLETE;
-    record->status = CALL_ABANDONED;
+    record->status = record->kind == ENDPOINT_MESSAGE_CALL ? CALL_ABANDONED : CALL_OK;
     wake_waiter(&record->wait);
   }
   record->receipt_live = false;
@@ -155,7 +156,7 @@ void endpoint_handle_close(struct kernel_object *object)
     lock_endpoint(state);
     if (record->state == DELIVERY_RECEIVED) {
       record->state = DELIVERY_COMPLETE;
-      record->status = CALL_ABANDONED;
+      record->status = record->kind == ENDPOINT_MESSAGE_CALL ? CALL_ABANDONED : CALL_OK;
       wake_waiter(&record->wait);
     }
     unlock_endpoint(state);
@@ -227,7 +228,7 @@ enum call_status endpoint_create(struct process *owner, struct endpoint_create_r
   object_init(&state->caller.object, OBJECT_ENDPOINT, destroy_endpoint);
   object_init(&state->receiver.object, OBJECT_ENDPOINT_RECEIVER, destroy_endpoint);
   struct kernel_object *objects[] = {&state->receiver.object, &state->caller.object};
-  uint64_t rights[] = {ENDPOINT_RIGHT_RECEIVE, ENDPOINT_RIGHT_CALL};
+  uint64_t rights[] = {ENDPOINT_RIGHT_RECEIVE, ENDPOINT_RIGHT_SEND | ENDPOINT_RIGHT_RECEIVE};
   handle_t handles[2];
   enum capability_result result = capability_insert_batch(&owner->capabilities,
       objects, rights, 2, handles);
@@ -309,27 +310,20 @@ static struct syscall_result write_packet(uintptr_t address,
   return (struct syscall_result){status, sizeof(*header) + header->size};
 }
 
-static struct syscall_result call_endpoint(struct endpoint *endpoint,
-    uintptr_t request_address, size_t request_size, uintptr_t reply_address)
+/* Admission owns all copied bytes and references. A SEND publishes no task
+ * pointer and never touches its record after unlocking: the receiver may
+ * already finish it before the sender returns. A CALL keeps its record until
+ * collection, independently of receipt retirement. */
+static enum call_status admit_message(struct endpoint *endpoint,
+    const struct endpoint_message *message, struct task_wait *wait,
+    struct endpoint_delivery_record **result)
 {
-  struct packet_header output = {0};
-  struct endpoint_message message;
-  enum call_status status = read_message(request_address, request_size, &message);
-  if (status == CALL_OK && message.result) {
-    status = CALL_BAD_REQUEST;
-  }
-  /* Reserve collection slots before admission: growth failure cannot discard
-   * a completed operation's result. This process has only one executing task. */
-  if (status == CALL_OK) {
-    status = reserve_handles(ENDPOINT_GRANTS_MAX);
-  }
+  KASSERT((wait != NULL) == (result != NULL));
   struct kernel_object *grants[ENDPOINT_GRANTS_MAX];
   uint64_t rights[ENDPOINT_GRANTS_MAX];
-  if (status == CALL_OK) {
-    status = capture_grants(&message, grants, rights);
-  }
+  enum call_status status = capture_grants(message, grants, rights);
   if (status != CALL_OK) {
-    return write_packet(reply_address, &output, NULL, status);
+    return status;
   }
   struct endpoint_state *state = endpoint->state;
   struct endpoint_delivery_record *record = NULL;
@@ -350,32 +344,33 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   }
   unlock_endpoint(state);
   if (status != CALL_OK) {
-    release_grants(grants, message.grant_count);
-    return write_packet(reply_address, &output, NULL, status);
+    release_grants(grants, message->grant_count);
+    return status;
   }
   /* The reserved slot is private until publication. Owner exit leaves filling
    * slots to their callers, which recheck closure before admitting them. */
-  if (message.size) {
-    KASSERT(copy_from_user(record->request, message.buffer, message.size));
+  if (message->size) {
+    KASSERT(copy_from_user(record->request, message->buffer, message->size));
   }
-  struct task_wait *wait = task_wait_prepare();
   lock_endpoint(state);
   if (state->closed) {
     record->state = DELIVERY_FREE;
     unlock_endpoint(state);
-    release_grants(grants, message.grant_count);
-    return write_packet(reply_address, &output, NULL, CALL_ENDPOINT_CLOSED);
+    release_grants(grants, message->grant_count);
+    return CALL_ENDPOINT_CLOSED;
   }
   record->endpoint = state;
   record->wait = wait;
   record->next = NULL;
-  record->caller_active = record->receipt_live = true;
+  record->kind = wait ? ENDPOINT_MESSAGE_CALL : ENDPOINT_MESSAGE_SEND;
+  record->caller_active = wait != NULL;
+  record->receipt_live = true;
   record->delivered = false;
-  record->request_size = message.size;
-  record->request_count = message.grant_count;
+  record->request_size = message->size;
+  record->request_count = message->grant_count;
   record->reply_count = record->reply_size = record->result = 0;
   record->status = CALL_OK;
-  for (size_t i = 0; i < message.grant_count; ++i) {
+  for (size_t i = 0; i < message->grant_count; ++i) {
     record->request_grants[i] = grants[i];
     record->request_rights[i] = rights[i];
   }
@@ -388,10 +383,54 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
     state->head = record;
   }
   state->tail = record;
+  if (result) {
+    *result = record;
+  }
   wake_waiter(&state->waiting_receiver);
   unlock_endpoint(state);
+  return CALL_OK;
+}
+
+static struct syscall_result send_endpoint(struct endpoint *endpoint,
+    uintptr_t request_address, size_t request_size)
+{
+  struct endpoint_message message;
+  enum call_status status = read_message(request_address, request_size, &message);
+  if (status == CALL_OK && message.result) {
+    status = CALL_BAD_REQUEST;
+  }
+  if (status == CALL_OK) {
+    status = admit_message(endpoint, &message, NULL, NULL);
+  }
+  return (struct syscall_result){status, 0};
+}
+
+static struct syscall_result call_endpoint(struct endpoint *endpoint,
+    uintptr_t request_address, size_t request_size, uintptr_t reply_address)
+{
+  struct packet_header output = {.kind = ENDPOINT_MESSAGE_CALL};
+  struct endpoint_message message;
+  enum call_status status = read_message(request_address, request_size, &message);
+  if (status == CALL_OK && message.result) {
+    status = CALL_BAD_REQUEST;
+  }
+  /* Reserve collection slots before admission: growth failure cannot discard
+   * a completed operation's result. This process has only one executing task. */
+  if (status == CALL_OK) {
+    status = reserve_handles(ENDPOINT_GRANTS_MAX);
+  }
+  if (status != CALL_OK) {
+    return write_packet(reply_address, &output, NULL, status);
+  }
+  struct task_wait *wait = task_wait_prepare();
+  struct endpoint_delivery_record *record;
+  status = admit_message(endpoint, &message, wait, &record);
+  if (status != CALL_OK) {
+    return write_packet(reply_address, &output, NULL, status);
+  }
   task_wait_sleep(wait);
 
+  struct endpoint_state *state = endpoint->state;
   lock_endpoint(state);
   KASSERT(record->state == DELIVERY_COMPLETE && !record->wait);
   status = record->status;
@@ -453,7 +492,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
     uint64_t rights[ENDPOINT_GRANTS_MAX + 1];
     handle_t handles[ENDPOINT_GRANTS_MAX + 1];
     objects[0] = &record->receipt;
-    rights[0] = ENDPOINT_RIGHT_REPLY;
+    rights[0] = record->kind == ENDPOINT_MESSAGE_CALL ? ENDPOINT_RIGHT_REPLY : 0;
     for (size_t i = 0; i < count; ++i) {
       objects[i + 1] = record->request_grants[i];
       rights[i + 1] = record->request_rights[i];
@@ -472,7 +511,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
     record->state = DELIVERY_RECEIVED;
     record->delivered = true;
     struct packet_header output = {.receipt = handles[0], .delivery = ENDPOINT_DELIVERED,
-      .size = record->request_size, .grant_count = count};
+      .kind = record->kind, .size = record->request_size, .grant_count = count};
     for (size_t i = 0; i < count; ++i) {
       output.grants[i] = (struct endpoint_grant){handles[i + 1], rights[i + 1]};
     }
@@ -573,13 +612,29 @@ struct syscall_result endpoint_call(struct kernel_object *object, handle_t handl
     uint64_t rights, uint64_t operation, uintptr_t request_address,
     size_t request_size, uintptr_t reply_address, size_t reply_capacity)
 {
-  uint64_t required = object->type == OBJECT_ENDPOINT ? ENDPOINT_RIGHT_CALL :
-      object->type == OBJECT_ENDPOINT_RECEIVER ? ENDPOINT_RIGHT_RECEIVE : ENDPOINT_RIGHT_REPLY;
-  if (!(rights & required)) {
-    return (struct syscall_result){CALL_DENIED, 0};
+  uint64_t required;
+  if (object->type == OBJECT_ENDPOINT) {
+    if (operation != ENDPOINT_CALL && operation != ENDPOINT_SEND) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    required = ENDPOINT_RIGHT_SEND;
+    if (operation == ENDPOINT_CALL) {
+      required |= ENDPOINT_RIGHT_RECEIVE;
+    }
+  } else if (object->type == OBJECT_ENDPOINT_RECEIVER) {
+    if (operation != ENDPOINT_RECEIVE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    required = ENDPOINT_RIGHT_RECEIVE;
+  } else {
+    KASSERT(object->type == OBJECT_ENDPOINT_RECEIPT);
+    if (operation != ENDPOINT_REPLY) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    required = ENDPOINT_RIGHT_REPLY;
   }
-  if (operation != ENDPOINT_CALL) {
-    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  if ((rights & required) != required) {
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   if (object->type == OBJECT_ENDPOINT_RECEIPT) {
     struct endpoint_delivery_record *record = (struct endpoint_delivery_record *)object;
@@ -594,6 +649,9 @@ struct syscall_result endpoint_call(struct kernel_object *object, handle_t handl
     return reply_endpoint(record, handle, request_address, request_size);
   }
   struct endpoint *endpoint = (struct endpoint *)object;
+  if (object->type == OBJECT_ENDPOINT && operation == ENDPOINT_SEND) {
+    return send_endpoint(endpoint, request_address, request_size);
+  }
   if (object->type == OBJECT_ENDPOINT_RECEIVER) {
     if (endpoint->owner != process_current()) {
       return (struct syscall_result){CALL_DENIED, 0};
