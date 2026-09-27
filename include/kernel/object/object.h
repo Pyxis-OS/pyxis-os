@@ -32,6 +32,8 @@ enum object_type {
   OBJECT_ENDPOINT_RECEIVER = 24,
   OBJECT_ENDPOINT_RECEIPT = 25,
   OBJECT_ENDPOINT_EXPORT = 26,
+  OBJECT_NAMESPACE_SERVICE = 27,
+  OBJECT_NAMESPACE = 28,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.

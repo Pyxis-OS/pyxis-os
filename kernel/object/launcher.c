@@ -1,5 +1,6 @@
 #include <abi/file.h>
 #include <abi/console.h>
+#include <abi/namespace.h>
 #include <abi/pipe.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
@@ -162,6 +163,10 @@ static void capture_streams(struct launch_capture *capture,
         return;
       }
     }
+    if (startup->namespace && stream->grant == startup->namespace - 1) {
+      capture->error = CALL_BAD_REQUEST;
+      return;
+    }
 
     struct kernel_object *object;
     enum capability_result found = capability_resolve(&process_current()->capabilities,
@@ -176,6 +181,36 @@ static void capture_streams(struct launch_capture *capture,
     }
     startup->streams[i] = (struct startup_stream){stream->protocol, stream->grant};
   }
+}
+
+static void capture_namespace(struct launch_capture *capture, uint64_t namespace_grant)
+{
+  if (!namespace_grant || capture->error != CALL_OK) {
+    return;
+  }
+  uint64_t index = namespace_grant - 1;
+  if (index >= capture->grant_count) {
+    capture->error = CALL_BAD_REQUEST;
+    return;
+  }
+
+  const struct launch_grant *grant = &capture->grants[index];
+  if (!(grant->rights & NAMESPACE_RIGHT_LOOKUP) || grant->transport) {
+    capture->error = CALL_BAD_REQUEST;
+    return;
+  }
+  struct kernel_object *object;
+  enum capability_result found = capability_resolve(&process_current()->capabilities,
+      grant->source, grant->rights, 0, &object, NULL, NULL);
+  if (found != CAP_OK) {
+    capture->error = found == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
+    return;
+  }
+  if (object->type != OBJECT_NAMESPACE) {
+    capture->error = CALL_WRONG_TYPE;
+    return;
+  }
+  capture->startup.namespace = namespace_grant;
 }
 
 static void capture_startup(struct launch_capture *capture, const struct launch_request *source)
@@ -196,6 +231,7 @@ static void capture_startup(struct launch_capture *capture, const struct launch_
       capture->error = CALL_BAD_REQUEST;
     }
   }
+  capture_namespace(capture, source->namespace_grant);
   capture_streams(capture, source);
   if (source->working_path) {
     startup->working_path = capture_string(capture, source->working_path);

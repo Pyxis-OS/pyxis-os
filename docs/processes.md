@@ -126,6 +126,13 @@ boundary first and current last, plus an optional descriptive path. The kernel
 validates their types without inferring ancestry or granting parent access. The
 shell starts at home; libpyxis retains an independently owned context.
 
+Startup also carries an optional explicit [service namespace](namespaces.md)
+handle. It is borrowed by `startup_namespace()` and has no ambient association
+with the process's space. Launch selects a LOOKUP-authorized namespace through
+`namespace_grant` (zero absent, otherwise grant index plus one). A namespace entry
+cannot also supply a standard stream. Known directory-root/name conflicts reject
+launch; runtime resolution checks again because bindings can change.
+
 The launcher supplies argument strings, including argv[0] when present; neither
 the kernel nor startup parses a command line. Zero arguments are valid and still
 provide argv[0] == NULL. Environment names are nonempty, case-sensitive, unique
@@ -536,16 +543,16 @@ implicit access to files or other resources. A launcher can itself be delegated
 through an explicit grant, authorizing the recipient to launch in its own space.
 
 The [request](../include/abi/launcher.h) supplies a READ file handle for the P1F
-image, source-handle/right pairs, arguments, environment, standard streams, named resources,
-scheme roots and working-directory context. Source grants are copied with equal
-or reduced rights. Bindings and working-directory entries refer to grant-list
+image, source handles with resource/transport masks, arguments, environment,
+standard streams, named resources, an optional namespace, scheme roots and
+working-directory context. Source grants retain or reduce each authority mask. Bindings and working-directory entries refer to grant-list
 indices; repeated references share one child handle, while separate grant-list
 entries produce separate handles. No resources, roots, environment or launcher
 are inherited implicitly. The image handle is not passed unless listed.
 
 Each present standard stream references an exclusive grant-list index. It cannot
-share that index with another stream, a named resource, a root or a working
-directory. The existing grant installation creates exactly one child handle for
+share that index with another stream, a named resource, a root, a working
+directory or the namespace. The existing grant installation creates exactly one child handle for
 that entry, and startup records it directly; there is no second retained copy.
 Separate entries may deliberately copy the same source object, as for console
 stdout/stderr and explicit terminal resources. No terminal grants are synthesized

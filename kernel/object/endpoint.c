@@ -154,6 +154,16 @@ bool endpoint_export_authority_valid(const struct kernel_object *object,
   return !(rights & ~export->rights) && !(transport & ~export->transport);
 }
 
+bool endpoint_export_available(struct kernel_object *object)
+{
+  KASSERT(object->type == OBJECT_ENDPOINT_EXPORT);
+  struct endpoint_export *export = (struct endpoint_export *)object;
+  lock_endpoint(export->endpoint);
+  bool available = !export->withdrawn && !export->endpoint->closed;
+  unlock_endpoint(export->endpoint);
+  return available;
+}
+
 static void free_delivery(struct endpoint_delivery_record *record)
 {
   if (!record->caller_active && !record->receipt_live) {

@@ -18,6 +18,7 @@ struct process_variable {
 
 struct process_startup {
   struct startup_stream streams[STARTUP_STREAM_COUNT];
+  handle_t namespace;
   const struct process_binding *resources;
   size_t resource_count;
   const struct process_binding *roots;
@@ -36,6 +37,8 @@ struct process_startup {
  * Resource names are nonempty and unique; handles must already be installed in
  * this process. Environment names are nonempty, unique and contain no '='.
  * Roots use their own unique names (no ':' or '/') and reference directories.
+ * An optional namespace handle grants LOOKUP and cannot share a stream handle;
+ * its existing names cannot conflict with root names.
  * Working-directory handles also reference installed directories; the launcher
  * chooses their order and navigation boundary. No ancestry is inferred or added.
  * A display path requires a nonempty chain and never grants access. Bindings may

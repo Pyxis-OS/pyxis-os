@@ -174,7 +174,8 @@ its client observes abandonment. `--saturate` retains sixteen received calls,
 observes a seventeenth caller's queue-full result, then completes the retained
 calls in reverse order. `--close` shows receiver closure after and before
 request delivery; `--exit` leaves a received call to process teardown. The shell
-delegates service creation and launch authority only to the session command.
+delegates launch authority through session handoff. Endpoint creation is also
+delegated to providers started through the [publication commands](namespaces.md).
 The session handoff exits the shell; boot another session to run another mode.
 
 `--send` grants a client SEND-only authority. It sends 4 KiB and four file grants,

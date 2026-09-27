@@ -57,6 +57,7 @@ struct launch_request {
   uint64_t environment, environment_count;
   uint64_t argv, argc;
   struct launch_stream streams[STARTUP_STREAM_COUNT];
+  uint64_t namespace_grant; /* Zero = absent; otherwise grant-list index + 1. */
 };
 
 struct launch_message {
@@ -91,8 +92,8 @@ struct launch_batch_reply {
 _Static_assert(sizeof(struct launch_grant) == 24, "launch grant layout");
 _Static_assert(sizeof(struct launch_binding) == 16, "launch binding layout");
 _Static_assert(sizeof(struct launch_stream) == 16, "launch stream layout");
-_Static_assert(sizeof(struct launch_request) == 160, "launch request layout");
-_Static_assert(sizeof(struct launch_message) == 176, "launch message layout");
+_Static_assert(sizeof(struct launch_request) == 168, "launch request layout");
+_Static_assert(sizeof(struct launch_message) == 184, "launch message layout");
 _Static_assert(sizeof(struct launch_batch_request) == 16, "launch batch request layout");
 _Static_assert(sizeof(struct launch_batch_message) == 32, "launch batch message layout");
 _Static_assert(sizeof(struct launch_batch_reply) == 72, "launch batch reply layout");

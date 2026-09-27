@@ -6,6 +6,10 @@ space, terminal and input. A single-CPU boot runs the primary init on the BSP.
 Children stay in their parent's space and on its CPU. This does not introduce
 migration, supervision or a global PID 1.
 
+Init also receives an explicit namespace-creation service. The packaged active
+init scripts create a [service namespace](namespaces.md) before session handoff;
+it is delegated independently of space membership.
+
 Initial processes share the read-only `app://` archive and writable RAM-backed
 `home://` tree. Home is not private per space and disappears on reboot. Each
 init receives the full available bootstrap grants. Init scripts are trusted

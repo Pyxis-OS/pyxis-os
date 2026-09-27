@@ -1,3 +1,4 @@
+#include <kernel/object/namespace.h>
 #include <kernel/object/udp.h>
 #include <kernel/object/tcp.h>
 #include <kernel/object/random.h>
@@ -280,6 +281,18 @@ static struct syscall_result call_object(handle_t handle,
     }
     return launcher_call(rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
+  case OBJECT_NAMESPACE_SERVICE:
+    if (header.protocol != PROTOCOL_NAMESPACE_SERVICE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return namespace_service_call(rights, header.operation, request_size,
+        reply_address, reply_capacity);
+  case OBJECT_NAMESPACE:
+    if (header.protocol != PROTOCOL_NAMESPACE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return namespace_call(object, rights, header.operation, request_address,
+        request_size, reply_address, reply_capacity);
   case OBJECT_ENDPOINT_SERVICE:
     if (header.protocol != PROTOCOL_ENDPOINT_SERVICE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

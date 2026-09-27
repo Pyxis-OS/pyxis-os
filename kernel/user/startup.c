@@ -1,6 +1,7 @@
 #include <abi/startup.h>
 #include <abi/console.h>
 #include <abi/file.h>
+#include <abi/namespace.h>
 #include <abi/pipe.h>
 #include <arch/smp.h>
 #include <kernel/memory.h>
@@ -9,6 +10,7 @@
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/object/directory.h>
+#include <kernel/object/namespace.h>
 #include <kernel/string.h>
 #include <kernel/user/startup.h>
 
@@ -39,7 +41,7 @@ static bool same_name(const char *left, const char *right)
 
 static bool measure_bindings(struct process *process,
     const struct process_binding *bindings, size_t count, bool directories,
-    size_t *size)
+    struct kernel_object *namespace, size_t *size)
 {
   for (size_t i = 0; i < count; ++i) {
     const struct process_binding *binding = &bindings[i];
@@ -51,6 +53,9 @@ static bool measure_bindings(struct process *process,
         if (*name == ':' || *name == '/') {
           return false;
         }
+      }
+      if (namespace && namespace_has_name(namespace, binding->name)) {
+        return false;
       }
     }
     struct kernel_object *object;
@@ -122,6 +127,9 @@ static bool validate_streams(struct process *process,
         return false;
       }
     }
+    if (source->namespace && stream->handle == source->namespace) {
+      return false;
+    }
   }
   return true;
 }
@@ -146,6 +154,14 @@ static bool measure_startup(struct process *process,
     return false;
   }
 
+  struct kernel_object *namespace = NULL;
+  if (source->namespace &&
+      (capability_resolve(&process->capabilities, source->namespace,
+          NAMESPACE_RIGHT_LOOKUP, 0, &namespace, NULL, NULL) != CAP_OK ||
+       namespace->type != OBJECT_NAMESPACE)) {
+    return false;
+  }
+
   sizes->metadata = sizeof(struct startup_info) +
                     source->resource_count * sizeof(struct startup_binding) +
                     source->root_count * sizeof(struct startup_binding) +
@@ -157,8 +173,9 @@ static bool measure_startup(struct process *process,
   }
 
   if (!measure_bindings(process, source->resources, source->resource_count, false,
-        &sizes->metadata) ||
-      !measure_bindings(process, source->roots, source->root_count, true, &sizes->metadata)) {
+        NULL, &sizes->metadata) ||
+      !measure_bindings(process, source->roots, source->root_count, true,
+        namespace, &sizes->metadata)) {
     return false;
   }
 
@@ -227,6 +244,7 @@ static void fill_startup(uint8_t *buffer, uintptr_t address,
     .environment_count = source->environment_count,
     .argc = source->argc,
     .argv = address + sizes->metadata,
+    .namespace = source->namespace,
   };
   memcpy(info->streams, source->streams, sizeof(info->streams));
 

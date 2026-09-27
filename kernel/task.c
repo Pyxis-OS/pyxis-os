@@ -1,3 +1,4 @@
+#include <kernel/object/namespace.h>
 #include <kernel/object/endpoint.h>
 #include <abi/memory.h>
 #include <abi/profile.h>
@@ -69,6 +70,9 @@ struct task {
   struct endpoint_export_reply export_reply;
   bool endpoint_exporting;
   enum call_status endpoint_result;
+  struct task *namespace_next;
+  handle_t namespace_handle;
+  enum call_status namespace_result;
   struct task *pipe_next;
   struct pipe_create_reply pipe_reply;
   enum call_status pipe_result;
@@ -133,6 +137,7 @@ static struct task *launch_head, *launch_tail;
 static struct task *display_head, *display_tail;
 static struct task *pipe_head, *pipe_tail;
 static struct task *endpoint_head, *endpoint_tail;
+static struct task *namespace_head, *namespace_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
 static struct task_wait *timed_waits; /* queues_locked, expired by the BSP. */
@@ -398,6 +403,38 @@ static void grow_requested_tables(void)
     task->growth_result = capability_grow(&task->process->capabilities);
     task_wait_wake(&task->wait_record);
     /* Waking returns table ownership; the task may immediately exit. */
+    task = next;
+  }
+}
+
+enum call_status task_create_namespace(handle_t *handle)
+{
+  struct task_wait *wait = prepare_user_wait();
+  struct task *task = wait->task;
+  lock_queues();
+  task->namespace_next = NULL;
+  if (namespace_tail) {
+    namespace_tail->namespace_next = task;
+  } else {
+    namespace_head = task;
+  }
+  namespace_tail = task;
+  unlock_queues();
+  task_wait_sleep(wait);
+  *handle = task->namespace_result == CALL_OK ? task->namespace_handle : HANDLE_INVALID;
+  return task->namespace_result;
+}
+
+static void service_namespace_requests(void)
+{
+  lock_queues();
+  struct task *task = namespace_head;
+  namespace_head = namespace_tail = NULL;
+  unlock_queues();
+  while (task) {
+    struct task *next = task->namespace_next;
+    task->namespace_result = namespace_create(task->process, &task->namespace_handle);
+    task_wait_wake(&task->wait_record);
     task = next;
   }
 }
@@ -1232,6 +1269,7 @@ void kernel_task_sleep_until(uint64_t deadline)
       expire_timed_waits();
       grow_requested_tables();
       service_pipe_requests();
+      service_namespace_requests();
       service_endpoint_requests();
       service_directory_requests();
       service_file_requests();
@@ -1331,7 +1369,7 @@ void task_preempt(bool user_mode)
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
      (completed_head != NULL || growth_head != NULL || pipe_head != NULL ||
-      endpoint_head != NULL ||
+      endpoint_head != NULL || namespace_head != NULL ||
       directory_head != NULL ||
       file_head != NULL || memory_head != NULL || launch_head != NULL ||
       display_head != NULL || hostfs_head != NULL));
