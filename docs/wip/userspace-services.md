@@ -143,11 +143,27 @@ unlimited wait. An already-expired deadline fails before admission. Pass the
 effective deadline to the provider as kernel-supplied metadata. Do not reset a
 call's deadline when it leaves the queue or while table growth is pending.
 
+Agreed task-3 details, not yet implemented: express deadlines in monotonic
+nanoseconds, with zero meaning unlimited. SEND remains admission-only. Check
+expiry under the endpoint lock before committing a reply: a reply committed
+before expiry wins even if collected later; a reply after expiry fails even if
+the caller has not resumed yet.
+
 Expiry before receive removes the request and reports not delivered. Expiry
 after receive wakes the caller with delivered/outcome-unknown and invalidates
 reply authority. Notify the provider, but do not wait for its acknowledgment to
 release the caller. Caller exit follows the same cancellation ownership rules.
 No external cancel-from-another-task API or wait-set API is included yet.
+
+A cancellation notification identifies the provider's existing receipt and
+grants no new handle or authority. Finishing the receipt clears any pending
+notification for it; a rejected late reply leaves it available to finish.
+Expiry before receive requires no provider notification.
+
+Today a single-task caller cannot exit while blocked in CALL, and there is no
+external process-termination operation. Task 3 handles the available lifetime
+transitions without introducing one. Process kill and Ctrl-C support are
+[separate technical debt](../technical-debt.md#process-termination-and-ctrl-c).
 
 Cancellation does not revoke attachments already delivered or free state still
 needed by the provider. Delivered canceled work retains its slot until its receipt
