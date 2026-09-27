@@ -1,4 +1,4 @@
-# File, terminal and pipe stdio
+# File, terminal and pipe I/O
 
 The freestanding C library exposes an unbuffered `FILE` subset in
 [`stdio.h`](https://git.internal/chronium/pyxis-userland/src/branch/main/libc/include/stdio.h). It uses native file, directory,
@@ -43,12 +43,47 @@ a FILE releases its live descriptor and wrapper metadata, not the directory entr
 Descriptors use the lowest free number, including absent or closed standard
 slots. The first three entries use static storage; later growth uses the heap.
 Storage exhaustion reports ENOMEM, and descriptor-number exhaustion reports
-EMFILE. Public open/read/write/close, fdopen, fileno and duplication are not yet
-exposed. Writable fopen already uses this same internal ownership/cursor model.
+EMFILE. Public open/read/write/close use this same ownership/cursor model;
+fdopen, fileno and duplication are not exposed.
 
 Append currently performs separate SIZE and WRITE calls. Concurrent appenders
 can choose the same end and overwrite one another. This is explicitly not an
 atomic append guarantee; see [technical debt](technical-debt.md#non-atomic-stdio-append).
+
+## Descriptor I/O
+
+`fcntl.h` declares `open(path, flags, ...)` and defines `O_RDONLY` as zero.
+Only that flag value is supported; every other value returns -1/EINVAL before
+allocation or path lookup. Open returns the lowest free descriptor for an
+existing readable file through the same capability path resolver as fopen.
+It creates no FILE wrapper and grants no additional authority. Public writable
+opens, creation-mode policy and seeking remain deferred; writable fopen and
+its existing seeks remain available.
+
+`unistd.h` declares `read`, `write` and `close`, and defines STDIN_FILENO,
+STDOUT_FILENO and STDERR_FILENO as 0, 1 and 2. `sys/types.h` defines ssize_t as
+signed long on the LP64 target; `limits.h` defines SSIZE_MAX as LONG_MAX.
+
+Read/write check descriptor and access validity first (-1/EBADF), then reject
+counts above SSIZE_MAX (-1/EINVAL). A valid zero-count request returns zero
+without touching the buffer or backend. Nonempty calls perform one backend
+transfer and return the confirmed byte count, including short progress, or -1
+with the translated errno. They do not fill a buffer or retry the remainder.
+File and pipe zero reads report EOF; unexpected console zero progress and
+nonempty zero writes report EIO. Native denial remains EACCES, unsupported
+operations remain ENOTSUP and pipe writes with no remaining reader report EPIPE.
+
+Descriptor I/O shares the cursor with an associated FILE but never reads or
+changes its EOF/error indicators. A prior FILE EOF does not suppress read;
+successful descriptor I/O does not clear that indicator. Closing descriptor 1
+invalidates stdout before native release. Later reuse of 1 does not reconnect
+stdout, and fclose of that stale wrapper cannot close the replacement.
+
+Close invalidates its descriptor even on release failure and never retries.
+Success returns zero without changing errno; invalid descriptors return
+-1/EBADF. Other failures follow the [close contract](wip/libc-portability.md#close-failure-and-cleanup),
+including uncertain native release surviving until process exit. Normal exit
+closes remaining descriptors, including opens without FILE wrappers.
 
 ## Removal
 
@@ -187,7 +222,7 @@ Normal exit calls it, closes each live descriptor once, then disposes of FILE
 metadata, including invalid associations. Cleanup errors do not replace the
 requested exit status. `_Exit` and fatal faults bypass libc cleanup; the kernel
 still reclaims process resources. There are no
-atexit callbacks, buffering controls, pushback, scanning, wide I/O or fd adapters
+atexit callbacks, buffering controls, pushback, scanning, wide I/O or fdopen/fileno
 in this slice.
 
 `fclose` invalidates the association and makes one native close attempt. Success
