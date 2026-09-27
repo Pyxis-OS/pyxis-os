@@ -101,9 +101,9 @@ for the persistent development loop or as a replacement for the boot archive.
 Next is [userspace services and the first HTTP provider](userspace-services.md).
 The agreed contract covers bounded call/send/receive delivery, exported objects,
 scoped namespaces, IPC-safe file messages and a read-only HTTP snapshot provider.
-Tasks 1 through 4 implement bounded request/reply, one-way delivery, deadlines,
-cancellation and exported service objects; task 5 (namespace delegation) is next. The document
-fixes the policy choices and separates later SQLite/compositor/shared-memory work.
+Tasks 1 through 5 implement bounded request/reply, one-way delivery, deadlines,
+cancellation, exported objects and namespace delegation. Task 6 (IPC-safe file
+messages) is next. The document fixes the policy choices and separates later SQLite/compositor/shared-memory work.
 
 The following remain alternatives for subsequent bounded milestones.
 

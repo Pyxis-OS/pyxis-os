@@ -400,3 +400,13 @@ bounded-delimiter read only when a concrete consumer needs both throughput and
 exact stream consumption; do not silently discard read-ahead. Multi-file output
 headers and additional head options are outside the current consumer scope.
 See [head usage](shell.md#bounded-input-with-head).
+
+## Service startup failure before publication
+
+The namespace publication command waits on the provider's registration endpoint.
+If a launched provider exits or faults before registration, the parent cannot
+currently wait for either IPC or process exit, so startup can remain blocked.
+A provider CALL deadline bounds its own registration wait, but does not bound
+the parent's RECEIVE. Revisit with endpoint/process wait sets or a bounded receive
+facility; do not infer provider readiness from launch success or add automatic
+restart. Process kill and running-command Ctrl-C remain separate debt.

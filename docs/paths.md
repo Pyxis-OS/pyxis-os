@@ -30,6 +30,11 @@ chooses the initial chain and its order from directory handles it grants. The
 kernel validates their types, not their ancestry: those explicit handles are
 the authority, regardless of the display string.
 
+An explicit [service namespace](namespaces.md) is separate from directory roots.
+Resolution rejects a scheme bound in both routes, including a binding whose
+provider has exited. Launch checks known conflicts too; mutation after launch
+makes the runtime check necessary. Provider file opening is not implemented yet.
+
 ## Ownership and storage
 
 `path_context_init()` copies a borrowed directory chain into caller-provided

@@ -107,6 +107,24 @@ same object they already hold can use libpyxis `file_sync(handle)` or
 See [the host synchronization contract](virtio-fs.md#synchronization) for
 permissions, errors and durability limits.
 
+## Service publication
+
+Init scripts can create and populate an explicit [service namespace](namespaces.md):
+
+```text
+namespace create
+service start counter app://counter.pxe --provide
+counter --lookup counter
+namespace remove counter
+```
+
+`service replace NAME IMAGE [ARG...]` atomically replaces an existing binding
+after the provider transfers an exported client through IPC. Existing clients
+keep their original object. `namespace remove` does not withdraw an export.
+Ordinary commands receive namespace LOOKUP only; trusted session handoff can
+retain held management authority. Provider publication launches omit the parent
+namespace. FILE/open routing through these services is a later milestone task.
+
 ## File redirection and stdin
 
 Foreground external commands accept `< file`, `> file` and `2> file`. For example:

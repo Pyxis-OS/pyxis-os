@@ -1,9 +1,9 @@
 # Userspace services and the first HTTP provider
 
 Status: agreed next milestone after [libc portability](../libc-portability.md).
-Tasks 1 through 4 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
+Tasks 1 through 5 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
 creation and process-owned receiver teardown moved forward from task 4 so the
-first delivery slice has a real consumer. Task 5 is the next unchecked task.
+first delivery slice has a real consumer. Task 6 is the next unchecked task.
 This document records the selected contracts for handoff between agents; the
 [broader provider ideas](userspace-scheme-providers.md) remain future directions where they exceed this scope. Work through the focused
 tasks in order, updating their checkboxes in the corresponding PRs. Discuss a
@@ -215,13 +215,14 @@ Natural retirement permits reclaiming an object nobody can still use.
 
 ## Namespace and startup contract
 
-Use a kernel-owned flat map of exact names to capabilities, with distinct LOOKUP
-and MANAGEMENT authority. Init creates/populates it or delegates management
-explicitly. A binding owns a reference and fixes the rights returned by lookup.
-Lookup cannot return rights beyond that binding's grant.
+Use a kernel-owned flat map of exact names to exported client capabilities, with
+distinct LOOKUP and MANAGEMENT authority. Native objects, raw endpoints and
+nested namespaces retain their existing explicit grant routes. Init creates/populates it or delegates management
+explicitly. A binding owns a reference and fixes both resource rights and transport authority
+returned by lookup. Lookup cannot exceed either mask.
 
-Applications receive lookup authority through an explicit launch/startup namespace
-capability. Child inheritance is explicit delegation, not ambient authority from
+Applications receive lookup authority through a dedicated optional launch/startup
+namespace capability field, with zero meaning absent and no new schema version. Child inheritance is explicit delegation, not ambient authority from
 space membership. Lookup access exposes all names in that namespace; a restricted
 child receives a separately populated namespace. Namespace overlays, enumeration,
 search paths and automatic provider activation are deferred.
@@ -245,6 +246,13 @@ Initial startup sequence: init launches a provider, obtains its exported service
 capability through real IPC transfer, publishes it, then launches consumers.
 Update launch/session/shell forwarding and examples together. No numeric-handle
 printing as a handoff mechanism, new schema version or legacy startup path.
+
+Task 5 implements this contract through the [namespace ABI and init commands](../namespaces.md).
+Bindings accept exported clients only; 64 bindings and 63-byte exact names bound
+each map. PUBLISH requires absence, REPLACE requires presence, and lookup returns
+the binding's fixed resource/transport masks. The shell publication launch omits
+the parent namespace from provider grants. A provider that exits before
+registration can leave startup waiting; this remains [technical debt](../technical-debt.md#service-startup-failure-before-publication).
 
 ## File protocol and open bridge
 
@@ -403,7 +411,7 @@ task; avoid publishing interfaces with fake successful operations.
   with export control, authenticated protocol/rights delivery, withdrawal and acknowledged
   retirement. Multiple exports share a provider endpoint. Provider death must
   close exports even when clients or queued references remain.
-- [ ] **5. Namespace and startup delegation.** Add flat authorized binding,
+- [x] **5. Namespace and startup delegation.** Add flat authorized binding,
   lookup, atomic replacement/removal and explicit launch/startup forwarding.
   Exercise restricted namespaces, retained old grants and provider exit. Define
   the small init-facing publication/handoff commands through existing launch/IPC;

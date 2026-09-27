@@ -156,6 +156,12 @@ runs destruction callbacks outside its lock. Pending objects also cause a busy
 BSP task to return to the scheduler on its next timer interrupt. No table grows
 on an AP; final releases never require an AP allocator call.
 
+Namespace creation uses a blocked caller's exclusive table loan for its fixed
+binding storage and initial grant. Namespace lookup captures a reference and both
+authority masks under its own lock, releases the lock, then installs the grant or
+lends the table for growth. Replacement cannot alter a captured lookup. Namespace
+locks never span allocation, endpoint locking or parking.
+
 Endpoint creation lends the blocked task's table to the BSP, which allocates
 its bounded delivery storage and installs both initial handles. Export creation
 uses the same table loan for backing allocation and client installation. Export
