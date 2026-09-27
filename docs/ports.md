@@ -43,6 +43,33 @@ development trees. The userland job consumes its Lua library/headers; the image
 job consumes only its boot tree. Both can reuse it without compiling ports again. Source checkout uses
 `PYXIS_SOURCE_READ_TOKEN`. Cross-repository dispatch remains future work.
 
+## Checksums with sbase cksum
+
+The image includes `app://cksum.pxe`, resolved as `cksum` by the shell. The
+[sbase recipe](../ports/sbase/README.md) pins the task-1 source revision and
+builds only cksum and its diagnostic/shutdown helpers. A single patch narrows
+private util.h; command bodies and conventional libc I/O calls are unchanged.
+The full license/contributor list and arg.h notice are packaged at
+`app://share/licenses/sbase/LICENSE` and `app://share/licenses/sbase/arg.h`.
+
+```text
+cksum host://hello.c
+cat host://hello.c | cksum
+cksum < host://hello.c > home://checksum.txt
+cksum host://first - host://last < host://input
+```
+
+Results contain the CRC and byte count, followed by the name for named inputs.
+Relative paths use the inherited working directory. With no operands, cksum
+reads stdin; an explicit `-` uses the same stdin and prints `<stdin>` as its label.
+Multiple operands are processed in order, continuing after missing/unreadable inputs
+with an aggregate nonzero exit status. Detected output errors also fail.
+
+Results require EOF. Use a finite file redirect or pipeline for stdin; the
+console has no EOF operation, so terminal-only input cannot finish normally.
+See the [accepted terminal limit](technical-debt.md#console-input-completion).
+Tee is not included; its scope remains a separate milestone decision.
+
 ## Editing in Pyxis
 
 Select CPU 1 with Super+Right on a multicore boot. The shell starts at `home://`:

@@ -96,10 +96,11 @@ for the persistent development loop or as a replacement for the boot archive.
 
 The current milestone is [libc portability](libc-portability.md): a small
 userspace descriptor layer, upstream cksum as the final consumer and an optional
-tee port. Tasks 1–3 provide the source probe, descriptor ownership shared with
-stdio and the public read-only-open/read/write/close slice. Task 4 is packaging
-and validating the pinned cksum consumer; its disposable task-3 build is not an
-installed port. Keep the usual task-by-task discussion.
+tee port. Tasks 1–4 provide descriptor ownership shared with stdio, public
+read-only-open/read/write/close and the packaged, validated sbase cksum consumer.
+Next is the explicit tee scope checkpoint: writable opens, creation-mode policy,
+append and signals remain unresolved. No tee scope has been selected. Keep the
+usual task-by-task discussion.
 
 The following remain alternatives for later milestones.
 

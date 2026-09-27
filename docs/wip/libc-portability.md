@@ -1,9 +1,8 @@
 # Standard C libc over the native ABI
 
-Status: tasks 1–3 complete. The public descriptor slice is implemented and
-validated; packaging cksum remains task 4. The intended result is a small libc
-descriptor layer exercised by an upstream cksum port, with tee as a conditional
-second consumer. This document does not authorize the whole compatibility backlog.
+Status: tasks 1–4 complete. The descriptor layer is exercised by the packaged
+upstream cksum port. Task 5 is the explicit tee scope checkpoint; no tee option
+has been selected. This document does not authorize the whole compatibility backlog.
 
 ## Intended result
 
@@ -145,11 +144,11 @@ headers were not implemented in task 2; their signed-count checks and end-to-end
 
 Investigated sbase revision `c546c3a5724c81cee9a11d816a38ccdf17472129`
 (2026-05-25), from `https://git.suckless.org/sbase`. This is the selected source
-revision for this investigation and subsequent consumer work; no recipe is
-installed yet. Keep its MIT LICENSE, contributor notices and individual source
-notices, including arg.h, when packaging it in ports.
+revision for the investigation and the task-4 sbase recipe. The package retains
+its full MIT LICENSE/contributor list and arg.h notice. The following table
+records the original task-1 gaps; task 3 supplied cksum's public libc needs.
 
-| Consumer | Source/helper closure | Gaps against the current SDK |
+| Consumer | Source/helper closure | Gaps against the task-1 SDK |
 | --- | --- | --- |
 | cksum | cksum.c, libutil/eprintf.c, libutil/fshut.c; arg.h and util.h | fcntl.h, unistd.h, ssize_t, open/read/close, O_RDONLY, inttypes.h/PRIu32 and stdio BUFSIZ |
 | tee | tee.c, libutil/eprintf.c, libutil/ealloc.c, libutil/writeall.c; arg.h and util.h | Descriptor headers/types, open/read/write, writable create/truncate/append flags and creation mode; BUFSIZ; signal.h, signal and SIGINT handling for -i |
@@ -368,6 +367,58 @@ dup/dup2, polling, nonblocking I/O, general signals, directory APIs and buffered
 stdio remain outside the initial slice unless a separately agreed prerequisite
 requires one. No speculative stubs or retroactive rewrite of every existing port.
 
+## Packaged cksum and task 4 validation
+
+The [sbase recipe](../../ports/sbase/README.md) builds only cksum.c,
+libutil/eprintf.c and libutil/fshut.c from the pinned revision. One ordered patch
+narrows private util.h to the required declarations while retaining its license
+notice. Command/helper bodies and arg.h are unchanged, and no replacement SDK
+headers are supplied. The image contains app://cksum.pxe and both upstream
+license notices under app://share/licenses/sbase. Shell lookup needs no changes.
+
+The ordinary `make -j16 image` build passed with the installed Pyxis compiler.
+The upstream signedness warning in cksum's byte loop remains. Source inspection
+confirmed util.h is the only modified upstream file; packaged LICENSE and arg.h
+match the pinned originals. Independent recipe review found no correctness issue.
+
+Manual acceptance used QEMU q35/KVM, four CPUs, 256 MiB, virtio-fs and virtio-rng,
+no NIC, inside the development VM. GNU coreutils 9.10 cksum on the host and the
+packaged guest command returned identical CRC/byte-count pairs:
+
+| Input | Bytes | CRC |
+| --- | ---: | ---: |
+| Empty file | 0 | 4294967295 |
+| `Pyxis cksum\nsecond line\n` | 24 | 3852765307 |
+| Bytes 0–255 repeated 1024 times, then `\x00\xffPyxis\n` | 262152 | 3239341589 |
+
+Inputs were placed in a virtio-fs export as empty, text and binary. These manual
+guest commands covered names, stdin, the explicit `-` operand, mixed failures,
+output redirection and pipe closure:
+
+```text
+cksum host://empty host://text host://binary > host://named.out
+cksum < host://binary > host://stdin.out
+cat host://binary | cksum > host://pipe.out
+cksum host://text missing host://empty - < host://binary > host://mixed.out 2> host://mixed.err
+cksum < host://empty > host://empty-stdin.out
+cksum host://binary | head -c 0
+```
+
+The binary is larger than the pipe's 64 KiB storage. Direct stdin and pipeline
+outputs were identical; explicit `-` printed the same pair with upstream's
+`<stdin>` label. Missing input produced a diagnostic and status 1 while later
+operands still produced correct results. Empty stdin matched the empty file.
+Early downstream closure produced EPIPE, a diagnostic and stage status 1;
+the shell returned without hanging. The read-only session also checksummed the
+host binary successfully.
+
+GDB observed the packaged consumer requesting 8192 pipe bytes and receiving
+4096, followed by a successful output shutdown. On early-reader close, stdout's
+error indicator was set, errno was EPIPE and fshut returned 1. No debugger-injected
+calls, fault injection, tests or boot/output automation were added. Validation jobs
+were stopped. Terminal-only stdin remains limited by the
+[lack of console EOF](../technical-debt.md#console-input-completion).
+
 ## Focused tasks
 
 - [x] **1. Pin and probe the consumers; settle the descriptor contract.** The
@@ -390,11 +441,11 @@ requires one. No speculative stubs or retroactive rewrite of every existing port
   libc headers, BUFSIZ and fixed-width output formats. Validation and limits are
   recorded above. Writable public opens, creation modes and public seeking stay
   deferred; revisit tee after cksum.
-- [ ] **4. Port cksum as the first final consumer.** Build and package the pinned
-  utility with its ordinary I/O calls intact. Keep adaptations to build/platform
-  integration and agreed library gaps. Check named files, stdin, empty input,
-  missing files, redirection and pipeline use on ordinary QEMU boots; compare
-  checksum and byte count with a host implementation on identical bytes.
+- [x] **4. Port cksum as the first final consumer.** The pinned sbase recipe
+  packages cksum with ordinary I/O intact and only private util.h narrowed.
+  Named files, stdin, empty/binary input, mixed missing input, redirection,
+  pipeline use and early downstream closure passed the manual checks above;
+  CRC and byte counts match the host on identical bytes.
 - [ ] **5. Port tee if the agreed scope fits.** Exercise stdin to stdout and named
   output files, short transfers, read-only grants and a downstream reader that
   closes early. Resolve append and interrupt-option behavior before coding: the
