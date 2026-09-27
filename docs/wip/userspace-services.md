@@ -1,9 +1,9 @@
 # Userspace services and the first HTTP provider
 
 Status: agreed next milestone after [libc portability](../libc-portability.md).
-Tasks 1 through 3 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
+Tasks 1 through 4 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
 creation and process-owned receiver teardown moved forward from task 4 so the
-first delivery slice has a real consumer. Task 4 is the next unchecked task.
+first delivery slice has a real consumer. Task 5 is the next unchecked task.
 This document records the selected contracts for handoff between agents; the
 [broader provider ideas](userspace-scheme-providers.md) remain future directions where they exceed this scope. Work through the focused
 tasks in order, updating their checkboxes in the corresponding PRs. Discuss a
@@ -34,7 +34,7 @@ display or namespace-publication authority. Permission to create is distinct fro
 resource budgets and future space accounting.
 
 An export associates a provider-owned endpoint, an opaque provider object ID,
-one protocol ID and an allowed rights mask. Export returns a client capability;
+one protocol ID, a resource-rights ceiling and a separate transport ceiling. Export returns a client capability;
 export control remains separate and cannot be obtained by copying a client grant.
 The opaque ID selects provider state, never client authority. Keep IDs unambiguous
 through retirement acknowledgment; stale deliveries must never select a new object.
@@ -48,7 +48,11 @@ its operation requires; the kernel needs no table of every provider operation.
 
 Object rights and endpoint receive/reply authority are different. Possessing a
 window capability must not grant access to the compositor's receiving endpoint.
-Ordinary capability copies can only retain or reduce the source grant's rights.
+Ordinary copies, launch grants and attachments can only retain or reduce each
+authority mask independently. Native objects have zero transport authority; raw
+endpoint clients have zero resource rights. Export protocols define resource
+rights, while transport SEND and RECEIVE retain the shared delivery contract.
+The owned receiver holds CONTROL resource authority and RECEIVE transport.
 
 One process owns each receiving endpoint and its export control in this milestone.
 Do not transfer that ownership to another process or let queued/client references
@@ -89,8 +93,9 @@ for events. No kernel callback system or implicit reverse authority is added.
 - Up to 4,096 application payload bytes per request, reply or one-way message.
   Protocol metadata inside the payload counts; kernel routing metadata and the
   attachment descriptors are separate. Copy only the supplied payload length.
+- Up to 64 live or unacknowledged exports per endpoint, separate from delivery slots.
 - Up to four explicitly attached capabilities per message, including replies.
-  Transfer copies with optional rights reduction; ownership moves are deferred.
+  Transfer copies with optional resource/transport reduction; ownership moves are deferred.
 - Sixteen outstanding deliveries per endpoint, shared by calls and sends.
   Count queued, delivered-but-unfinished and completed-but-uncollected calls.
   Merely receiving a message does not release its admission slot.
@@ -193,6 +198,16 @@ affected callers. Delivered work still needs completion before its provider stat
 can be freed. Existing client handles remain safe to close but cannot invoke new
 operations. Provider process exit closes all exports and releases pending work;
 it must not depend on client reference counts falling to zero first.
+
+Task 4 implements export/control through the existing endpoint service and owned
+receiver. Exported clients use the endpoint CALL/SEND envelope with an inner
+protocol and operation; there is no native file bridge yet. Retirement is ready
+after accepted records drain and either all clients close or the export is
+withdrawn. ACK releases the ID even if invalid withdrawn clients remain: they
+retain old backing storage and never rebind to a reused ID. Cancellation notices
+carry timeout/closure reasons and precede retirement, then normal FIFO work.
+The [endpoint contract and counter example](../endpoints.md) describe the ABI
+and implemented limits.
 
 Do not conflate namespace removal, withdrawal and retirement. Removing a name
 only prevents future discovery. Withdrawal denies further use of that export.
@@ -384,7 +399,7 @@ task; avoid publishing interfaces with fake successful operations.
   queued/delivered cancellation distinction and reliable control notifications.
   Cover reply/expiry/exit races and abandoned receipts. Keep external cancellation
   and wait sets out of scope; later export retirement uses this notification path.
-- [ ] **4. Exported service objects.** Extend the creation authority from task 1
+- [x] **4. Exported service objects.** Extend the creation authority from task 1
   with export control, authenticated protocol/rights delivery, withdrawal and acknowledged
   retirement. Multiple exports share a provider endpoint. Provider death must
   close exports even when clients or queued references remain.

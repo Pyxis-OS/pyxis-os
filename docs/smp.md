@@ -157,7 +157,12 @@ BSP task to return to the scheduler on its next timer interrupt. No table grows
 on an AP; final releases never require an AP allocator call.
 
 Endpoint creation lends the blocked task's table to the BSP, which allocates
-its bounded delivery storage and installs both initial handles. A caller
+its bounded delivery storage and installs both initial handles. Export creation
+uses the same table loan for backing allocation and client installation. Export
+control holds storage separately from client references, so it cannot prevent
+natural retirement. Accepted deliveries retain their target until caller and
+receipt ownership both end. Final client/backing destruction runs on the BSP.
+A caller
 reserves four free slots before admitting a request so collecting reply grants
 needs no growth. RECEIVE needs one slot for the receipt and one per request
 attachment. If those slots are unavailable, the task queues a capability-growth

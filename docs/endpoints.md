@@ -6,34 +6,42 @@ records and returns two handles: a receiver owned by the creating process and
 a callable handle that it may grant to clients. Creation supplies no namespace,
 file, network or other resource authority. The receiver and delivery receipts
 cannot be copied, attached to a message or inherited by a child. The callable
-handle can be copied with equal or reduced rights. There is no global endpoint
+handle can be copied with equal or reduced resource and transport authority. There is no global endpoint
 name or implicit discovery.
 
 The [ABI](../include/abi/endpoint.h) defines three distinct protocols for
-client delivery, receiving and replying, plus the creation protocol. The
+client delivery, receiving and replying, plus the service creation/export protocol. The
 [userspace helpers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/endpoint.h) wrap the native CALL
 and CLOSE syscalls:
 
 | Helper | Handle | Behavior |
 | --- | --- | --- |
 | `endpoint_create()` | Service grant | Create a receiver and callable handle |
+| `endpoint_export()` | Service and owned receiver | Create an exported client with an ID, protocol and authority ceiling |
+| `endpoint_withdraw()` | Owned receiver | Stop an export and cancel its pending work |
+| `endpoint_retire_ack()` | Owned receiver | Release a retired export ID after its notification |
+| `endpoint_invoke()` / `endpoint_notify()` | Exported client | CALL / SEND a provider protocol operation |
 | `endpoint_request()` | Callable handle | Admit a request with an optional deadline, then wait for its result or transport failure |
 | `endpoint_send()` | Client handle | Admit a one-way message and return without waiting for completion |
-| `endpoint_receive()` | Receiver handle | Take a pending cancellation notice or the oldest queued message |
+| `endpoint_receive()` | Receiver handle | Take a cancellation, retirement notice or oldest queued message |
 | `endpoint_reply()` | CALL receipt handle | Complete that request and consume the receipt |
 | `endpoint_finish()` | Receipt handle | Finish a SEND or canceled CALL, or abandon an unanswered CALL |
 
-Client SEND requires `ENDPOINT_RIGHT_SEND`; CALL requires both SEND and
-`ENDPOINT_RIGHT_RECEIVE`. Client RECEIVE authorizes only that call's response,
+Client SEND requires `HANDLE_TRANSPORT_SEND`; CALL requires both SEND and
+`HANDLE_TRANSPORT_RECEIVE`. Client RECEIVE authorizes only that call's response,
 with no standalone operation or access to the incoming queue. The separate
 process-owned receiver uses RECEIVE for incoming work. Creation gives the client
-both rights; copies and transfers can attenuate them.
+both transport bits and zero resource rights. The receiver has RECEIVE transport
+and `ENDPOINT_RECEIVER_RIGHT_CONTROL` resource authority for export management.
+Copies and transfers attenuate each mask independently. Native objects have zero
+transport authority and retain their protocol-specific resource rights.
 
 Each request, send or reply carries at most 4,096 application bytes and four explicit
 capability attachments. The kernel copies only the stated payload length into
 endpoint-owned storage. The bytes are opaque; an embedded pointer or numeric
 handle cannot grant authority in another process. An attachment selects a
-sender handle and rights no greater than its existing grant. The sender keeps
+sender handle, resource rights and transport authority, each no greater than its
+existing grant. The sender keeps
 its original handle, while the recipient gets a new local handle and reference.
 The kernel retains attachments while queued or awaiting collection, so closing
 the sender's handle does not invalidate an admitted transfer. Invalid source
@@ -94,9 +102,11 @@ Deadline wakeups use the existing
 scheduler timed waits and can be late; nanosecond units do not promise exact
 scheduling latency.
 
-RECEIVE prioritizes `ENDPOINT_MESSAGE_CANCEL` notifications over normal FIFO
-messages. The notice's `receipt` names the provider's existing receipt, with no
-new handle or authority. It has the original deadline, delivered state, and
+RECEIVE prioritizes `ENDPOINT_MESSAGE_CANCEL`, then `ENDPOINT_MESSAGE_RETIRE`
+notifications over normal FIFO messages. A cancellation notice's `receipt` names
+the provider's existing receipt, with no new handle or authority. It has the
+original deadline, delivered state, authenticated export metadata and a `reason`
+of `CALL_TIMED_OUT` or `CALL_ENDPOINT_CLOSED`, with
 zero result, payload and attachments. Pending state lives in the delivery
 record, so a full message queue cannot prevent notification. Receiving the
 notice clears that pending notification but does not finish the receipt;
@@ -111,6 +121,49 @@ rechecks the queued delivery. Growth failure leaves it queued for a later
 receive attempt. Endpoint state and wait records live in stable kernel storage;
 the endpoint lock may nest the scheduler lock, but no lock spans user copying,
 allocation or parking. See [scheduling ownership](smp.md#scheduling-and-ownership).
+
+An endpoint supports up to 64 live or unacknowledged exports, independently of
+its sixteen delivery slots. EXPORT requires service CREATE authority and the
+process's own receiver with CONTROL authority. It fixes a nonzero object ID,
+nonzero protocol, resource-rights ceiling and transport ceiling. IDs are unique
+within that receiver until retirement acknowledgment. The receiver owns control;
+it is not a client reference.
+
+Exported invocation uses the endpoint CALL/SEND envelope with an inner protocol
+and operation. Raw endpoint traffic and replies set both to zero. A mismatched
+export protocol returns `CALL_BAD_OPERATION` before admission. RECEIVE supplies
+the immutable export ID/protocol, requested operation and the invoking grant's
+actual resource rights. The provider checks operation-specific resource rights;
+the kernel enforces transport authority without interpreting provider protocols.
+There is no native FILE invocation bridge in this slice.
+
+WITHDRAW denies new operations with `CALL_ENDPOINT_CLOSED`, removes queued work
+and wakes callers with their delivery state. Delivered work retains its receipt
+and attachments; CANCEL reports closure, including for SEND with deadline zero.
+An already-expired CALL retains its timeout result. Providers must finish retained
+receipts before reclaiming state. Withdrawal affects one export, not its siblings.
+
+RETIRE becomes pending after accepted operations drain and either the last client
+reference disappears or the export is withdrawn. Client references include local
+copies, launch grants and retained attachments. Keeping the original exported
+client open prevents natural retirement; provider control does not. RETIRE has no
+receipt, payload or attachments and consumes no delivery slot. It supplies the
+export ID and protocol; explicit ACK releases the ID. A withdrawn client can
+outlive ACK, but remains attached to an invalid old object even if its ID is
+reused. Receiver closure or provider exit invalidates every export and discards
+control records without waiting for clients or ACKs. Remaining references keep
+only safe backing storage until their final BSP release.
+
+The exported counter example runs with `session app://counter.pxe`. Two objects
+share a receiver and demonstrate authenticated identity/rights, COPY, launch and
+attachment attenuation, protocol rejection, provider-side denial, SEND and
+acknowledged retirement. `--withdraw` cancels a delivered call, finishes its
+receipt, acknowledges retirement and reuses the ID while a stale grant remains
+closed to invocation. `--exit` demonstrates provider teardown with retained
+client grants and accepted work. `--queued-withdraw` parks the provider before
+withdrawal so a CALL can queue; debugger inspection can confirm admission.
+`--retire-full` withdraws an idle export and receives its retirement notice while
+all sixteen normal slots remain occupied.
 
 The packaged example runs from the interactive shell with
 `session app://server.pxe`. The server creates an endpoint, launches two clients
@@ -148,7 +201,7 @@ deadline. Received file attachments remain usable after cancellation and receipt
 completion. The existing `--abandon`, `--close` and `--exit` modes cover receipt
 abandonment and provider teardown.
 
-This slice has no exports, namespace publication, external cancellation API,
+This slice has no namespace publication, external cancellation API,
 wait sets or automatic restart. A provider can retain all sixteen slots by
 leaving delivered receipts unfinished; deadlines release callers, not provider
 work. Calls without a deadline can still wait indefinitely, including self-calls

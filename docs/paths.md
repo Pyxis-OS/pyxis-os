@@ -100,8 +100,8 @@ not probe destination existence or widen any capability.
 ## Local handle copies
 
 [Handle copying](https://git.internal/chronium/pyxis-userland/src/branch/main/include/handle.h) installs another reference in the
-same process. `handle_copy()` preserves rights; `handle_copy_restricted()` requests
-an exact subset, including zero. Neither changes the source or grants extra
+same process. `handle_copy()` preserves both resource and transport authority;
+`handle_copy_restricted()` requests an exact subset of each mask, including zero. Neither changes the source or grants extra
 authority. Closing either copy leaves the other alive.
 
 The COPY syscall validates its output buffer before insertion. A full table uses
