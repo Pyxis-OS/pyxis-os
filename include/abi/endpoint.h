@@ -7,20 +7,24 @@
 
 #define ENDPOINT_SERVICE_RIGHT_CREATE (UINT64_C(1) << 0)
 #define ENDPOINT_CREATE UINT64_C(1)
-#define ENDPOINT_RIGHT_SEND (UINT64_C(1) << 0)
-#define ENDPOINT_RIGHT_RECEIVE (UINT64_C(1) << 1)
+#define ENDPOINT_EXPORT UINT64_C(2)
+#define ENDPOINT_RECEIVER_RIGHT_CONTROL (UINT64_C(1) << 0)
 #define ENDPOINT_RIGHT_REPLY (UINT64_C(1) << 0)
 #define ENDPOINT_CALL UINT64_C(1)
 #define ENDPOINT_SEND UINT64_C(2)
 #define ENDPOINT_RECEIVE UINT64_C(1)
+#define ENDPOINT_WITHDRAW UINT64_C(2)
+#define ENDPOINT_RETIRE_ACK UINT64_C(3)
 #define ENDPOINT_REPLY UINT64_C(1)
 #define ENDPOINT_DATA_MAX 4096
 #define ENDPOINT_GRANTS_MAX 4
 #define ENDPOINT_DELIVERIES_MAX 16
+#define ENDPOINT_EXPORTS_MAX 64
 
 struct endpoint_grant {
   handle_t handle;
   uint64_t rights;
+  uint64_t transport;
 };
 
 /* Client SEND admits a one-way message; CALL requires SEND | RECEIVE, where
@@ -42,6 +46,28 @@ struct endpoint_create_reply {
  * deadline_ns is an absolute monotonic CALL deadline, zero for unlimited.
  * SEND and REPLY must supply zero. RECEIVE and CREATE take only a message_header
  * with their own protocol. */
+/* Exports are created through the service using an owned receiver. The receiver
+ * controls withdrawal/retirement. IDs are nonzero and unique on that receiver
+ * until retirement acknowledgment. Closing the receiver withdraws all exports.
+ * Allowed rights are protocol-specific; transport is SEND and/or RECEIVE. */
+struct endpoint_export_message {
+  struct message_header header;
+  handle_t receiver;
+  uint64_t object_id;
+  uint64_t protocol;
+  uint64_t rights;
+  uint64_t transport;
+};
+
+struct endpoint_export_reply {
+  handle_t client;
+};
+
+struct endpoint_control_message {
+  struct message_header header;
+  uint64_t object_id;
+};
+
 struct endpoint_message {
   struct message_header header;
   uint64_t buffer;
@@ -49,6 +75,8 @@ struct endpoint_message {
   uint64_t grant_count;
   uint64_t result;
   uint64_t deadline_ns;
+  uint64_t protocol; /* Export protocol; zero for raw endpoint delivery/reply. */
+  uint64_t operation; /* Provider operation; zero for raw endpoint delivery/reply. */
   struct endpoint_grant grants[ENDPOINT_GRANTS_MAX];
 };
 
@@ -56,6 +84,7 @@ enum endpoint_message_kind {
   ENDPOINT_MESSAGE_CALL = 1,
   ENDPOINT_MESSAGE_SEND = 2,
   ENDPOINT_MESSAGE_CANCEL = 3,
+  ENDPOINT_MESSAGE_RETIRE = 4,
 };
 
 enum endpoint_delivery {
@@ -64,6 +93,8 @@ enum endpoint_delivery {
 };
 
 /* RECEIVE supplies a single-use receipt and a kernel-authenticated kind.
+ * RETIRE has no receipt, grants or payload. It identifies the export whose
+ * provider state is no longer in use. ACK on the receiver releases that ID.
  * CALL receipts carry reply authority; SEND receipts carry zero operation rights.
  * Successful REPLY consumes a CALL receipt; invalid replies leave it live.
  * CLOSE finishes a SEND receipt or abandons an unanswered CALL. Receipt grants are
@@ -94,14 +125,19 @@ struct endpoint_packet {
   uint64_t size;
   uint64_t grant_count;
   uint64_t deadline_ns;
+  uint64_t object_id;
+  uint64_t protocol;
+  uint64_t operation;
+  uint64_t rights; /* Actual invoking grant, not the export ceiling. */
+  uint64_t reason; /* CANCEL: CALL_TIMED_OUT or CALL_ENDPOINT_CLOSED. */
   struct endpoint_grant grants[ENDPOINT_GRANTS_MAX];
   uint8_t data[ENDPOINT_DATA_MAX];
 };
 
 #define ENDPOINT_PACKET_HEADER_SIZE offsetof(struct endpoint_packet, data)
 
-_Static_assert(sizeof(struct endpoint_message) == 120, "endpoint message layout");
-_Static_assert(ENDPOINT_PACKET_HEADER_SIZE == 120, "endpoint packet layout");
+_Static_assert(sizeof(struct endpoint_message) == 168, "endpoint message layout");
+_Static_assert(ENDPOINT_PACKET_HEADER_SIZE == 192, "endpoint packet layout");
 _Static_assert(sizeof(struct endpoint_create_reply) == 16, "endpoint create layout");
 
 #endif

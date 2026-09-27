@@ -18,6 +18,7 @@
 struct launch_grant {
   handle_t source;
   uint64_t rights;
+  uint64_t transport;
 };
 
 struct launch_binding {
@@ -87,7 +88,7 @@ struct launch_batch_reply {
 /* Reply is one WAIT-authorized process-control handle. Failure returns no
  * handle or runnable child, and preserves source grants. A successful child
  * belongs to the caller's space and runs on the caller's assigned CPU. */
-_Static_assert(sizeof(struct launch_grant) == 16, "launch grant layout");
+_Static_assert(sizeof(struct launch_grant) == 24, "launch grant layout");
 _Static_assert(sizeof(struct launch_binding) == 16, "launch binding layout");
 _Static_assert(sizeof(struct launch_stream) == 16, "launch stream layout");
 _Static_assert(sizeof(struct launch_request) == 160, "launch request layout");
