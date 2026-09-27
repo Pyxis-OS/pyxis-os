@@ -5,55 +5,72 @@
 #include <abi/handle.h>
 #include <stddef.h>
 
+#define ENDPOINT_SERVICE_RIGHT_CREATE (UINT64_C(1) << 0)
+#define ENDPOINT_CREATE UINT64_C(1)
 #define ENDPOINT_RIGHT_CALL (UINT64_C(1) << 0)
-#define ENDPOINT_RIGHT_RECEIVE (UINT64_C(1) << 1)
-#define ENDPOINT_RIGHT_REPLY (UINT64_C(1) << 2)
-
+#define ENDPOINT_RIGHT_RECEIVE (UINT64_C(1) << 0)
+#define ENDPOINT_RIGHT_REPLY (UINT64_C(1) << 0)
 #define ENDPOINT_CALL UINT64_C(1)
-#define ENDPOINT_RECEIVE UINT64_C(2)
-#define ENDPOINT_REPLY UINT64_C(3)
-#define ENDPOINT_DATA_MAX 64
+#define ENDPOINT_RECEIVE UINT64_C(1)
+#define ENDPOINT_REPLY UINT64_C(1)
+#define ENDPOINT_DATA_MAX 4096
+#define ENDPOINT_GRANTS_MAX 4
+#define ENDPOINT_DELIVERIES_MAX 16
 
-/* CALL copies this source grant with equal or reduced rights. A zero handle
- * with zero rights means no grant. RECEIVE reports a new recipient-local
- * handle; the sender keeps its original. REPLY cannot attach capabilities. */
 struct endpoint_grant {
   handle_t handle;
   uint64_t rights;
 };
 
-/* IDs correlate delivered requests, never authority. Zero is not an ID.
- * Only RECEIVE returns a grant; CALL's reply always has an absent grant. */
-struct endpoint_packet {
-  uint64_t id;
+/* Creation returns both handles or neither. The receiver belongs to its
+ * creating process and cannot be copied, transferred or inherited. Clients
+ * can copy the callable handle. Owner exit or receiver close shuts it down. */
+struct endpoint_create_reply {
+  handle_t receiver;
+  handle_t caller;
+};
+
+/* CALL and REPLY use caller-local bytes; these addresses are never delivered.
+ * REPLY invokes the receipt, not the receiving endpoint. result is an opaque
+ * application result on REPLY and must be zero on CALL. Unused grants are zero.
+ * RECEIVE and CREATE take only a message_header with their own protocol. */
+struct endpoint_message {
+  struct message_header header;
+  uint64_t buffer;
   uint64_t size;
-  struct endpoint_grant grant;
+  uint64_t grant_count;
+  uint64_t result;
+  struct endpoint_grant grants[ENDPOINT_GRANTS_MAX];
+};
+
+enum endpoint_delivery {
+  ENDPOINT_NOT_DELIVERED = 0,
+  ENDPOINT_DELIVERED = 1,
+};
+
+/* RECEIVE supplies a single-use receipt. Successful REPLY consumes it; invalid
+ * replies leave it live. CLOSE abandons an unanswered call. Receipt grants are
+ * never copyable, transferable or inherited. Separately delivered grants remain
+ * owned by their recipient regardless of receipt completion.
+ *
+ * CALL returns this prefix even on transport failure after output validation,
+ * preserving delivery state separately from syscall status. result is meaningful
+ * only on successful transport. reply_size is offsetof(data) + size, not the
+ * whole packet. Only the supplied payload bytes are copied. */
+struct endpoint_packet {
+  handle_t receipt;
+  uint64_t delivery;
+  uint64_t result;
+  uint64_t size;
+  uint64_t grant_count;
+  struct endpoint_grant grants[ENDPOINT_GRANTS_MAX];
   uint8_t data[ENDPOINT_DATA_MAX];
 };
 
-union endpoint_payload {
-  struct {
-    uint64_t size;
-    struct endpoint_grant grant;
-    uint8_t data[ENDPOINT_DATA_MAX];
-  } call;
-  struct {
-    uint64_t id;
-    uint64_t size;
-    uint8_t data[ENDPOINT_DATA_MAX];
-  } reply;
-};
+#define ENDPOINT_PACKET_HEADER_SIZE offsetof(struct endpoint_packet, data)
 
-/* RECEIVE ignores body. Send the complete zero-initialized message for every
- * operation. CALL and RECEIVE return a packet; REPLY returns no reply bytes. */
-struct endpoint_message {
-  struct message_header header;
-  union endpoint_payload body;
-};
-
-_Static_assert(sizeof(struct endpoint_packet) == 96, "endpoint packet layout");
-_Static_assert(sizeof(union endpoint_payload) == 88, "endpoint payload layout");
-_Static_assert(offsetof(struct endpoint_message, body) == 16, "endpoint payload offset");
-_Static_assert(sizeof(struct endpoint_message) == 104, "endpoint message layout");
+_Static_assert(sizeof(struct endpoint_message) == 112, "endpoint message layout");
+_Static_assert(ENDPOINT_PACKET_HEADER_SIZE == 104, "endpoint packet layout");
+_Static_assert(sizeof(struct endpoint_create_reply) == 16, "endpoint create layout");
 
 #endif

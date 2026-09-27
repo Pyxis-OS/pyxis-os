@@ -1,3 +1,4 @@
+#include <kernel/object/endpoint.h>
 #include <abi/memory.h>
 #include <abi/profile.h>
 #include <abi/pipe.h>
@@ -62,6 +63,9 @@ struct task {
   struct console_wait console_wait;
   struct process_wait process_wait;
   struct pipe_wait pipe_wait;
+  struct task *endpoint_next;
+  struct endpoint_create_reply endpoint_reply;
+  enum call_status endpoint_result;
   struct task *pipe_next;
   struct pipe_create_reply pipe_reply;
   enum call_status pipe_result;
@@ -125,6 +129,7 @@ static struct task *memory_head, *memory_tail;
 static struct task *launch_head, *launch_tail;
 static struct task *display_head, *display_tail;
 static struct task *pipe_head, *pipe_tail;
+static struct task *endpoint_head, *endpoint_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
 static struct task_wait *timed_waits; /* queues_locked, expired by the BSP. */
@@ -412,6 +417,40 @@ enum call_status task_create_pipe(struct pipe_create_reply *reply)
     *reply = task->pipe_reply;
   }
   return task->pipe_result;
+}
+
+enum call_status task_create_endpoint(struct endpoint_create_reply *reply)
+{
+  struct task_wait *wait = prepare_user_wait();
+  struct task *task = wait->task;
+  lock_queues();
+  task->endpoint_next = NULL;
+  if (endpoint_tail) {
+    endpoint_tail->endpoint_next = task;
+  } else {
+    endpoint_head = task;
+  }
+  endpoint_tail = task;
+  unlock_queues();
+  task_wait_sleep(wait);
+  if (task->endpoint_result == CALL_OK) {
+    *reply = task->endpoint_reply;
+  }
+  return task->endpoint_result;
+}
+
+static void service_endpoint_requests(void)
+{
+  lock_queues();
+  struct task *task = endpoint_head;
+  endpoint_head = endpoint_tail = NULL;
+  unlock_queues();
+  while (task) {
+    struct task *next = task->endpoint_next;
+    task->endpoint_result = endpoint_create(task->process, &task->endpoint_reply);
+    task_wait_wake(&task->wait_record);
+    task = next;
+  }
 }
 
 static enum call_status pipe_install_status(enum capability_result result)
@@ -1168,6 +1207,7 @@ void kernel_task_sleep_until(uint64_t deadline)
       expire_timed_waits();
       grow_requested_tables();
       service_pipe_requests();
+      service_endpoint_requests();
       service_directory_requests();
       service_file_requests();
       service_hostfs_requests();
@@ -1266,6 +1306,7 @@ void task_preempt(bool user_mode)
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
      (completed_head != NULL || growth_head != NULL || pipe_head != NULL ||
+      endpoint_head != NULL ||
       directory_head != NULL ||
       file_head != NULL || memory_head != NULL || launch_head != NULL ||
       display_head != NULL || hostfs_head != NULL));

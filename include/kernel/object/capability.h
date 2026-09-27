@@ -7,6 +7,8 @@
 struct kernel_object;
 struct capability_entry;
 
+#define CAPABILITY_BATCH_MAX 5
+
 /* Kernel results, not the syscall status encoding. */
 enum capability_result {
   CAP_OK,
@@ -41,6 +43,20 @@ enum capability_result capability_install(struct capability_table *table,
  * Other results and ownership match capability_install(). */
 enum capability_result capability_insert(struct capability_table *table,
     struct kernel_object *object, uint64_t rights, handle_t *handle);
+
+/* IF=0, exclusive table ownership. Counts empty slots whose generation has
+ * not retired. A NULL table has no free slots. */
+size_t capability_free_slots(const struct capability_table *table);
+
+/* IF=0, exclusive table ownership. Installs at most CAPABILITY_BATCH_MAX
+ * objects without allocating. The caller owns a reference to each object;
+ * successful insertion adds one reference per entry, including duplicates.
+ * A failure changes neither the table nor its references. For a valid count,
+ * all output handles are cleared before validation and remain invalid on
+ * failure. CAP_FULL permits the caller to request BSP growth and retry. */
+enum capability_result capability_insert_batch(struct capability_table *table,
+    struct kernel_object *const *objects, const uint64_t *rights, size_t count,
+    handle_t *handles);
 
 /* BSP, IF=0, exclusive ownership (including caller loans).
  * Preserves entries, generations and references; failure leaves them intact. */

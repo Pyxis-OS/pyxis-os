@@ -34,6 +34,11 @@ static struct syscall_result close_handle(handle_t handle)
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
   }
 
+  struct kernel_object *object;
+  if (capability_resolve(&process->capabilities, handle, 0, &object, NULL) != CAP_OK) {
+    return (struct syscall_result){CALL_BAD_HANDLE, 0};
+  }
+  endpoint_handle_close(object);
   enum capability_result result = capability_close(&process->capabilities, handle);
   if (result == CAP_BAD_HANDLE) {
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
@@ -85,6 +90,9 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
   if (result != CAP_OK) {
     KASSERT(result == CAP_BAD_HANDLE || result == CAP_DENIED);
     return (struct syscall_result){result == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED, 0};
+  }
+  if (object->type == OBJECT_ENDPOINT_RECEIPT || object->type == OBJECT_ENDPOINT_RECEIVER) {
+    return (struct syscall_result){CALL_DENIED, 0};
   }
   if (flags & HANDLE_COPY_SAME_RIGHTS) {
     rights = granted;
@@ -267,11 +275,20 @@ static struct syscall_result call_object(handle_t handle,
     }
     return launcher_call(rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
-  case OBJECT_ENDPOINT:
-    if (header.protocol != PROTOCOL_ENDPOINT) {
+  case OBJECT_ENDPOINT_SERVICE:
+    if (header.protocol != PROTOCOL_ENDPOINT_SERVICE) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    return endpoint_call((struct endpoint *)object, rights, header.operation,
+    return endpoint_service_call(rights, header.operation, request_size, reply_address, reply_capacity);
+  case OBJECT_ENDPOINT_RECEIVER:
+  case OBJECT_ENDPOINT_RECEIPT:
+  case OBJECT_ENDPOINT:
+    if ((object->type == OBJECT_ENDPOINT && header.protocol != PROTOCOL_ENDPOINT) ||
+        (object->type == OBJECT_ENDPOINT_RECEIVER && header.protocol != PROTOCOL_ENDPOINT_RECEIVER) ||
+        (object->type == OBJECT_ENDPOINT_RECEIPT && header.protocol != PROTOCOL_ENDPOINT_RECEIPT)) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return endpoint_call(object, handle, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};

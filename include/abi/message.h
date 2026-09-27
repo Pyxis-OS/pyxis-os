@@ -27,6 +27,10 @@
 #define PROTOCOL_PIPE_SERVICE UINT64_C(21)
 #define PROTOCOL_PIPE UINT64_C(22)
 
+#define PROTOCOL_ENDPOINT_SERVICE UINT64_C(23)
+#define PROTOCOL_ENDPOINT_RECEIVER UINT64_C(24)
+#define PROTOCOL_ENDPOINT_RECEIPT UINT64_C(25)
+
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */
 struct message_header {

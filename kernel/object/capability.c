@@ -78,6 +78,73 @@ enum capability_result capability_insert(struct capability_table *table,
   return CAP_OK;
 }
 
+size_t capability_free_slots(const struct capability_table *table)
+{
+  if (!table) {
+    return 0;
+  }
+
+  size_t free_slots = 0;
+  for (size_t i = 0; i < table->capacity; ++i) {
+    if (!table->entries[i].object && table->entries[i].generation) {
+      ++free_slots;
+    }
+  }
+  return free_slots;
+}
+
+enum capability_result capability_insert_batch(struct capability_table *table,
+    struct kernel_object *const *objects, const uint64_t *rights, size_t count,
+    handle_t *handles)
+{
+  if (count > CAPABILITY_BATCH_MAX) {
+    return CAP_INVALID;
+  }
+  if (handles) {
+    for (size_t i = 0; i < count; ++i) {
+      handles[i] = HANDLE_INVALID;
+    }
+  }
+  if (!table || (count && (!objects || !rights || !handles))) {
+    return CAP_INVALID;
+  }
+
+  for (size_t i = 0; i < count; ++i) {
+    if (!objects[i] || !object_rights_valid(objects[i]->type, rights[i])) {
+      return CAP_INVALID;
+    }
+  }
+
+  size_t slots[CAPABILITY_BATCH_MAX];
+  size_t selected = 0;
+  for (size_t i = 0; i < table->capacity && selected < count; ++i) {
+    if (!table->entries[i].object && table->entries[i].generation) {
+      slots[selected++] = i;
+    }
+  }
+  if (selected != count) {
+    return CAP_FULL;
+  }
+
+  size_t retained = 0;
+  for (; retained < count; ++retained) {
+    if (!object_retain(objects[retained])) {
+      for (size_t i = 0; i < retained; ++i) {
+        object_release(objects[i]);
+      }
+      return CAP_LIMIT;
+    }
+  }
+
+  for (size_t i = 0; i < count; ++i) {
+    struct capability_entry *entry = &table->entries[slots[i]];
+    entry->object = objects[i];
+    entry->rights = rights[i];
+    handles[i] = ((uint64_t)entry->generation << HANDLE_INDEX_BITS) | slots[i];
+  }
+  return CAP_OK;
+}
+
 enum capability_result capability_install(struct capability_table *table,
     struct kernel_object *object, uint64_t rights, handle_t *handle)
 {
@@ -167,6 +234,10 @@ enum capability_result capability_grant(struct capability_table *destination,
       &object, NULL);
   if (status != CAP_OK) {
     return status;
+  }
+  if (object->type == OBJECT_ENDPOINT_RECEIPT ||
+      object->type == OBJECT_ENDPOINT_RECEIVER) {
+    return CAP_DENIED;
   }
   return capability_install(destination, object, rights, result);
 }

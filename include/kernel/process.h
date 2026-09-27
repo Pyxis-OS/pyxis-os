@@ -8,6 +8,7 @@ struct space;
 struct vm_space;
 struct private_allocation;
 struct process_control;
+struct endpoint;
 
 /* One user task per process. Owns address_space, private allocation records,
  * capabilities and a process-control reference. space is borrowed from the initialized set and must outlive
@@ -17,6 +18,7 @@ struct process {
   struct vm_space *address_space;
   struct capability_table capabilities;
   struct process_control *control; /* Owned reference; reaper takes it before destruction. */
+  struct endpoint *endpoints; /* BSP-owned weak list of receiving endpoints. */
   struct private_allocation *allocations; /* Private-memory service regions only. */
   uintptr_t startup_address; /* Read-only record in address_space; zero until prepared. */
 };
