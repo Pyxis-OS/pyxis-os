@@ -235,7 +235,7 @@ static enum call_status create_child(struct hostfs_request *request)
     return CALL_NO_MEMORY;
   }
   enum capability_result installed = capability_install(request->table, node->object,
-      request->rights, &request->handle);
+      request->rights, 0, &request->handle);
   cpu_restore_interrupts(flags);
   if (installed != CAP_OK) {
     KASSERT(installed == CAP_NO_MEMORY || installed == CAP_LIMIT);

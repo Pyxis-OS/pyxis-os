@@ -213,7 +213,7 @@ static enum call_status install_child(struct kernel_object *object, uint64_t rig
   struct capability_table *table = &process_current()->capabilities;
   enum capability_result result;
   for (;;) {
-    result = capability_insert(table, object, rights, handle);
+    result = capability_insert(table, object, rights, 0, handle);
     if (result != CAP_FULL) {
       break;
     }
@@ -489,7 +489,8 @@ static struct syscall_result rename_child(struct directory_object *source,
   struct kernel_object *object;
   uint64_t destination_rights;
   enum capability_result result = capability_resolve(&process_current()->capabilities,
-      request->destination, DIRECTORY_RIGHT_CREATE, &object, &destination_rights);
+      request->destination, DIRECTORY_RIGHT_CREATE, 0, &object,
+      &destination_rights, NULL);
   if (result != CAP_OK) {
     return (struct syscall_result){result == CAP_DENIED ? CALL_DENIED : CALL_BAD_HANDLE, 0};
   }

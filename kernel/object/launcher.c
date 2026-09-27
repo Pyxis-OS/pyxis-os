@@ -132,7 +132,8 @@ static void capture_streams(struct launch_capture *capture,
     }
 
     if (stream->grant >= capture->grant_count ||
-        capture->grants[stream->grant].rights != rights) {
+        capture->grants[stream->grant].rights != rights ||
+        capture->grants[stream->grant].transport != 0) {
       capture->error = CALL_BAD_REQUEST;
       return;
     }
@@ -164,7 +165,7 @@ static void capture_streams(struct launch_capture *capture,
 
     struct kernel_object *object;
     enum capability_result found = capability_resolve(&process_current()->capabilities,
-        capture->grants[stream->grant].source, rights, &object, NULL);
+        capture->grants[stream->grant].source, rights, 0, &object, NULL, NULL);
     if (found != CAP_OK) {
       capture->error = found == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
       return;
@@ -227,7 +228,7 @@ static enum call_status capture_launch_request(const struct launch_request *requ
   *result = NULL;
   struct kernel_object *image;
   enum capability_result lookup = capability_resolve(&process_current()->capabilities,
-      request->image, FILE_RIGHT_READ, &image, NULL);
+      request->image, FILE_RIGHT_READ, 0, &image, NULL, NULL);
   if (lookup != CAP_OK) {
     return lookup == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
   }

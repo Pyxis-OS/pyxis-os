@@ -62,7 +62,7 @@ struct syscall_result mount_call(uint64_t rights, uint64_t operation,
   enum capability_result result;
   for (;;) {
     result = capability_insert(&process_current()->capabilities, root,
-        directory_rights, &reply.root);
+        directory_rights, 0, &reply.root);
     if (result != CAP_FULL) {
       break;
     }

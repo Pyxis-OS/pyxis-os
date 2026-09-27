@@ -148,7 +148,7 @@ static enum call_status open_endpoint(struct udp_control *call)
   };
   object_init(&endpoint->object, OBJECT_UDP, retire_endpoint);
   enum capability_result result = capability_install(call->table, &endpoint->object,
-      UDP_RIGHTS, &call->reply.handle);
+      UDP_RIGHTS, 0, &call->reply.handle);
   if (result != CAP_OK) {
     /* Unpublished: only the initial reference exists, with no binding to retire. */
     kfree(endpoint);

@@ -19,15 +19,34 @@
 #include <abi/endpoint.h>
 #include <arch/smp.h>
 #include <kernel/object/object.h>
+#include <kernel/object/endpoint.h>
 #include <kernel/panic.h>
 #include <stdint.h>
 
 static struct kernel_object *retired_objects;
 static atomic_bool retired_locked;
 
-bool object_rights_valid(enum object_type type, uint64_t rights)
+bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
+                            uint64_t transport)
 {
-  switch (type) {
+  if (!object) {
+    return false;
+  }
+  if (object->type == OBJECT_ENDPOINT) {
+    return !rights && !(transport & ~HANDLE_TRANSPORT_CALL);
+  }
+  if (object->type == OBJECT_ENDPOINT_RECEIVER) {
+    return !(rights & ~ENDPOINT_RECEIVER_RIGHT_CONTROL) &&
+        !(transport & ~HANDLE_TRANSPORT_RECEIVE);
+  }
+  if (object->type == OBJECT_ENDPOINT_EXPORT) {
+    return endpoint_export_authority_valid(object, rights, transport);
+  }
+  if (transport) {
+    return false;
+  }
+
+  switch (object->type) {
   case OBJECT_PIPE_SERVICE:
     return !(rights & ~PIPE_SERVICE_RIGHT_CREATE);
   case OBJECT_PIPE:
@@ -72,10 +91,6 @@ bool object_rights_valid(enum object_type type, uint64_t rights)
     return !(rights & ~LAUNCHER_RIGHT_LAUNCH);
   case OBJECT_ENDPOINT_SERVICE:
     return !(rights & ~ENDPOINT_SERVICE_RIGHT_CREATE);
-  case OBJECT_ENDPOINT:
-    return !(rights & ~(ENDPOINT_RIGHT_SEND | ENDPOINT_RIGHT_RECEIVE));
-  case OBJECT_ENDPOINT_RECEIVER:
-    return !(rights & ~ENDPOINT_RIGHT_RECEIVE);
   case OBJECT_ENDPOINT_RECEIPT:
     return !(rights & ~ENDPOINT_RIGHT_REPLY);
   default:

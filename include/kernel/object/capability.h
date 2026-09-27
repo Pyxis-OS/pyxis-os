@@ -31,18 +31,20 @@ struct capability_table {
 
 /* BSP, IF=0, exclusively owning an unsubmitted or caller-lent table.
  * Adds a reference; the caller retains
- * its original one. Rights are an explicit kernel grant, not derived from
- * another handle, and must use the target object's protocol-specific mask.
+ * its original one. Resource rights and transport authority are an explicit
+ * kernel grant, not derived from another handle, and must fit the object.
  * Unsupported bits are rejected. Failure clears *handle and leaves references
  * unchanged. */
 enum capability_result capability_install(struct capability_table *table,
-    struct kernel_object *object, uint64_t rights, handle_t *handle);
+    struct kernel_object *object, uint64_t rights, uint64_t transport,
+    handle_t *handle);
 
 /* IF=0, exclusive table ownership on any CPU. Adds a reference without
  * allocating; CAP_FULL leaves the message/owner free to request BSP growth.
  * Other results and ownership match capability_install(). */
 enum capability_result capability_insert(struct capability_table *table,
-    struct kernel_object *object, uint64_t rights, handle_t *handle);
+    struct kernel_object *object, uint64_t rights, uint64_t transport,
+    handle_t *handle);
 
 /* IF=0, exclusive table ownership. Counts empty slots whose generation has
  * not retired. A NULL table has no free slots. */
@@ -55,8 +57,8 @@ size_t capability_free_slots(const struct capability_table *table);
  * all output handles are cleared before validation and remain invalid on
  * failure. CAP_FULL permits the caller to request BSP growth and retry. */
 enum capability_result capability_insert_batch(struct capability_table *table,
-    struct kernel_object *const *objects, const uint64_t *rights, size_t count,
-    handle_t *handles);
+    struct kernel_object *const *objects, const uint64_t *rights,
+    const uint64_t *transport, size_t count, handle_t *handles);
 
 /* BSP, IF=0, exclusive ownership (including caller loans).
  * Preserves entries, generations and references; failure leaves them intact. */
@@ -64,19 +66,19 @@ enum capability_result capability_grow(struct capability_table *table);
 
 /* BSP, IF=0, exclusive ownership of both tables: unsubmitted processes or
  * a blocked launcher caller lending its source table. Copies with equal or
- * reduced rights; source remains valid. Failure clears
+ * reduced resource and transport authority; source remains valid. Failure clears
  * the result handle and changes neither table's entries nor object references. */
 enum capability_result capability_grant(struct capability_table *destination,
     struct capability_table *source, handle_t handle, uint64_t rights,
-    handle_t *result);
+    uint64_t transport, handle_t *result);
 
 /* IF=0, exclusive table ownership (including a BSP loan). Resolve returns a borrowed object, valid only until
  * that entry closes or the table is destroyed; failure clears *object.
- * All required rights must be present. Optional rights receives the granted
- * mask on success, zero on failure. A handle has meaning only in its table. */
+ * Both required masks must be present. Optional outputs receive the granted
+ * masks on success, zero on failure. A handle has meaning only in its table. */
 enum capability_result capability_resolve(struct capability_table *table,
-    handle_t handle, uint64_t required_rights, struct kernel_object **object,
-    uint64_t *rights);
+    handle_t handle, uint64_t required_rights, uint64_t required_transport,
+    struct kernel_object **object, uint64_t *rights, uint64_t *transport);
 
 /* IF=0, exclusive table ownership; no allocation or destruction. Immediately makes
  * the handle stale and releases its reference through BSP retirement. */
