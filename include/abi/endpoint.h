@@ -39,19 +39,23 @@ struct endpoint_create_reply {
 /* CALL, SEND and REPLY use caller-local bytes; these addresses are never delivered.
  * REPLY invokes the receipt, not the receiving endpoint. result is an opaque
  * application result on REPLY and must be zero on CALL/SEND. Unused grants are zero.
- * RECEIVE and CREATE take only a message_header with their own protocol. */
+ * deadline_ns is an absolute monotonic CALL deadline, zero for unlimited.
+ * SEND and REPLY must supply zero. RECEIVE and CREATE take only a message_header
+ * with their own protocol. */
 struct endpoint_message {
   struct message_header header;
   uint64_t buffer;
   uint64_t size;
   uint64_t grant_count;
   uint64_t result;
+  uint64_t deadline_ns;
   struct endpoint_grant grants[ENDPOINT_GRANTS_MAX];
 };
 
 enum endpoint_message_kind {
   ENDPOINT_MESSAGE_CALL = 1,
   ENDPOINT_MESSAGE_SEND = 2,
+  ENDPOINT_MESSAGE_CANCEL = 3,
 };
 
 enum endpoint_delivery {
@@ -72,7 +76,15 @@ enum endpoint_delivery {
  * whole packet. Only the supplied payload bytes are copied.
  * SEND returns status only: success means admission, with no later completion
  * report. Accepted sends survive sender close/exit and share CALL's sixteen
- * delivery slots and FIFO. RECEIVE alone does not release a send's slot. */
+ * delivery slots and FIFO. RECEIVE alone does not release a send's slot.
+ *
+ * CALL expiry returns CALL_TIMED_OUT with delivery state. A delivered timeout
+ * does not prove whether the operation ran. RECEIVE prioritizes CANCEL notices
+ * over ordinary messages: receipt identifies an existing owned receipt, not a
+ * new grant; size, grant_count and result are zero. deadline_ns is the original
+ * deadline. A notice consumes no delivery slot. Late REPLY returns TIMED_OUT
+ * without consuming the receipt; CLOSE releases it and any pending notice.
+ * Delivered attachments remain owned independently of cancellation. */
 struct endpoint_packet {
   handle_t receipt;
   uint64_t delivery;
@@ -80,14 +92,15 @@ struct endpoint_packet {
   uint64_t result;
   uint64_t size;
   uint64_t grant_count;
+  uint64_t deadline_ns;
   struct endpoint_grant grants[ENDPOINT_GRANTS_MAX];
   uint8_t data[ENDPOINT_DATA_MAX];
 };
 
 #define ENDPOINT_PACKET_HEADER_SIZE offsetof(struct endpoint_packet, data)
 
-_Static_assert(sizeof(struct endpoint_message) == 112, "endpoint message layout");
-_Static_assert(ENDPOINT_PACKET_HEADER_SIZE == 112, "endpoint packet layout");
+_Static_assert(sizeof(struct endpoint_message) == 120, "endpoint message layout");
+_Static_assert(ENDPOINT_PACKET_HEADER_SIZE == 120, "endpoint packet layout");
 _Static_assert(sizeof(struct endpoint_create_reply) == 16, "endpoint create layout");
 
 #endif
