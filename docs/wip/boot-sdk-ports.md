@@ -98,12 +98,16 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Next milestone and later candidates
 
-The libc portability milestone is complete. No successor is selected; the
-following remain alternatives for discussion as separate bounded milestones.
+Next is [userspace services and the first HTTP provider](userspace-services.md).
+The agreed contract covers bounded call/send/receive delivery, exported objects,
+scoped namespaces, IPC-safe file messages and a read-only HTTP snapshot provider.
+Start with task 1; the document fixes the policy choices and separates later
+SQLite/compositor/shared-memory work. No implementation has started.
+
+The following remain alternatives for subsequent bounded milestones.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
-| Userspace scheme services and HTTP | `cat http://...` obtains a bounded, stable response from a userspace provider. | Endpoint reply grants, request transport, provider lifetime/cancellation and scoped registration/authority. HTTPS adds a TLS library and trust policy later. |
 | SDL2 and graphical applications | A native software-rendered SDL2 backend supports a selected GrafX2 edit/save workflow. | Probe the pinned application first; settle input/presentation and image-library needs. zlib/libpng are useful shared candidates. Compositor and GPU support stay separate. |
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
@@ -119,11 +123,10 @@ interactions, not supported shell syntax or a settled ABI.
 [Hosted toolchains and language runtimes](toolchains-and-runtimes.md) park
 binutils/P1F investigation, the GCC-versus-LLVM choice, C++ userspace, Go cross
 compilation and a later hosted Go toolchain. Rust, Tailscale and Ladybird are
-future directions, not additions to the libc milestone.
+future directions, not additions to the services milestone.
 
-HTTP providers are a strong alternative for advancing the native resource model;
-SDL2/GrafX2 is the graphical alternative. A desktop/compositor remains a separate
-[graphics direction](desktop-graphics.md), and users/authority is a cross-cutting
+SDL2/GrafX2 remains a later graphical alternative. A desktop/compositor remains
+a separate [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting
 [design checkpoint](users-and-authority.md), not something a port should define
 implicitly.
 
