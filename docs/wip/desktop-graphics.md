@@ -11,6 +11,11 @@ A desktop/compositor belongs within a space. Multiple desktop instances can
 coexist; the persistent space-navigation interface remains independent of them.
 The desktop's application menu bar is distinct from global space navigation.
 
+The [userspace-services milestone](userspace-services.md) defines discovery,
+exported-object authority/lifetime and call/send/receive transport for future
+services, including this one. It does not define window operations, shared pixel
+memory, frame ownership or compositor scheduling. Those remain graphics work.
+
 ## First useful graphics slice
 
 Two independent client windows can overlap, move, receive input and disappear

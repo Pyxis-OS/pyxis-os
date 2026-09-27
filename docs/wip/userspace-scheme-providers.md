@@ -1,8 +1,12 @@
 # Userspace URI scheme providers
 
-Status: agreed design direction for later work, not an implementation task or a
-frozen ABI. It builds
-on the [namespace direction](../vfs.md) and [named endpoints](../spaces.md#named-endpoints).
+Status: broader design direction and future consumers. The selected
+[userspace-services milestone](userspace-services.md) now records the agreed
+initial transport, export, namespace, representation and read-only HTTP contracts;
+that concrete scope takes precedence over open alternatives in these notes.
+Writes, media-type aliases, richer representations, SQLite and Git remain later
+work. This document builds on the [namespace direction](../vfs.md) and
+[named endpoints](../spaces.md#named-endpoints).
 
 ## Intended use
 
@@ -408,7 +412,9 @@ a command language or editor feature to implement alongside the first provider.
 
 ## Prerequisites and decisions
 
-Before an implementation milestone, settle:
+The [selected milestone](userspace-services.md) settles the initial choices below.
+Retain this list as context for later extensions, not decisions to reopen before
+its first task:
 
 - Registration/lookup requests, namespace scope and delegation, binding lifetime,
   provider death and how policy follows a routed request.
