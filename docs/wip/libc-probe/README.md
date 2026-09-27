@@ -146,3 +146,47 @@ The patch's upstream util.h material is covered by [LICENSE.sbase](LICENSE.sbase
 The pinned checkout retains the full license and individual file notices,
 including arg.h. No upstream application sources or executable stubs are added
 to Pyxis by this record.
+
+## Task 3 real SDK check
+
+The task-1 results above remain a historical declaration-only investigation.
+After implementing task 3, the same cksum closure linked against the actual SDK.
+From a task-3 Pyxis checkout, after `make -j16 image` with the installed compiler:
+
+```bash
+probe_cc="$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis-gcc"
+probe_sdk="$PWD/build/sdk"
+probe_root="$PWD/build/libc-probe"
+git init -q "$probe_root/sbase"
+git -C "$probe_root/sbase" remote add origin https://git.suckless.org/sbase
+git -C "$probe_root/sbase" fetch --depth=1 origin \
+  c546c3a5724c81cee9a11d816a38ccdf17472129
+git -C "$probe_root/sbase" checkout --detach -q FETCH_HEAD
+git -C "$probe_root/sbase" apply --include=util.h \
+  "$PWD/docs/wip/libc-probe/scratch.patch"
+mkdir -p "$probe_root/objects"
+probe_flags=(
+  "--sysroot=$probe_sdk/sysroot"
+  -nostdinc -isystem "$("$probe_cc" -print-file-name=include)"
+  "-I$probe_sdk/sysroot/usr/include"
+  -std=gnu23 -O2 -g -ffreestanding -fno-pie -fno-stack-protector
+  -mno-red-zone -march=x86-64 -Wall -Wextra
+)
+for probe_src in cksum.c libutil/eprintf.c libutil/fshut.c; do
+  probe_name=${probe_src##*/}
+  "$probe_cc" "${probe_flags[@]}" -c "$probe_root/sbase/$probe_src" \
+    -o "$probe_root/objects/${probe_name%.c}.o"
+done
+"$probe_cc" "--sysroot=$probe_sdk/sysroot" \
+  "$probe_root/objects/cksum.o" "$probe_root/objects/eprintf.o" \
+  "$probe_root/objects/fshut.o" -o "$probe_root/cksum.elf"
+"$probe_sdk/bin/elf2pxe" --format p1f \
+  -o "$probe_root/cksum.pxe" "$probe_root/cksum.elf"
+```
+
+Only util.h is patched; no probe headers are created or added to the include
+path, and BUFSIZ comes from stdio.h. The command source and helper bodies remain
+unchanged. The existing signedness warning in cksum remains. The disposable PXE
+can be launched from a virtio-fs export for debugger inspection; it is not added
+to the boot image or ports manifest. Packaging and checksum acceptance remain
+task 4.

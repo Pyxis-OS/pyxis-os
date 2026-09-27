@@ -1,8 +1,7 @@
 # Standard C libc over the native ABI
 
-Status: tasks 1 and 2 complete: the source probe, descriptor ownership and stdio
-integration are implemented and validated. Public descriptor I/O remains task 3
-and has not started. The intended result is a small libc
+Status: tasks 1–3 complete. The public descriptor slice is implemented and
+validated; packaging cksum remains task 4. The intended result is a small libc
 descriptor layer exercised by an upstream cksum port, with tee as a conditional
 second consumer. This document does not authorize the whole compatibility backlog.
 
@@ -51,8 +50,7 @@ silently expanding the current implementation task.
 
 ## Agreed descriptor and FILE constraints
 
-Task 2 implements the private ownership and stdio machinery below. Public
-descriptor calls, including the `close(1)` example, remain task-3 behavior.
+Tasks 2 and 3 implement the ownership, stdio and public descriptor contracts below.
 Libc owns process-local descriptor entries over native file, console and pipe
 capabilities. A descriptor number is neither a kernel handle nor authority.
 
@@ -140,8 +138,8 @@ Head's stdin close also invalidated its FILE while leaving the borrowed startup
 snapshot unchanged. No debugger calls or fault injection were used. Absent
 startup bindings, allocation-failure unwinding and exceptional CLOSE responses
 were inspected in code, not forced at runtime. Public descriptor functions and
-headers remain unimplemented; their signed-count checks and end-to-end
-`close(1)` checks belong to task 3.
+headers were not implemented in task 2; their signed-count checks and end-to-end
+`close(1)` behavior belong to task 3.
 
 ## Pinned source probe
 
@@ -205,9 +203,8 @@ or an installable compatibility layer.
 
 ## Accepted initial public slice
 
-The initial slice below is accepted for tasks 2 and 3. Task 2 implements the
-private representation and invalidation mechanism; the public API remains task
-3. The implemented close-failure contract is specified immediately afterward.
+The initial slice below is implemented by tasks 2 and 3. The close-failure
+contract is specified immediately afterward.
 
 - Add `int open(const char *path, int flags, ...)`, `int close(int fd)`,
   `ssize_t read(int fd, void *buffer, size_t count)` and
@@ -230,14 +227,49 @@ private representation and invalidation mechanism; the public API remains task
   positive byte count, without inventing an error or completing the remainder.
 - Check descriptor/access validity even for count zero, then return zero
   without backend I/O. Reject counts above the signed return type's maximum
-  with EINVAL. Nonempty file/pipe zero reads mean EOF; the console's unexpected
-  zero progress remains EIO. A nonempty zero write remains EIO. Closing a
+  with EINVAL after descriptor/access validation. Nonempty file/pipe zero reads
+  mean EOF; the console's unexpected zero progress remains EIO. A nonempty zero
+  write remains EIO. Closing a
   descriptor invalidates its association even if native release reports failure.
   See the close-failure contract below.
 - Supply BUFSIZ (8192) and the fixed-width output-format macros in
-  inttypes.h needed to use existing stdint.h types without consumer-local
-  format workarounds. The probe requires PRIu32; broader integer conversions,
-  scanning and unrelated inttypes functions are not prerequisites.
+  inttypes.h (PRId/PRIi/PRIo/PRIu/PRIx/PRIX for 8/16/32/64-bit types) needed to use
+  existing stdint.h types without consumer-local format workarounds. The probe
+  requires PRIu32; broader integer conversions,
+  scanning and unrelated inttypes functions are not prerequisites. SSIZE_MAX in
+  limits.h is LONG_MAX for the selected ssize_t.
+
+### Task 3 implementation and validation
+
+`libc/io.c` supplies public wrappers over the private descriptor module. Open
+passes no FILE association; standard streams and fopen retain their existing
+associations. No second ownership or cursor system is introduced. SDK header
+export now preserves nested libc directories, including sys/types.h.
+
+The ordinary `make -j16 image` build passed with the installed Pyxis compiler.
+The pinned cksum closure also compiled and linked against the real SDK with
+only the recorded util.h narrowing; no substitute headers or BUFSIZ define were
+used. See the [task-3 probe commands](libc-probe/README.md#task-3-real-sdk-check).
+This disposable build is not a ports recipe or installed command.
+
+Interactive QEMU q35/KVM validation used four CPUs, 256 MiB, virtio-fs and
+virtio-rng, with no NIC, inside the development VM. The disposable executable
+opened host/archive files, reported a missing input and read a pipeline.
+GDB observed an open returning descriptor 3 with no FILE association, a 661-byte
+read from an 8192-byte request, subsequent EOF, close releasing the entry, and
+reuse of 3. Missing-file open returned -1/ENOENT with the reservation free.
+An 8192-byte pipe read returned 4096 bytes. After descriptor input reached EOF,
+stdin's FILE EOF/error indicators were still clear; exit invalidated that
+association and freed its entry. Guest TCC compiled the same cksum closure
+using the exported SDK, and the resulting executable ran on a file created by
+ordinary stdout redirection.
+
+Code inspection, including independent review, covered invalid/access-mode
+precedence, zero and oversized counts, unsupported flags, the public write
+wrapper, reads after sticky FILE EOF, close(1)/slot reuse and exit cleanup of
+unassociated descriptors. These paths were not forced at runtime; no tests,
+debugger-injected calls or fault injection were added. Task 4 still owns the
+packaged consumer and full checksum acceptance matrix.
 
 ### Close failure and cleanup
 
@@ -348,16 +380,16 @@ requires one. No speculative stubs or retroactive rewrite of every existing port
   explicitly invalidated on close. Static startup storage, heap growth,
   reservation before truncation and the close/exit policy are implemented while
   retaining writable stdio and native launch grants. Build, interactive guest
-  and debugger validation is recorded above. Public descriptor APIs and
-  fdopen/fileno remain deferred.
-- [ ] **3. Add the conventional I/O slice.** Implement open/read/write/close and
-  the headers/types/flags selected in task 1 over native file, console and pipe
-  protocols. Read returns available progress without trying to fill the buffer;
-  write reports actual progress, including short writes. Reuse capability path
-  resolution and shared error handling rather than duplicating them in ports.
-  Public open is read-only in this slice; preserve internal writable fopen
-  and its existing seeks. Public writable-open flags, creation-mode policy and
-  public seeking are deferred; revisit tee requirements after cksum.
+  and debugger validation is recorded above. Public descriptor APIs followed in
+  task 3; fdopen/fileno remain deferred.
+- [x] **3. Add the conventional I/O slice.** Public open/read/write/close and
+  their headers/types/flags use the private table, capability path resolver and
+  shared error translation. Reads/writes return one backend transfer; validity
+  precedes signed-count checks and zero-count handling. Public open accepts only
+  O_RDONLY while writable fopen and its seeks remain intact. SDK exports nested
+  libc headers, BUFSIZ and fixed-width output formats. Validation and limits are
+  recorded above. Writable public opens, creation modes and public seeking stay
+  deferred; revisit tee after cksum.
 - [ ] **4. Port cksum as the first final consumer.** Build and package the pinned
   utility with its ordinary I/O calls intact. Keep adaptations to build/platform
   integration and agreed library gaps. Check named files, stdin, empty input,

@@ -41,6 +41,13 @@ constant suffixes preserve the existing Pyxis GCC choices. `MB_LEN_MAX` is 1
 for the current single-byte libc; these headers add no character conversion,
 signal or wide-character runtime facilities.
 
+`inttypes.h` includes stdint.h and supplies fixed-width PRId/PRIi/PRIo/PRIu/PRIx/
+PRIX output macros for 8/16/32/64-bit types. Other integer-type families,
+scanning macros and conversion functions are not supplied. `stdio.h` defines
+BUFSIZ as 8192, without enabling stream buffering. Descriptor I/O headers include
+`fcntl.h`, `unistd.h` and the exported `sys/types.h` subdirectory; see
+[the I/O contract](stdio.md#descriptor-io).
+
 `stddef.h`, `stdarg.h`, `stdbool.h` and `float.h` remain compiler-provided.
 SDK `-I` paths precede compiler `-isystem` paths, so both GCC and another
 compiler use the same SDK integer definitions while retaining their own

@@ -13,7 +13,8 @@ case "${1:-}" in
     mkdir -p "$staging/abi" "$staging/pxe" "$sdk/sysroot/usr" "$sdk/share/pyxis"
     cp include/abi/*.h "$staging/abi/"
     cp include/pxe/*.h "$staging/pxe/"
-    cp userspace/include/*.h userspace/libc/include/*.h "$staging/"
+    cp userspace/include/*.h "$staging/"
+    cp -R userspace/libc/include/. "$staging/"
     if ! diff -qr "$staging" "$sdk/sysroot/usr/include" >/dev/null 2>&1; then
       rm -rf "$sdk/sysroot/usr/include"
       mv "$staging" "$sdk/sysroot/usr/include"
