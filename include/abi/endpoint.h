@@ -82,8 +82,9 @@ enum endpoint_delivery {
  * does not prove whether the operation ran. RECEIVE prioritizes CANCEL notices
  * over ordinary messages: receipt identifies an existing owned receipt, not a
  * new grant; size, grant_count and result are zero. deadline_ns is the original
- * deadline. A notice consumes no delivery slot. Late REPLY returns TIMED_OUT
- * without consuming the receipt; CLOSE releases it and any pending notice.
+ * deadline. A notice consumes no delivery slot. A valid late REPLY on an open
+ * endpoint returns CALL_TIMED_OUT without consuming the receipt; CLOSE releases
+ * it and any pending notice. Validation and endpoint-closure errors still apply.
  * Delivered attachments remain owned independently of cancellation. */
 struct endpoint_packet {
   handle_t receipt;

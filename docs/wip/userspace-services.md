@@ -1,9 +1,9 @@
 # Userspace services and the first HTTP provider
 
 Status: agreed next milestone after [libc portability](../libc-portability.md).
-Tasks 1 and 2 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
+Tasks 1 through 3 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
 creation and process-owned receiver teardown moved forward from task 4 so the
-first delivery slice has a real consumer. Task 3 is the next unchecked task.
+first delivery slice has a real consumer. Task 4 is the next unchecked task.
 This document records the selected contracts for handoff between agents; the
 [broader provider ideas](userspace-scheme-providers.md) remain future directions where they exceed this scope. Work through the focused
 tasks in order, updating their checkboxes in the corresponding PRs. Discuss a
@@ -143,9 +143,9 @@ unlimited wait. An already-expired deadline fails before admission. Pass the
 effective deadline to the provider as kernel-supplied metadata. Do not reset a
 call's deadline when it leaves the queue or while table growth is pending.
 
-Agreed task-3 details, not yet implemented: express deadlines in monotonic
-nanoseconds, with zero meaning unlimited. SEND remains admission-only. Check
-expiry under the endpoint lock before committing a reply: a reply committed
+Task 3 implements deadlines in monotonic nanoseconds, with zero meaning
+unlimited. SEND remains admission-only. Expiry is checked under the endpoint
+lock before committing a reply: a reply committed
 before expiry wins even if collected later; a reply after expiry fails even if
 the caller has not resumed yet.
 
@@ -380,7 +380,7 @@ task; avoid publishing interfaces with fake successful operations.
 - [x] **2. One-way delivery.** Add send and receipt completion using the same
   machinery. Exercise sender close/exit after admission, queue exhaustion and
   retained attachment/target lifetime without waiting for a reply.
-- [ ] **3. Deadlines and lifecycle delivery.** Add absolute call deadlines,
+- [x] **3. Deadlines and lifecycle delivery.** Add absolute call deadlines,
   queued/delivered cancellation distinction and reliable control notifications.
   Cover reply/expiry/exit races and abandoned receipts. Keep external cancellation
   and wait sets out of scope; later export retirement uses this notification path.
