@@ -130,7 +130,8 @@ within the RAM filesystem, not disk durability or a whole-path snapshot.
 before I/O. A partial final element may have transferred bytes even though it
 is not included in that count. File position belongs to the associated descriptor,
 with no shared seek position in the underlying capability. File writes use that
-offset.
+offset. Native file calls transfer at most 4,088 bytes per read or 4,080 bytes per
+write; `fread`/`fwrite` continue across those boundaries using their existing loops.
 File, terminal and pipe output continue positive short writes until complete or
 an error, submitting only the remaining suffix. Zero progress or an excessive
 count is rejected; file position advances only for confirmed bytes. On a later

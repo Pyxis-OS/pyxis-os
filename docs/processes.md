@@ -175,8 +175,8 @@ there is no support for older CALL layouts.
 Request and reply fields below are consecutive `uint64_t` values, including
 user addresses, offsets and byte counts. They do not embed C pointers, enums
 or `size_t`. Each message starts with a protocol/operation pair from the
-[message header](../include/abi/message.h), followed by its protocol's payload
-union. The handle selects the actual object type; a mismatched protocol is
+[message header](../include/abi/message.h), followed by its operation's payload.
+The handle selects the actual object type; a mismatched protocol is
 rejected. Operation numbers are local to each protocol and may overlap.
 
 | Operation | Authority | Payload fields, in order | Reply field |
@@ -184,20 +184,25 @@ rejected. Operation numbers are local to each protocol and may overlap.
 | Console write | `CONSOLE_RIGHT_WRITE` | Source user address, byte length | Bytes written |
 | Console read | `CONSOLE_RIGHT_READ` | Destination user address, capacity | Bytes read |
 | Console size | Console READ or WRITE | Unused | Columns, rows |
-| File read at offset | `FILE_RIGHT_READ` | Byte offset, destination user address, capacity | Bytes read |
-| File size | File READ or WRITE | Unused | File byte size |
-| File write at offset | `FILE_RIGHT_WRITE` | Byte offset, source user address, length | Bytes written |
+| File read at offset | `FILE_RIGHT_READ` | Byte offset, capacity | Byte count, copied bytes |
+| File size | File READ or WRITE | None | File byte size |
+| File write at offset | `FILE_RIGHT_WRITE` | Byte offset, length, copied bytes | Bytes written |
 | File resize | `FILE_RIGHT_WRITE` | New byte size | None |
+| File sync | `FILE_RIGHT_WRITE` | None | None |
 
-Send the complete protocol message structure, including unused union storage:
-`console_message` is 32 bytes and `file_message` is 40 bytes. Both start with the
-16-byte tag. Sizes must match exactly. The size operations ignore payload
-fields, but the complete message must be readable. Initialize unused storage to
-zero; the wrappers do this. The shared headers assert sizes and payload offsets.
-Console SIZE needs a 16-byte reply for its two fields. The other replies above
-contain one 8-byte field. `RDX` reports reply bytes; the transferred data count
-is a field in the reply, not `RDX`. RESIZE returns zero reply bytes and ignores
-the reply buffer.
+Send the complete 32-byte `console_message`, including unused union storage;
+the wrappers initialize it to zero. FILE uses exact operation extents after the
+16-byte tag: READ has 16 payload bytes, WRITE has 16 plus its inline byte count,
+RESIZE has eight, and SIZE/SYNC have none. FILE request and reply payloads are
+bounded to 4 KiB, excluding the tag. READ capacity is at most 4,088 bytes and
+WRITE length at most 4,080; larger native payloads are rejected. Libpyxis caps
+larger application requests to one transfer and returns its actual short count.
+READ requires reply capacity for its eight-byte count plus the requested bytes,
+but copies only the returned bytes. Its successful reply is exactly eight bytes
+plus that count. Console SIZE needs a 16-byte reply; the other count/size replies
+contain one eight-byte field. `RDX` reports reply bytes, including FILE READ data;
+the transferred data count is a field in the reply, not `RDX`. RESIZE and SYNC
+return zero reply bytes and ignore the reply buffer. Errors return no reply bytes.
 Close removes a valid handle from the caller's table and releases its reference.
 It requires no access rights on that handle. Invalid and already-closed handles
 return the invalid-handle status; both success and failure return zero in RDX.
