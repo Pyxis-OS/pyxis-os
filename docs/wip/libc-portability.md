@@ -1,8 +1,8 @@
 # Standard C libc over the native ABI
 
-Status: tasks 1–4 complete. The descriptor layer is exercised by the packaged
-upstream cksum port. Task 5 is the explicit tee scope checkpoint; no tee option
-has been selected. This document does not authorize the whole compatibility backlog.
+Status: tasks 1–5 complete, including the restricted tee and writable-open slice.
+Task 6's documentation handoff remains. This document does not authorize the
+whole compatibility backlog.
 
 ## Intended result
 
@@ -326,21 +326,26 @@ promise; the existing explicit file-sync contract is unchanged.
 
 ### Tee checkpoint after cksum
 
-Record the gaps now and revisit scope after cksum works. No choice has been
-made between adding writable opens, restricting options or deferring tee.
+After cksum acceptance, the agreed scope is a restricted tee with named outputs,
+without -a or -i. Public open gains O_WRONLY with optional O_CREAT/O_TRUNC over
+the same private module. Read-only mutation combinations and unknown flags fail
+with EINVAL before lookup; O_CREAT consumes a mode_t argument and accepts only
+0666 as native creation policy. Other modes fail with ENOTSUP before lookup,
+including opens of existing files. Permission bits and extra authority are not
+fabricated. Revisit this policy with users, ownership and a permission system;
+the current virtio-fs 0644 request is unchanged.
 
-The default command needs O_WRONLY|O_CREAT|O_TRUNC and a 0666 creation-mode
-argument. Native capability grants do not implement Unix permission bits;
-handling that argument must be agreed. `-a` adds O_APPEND, whose conventional
-atomicity is not supplied by stdio's separate SIZE/WRITE sequence. `-i` invokes
-signal(SIGINT, SIG_IGN); no-op signal handling is not support.
+Tee rejects unsupported options before touching files. It validates stdin and
+records stdout availability before opens can reuse missing standard slots.
+Failed outputs are reported and closed once; surviving outputs continue. When
+no output remains, it stops reading and closes stdin. EOF/read failure also
+closes remaining outputs, with reported close failures and no retries. These
+are deliberate lifetime adaptations from upstream, which abandons failed
+numbers until exit and drains input even after all outputs fail. The upstream
+writeall loop remains unchanged and handles positive short writes.
 
-The writeall helper already loops over positive short writes. It treats zero
-as a return, so the nonempty zero-write error rule matters. Tee marks
-failed outputs inactive but does not close their descriptors, and keeps reading
-input even after every output has failed. It relies on exit for descriptor
-cleanup. Revisit whether that lifetime and downstream-closure behavior is
-acceptable as part of the consumer review; do not silently change it now.
+Public O_APPEND and signal support remain deferred. Stdio's separate SIZE/WRITE
+append is not an atomic substitute, and a no-op -i is not supported behavior.
 
 ## Milestone boundary
 
@@ -369,7 +374,7 @@ requires one. No speculative stubs or retroactive rewrite of every existing port
 
 ## Packaged cksum and task 4 validation
 
-The [sbase recipe](../../ports/sbase/README.md) builds only cksum.c,
+At task 4, the [sbase recipe](../../ports/sbase/README.md) built only cksum.c,
 libutil/eprintf.c and libutil/fshut.c from the pinned revision. One ordered patch
 narrows private util.h to the required declarations while retaining its license
 notice. Command/helper bodies and arg.h are unchanged, and no replacement SDK
@@ -419,6 +424,57 @@ calls, fault injection, tests or boot/output automation were added. Validation j
 were stopped. Terminal-only stdin remains limited by the
 [lack of console EOF](../technical-debt.md#console-input-completion).
 
+## Restricted tee and task 5 validation
+
+The same pinned sbase recipe now also builds tee.c with the unchanged ealloc,
+eprintf and writeall helpers. Patch 0002 adds their declarations to private
+util.h and implements the agreed option/lifetime adaptation above. The image
+includes app://tee.pxe with the same license notices. Public writable opens use
+the existing descriptor module; allocation/reservation still precedes truncation.
+The [stdio reference](../stdio.md) describes the exported flags and mode policy.
+
+The ordinary `make -j16 image` build passed using the installed Pyxis compiler;
+no compiler rebuild was needed. Upstream signedness comparisons in cksum/tee
+remain, including tee's additional uses of the same operand-index comparison.
+Independent code review found no correctness issue.
+
+Manual validation used QEMU q35/KVM, four CPUs, 256 MiB, virtio-fs and virtio-rng,
+no NIC, inside the development VM. Input was the same 262152-byte binary used
+above, plus an empty file. These commands were entered in the development shell:
+
+```text
+tee host://first host://second < host://input | cat > host://stdout
+cat host://input > home://input
+tee host://ram-copy < home://input | cat > host://ram-stdout
+tee -a host://option-a < host://input
+tee -i host://option-i < host://input
+tee host://empty-copy < host://empty > host://empty-stdout
+cat host://input | tee host://survivor | head -c 0
+cat host://input | tee | head -c 0
+```
+
+Host byte comparisons matched the input for both named copies and stdout,
+including truncation of a larger existing first file and creation of the second.
+Both RAM-source copies matched too. Rejected -a/-i returned status 1 and left
+their existing outputs unchanged. Empty input produced two empty outputs.
+Early stdout closure reported EPIPE/status 1 while the named survivor received
+the complete input. With no named output, tee closed stdin and upstream cat also
+reported EPIPE/status 1; the shell returned without hanging.
+
+In the read-only session, `tee host://readonly < host://input > home://readonly-copy`
+reported permission denied/status 1 and left the existing host file unchanged.
+The surviving stdout copy checksummed to 3239341589 with 262152 bytes.
+GDB observed a writable create/truncate open with mode 0666, a successful short
+pipe write of 4096 bytes from an 8192-byte request, and close(0) invalidating the
+descriptor and its FILE association after EOF.
+
+Unsupported flags/modes, absent standard descriptors, allocation failure and
+exceptional close failures were reviewed by code inspection rather than injected
+at runtime. No tests, fault injection or boot/output automation were added.
+QEMU, debugger and virtio-fs validation processes were stopped. Console EOF,
+non-atomic stdio append and the temporary creation-mode policy remain documented
+limitations; task 6's final documentation consolidation is separate.
+
 ## Focused tasks
 
 - [x] **1. Pin and probe the consumers; settle the descriptor contract.** The
@@ -436,22 +492,22 @@ were stopped. Terminal-only stdin remains limited by the
 - [x] **3. Add the conventional I/O slice.** Public open/read/write/close and
   their headers/types/flags use the private table, capability path resolver and
   shared error translation. Reads/writes return one backend transfer; validity
-  precedes signed-count checks and zero-count handling. Public open accepts only
-  O_RDONLY while writable fopen and its seeks remain intact. SDK exports nested
+  precedes signed-count checks and zero-count handling. At task 3, public open
+  accepted only O_RDONLY while writable fopen and its seeks remained intact. SDK exports nested
   libc headers, BUFSIZ and fixed-width output formats. Validation and limits are
-  recorded above. Writable public opens, creation modes and public seeking stay
-  deferred; revisit tee after cksum.
+  recorded above. Task 5 adds writable opens and a native creation-mode policy;
+  public seeking remains deferred.
 - [x] **4. Port cksum as the first final consumer.** The pinned sbase recipe
   packages cksum with ordinary I/O intact and only private util.h narrowed.
   Named files, stdin, empty/binary input, mixed missing input, redirection,
   pipeline use and early downstream closure passed the manual checks above;
   CRC and byte counts match the host on identical bytes.
-- [ ] **5. Port tee if the agreed scope fits.** Exercise stdin to stdout and named
-  output files, short transfers, read-only grants and a downstream reader that
-  closes early. Resolve append and interrupt-option behavior before coding: the
-  existing separate SIZE/WRITE append is not atomic, and no-op signal handling
-  is not support. Any restricted port needs explicit agreement and documented
-  limitations; otherwise record the reason for deferring this optional consumer.
+- [x] **5. Port the agreed restricted tee.** Public writable/create/truncate opens
+  share the existing ownership/cursor machinery; O_CREAT accepts 0666 as native
+  policy. Tee rejects -a/-i, isolates failed outputs and closes stdin when none
+  remain. Named outputs, stdout, empty/binary input, short transfers, read-only
+  grants and early downstream closure passed the manual checks above. Signals
+  and atomic append remain outside this milestone.
 - [ ] **6. Complete the handoff.** Document the supported libc contract and port
   adaptations, carry missing semantics into technical debt, and move this WIP
   document into docs as an implementation reference. Record tee as implemented
@@ -472,7 +528,7 @@ cksum < host://hello.c > home://checksum.txt
 cat host://hello.c | tee home://copy.c | cksum
 ```
 
-The last command depends on accepting the tee slice. Existing
+Both consumers are now packaged. Existing
 [stdio behavior](../stdio.md), [append limitations](../technical-debt.md#non-atomic-stdio-append)
 and [directory API gaps](../technical-debt.md#directory-apis-in-libpyxis) remain
 explicit starting constraints, not promises this milestone resolves them all.

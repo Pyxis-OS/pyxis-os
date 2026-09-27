@@ -47,8 +47,9 @@ job consumes only its boot tree. Both can reuse it without compiling ports again
 
 The image includes `app://cksum.pxe`, resolved as `cksum` by the shell. The
 [sbase recipe](../ports/sbase/README.md) pins the task-1 source revision and
-builds only cksum and its diagnostic/shutdown helpers. A single patch narrows
-private util.h; command bodies and conventional libc I/O calls are unchanged.
+builds cksum and a restricted tee with their helpers. Ordered patches narrow
+private util.h and adapt tee's options and descriptor lifetimes; cksum and helper
+bodies remain unchanged and use conventional libc I/O calls.
 The full license/contributor list and arg.h notice are packaged at
 `app://share/licenses/sbase/LICENSE` and `app://share/licenses/sbase/arg.h`.
 
@@ -68,7 +69,29 @@ with an aggregate nonzero exit status. Detected output errors also fail.
 Results require EOF. Use a finite file redirect or pipeline for stdin; the
 console has no EOF operation, so terminal-only input cannot finish normally.
 See the [accepted terminal limit](technical-debt.md#console-input-completion).
-Tee is not included; its scope remains a separate milestone decision.
+
+## Copying streams with sbase tee
+
+The shell resolves `tee` to `app://tee.pxe`:
+
+```text
+cat host://input | tee home://first home://second | cksum
+```
+
+Tee copies stdin to stdout and each named output, creating or truncating files
+through the caller's native grants. Its 0666 creation argument selects native
+policy; it does not implement Unix permissions. Options `-a` and `-i` are
+unsupported and rejected before opening files. Use `--` before names beginning
+with a dash.
+
+An output failure is reported and that descriptor is closed while surviving
+outputs continue. If none remain, tee stops reading and closes stdin so an
+upstream writer can observe closure. Open/read/write/close errors produce a
+nonzero status. Missing stdin is rejected before files are touched; missing
+stdout still allows named copies but reports failure. Output may be partial on
+error, and naming the input as an output can destroy its contents. Console EOF
+has the same limit as cksum above. See the [recipe notes](../ports/sbase/README.md)
+for the exact upstream adaptations.
 
 ## Editing in Pyxis
 

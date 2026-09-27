@@ -34,7 +34,7 @@ TZDATA_OUTPUTS := $(addprefix $(TZDATA_STAGE)/,share/zoneinfo/UTC \
 
 SBASE_INPUTS := $(wildcard ports/sbase/*.lua ports/sbase/Makefile \
                           ports/sbase/patches/*.patch) ports/ports.lua ports/build.lua
-SBASE_OUTPUTS := $(addprefix build/ports/sbase/stage/,bin/cksum.pxe \
+SBASE_OUTPUTS := $(addprefix build/ports/sbase/stage/,bin/cksum.pxe bin/tee.pxe \
   share/licenses/sbase/LICENSE share/licenses/sbase/arg.h)
 
 .PHONY: all
