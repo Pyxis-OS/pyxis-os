@@ -17,11 +17,11 @@ and CLOSE syscalls:
 | Helper | Handle | Behavior |
 | --- | --- | --- |
 | `endpoint_create()` | Service grant | Create a receiver and callable handle |
-| `endpoint_request()` | Callable handle | Admit a request, then wait for its result or transport failure |
+| `endpoint_request()` | Callable handle | Admit a request with an optional deadline, then wait for its result or transport failure |
 | `endpoint_send()` | Client handle | Admit a one-way message and return without waiting for completion |
-| `endpoint_receive()` | Receiver handle | Take the oldest queued message, its kind and an owned receipt |
+| `endpoint_receive()` | Receiver handle | Take a pending cancellation notice or the oldest queued message |
 | `endpoint_reply()` | CALL receipt handle | Complete that request and consume the receipt |
-| `endpoint_finish()` | Receipt handle | Close a SEND receipt, or abandon an unanswered CALL |
+| `endpoint_finish()` | Receipt handle | Finish a SEND or canceled CALL, or abandon an unanswered CALL |
 
 Client SEND requires `ENDPOINT_RIGHT_SEND`; CALL requires both SEND and
 `ENDPOINT_RIGHT_RECEIVE`. Client RECEIVE authorizes only that call's response,
@@ -71,6 +71,38 @@ shuts down its endpoint and wakes affected callers with `CALL_ENDPOINT_CLOSED`.
 Process exit has the same effect on every receiver it owns, even while clients
 still hold callable handles. Final object reclamation is deferred to the BSP.
 
+CALL accepts an absolute monotonic deadline in nanoseconds; zero means unlimited.
+The deadline uses the same epoch as CLOCK NOW and is supplied to the provider
+in `deadline_ns`. It is never restarted after admission, receipt delivery or
+capability-table growth. SEND and REPLY descriptors must set their deadline to
+zero. SEND still reports only admission.
+
+An expired deadline returns `CALL_TIMED_OUT`. Before delivery, expiry removes
+the queued request and releases its retained attachments, with
+`ENDPOINT_NOT_DELIVERED`. After delivery, it returns `ENDPOINT_DELIVERED`:
+the provider may have performed the operation, so this is no basis for automatic
+retry. Expiry invalidates reply authority without revoking attachment handles
+already delivered to the provider. The canceled receipt retains its delivery
+slot until finished or released by provider teardown.
+
+Reply, expiry, abandonment and closure serialize under the endpoint lock.
+REPLY checks the deadline before committing; a reply committed before expiry
+wins even if the caller collects it later. A valid late REPLY on an open endpoint
+returns `CALL_TIMED_OUT` and leaves the receipt available to finish. Malformed
+replies retain their validation errors; a closed endpoint reports closure.
+Deadline wakeups use the existing
+scheduler timed waits and can be late; nanosecond units do not promise exact
+scheduling latency.
+
+RECEIVE prioritizes `ENDPOINT_MESSAGE_CANCEL` notifications over normal FIFO
+messages. The notice's `receipt` names the provider's existing receipt, with no
+new handle or authority. It has the original deadline, delivered state, and
+zero result, payload and attachments. Pending state lives in the delivery
+record, so a full message queue cannot prevent notification. Receiving the
+notice clears that pending notification but does not finish the receipt;
+`endpoint_finish()` clears any pending notice and closes the receipt. No
+notification is needed for expiry before delivery.
+
 The caller reserves four capability slots before admission so a completed reply
 can transfer its attachments without later table growth. RECEIVE needs one
 slot for the receipt and one per request attachment. If its table is short, the
@@ -100,7 +132,25 @@ while a SEND-only client admits fifteen sends and receives queue-full on its
 sixteenth. After that sender exits, the provider receives and finishes the sends
 in order, then replies to the held call.
 
-This slice has no deadlines, cancellation, exports, namespace
-publication, wait sets or automatic restart. A live provider that does not
-reply can block a caller indefinitely. Self-calls and cycles between blocked
-single-task processes can deadlock.
+Deadline modes use an explicitly delegated clock grant:
+
+| Mode | Behavior |
+| --- | --- |
+| `--expired` | Reject an already-expired call without queueing it |
+| `--queued-timeout` | Let an admitted call expire before RECEIVE; subsequent work remains receivable |
+| `--delivered-timeout` | Block RECEIVE until a cancellation notice, reject a late reply, then finish the receipt |
+| `--cancel-full` | Keep one delivered call plus fifteen queued sends; obtain cancellation despite full capacity |
+| `--cancel-finish` | Finish a canceled receipt before reading its notice; subsequent RECEIVE returns ordinary work |
+| `--deadline-reply` | Reply successfully before a finite deadline |
+
+The timeout modes also inspect the caller's delivery state and the original
+deadline. Received file attachments remain usable after cancellation and receipt
+completion. The existing `--abandon`, `--close` and `--exit` modes cover receipt
+abandonment and provider teardown.
+
+This slice has no exports, namespace publication, external cancellation API,
+wait sets or automatic restart. A provider can retain all sixteen slots by
+leaving delivered receipts unfinished; deadlines release callers, not provider
+work. Calls without a deadline can still wait indefinitely, including self-calls
+and cycles between blocked single-task processes. External process termination
+and Ctrl-C remain [separate technical debt](technical-debt.md#process-termination-and-ctrl-c).

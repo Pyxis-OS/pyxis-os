@@ -14,7 +14,7 @@ enum delivery_state { DELIVERY_FREE, DELIVERY_FILLING, DELIVERY_QUEUED,
 /* Exactly the public prefix, without putting a page-sized packet on a stack. */
 struct packet_header {
   handle_t receipt;
-  uint64_t delivery, kind, result, size, grant_count;
+  uint64_t delivery, kind, result, size, grant_count, deadline_ns;
   struct endpoint_grant grants[ENDPOINT_GRANTS_MAX];
 };
 _Static_assert(sizeof(struct packet_header) == ENDPOINT_PACKET_HEADER_SIZE,
@@ -28,7 +28,9 @@ struct endpoint_delivery_record {
   enum delivery_state state;
   enum endpoint_message_kind kind;
   enum call_status status;
-  bool caller_active, receipt_live, delivered;
+  bool caller_active, receipt_live, delivered, cancel_pending;
+  handle_t receipt_handle;
+  uint64_t deadline_ns;
   uint64_t request_size, reply_size, result;
   size_t request_count, reply_count;
   struct kernel_object *request_grants[ENDPOINT_GRANTS_MAX];
@@ -95,8 +97,46 @@ static void free_delivery(struct endpoint_delivery_record *record)
 {
   if (!record->caller_active && !record->receipt_live) {
     KASSERT(record->state == DELIVERY_COMPLETE);
+    KASSERT(!record->cancel_pending);
     record->state = DELIVERY_FREE;
   }
+}
+
+static bool deadline_expired(uint64_t deadline_ns)
+{
+  return deadline_ns && task_deadline_expired(deadline_ns);
+}
+
+/* The endpoint lock serializes expiry with reply, receipt close and owner exit. */
+static void expire_delivery(struct endpoint_state *state,
+    struct endpoint_delivery_record *record)
+{
+  KASSERT(record->kind == ENDPOINT_MESSAGE_CALL);
+  KASSERT(deadline_expired(record->deadline_ns));
+  KASSERT(record->state == DELIVERY_QUEUED || record->state == DELIVERY_RECEIVED);
+  if (record->state == DELIVERY_QUEUED) {
+    struct endpoint_delivery_record *previous = NULL;
+    struct endpoint_delivery_record **link = &state->head;
+    while (*link != record) {
+      KASSERT(*link);
+      previous = *link;
+      link = &(*link)->next;
+    }
+    *link = record->next;
+    if (state->tail == record) {
+      state->tail = previous;
+    }
+    record->next = NULL;
+    release_grants(record->request_grants, record->request_count);
+    record->request_count = 0;
+    object_release(&record->receipt);
+  } else {
+    record->cancel_pending = true;
+    wake_waiter(&state->waiting_receiver);
+  }
+  record->state = DELIVERY_COMPLETE;
+  record->status = CALL_TIMED_OUT;
+  wake_waiter(&record->wait);
 }
 
 static void destroy_receipt(struct kernel_object *object)
@@ -107,9 +147,12 @@ static void destroy_receipt(struct kernel_object *object)
   KASSERT(record->receipt_live);
   if (record->state == DELIVERY_RECEIVED) {
     record->state = DELIVERY_COMPLETE;
-    record->status = record->kind == ENDPOINT_MESSAGE_CALL ? CALL_ABANDONED : CALL_OK;
+    record->status = record->kind == ENDPOINT_MESSAGE_CALL ?
+        (deadline_expired(record->deadline_ns) ? CALL_TIMED_OUT : CALL_ABANDONED) : CALL_OK;
     wake_waiter(&record->wait);
   }
+  record->cancel_pending = false;
+  record->receipt_handle = HANDLE_INVALID;
   record->receipt_live = false;
   free_delivery(record);
   bool destroy = --state->storage_references == 0;
@@ -137,8 +180,13 @@ static void close_endpoint(struct endpoint_state *state)
     }
     record->next = NULL;
     record->state = DELIVERY_COMPLETE;
-    record->status = CALL_ENDPOINT_CLOSED;
+    record->status = deadline_expired(record->deadline_ns) ?
+        CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
+    record->cancel_pending = false;
     wake_waiter(&record->wait);
+  }
+  for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
+    state->deliveries[i].cancel_pending = false;
   }
   wake_waiter(&state->waiting_receiver);
 }
@@ -156,9 +204,12 @@ void endpoint_handle_close(struct kernel_object *object)
     lock_endpoint(state);
     if (record->state == DELIVERY_RECEIVED) {
       record->state = DELIVERY_COMPLETE;
-      record->status = record->kind == ENDPOINT_MESSAGE_CALL ? CALL_ABANDONED : CALL_OK;
+      record->status = record->kind == ENDPOINT_MESSAGE_CALL ?
+          (deadline_expired(record->deadline_ns) ? CALL_TIMED_OUT : CALL_ABANDONED) : CALL_OK;
       wake_waiter(&record->wait);
     }
+    record->cancel_pending = false;
+    record->receipt_handle = HANDLE_INVALID;
     unlock_endpoint(state);
   }
 }
@@ -328,7 +379,9 @@ static enum call_status admit_message(struct endpoint *endpoint,
   struct endpoint_state *state = endpoint->state;
   struct endpoint_delivery_record *record = NULL;
   lock_endpoint(state);
-  if (state->closed) {
+  if (wait && deadline_expired(message->deadline_ns)) {
+    status = CALL_TIMED_OUT;
+  } else if (state->closed) {
     status = CALL_ENDPOINT_CLOSED;
   } else {
     for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
@@ -353,11 +406,13 @@ static enum call_status admit_message(struct endpoint *endpoint,
     KASSERT(copy_from_user(record->request, message->buffer, message->size));
   }
   lock_endpoint(state);
-  if (state->closed) {
+  bool expired = wait && deadline_expired(message->deadline_ns);
+  if (expired || state->closed) {
     record->state = DELIVERY_FREE;
+    status = expired ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
     unlock_endpoint(state);
     release_grants(grants, message->grant_count);
-    return CALL_ENDPOINT_CLOSED;
+    return status;
   }
   record->endpoint = state;
   record->wait = wait;
@@ -366,6 +421,9 @@ static enum call_status admit_message(struct endpoint *endpoint,
   record->caller_active = wait != NULL;
   record->receipt_live = true;
   record->delivered = false;
+  record->cancel_pending = false;
+  record->receipt_handle = HANDLE_INVALID;
+  record->deadline_ns = message->deadline_ns;
   record->request_size = message->size;
   record->request_count = message->grant_count;
   record->reply_count = record->reply_size = record->result = 0;
@@ -396,7 +454,7 @@ static struct syscall_result send_endpoint(struct endpoint *endpoint,
 {
   struct endpoint_message message;
   enum call_status status = read_message(request_address, request_size, &message);
-  if (status == CALL_OK && message.result) {
+  if (status == CALL_OK && (message.result || message.deadline_ns)) {
     status = CALL_BAD_REQUEST;
   }
   if (status == CALL_OK) {
@@ -411,8 +469,14 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   struct packet_header output = {.kind = ENDPOINT_MESSAGE_CALL};
   struct endpoint_message message;
   enum call_status status = read_message(request_address, request_size, &message);
+  if (status == CALL_OK) {
+    output.deadline_ns = message.deadline_ns;
+  }
   if (status == CALL_OK && message.result) {
     status = CALL_BAD_REQUEST;
+  }
+  if (status == CALL_OK && deadline_expired(message.deadline_ns)) {
+    status = CALL_TIMED_OUT;
   }
   /* Reserve collection slots before admission: growth failure cannot discard
    * a completed operation's result. This process has only one executing task. */
@@ -428,10 +492,19 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   if (status != CALL_OK) {
     return write_packet(reply_address, &output, NULL, status);
   }
-  task_wait_sleep(wait);
+  if (message.deadline_ns) {
+    task_wait_sleep_until(wait, message.deadline_ns);
+  } else {
+    task_wait_sleep(wait);
+  }
 
   struct endpoint_state *state = endpoint->state;
   lock_endpoint(state);
+  if (record->state != DELIVERY_COMPLETE) {
+    KASSERT(deadline_expired(record->deadline_ns));
+    /* Timed sleep can return with the wait pointer still published. */
+    expire_delivery(state, record);
+  }
   KASSERT(record->state == DELIVERY_COMPLETE && !record->wait);
   status = record->status;
   output.delivery = record->delivered ? ENDPOINT_DELIVERED : ENDPOINT_NOT_DELIVERED;
@@ -470,6 +543,27 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
     if (state->closed) {
       unlock_endpoint(state);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+    }
+    for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
+      struct endpoint_delivery_record *due = &state->deliveries[i];
+      if ((due->state == DELIVERY_QUEUED || due->state == DELIVERY_RECEIVED) &&
+          due->kind == ENDPOINT_MESSAGE_CALL && deadline_expired(due->deadline_ns)) {
+        expire_delivery(state, due);
+      }
+    }
+    for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
+      struct endpoint_delivery_record *cancel = &state->deliveries[i];
+      if (!cancel->cancel_pending) {
+        continue;
+      }
+      KASSERT(cancel->state == DELIVERY_COMPLETE && cancel->receipt_live &&
+          cancel->receipt_handle);
+      struct packet_header output = {.receipt = cancel->receipt_handle,
+        .delivery = ENDPOINT_DELIVERED, .kind = ENDPOINT_MESSAGE_CANCEL,
+        .deadline_ns = cancel->deadline_ns};
+      cancel->cancel_pending = false;
+      unlock_endpoint(state);
+      return write_packet(reply_address, &output, NULL, CALL_OK);
     }
     struct endpoint_delivery_record *record = state->head;
     if (!record) {
@@ -510,8 +604,10 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
     record->next = NULL;
     record->state = DELIVERY_RECEIVED;
     record->delivered = true;
+    record->receipt_handle = handles[0];
     struct packet_header output = {.receipt = handles[0], .delivery = ENDPOINT_DELIVERED,
-      .kind = record->kind, .size = record->request_size, .grant_count = count};
+      .kind = record->kind, .size = record->request_size, .grant_count = count,
+      .deadline_ns = record->deadline_ns};
     for (size_t i = 0; i < count; ++i) {
       output.grants[i] = (struct endpoint_grant){handles[i + 1], rights[i + 1]};
     }
@@ -531,6 +627,9 @@ static struct syscall_result reply_endpoint(struct endpoint_delivery_record *rec
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
+  if (message.deadline_ns) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
   struct kernel_object *grants[ENDPOINT_GRANTS_MAX];
   uint64_t rights[ENDPOINT_GRANTS_MAX];
   status = capture_grants(&message, grants, rights);
@@ -539,20 +638,28 @@ static struct syscall_result reply_endpoint(struct endpoint_delivery_record *rec
   }
   struct endpoint_state *state = record->endpoint;
   lock_endpoint(state);
+  if (record->state == DELIVERY_RECEIVED && deadline_expired(record->deadline_ns)) {
+    expire_delivery(state, record);
+  }
   if (record->state != DELIVERY_RECEIVED || state->closed) {
+    status = record->status == CALL_TIMED_OUT ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
     unlock_endpoint(state);
     release_grants(grants, message.grant_count);
-    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+    return (struct syscall_result){status, 0};
   }
   unlock_endpoint(state);
   if (message.size) {
     KASSERT(copy_from_user(record->reply, message.buffer, message.size));
   }
   lock_endpoint(state);
+  if (record->state == DELIVERY_RECEIVED && deadline_expired(record->deadline_ns)) {
+    expire_delivery(state, record);
+  }
   if (record->state != DELIVERY_RECEIVED || state->closed) {
+    status = record->status == CALL_TIMED_OUT ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
     unlock_endpoint(state);
     release_grants(grants, message.grant_count);
-    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+    return (struct syscall_result){status, 0};
   }
   record->reply_size = message.size;
   record->result = message.result;

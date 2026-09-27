@@ -169,6 +169,14 @@ before the task finishes parking, using the same early-wake handling as endpoint
 calls. After waking, RECEIVE rechecks the endpoint queue before installing
 handles atomically and consuming a delivery.
 
+Endpoint CALL deadlines use timed waits. On resumption the caller checks the
+delivery under the endpoint lock and detaches its published waiter before
+returning. RECEIVE and REPLY also check expiry under that lock, so late work
+cannot win merely because the caller has not run yet. A delivered timeout keeps
+its receipt storage while releasing the caller; its pending cancellation notice
+uses that same record and existing recipient handle, without table growth or
+additional queue capacity.
+
 The BSP scheduler detaches a batch of requests under the queue lock, grows each
 table with IF=0 outside the lock, and wakes its owner with the result. It does
 not touch that task again after wake. Pending growth also makes a busy BSP task
