@@ -11,7 +11,8 @@ struct process;
 struct launch_group;
 
 /* Heap storage shared with BSP, never a remote task stack. Bindings/directory
- * entries initially hold grant indices; BSP replaces them with child handles.
+ * entries initially hold grant indices; optional namespace holds index + 1.
+ * BSP replaces them with child handles.
  * Source handles and image are borrowed from the blocked caller's table. */
 struct launch_capture {
   struct process_startup startup;

@@ -59,6 +59,9 @@ static enum call_status install_grants(struct launch_capture *capture,
   for (size_t i = 0; i < capture->startup.working_directory_count; ++i) {
     directories[i] = capture->grants[directories[i]].source;
   }
+  if (capture->startup.namespace) {
+    capture->startup.namespace = capture->grants[capture->startup.namespace - 1].source;
+  }
   for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
     struct startup_stream *stream = &capture->startup.streams[i];
     if (stream->protocol != STARTUP_STREAM_NONE) {
