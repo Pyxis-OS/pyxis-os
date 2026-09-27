@@ -53,12 +53,22 @@ atomic append guarantee; see [technical debt](technical-debt.md#non-atomic-stdio
 ## Descriptor I/O
 
 `fcntl.h` declares `open(path, flags, ...)` and defines `O_RDONLY` as zero.
-Only that flag value is supported; every other value returns -1/EINVAL before
-allocation or path lookup. Open returns the lowest free descriptor for an
-existing readable file through the same capability path resolver as fopen.
-It creates no FILE wrapper and grants no additional authority. Public writable
-opens, creation-mode policy and seeking remain deferred; writable fopen and
-its existing seeks remain available.
+O_WRONLY selects write-only access; O_CREAT and O_TRUNC may be combined with it
+to create an absent file and/or truncate an existing file. Read-only mutation
+combinations and unknown flags return -1/EINVAL before lookup or mutation.
+Open returns the lowest free descriptor through the same resolver as fopen.
+It creates no FILE wrapper and grants no additional authority. Descriptor
+storage and path workspace are reserved before truncation, with no fallible
+publication afterward. Public read/write access mode, append and seeking are
+not supplied; writable fopen and its existing seeks remain available.
+
+With O_CREAT, the third argument has type mode_t (unsigned int in sys/types.h).
+Only 0666 is accepted, meaning native creation policy rather than Unix permission
+bits. Other modes return -1/ENOTSUP before lookup, even when the file exists;
+invalid flags are rejected before examining that argument. No mode argument is
+read without O_CREAT. Existing native capability rights, backend creation policy
+and host restrictions remain authoritative. Virtio-fs still requests 0644.
+See the [temporary creation-mode policy](technical-debt.md#public-open-creation-mode).
 
 `unistd.h` declares `read`, `write` and `close`, and defines STDIN_FILENO,
 STDOUT_FILENO and STDERR_FILENO as 0, 1 and 2. `sys/types.h` defines ssize_t as

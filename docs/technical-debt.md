@@ -136,6 +136,19 @@ Revisit console input completion and its interaction with line editing when
 interactive EOF-driven tools are explicitly in scope. The cksum port preserves
 upstream behavior and does not add terminal controls or signal handling.
 
+## Public open creation mode
+
+O_CREAT accepts only mode 0666 as a request for native creation policy. It does
+not install Unix permissions, change ownership or create authority. Other modes
+fail with ENOTSUP before lookup/mutation, including restrictive requests such as
+0600 and opens of existing files. Virtio-fs retains its current 0644 creation
+request under the host-service identity and host restrictions still apply.
+
+This is the accepted compatibility policy for the first writable public opens,
+used by tee. Revisit it when a file permission system, users and ownership are
+introduced; define mode enforcement and umask behavior together rather than
+silently discarding requests callers expect to restrict access.
+
 ## Non-atomic stdio append
 
 Append streams query the current file size before each native write. Another
