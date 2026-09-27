@@ -1,8 +1,8 @@
 # Reproducing the libc consumer probe
 
-This is the manual source/compile investigation for
-[libc task 1](../libc-portability.md#pinned-source-probe), not a build recipe for
-installed applications or a test runner. It uses sbase
+This preserves the manual source/compile investigation for
+[the original libc consumer probe](../libc-portability.md#pinned-source-probe).
+It is not a build recipe for installed applications or a test runner. It uses sbase
 `c546c3a5724c81cee9a11d816a38ccdf17472129`, Pyxis
 `54873691f7ee0ee00115e77c84b3153d102cfa5b`, userland
 `1263b5c5081239deb1d9831462a07032adb96d49`, and the existing Pyxis GCC 16.2.0
@@ -17,7 +17,7 @@ storage. No compiler rebuild is needed.
 ```bash
 set -e
 probe_pyxis=/absolute/path/to/pyxis-os
-probe_docs=/absolute/path/to/docs/wip/libc-probe
+probe_docs=/absolute/path/to/docs/libc-probe
 probe_cc="$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis-gcc"
 probe_root=$(mktemp -d "${TMPDIR:-/tmp}/pyxis-libc-probe.XXXXXX")
 
@@ -129,8 +129,8 @@ All six selected objects compiled in the recorded run. Cksum and tee retain
 upstream signedness warnings. Cksum linking leaves open/read/close unresolved;
 tee leaves open/read/write/signal unresolved. Diagnostic, formatting, shutdown
 and allocation helpers resolve against the target SDK. Neither application
-links successfully or has been booted; declaration-only compilation says
-nothing about the missing functions' runtime semantics.
+linked successfully or was booted in that historical probe; declaration-only
+compilation says nothing about the missing functions' runtime semantics.
 
 ## Cleanup and provenance
 
@@ -151,10 +151,12 @@ to Pyxis by this record.
 
 The task-1 results above remain a historical declaration-only investigation.
 After implementing task 3, the same cksum closure linked against the actual SDK.
-From a task-3 Pyxis checkout, after `make -j16 image` with the installed compiler:
+From a task-3 or later Pyxis checkout, after `make -j16 image` with the installed
+compiler, set probe_docs to this preserved recipe directory:
 
 ```bash
 probe_cc="$HOME/opt/pyxis-cross/bin/x86_64-unknown-pyxis-gcc"
+probe_docs=/absolute/path/to/docs/libc-probe
 probe_sdk="$PWD/build/sdk"
 probe_root="$PWD/build/libc-probe"
 git init -q "$probe_root/sbase"
@@ -163,7 +165,7 @@ git -C "$probe_root/sbase" fetch --depth=1 origin \
   c546c3a5724c81cee9a11d816a38ccdf17472129
 git -C "$probe_root/sbase" checkout --detach -q FETCH_HEAD
 git -C "$probe_root/sbase" apply --include=util.h \
-  "$PWD/docs/wip/libc-probe/scratch.patch"
+  "$probe_docs/scratch.patch"
 mkdir -p "$probe_root/objects"
 probe_flags=(
   "--sysroot=$probe_sdk/sysroot"
@@ -188,5 +190,5 @@ Only util.h is patched; no probe headers are created or added to the include
 path, and BUFSIZ comes from stdio.h. The command source and helper bodies remain
 unchanged. The existing signedness warning in cksum remains. The disposable PXE
 can be launched from a virtio-fs export for debugger inspection; it is not added
-to the boot image or ports manifest. Packaging and checksum acceptance remain
-task 4.
+to the boot image or ports manifest. Current packaging and completed acceptance
+are described in the [implementation reference](../libc-portability.md#validation-evidence).

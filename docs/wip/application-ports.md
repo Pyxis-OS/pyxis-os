@@ -46,9 +46,9 @@ cat json+http://example.com/apps | jq '.[].name'
 ```
 
 [Shell pipelines and native head](../shell-streams.md) are implemented. The
-[libc milestone](libc-portability.md) next targets upstream cksum and optionally
-tee through conventional descriptor APIs. The HTTP provider and jq port remain
-separate work; adding jq alone does not implement a scheme provider.
+[libc portability milestone](../libc-portability.md) packages upstream cksum and
+restricted tee through conventional descriptor APIs. The HTTP provider and jq
+port remain separate work; adding jq alone does not implement a scheme provider.
 
 ## Graphical applications and games
 
