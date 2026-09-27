@@ -65,6 +65,9 @@ struct task {
   struct pipe_wait pipe_wait;
   struct task *endpoint_next;
   struct endpoint_create_reply endpoint_reply;
+  struct endpoint_export_message export_request;
+  struct endpoint_export_reply export_reply;
+  bool endpoint_exporting;
   enum call_status endpoint_result;
   struct task *pipe_next;
   struct pipe_create_reply pipe_reply;
@@ -419,10 +422,8 @@ enum call_status task_create_pipe(struct pipe_create_reply *reply)
   return task->pipe_result;
 }
 
-enum call_status task_create_endpoint(struct endpoint_create_reply *reply)
+static void submit_endpoint_request(struct task *task, struct task_wait *wait)
 {
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
   lock_queues();
   task->endpoint_next = NULL;
   if (endpoint_tail) {
@@ -433,8 +434,30 @@ enum call_status task_create_endpoint(struct endpoint_create_reply *reply)
   endpoint_tail = task;
   unlock_queues();
   task_wait_sleep(wait);
+}
+
+enum call_status task_create_endpoint(struct endpoint_create_reply *reply)
+{
+  struct task_wait *wait = prepare_user_wait();
+  struct task *task = wait->task;
+  task->endpoint_exporting = false;
+  submit_endpoint_request(task, wait);
   if (task->endpoint_result == CALL_OK) {
     *reply = task->endpoint_reply;
+  }
+  return task->endpoint_result;
+}
+
+enum call_status task_export_endpoint(const struct endpoint_export_message *request,
+    struct endpoint_export_reply *reply)
+{
+  struct task_wait *wait = prepare_user_wait();
+  struct task *task = wait->task;
+  task->endpoint_exporting = true;
+  task->export_request = *request;
+  submit_endpoint_request(task, wait);
+  if (task->endpoint_result == CALL_OK) {
+    *reply = task->export_reply;
   }
   return task->endpoint_result;
 }
@@ -447,7 +470,9 @@ static void service_endpoint_requests(void)
   unlock_queues();
   while (task) {
     struct task *next = task->endpoint_next;
-    task->endpoint_result = endpoint_create(task->process, &task->endpoint_reply);
+    task->endpoint_result = task->endpoint_exporting ?
+        endpoint_export_create(task->process, &task->export_request, &task->export_reply) :
+        endpoint_create(task->process, &task->endpoint_reply);
     task_wait_wake(&task->wait_record);
     task = next;
   }
@@ -476,10 +501,10 @@ static void service_pipe_requests(void)
     if (pipe_pair_create(&reader, &writer)) {
       handle_t read_handle, write_handle;
       enum capability_result result = capability_install(&task->process->capabilities,
-          &reader->object, PIPE_RIGHT_READ, &read_handle);
+          &reader->object, PIPE_RIGHT_READ, 0, &read_handle);
       if (result == CAP_OK) {
         result = capability_install(&task->process->capabilities,
-            &writer->object, PIPE_RIGHT_WRITE, &write_handle);
+            &writer->object, PIPE_RIGHT_WRITE, 0, &write_handle);
         if (result == CAP_OK) {
           task->pipe_reply = (struct pipe_create_reply){read_handle, write_handle};
           task->pipe_result = CALL_OK;

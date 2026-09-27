@@ -307,6 +307,7 @@ struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t 
                          uint64_t arg3, uint64_t arg4, uint64_t arg5,
                          uint64_t arg6)
 {
+  (void)arg6;
   switch (number) {
   case SYSCALL_CALL:
     return call_object(arg1, arg2, arg3, arg4, arg5);

@@ -53,7 +53,7 @@ void object_init(struct kernel_object *object, enum object_type type,
                  void (*destroy)(struct kernel_object *));
 
 /* Resource rights have meaning within the object's protocol; transport
- * authority controls SEND/CALL on endpoint clients. Zero grants no operation.
+ * authority controls endpoint delivery. Providers interpret resource rights.
  * Unknown types, bits and grants above an export's ceiling are invalid. */
 bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
                             uint64_t transport);

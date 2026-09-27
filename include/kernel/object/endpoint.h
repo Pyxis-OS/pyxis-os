@@ -17,6 +17,10 @@ struct endpoint {
 /* BSP, IF=0, with exclusive ownership of the caller's capability table.
  * Reserves all delivery storage and installs both handles or neither. */
 enum call_status endpoint_create(struct process *owner, struct endpoint_create_reply *reply);
+enum call_status endpoint_export_create(struct process *owner,
+    const struct endpoint_export_message *request, struct endpoint_export_reply *reply);
+bool endpoint_export_authority_valid(const struct kernel_object *object,
+    uint64_t rights, uint64_t transport);
 struct kernel_object *endpoint_service_create(void);
 /* BSP, IF=0, before destroying an inactive process's capabilities. Closes all
  * owned receivers even when messages or client grants retain their objects. */
@@ -25,9 +29,9 @@ void endpoint_process_exit(struct process *owner);
 void endpoint_handle_close(struct kernel_object *object);
 
 struct syscall_result endpoint_service_call(uint64_t rights, uint64_t operation,
-    size_t request_size, uintptr_t reply_address, size_t reply_capacity);
+    uintptr_t request_address, size_t request_size, uintptr_t reply_address, size_t reply_capacity);
 struct syscall_result endpoint_call(struct kernel_object *object, handle_t handle,
-    uint64_t rights, uint64_t operation, uintptr_t request_address,
+    uint64_t rights, uint64_t transport, uint64_t operation, uintptr_t request_address,
     size_t request_size, uintptr_t reply_address, size_t reply_capacity);
 
 #endif

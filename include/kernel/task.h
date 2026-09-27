@@ -15,6 +15,8 @@ struct console_wait;
 struct pipe_wait;
 struct pipe_create_reply;
 struct endpoint_create_reply;
+struct endpoint_export_message;
+struct endpoint_export_reply;
 struct memory_region;
 struct display_object;
 struct display_buffer;
@@ -78,6 +80,8 @@ struct pipe_wait *task_prepare_pipe_wait(void);
  * installation. Failure installs neither handle. */
 enum call_status task_create_pipe(struct pipe_create_reply *reply);
 enum call_status task_create_endpoint(struct endpoint_create_reply *reply);
+enum call_status task_export_endpoint(const struct endpoint_export_message *request,
+    struct endpoint_export_reply *reply);
 
 /* Current user task, IF=0, no spinlocks held. Lend exclusive file operation
  * ownership to the BSP to replace/release backing; return it after completion. */
