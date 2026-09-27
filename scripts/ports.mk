@@ -32,9 +32,14 @@ TZDATA_OUTPUTS := $(addprefix $(TZDATA_STAGE)/,share/zoneinfo/UTC \
   share/zoneinfo/Europe/Bucharest share/zoneinfo/tzdata.zi share/zoneinfo/version \
   share/licenses/tzdata/LICENSE share/tzdata/source.txt)
 
+SBASE_INPUTS := $(wildcard ports/sbase/*.lua ports/sbase/Makefile \
+                          ports/sbase/patches/*.patch) ports/ports.lua ports/build.lua
+SBASE_OUTPUTS := $(addprefix build/ports/sbase/stage/,bin/cksum.pxe \
+  share/licenses/sbase/LICENSE share/licenses/sbase/arg.h)
+
 .PHONY: all
 all: $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
-     $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS)
+     $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.
@@ -70,3 +75,9 @@ $(TZDATA_OUTPUTS) &: $(TZDATA_INPUTS) scripts/ports.mk
 	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
 	rm -rf build/ports/tzdata
 	$(LUA) ports/build.lua tzdata --sdk $(abspath build/sdk) --work $(abspath build/ports/tzdata)
+
+$(SBASE_OUTPUTS) &: $(SBASE_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	@command -v $(LUA) >/dev/null 2>&1 || { \
+	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
+	rm -rf build/ports/sbase
+	$(LUA) ports/build.lua sbase --sdk $(abspath build/sdk) --work $(abspath build/ports/sbase)

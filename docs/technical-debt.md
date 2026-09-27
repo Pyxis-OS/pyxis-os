@@ -124,6 +124,18 @@ needed before treating that fallback as a normal interactive environment.
 The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
 on screen. History, Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](terminal.md).
 
+## Console input completion
+
+The console input protocol waits for bytes and provides no EOF operation.
+Consequently EOF-driven consumers such as cksum cannot finish normally with
+terminal-only stdin. For now they require finite file input or a pipe whose
+last writer closes. A zero console transfer is still an error, not fabricated
+EOF, and Ctrl-D is not a libc substitute for a terminal protocol decision.
+
+Revisit console input completion and its interaction with line editing when
+interactive EOF-driven tools are explicitly in scope. The cksum port preserves
+upstream behavior and does not add terminal controls or signal handling.
+
 ## Non-atomic stdio append
 
 Append streams query the current file size before each native write. Another
