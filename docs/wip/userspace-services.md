@@ -1,9 +1,11 @@
 # Userspace services and the first HTTP provider
 
 Status: agreed next milestone after [libc portability](../libc-portability.md).
-No implementation has started. This document records the selected contracts for
-handoff between agents; the [broader provider ideas](userspace-scheme-providers.md)
-remain future directions where they exceed this scope. Work through the focused
+Task 1 is implemented; see [the endpoint contract](../endpoints.md). Endpoint
+creation and process-owned receiver teardown moved forward from task 4 so the
+first delivery slice has a real consumer. Task 2 is the next unchecked task.
+This document records the selected contracts for handoff between agents; the
+[broader provider ideas](userspace-scheme-providers.md) remain future directions where they exceed this scope. Work through the focused
 tasks in order, updating their checkboxes in the corresponding PRs. Discuss a
 newly discovered semantic conflict before changing these decisions.
 
@@ -342,11 +344,13 @@ Each task is a separate reviewable PR or small dependent PR set. Do not start th
 next task automatically. Private scaffolding must have a working consumer in its
 task; avoid publishing interfaces with fake successful operations.
 
-- [ ] **1. Bounded request/reply delivery.** Replace the one-outstanding-request
+- [x] **1. Bounded request/reply delivery.** Replace the one-outstanding-request
   endpoint path with the 4 KiB/four-attachment/sixteen-delivery model. Add receipts,
   deferred/out-of-order reply, atomic request/reply grant transfer and separate
   transport/operation results. Preserve BSP growth, parking and teardown rules;
-  migrate existing endpoint examples. Land a functioning call/receive/reply slice.
+  migrate existing endpoint examples. Include explicit endpoint creation authority
+  and process-owned receiver teardown, brought forward from task 4. Land a
+  functioning call/receive/reply slice.
 - [ ] **2. One-way delivery.** Add send and receipt completion using the same
   machinery. Exercise sender close/exit after admission, queue exhaustion and
   retained attachment/target lifetime without waiting for a reply.
@@ -354,8 +358,8 @@ task; avoid publishing interfaces with fake successful operations.
   queued/delivered cancellation distinction and reliable control notifications.
   Cover reply/expiry/exit races and abandoned receipts. Keep external cancellation
   and wait sets out of scope; later export retirement uses this notification path.
-- [ ] **4. Exported service objects.** Add explicit creation authority, export
-  control, authenticated protocol/rights delivery, withdrawal and acknowledged
+- [ ] **4. Exported service objects.** Extend the creation authority from task 1
+  with export control, authenticated protocol/rights delivery, withdrawal and acknowledged
   retirement. Multiple exports share a provider endpoint. Provider death must
   close exports even when clients or queued references remain.
 - [ ] **5. Namespace and startup delegation.** Add flat authorized binding,

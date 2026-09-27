@@ -156,12 +156,18 @@ runs destruction callbacks outside its lock. Pending objects also cause a busy
 BSP task to return to the scheduler on its next timer interrupt. No table grows
 on an AP; final releases never require an AP allocator call.
 
-When endpoint receipt needs a free capability slot, the task queues a specific
-capability-growth request and blocks. Its metadata contains the queue link,
-completion result and wait record, so submitting work never allocates on an AP.
-Publication lends exclusive table ownership to the BSP; the submitting task
-must not access the table again until completion. The BSP may complete before
-the task finishes parking, using the same early-wake handling as endpoint calls.
+Endpoint creation lends the blocked task's table to the BSP, which allocates
+its bounded delivery storage and installs both initial handles. A caller
+reserves four free slots before admitting a request so collecting reply grants
+needs no growth. RECEIVE needs one slot for the receipt and one per request
+attachment. If those slots are unavailable, the task queues a capability-growth
+request and blocks outside the endpoint lock. Its metadata contains the queue
+link, completion result and wait record, so submitting work never allocates on
+an AP. Publication lends exclusive table ownership to the BSP; the submitting
+task must not access the table again until completion. The BSP may complete
+before the task finishes parking, using the same early-wake handling as endpoint
+calls. After waking, RECEIVE rechecks the endpoint queue before installing
+handles atomically and consuming a delivery.
 
 The BSP scheduler detaches a batch of requests under the queue lock, grows each
 table with IF=0 outside the lock, and wakes its owner with the result. It does
