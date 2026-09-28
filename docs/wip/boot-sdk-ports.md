@@ -117,8 +117,11 @@ closes the performance milestone. The former IPC/HTTP failures are resolved,
 and HOST publication now notifies the BSP. Profiling perturbation and remaining
 measurement coverage are recorded in [technical debt](../technical-debt.md).
 
-The following remain later alternatives; no additional implementation is selected
-by this milestone closure.
+The selected next milestone is [verified HTTPS snapshots with Mbed TLS](https.md).
+Mbed TLS is agreed; the exact supported version, platform configuration and trust
+policy must be settled before implementation. Start by probing the current 4.x
+line and its crypto dependency against the SDK. SSH/libssh remains deferred and
+does not constrain that version choice. The following remain later alternatives.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
