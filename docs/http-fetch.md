@@ -1,9 +1,13 @@
-# Userspace HTTP fetching
+# Userspace HTTP and HTTPS fetching
 
 The `httpfs` userspace service connects the bounded fetch library to
 [provider OPEN and exported FILE snapshots](file-providers.md). Ordinary file
 consumers use `http://` through their delegated namespace. Publication performs
 no fetch; boot and local files remain usable without networking.
+
+The underlying library also supports verified HTTPS with an explicitly supplied
+TLS runtime. HTTPS namespace publication and packaged trust remain separate
+[milestone work](wip/https.md); the installed `httpfs` still serves HTTP only.
 
 ## Use and startup
 
@@ -43,19 +47,30 @@ account. The temporary task-8 `http-fetch` consumer has been removed.
 
 ## Library and authority
 
-`userspace/libhttp/http.h` declares `http_fetch`, `http_body_release` and the
-result/storage structures. This is an application library, built as `libhttp.a`,
+`userspace/libhttp/http.h` declares `http_fetch`, `http_body_release`,
+`http_result_status` and the result/storage structures. This is an application library, built as `libhttp.a`,
 outside the SDK runtime. Its parser dependency is the pinned
 [picohttpparser port](../ports/picohttpparser/README.md), exported separately at
-`build/ports-dev/picohttpparser`. Consumers link both static libraries against the
-same SDK. There are no kernel changes or new libc operations.
+`build/ports-dev/picohttpparser`. Consumers also link userland's `libtls.a` and
+the configured Mbed TLS libraries from `build/ports-dev/mbedtls`, in the order
+supplied by that export's `share/mbedtls.mk`. All consume the same SDK.
+There are no kernel changes or new libc operations.
 
 The caller supplies borrowed TCP, UDP, random and monotonic-clock capabilities
-and a numeric DNS server. Numeric IPv4 destinations skip DNS and do not need
+and a numeric DNS server through `http_client`. Its explicit HTTP/HTTPS mode
+must match the URI; a mismatch fails without falling back to another transport.
+Numeric HTTP IPv4 destinations skip DNS and do not need
 UDP/random authority. The library does no startup lookup or printing. The
 HTTP provider obtains its grants from startup and selects the existing `DNS_SERVER`
 configuration. These grants permit access under existing networking policy;
 this is not a destination sandbox.
+
+HTTPS additionally borrows a ready `tls_runtime`. The caller initializes it,
+imports public roots and any custom augmentation, freezes trust and retains it
+through the fetch. Libhttp neither reads trust files nor discovers authority.
+One runtime permits one active connection. A fetch owns its TLS connection and
+TCP stream; a returned body retains neither. Plain HTTP does not initialize TLS
+or require a trust runtime. The TLS allocation cap is separate from body storage.
 
 The result distinguishes HTTP policy/parser failures, allocation/quota failures,
 DNS answer failures and native network errors. The final status from a parsed
@@ -64,6 +79,14 @@ status. Native call status and DNS RCODE have separate fields inside the library
 The provider maps these into native operation results; the shared OPEN bridge
 preserves final HTTP status separately in `provider_result.provider_status`.
 A caller must check the bridge's transport return before using the provider result.
+
+TLS failures retain their category, native status, library code and certificate
+verification flags in `tls_failure`. `tls_cleanup` separately records diagnostic
+close-notification failures, preserving the original fetch result. The library
+status mapper translates certificate rejection to `CALL_DENIED`, TLS protocol
+or truncation to `CALL_IO`, allocation quota to `CALL_QUOTA`, allocation failure
+to `CALL_NO_MEMORY`, and encoded-size limits to `CALL_FILE_TOO_LARGE`. Native
+TLS transport, entropy and clock failures preserve their native status.
 
 ## Request and response policy
 
@@ -75,18 +98,34 @@ raw characters outside URI syntax and malformed percent escapes. An empty path
 becomes `/`; fragments are checked but never transmitted. Encoded path/query
 bytes are preserved, without percent decoding or normalization.
 
+HTTPS defaults to port 443 and accepts explicit ports, but requires a DNS name;
+numeric HTTPS addresses are unsupported. Verification and SNI use the URI host
+without its port and with one terminal DNS dot removed. DNS selects the address,
+not the identity. The HTTP Host field retains the original authority. Required
+chain, name and validity checks complete before the GET is sent.
+
 Responses use HTTP/1.0 or HTTP/1.1. Status 200 returns bytes; 204 returns an empty
 body without waiting for connection close. Other final statuses are retained and
 rejected. Redirects are never followed, including HTTPS locations. There is no
-TLS, decompression, connection reuse, cache or whole-request replay.
+decompression, connection reuse, cache or whole-request replay. An HTTPS failure
+never triggers a plaintext request.
 
 The client supports Content-Length, chunked and orderly-close framing. Fixed and
-chunked bodies must finish completely. Close-delimited bodies accept orderly EOF;
-there is no way to prove the origin intended to send no more bytes. Chunked bodies
+chunked bodies must finish completely. Plain HTTP close-delimited bodies accept
+orderly TCP EOF; there is no way to prove the origin intended to send no more bytes. Chunked bodies
 finish at the terminal chunk and validated trailers, independently of peer EOF.
 The pinned parser handles response/header syntax and chunk decoding; the library
 validates framing policy and ignored chunk-extension syntax. Trailer fields are
 parsed separately, not silently skipped.
+
+For HTTPS, close-delimited bodies require authenticated TLS `close_notify`;
+underlying TCP EOF is truncation. Authenticated EOF before a fixed-length or
+chunked body completes is still incomplete HTTP input. Complete fixed-length,
+chunked and 204 responses do not wait for peer shutdown. On success, the client
+attempts its own TLS close notification using at most 100 ms of the remaining
+original deadline. Its failure is diagnostic; handle-close failure still fails
+the fetch. Failed fetches free partial bodies and abort the stream, preserving
+their first failure.
 
 The deliberately strict subset requires CRLF and rejects folded fields, duplicate
 or comma-list Content-Length (even identical values), conflicting length/transfer
@@ -118,7 +157,7 @@ Parser/request scratch is fixed and bounded separately from body storage; the
 large receive buffer and field array live on the heap.
 
 The deadline starts before URI processing and covers DNS, connect, send and the
-complete response. Existing DNS attempts retain their three-second maximum and
+TLS handshake when applicable and the complete response. Existing DNS attempts retain their three-second maximum and
 at most two attempts, capped by this same absolute deadline. No retry,
 informational response or successful short transfer refreshes it. CPU-side work
 is checked before returning success as well.
