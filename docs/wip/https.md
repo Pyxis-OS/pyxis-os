@@ -200,9 +200,10 @@ not interrupt arbitrary CPU-bound crypto work.
 
 Use the upstream PSA random generator seeded by
 `mbedtls_platform_get_entropy` through the supplied random capability. Native
-reads are at most 256 bytes, with deadlines capped at the earlier of the fetch
-deadline and five seconds ahead. Treat a partially gathered seed as failure if
-any native read fails. No timestamp seed, persistent seed or alternate source.
+reads are at most 256 bytes, with deadlines capped at the earlier of the active
+operation's deadline (setup or fetch) and five seconds ahead. Treat a partially
+gathered seed as failure if any native read fails. No timestamp seed, persistent
+seed or alternate source.
 The QEMU contract trusts the VirtIO host's bytes, as described in
 [randomness](../randomness.md); it does not claim independent guest entropy.
 
@@ -211,9 +212,22 @@ UTC and latch errors from clock hooks during certificate verification, rejecting
 the fetch even if the TLS library otherwise reports success. Do not rely solely
 on libc `time()` or allow a failure sentinel to bypass validity checking.
 The hooks and PSA state are process-local: one HTTPS provider handles one fetch
-at a time, and its active borrowed authority is valid only during that fetch.
-Set up shared state without reading entropy or making network requests at boot;
-initialize/reseed the generator under a fetch's authority and deadline as needed.
+at a time. Active borrowed authority is valid during provider setup or the
+current fetch, and is cleared when that operation finishes.
+
+Provider setup receives explicit random and clock grants and calls
+`psa_crypto_init()` before parsing trust certificates. In the selected source,
+certificate parsing requires PSA initialization, and initialization eagerly
+seeds the PSA random generator through the entropy hook. Permit that entropy
+read during setup with one absolute monotonic deadline five seconds ahead for
+the entire entropy initialization, shared by all reads without renewal. Check it
+in the hooks and before accepting initialization success; it does not interrupt
+CPU-bound work. Missing clock/random authority, unavailable entropy, timeout or
+PSA initialization failure releases partial setup state and leaves HTTPS unpublished. Trusted
+startup reports the failure and continues local boot and HTTP. Setup makes no
+network requests. Subsequent entropy/reseed operations during a fetch use that
+fetch's authority and original deadline; initialization at setup does not grant
+an extra fetch budget.
 
 ### Trust provisioning
 
@@ -234,14 +248,16 @@ and retained notices. The [CA extract documentation](https://curl.se/docs/caextr
 warns that this PEM export omits Mozilla's additional trust-store constraints;
 it is not the full browser trust policy.
 
-Read and parse the public and any configured custom bundle before publishing
-the provider, then release temporary input buffers and keep immutable parsed
-trust for its lifetime. Missing, malformed, empty or over-budget configured
-trust fails that provider's setup; do not silently ignore custom-bundle errors.
+After bounded PSA/entropy initialization, read and parse the public and any
+configured custom bundle before publishing the provider, then release temporary
+input buffers and keep immutable parsed trust for its lifetime. Missing,
+malformed, empty or over-budget configured trust fails that provider's setup;
+do not silently ignore custom-bundle errors.
 Local files and HTTP remain usable. Changes to backing files do not change a
 running provider; restart it to change trust. No network request is needed to
-load packaged trust, and a missing network/entropy device fails a fetch rather
-than local boot.
+load packaged trust. Missing entropy during setup leaves HTTPS unavailable;
+a missing network device or a later entropy-read failure fails a fetch. Neither
+failure prevents local boot or HTTP startup.
 
 Manual updates select a dated snapshot, review certificate changes, verify its
 checksum, update ports metadata/notices, rebuild the image and restart providers.
@@ -326,8 +342,10 @@ follow upstream main or fetch the moving public-root URL in ordinary builds.
 
 Task 2 must turn the agreed client profile into configuration, implement the
 missing/native hooks, validate actual root/handshake memory demand, and exercise
-a controlled connection manually. The checked-in builder needs CMake added for
-that build; inspect the deployed image before asking the owner to publish an
+a controlled connection manually. Confirm bounded setup failure without entropy
+and continued local/HTTP startup when integrating trusted service launch in
+task 4. The checked-in builder needs CMake added for that build; inspect the
+deployed image before asking the owner to publish an
 updated builder. This is a host build-tool change, not a compiler change. No
 container publication, runtime port or handshake validation occurred in task 1.
 
