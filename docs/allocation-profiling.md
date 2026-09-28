@@ -58,7 +58,10 @@ profiled and unprofiled runs rather than subtracting a presumed constant cost.
 ## Profiling capability
 
 The [profile protocol](../include/abi/profile.h) uses ordinary tagged CALLs and
-`PROFILE_RIGHT_MEMORY`. Libpyxis exposes `profile_begin`, `profile_snapshot` and
+`PROFILE_RIGHT_MEMORY`. Independent RAM FILE replacement collection uses
+`PROFILE_RIGHT_FILE` and `profile_file_begin/snapshot/end`; see the
+[FILE attribution contract](wip/io-reliability-attribution.md#task-2-implemented-ram-file-profiling).
+The memory operations below keep their existing meaning. Libpyxis exposes `profile_begin`, `profile_snapshot` and
 `profile_end` through `<profile.h>`.
 
 BEGIN clears the caller's counters and enables collection; repeated BEGIN is

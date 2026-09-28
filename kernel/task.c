@@ -90,6 +90,10 @@ struct task {
   /* Only the caller updates aggregates. The parked request lends timestamps
    * to the BSP until wakeup transfers ownership back. */
   struct profile_snapshot profile;
+  struct profile_file_snapshot file_profile;
+  struct file_buffer_profile file_buffer_profile;
+  uint64_t file_started_ns, file_published_ns;
+  uint64_t file_service_started_ns, file_service_ended_ns;
   uint64_t memory_started_ns, memory_published_ns;
   uint64_t memory_service_started_ns, memory_service_ended_ns;
   struct task *memory_next;
@@ -680,13 +684,23 @@ struct file_wait *task_prepare_file_wait(void)
   return record;
 }
 
+static void finish_file_profile(struct task *task);
+
 bool task_replace_file_buffer(struct file_object *file, size_t capacity)
 {
+  struct task *task = local_scheduler()->current_task;
+  bool profiled = task->file_profile.flags & PROFILE_ACTIVE;
+  if (profiled) {
+    task->file_started_ns = arch_monotonic_ns();
+    task->file_buffer_profile = (struct file_buffer_profile){0};
+  }
   struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
   task->file = file;
   task->file_capacity = capacity;
 
+  if (profiled) {
+    task->file_published_ns = arch_monotonic_ns();
+  }
   lock_queues();
   task->file_next = NULL;
   if (file_tail) {
@@ -698,6 +712,9 @@ bool task_replace_file_buffer(struct file_object *file, size_t capacity)
   unlock_queues();
 
   task_wait_sleep(wait);
+  if (profiled) {
+    finish_file_profile(task);
+  }
   task->file = NULL;
   return task->file_result;
 }
@@ -711,7 +728,15 @@ static void service_file_requests(void)
 
   while (task) {
     struct task *next = task->file_next;
-    task->file_result = file_replace_buffer(task->file, task->file_capacity);
+    bool profiled = task->file_profile.flags & PROFILE_ACTIVE;
+    if (profiled) {
+      task->file_service_started_ns = arch_monotonic_ns();
+    }
+    task->file_result = file_replace_buffer(task->file, task->file_capacity,
+        profiled ? &task->file_buffer_profile : NULL);
+    if (profiled) {
+      task->file_service_ended_ns = arch_monotonic_ns();
+    }
     task_wait_wake(&task->wait_record);
     /* The requester owns the file again and may immediately exit. */
     task = next;
@@ -742,25 +767,68 @@ enum call_status task_profile_control(uint64_t operation, struct profile_snapsho
   return CALL_OK;
 }
 
-static void profile_add(struct task *task, uint64_t *total, uint64_t amount)
+enum call_status task_profile_file_control(uint64_t operation, struct profile_file_snapshot *reply)
+{
+  struct task *task = local_scheduler()->current_task;
+  KASSERT(task && task->kind == TASK_USER);
+  bool active = task->file_profile.flags & PROFILE_ACTIVE;
+  if (operation == PROFILE_FILE_BEGIN) {
+    if (active) {
+      return CALL_BUSY;
+    }
+    task->file_profile = (struct profile_file_snapshot){.flags = PROFILE_ACTIVE};
+  } else {
+    if (operation == PROFILE_FILE_END) {
+      if (!active) {
+        return CALL_BAD_REQUEST;
+      }
+      task->file_profile.flags &= ~PROFILE_ACTIVE;
+    } else {
+      KASSERT(operation == PROFILE_FILE_SNAPSHOT);
+    }
+    *reply = task->file_profile;
+  }
+  return CALL_OK;
+}
+
+static void profile_add(uint64_t *flags, uint64_t *total, uint64_t amount)
 {
   if (amount > UINT64_MAX - *total) {
     *total = UINT64_MAX;
-    task->profile.flags |= PROFILE_SATURATED;
+    *flags |= PROFILE_SATURATED;
   } else {
     *total += amount;
   }
 }
 
-static void profile_duration_add(struct task *task, struct profile_duration *duration,
+static void profile_duration_add(uint64_t *flags, struct profile_duration *duration,
     uint64_t start, uint64_t end)
 {
   KASSERT(end >= start);
   uint64_t elapsed = end - start;
-  profile_add(task, &duration->total_ns, elapsed);
+  profile_add(flags, &duration->total_ns, elapsed);
   if (elapsed > duration->maximum_ns) {
     duration->maximum_ns = elapsed;
   }
+}
+
+static void finish_file_profile(struct task *task)
+{
+  uint64_t resumed = arch_monotonic_ns();
+  struct profile_file_snapshot *stats = &task->file_profile;
+  struct file_buffer_profile *service = &task->file_buffer_profile;
+  profile_add(&stats->flags, &stats->requests, 1);
+  profile_add(&stats->flags, task->file_result ? &stats->successes : &stats->failures, 1);
+  profile_add(&stats->flags, &stats->requested_capacity, task->file_capacity);
+  profile_add(&stats->flags, &stats->copied_bytes, service->copied_bytes);
+  profile_duration_add(&stats->flags, &stats->publication, task->file_started_ns, task->file_published_ns);
+  profile_duration_add(&stats->flags, &stats->queue, task->file_published_ns, task->file_service_started_ns);
+  profile_duration_add(&stats->flags, &stats->service, task->file_service_started_ns, task->file_service_ended_ns);
+  profile_duration_add(&stats->flags, &stats->resume, task->file_service_ended_ns, resumed);
+  profile_duration_add(&stats->flags, &stats->total, task->file_started_ns, resumed);
+  profile_duration_add(&stats->flags, &stats->allocation, service->allocation_started, service->allocation_ended);
+  profile_duration_add(&stats->flags, &stats->copy, service->copy_started, service->copy_ended);
+  profile_duration_add(&stats->flags, &stats->release, service->release_started, service->release_ended);
 }
 
 static void finish_memory_profile(struct task *task)
@@ -768,18 +836,18 @@ static void finish_memory_profile(struct task *task)
   uint64_t resumed = arch_monotonic_ns();
   struct profile_memory_operation *stats = task->memory_operation == MEMORY_ALLOCATE ?
       &task->profile.allocate : &task->profile.release;
-  profile_add(task, &stats->requests, 1);
-  profile_add(task, &stats->requested_bytes, task->memory_region.size);
+  profile_add(&task->profile.flags, &stats->requests, 1);
+  profile_add(&task->profile.flags, &stats->requested_bytes, task->memory_region.size);
   if (task->memory_result == MM_OK) {
-    profile_add(task, &stats->completed_bytes, task->memory_region.size);
+    profile_add(&task->profile.flags, &stats->completed_bytes, task->memory_region.size);
   } else {
-    profile_add(task, &stats->failures, 1);
+    profile_add(&task->profile.flags, &stats->failures, 1);
   }
-  profile_duration_add(task, &stats->publication, task->memory_started_ns, task->memory_published_ns);
-  profile_duration_add(task, &stats->queue, task->memory_published_ns, task->memory_service_started_ns);
-  profile_duration_add(task, &stats->service, task->memory_service_started_ns, task->memory_service_ended_ns);
-  profile_duration_add(task, &stats->resume, task->memory_service_ended_ns, resumed);
-  profile_duration_add(task, &stats->total, task->memory_started_ns, resumed);
+  profile_duration_add(&task->profile.flags, &stats->publication, task->memory_started_ns, task->memory_published_ns);
+  profile_duration_add(&task->profile.flags, &stats->queue, task->memory_published_ns, task->memory_service_started_ns);
+  profile_duration_add(&task->profile.flags, &stats->service, task->memory_service_started_ns, task->memory_service_ended_ns);
+  profile_duration_add(&task->profile.flags, &stats->resume, task->memory_service_ended_ns, resumed);
+  profile_duration_add(&task->profile.flags, &stats->total, task->memory_started_ns, resumed);
 }
 
 enum mm_result task_request_memory(uint64_t operation, struct memory_region *region)

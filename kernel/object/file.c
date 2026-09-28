@@ -1,5 +1,6 @@
 #include <abi/file.h>
 #include <arch/smp.h>
+#include <arch/clock.h>
 #include <kernel/object/file.h>
 #include <kernel/initrd.h>
 #include <kernel/fs/hostfs.h>
@@ -119,21 +120,41 @@ void file_end_operation(struct file_object *file)
   unlock_file(file);
 }
 
-bool file_replace_buffer(struct file_object *file, size_t capacity)
+bool file_replace_buffer(struct file_object *file, size_t capacity,
+    struct file_buffer_profile *profile)
 {
   KASSERT(arch_cpu_index() == 0 && file->backing == FILE_RAM && file->busy);
   KASSERT(!capacity || capacity >= file->size);
   void *data = NULL;
   if (capacity) {
+    if (profile) {
+      profile->allocation_started = arch_monotonic_ns();
+    }
     data = kmalloc(capacity);
+    if (profile) {
+      profile->allocation_ended = arch_monotonic_ns();
+    }
     if (!data) {
       return false;
     }
     if (file->size) {
+      if (profile) {
+        profile->copy_started = arch_monotonic_ns();
+      }
       memcpy(data, file->data, file->size);
+      if (profile) {
+        profile->copy_ended = arch_monotonic_ns();
+        profile->copied_bytes = file->size;
+      }
     }
   }
+  if (profile) {
+    profile->release_started = arch_monotonic_ns();
+  }
   kfree((void *)file->data);
+  if (profile) {
+    profile->release_ended = arch_monotonic_ns();
+  }
   file->data = data;
   file->capacity = capacity;
   return true;
