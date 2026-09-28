@@ -2,12 +2,10 @@
 
 The `httpfs` userspace service connects the bounded fetch library to
 [provider OPEN and exported FILE snapshots](file-providers.md). Ordinary file
-consumers use `http://` through their delegated namespace. Publication performs
-no fetch; boot and local files remain usable without networking.
-
-The underlying library also supports verified HTTPS with an explicitly supplied
-TLS runtime. HTTPS namespace publication and packaged trust remain separate
-[milestone work](wip/https.md); the installed `httpfs` still serves HTTP only.
+consumers use `http://` and `https://` through their delegated namespace. Separate
+provider instances serve the two schemes. Publication performs no fetch; boot
+and local files remain usable without networking. HTTPS verifies certificates
+against packaged public roots and any explicitly configured custom roots.
 
 ## Use and startup
 
@@ -21,6 +19,7 @@ In the guest:
 
 ```text
 cat http://example.com/
+cat https://example.com/
 cksum http://10.0.2.2:18080/sample.bin
 cat http://10.0.2.2:18080/sample.bin | tee home://sample.bin | cksum
 cat < http://example.com/
@@ -33,17 +32,45 @@ Development and read-only init each create a namespace and request
 `session --start-services`. After reading configuration and applying any requested
 NIC settings, session launches `app://init-services` with the configured
 `DNS_SERVER` and ordinary session grants. That trusted script publishes
-`service start http app://httpfs.pxe`, then hands off to the interactive shell.
-The read-only profile restricts host-file writes, not HTTP reads. Idle spaces
+`service start http app://httpfs.pxe`, followed by
+`service start --optional --read-only https app://httpfs.pxe --https`, then hands
+off to the interactive shell. A reported HTTPS setup failure is logged and
+leaves HTTPS unpublished while startup continues. The read-only profile
+restricts host-file writes, not HTTP or HTTPS reads. Idle spaces
 start no provider. Ordinary session invocation without the flag starts its shell
 directly, so handing off within an existing namespace does not republish services.
 
-`httpfs` takes no arguments. It selects the inherited DNS configuration at startup
-without DNS traffic. Publication uses the existing explicit grant handoff;
-providers do not receive the parent namespace or namespace-creation grant.
-Providers may be replaced with `service replace http app://httpfs.pxe` or removed
-with `namespace remove http`. Each instance has its own snapshots and storage
-account. The temporary task-8 `http-fetch` consumer has been removed.
+`httpfs` defaults to HTTP. `--https` selects HTTPS and optionally accepts
+`--ca-bundle URI` to augment public trust. It selects inherited DNS configuration
+without DNS traffic. Publication uses the explicit grant handoff; providers
+receive neither the parent namespace nor namespace-creation authority.
+
+```text
+service replace --read-only https app://httpfs.pxe --https --ca-bundle home://custom-ca.pem
+namespace remove https
+service start --read-only https app://httpfs.pxe --https
+```
+
+The `--read-only` service option attenuates native directory roots and working
+directories for that provider launch. Trust loading uses native read-only files,
+never a remote provider. The public bundle always loads from
+`app://share/ca-certificates/cacert.pem`. An explicitly supplied custom bundle
+adds roots; it cannot replace or disable public trust. Missing, malformed, empty
+or over-budget configured bundles fail setup without replacing an existing binding.
+
+HTTPS initializes PSA with explicit random and clock grants under one five-second
+entropy deadline, then loads and freezes trust before publication. Temporary input
+buffers, parsed trust and TLS allocations share a 2 MiB budget, independent of
+body storage. Setup makes no network request. Missing entropy leaves HTTPS
+unpublished; a missing NIC does not prevent publication. Plain HTTP initializes
+no TLS state. Existing kernel TCP entropy requirements still apply to HTTP fetches.
+
+Changing trust files has no effect on an existing instance. Restart or replace
+it to apply changes. Each instance owns independent trust, snapshots and storage;
+existing snapshots survive removal/replacement until their final handles close.
+Clients receive FILE authority, not trust-management or additional TCP grants.
+See [public-root packaging and updates](ports.md#public-ca-roots) for the pinned
+source, notices and manual update procedure.
 
 ## Library and authority
 

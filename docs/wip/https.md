@@ -1,9 +1,10 @@
 # Verified HTTPS snapshots with Mbed TLS
 
-Status: tasks 1–3 complete. The source pair, trust model and contract below were
+Status: tasks 1–4 complete. The source pair, trust model and contract below were
 agreed on 2026-09-28. Ports now packages the client libraries and userland provides
-the native TLS adapter; libhttp now performs verified HTTPS fetching.
-Trust packaging and HTTPS provider publication remain task 4.
+the native TLS adapter and verified HTTPS fetching. Packaged public trust and
+separate HTTPS providers are installed in configured boot sessions. The broader
+public/certificate workflow and final documentation handoff remain task 5.
 SSH/libssh remains deferred. This follows the closed
 [I/O reliability and attribution work](../io-reliability-attribution.md).
 
@@ -332,6 +333,23 @@ removal/replacement stops new discovery, existing snapshots keep their original
 provider alive, and the process exits after its OPEN export and all snapshots
 retire. Replacing trust or a scheme binding does not mutate existing snapshots.
 
+### Task 4 startup integration
+
+Run `httpfs --https` as a separate provider, with optional
+`--ca-bundle URI` augmentation selected in the trusted startup script. Public
+roots always load from `app://share/ca-certificates/cacert.pem`. Use native
+read-only trust authority; no provider lookup is needed to load trust.
+The explicit `service start --read-only` option attenuates directory roots and
+working-directory grants for that launch without changing other providers.
+
+Extend the userspace publication handshake to report setup failure without an
+exported grant. The launcher acknowledges a well-formed failure and leaves the
+namespace unchanged. `service start --optional` permits the boot script to
+continue after that reported failure; malformed handshakes, launch failures and
+cleanup failures remain errors. Start HTTP first, then optional HTTPS, then the
+interactive shell. An unexpected provider crash before reporting remains the
+existing unbounded RECEIVE limitation; this task adds no wait sets or supervisor.
+
 ### Update checkpoint
 
 Source and public-root pins were checked on 2026-09-28. Before merging the ports
@@ -481,9 +499,52 @@ disposable controlled CA. Observations:
 
 These are manual functional observations, not performance measurements or a
 claim that every supported cipher/certificate/framing combination was exercised.
-The controlled servers, probe and private keys remain disposable. HTTPS service
-startup, packaged roots and ordinary `cat https://...` remain task 4; broader
-public/certificate workflow coverage remains task 5.
+The controlled servers, probe and private keys remain disposable. Task 4 adds
+the service integration below; broader public/certificate workflow coverage
+remains task 5.
+
+## Task 4 implementation and manual validation
+
+Ports packages the pinned public CA file, checksum, provenance and notices.
+Userland's `httpfs --https` loads public roots and optional native-file
+augmentation before publication. The updated publication handshake is shared by
+httpfs, textfs, counter and the shell; explicit failed setup leaves bindings
+unchanged. Optional startup continues only after a valid failure report and
+successful cleanup. Read-only delegation applies only to explicitly selected
+service launches. No kernel ABI or compiler/container change is required.
+
+Ordinary ports, provider/shell and integrated image builds passed. Manual checks
+used nested KVM with four vCPUs, 256 MiB and VirtIO network/random devices,
+controlled local DNS/TLS peers, a disposable custom CA and a temporary snapshot
+holder. The final normal image contains none of those fixtures or utilities.
+
+- Public-only trust rejected the private endpoint with verification flag 8.
+  Adding its CA allowed a 12,000-byte TLS 1.2 response with CRC 4154493573.
+  A TLS 1.3 chunked response through `cat | tee | cksum`, TLS 1.2 close framing
+  through input redirection, and the saved file all matched. HTTP still matched.
+- Changing the custom file did not mutate a running instance. Malformed
+  replacement failed while its old binding continued to serve. Empty, missing
+  and 2 MiB input files, and writable trust-directory grants, failed setup with
+  no publication and successful cleanup reported.
+- Two retained snapshots stayed readable through ordinary stdio and descriptor
+  reads after replacement. New opens used the replacement's public-only trust
+  and rejected the private CA. GDB observed the old provider retiring after final
+  snapshot closure, with zero body reservations and no active TLS connection.
+- Both boot sessions had independent trust and namespace bindings. Custom roots
+  in one did not change the other; removing HTTPS in one left the other usable.
+  Text snapshot reads and counter publication, lookup and removal also passed.
+- GDB measured 355,443 bytes retained for public trust and 357,602 with the custom
+  CA. Peak TLS-budget usage including trust-file input was 547,786 bytes, below
+  the 2 MiB cap. These figures describe this bundle/configuration and guest run.
+- Two-vCPU, 256 MiB boots of the restored normal image passed without a NIC:
+  local files worked and both HTTP/HTTPS bindings were published. Without VirtIO
+  RNG, HTTPS reported native entropy failure and remained absent while local
+  files and the shell worked. HTTP remained published; new TCP fetches returned
+  unavailable under the existing kernel entropy requirement.
+
+All QEMU/debugger/peer jobs were stopped. Unexpected crashes before setup
+reporting still have the documented unbounded RECEIVE limitation; no wait sets,
+supervisor, permanent probe or automated test harness was added.
 
 ## Focused PR tasks
 
@@ -503,7 +564,7 @@ public/certificate workflow coverage remains task 5.
   handshake, identity verification, encrypted transfers, shutdown/truncation
   handling and structured errors. Preserve HTTP behavior and existing transfer
   deadlines/quotas. Check positive short-transfer handling and failure cleanup.
-- [ ] **4. Publish HTTPS snapshots and package trust.** Install the agreed root
+- [x] **4. Publish HTTPS snapshots and package trust.** Install the agreed root
   data, wire configuration/grants and trusted service startup, and publish the
   HTTPS provider through existing namespaces. Validate ordinary descriptor/stdio
   consumers, redirection and pipes, separate sessions, service lifetime, and

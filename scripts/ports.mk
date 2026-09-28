@@ -32,6 +32,12 @@ TZDATA_OUTPUTS := $(addprefix $(TZDATA_STAGE)/,share/zoneinfo/UTC \
   share/zoneinfo/Europe/Bucharest share/zoneinfo/tzdata.zi share/zoneinfo/version \
   share/licenses/tzdata/LICENSE share/tzdata/source.txt)
 
+CA_CERTIFICATES_INPUTS := $(wildcard ports/ca-certificates/*) ports/ports.lua ports/build.lua
+CA_CERTIFICATES_OUTPUTS := $(addprefix build/ports/ca-certificates/stage/,\
+  share/ca-certificates/cacert.pem share/ca-certificates/cacert.pem.sha256 \
+  share/ca-certificates/source.txt share/licenses/ca-certificates/LICENSE \
+  share/licenses/ca-certificates/NOTICE)
+
 SBASE_INPUTS := $(wildcard ports/sbase/*.lua ports/sbase/Makefile \
                           ports/sbase/patches/*.patch) ports/ports.lua ports/build.lua
 SBASE_OUTPUTS := $(addprefix build/ports/sbase/stage/,bin/cksum.pxe bin/tee.pxe \
@@ -53,7 +59,8 @@ MBEDTLS_OUTPUTS := $(addprefix build/ports/mbedtls/stage/,dev/lib/libmbedtls.a \
 
 .PHONY: all
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
-     $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS)
+     $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) \
+     $(CA_CERTIFICATES_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.
@@ -89,6 +96,11 @@ $(TZDATA_OUTPUTS) &: $(TZDATA_INPUTS) scripts/ports.mk
 	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
 	rm -rf build/ports/tzdata
 	$(LUA) ports/build.lua tzdata --sdk $(abspath build/sdk) --work $(abspath build/ports/tzdata)
+
+# Pinned trust data is independent of target SDK contents.
+$(CA_CERTIFICATES_OUTPUTS) &: $(CA_CERTIFICATES_INPUTS) scripts/ports.mk
+	rm -rf build/ports/ca-certificates
+	$(LUA) ports/build.lua ca-certificates --sdk $(abspath build/sdk) --work $(abspath build/ports/ca-certificates)
 
 $(SBASE_OUTPUTS) &: $(SBASE_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	@command -v $(LUA) >/dev/null 2>&1 || { \

@@ -532,8 +532,10 @@ without retrying or pacing away admission failures.
 ## Service startup failure before publication
 
 The namespace publication command waits on the provider's registration endpoint.
-If a launched provider exits or faults before registration, the parent cannot
-currently wait for either IPC or process exit, so startup can remain blocked.
+Providers can explicitly report setup failure before registration; the launcher
+acknowledges it, and optional startup continues after a well-formed failure. If a
+launched provider exits or faults without reporting, the parent cannot currently
+wait for either IPC or process exit, so startup can remain blocked.
 A provider CALL deadline bounds its own registration wait, but does not bound
 the parent's RECEIVE. Revisit with endpoint/process wait sets or a bounded receive
 facility; do not infer provider readiness from launch success or add automatic

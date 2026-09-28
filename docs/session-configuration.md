@@ -5,8 +5,10 @@
 terminal tab spacing, and hands off to `app://shell.pxe`. The optional
 `--configure-network` argument also applies shared NIC settings.
 `--start-services` selects the trusted `app://init-services` script after
-configuration; it publishes HTTP with the configured resolver, then starts the
-interactive shell. Without it, session starts the shell directly. The development
+configuration; it publishes HTTP with the configured resolver, then optionally
+publishes HTTPS with packaged trust before starting the interactive shell.
+Custom CA augmentation is selected by the trusted service command in
+`init/services.sh`; it is not a session Lua setting. Without it, session starts the shell directly. The development
 init script selects it:
 
 ```text

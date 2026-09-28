@@ -123,8 +123,10 @@ contract, including public roots augmented by optional instance-specific custom
 roots. Task 2 packages the configured libraries and native platform support;
 controlled TLS 1.2/1.3 guest connections and bounded failure paths have passed
 manual validation. Task 3 adds verified HTTPS fetching to libhttp, with controlled
-framing, certificate, deadline and cleanup checks. Task 4 packages trust and
-publishes HTTPS snapshots through the namespace.
+framing, certificate, deadline and cleanup checks. Task 4 packages public trust
+and publishes independent HTTPS snapshots through configured session namespaces,
+with optional startup failure handling. Task 5 remains the public/certificate
+workflow validation and documentation handoff.
 SSH/libssh remains deferred. The following remain later alternatives.
 
 | Path | First concrete completion point | Decisions and supporting work |
