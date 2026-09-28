@@ -87,9 +87,10 @@ cat text://welcome
 namespace remove text
 ```
 
-Writable opens are denied by the published OPEN_READ grant (EACCES through libc). Publication
-uses the existing service handoff; no networking or namespace-management grant
-is passed to the provider.
+Writable opens are denied by the published OPEN_READ grant (EACCES through libc).
+Publication uses the existing service handoff and its ordinary resource grants,
+omitting the parent namespace and namespace-creation service. The text service
+performs no network operations.
 
 Each OPEN creates one export. A receiver can hold 64 exports, including its OPEN
 service, so a published instance supports at most 63 simultaneous file exports;
