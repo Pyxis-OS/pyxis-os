@@ -70,8 +70,9 @@ make -C /path/to/pyxis-userland SDK=/path/to/sdk \
 
 The `session` application also consumes Lua headers and `liblua.a` through
 `LUA_PREFIX`. The `httpfs` application consumes picohttpparser headers and
-`libpicohttpparser.a` through `PICOHTTPPARSER_PREFIX`. The native `libtls.a`
-adapter consumes the configured Mbed TLS export through `MBEDTLS_PREFIX`.
+`libpicohttpparser.a` through `PICOHTTPPARSER_PREFIX`. Its fetch library also
+links the native `libtls.a` adapter and the configured Mbed TLS export through
+`MBEDTLS_PREFIX`, even while the installed provider remains in HTTP mode.
 These development prefixes are exported by the ports build. Other application targets can still build with
 the SDK alone.
 

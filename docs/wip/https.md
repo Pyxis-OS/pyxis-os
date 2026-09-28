@@ -1,9 +1,9 @@
 # Verified HTTPS snapshots with Mbed TLS
 
-Status: tasks 1–2 complete. The source pair, trust model and contract below were
+Status: tasks 1–3 complete. The source pair, trust model and contract below were
 agreed on 2026-09-28. Ports now packages the client libraries and userland provides
-the native TLS adapter; controlled guest connections have been validated.
-HTTPS fetching, trust packaging and provider publication remain tasks 3–4.
+the native TLS adapter; libhttp now performs verified HTTPS fetching.
+Trust packaging and HTTPS provider publication remain task 4.
 SSH/libssh remains deferred. This follows the closed
 [I/O reliability and attribution work](../io-reliability-attribution.md).
 
@@ -421,6 +421,70 @@ task 5. Public HTTPS fetching and no-network HTTP/local-service regression check
 belong to their integration tasks. These measurements cover this selected peer
 and root set, not arbitrary chains or all supported ciphersuites.
 
+## Task 3 implementation and validation, 2026-09-28
+
+[Userland PR 78](https://git.internal/chronium/pyxis-userland/pulls/78) adds
+an explicit `http_client` with expected HTTP/HTTPS mode,
+borrowed authority and, for HTTPS, a ready caller-owned TLS runtime. Its URI
+parser selects the default port, rejects numeric HTTPS, normalizes the reference
+name and preserves the original Host authority. The existing framing/body
+parser receives decrypted bytes only after verification. One original deadline
+covers parsing, DNS, connect, handshake and response completion. Structured
+`tls_failure` and diagnostic `tls_cleanup` fields preserve attribution; the
+shared `http_result_status` mapping is also used by the existing HTTP provider.
+See [the fetch contract](../http-fetch.md).
+
+The installed provider still selects HTTP mode and creates no TLS runtime.
+No trust files, HTTPS namespace binding, new ABI, port pin or compiler/container
+change is introduced. Applications linking libhttp now also link libtls and
+the configured Mbed TLS archives. The TLS export content identity participates
+in relinking the provider, including when export timestamps are normalized.
+
+Ordinary libhttp/httpfs builds used Pyxis GCC 16.2.0. A disposable consumer was
+manually exercised in QEMU with nested KVM, two vCPUs, 256 MiB and VirtIO
+networking/randomness. A private host network namespace contained the controlled
+DNS and HTTP/TLS peers, so name resolution and endpoint behavior did not depend
+on public services. The runtime loaded the pinned 121 public roots plus a
+disposable controlled CA. Observations:
+
+- Matching 12,000-byte bodies arrived over TLS 1.2 on default port 443 with
+  Content-Length, TLS 1.3 on explicit port 8444 with chunks/trailers, and TLS 1.2
+  with authenticated close-delimited framing. Fixed/chunked fetches returned
+  before the peer's two-second shutdown delay.
+- A raw TCP close during close-delimited HTTPS produced TLS truncation and
+  `CALL_IO`. Authenticated EOF before Content-Length or chunked completion
+  produced `HTTP_BAD_RESPONSE`/`CALL_IO`. Each retained HTTP status 200 and
+  returned no body or reservation.
+- A complete fixed-length response followed by raw TCP close succeeded; 204
+  completed without waiting for peer shutdown. A 404 retained its HTTP status
+  and mapped to `CALL_NOT_FOUND`. HTTPS without a runtime failed before DNS
+  with `TLS_BAD_STATE`/`CALL_BAD_OPERATION`.
+- Wrong-name and untrusted-chain cases preserved certificate flags 4 and 8,
+  mapped to `CALL_DENIED`, and sent no GET. Numeric HTTPS and both scheme-mode
+  mismatches returned `CALL_BAD_OPERATION` before DNS/network traffic.
+- A trailing-dot URI succeeded: the peer observed SNI `tls.pyxis.test` and
+  Host `tls.pyxis.test.:8443`. A 500 ms caller deadline against a delayed body
+  returned `TLS_DEADLINE`/`CALL_TIMED_OUT` after about 502 ms in this nested VM,
+  with HTTP status 200 and no retained body.
+- Numeric plain HTTP succeeded with no TLS runtime and invalid UDP/random
+  handles; a DNS-based plain HTTP close-delimited response also succeeded.
+  TLS allocations returned to the 357,602-byte trust/configuration
+  baseline after the exercised success/failure paths (355,443 without custom
+  trust); body reservations returned to zero after release or failure.
+- A normal boot without VirtIO RNG reached the shell and HTTP startup. Numeric
+  HTTP fetching then returned unavailable: the existing kernel
+  [TCP identity contract](../tcp.md) disables new connections without entropy.
+  This is independent of whether the HTTP caller holds a random grant.
+- With entropy enabled, the installed provider served
+  `cksum http://10.0.2.2:18080/fixed` in a normal boot. Its CRC 4154493573 and
+  12,000-byte count matched the host fixture.
+
+These are manual functional observations, not performance measurements or a
+claim that every supported cipher/certificate/framing combination was exercised.
+The controlled servers, probe and private keys remain disposable. HTTPS service
+startup, packaged roots and ordinary `cat https://...` remain task 4; broader
+public/certificate workflow coverage remains task 5.
+
 ## Focused PR tasks
 
 - [x] **1. Pin/probe and settle the HTTPS contract.** Probe the selected Mbed TLS
@@ -435,7 +499,7 @@ and root set, not arbitrary chains or all supported ciphersuites.
   handling. Preserve certificate validation. Validate a manually exercised
   connection against a controlled TLS endpoint; keep any probe executable
   temporary rather than installing another permanent test utility.
-- [ ] **3. Add verified HTTPS fetching.** Extend libhttp with URI/port handling,
+- [x] **3. Add verified HTTPS fetching.** Extend libhttp with URI/port handling,
   handshake, identity verification, encrypted transfers, shutdown/truncation
   handling and structured errors. Preserve HTTP behavior and existing transfer
   deadlines/quotas. Check positive short-transfer handling and failure cleanup.

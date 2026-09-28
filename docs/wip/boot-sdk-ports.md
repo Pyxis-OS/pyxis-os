@@ -122,7 +122,9 @@ Task 1 selected Mbed TLS 4.1.1 / TF-PSA-Crypto 1.1.1 and settled the HTTPS
 contract, including public roots augmented by optional instance-specific custom
 roots. Task 2 packages the configured libraries and native platform support;
 controlled TLS 1.2/1.3 guest connections and bounded failure paths have passed
-manual validation. Task 3 adds verified HTTPS fetching to libhttp.
+manual validation. Task 3 adds verified HTTPS fetching to libhttp, with controlled
+framing, certificate, deadline and cleanup checks. Task 4 packages trust and
+publishes HTTPS snapshots through the namespace.
 SSH/libssh remains deferred. The following remain later alternatives.
 
 | Path | First concrete completion point | Decisions and supporting work |
