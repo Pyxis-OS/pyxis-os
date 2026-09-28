@@ -395,6 +395,9 @@ the custom CA. Observed results:
   malformed PEM, allocation-cap exhaustion and an expired deadline failed
   explicitly. Debugger inspection found runtime ownership and active borrowed
   authority cleared after cleanup.
+- A second boot with `VIRTIO_RNG=0` reached the probe normally; TLS runtime setup
+  failed with `TLS_ENTROPY_ERROR`, native `CALL_UNAVAILABLE` and PSA error -148.
+  Runtime ownership and active authority were cleared on this path too.
 
 The probe, controlled certificates and private keys are not installed or
 committed. Date rejection and raw TCP truncation were inspected in code but
