@@ -75,6 +75,11 @@ milestone's remaining interface details before starting its code work.
     and ordinary file consumers using immutable text and HTTP snapshots. The
     documentation handoff is complete; accepted limits remain in technical debt.
 
+23. Complete: [I/O and IPC performance baselines](../io-ipc-baselines.md),
+    with verified file, pipe, endpoint and HTTP workloads, separate completion
+    boundaries, and a recorded nested-KVM baseline. Owner-host results remain
+    unavailable; capacity and attribution follow-ups are documented.
+
 Everyday use for simple tasks guides this order. Website hosting remains one
 future application, not the primary completion target for the OS.
 
@@ -101,22 +106,13 @@ An opt-in [host-backed development overlay](host-development-overlay.md)
 remains postponed: programs can already run from `host://`, so it is not needed
 for the persistent development loop or as a replacement for the boot archive.
 
-## Next milestone and later candidates
+## Later milestone candidates
 
-Next is [I/O and IPC performance baselines](io-ipc-baselines.md): manually invoked
-userspace measurements for files, copies, pipes, endpoints and HTTP snapshots.
-Separate fetch/setup from transfer and producer acceptance from consumer
-completion. Reuse existing allocation/TCP benchmarks; identify bottlenecks without
-bundling optimizations. Tasks 1–4 are complete: verified file reads,
-writes/copies with exclusive outputs and separate sync timing, pipe consumer
-completion and bounded CALL/SEND samples. Initial observations cover archive,
-RAM, host, pipes and endpoints. Deferred endpoint receipt reclamation limits
-sustained traffic and is recorded in technical debt; default IPC samples use
-fresh endpoints and eight messages. Matched archive/RAM/HTTP reads now separate
-OPEN, retained payload and complete consumption; 32 KiB HTTP passed while 1 MiB
-HTTP exposed the same capacity limit. Task 5 is the baseline report and handoff.
-
-The following remain alternatives after that bounded measurement milestone.
+The [I/O and IPC baseline](../io-ipc-baselines.md) and documentation handoff are
+complete. Deferred receipt reclamation limits sustained IPC and larger HTTP
+snapshot reads; its consequence and revisit point remain in
+[technical debt](../technical-debt.md#endpoint-throughput-limited-by-deferred-receipt-reclamation).
+No next milestone is selected. The following remain alternatives for discussion.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

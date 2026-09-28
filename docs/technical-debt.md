@@ -54,6 +54,25 @@ on a later timer wakeup. Other BSP request queues retain their existing service
 paths; measure them separately before extending notification or changing
 allocation policy.
 
+## I/O baseline attribution and coverage
+
+The [I/O/IPC baselines](io-ipc-baselines.md) measure elapsed workload boundaries
+in nested KVM. RAM grow-from-zero writes are much slower than prepared overwrite,
+but allocation, copying and BSP queue/service time are not separately measured.
+Host FILE results combine guest queueing, VirtIO/FUSE transport, daemon and backing
+service; write/sync runs used host tmpfs. These results cannot select an internal
+optimization or establish physical-disk durability cost.
+
+Revisit with a bounded file-growth or host-service attribution investigation
+before changing allocation policy, notification, batching or transfer limits.
+Private-memory profiling does not instrument these FILE paths. Short native
+and SEND intervals are close to clock overhead; finer comparisons need a separate
+longer-batch or scoped-instrumentation contract. Owner-host/physical-hardware
+results, capability attachment cost, cross-space contention, mixed-workload
+fairness and per-process CPU accounting remain unmeasured. Gather the relevant
+coverage before making deployment-capacity or fine-grained performance claims;
+keep each environment and completion boundary distinct.
+
 ## Fixed userspace stacks
 
 Each process eagerly backs a 1 MiB user stack, including programs that use much
@@ -423,14 +442,14 @@ does not immediately return the slot. A sequential caller, or a sender whose
 previous group has already been consumed and acknowledged, can therefore hit
 QUEUE_FULL despite having no outstanding application work.
 
-The [I/O and IPC baseline](wip/io-ipc-baselines.md) observed this on CPU 1 in
+The [I/O and IPC baseline](io-ipc-baselines.md) observed this on CPU 1 in
 four-CPU nested KVM: a zero-byte 256-call warmup completed 21 round trips before
 QUEUE_FULL; SEND admitted and acknowledged two groups of eight, then rejected
 message 17. These are observed failure points, not deterministic capacity
 thresholds: BSP scheduling/reclamation can change the number completed.
 
-Task 4 also observed ordinary 1 MiB HTTP snapshot reads fail with EAGAIN after
-61320 and 122640 confirmed bytes, at caller request sizes 4088 and 65536. Each
+Matched HTTP runs also observed ordinary 1 MiB snapshot reads fail with EAGAIN
+after 61320 and 122640 confirmed bytes, at caller request sizes 4088 and 65536. Each
 OPEN fetched the full body successfully; the retained FILE reads then failed.
 The 32 KiB matched fixtures completed. This is consistent with the same receipt
 capacity limit and affects real exported-file consumers, not only synthetic IPC
@@ -438,8 +457,8 @@ batches. Larger caller buffers do not bypass the 4088-byte FILE transfer limit.
 The exact failure position varies with reclamation; shrinking benchmark fixtures
 does not make sustained exported-file consumption reliable.
 
-Task 3 uses fresh endpoints and eight-message samples, with creation and teardown
-outside timing. Larger explicitly requested runs still expose capacity failures;
+`ipcbench` uses fresh endpoints and eight-message samples, with creation and
+teardown outside timing. Larger explicitly requested runs still expose capacity failures;
 there are no hidden data retries or sleeps to pace the measured workload. This
 keeps successful measurements possible but does not establish sustainable
 long-running endpoint throughput. Even control calls used for shutdown can meet
@@ -447,8 +466,8 @@ this capacity limit.
 
 Revisit in a separate endpoint lifetime/reclamation investigation before using
 these samples to size a continuously busy service or adding a sustained IPC
-baseline, or relying on larger exported-file snapshots. Preserve BSP destruction ownership, CALL delivery/outcome reporting,
-and attachment/receipt lifetimes; determine whether logical slot reuse can be
+baseline, or relying on larger exported-file snapshots. Preserve BSP destruction
+ownership, CALL delivery/outcome reporting, and attachment/receipt lifetimes; determine whether logical slot reuse can be
 separated safely from object destruction or reclamation scheduling needs work.
 No reclamation algorithm change is included in the measurement milestone.
 
@@ -468,7 +487,7 @@ a companion that faults before its readiness or result message can leave the
 coordinator in RECEIVE. Their CALL deadlines do not bound pipe or process waits.
 Revisit benchmark-wide timeouts with the same bounded-receive/wait-set work;
 retain explicit partial progress and never describe a CALL deadline as forced
-process termination. See [I/O and IPC baselines](wip/io-ipc-baselines.md).
+process termination. See [I/O and IPC baselines](io-ipc-baselines.md).
 
 ## Provider calls through synchronous file helpers
 
