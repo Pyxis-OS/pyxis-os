@@ -56,7 +56,16 @@ void file_end_operation(struct file_object *file);
 /* BSP, IF=0. Requester lends exclusive operation ownership while blocked.
  * Capacity must cover the live prefix, or be zero to release the buffer.
  * Failure leaves the old buffer/capacity intact. Does not change logical size. */
-bool file_replace_buffer(struct file_object *file, size_t capacity);
+struct file_buffer_profile {
+  uint64_t allocation_started, allocation_ended;
+  uint64_t copy_started, copy_ended;
+  uint64_t release_started, release_ended;
+  size_t copied_bytes;
+};
+
+/* Optional BSP-owned result storage, initialized by the requester. */
+bool file_replace_buffer(struct file_object *file, size_t capacity,
+    struct file_buffer_profile *profile);
 
 /* Current process, IF=0. Caller holds a live reference and supplies its granted
  * rights and operation from a checked protocol tag. request_address/size

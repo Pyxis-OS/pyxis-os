@@ -4,6 +4,10 @@
 #include <abi/message.h>
 
 #define PROFILE_RIGHT_MEMORY (UINT64_C(1) << 0)
+#define PROFILE_RIGHT_FILE (UINT64_C(1) << 1)
+#define PROFILE_FILE_BEGIN UINT64_C(4)
+#define PROFILE_FILE_SNAPSHOT UINT64_C(5)
+#define PROFILE_FILE_END UINT64_C(6)
 #define PROFILE_BEGIN UINT64_C(1)
 #define PROFILE_SNAPSHOT UINT64_C(2)
 #define PROFILE_END UINT64_C(3)
@@ -33,7 +37,31 @@ struct profile_snapshot {
   struct profile_memory_operation release;
 };
 
-/* All operations are header-only and require MEMORY authority. They always
+struct profile_file_snapshot {
+  uint64_t flags;
+  uint64_t requests, successes, failures;
+  uint64_t requested_capacity, copied_bytes;
+  struct profile_duration publication, queue, service, resume, total;
+  struct profile_duration allocation, copy, release;
+};
+
+/* FILE_BEGIN/SNAPSHOT/END require FILE authority and control an independent
+ * caller-local collection with the same state rules as the memory operations.
+ * Count each RAM buffer replacement admitted to BSP, including the existing
+ * exact-capacity fallback after a failed spare-capacity allocation. Capacity
+ * sums include failures and zero-capacity releases; copied bytes count only
+ * existing file contents actually copied, never incoming write payloads.
+ * Boundaries: preparation before wait setup, just before publication locking,
+ * BSP service start/end and caller resumption. Service includes allocation,
+ * existing-data copy and old-buffer release, separately timed when performed.
+ * Zero-capacity requests only release; failed allocation does not copy/release.
+ * No clocks or allocations for disabled collection. Elapsed ns include clock
+ * overhead and scheduling, not CPU time. Saturation is local to this collection.
+ * File ownership waits, payload copying, validation and reply work are excluded.
+ * No file addresses, names or remote task information are exposed. */
+_Static_assert(sizeof(struct profile_file_snapshot) == 176, "file profile layout");
+
+/* All operations are header-only. BEGIN/SNAPSHOT/END require MEMORY authority. They always
  * act on the calling process, even through copied/delegated handles. One
  * collection per process, initially disabled; children start disabled too.
  * BEGIN clears counters, enables collection and has no reply (BUSY if active).

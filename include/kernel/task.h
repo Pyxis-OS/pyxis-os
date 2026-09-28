@@ -6,6 +6,7 @@
 #include <kernel/object/capability.h>
 
 struct profile_snapshot;
+struct profile_file_snapshot;
 struct task_wait;
 struct directory_entry;
 struct file_object;
@@ -97,6 +98,7 @@ enum mm_result task_request_memory(uint64_t operation, struct memory_region *reg
 /* Current user task, IF=0. Caller validates reply storage before state changes.
  * No allocation or remote inspection; one task per process at present. */
 enum call_status task_profile_control(uint64_t operation, struct profile_snapshot *reply);
+enum call_status task_profile_file_control(uint64_t operation, struct profile_file_snapshot *reply);
 
 /* Same inactive-root handoff as private memory. The capability keeps display
  * alive while blocked; reply is copied through task metadata, never remotely. */
