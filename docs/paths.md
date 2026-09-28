@@ -33,7 +33,11 @@ the authority, regardless of the display string.
 An explicit [service namespace](namespaces.md) is separate from directory roots.
 Resolution rejects a scheme bound in both routes, including a binding whose
 provider has exited. Launch checks known conflicts too; mutation after launch
-makes the runtime check necessary. Provider file opening is not implemented yet.
+makes the runtime check necessary. A namespace-only scheme opens files through
+its [provider](file-providers.md), passing the complete URI without component
+walking, normalization or decoding. The provider decides its own URI semantics.
+Provider directories, cwd changes, removal and rename are unsupported; there is
+no fallback to directory operations after provider failure.
 
 ## Ownership and storage
 
@@ -53,6 +57,7 @@ variables after changing directory.
 Each operation also receives a workspace: a temporary handle array and a buffer
 for one component or scheme plus NUL. All storage, input strings and output
 locations must be disjoint. There is no library-wide path length or depth limit.
+Provider OPEN URIs additionally fit the 4,080-byte copied-payload bound.
 Caller capacity bounds an operation; insufficiency returns LIMIT without
 truncation. A later allocator can supply larger arrays without changing the
 kernel ABI. Scratch grants are released on every return.

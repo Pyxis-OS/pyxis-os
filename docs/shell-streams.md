@@ -16,6 +16,9 @@ cat missing 2> home://errors | cat > home://empty
 
 Launch selects dedicated stream grants with explicit protocol tags. Each stdin
 handle has READ authority; stdout and stderr have WRITE authority. A stream's
+FILE grant may be native or [exported by a provider](file-providers.md); exported
+streams additionally carry SEND|RECEIVE transport, while native streams carry zero.
+The kernel checks the interface and both authority masks. A stream's
 grant index cannot also be used by another stream or an ordinary startup binding.
 Libc descriptors adopt those handles directly, without leaving unused startup
 copies. Each FILE has a non-owning association that is invalidated before the
@@ -89,5 +92,5 @@ revisit points are retained in [technical debt](technical-debt.md#shell-redirect
 
 Future provider-to-shell capability handoff and explicit request submission
 remain separate designs in [userspace scheme providers](wip/userspace-scheme-providers.md#prepared-requests-and-shell-handoff).
-The implemented stream interfaces do not add provider APIs, implicit submission,
-resource representations, POSIX descriptors or additional authority.
+FILE provider opens are implemented through the shared library bridge. Prepared
+requests, implicit submission and additional authority remain outside it.

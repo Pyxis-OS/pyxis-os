@@ -108,8 +108,8 @@ automatically retried. Gaps and newly grown ranges read as zero. Zero bytes with
 nonzero read capacity means EOF. Cat uses libc stdio to copy bytes without assuming
 NUL-terminated content or allocating a buffer the size of the file. The helpers
 use bounded stack storage and require valid caller buffers; copying adds no heap
-or memory-service dependency. Exported-file routing and provider OPEN remain the
-next [userspace-services task](wip/userspace-services.md#focused-implementation-tasks).
+or memory-service dependency. The [file-provider bridge](file-providers.md) routes exported files through
+endpoint invocation and shares OPEN resolution with libc and shell redirection.
 
 The [handle wrapper](https://git.internal/chronium/pyxis-userland/src/branch/main/include/handle.h) releases the calling process's
 reference. A closed handle is immediately stale; other owners, including the

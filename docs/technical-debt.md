@@ -410,3 +410,14 @@ A provider CALL deadline bounds its own registration wait, but does not bound
 the parent's RECEIVE. Revisit with endpoint/process wait sets or a bounded receive
 facility; do not infer provider readiness from launch success or add automatic
 restart. Process kill and running-command Ctrl-C remain separate debt.
+
+## Provider calls through synchronous file helpers
+
+The shared FILE and provider OPEN helpers preserve their synchronous signatures
+and currently submit calls without a deadline. A live provider that stops replying
+can therefore block ordinary file readers and shell input redirection indefinitely.
+Provider exit or withdrawal releases affected waits, but neither is automatic.
+The immutable text service does no blocking work inside a request; HTTP will need
+its planned bounded fetch policy. Revisit caller-controlled bounded file/open
+waits alongside cancellation/wait sets; do not introduce hidden retries or an
+arbitrary global timeout. Existing endpoint APIs already support explicit deadlines.

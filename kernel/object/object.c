@@ -27,6 +27,85 @@
 static struct kernel_object *retired_objects;
 static atomic_bool retired_locked;
 
+uint64_t object_protocol(const struct kernel_object *object)
+{
+  switch (object->type) {
+  case OBJECT_CONSOLE:
+    return PROTOCOL_CONSOLE;
+  case OBJECT_FILE:
+    return PROTOCOL_FILE;
+  case OBJECT_ENDPOINT:
+    return PROTOCOL_ENDPOINT;
+  case OBJECT_DIRECTORY:
+    return PROTOCOL_DIRECTORY;
+  case OBJECT_MEMORY:
+    return PROTOCOL_MEMORY;
+  case OBJECT_PROCESS_CONTROL:
+    return PROTOCOL_PROCESS;
+  case OBJECT_LAUNCHER:
+    return PROTOCOL_LAUNCHER;
+  case OBJECT_DISPLAY:
+    return PROTOCOL_DISPLAY;
+  case OBJECT_CLOCK:
+    return PROTOCOL_CLOCK;
+  case OBJECT_KEYBOARD:
+    return PROTOCOL_KEYBOARD;
+  case OBJECT_MOUNT:
+    return PROTOCOL_MOUNT;
+  case OBJECT_ECHO:
+    return PROTOCOL_ECHO;
+  case OBJECT_NET_CONFIG:
+    return PROTOCOL_NET_CONFIG;
+  case OBJECT_UDP_SERVICE:
+    return PROTOCOL_UDP_SERVICE;
+  case OBJECT_UDP:
+    return PROTOCOL_UDP;
+  case OBJECT_RANDOM:
+    return PROTOCOL_RANDOM;
+  case OBJECT_TCP_SERVICE:
+    return PROTOCOL_TCP_SERVICE;
+  case OBJECT_TCP:
+    return PROTOCOL_TCP;
+  case OBJECT_SPACE:
+    return PROTOCOL_SPACE;
+  case OBJECT_PROFILE:
+    return PROTOCOL_PROFILE;
+  case OBJECT_PIPE_SERVICE:
+    return PROTOCOL_PIPE_SERVICE;
+  case OBJECT_PIPE:
+    return PROTOCOL_PIPE;
+  case OBJECT_ENDPOINT_SERVICE:
+    return PROTOCOL_ENDPOINT_SERVICE;
+  case OBJECT_ENDPOINT_RECEIVER:
+    return PROTOCOL_ENDPOINT_RECEIVER;
+  case OBJECT_ENDPOINT_RECEIPT:
+    return PROTOCOL_ENDPOINT_RECEIPT;
+  case OBJECT_NAMESPACE_SERVICE:
+    return PROTOCOL_NAMESPACE_SERVICE;
+  case OBJECT_NAMESPACE:
+    return PROTOCOL_NAMESPACE;
+  case OBJECT_ENDPOINT_EXPORT:
+    return endpoint_export_protocol(object);
+  default:
+    return 0;
+  }
+}
+
+bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
+                         uint64_t transport)
+{
+  if (object->type == OBJECT_ENDPOINT_EXPORT) {
+    return protocol == PROTOCOL_FILE && object_protocol(object) == PROTOCOL_FILE &&
+        transport == HANDLE_TRANSPORT_CALL;
+  }
+  if (transport) {
+    return false;
+  }
+  return (protocol == PROTOCOL_FILE && object->type == OBJECT_FILE) ||
+      (protocol == PROTOCOL_CONSOLE && object->type == OBJECT_CONSOLE) ||
+      (protocol == PROTOCOL_PIPE && object->type == OBJECT_PIPE);
+}
+
 bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
                             uint64_t transport)
 {

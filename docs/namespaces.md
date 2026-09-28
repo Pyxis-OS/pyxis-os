@@ -59,8 +59,8 @@ Existing directory roots remain the route for ordinary paths. Launch rejects
 names already bound both as a child directory root and in its namespace, even if
 the export is dead. Since managers can mutate the map later, userspace resolution
 also checks for ambiguity at resolution time. Neither route wins by priority.
-Provider FILE/open routing remains a later task; this slice exposes direct named
-service discovery.
+Provider FILE/open routing uses the shared [file-provider bridge](file-providers.md);
+other protocols continue to use direct named service discovery.
 
 ## Init publication
 

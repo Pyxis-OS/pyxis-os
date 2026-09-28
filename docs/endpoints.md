@@ -135,7 +135,9 @@ export protocol returns `CALL_BAD_OPERATION` before admission. RECEIVE supplies
 the immutable export ID/protocol, requested operation and the invoking grant's
 actual resource rights. The provider checks operation-specific resource rights;
 the kernel enforces transport authority without interpreting provider protocols.
-There is no native FILE invocation bridge in this slice.
+Libpyxis FILE helpers select this exported route using the authenticated handle
+interface/kind; native FILE calls retain their existing syscall dispatch. See
+[userspace file providers](file-providers.md).
 
 WITHDRAW denies new operations with `CALL_ENDPOINT_CLOSED`, removes queued work
 and wakes callers with their delivery state. Delivered work retains its receipt

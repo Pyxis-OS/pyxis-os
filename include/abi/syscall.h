@@ -7,7 +7,7 @@
 #define SYSCALL_CALL UINT64_C(2)
 #define SYSCALL_CLOSE UINT64_C(3)
 #define SYSCALL_COPY UINT64_C(4)
-#define SYSCALL_HANDLE_RIGHTS UINT64_C(5)
+#define SYSCALL_HANDLE_INFO UINT64_C(5)
 #define SYSCALL_EXIT UINT64_C(-1)
 
 enum call_status {
@@ -45,11 +45,11 @@ enum call_status {
   CALL_STATUS_COUNT, /* Validation bound, not a result. */
 };
 
-/* CALL/CLOSE/COPY/HANDLE_RIGHTS return status in RAX and reply bytes in RDX (zero on failure,
+/* CALL/CLOSE/COPY/HANDLE_INFO return status in RAX and reply bytes in RDX (zero on failure,
  * always zero for CLOSE). COPY takes source, resource rights, transport rights,
  * flags and an output handle address in RDI/RSI/RDX/R10/R8; success writes
- * one handle and returns its size. HANDLE_RIGHTS takes a handle and
- * handle_authority output address in RDI/RSI; success writes both masks.
+ * one handle and returns its size. HANDLE_INFO takes a handle and
+ * handle_info output address in RDI/RSI; success writes authority and interface.
  * It exposes no object identity and requires no right beyond holding the handle.
  * The C x86_64 ABI returns this two-word structure in those same registers.
  * LAUNCHER_LAUNCH_BATCH is a narrow exception: after reply-buffer validation it

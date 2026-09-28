@@ -60,6 +60,13 @@ void object_init(struct kernel_object *object, enum object_type type,
 bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
                             uint64_t transport);
 
+/* Immutable public interface; caller retains the object. No liveness promise. */
+uint64_t object_protocol(const struct kernel_object *object);
+
+/* Standard streams accept native objects or exported FILE with CALL transport. */
+bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
+                         uint64_t transport);
+
 /* Caller owns a live reference throughout retain. False means count overflow;
  * no reference is acquired. Release consumes one owned reference. IF=0 for
  * release on every CPU; the last release queues destruction without allocating. */
