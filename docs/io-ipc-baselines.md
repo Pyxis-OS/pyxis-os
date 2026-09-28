@@ -342,21 +342,22 @@ are elapsed clock readings, not nanosecond-accuracy claims.
 
 ## Capacity failures and validation limits
 
-Zero-byte, 256-message endpoint warmups exposed deferred receipt reclamation:
+In the original baseline, zero-byte, 256-message endpoint warmups exposed
+deferred receipt reclamation:
 CALL completed 21 round trips before QUEUE_FULL; SEND admitted and acknowledged
-16 messages, then rejected the 17th. Completed receipts retain delivery slots
-until BSP destruction. Failure positions depend on reclamation scheduling and
-are not fixed thresholds. Both workloads failed without throughput. CALL's STOP
+16 messages, then rejected the 17th. Completed receipts retained delivery slots
+until BSP destruction. Failure positions depended on reclamation scheduling and
+were not fixed thresholds. Both workloads failed without throughput. CALL's STOP
 also failed admission; closing the last control client allowed retirement and a
 normal nonzero child exit. SEND verified its acknowledged prefix and shut down.
-Fresh endpoints and eight-message defaults make short samples possible without
+Fresh endpoints and eight-message defaults made short samples possible without
 establishing sustained throughput.
 
 Both 1 MiB HTTP warmups failed with EAGAIN (native errno 9) after successful body
 fetches. Request 4088 confirmed 61320 bytes before read attempt 16 failed; request
 65536 confirmed 122640 bytes and 30 positive shorts before attempt 31 failed.
 Neither reached EOF or produced measured samples/throughput. These ordinary
-exported-file failures are consistent with the same receipt limit. There was no
+exported-file failures were consistent with the same receipt limit. There was no
 retry, pacing or automatic smaller fixture. The 32 KiB success is a bounded
 observation, not a workaround for arbitrary consumers.
 
@@ -373,14 +374,15 @@ performance; the documentation handoff did not rerun these measurements.
 
 These investigations are now organized in the agreed
 [I/O reliability and bottleneck attribution milestone](wip/io-reliability-attribution.md),
-with receipt reclamation first. They are not implemented optimizations.
+where task 1 has resolved completed-receipt retention. The attribution
+investigations remain pending.
 The attribution/coverage gaps and revisit points are retained in
 [technical debt](technical-debt.md#io-baseline-attribution-and-coverage):
 
-- **Endpoint receipt reclamation:** determine whether logical slot reuse can be
-  separated safely from object destruction, preserving BSP ownership and receipt,
-  attachment and delivery lifetimes. Revisit before sustained IPC or larger
-  exported snapshots. The observed failures and contract are in
+- **Endpoint receipt reclamation — completed:** logical slot reuse is now
+  separate from backing destruction, preserving BSP ownership and receipt,
+  attachment and delivery lifetimes. The agreed 256-message IPC and 1 MiB HTTP
+  reruns passed. The original failures and remaining live-work limit are in
   [technical debt](technical-debt.md#endpoint-throughput-limited-by-deferred-receipt-reclamation).
 - **RAM growth attribution:** isolate file-buffer growth and BSP queue/service
   time before choosing allocation or notification changes. The grow/prepared gap
