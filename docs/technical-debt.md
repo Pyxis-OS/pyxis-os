@@ -57,7 +57,7 @@ allocation policy.
 ## I/O baseline attribution and coverage
 
 The [I/O/IPC baselines](io-ipc-baselines.md) measure elapsed workload boundaries
-in nested KVM. The [RAM attribution](wip/io-reliability-attribution.md#task-2-implemented-ram-file-profiling)
+in nested KVM. The [RAM attribution](io-reliability-attribution.md#ram-file-profiling)
 now separates RAM replacement costs and identifies queue time as dominant in the
 measured growing writes/copies; see the FILE service-delay entry below.
 HOST profiling now separates guest queues, worker service and transport, but
@@ -70,14 +70,16 @@ Private-memory, RAM replacement and HOST collections remain independent. Short n
 and SEND intervals are close to clock overhead; finer comparisons need a separate
 longer-batch or scoped-instrumentation contract. Owner-host/physical-hardware
 results, capability attachment cost, cross-space contention, mixed-workload
-fairness and per-process CPU accounting remain unmeasured. Gather the relevant
-coverage before making deployment-capacity or fine-grained performance claims;
-keep each environment and completion boundary distinct.
+fairness and per-process CPU accounting remain unmeasured. The final combined
+IPC/HTTP/RAM/HOST matrix and additional resolution decisions were deferred when
+the reliability milestone closed; no final matched matrix is claimed. Gather
+relevant coverage before making deployment-capacity or fine-grained performance
+claims; keep each environment and completion boundary distinct.
 
 ## RAM FILE BSP service delay
 
 RAM buffer replacements publish work to the BSP queue without explicit remote
-notification. In the [matched nested-KVM attribution](wip/io-reliability-attribution.md#attribution-and-follow-up),
+notification. In the [matched nested-KVM attribution](io-reliability-attribution.md#ram-file-profiling),
 ten successful replacements copied 2,084,880 existing-data bytes per 1 MiB grow
 pass. Publication-to-service queue sums were 44.783–54.129 ms and accounted for
 83–92% of profiled transfer time, while BSP service was 2.799–5.357 ms. Prepared
@@ -93,7 +95,7 @@ five-sample groups. Other BSP queues and allocator concurrency remain separate.
 
 ## Host FILE profiling perturbation
 
-The [HOST attribution matrix](wip/io-reliability-attribution.md#instrumented-attribution-and-its-limit)
+The [HOST attribution matrix](io-reliability-attribution.md#host-profiling-and-attribution-limits)
 records separate initial BSP queue, worker queue/service, transport and resumption
 intervals. In the agreed five-sample nested-KVM groups, profiled medians were
 13.7–16.1 times their controls. Initial queue wait took 73.8–78.8% of profiled
@@ -113,9 +115,11 @@ correction or normal-workload phase partition is justified.
 
 Initial HOST publication now explicitly notifies the BSP after unlocking,
 preserving request ownership and early wake semantics. The
-[correction validation](wip/io-reliability-attribution.md#task-5-host-publication-notification)
+[correction validation](io-reliability-attribution.md#host-publication-notification)
 repeats the affected off/on controls; full profiling still perturbs execution.
-Task 5's remaining comparison work must retain unprofiled elapsed controls and
+The milestone closed after this correction. Additional resolution/coverage and
+the final combined IPC/HTTP/RAM/HOST matrix were deferred as independent work,
+not completed. Future comparisons must retain unprofiled elapsed controls and
 settle any additional measurement coverage separately. The report's counts-only
 patches are experimental, with unavailable phase timings explicitly omitted; no permanent
 collection mode or clock change has been accepted. Full-profile attribution
@@ -492,7 +496,7 @@ receipt ownership and CALL outcome collection, if any, have both ended. The
 embedded receipt never enters the retirement queue; a separate endpoint backing
 object preserves BSP destruction ownership. See the
 [endpoint contract](endpoints.md) and
-[reliability milestone](wip/io-reliability-attribution.md) for implementation and
+[reliability milestone](io-reliability-attribution.md) for implementation and
 validation details.
 
 Historical observations before the fix: the sixteen delivery records retained

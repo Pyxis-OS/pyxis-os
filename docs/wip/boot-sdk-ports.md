@@ -80,6 +80,10 @@ milestone's remaining interface details before starting its code work.
     boundaries, and a recorded nested-KVM baseline. Owner-host results remain
     unavailable; capacity and attribution follow-ups are documented.
 
+24. Complete: [I/O reliability and attribution](../io-reliability-attribution.md),
+    with prompt receipt reuse, RAM/HOST attribution, and initial HOST publication
+    notification. Remaining resolution and combined-matrix work is deferred.
+
 Everyday use for simple tasks guides this order. Website hosting remains one
 future application, not the primary completion target for the OS.
 
@@ -108,22 +112,13 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Next milestone and later candidates
 
-The [I/O and IPC baseline](../io-ipc-baselines.md) and documentation handoff are
-complete. The observed completed-receipt capacity retention is resolved; genuine
-live-work capacity and wait limits remain documented in
-[technical debt](../technical-debt.md#endpoint-throughput-limited-by-deferred-receipt-reclamation).
-The active milestone is [I/O reliability and bottleneck attribution](io-reliability-attribution.md):
-task 1 fixed logical receipt reuse and the previously failing IPC/HTTP matrix
-now passes. Task 2 attributed RAM growth mainly to BSP queue wait in nested KVM.
-Task 3 separated host queue/transport intervals and exposed strong profiling
-perturbation. Task 4 reproduced the slowdown and isolated a large interaction
-between timestamps and missing initial BSP notification; its
-[experiment report](../experiments/host-profile-slowdown/README.md) records residual
-profiling distortion. Task 5 has implemented the focused HOST publication
-notification correction and repeated its affected controls. Comparison resolution,
-the final IPC/HTTP-inclusive matrix and the documentation handoff remain to settle.
-Instrumentation choices are settled per task;
-there is no blanket optimization assignment. The following remain later alternatives.
+The [I/O reliability and attribution report](../io-reliability-attribution.md)
+closes the performance milestone. The former IPC/HTTP failures are resolved,
+and HOST publication now notifies the BSP. Profiling perturbation and remaining
+measurement coverage are recorded in [technical debt](../technical-debt.md).
+
+The following remain later alternatives; no additional implementation is selected
+by this milestone closure.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

@@ -417,7 +417,7 @@ not collect metadata-only operations, sync, deferred cleanup or remote callers.
 Failed published transport requests have a separate interval ending before reset
 recovery; valid used-ring completion does not imply FUSE success. Disabled
 collection adds no clocks or allocation. See the [ABI](../include/abi/profile.h)
-and [measured attribution limits](wip/io-reliability-attribution.md#instrumented-attribution-and-its-limit).
+and [measured attribution limits](io-reliability-attribution.md#host-profiling-and-attribution-limits).
 
 The nested-KVM measurements show strong profiling perturbation; retain matching
 unprofiled controls. Transport elapsed combines guest and host scheduling with
