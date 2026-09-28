@@ -429,6 +429,15 @@ QUEUE_FULL; SEND admitted and acknowledged two groups of eight, then rejected
 message 17. These are observed failure points, not deterministic capacity
 thresholds: BSP scheduling/reclamation can change the number completed.
 
+Task 4 also observed ordinary 1 MiB HTTP snapshot reads fail with EAGAIN after
+61320 and 122640 confirmed bytes, at caller request sizes 4088 and 65536. Each
+OPEN fetched the full body successfully; the retained FILE reads then failed.
+The 32 KiB matched fixtures completed. This is consistent with the same receipt
+capacity limit and affects real exported-file consumers, not only synthetic IPC
+batches. Larger caller buffers do not bypass the 4088-byte FILE transfer limit.
+The exact failure position varies with reclamation; shrinking benchmark fixtures
+does not make sustained exported-file consumption reliable.
+
 Task 3 uses fresh endpoints and eight-message samples, with creation and teardown
 outside timing. Larger explicitly requested runs still expose capacity failures;
 there are no hidden data retries or sleeps to pace the measured workload. This
@@ -438,7 +447,7 @@ this capacity limit.
 
 Revisit in a separate endpoint lifetime/reclamation investigation before using
 these samples to size a continuously busy service or adding a sustained IPC
-baseline. Preserve BSP destruction ownership, CALL delivery/outcome reporting,
+baseline, or relying on larger exported-file snapshots. Preserve BSP destruction ownership, CALL delivery/outcome reporting,
 and attachment/receipt lifetimes; determine whether logical slot reuse can be
 separated safely from object destruction or reclamation scheduling needs work.
 No reclamation algorithm change is included in the measurement milestone.

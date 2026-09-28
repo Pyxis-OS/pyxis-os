@@ -14,8 +14,8 @@ compared against useful baselines rather than an unexplained throughput figure.
 
 Small manually invoked userspace applications are the primary deliverable:
 `iobench` for byte I/O and a focused IPC benchmark with a companion process.
-The read, write, copy, pipe and endpoint contracts below are implemented.
-Remaining exported-file/HTTP workload details are settled before task 4.
+The read, write, copy, pipe, endpoint and exported-file/HTTP contracts below are
+implemented. Task 5 remains: consolidate the baseline report and handoff.
 Keep workloads bounded and build/package them normally;
 do not add a generic benchmark framework, boot automation or CI performance gates.
 
@@ -132,6 +132,10 @@ up benchmark processes, handles and temporary resources after each run. No
 performance target or minimum throughput is required to complete the milestone.
 
 ## Implemented task 1: file reads
+
+This section records the original payload-only contract and observations.
+[Task 4](#implemented-task-4-exported-files-and-http) extends read mode with exact
+length selection and separate OPEN/complete timing; use that contract for new runs.
 
 The ordinary userland build packages `iobench.pxe` and `share/iobench.bin`.
 The latter is a deterministic 1 MiB fixture: byte at zero-based offset `i` is
@@ -513,6 +517,123 @@ GDB after the final 4096-byte SEND run showed four idle CPUs, CPU 1 online and
 empty completion/pipe/endpoint/memory queues and object-retirement list. All
 owned QEMU/debugger jobs were stopped. No compiler-container rebuild is needed.
 
+## Implemented task 4: exported files and HTTP
+
+`iobench read` accepts exact `--bytes N` (1..1048576, default 1048576). The build
+packages `share/iobench-small.bin`, the 32 KiB prefix of the existing 1 MiB fixture.
+Read requires the selected deterministic bytes followed by EOF. Other modes
+retain their 1 MiB contract. See the [tool reference](../../userspace/iobench/README.md).
+
+Every pass holds one descriptor from OPEN through payload reads, EOF check and
+close. Four clock boundaries report OPEN, payload-only and complete consumption
+separately. HTTP OPEN includes discovery, connect/request, parsing and complete
+body staging; payload reads perform no further fetch. Complete consumption ends
+at close return, not deferred provider storage reclamation, and includes the
+intermediate clock reads. Allocation, fixture preparation, content verification
+and diagnostics remain outside all timing. One untimed warmup and five measured
+passes remain the defaults. Selected-byte throughput is reported only for
+successful payload and complete intervals, never for OPEN.
+
+No provider, kernel, ABI, libc, caching, retry or pacing change is included.
+Capacity failures remain explicit failed workloads with confirmed partial
+progress; a smaller fixture is an explicit choice, not an automatic fallback.
+Ordinary FILE helpers have no caller IPC deadline, even though the provider
+bounds each network fetch to thirty seconds. Existing `ttcp` results measure
+guest transmit with a different completion boundary; they remain context, not
+matched HTTP-download measurements.
+
+### Manual matched fixtures
+
+After `make -j16 image`, start a host server in a dedicated temporary directory:
+
+```sh
+http_fixture_dir=$(mktemp -d)
+cp build/userspace-root/share/iobench.bin build/userspace-root/share/iobench-small.bin "$http_fixture_dir/"
+python3 -m http.server 18080 --bind 127.0.0.1 --directory "$http_fixture_dir"
+```
+
+Use `CPUS=4 ACCEL=kvm MEMORY=256M VIRTIO_NET=1 make run` with the normal OVMF
+configuration. Select CPU 1 Development. Numeric `10.0.2.2` uses QEMU user
+networking and avoids DNS. Choose unused RAM output names because shell `>`
+truncates existing files, then prepare the copies outside measurements:
+
+```text
+cat app://share/iobench-small.bin > home://http-small.bin
+cat app://share/iobench.bin > home://http-large.bin
+iobench read app://share/iobench-small.bin --bytes 32768
+iobench read home://http-small.bin --bytes 32768
+iobench read http://10.0.2.2:18080/iobench-small.bin --bytes 32768
+iobench read app://share/iobench.bin
+iobench read home://http-large.bin
+iobench read http://10.0.2.2:18080/iobench.bin
+```
+
+Repeat each selected command with `--buffer 65536`; the default is 4088. Remove
+the disposable RAM copies after use. After quitting QEMU, stop the host server
+with Ctrl-C and remove its two copied fixtures and temporary directory. No cold
+cache is forced; opening again fetches again but does not evict host caches.
+
+### Task 4 observations
+
+Measured on 2026-09-28 with kernel/source `2b9b7e7`, userland implementation
+committed as `bef2991`, ports `6ec1290` and lwIP `a1aadb9`. The ordinary `make -j16 image`
+passed using Pyxis GCC 16.2.0. QEMU 10.2.2 used Q35, nested KVM, four CPUs,
+256 MiB RAM, OVMF, virtio entropy and virtio networking with the user backend;
+no virtio-fs export was attached. Commands ran on CPU 1 Development with the
+ordinary presenter/provider tasks. Host: Fedora 44 KDE, Linux
+6.19.10-300.fc44.x86_64, itself a KVM guest exposing an i9-12900K and 16 CPUs.
+These are nested-VM observations, not owner-host baselines.
+
+Python 3.14.3 served the two files from host tmpfs over loopback port 18080.
+Their POSIX checksums were 1349564844 (32768 bytes) and 1625934143 (1048576 bytes);
+the smaller file matched the larger one's prefix. Every successful configuration
+below completed one verified warmup and five verified samples. Server logs showed
+six GETs per successful HTTP configuration: one per OPEN, none for held reads.
+
+Each elapsed cell is median [minimum, maximum], in milliseconds, independently
+computed over five samples. The final column is the separate 1000-call clock-loop
+mean in nanoseconds; no overhead was subtracted.
+
+| Backend | Bytes | Request | OPEN ms | Payload ms | Complete ms | Clock ns |
+| --- | ---: | ---: | --- | --- | --- | ---: |
+| archive | 32768 | 4088 | 0.039 [0.037, 0.041] | 0.044 [0.044, 0.045] | 0.118 [0.116, 0.121] | 35913 |
+| archive | 32768 | 65536 | 0.037 [0.037, 0.038] | 0.044 [0.043, 0.044] | 0.117 [0.116, 0.117] | 35955 |
+| archive | 1048576 | 4088 | 0.039 [0.038, 0.041] | 0.267 [0.250, 0.404] | 0.344 [0.326, 0.478] | 35725 |
+| archive | 1048576 | 65536 | 0.039 [0.037, 0.040] | 0.265 [0.254, 0.283] | 0.338 [0.329, 0.358] | 35947 |
+| ram | 32768 | 4088 | 0.038 [0.036, 0.040] | 0.043 [0.042, 0.044] | 0.116 [0.112, 0.119] | 36011 |
+| ram | 32768 | 65536 | 0.038 [0.036, 0.045] | 0.044 [0.044, 0.050] | 0.117 [0.116, 0.125] | 36200 |
+| ram | 1048576 | 4088 | 0.038 [0.037, 0.039] | 0.257 [0.253, 0.279] | 0.335 [0.326, 0.353] | 35906 |
+| ram | 1048576 | 65536 | 0.038 [0.037, 0.043] | 0.253 [0.251, 0.266] | 0.328 [0.324, 0.345] | 35777 |
+| http | 32768 | 4088 | 14.161 [12.628, 16.298] | 0.073 [0.072, 0.078] | 14.273 [12.738, 16.414] | 36217 |
+| http | 32768 | 65536 | 14.452 [11.021, 14.613] | 0.080 [0.073, 0.088] | 14.564 [11.154, 14.732] | 36235 |
+
+All successful 32 KiB passes used nine payload calls; all successful 1 MiB passes
+used 257. At request size 4088 there were no short payload reads. At 65536 there
+were eight and 256 respectively. Each successful pass made one extra EOF call.
+Thus a larger application request did not enlarge the 4088-byte native/exported
+transfer. Native short intervals are close to clock-call overhead and should
+not support fine-grained speed comparisons. HTTP OPEN dominated the small-file
+complete interval; this does not isolate network, parser, staging or scheduling
+costs from one another.
+
+Both 1 MiB HTTP configurations failed during the untimed warmup with EAGAIN
+(native errno 9). Request 4088 confirmed 61320 bytes before read attempt 16 failed;
+request 65536 confirmed 122640 bytes with 30 short reads before attempt 31 failed.
+Neither attempted EOF or produced measured samples/throughput. Each OPEN fetched
+once successfully. The failures are consistent with the existing deferred
+endpoint receipt reclamation limit; these positions are observations, not fixed
+capacity thresholds. No retry, pacing or automatic smaller fixture was used.
+See [technical debt](../technical-debt.md#endpoint-throughput-limited-by-deferred-receipt-reclamation).
+
+Manual checks also covered a valid one-byte prefix, early EOF, excess length,
+wrong content, HTTP 404, zero/oversized `--bytes`, and rejection of `--bytes` on
+write mode. Failures returned nonzero without throughput. One-warmup/one-sample
+write, copy and pipe regression runs each verified the full 1 MiB. Post-workload
+GDB inspection showed four CPUs, CPU 1 online, and empty completed-task, pipe,
+endpoint, memory-work and retired-object queues. This is a point-in-time kernel observation,
+not proof of provider snapshot storage accounting. QEMU, GDB and the host HTTP
+server were stopped; the temporary host fixtures were removed.
+
 ## Focused PR tasks
 
 - [x] **1. Measurement contract and file reads.** Settle command syntax, default
@@ -526,7 +647,7 @@ owned QEMU/debugger jobs were stopped. No compiler-container rebuild is needed.
   and payload sets. Measure pipe consumer completion, CALL round trips and SEND
   admission versus acknowledged completion with existing capabilities. Keep
   startup separate from transfer timing; do not introduce new scheduling APIs.
-- [ ] **4. Exported files and HTTP.** Reuse the measurement tools for matched
+- [x] **4. Exported files and HTTP.** Reuse the measurement tools for matched
   native/snapshot reads and a known local HTTP fixture. Report OPEN, retained
   reads and complete consumer paths separately, using existing ttcp measurements
   only with their different direction and completion boundary clearly stated.

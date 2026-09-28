@@ -107,13 +107,14 @@ Next is [I/O and IPC performance baselines](io-ipc-baselines.md): manually invok
 userspace measurements for files, copies, pipes, endpoints and HTTP snapshots.
 Separate fetch/setup from transfer and producer acceptance from consumer
 completion. Reuse existing allocation/TCP benchmarks; identify bottlenecks without
-bundling optimizations. Tasks 1–3 are complete: verified file reads,
+bundling optimizations. Tasks 1–4 are complete: verified file reads,
 writes/copies with exclusive outputs and separate sync timing, pipe consumer
 completion and bounded CALL/SEND samples. Initial observations cover archive,
 RAM, host, pipes and endpoints. Deferred endpoint receipt reclamation limits
 sustained traffic and is recorded in technical debt; default IPC samples use
-fresh endpoints and eight messages. Task 4 will settle exported-file/HTTP
-workloads before implementation.
+fresh endpoints and eight messages. Matched archive/RAM/HTTP reads now separate
+OPEN, retained payload and complete consumption; 32 KiB HTTP passed while 1 MiB
+HTTP exposed the same capacity limit. Task 5 is the baseline report and handoff.
 
 The following remain alternatives after that bounded measurement milestone.
 
