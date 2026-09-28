@@ -30,6 +30,9 @@ struct kernel_object *endpoint_service_create(void);
 void endpoint_process_exit(struct process *owner);
 /* Explicit CLOSE takes effect before returning; backing reclamation remains BSP-owned. */
 void endpoint_handle_close(struct kernel_object *object);
+/* IF=0, final receipt reference already dropped, endpoint lock not held.
+ * Releases logical delivery ownership; backing destruction remains on BSP. */
+void endpoint_receipt_release(struct kernel_object *object);
 
 struct syscall_result endpoint_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size, uintptr_t reply_address, size_t reply_capacity);

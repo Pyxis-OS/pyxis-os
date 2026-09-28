@@ -197,7 +197,7 @@ static void unlock_retired(void)
 void object_init(struct kernel_object *object, enum object_type type,
                  void (*destroy)(struct kernel_object *))
 {
-  KASSERT(object && destroy);
+  KASSERT(object && (destroy || type == OBJECT_ENDPOINT_RECEIPT));
   object->type = type;
   atomic_init(&object->references, 1);
   object->retired_next = NULL;
@@ -225,6 +225,11 @@ void object_release(struct kernel_object *object)
                                               memory_order_acq_rel);
   KASSERT(previous);
   if (previous != 1) {
+    return;
+  }
+
+  if (object->type == OBJECT_ENDPOINT_RECEIPT) {
+    endpoint_receipt_release(object);
     return;
   }
 

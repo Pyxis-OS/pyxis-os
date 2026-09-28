@@ -109,14 +109,14 @@ for the persistent development loop or as a replacement for the boot archive.
 ## Next milestone and later candidates
 
 The [I/O and IPC baseline](../io-ipc-baselines.md) and documentation handoff are
-complete. Deferred receipt reclamation limits sustained IPC and larger HTTP
-snapshot reads; its consequence and revisit point remain in
+complete. The observed completed-receipt capacity retention is resolved; genuine
+live-work capacity and wait limits remain documented in
 [technical debt](../technical-debt.md#endpoint-throughput-limited-by-deferred-receipt-reclamation).
-Next is [I/O reliability and bottleneck attribution](io-reliability-attribution.md):
-resolve receipt reclamation first and rerun the failing IPC/HTTP workloads, then
-attribute RAM growth and host FILE latency and publish comparable measurements.
-Instrumentation and implementation choices are settled per task; there is no
-blanket optimization assignment. The following remain later alternatives.
+The active milestone is [I/O reliability and bottleneck attribution](io-reliability-attribution.md):
+task 1 fixed logical receipt reuse and the previously failing IPC/HTTP matrix
+now passes. Task 2 is RAM file-growth attribution, followed by host FILE latency
+and comparable measurements. Instrumentation choices are settled per task;
+there is no blanket optimization assignment. The following remain later alternatives.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
