@@ -57,21 +57,39 @@ allocation policy.
 ## I/O baseline attribution and coverage
 
 The [I/O/IPC baselines](io-ipc-baselines.md) measure elapsed workload boundaries
-in nested KVM. RAM grow-from-zero writes are much slower than prepared overwrite,
-but allocation, copying and BSP queue/service time are not separately measured.
+in nested KVM. The [RAM attribution](wip/io-reliability-attribution.md#task-2-implemented-ram-file-profiling)
+now separates RAM replacement costs and identifies queue time as dominant in the
+measured growing writes/copies; see the FILE service-delay entry below.
 Host FILE results combine guest queueing, VirtIO/FUSE transport, daemon and backing
 service; write/sync runs used host tmpfs. These results cannot select an internal
 optimization or establish physical-disk durability cost.
 
-Revisit with a bounded file-growth or host-service attribution investigation
-before changing allocation policy, notification, batching or transfer limits.
-Private-memory profiling does not instrument these FILE paths. Short native
+Revisit host costs with a bounded host-service attribution investigation before
+changing batching or transfer limits. Private-memory and RAM replacement
+profiling do not instrument host FILE service. Short native
 and SEND intervals are close to clock overhead; finer comparisons need a separate
 longer-batch or scoped-instrumentation contract. Owner-host/physical-hardware
 results, capability attachment cost, cross-space contention, mixed-workload
 fairness and per-process CPU accounting remain unmeasured. Gather the relevant
 coverage before making deployment-capacity or fine-grained performance claims;
 keep each environment and completion boundary distinct.
+
+## RAM FILE BSP service delay
+
+RAM buffer replacements publish work to the BSP queue without explicit remote
+notification. In the [matched nested-KVM attribution](wip/io-reliability-attribution.md#attribution-and-follow-up),
+ten successful replacements copied 2,084,880 existing-data bytes per 1 MiB grow
+pass. Publication-to-service queue sums were 44.783–54.129 ms and accounted for
+83–92% of profiled transfer time, while BSP service was 2.799–5.357 ms. Prepared
+overwrite made no replacement requests. Buffer-growth/copy policy is therefore
+not the dominant measured cost for this workload.
+
+The timestamps combine queue locking, BSP availability and scheduling; they do
+not prove which wakeup caused service. Revisit with a separate, explicitly agreed
+FILE publication-notification change, retaining the early-wakeup/lifetime contract,
+and rerun matched profile-off/on grow/prepared controls. Do not infer a constant
+instrumentation cost, system-wide CPU time or owner-host performance from the
+five-sample groups. Other BSP queues and allocator concurrency remain separate.
 
 ## Fixed userspace stacks
 

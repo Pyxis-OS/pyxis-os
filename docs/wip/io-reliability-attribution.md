@@ -1,8 +1,10 @@
 # I/O reliability and bottleneck attribution
 
-Status: task 1 is complete: logical receipt release fixes completed-work capacity
-retention, and the agreed IPC/HTTP reruns passed. Task 2 is RAM file-growth
-attribution; its instrumentation contract remains to be discussed. This follows
+Status: tasks 1 and 2 are complete. Logical receipt release fixes completed-work
+capacity retention, and the agreed IPC/HTTP reruns passed. RAM file-growth
+attribution identifies publication-to-BSP-service wait as the dominant measured
+interval. Task 3 is host FILE attribution; its instrumentation contract remains
+to be discussed. This follows
 the completed [I/O and IPC baselines](../io-ipc-baselines.md).
 
 ## Outcome and scope
@@ -257,6 +259,182 @@ HTTP fixtures removed. The ordinary `make -j16 image` passed; final header-comme
 and documentation changes do not change the measured code. No compiler-container
 rebuild is needed.
 
+## Task 2: implemented RAM FILE profiling
+
+The profile capability now has explicit FILE authority and independent
+caller-local FILE BEGIN/SNAPSHOT/END collection, preserving private-memory meaning.
+RAM buffer replacement records preparation before wait setup, the boundary before
+publication locking, BSP service start/end and caller resumption. It records
+elapsed sums/maxima for the resulting intervals and allocation, existing-data copy and
+release calls within service. It counts attempts, successes/failures, summed
+requested capacity and actual copied bytes, saturating without exposing addresses.
+
+BSP owns request result/timestamps from publication until wakeup; the caller then
+aggregates. Disabled collection adds no clocks or allocations. This preserves
+existing early wakeup, allocation, growth, fallback and notification behavior.
+FILE ownership waits, incoming payload copies and nonreplacement work remain an
+unattributed residual. None of these elapsed intervals is kernel CPU time.
+
+`iobench write/copy --profile` collects each measured transfer after preparation
+and before verification/reporting; warmup is unprofiled. BEGIN/END are outside the
+transfer clock interval; per-request instrumentation is inside. Optional sync
+remains separate and outside collection. The matched comparison uses
+grow/prepared RAM writes and archive-to-RAM copies: 1 MiB, 4080-byte requests, no sync, one warmup and five
+samples, each with profile-off controls. No growth or notification optimization
+belongs in this attribution task.
+
+Code inspection predicts ten successful geometric replacements and 2,084,880
+existing-data bytes copied for each growing pass without allocation failures.
+FILE request publication has no explicit BSP notification, unlike private memory;
+this is a hypothesis for queue cost, not a measured cause.
+
+### RAM measurement provenance and reproduction
+
+Measured on 2026-09-28 with kernel implementation
+`0757faecc186c1b3fb1649a103ae18980736bfba` and userland
+`f180e4330a9218aa08bc49c93be2458c7c9005f5`. These commit the code used in the
+ordinary image build; later report/gitlink changes do not alter runtime code.
+Ports stayed `6ec1290f87882392390e6a889be61ba3ac1448d1`, lwIP
+`a1aadb91a50360ff5b52864f7cec810b8162ee85`. The same nested-KVM host and QEMU/Q35,
+GCC, OVMF and 256 MiB/four-CPU configuration described in task 1 were used.
+Work ran on CPU 1; entropy was enabled, networking disabled, and no host filesystem
+was exported. Outputs and redirected logs used RAM `home://`; copy source was the
+packaged deterministic 1 MiB archive fixture. No cache eviction was attempted.
+
+The eight commands ran sequentially in the order below in one boot, with unique
+retained output/log names. Defaults are 4080-byte requests, 1 MiB and five measured
+passes after one untimed warmup; sync is off. Logs were inspected manually with
+`head`/`cat` and screenshots after each run, outside all benchmark intervals.
+
+```text
+iobench write home://wg-off 2> home://wg-off.log
+iobench write home://wg-on --profile 2> home://wg-on.log
+iobench write home://wp-off --prepared 2> home://wp-off.log
+iobench write home://wp-on --prepared --profile 2> home://wp-on.log
+iobench copy app://share/iobench.bin home://cg-off 2> home://cg-off.log
+iobench copy app://share/iobench.bin home://cg-on --profile 2> home://cg-on.log
+iobench copy app://share/iobench.bin home://cp-off --prepared 2> home://cp-off.log
+iobench copy app://share/iobench.bin home://cp-on --prepared --profile 2> home://cp-on.log
+```
+
+All 48 passes verified exact length, contents and EOF. Every pass completed 258
+writes; copies also completed 258 reads. No short transfers or failures occurred.
+All ten profiled grow samples reported ten attempts/successes, zero failures,
+4,173,840 bytes of summed requested capacity and 2,084,880 existing-data bytes
+copied. All ten profiled prepared samples reported zero counts and durations.
+Requested capacity is a sum of replacement sizes, not a live allocation gauge.
+The existing doubling policy, including its allocation-failure fallback, is
+unchanged. No allocation failure was induced or observed.
+
+### Transfer samples and controls
+
+Times are milliseconds in execution order; six decimal places retain the original
+nanosecond readings. Clock cost is the 1000-call mean in ns/read, not subtracted.
+
+| Workload | Profile | Clock ns | Transfer samples ms | Median ms | Range ms |
+| --- | --- | ---: | --- | ---: | --- |
+| Write grow | off | 35902 | 50.366100, 52.811340, 59.072960, 52.339550, 58.696730 | 52.811340 | 50.366100–59.072960 |
+| Write grow | on | 36862 | 53.091190, 52.851590, 59.037810, 59.043150, 59.205240 | 59.037810 | 52.851590–59.205240 |
+| Write prepared | off | 36163 | 0.301790, 0.488580, 0.295900, 0.276580, 0.274440 | 0.295900 | 0.274440–0.488580 |
+| Write prepared | on | 36587 | 0.677960, 0.684860, 0.497960, 0.638890, 0.656270 | 0.656270 | 0.497960–0.684860 |
+| Copy grow | off | 39762 | 52.191460, 53.127050, 58.463970, 58.450710, 56.624600 | 56.624600 | 52.191460–58.463970 |
+| Copy grow | on | 37534 | 52.805100, 56.770750, 53.118070, 54.279920, 59.807410 | 54.279920 | 52.805100–59.807410 |
+| Copy prepared | off | 38501 | 0.519400, 0.543820, 0.595790, 0.506010, 0.506140 | 0.519400 | 0.506010–0.595790 |
+| Copy prepared | on | 35905 | 0.480040, 0.499850, 0.493820, 0.491520, 0.497120 | 0.493820 | 0.480040–0.499850 |
+
+These off/on groups are matched controls, not paired measurements of constant
+instrumentation overhead. Growth write medians were 52.811/59.038 ms; growth copy
+medians were 56.625/54.280 ms. Prepared write medians were 0.296/0.656 ms despite
+zero replacements in the profiled run, while prepared copy medians were
+0.519/0.494 ms. Run ordering, cache state and nested scheduling remain combined;
+these five-sample groups do not establish a precise overhead or a speedup. No
+clock-cost correction is applied. Short prepared intervals remain a task-4
+resolution concern.
+
+### Profile intervals
+
+Each row contains per-pass sums in milliseconds. Allocation, copy and release
+are subintervals of service; do not add them to the top-level phases. Release
+includes the `kfree(NULL)` call on first allocation. The residual is transfer
+minus replacement total and includes instrumentation aggregation, user/kernel
+transfer work, clock boundaries and scheduling outside the replacement interval.
+It cannot isolate incoming payload-copy cost or be called CPU time.
+
+| Grow workload | Interval | Sample sums ms | Median ms |
+| --- | --- | --- | ---: |
+| Write grow | publication | 0.625080, 0.358630, 0.465400, 0.439400, 0.857710 | 0.465400 |
+| Write grow | queue | 47.307070, 47.851240, 54.128940, 53.756960, 52.324090 | 52.324090 |
+| Write grow | service | 3.155520, 3.162550, 2.821210, 2.876360, 2.919320 | 2.919320 |
+| Write grow | resume | 1.028210, 0.747620, 0.841940, 0.944630, 1.182810 | 0.944630 |
+| Write grow | total | 52.115880, 52.120040, 58.257490, 58.017350, 57.283930 | 57.283930 |
+| Write grow | allocation | 0.439620, 0.436610, 0.377210, 0.358890, 0.435490 | 0.435490 |
+| Write grow | copy | 0.794120, 0.711650, 0.707680, 0.635750, 0.649530 | 0.707680 |
+| Write grow | release | 0.356010, 0.356480, 0.351470, 0.391160, 0.359420 | 0.356480 |
+| Write grow | residual | 0.975310, 0.731550, 0.780320, 1.025800, 1.921310 | 0.975310 |
+| Copy grow | publication | 1.028920, 0.351540, 0.700830, 1.016960, 1.016820 | 1.016820 |
+| Copy grow | queue | 44.782840, 51.986590, 46.475210, 46.223620, 49.721010 | 46.475210 |
+| Copy grow | service | 3.689400, 2.867450, 2.799300, 3.465280, 5.357400 | 3.465280 |
+| Copy grow | resume | 1.165840, 0.660070, 1.099030, 1.408810, 1.422330 | 1.165840 |
+| Copy grow | total | 50.667000, 55.865650, 51.074370, 52.114670, 57.517560 | 52.114670 |
+| Copy grow | allocation | 0.437640, 0.467410, 0.356780, 0.441900, 0.694960 | 0.441900 |
+| Copy grow | copy | 0.727980, 0.655370, 0.628550, 0.824270, 1.119160 | 0.727980 |
+| Copy grow | release | 0.564540, 0.400350, 0.357770, 0.448700, 0.685330 | 0.448700 |
+| Copy grow | residual | 2.138100, 0.905100, 2.043700, 2.165250, 2.289850 | 2.138100 |
+
+Per-request maxima in each pass, also milliseconds. These are maxima of ten
+replacement requests, not latency percentiles; maxima from different rows need
+not belong to the same request.
+
+| Grow workload | Interval | Sample maxima ms |
+| --- | --- | --- |
+| Write grow | publication | 0.134810, 0.041220, 0.151080, 0.115400, 0.132840 |
+| Write grow | queue | 8.273050, 7.973390, 8.240830, 8.155500, 8.266700 |
+| Write grow | service | 0.709850, 0.688170, 0.416420, 0.414240, 0.487250 |
+| Write grow | resume | 0.164990, 0.091030, 0.152970, 0.147740, 0.144050 |
+| Write grow | total | 8.567400, 8.348860, 8.519720, 8.445310, 8.622370 |
+| Write grow | allocation | 0.117170, 0.116710, 0.056090, 0.037470, 0.115220 |
+| Write grow | copy | 0.227960, 0.188600, 0.205230, 0.091560, 0.196240 |
+| Write grow | release | 0.037150, 0.041640, 0.035590, 0.073540, 0.044260 |
+| Copy grow | publication | 0.143270, 0.035380, 0.137030, 0.125950, 0.119810 |
+| Copy grow | queue | 7.751510, 8.104820, 8.022420, 7.777910, 8.054250 |
+| Copy grow | service | 1.067930, 0.401580, 0.404910, 1.039030, 1.224360 |
+| Copy grow | resume | 0.157980, 0.088210, 0.155040, 0.270500, 0.175500 |
+| Copy grow | total | 8.285780, 8.462510, 8.462920, 8.915390, 8.967370 |
+| Copy grow | allocation | 0.117000, 0.158670, 0.036280, 0.119560, 0.131160 |
+| Copy grow | copy | 0.187460, 0.187730, 0.186530, 0.302150, 0.490250 |
+| Copy grow | release | 0.139470, 0.097310, 0.041310, 0.116480, 0.116620 |
+
+### Attribution and follow-up
+
+Publication-to-service queue time accounts for 88–92% of transfer time in the
+profiled write samples and 83–92% in copies. Its per-pass sums are 44.783–54.129 ms
+across the two workloads, compared with 2.799–5.357 ms of BSP replacement service.
+Allocation-call sums are 0.357–0.695 ms, existing-data copy 0.629–1.119 ms and
+release calls 0.351–0.685 ms. Thus repeated geometric growth is confirmed, but
+allocation/copy service is not the dominant measured cost in these runs.
+
+Queue includes publication lock/link overhead, BSP availability and scheduling;
+these timestamps do not distinguish them. Code inspection shows FILE publication
+does not explicitly notify the BSP, unlike private-memory publication. Millisecond
+queue maxima are consistent with delayed BSP service, but do not prove timer
+wakeups are its sole cause. The concrete follow-up proposal is a separate PR to
+notify the BSP after FILE request publication, preserving the early-wakeup
+handshake and touching no relinquished request storage, followed by this same
+profile-off/on matrix. It needs its own design decision; no notification or
+allocator/growth-policy change is included here. This limitation and revisit
+point are in [technical debt](../technical-debt.md#ram-file-bsp-service-delay).
+
+`make -j16 image` passed. The existing manual
+`allocbench pages --profile --size 4096 --live 1 --rounds 8` control reported eight
+allocations and eight releases, zero failures and 32768 completed bytes in each
+direction, preserving the existing memory-profile behavior. This does not exercise
+simultaneous FILE/MEMORY collection or every denied/malformed profile operation.
+Read-only post-workload GDB inspection found four CPUs, CPU 1 online, and empty
+completed-task, FILE, private-memory and object-retirement queues. No debugger
+stops occurred during measurements. Owned QEMU/debugger jobs were stopped; RAM
+fixtures/logs disappeared with that boot. No new tests or automation were added,
+and no compiler-container rebuild is needed.
+
 ## Focused PR tasks
 
 - [x] **1. Resolve endpoint receipt reclamation.** Separate logical receipt
@@ -267,15 +445,12 @@ rebuild is needed.
   passed. The implemented guarantee and remaining live-work limit are recorded
   above and in technical debt.
 
-- [ ] **2. Attribute RAM file-growth cost.** Separate request publication and
-  BSP queue wait, allocation/copy service, and completion-to-resumption time.
-  Count growth operations and copied bytes so repeated growth is distinguishable
-  from expensive individual operations. Compare grow-from-zero with prepared
-  overwrite using the same 1 MiB payload and 4080-byte requests, without sync;
-  retain write/copy correctness checks outside transfer timing. Existing private
-  memory profiling does not cover this FILE path. Agree narrow instrumentation
-  first, then report the dominant costs and unresolved intervals. Propose any
-  allocator, growth-policy or notification change separately from attribution.
+- [x] **2. Attribute RAM file-growth cost.** Independent caller-scoped FILE
+  profiling separates publication, BSP queue/service and resumption, including
+  allocation/copy/release subphases and replacement/copy counts. All eight matched
+  grow/prepared write/copy configurations passed warmup plus five verified samples.
+  Queue time dominates the profiled growing transfers; a separate FILE publication
+  notification proposal and unresolved intervals are recorded above and in debt.
 
 - [ ] **3. Attribute host FILE latency.** Use matched read/write/copy workloads
   to distinguish guest service-queue wait, submission-to-observed-completion,
