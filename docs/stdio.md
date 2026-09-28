@@ -194,6 +194,9 @@ required read/write transitions.
 Startup supplies independent stdin, stdout and stderr bindings. Each declares
 `PROTOCOL_CONSOLE`, `PROTOCOL_FILE` or `PROTOCOL_PIPE` and owns a distinct child
 handle with only READ authority for stdin or WRITE authority for stdout/stderr.
+An exported FILE additionally retains CALL transport; native streams retain zero.
+The shared [provider bridge](file-providers.md) supports ordinary opens and stdin
+redirection without changing stdio operations or per-descriptor positions.
 Runtime adopts these handles into descriptors 0, 1 and 2 before heap
 initialization, using static storage. It retains no hidden startup copy.
 Closing stdout cannot close stderr or a named terminal grant. Normal boot binds

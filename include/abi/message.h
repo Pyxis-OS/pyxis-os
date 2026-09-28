@@ -33,6 +33,7 @@
 
 #define PROTOCOL_NAMESPACE_SERVICE UINT64_C(27)
 #define PROTOCOL_NAMESPACE UINT64_C(28)
+#define PROTOCOL_PROVIDER UINT64_C(29)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

@@ -208,11 +208,15 @@ It requires no access rights on that handle. Invalid and already-closed handles
 return the invalid-handle status; both success and failure return zero in RDX.
 [Local handle copying](paths.md#local-handle-copies) retains another reference
 with the same or reduced rights, without changing the source.
-`handle_rights()` queries the caller's resource and transport masks, including
-zero-authority grants. It does not return object identity, allocate or change
-ownership. `SYSCALL_HANDLE_RIGHTS` takes a handle and a `struct handle_authority`
-output address in RDI/RSI; RAX returns status and RDX is sixteen on success, zero
-on failure. Native objects require zero transport authority.
+`handle_query()` returns kernel-authenticated resource/transport masks, protocol
+and native/exported kind, including for zero-authority grants. It exposes no
+object identity, allocates nothing and changes no ownership. `SYSCALL_HANDLE_INFO`
+takes a handle and a `struct handle_info` output address in RDI/RSI; RAX returns
+status and RDX is 32 on success, zero on failure. Interface and kind are immutable:
+a withdrawn export can still be queried, but invocation reports closure. The
+`handle_rights()` convenience helper selects the two authority masks from this
+query. FILE helpers use the interface/kind to choose native calls or exported
+endpoint invocation; they never infer identity or routing from handle bits.
 
 Other references to the object remain valid. A last release uses the existing
 BSP retirement path, so closing on an AP does not allocate or destroy objects.

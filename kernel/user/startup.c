@@ -85,26 +85,23 @@ static bool validate_streams(struct process *process,
       continue;
     }
 
-    enum object_type type;
     uint64_t expected_rights;
     if (stream->protocol == PROTOCOL_CONSOLE) {
-      type = OBJECT_CONSOLE;
       expected_rights = i == STARTUP_STDIN ? CONSOLE_RIGHT_READ : CONSOLE_RIGHT_WRITE;
     } else if (stream->protocol == PROTOCOL_FILE) {
-      type = OBJECT_FILE;
       expected_rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
     } else if (stream->protocol == PROTOCOL_PIPE) {
-      type = OBJECT_PIPE;
       expected_rights = i == STARTUP_STDIN ? PIPE_RIGHT_READ : PIPE_RIGHT_WRITE;
     } else {
       return false;
     }
 
     struct kernel_object *object;
-    uint64_t rights;
+    uint64_t rights, transport;
     if (capability_resolve(&process->capabilities, stream->handle, expected_rights,
-          0, &object, &rights, NULL) != CAP_OK ||
-        object->type != type || rights != expected_rights) {
+          0, &object, &rights, &transport) != CAP_OK ||
+        !object_stream_valid(object, stream->protocol, transport) ||
+        rights != expected_rights) {
       return false;
     }
     for (size_t j = 0; j < i; ++j) {

@@ -15,10 +15,19 @@ typedef uint64_t handle_t;
 #define HANDLE_TRANSPORT_RECEIVE (UINT64_C(1) << 1)
 #define HANDLE_TRANSPORT_CALL (HANDLE_TRANSPORT_SEND | HANDLE_TRANSPORT_RECEIVE)
 
-struct handle_authority {
+#define HANDLE_KIND_NATIVE UINT64_C(1)
+#define HANDLE_KIND_EXPORTED UINT64_C(2)
+
+/* Describes this grant, not object identity or current availability. Export
+ * protocol/kind remain queryable after withdrawal or provider exit. */
+struct handle_info {
   uint64_t rights;
   uint64_t transport;
+  uint64_t protocol;
+  uint64_t kind;
 };
+
+_Static_assert(sizeof(struct handle_info) == 32, "handle info layout");
 
 /* COPY with this flag preserves both sets and requires rights == transport == 0.
  * Without it, each mask requests an exact subset of the source grant. */

@@ -49,7 +49,7 @@ static struct syscall_result close_handle(handle_t handle)
   return (struct syscall_result){CALL_OK, 0};
 }
 
-static struct syscall_result handle_rights(handle_t handle, uintptr_t destination)
+static struct syscall_result handle_info(handle_t handle, uintptr_t destination)
 {
   struct process *process = process_current();
   if (!process) {
@@ -57,17 +57,20 @@ static struct syscall_result handle_rights(handle_t handle, uintptr_t destinatio
   }
 
   struct kernel_object *object;
-  struct handle_authority authority;
+  struct handle_info info;
   enum capability_result result = capability_resolve(&process->capabilities,
-      handle, 0, 0, &object, &authority.rights, &authority.transport);
+      handle, 0, 0, &object, &info.rights, &info.transport);
   if (result == CAP_BAD_HANDLE) {
     return (struct syscall_result){CALL_BAD_HANDLE, 0};
   }
   KASSERT(result == CAP_OK);
-  if (!copy_to_user(destination, &authority, sizeof(authority))) {
+  info.protocol = object_protocol(object);
+  info.kind = object->type == OBJECT_ENDPOINT_EXPORT ?
+      HANDLE_KIND_EXPORTED : HANDLE_KIND_NATIVE;
+  if (!copy_to_user(destination, &info, sizeof(info))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  return (struct syscall_result){CALL_OK, sizeof(authority)};
+  return (struct syscall_result){CALL_OK, sizeof(info)};
 }
 
 static struct syscall_result copy_handle(handle_t source, uint64_t rights,
@@ -326,8 +329,8 @@ struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t 
     return call_object(arg1, arg2, arg3, arg4, arg5);
   case SYSCALL_CLOSE:
     return close_handle(arg1);
-  case SYSCALL_HANDLE_RIGHTS:
-    return handle_rights(arg1, arg2);
+  case SYSCALL_HANDLE_INFO:
+    return handle_info(arg1, arg2);
   case SYSCALL_COPY:
     return copy_handle(arg1, arg2, arg3, arg4, arg5);
   case SYSCALL_LOG_PUTCHAR: {

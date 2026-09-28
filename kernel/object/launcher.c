@@ -116,16 +116,12 @@ static void capture_streams(struct launch_capture *capture,
       continue;
     }
 
-    enum object_type type;
     uint64_t rights;
     if (stream->protocol == PROTOCOL_CONSOLE) {
-      type = OBJECT_CONSOLE;
       rights = i == STARTUP_STDIN ? CONSOLE_RIGHT_READ : CONSOLE_RIGHT_WRITE;
     } else if (stream->protocol == PROTOCOL_FILE) {
-      type = OBJECT_FILE;
       rights = i == STARTUP_STDIN ? FILE_RIGHT_READ : FILE_RIGHT_WRITE;
     } else if (stream->protocol == PROTOCOL_PIPE) {
-      type = OBJECT_PIPE;
       rights = i == STARTUP_STDIN ? PIPE_RIGHT_READ : PIPE_RIGHT_WRITE;
     } else {
       capture->error = CALL_BAD_REQUEST;
@@ -133,8 +129,7 @@ static void capture_streams(struct launch_capture *capture,
     }
 
     if (stream->grant >= capture->grant_count ||
-        capture->grants[stream->grant].rights != rights ||
-        capture->grants[stream->grant].transport != 0) {
+        capture->grants[stream->grant].rights != rights) {
       capture->error = CALL_BAD_REQUEST;
       return;
     }
@@ -170,12 +165,14 @@ static void capture_streams(struct launch_capture *capture,
 
     struct kernel_object *object;
     enum capability_result found = capability_resolve(&process_current()->capabilities,
-        capture->grants[stream->grant].source, rights, 0, &object, NULL, NULL);
+        capture->grants[stream->grant].source, rights,
+        capture->grants[stream->grant].transport, &object, NULL, NULL);
     if (found != CAP_OK) {
       capture->error = found == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
       return;
     }
-    if (object->type != type) {
+    if (!object_stream_valid(object, stream->protocol,
+        capture->grants[stream->grant].transport)) {
       capture->error = CALL_WRONG_TYPE;
       return;
     }

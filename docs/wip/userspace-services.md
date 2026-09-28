@@ -1,9 +1,10 @@
 # Userspace services and the first HTTP provider
 
 Status: agreed next milestone after [libc portability](../libc-portability.md).
-Tasks 1 through 5 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
+Tasks 1 through 7 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
 creation and process-owned receiver teardown moved forward from task 4 so the
-first delivery slice has a real consumer. Task 6 is the next unchecked task.
+first delivery slice has a real consumer. Task 7 connects discovery and FILE delivery through the [OPEN bridge](../file-providers.md).
+Task 8 (the HTTP parser and fetch library) is next.
 This document records the selected contracts for handoff between agents; the
 [broader provider ideas](userspace-scheme-providers.md) remain future directions where they exceed this scope. Work through the focused
 tasks in order, updating their checkboxes in the corresponding PRs. Discuss a
@@ -271,9 +272,8 @@ transfer; larger requests return short counts. Callers continue from confirmed
 progress. Stdio preserves its fill loops, positions, EOF/error handling and
 uncertain-mutation rules. Helpers use bounded stack scratch without a new heap
 dependency. Native kernel paths keep private user mappings stable across waits
-and do not allocate payload-sized stack buffers. Native and exported files will
-share this wire format; task 7 adds exported dispatch and the OPEN bridge with a
-working provider. No compatibility layout, HTTP-file adapter or generic kernel
+and do not allocate payload-sized stack buffers. Native and exported files share this wire format. Task 7 implements exported
+dispatch and the OPEN bridge with the [immutable text provider](../file-providers.md). No compatibility layout, HTTP-file adapter or generic kernel
 pointer-marshaling description language is introduced.
 
 Provider OPEN returns an actual resource grant with a declared interface and
@@ -424,7 +424,7 @@ task; avoid publishing interfaces with fake successful operations.
   with bounded copied bytes for native files and helpers. Preserve public C
   signatures and all existing backends; audit native callers and stdio for short
   transfers. Build/boot existing file utilities and ports before adding a provider.
-- [ ] **7. End-to-end userspace file provider.** Add provider OPEN and shared
+- [x] **7. End-to-end userspace file provider.** Add provider OPEN and shared
   resolution/representation handling. Publish a small immutable-file service
   through init; use existing cat, cksum and redirected input to read it. Exercise
   rights, copies, retirement, withdrawal, replacement and provider exit. This is

@@ -164,6 +164,12 @@ bool endpoint_export_available(struct kernel_object *object)
   return available;
 }
 
+uint64_t endpoint_export_protocol(const struct kernel_object *object)
+{
+  KASSERT(object->type == OBJECT_ENDPOINT_EXPORT);
+  return ((const struct endpoint_export *)object)->protocol;
+}
+
 static void free_delivery(struct endpoint_delivery_record *record)
 {
   if (!record->caller_active && !record->receipt_live) {
