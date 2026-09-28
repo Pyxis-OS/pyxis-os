@@ -111,14 +111,15 @@ individual wake causes were not traced. The residual includes direct timestamp
 work and unresolved scheduling/transport observation effects; no constant
 correction or normal-workload phase partition is justified.
 
-Production publication still has no explicit BSP notification. Task 5 of the
-[reliability milestone](wip/io-reliability-attribution.md#focused-pr-tasks)
-must settle the report's focused notification proposal and validation contract
-before final comparisons. Preserve request ownership and early wake semantics;
-repeat affected off/on controls if implemented. The report's counts-only patches
-are experimental, with unavailable phase timings explicitly omitted; no permanent
+Initial HOST publication now explicitly notifies the BSP after unlocking,
+preserving request ownership and early wake semantics. The
+[correction validation](wip/io-reliability-attribution.md#task-5-host-publication-notification)
+repeats the affected off/on controls; full profiling still perturbs execution.
+Task 5's remaining comparison work must retain unprofiled elapsed controls and
+settle any additional measurement coverage separately. The report's counts-only
+patches are experimental, with unavailable phase timings explicitly omitted; no permanent
 collection mode or clock change has been accepted. Full-profile attribution
-remains limited to instrumented behavior even with the experimental notification.
+remains limited to instrumented behavior after the notification correction.
 Host-side component timing and durable storage remain separately scoped work;
 current fixtures are tmpfs with sync off.
 

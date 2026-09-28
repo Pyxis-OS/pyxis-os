@@ -115,6 +115,13 @@ an idle BSP or preempt an eligible BSP task because it checks the memory queue.
 A BSP caller sends no self-IPI: its scheduler loop services the request directly.
 There is no remote allocation, change to VM ownership, or new interrupt handler.
 
+Initial HOST request publication also notifies the BSP after releasing the queue
+lock, so a request arriving after its queue sweep can wake an idle BSP. The
+caller saves its own wait pointer before publication and uses the existing
+early-wakeup handshake; it does not inspect the borrowed request until completion.
+The BSP forwards the record to the transport worker as before. CPU 0 callers send
+no self-IPI and reach forwarding through their scheduler when they block.
+
 The periodic timer remains 120 Hz. Timed-wait expiry, sleeping tasks, other
 BSP-only request queues and exit cleanup retain their existing scheduler/timer
 service paths. Resource wakeups on the same CPU do not send a self-IPI; interrupt
