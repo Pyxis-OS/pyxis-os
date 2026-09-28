@@ -404,6 +404,22 @@ object reaping transfers the wrapper to a worker cleanup queue without sleeping
 or allocating. That worker sends RELEASE/RELEASEDIR followed by FORGET before
 freeing local storage. Copies held elsewhere keep the object alive independently.
 
+## Caller-scoped transfer profiling
+
+The profile capability's independent `PROFILE_RIGHT_HOST` collection counts native
+host READ/WRITE work, including lazy OPEN transport under those operations.
+`iobench --host-profile` exposes separate scheduler/worker queues, worker service,
+transport and caller-resumption intervals with native/transport counts. It does
+not collect metadata-only operations, sync, deferred cleanup or remote callers.
+Failed published transport requests have a separate interval ending before reset
+recovery; valid used-ring completion does not imply FUSE success. Disabled
+collection adds no clocks or allocation. See the [ABI](../include/abi/profile.h)
+and [measured attribution limits](wip/io-reliability-attribution.md#instrumented-attribution-and-its-limit).
+
+The nested-KVM measurements show strong profiling perturbation; retain matching
+unprofiled controls. Transport elapsed combines guest and host scheduling with
+device/daemon/backing service and cannot isolate any one component or CPU time.
+
 ## Init mount and delegation
 
 The default init script is:

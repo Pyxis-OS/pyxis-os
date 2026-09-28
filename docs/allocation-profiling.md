@@ -61,6 +61,8 @@ The [profile protocol](../include/abi/profile.h) uses ordinary tagged CALLs and
 `PROFILE_RIGHT_MEMORY`. Independent RAM FILE replacement collection uses
 `PROFILE_RIGHT_FILE` and `profile_file_begin/snapshot/end`; see the
 [FILE attribution contract](wip/io-reliability-attribution.md#task-2-implemented-ram-file-profiling).
+Host READ/WRITE collection independently requires `PROFILE_RIGHT_HOST`; see the
+[host attribution contract](wip/io-reliability-attribution.md#task-3-implemented-host-file-profiling).
 The memory operations below keep their existing meaning. Libpyxis exposes `profile_begin`, `profile_snapshot` and
 `profile_end` through `<profile.h>`.
 
