@@ -48,6 +48,10 @@ encoded name to 255 bytes. There is no suffix search or Unicode conversion.
 
 One recursive `IN A` question is sent to UDP port 53. Each of two attempts has
 a three-second monotonic deadline covering source setup, send and receive.
+The shared query helper also accepts an optional absolute overall deadline.
+It caps each attempt and prevents retries after expiry; existing DNS tools pass
+zero and retain their current behavior. [HTTP fetching](http-fetch.md) uses this
+to include DNS in its whole-fetch budget.
 Host-backed randomness supplies a fresh 16-bit query ID and source port in
 49152–65535; at most sixteen random port choices are tried per attempt if binds
 collide. The endpoint binds through route-aware OPEN, then is shut down and

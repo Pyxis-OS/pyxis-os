@@ -37,8 +37,11 @@ SBASE_INPUTS := $(wildcard ports/sbase/*.lua ports/sbase/Makefile \
 SBASE_OUTPUTS := $(addprefix build/ports/sbase/stage/,bin/cksum.pxe bin/tee.pxe \
   share/licenses/sbase/LICENSE share/licenses/sbase/arg.h)
 
+PICOHTTPPARSER_INPUTS := $(wildcard ports/picohttpparser/*.lua ports/picohttpparser/Makefile) ports/ports.lua ports/build.lua
+PICOHTTPPARSER_OUTPUTS := $(addprefix build/ports/picohttpparser/stage/,dev/include/picohttpparser.h dev/lib/libpicohttpparser.a share/licenses/picohttpparser/picohttpparser.h)
+
 .PHONY: all
-all: $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
+all: $(PICOHTTPPARSER_OUTPUTS) $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
      $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
@@ -81,3 +84,7 @@ $(SBASE_OUTPUTS) &: $(SBASE_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
 	rm -rf build/ports/sbase
 	$(LUA) ports/build.lua sbase --sdk $(abspath build/sdk) --work $(abspath build/ports/sbase)
+
+$(PICOHTTPPARSER_OUTPUTS) &: $(PICOHTTPPARSER_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/picohttpparser
+	$(LUA) ports/build.lua picohttpparser --sdk $(abspath build/sdk) --work $(abspath build/ports/picohttpparser)

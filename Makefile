@@ -89,7 +89,7 @@ userspace: ports
 	./scripts/bundle.sh verify userspace
 else
 userspace: ports
-	$(MAKE) -C userspace SDK=$(abspath build/sdk) LUA_PREFIX=$(abspath build/ports-dev/lua) BUILD=$(abspath build/userspace) install DESTDIR=$(abspath build/userspace-root)
+	$(MAKE) -C userspace SDK=$(abspath build/sdk) LUA_PREFIX=$(abspath build/ports-dev/lua) PICOHTTPPARSER_PREFIX=$(abspath build/ports-dev/picohttpparser) BUILD=$(abspath build/userspace) install DESTDIR=$(abspath build/userspace-root)
 	./scripts/bundle.sh record userspace
 endif
 
