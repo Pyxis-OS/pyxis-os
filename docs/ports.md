@@ -1,7 +1,8 @@
 # Ports
 
 Pyxis pins [pyxis-ports](https://git.internal/chronium/pyxis-ports) at `ports`.
-Its host Lua runner fetches an exact upstream commit, applies ordered patches,
+Its host Lua runner fetches an exact upstream commit or a checksum-pinned release
+archive, applies ordered patches,
 builds against the exported SDK and stages executables with their licenses.
 Recipes are trusted build code. They do not modify the SDK or resolve/install
 dependencies. Source pins, licenses, host/Pyxis dependencies, patch order and
@@ -17,7 +18,7 @@ make run CPUS=4
 ```
 
 The host needs Lua 5.4 (`LUA=lua5.4` selects its executable), Git, GNU Make 4.3+,
-GNU coreutils and the Pyxis target toolchain, plus network access to fetch
+GNU coreutils, CMake 3.20.2 or newer, curl, tar, bzip2 and the Pyxis target toolchain, plus network access to fetch
 upstream source on a port rebuild. See [SDK/repository setup](sdk-and-repositories.md).
 The build container includes Lua; the owner publishes container updates.
 
@@ -35,13 +36,26 @@ payloads into a dedicated tree, which the root [archive manifest](boot-archive.m
 combines with userland and the guest SDK. Intermediate and host outputs stay out.
 Fresh staging removes obsolete files and preserves unchanged output timestamps. Kernel-only
 `make` and `make sdk` do not build ports. `make userspace` now consumes the
-Lua development files from the ports build, in addition to the SDK.
+Lua, HTTP-parser and TLS development files from the ports build, in addition to the SDK.
 
 The root workflow has a separate ports job consuming the SDK job's artifact.
 It publishes a [bundle](build-bundles.md) containing separate boot and
-development trees. The userland job consumes its Lua library/headers; the image
+development trees. The userland job consumes its libraries/headers; the image
 job consumes only its boot tree. Both can reuse it without compiling ports again. Source checkout uses
 `PYXIS_SOURCE_READ_TOKEN`. Cross-repository dispatch remains future work.
+
+## TLS development libraries
+
+The [Mbed TLS recipe](../ports/mbedtls/README.md) verifies the official 4.1.1
+release archive before extraction, including its bundled TF-PSA-Crypto 1.1.1.
+It exports three static archives, upstream headers, the client configuration
+and `share/mbedtls.mk` under `build/ports-dev/mbedtls`. Consumers use that make
+fragment's configuration flags and ordered libraries. Native clock, entropy,
+allocation and TCP integration lives in userland's `libtls`.
+
+Only licenses and provenance enter the boot archive. The base/guest SDK stays
+independent of TLS. HTTPS fetching and packaged public roots are subsequent
+[milestone tasks](wip/https.md).
 
 ## Checksums with sbase cksum
 

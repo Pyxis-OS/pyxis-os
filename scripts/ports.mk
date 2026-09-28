@@ -40,8 +40,19 @@ SBASE_OUTPUTS := $(addprefix build/ports/sbase/stage/,bin/cksum.pxe bin/tee.pxe 
 PICOHTTPPARSER_INPUTS := $(wildcard ports/picohttpparser/*.lua ports/picohttpparser/Makefile) ports/ports.lua ports/build.lua
 PICOHTTPPARSER_OUTPUTS := $(addprefix build/ports/picohttpparser/stage/,dev/include/picohttpparser.h dev/lib/libpicohttpparser.a share/licenses/picohttpparser/picohttpparser.h)
 
+MBEDTLS_INPUTS := $(wildcard ports/mbedtls/*.lua ports/mbedtls/*.h ports/mbedtls/*.mk \
+                           ports/mbedtls/*.cmake ports/mbedtls/Makefile \
+                           ports/mbedtls/PORT-NOTICE) ports/ports.lua ports/build.lua
+MBEDTLS_OUTPUTS := $(addprefix build/ports/mbedtls/stage/,dev/lib/libmbedtls.a \
+  dev/lib/libmbedx509.a dev/lib/libtfpsacrypto.a dev/include/mbedtls/ssl.h \
+  dev/include/psa/crypto.h dev/include/mbedtls/private_access.h \
+  dev/include/mbedtls/pyxis_tls_config.h \
+  dev/include/mbedtls/pyxis_crypto_config.h dev/share/mbedtls.mk \
+  share/licenses/mbedtls/LICENSE share/licenses/tf-psa-crypto/LICENSE \
+  share/licenses/mbedtls/PORT-NOTICE)
+
 .PHONY: all
-all: $(PICOHTTPPARSER_OUTPUTS) $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
+all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
      $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
@@ -88,3 +99,7 @@ $(SBASE_OUTPUTS) &: $(SBASE_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(PICOHTTPPARSER_OUTPUTS) &: $(PICOHTTPPARSER_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/picohttpparser
 	$(LUA) ports/build.lua picohttpparser --sdk $(abspath build/sdk) --work $(abspath build/ports/picohttpparser)
+
+$(MBEDTLS_OUTPUTS) &: $(MBEDTLS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/mbedtls
+	$(LUA) ports/build.lua mbedtls --sdk $(abspath build/sdk) --work $(abspath build/ports/mbedtls)

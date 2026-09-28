@@ -120,8 +120,9 @@ measurement coverage are recorded in [technical debt](../technical-debt.md).
 The selected next milestone is [verified HTTPS snapshots with Mbed TLS](https.md).
 Task 1 selected Mbed TLS 4.1.1 / TF-PSA-Crypto 1.1.1 and settled the HTTPS
 contract, including public roots augmented by optional instance-specific custom
-roots. The SDK compile/link probe identifies native time and entropy hooks; no
-handshake has run. Task 2 packages the libraries and native platform support.
+roots. Task 2 packages the configured libraries and native platform support;
+controlled TLS 1.2/1.3 guest connections and bounded failure paths have passed
+manual validation. Task 3 adds verified HTTPS fetching to libhttp.
 SSH/libssh remains deferred. The following remain later alternatives.
 
 | Path | First concrete completion point | Decisions and supporting work |
