@@ -1,10 +1,11 @@
 # Userspace services and the first HTTP provider
 
 Status: agreed next milestone after [libc portability](../libc-portability.md).
-Tasks 1 through 7 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
+Tasks 1 through 8 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
 creation and process-owned receiver teardown moved forward from task 4 so the
 first delivery slice has a real consumer. Task 7 connects discovery and FILE delivery through the [OPEN bridge](../file-providers.md).
-Task 8 (the HTTP parser and fetch library) is next.
+Task 8 adds the [bounded HTTP fetch library](../http-fetch.md).
+Task 9 (HTTP service integration) is next.
 This document records the selected contracts for handoff between agents; the
 [broader provider ideas](userspace-scheme-providers.md) remain future directions where they exceed this scope. Work through the focused
 tasks in order, updating their checkboxes in the corresponding PRs. Discuss a
@@ -302,10 +303,10 @@ Boot without networking must remain usable; do not perform an automatic remote
 fetch or make ordinary local file access depend on the service being present.
 
 Use picohttpparser for headers and chunked decoding, pinned through ports under
-its MIT license. Candidate pin for the first compile probe:
+its MIT license. Task 8 packages the verified unmodified pin:
 `f4d94b48b31e0abae029ebeafcfd9ca0680ede58` from
 [upstream](https://github.com/h2o/picohttpparser/tree/f4d94b48b31e0abae029ebeafcfd9ca0680ede58).
-Verify its SDK requirements and preserve notices before integration. It is a
+Its existing SDK requirements and MIT notices are recorded in the port. It is a
 parser, not a complete client; userspace owns framing policy, sockets, limits,
 response staging and cleanup. Do not import its tests into this milestone.
 
@@ -429,7 +430,7 @@ task; avoid publishing interfaces with fake successful operations.
   through init; use existing cat, cksum and redirected input to read it. Exercise
   rights, copies, retirement, withdrawal, replacement and provider exit. This is
   a small demonstrable service, not a test framework or an HTTP-specific libc path.
-- [ ] **8. Pinned HTTP parser and fetch library.** Probe/package picohttpparser,
+- [x] **8. Pinned HTTP parser and fetch library.** Probe/package picohttpparser,
   implement userspace GET/framing/staging under the agreed budgets, and exercise
   the fetch library with a small native development consumer. Reuse the existing
   resolver; any API adjustment must preserve its current consumers and limits.

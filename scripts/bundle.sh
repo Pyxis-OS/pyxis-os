@@ -78,7 +78,7 @@ case "$action" in
           ;;
       esac
       if [ "$component" = userspace ]; then
-        printf 'lua_sha256=%s\n' "$(checksums build/ports-dev/lua | sha256sum | cut -d ' ' -f 1)"
+        printf 'ports_dev_sha256=%s\n' "$(checksums build/ports-dev | sha256sum | cut -d ' ' -f 1)"
       fi
     } > "$info.txt.tmp"
     for extension in txt sha256; do
@@ -115,9 +115,9 @@ case "$action" in
       }
     fi
     if [ "$component" = userspace ]; then
-      expected=$(sed -n 's/^lua_sha256=//p' "$info.txt")
-      test "$expected" = "$(checksums build/ports-dev/lua | sha256sum | cut -d ' ' -f 1)" || {
-        echo 'Userland bundle requires different Lua development files; select matching bundles or rebuild it.' >&2
+      expected=$(sed -n 's/^ports_dev_sha256=//p' "$info.txt")
+      test "$expected" = "$(checksums build/ports-dev | sha256sum | cut -d ' ' -f 1)" || {
+        echo 'Userland bundle requires different ports development files; select matching bundles or rebuild it.' >&2
         exit 1
       }
     fi

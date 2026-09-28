@@ -417,7 +417,19 @@ The shared FILE and provider OPEN helpers preserve their synchronous signatures
 and currently submit calls without a deadline. A live provider that stops replying
 can therefore block ordinary file readers and shell input redirection indefinitely.
 Provider exit or withdrawal releases affected waits, but neither is automatic.
-The immutable text service does no blocking work inside a request; HTTP will need
-its planned bounded fetch policy. Revisit caller-controlled bounded file/open
+The immutable text service does no blocking work inside a request. The HTTP fetch
+library bounds one fetch to thirty seconds (or an earlier caller deadline), but
+this does not bound queueing or invocation through the shared file/open helpers. Revisit caller-controlled bounded file/open
 waits alongside cancellation/wait sets; do not introduce hidden retries or an
 arbitrary global timeout. Existing endpoint APIs already support explicit deadlines.
+
+
+## HTTP framing compatibility
+
+The [initial HTTP library](http-fetch.md) deliberately rejects duplicate or list
+Content-Length, folded fields, non-CRLF headers and unsupported transfer/content
+codings. The pinned chunk decoder also rejects sufficiently excessive framing
+overhead. Some otherwise valid origins can therefore fail before the configured
+body limit. Close-delimited responses cannot prove whether an orderly EOF was
+intended to end the content. Revisit these restrictions when expanding HTTP client
+compatibility; do not silently accept ambiguous framing or publish partial bodies.
