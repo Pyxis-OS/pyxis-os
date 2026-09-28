@@ -83,6 +83,12 @@ Process launch, build cache, module acquisition and dependency tooling deserve
 their own scope. Running Go applications and hosting Go development tools are
 both valuable independently of the distant Tailscale idea.
 
+One very distant illustrative progression is Go runtime, age and small Go
+utilities, fzf and esbuild, gopls, CoreDNS and Caddy, rclone, restic and
+Syncthing, Tailscale, then Forgejo. This is a way to record possible reach, not
+a prerequisite graph or fixed implementation order. Hosted Go development is
+also a separate result from cross-compiling Go programs on the host for Pyxis.
+
 ## Rust without choosing the C compiler around it
 
 LLVM makes Rust worth keeping on the list, but running LLVM tools inside Pyxis
