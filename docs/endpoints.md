@@ -204,9 +204,9 @@ deadline. Received file attachments remain usable after cancellation and receipt
 completion. The existing `--abandon`, `--close` and `--exit` modes cover receipt
 abandonment and provider teardown.
 
-This slice has no namespace publication, external cancellation API,
-wait sets or automatic restart. A provider can retain all sixteen slots by
-leaving delivered receipts unfinished; deadlines release callers, not provider
+[Namespace publication](namespaces.md) provides explicit discovery and handoff.
+There is no external cancellation API, wait-set facility or automatic restart.
+A provider can retain all sixteen slots by leaving delivered receipts unfinished; deadlines release callers, not provider
 work. Calls without a deadline can still wait indefinitely, including self-calls
 and cycles between blocked single-task processes. External process termination
 and Ctrl-C remain [separate technical debt](technical-debt.md#process-termination-and-ctrl-c).

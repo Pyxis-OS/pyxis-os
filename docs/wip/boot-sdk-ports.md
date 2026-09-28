@@ -70,6 +70,11 @@ milestone's remaining interface details before starting its code work.
     restricted tee. The documentation handoff is complete; accepted compatibility
     limits and their revisit points are recorded in technical debt.
 
+22. Complete: [userspace services and HTTP snapshots](../userspace-services.md),
+    with bounded call/send/receive, deadlines, exported objects, scoped namespaces
+    and ordinary file consumers using immutable text and HTTP snapshots. The
+    documentation handoff is complete; accepted limits remain in technical debt.
+
 Everyday use for simple tasks guides this order. Website hosting remains one
 future application, not the primary completion target for the OS.
 
@@ -96,18 +101,10 @@ An opt-in [host-backed development overlay](host-development-overlay.md)
 remains postponed: programs can already run from `host://`, so it is not needed
 for the persistent development loop or as a replacement for the boot archive.
 
-## Next milestone and later candidates
+## Later milestone candidates
 
-Next is [userspace services and the first HTTP provider](userspace-services.md).
-The agreed contract covers bounded call/send/receive delivery, exported objects,
-scoped namespaces, IPC-safe file messages and a read-only HTTP snapshot provider.
-Tasks 1 through 9 implement bounded request/reply, one-way delivery, deadlines,
-cancellation, exported objects, namespace delegation, IPC-safe file messages and
-the first end-to-end immutable-file provider, a bounded HTTP fetch library and
-HTTP snapshot service integration. Task 10 (documentation handoff) is next. The
-document fixes the policy choices and separates later SQLite/compositor/shared-memory work.
-
-The following remain alternatives for subsequent bounded milestones.
+The userspace-services milestone is complete. No subsequent milestone is selected;
+the following remain alternatives for the next bounded discussion.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
@@ -126,7 +123,7 @@ interactions, not supported shell syntax or a settled ABI.
 [Hosted toolchains and language runtimes](toolchains-and-runtimes.md) park
 binutils/P1F investigation, the GCC-versus-LLVM choice, C++ userspace, Go cross
 compilation and a later hosted Go toolchain. Rust, Tailscale and Ladybird are
-future directions, not additions to the services milestone.
+future directions with their own scope decisions.
 
 SDL2/GrafX2 remains a later graphical alternative. A desktop/compositor remains
 a separate [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting

@@ -138,8 +138,7 @@ and blocked tasks, outstanding IPC and other waits, resource reclamation, and
 the completion result visible to waiters. Native termination need not require a
 general POSIX signal implementation.
 
-The [userspace-service deadline task](wip/userspace-services.md#deadlines-and-cancellation)
-does not add process kill: expiring a call releases its caller, not the provider
+[Endpoint call expiry](endpoints.md) releases its caller, not the provider
 process. Integrate externally terminated callers with IPC cancellation when the
 termination operation exists.
 
@@ -401,6 +400,21 @@ exact stream consumption; do not silently discard read-ahead. Multi-file output
 headers and additional head options are outside the current consumer scope.
 See [head usage](shell.md#bounded-input-with-head).
 
+## Endpoint cancellation and capacity
+
+[Endpoints](endpoints.md) have no external cancellation operation, wait sets or
+wait-for-capacity facility. Admission to a full endpoint fails immediately.
+A provider can retain all sixteen delivery slots by leaving receipts unfinished;
+deadlines release callers but do not reclaim delivered work. Calls without a
+deadline can wait indefinitely, including self-calls or cycles between blocked
+single-task processes. Control notifications remain deliverable at full capacity,
+but the provider must receive and finish the retained work.
+
+Revisit with asynchronous service scheduling and explicit cancellation/wait APIs.
+Preserve delivery/outcome reporting and receipt ownership; cancellation must not
+silently revoke attachments already delivered. Integrate process termination
+when its authority and teardown contract exist.
+
 ## Service startup failure before publication
 
 The namespace publication command waits on the provider's registration endpoint.
@@ -409,20 +423,21 @@ currently wait for either IPC or process exit, so startup can remain blocked.
 A provider CALL deadline bounds its own registration wait, but does not bound
 the parent's RECEIVE. Revisit with endpoint/process wait sets or a bounded receive
 facility; do not infer provider readiness from launch success or add automatic
-restart. Process kill and running-command Ctrl-C remain separate debt.
+restart. See [process termination and Ctrl-C](#process-termination-and-ctrl-c)
+for forced shutdown.
 
 ## Provider calls through synchronous file helpers
 
 The shared FILE helpers and ordinary path/libc opens currently submit calls
 without a deadline. Native provider OPEN exposes an explicit caller deadline.
-A live provider that stops replying can therefore block ordinary file readers and shell input redirection indefinitely.
+A live provider that stops replying can therefore block ordinary file readers
+and shell input redirection indefinitely.
 Provider exit or withdrawal releases affected waits, but neither is automatic.
 The immutable text service does no blocking work inside a request. The HTTP fetch
 library bounds one fetch to thirty seconds (or an earlier caller deadline), but
-this does not bound queueing or invocation through the shared file/open helpers. Revisit caller-controlled bounded file/open
-waits alongside cancellation/wait sets; do not introduce hidden retries or an
-arbitrary global timeout. Existing endpoint APIs already support explicit deadlines.
-
+this does not bound queueing or invocation through the shared file/open helpers.
+Revisit caller-controlled bounded file/open waits alongside cancellation/wait
+sets; do not introduce hidden retries or an arbitrary global timeout. Existing endpoint APIs already support explicit deadlines.
 
 ## HTTP framing compatibility
 

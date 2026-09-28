@@ -1,67 +1,34 @@
 # Userspace URI scheme providers
 
-Status: broader design direction and future consumers. The selected
-[userspace-services milestone](userspace-services.md) now records the agreed
-initial transport, export, namespace, representation and read-only HTTP contracts;
-that concrete scope takes precedence over open alternatives in these notes.
-Writes, media-type aliases, richer representations, SQLite and Git remain later
-work. This document builds on the [namespace direction](../vfs.md) and
-[named endpoints](../spaces.md#named-endpoints).
+Status: future extensions to the [implemented userspace services](../userspace-services.md).
+Read-only HTTP, byte snapshots, scoped binding, capability transfer and export
+lifetime are implemented; their contracts live in the subsystem docs. Writes,
+TLS, media-type aliases, richer representations, caching, SQLite and Git remain
+later work. The URI examples below are proposals unless identified as existing
+behavior.
 
-## Intended use
+## Implemented foundation and extension boundary
 
-A userspace service could expose resources through a URI scheme, allowing:
+Ordinary `fopen("http://example.com/hello.txt", "r")` and
+`cat http://example.com/hello.txt` use the [file-provider bridge](../file-providers.md).
+The [HTTP provider](../http-fetch.md) stages a complete bounded body and returns
+an immutable snapshot. Copies retain its bytes; independent opens fetch again.
+Reads use retained bytes at explicit offsets without new range requests.
+Retirement governs storage release, and provider death invalidates its exports.
 
-```c
-FILE *file = fopen("http://example.com/hello.txt", "r");
-```
+[Namespaces](../namespaces.md) supply exact-name publication, atomic replacement
+and explicit startup delegation. Libpyxis selects the URI scheme; the provider
+interprets the full URI. Directory roots retain their existing traversal, and
+ambiguous directory/provider bindings fail. Removal or replacement changes future
+discovery without retargeting held grants. There is no automatic restart or
+rebinding.
 
-and ordinary tools to consume the same resource:
-
-```text
-cat http://example.com/hello.txt
-```
-
-The provider implements fetching; a separate download utility is unnecessary
-for this simple read. This does not eliminate the HTTP client implementation
-or provide every option of a tool such as curl.
-
-Both HTTP and HTTPS clients belong entirely in userspace. HTTP parsing, headers,
-redirects, TLS, certificate verification and response caching stay there. The
-kernel supplies network primitives, IPC, capability enforcement and namespace
-binding/routing. It must not fetch URLs or contain an HTTP/TLS implementation.
-
-## Binding, routing and authority
-
-An authorized application registers a provider endpoint under a scheme within
-a namespace. Init can establish default bindings and delegate a namespace to a
-space or process. Registration and replacement require explicit authority; there
-is no unrestricted global registration table.
-
-Opening a URI selects a binding in the caller's namespace and routes an open
-request to that provider. The provider returns an opened-resource capability or
-an error. Libpyxis/libc adapts that resource to the file interface, including
-`FILE *`. Kernel routing only needs the generic scheme/binding contract; the
-provider interprets the scheme-specific address and protocol.
-
-Knowing a URI does not authorize access. The caller needs the applicable binding
-and operation rights. The provider's own network grants limit its access, but
-are not a substitute for enforcing caller policy: a shared privileged provider
-must not turn a restricted caller's request into unrestricted network access.
-Define how those restrictions are represented and checked before implementation,
-including redirects and cache hits.
-
-Changing a binding affects subsequent resolution, not already opened resources.
-Existing handles retain their original object/provider relationship. Provider
-exit must produce a defined closure/error result and wake blocked clients;
-it does not silently rebind their handles to a replacement service. Registration
-ownership, namespace inheritance, unregistration, restart and explicit revocation
-still need concrete lifetime rules.
-
-The current URI path helpers resolve directory roots in userspace. Kernel-managed
-provider bindings would be a new facility, not a description of existing code.
-Keep ordinary directory traversal and the provider-open contract distinct; an
-HTTP URI need not be represented as a tree of remote directory objects.
+HTTP parsing, redirects, TLS, certificate verification and cache policy belong
+in userspace. The kernel supplies network primitives, bounded IPC, capability
+enforcement and namespace bindings. Existing per-space HTTP publication is not a
+network-destination sandbox. A future shared provider needs an explicit caller
+policy before adding redirects, credential handling or cross-caller cache reuse;
+its own network grants alone do not enforce those restrictions.
 
 ## Discoverable resource representations
 
@@ -79,10 +46,9 @@ the current [object/capability contract](../processes.md#objects-capabilities-an
 already defines references and rights, while representation discovery is future
 work.
 
-Higher-priority design work for the provider milestone: let consumers discover
-the representations a resource offers and explicitly select one. The exact
-metadata, negotiation and byte/structured-data contracts remain open; this does
-not add a new interface to the current streams milestone.
+The existing OPEN reply declares a byte representation and optional media type.
+A later interface could let consumers discover alternatives and select one.
+Negotiation, structured-data contracts and their authority checks remain open.
 
 For example, `json+sqlite://catalog/apps` explicitly requests serialized JSON.
 An explorer opening `sqlite://catalog/` could discover the `apps` view, then ask
@@ -99,8 +65,8 @@ remain scoped bindings, not a kernel parser for composable URI prefixes.
 This could allow a generic explorer/table viewer to display database results
 without SQLite-specific UI. Keep provider serialization and interpretation in
 userspace, and define unsupported-format errors when designing the contract.
-Record the consumer examples now; do not build a general negotiation framework
-or require an explorer before the first provider exists.
+These consumer examples motivate a later contract; they do not add a general
+negotiation framework to the existing OPEN interface.
 
 ## Media-type scheme aliases
 
@@ -120,63 +86,6 @@ The kernel treats `json+https` as a binding name; it does not split the name int
 protocol layers or interpret JSON, HTTP or TLS. The userspace provider translates
 the alias to the underlying HTTP(S) URI. More aliases and request options can be
 designed when needed; this is not a generic composition framework.
-
-## Initial HTTP file policy
-
-Support ordinary finite web downloads even when their total length is not known
-upfront. The initial provider stages the complete response body under a byte
-budget and an overall deadline, then returns a read-only, sized resource. The
-file consumer sees stable bytes and explicit-offset reads; it never receives an
-unbounded live stream. Open may block while fetching, and must report failure if
-completion cannot be reached within the limits.
-
-Finite responses can omit `Content-Length`. HTTP/1.1 chunked framing carries chunk
-sizes rather than an upfront total; connection-close framing is also possible.
-There is no universal streaming flag. Apply the protocol's framing rules to
-determine completion, and reject conflicting framing rather than trusting a
-length beside `Transfer-Encoding`. Close-delimited completion cannot itself
-prove that the origin intended to send no more data.
-See [HTTP/1.1 body framing](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3).
-
-When supplied and applicable to the body, validate `Content-Length` and use it
-for early size-limit rejection. Zero is valid; absence alone is not an error.
-Interpret method/status semantics before length, and parse lengths with overflow
-checks. A separate HEAD request is not proof of the length of a later GET.
-See [Content-Length semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6).
-
-The exposed file size describes the bytes actually retained for the caller.
-Content decoding must not confuse transmitted encoded length with the resulting
-file length, and any decoding needs its own output bound. A simple initial option
-is to request identity encoding and reject unsupported content encodings; settle
-that exact policy before implementation.
-
-A declared length is not permission for unchecked allocation. Enforce the byte
-budget as data arrives whether or not a length was declared. Malformed framing,
-a declared-length mismatch, a size limit or deadline expiry fails the open and
-releases staging storage; never publish a partial result as a complete file.
-An indefinitely continuing response eventually fails the same limits. Exact
-budgets, staging storage, HTTP versions and status/redirect mapping remain open.
-
-## Open-resource lifetime and random access
-
-Each successful open returns a read-only snapshot backed by the complete retained
-response body. Its size and bytes stay fixed for that resource's lifetime. Reads
-at any supported offset use those bytes, without another network request or a
-dependency on the server's range support. A remote edit does not change an
-already opened resource.
-
-The opened resource owns the retained body. Copied or delegated handles refer to
-that same snapshot; closing one handle does not invalidate the others. Release
-the body after its last reference is gone and any in-flight reads have finished.
-Process teardown releases its references through the normal handle lifecycle.
-No HTTP-specific lifetime management is required in the kernel.
-
-Initially, independent opens fetch independent snapshots, even for the same URI.
-There is no retention for reuse after the final close. This per-open storage
-provides random access; a future cache across opens is a separate feature.
-Account for both downloads in progress and completed bodies pinned by live
-handles. A byte budget must reject or delay new opens rather than evict storage
-that an existing handle still owns.
 
 ## Future writes and shell operations
 
@@ -410,30 +319,30 @@ requires explicit execution/transaction controls: autosave must never commit a
 database change. This is a possible consumer of the session protocol above, not
 a command language or editor feature to implement alongside the first provider.
 
-## Prerequisites and decisions
+## Decisions for later extensions
 
-The [selected milestone](userspace-services.md) settles the initial choices below.
-Retain this list as context for later extensions, not decisions to reopen before
-its first task:
+The [implemented service contracts](../userspace-services.md) provide discovery,
+request/reply capability transfer, deadlines, immutable files and acknowledged
+retirement. Future work builds on those contracts rather than reopening them:
 
-- Registration/lookup requests, namespace scope and delegation, binding lifetime,
-  provider death and how policy follows a routed request.
-- Reply-side capability transfer and resource ownership. Current
-  [endpoints](../endpoints.md#copying-a-capability) transfer a capability with a
-  request only; returning a new handle requires real transfer support, not a
-  numeric handle embedded in reply bytes.
-- URI/request transport beyond the current endpoint's small inline payload,
-  server-side file resources or bounded materialization, timeouts, cancellation
-  and resource accounting. No private pointers may cross process boundaries.
-- TCP, name resolution for hostnames, the userspace HTTP implementation, HTTPS
-  library and trust configuration. TLS stays out of the kernel regardless of
-  library choice.
-- HTTP status mapping, redirects, encoding, size/deadline limits and offset-read
-  storage for the first read-only provider. Cache and compiler work come later.
-- For a later SQLite consumer: the [SQLite port](application-ports.md), view
+- Namespace overlays, enumeration, search paths and automatic provider activation
+  remain deferred; the implemented map uses exact lookup and explicit publication.
+- Capability attachments currently copy grants. Ownership-moving transfers need
+  a separate failure and lifetime contract.
+- Shared provider policy must define caller isolation, credentials, redirects
+  and cache reuse. A URL alone does not identify an authority boundary.
+- TLS needs a userspace library and trust configuration. It stays out of the
+  kernel regardless of library choice.
+- Writes and prepared requests need explicit commit/cancel behavior, body
+  ownership, deadlines and uncertain-outcome reporting.
+- Representation discovery and selection need bounded metadata and resource
+  protocols. Shared-memory transport needs its own mapping and lifetime rules;
+  private pointers cannot cross process boundaries.
+- Asynchronous provider work needs scheduling and cancellation contracts; see
+  [HTTP responsiveness debt](../technical-debt.md#http-provider-responsiveness).
+- A later SQLite consumer needs the [SQLite port](application-ports.md), view
   grants and binding policy, consistent result generation, serialization and
   query budgets. Session mutations and editor worksheets follow independently.
 
-This is a future consumer of networking, IPC and namespace work. It is not a
-reason to add placeholder syscalls, provider registries or protocol adapters to
-unrelated milestones.
+These extensions need their own bounded implementation decisions. They do not
+require placeholder syscalls, registries or protocol adapters in current work.
