@@ -29,16 +29,21 @@ struct provider_open_request {
  * The prefix is followed by media_type_size printable ASCII bytes (no NUL),
  * or zero bytes when absent. A media type describes, but does not validate,
  * content. The immutable snapshot has stable SIZE and explicit-offset READ.
- * Application result uses call_status; failure carries no payload or grants.
+ * Application result uses call_status. Every OPEN reply carries this prefix.
+ * Failure carries no grants or media type, and protocol/representation are zero.
+ * provider_status is a provider-specific diagnostic (HTTP's final response code,
+ * for example), zero when absent; it is meaningful on success and failure and
+ * grants no authority. Providers without a diagnostic return zero.
  * Transport errors remain separate and must not trigger automatic retries. */
 struct provider_open_reply {
   uint64_t protocol;
   uint64_t representation;
   uint64_t media_type_size;
+  uint64_t provider_status;
 };
 
 _Static_assert(sizeof(struct provider_open_request) == 16, "provider open request layout");
-_Static_assert(sizeof(struct provider_open_reply) == 24, "provider open reply layout");
+_Static_assert(sizeof(struct provider_open_reply) == 32, "provider open reply layout");
 _Static_assert(FILE_PAYLOAD_MAX <= ENDPOINT_DATA_MAX, "file payload fits endpoint delivery");
 
 #endif

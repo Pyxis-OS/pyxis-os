@@ -68,7 +68,7 @@ make -C /path/to/pyxis-userland SDK=/path/to/sdk \
 ```
 
 The `session` application also consumes Lua headers and `liblua.a` through
-`LUA_PREFIX`. The `http-fetch` application consumes picohttpparser headers and
+`LUA_PREFIX`. The `httpfs` application consumes picohttpparser headers and
 `libpicohttpparser.a` through `PICOHTTPPARSER_PREFIX`. Both development prefixes
 are exported by the ports build. Other application targets can still build with
 the SDK alone.
