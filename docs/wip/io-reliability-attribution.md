@@ -1,12 +1,14 @@
 # I/O reliability and bottleneck attribution
 
-Status: tasks 1–3 are complete. Logical receipt release fixes completed-work
+Status: tasks 1–4 are complete. Logical receipt release fixes completed-work
 capacity retention, and the agreed IPC/HTTP reruns passed. RAM file-growth
 attribution identifies publication-to-BSP-service wait as the dominant measured
 interval. Host profiling separates queue/service/transport intervals but strongly
 perturbs the measured workload; its limits and follow-up are recorded below.
-Task 4 investigates the profiler's 13.7–16.1× slowdown; task 5 covers comparison
-resolution and the final handoff. Investigation details remain to be agreed.
+The task-4 experiment reproduces a 14.9× slowdown and reduces it to 2.0× with
+initial BSP notification; counts-only collection stays near the off controls.
+The notification correction is proposed, not implemented. Task 5 must settle
+that proposal before comparison resolution and the final handoff.
 This follows the completed [I/O and IPC baselines](../io-ipc-baselines.md).
 
 ## Outcome and scope
@@ -663,21 +665,17 @@ rebuild is needed.
   to instrumented behavior and records the required follow-up before applying them
   to normal-workload optimization. Sync/durable-media costs remain out of scope.
 
-- [ ] **4. Investigate profiler-induced slowdown.** Explain why enabling HOST
-  profiling increased matched nested-KVM medians by 13.7–16.1× in task 3.
-  Distinguish direct timestamp/counter overhead from changes to request timing,
-  BSP queue service, worker scheduling and transport completion observation.
-  Treat missing initial BSP notification and clock-read cost as hypotheses,
-  not established causes. Agree the smallest controlled experiments and their
-  instrumentation/ownership contract before implementation; isolate factors
-  rather than changing the profiler and scheduling policy together. Retain
-  matched profile-off/on controls, workload sizes, transfer counts, correctness
-  checks and environment provenance, and account for the investigation's own
-  perturbation. Report causal evidence, remaining uncertainty and whether the
-  profiler can support normal-workload attribution. Propose any clock-source,
-  notification or collection-policy correction separately, with its validation
-  contract. Carry the findings and any agreed corrections into task 5 and update
-  the profiling debt.
+- [x] **4. Investigate profiler-induced slowdown.** The agreed six-cell
+  notification × off/counts/full experiment passed six warmups and thirty
+  verified samples. The timestamp path interacts with initial BSP notification:
+  full-profile medians fall from 1855.850 to 234.100 ms with notification, versus
+  off controls of 124.337 and 116.313 ms. Counts-only medians are 132.160 and
+  116.876 ms. The [report, raw samples and experiment patches](../experiments/host-profile-slowdown/README.md)
+  distinguish measured notification effects, the inferred queue-sweep/timer
+  mechanism, direct timestamp cost and unresolved transport/scheduling effects.
+  It proposes a focused notification correction and validation separately;
+  normal runtime code and pins are unchanged. Full profiling still cannot
+  partition normal-workload latency. Technical debt carries the remaining limit.
 
 - [ ] **5. Improve resolution and publish the comparison.** Review the evidence
   from the first four tasks and settle the smallest additional batch/coverage

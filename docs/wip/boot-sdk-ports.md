@@ -116,8 +116,11 @@ The active milestone is [I/O reliability and bottleneck attribution](io-reliabil
 task 1 fixed logical receipt reuse and the previously failing IPC/HTTP matrix
 now passes. Task 2 attributed RAM growth mainly to BSP queue wait in nested KVM.
 Task 3 separated host queue/transport intervals and exposed strong profiling
-perturbation. Task 4 investigates the profiler's 13.7–16.1× slowdown; task 5
-will settle comparison resolution and the final handoff.
+perturbation. Task 4 reproduced the slowdown and isolated a large interaction
+between timestamps and missing initial BSP notification; its
+[experiment report](../experiments/host-profile-slowdown/README.md) proposes a
+notification correction while recording residual profiling distortion. Task 5
+must settle that proposal, comparison resolution and the final handoff.
 Instrumentation choices are settled per task;
 there is no blanket optimization assignment. The following remain later alternatives.
 

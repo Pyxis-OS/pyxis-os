@@ -101,13 +101,24 @@ transfer time; these percentages cannot partition normal unprofiled transfer tim
 or establish host filesystem cost. Timestamp overhead changes interleaving as
 well as adding elapsed time, so subtracting a constant is inappropriate.
 
-Host request publication does not explicitly notify the BSP, whereas forwarding
-wakes the transport worker. This makes the first handoff a concrete follow-up
-candidate, not a proven explanation of all observed delay. Agree a bounded
-lower-perturbation measurement or notification investigation before optimizing;
-retain the same profile-off controls and lifetime/early-wakeup contract. Revisit
-this in task 4 of the [reliability milestone](wip/io-reliability-attribution.md#focused-pr-tasks),
-which investigates the profiler-induced slowdown before task 5's final comparison.
+The [task-4 controlled experiment](experiments/host-profile-slowdown/README.md)
+reproduces 14.9× full-profile slowdown on prepared HOST writes. Explicit initial
+BSP notification reduces it to 2.0×; counts-only runs stay near their off controls.
+Initial queue mean drops from 5.331 to 0.137 ms/request. This establishes a large
+notification-dependent amplification under the measured workload. Queue-sweep
+timing followed by timer wake is consistent with code and near-8 ms maxima, but
+individual wake causes were not traced. The residual includes direct timestamp
+work and unresolved scheduling/transport observation effects; no constant
+correction or normal-workload phase partition is justified.
+
+Production publication still has no explicit BSP notification. Task 5 of the
+[reliability milestone](wip/io-reliability-attribution.md#focused-pr-tasks)
+must settle the report's focused notification proposal and validation contract
+before final comparisons. Preserve request ownership and early wake semantics;
+repeat affected off/on controls if implemented. The report's counts-only patches
+are experimental, with unavailable phase timings explicitly omitted; no permanent
+collection mode or clock change has been accepted. Full-profile attribution
+remains limited to instrumented behavior even with the experimental notification.
 Host-side component timing and durable storage remain separately scoped work;
 current fixtures are tmpfs with sync off.
 
