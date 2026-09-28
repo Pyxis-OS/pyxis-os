@@ -54,6 +54,7 @@ struct endpoint_delivery_record {
 };
 
 struct endpoint_state {
+  struct kernel_object storage;
   atomic_bool locked;
   struct endpoint caller, receiver;
   struct endpoint_delivery_record deliveries[ENDPOINT_DELIVERIES_MAX];
@@ -119,6 +120,13 @@ static void retire_export(struct endpoint_export *export)
   }
 }
 
+static void destroy_endpoint_storage(struct kernel_object *object)
+{
+  struct endpoint_state *state = (struct endpoint_state *)object;
+  KASSERT(!state->storage_references);
+  kfree(state);
+}
+
 static void destroy_export_storage(struct kernel_object *object)
 {
   struct endpoint_export *export = (void *)((uint8_t *)object -
@@ -130,7 +138,7 @@ static void destroy_export_storage(struct kernel_object *object)
   unlock_endpoint(state);
   kfree(export);
   if (destroy) {
-    kfree(state);
+    object_release(&state->storage);
   }
 }
 
@@ -187,6 +195,8 @@ static void free_delivery(struct endpoint_delivery_record *record)
   }
 }
 
+static void release_queued_receipt(struct endpoint_delivery_record *record);
+
 static bool deadline_expired(uint64_t deadline_ns)
 {
   return deadline_ns && task_deadline_expired(deadline_ns);
@@ -197,7 +207,8 @@ static void cancel_delivery(struct endpoint_state *state,
     struct endpoint_delivery_record *record, enum call_status reason)
 {
   KASSERT(record->state == DELIVERY_QUEUED || record->state == DELIVERY_RECEIVED);
-  if (record->state == DELIVERY_QUEUED) {
+  bool queued = record->state == DELIVERY_QUEUED;
+  if (queued) {
     struct endpoint_delivery_record *previous = NULL;
     struct endpoint_delivery_record **link = &state->head;
     while (*link != record) {
@@ -212,7 +223,6 @@ static void cancel_delivery(struct endpoint_state *state,
     record->next = NULL;
     release_grants(record->request_grants, record->request_count);
     record->request_count = 0;
-    object_release(&record->receipt);
   } else {
     record->cancel_pending = true;
     wake_waiter(&state->waiting_receiver);
@@ -220,6 +230,9 @@ static void cancel_delivery(struct endpoint_state *state,
   record->state = DELIVERY_COMPLETE;
   record->status = reason;
   wake_waiter(&record->wait);
+  if (queued) {
+    release_queued_receipt(record);
+  }
 }
 
 static void expire_delivery(struct endpoint_state *state,
@@ -229,11 +242,12 @@ static void expire_delivery(struct endpoint_state *state,
   cancel_delivery(state, record, CALL_TIMED_OUT);
 }
 
-static void destroy_receipt(struct kernel_object *object)
+/* Called at zero references with the endpoint lock held. A receipt never enters
+ * the retirement queue: its embedded link must not outlive this delivery. */
+static bool release_receipt(struct endpoint_delivery_record *record)
 {
-  struct endpoint_delivery_record *record = (struct endpoint_delivery_record *)object;
   struct endpoint_state *state = record->endpoint;
-  lock_endpoint(state);
+  KASSERT(!atomic_load_explicit(&record->receipt.references, memory_order_relaxed));
   KASSERT(record->receipt_live);
   if (record->state == DELIVERY_RECEIVED) {
     record->state = DELIVERY_COMPLETE;
@@ -245,11 +259,32 @@ static void destroy_receipt(struct kernel_object *object)
   record->receipt_handle = HANDLE_INVALID;
   record->receipt_live = false;
   free_delivery(record);
-  bool destroy = --state->storage_references == 0;
+  KASSERT(state->storage_references);
+  return --state->storage_references == 0;
+}
+
+void endpoint_receipt_release(struct kernel_object *object)
+{
+  struct endpoint_delivery_record *record = (struct endpoint_delivery_record *)object;
+  struct endpoint_state *state = record->endpoint;
+  lock_endpoint(state);
+  bool destroy = release_receipt(record);
   unlock_endpoint(state);
   if (destroy) {
-    kfree(state);
+    object_release(&state->storage);
   }
+}
+
+static void release_queued_receipt(struct endpoint_delivery_record *record)
+{
+  /* No handle was published. The caller/receiver still owns endpoint storage,
+   * and dropping this initial reference must not reacquire the endpoint lock. */
+  KASSERT(!record->delivered && !record->receipt_handle);
+  size_t previous = atomic_fetch_sub_explicit(&record->receipt.references, 1,
+      memory_order_acq_rel);
+  KASSERT(previous == 1);
+  bool destroy = release_receipt(record);
+  KASSERT(!destroy);
 }
 
 static void close_endpoint(struct endpoint_state *state)
@@ -274,11 +309,10 @@ static void close_endpoint(struct endpoint_state *state)
     if (record->state != DELIVERY_QUEUED && record->state != DELIVERY_RECEIVED) {
       continue;
     }
-    if (record->state == DELIVERY_QUEUED) {
+    bool queued = record->state == DELIVERY_QUEUED;
+    if (queued) {
       release_grants(record->request_grants, record->request_count);
       record->request_count = 0;
-      /* A queued receipt still has its initial, unpublished reference. */
-      object_release(&record->receipt);
     }
     record->next = NULL;
     record->state = DELIVERY_COMPLETE;
@@ -286,6 +320,9 @@ static void close_endpoint(struct endpoint_state *state)
         CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
     record->cancel_pending = false;
     wake_waiter(&record->wait);
+    if (queued) {
+      release_queued_receipt(record);
+    }
   }
   for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
     state->deliveries[i].cancel_pending = false;
@@ -337,7 +374,7 @@ static void destroy_endpoint(struct kernel_object *object)
   bool destroy = --state->storage_references == 0;
   unlock_endpoint(state);
   if (destroy) {
-    kfree(state);
+    object_release(&state->storage);
   }
 }
 
@@ -372,6 +409,7 @@ enum call_status endpoint_create(struct process *owner, struct endpoint_create_r
     return CALL_NO_MEMORY;
   }
   memset(state, 0, sizeof(*state));
+  object_init(&state->storage, OBJECT_ENDPOINT, destroy_endpoint_storage);
   atomic_init(&state->locked, false);
   state->storage_references = 2;
   state->caller.state = state->receiver.state = state;
@@ -687,7 +725,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
     record->request_rights[i] = rights[i];
     record->request_transport[i] = transport[i];
   }
-  object_init(&record->receipt, OBJECT_ENDPOINT_RECEIPT, destroy_receipt);
+  object_init(&record->receipt, OBJECT_ENDPOINT_RECEIPT, NULL);
   ++state->storage_references;
   record->state = DELIVERY_QUEUED;
   if (state->tail) {

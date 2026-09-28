@@ -50,7 +50,8 @@ struct kernel_object {
  * only on the BSP with IF=0, outside the retirement lock. It releases the
  * enclosing allocation and owned resources, or transfers final cleanup to a
  * worker. It must not sleep or borrow a process/capability entry that may
- * already have been destroyed. */
+ * already have been destroyed. Embedded endpoint receipts instead use a NULL
+ * callback: their final release ends delivery ownership synchronously. */
 void object_init(struct kernel_object *object, enum object_type type,
                  void (*destroy)(struct kernel_object *));
 
@@ -69,7 +70,8 @@ bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
 
 /* Caller owns a live reference throughout retain. False means count overflow;
  * no reference is acquired. Release consumes one owned reference. IF=0 for
- * release on every CPU; the last release queues destruction without allocating. */
+ * release on every CPU; the last release queues destruction without allocating,
+ * except receipts, which release logical ownership without freeing storage. */
 bool object_retain(struct kernel_object *object);
 void object_release(struct kernel_object *object);
 
