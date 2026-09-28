@@ -124,5 +124,7 @@ Each open fetches independently; copies retain the same immutable body.
 Retirement releases its allocation and shared storage reservation. The provider
 supports 63 live snapshots alongside its OPEN export, including empty snapshots.
 
-Format negotiation, shared-memory transfers and writable providers remain future
-[userspace-services work](wip/userspace-services.md).
+See the [service overview](userspace-services.md) for authority and lifetime across
+protocols. Format negotiation and writable providers remain
+[scheme-provider extensions](wip/userspace-scheme-providers.md); shared-memory
+transfers need a separate ownership contract.
