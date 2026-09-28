@@ -24,6 +24,7 @@ should improve daily use or exercise a reusable OS facility.
 | awk | Text filtering, field processing and small scripts; select an implementation after a libc/dependency probe. |
 | grep, tail, wc, sort, uniq, hexdump | Small everyday commands that remain useful alongside awk. Decide which to port or implement separately; this is not a commitment to a complete Unix utility suite. |
 | jq | JSON inspection and transformation, initially on local files. Audit libc/math and the selected regex configuration/dependency. |
+| pup | A Go command-line HTML parser and CSS-selector tool, with JSON output for pipelines. It is a small Go utility candidate; see the [Go runtime direction](toolchains-and-runtimes.md#go-cross-compiler-then-hosted-go-toolchain). |
 
 SDL2 means an upstream library port with a Pyxis platform backend, not a growing
 collection of lookalike SDL functions. Begin with the subsystems a selected
@@ -38,17 +39,19 @@ successful no-op locking/sync is not a substitute. WAL and shared-memory support
 are separate decisions. SQLite's VFS is its userspace OS adapter, distinct from
 Pyxis namespace routing or the proposed `sqlite://` provider.
 
-Pipelines and [userspace scheme providers](userspace-scheme-providers.md) would
-eventually make this illustrative command possible:
+HTTP reads and shell pipelines are implemented. Once jq and pup are ported, this
+illustrative command could select HTML links and pass their JSON representation
+to jq:
 
 ```sh
-cat json+http://example.com/apps | jq '.[].name'
+cat http://example.com/ | pup 'a json{}' | jq '.[].href'
 ```
 
 [Shell pipelines and native head](../shell-streams.md) are implemented. The
 [libc portability milestone](../libc-portability.md) packages upstream cksum and
-restricted tee through conventional descriptor APIs. The HTTP provider and jq
-port remain separate work; adding jq alone does not implement a scheme provider.
+restricted tee through conventional descriptor APIs. jq and pup remain unported
+candidates. The separate [userspace scheme provider](userspace-scheme-providers.md)
+proposal for media-type aliases such as `json+http://` remains future work.
 
 ## Graphical applications and games
 
@@ -101,6 +104,7 @@ These are leads for a pinned compile/runtime probe, not verified Pyxis support.
 - [Mbed TLS and its TF-PSA-Crypto dependency](https://github.com/Mbed-TLS/mbedtls).
 - [SQLite OS interface](https://www.sqlite.org/vfs.html).
 - [One True Awk](https://github.com/onetrueawk/awk) and [jq](https://github.com/jqlang/jq).
+- [pup HTML command-line tool](https://github.com/ericchiang/pup).
 - [Quake source](https://github.com/id-Software/Quake).
 - [DevilutionX build options](https://github.com/diasurgical/DevilutionX/blob/master/docs/building.md).
 - [Current C AbyssEngine](https://github.com/AbyssEngine/AbyssEngine),
