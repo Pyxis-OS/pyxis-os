@@ -101,10 +101,15 @@ An opt-in [host-backed development overlay](host-development-overlay.md)
 remains postponed: programs can already run from `host://`, so it is not needed
 for the persistent development loop or as a replacement for the boot archive.
 
-## Later milestone candidates
+## Next milestone and later candidates
 
-The userspace-services milestone is complete. No subsequent milestone is selected;
-the following remain alternatives for the next bounded discussion.
+Next is [I/O and IPC performance baselines](io-ipc-baselines.md): manually invoked
+userspace measurements for files, copies, pipes, endpoints and HTTP snapshots.
+Separate fetch/setup from transfer and producer acceptance from consumer
+completion. Reuse existing allocation/TCP benchmarks; identify bottlenecks without
+bundling optimizations. Task 1 settles the measurement contract and file reads.
+
+The following remain alternatives after that bounded measurement milestone.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
