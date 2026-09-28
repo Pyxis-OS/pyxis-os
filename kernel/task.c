@@ -659,6 +659,7 @@ void task_submit_hostfs(struct hostfs_request *request)
 {
   struct task *task = local_scheduler()->current_task;
   KASSERT(request == &task->hostfs_request);
+  struct task_wait *wait = request->wait;
   bool profiled = request->profile.active;
   if (profiled) {
     request->profile.requested_bytes = request->count;
@@ -672,7 +673,9 @@ void task_submit_hostfs(struct hostfs_request *request)
   }
   hostfs_tail = request;
   unlock_queues();
-  task_wait_sleep(request->wait);
+  /* Publication may miss the BSP's queue sweep; wake it before parking. */
+  notify_remote_cpu(0);
+  task_wait_sleep(wait);
   if (profiled) {
     finish_host_profile(task);
   }
