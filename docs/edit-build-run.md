@@ -50,3 +50,34 @@ remain unsupported. GCC continues to build maintained OS/userland sources.
 
 See [TCC's contract and limits](tcc.md), [Kilo controls](ports.md#editing-in-pyxis)
 and [terminal behavior](terminal.md) for details.
+
+## Fetch source over HTTPS
+
+A controlled HTTPS endpoint can supply source through the same file interface.
+For this example, arrange DNS for `tls.pyxis.test`, serve the small program above
+at `https://tls.pyxis.test:8443/hello.c`, and provide a certificate valid for that
+name and the guest's UTC date. Networking must be enabled in QEMU. The controlled
+CA's PEM certificate must be available as a native file, for example
+`home://custom-ca.pem`; it contains the public CA certificate, never a private key.
+
+In the guest, replace HTTPS with an instance that augments packaged public trust:
+
+```text
+service replace --read-only https app://httpfs.pxe --https --ca-bundle home://custom-ca.pem
+cat https://tls.pyxis.test:8443/hello.c > home://hello.c
+cat home://hello.c
+tcc home://hello.c -o home://hello.pxe
+home://hello.pxe
+```
+
+Inspect the saved source before compiling and run only code you trust. HTTPS
+authenticates the server and transfer; it does not establish that a program is
+safe. Check each command's result before proceeding. A failed HTTPS open exposes
+no partial snapshot, but output redirection can already have created or truncated
+its destination. A failed build can leave an old or partial executable as above.
+
+The resulting source and executable remain RAM-backed. Use writable `host://`
+paths for persistence. A public-CA endpoint uses the default HTTPS instance
+without custom augmentation. See [HTTPS trust and updates](https.md) and
+[provider configuration](http-fetch.md#use-and-startup) for setup, failure and
+replacement rules.

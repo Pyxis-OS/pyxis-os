@@ -6,6 +6,8 @@ consumers use `http://` and `https://` through their delegated namespace. Separa
 provider instances serve the two schemes. Publication performs no fetch; boot
 and local files remain usable without networking. HTTPS verifies certificates
 against packaged public roots and any explicitly configured custom roots.
+The [TLS contract](https.md) describes the profile, trust updates, native hooks
+and TLS memory accounting.
 
 ## Use and startup
 
@@ -53,24 +55,12 @@ service start --read-only https app://httpfs.pxe --https
 
 The `--read-only` service option attenuates native directory roots and working
 directories for that provider launch. Trust loading uses native read-only files,
-never a remote provider. The public bundle always loads from
-`app://share/ca-certificates/cacert.pem`. An explicitly supplied custom bundle
-adds roots; it cannot replace or disable public trust. Missing, malformed, empty
-or over-budget configured bundles fail setup without replacing an existing binding.
-
-HTTPS initializes PSA with explicit random and clock grants under one five-second
-entropy deadline, then loads and freezes trust before publication. Temporary input
-buffers, parsed trust and TLS allocations share a 2 MiB budget, independent of
-body storage. Setup makes no network request. Missing entropy leaves HTTPS
-unpublished; a missing NIC does not prevent publication. Plain HTTP initializes
-no TLS state. Existing kernel TCP entropy requirements still apply to HTTP fetches.
-
-Changing trust files has no effect on an existing instance. Restart or replace
-it to apply changes. Each instance owns independent trust, snapshots and storage;
+never a remote provider. See
+[trust configuration](https.md#trust-configuration-and-updates) for packaged roots,
+native trust loading, bounded setup failure and the restart/update contract.
+Each instance owns independent trust, snapshots and storage;
 existing snapshots survive removal/replacement until their final handles close.
 Clients receive FILE authority, not trust-management or additional TCP grants.
-See [public-root packaging and updates](ports.md#public-ca-roots) for the pinned
-source, notices and manual update procedure.
 
 ## Library and authority
 

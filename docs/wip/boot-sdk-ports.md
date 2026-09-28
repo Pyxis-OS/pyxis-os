@@ -110,24 +110,21 @@ An opt-in [host-backed development overlay](host-development-overlay.md)
 remains postponed: programs can already run from `host://`, so it is not needed
 for the persistent development loop or as a replacement for the boot archive.
 
-## Next milestone and later candidates
+## Closed HTTPS milestone and later candidates
 
 The [I/O reliability and attribution report](../io-reliability-attribution.md)
 closes the performance milestone. The former IPC/HTTP failures are resolved,
 and HOST publication now notifies the BSP. Profiling perturbation and remaining
 measurement coverage are recorded in [technical debt](../technical-debt.md).
 
-The selected next milestone is [verified HTTPS snapshots with Mbed TLS](https.md).
-Task 1 selected Mbed TLS 4.1.1 / TF-PSA-Crypto 1.1.1 and settled the HTTPS
-contract, including public roots augmented by optional instance-specific custom
-roots. Task 2 packages the configured libraries and native platform support;
-controlled TLS 1.2/1.3 guest connections and bounded failure paths have passed
-manual validation. Task 3 adds verified HTTPS fetching to libhttp, with controlled
-framing, certificate, deadline and cleanup checks. Task 4 packages public trust
-and publishes independent HTTPS snapshots through configured session namespaces,
-with optional startup failure handling. Task 5 remains the public/certificate
-workflow validation and documentation handoff.
-SSH/libssh remains deferred. The following remain later alternatives.
+The [verified HTTPS snapshots milestone](../https.md) is complete. Mbed TLS
+4.1.1 / TF-PSA-Crypto 1.1.1 supplies client TLS through native userland hooks;
+separate providers publish verified snapshots using packaged public roots and
+optional instance-specific augmentation. Implemented behavior, configuration and
+limits live in the subsystem docs, with the
+[fetch/inspect/compile/run workflow](../edit-build-run.md#fetch-source-over-https)
+beside the local development loop. SSH/libssh remains deferred. No next milestone
+is selected; the following remain later alternatives.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

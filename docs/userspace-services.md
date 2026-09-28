@@ -153,8 +153,9 @@ Accepted limitations and their revisit points are recorded in technical debt:
 - [Provider calls through synchronous file helpers](technical-debt.md#provider-calls-through-synchronous-file-helpers).
 - [HTTP framing compatibility](technical-debt.md#http-framing-compatibility).
 - [HTTP provider responsiveness](technical-debt.md#http-provider-responsiveness).
+- [HTTPS trust and platform limits](technical-debt.md#https-trust-and-platform-limits).
 
-The HTTP provider fetches synchronously, delaying snapshot reads and retirement
+Each HTTP/HTTPS provider fetches synchronously, delaying snapshot reads and retirement
 behind network work. Ordinary file/open helpers have no IPC deadline, so the
 fetch budget does not bound total client wait. Call expiry cannot kill a provider
 or reclaim its unfinished receipts.
