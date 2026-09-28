@@ -5,8 +5,9 @@ capacity retention, and the agreed IPC/HTTP reruns passed. RAM file-growth
 attribution identifies publication-to-BSP-service wait as the dominant measured
 interval. Host profiling separates queue/service/transport intervals but strongly
 perturbs the measured workload; its limits and follow-up are recorded below.
-Task 4 is comparison resolution and the final handoff, with scope still to agree. This follows
-the completed [I/O and IPC baselines](../io-ipc-baselines.md).
+Task 4 investigates the profiler's 13.7–16.1× slowdown; task 5 covers comparison
+resolution and the final handoff. Investigation details remain to be agreed.
+This follows the completed [I/O and IPC baselines](../io-ipc-baselines.md).
 
 ## Outcome and scope
 
@@ -349,7 +350,7 @@ medians were 56.625/54.280 ms. Prepared write medians were 0.296/0.656 ms despit
 zero replacements in the profiled run, while prepared copy medians were
 0.519/0.494 ms. Run ordering, cache state and nested scheduling remain combined;
 these five-sample groups do not establish a precise overhead or a speedup. No
-clock-cost correction is applied. Short prepared intervals remain a task-4
+clock-cost correction is applied. Short prepared intervals remain a task-5
 resolution concern.
 
 ### Profile intervals
@@ -662,8 +663,24 @@ rebuild is needed.
   to instrumented behavior and records the required follow-up before applying them
   to normal-workload optimization. Sync/durable-media costs remain out of scope.
 
-- [ ] **4. Improve resolution and publish the comparison.** Review the evidence
-  from the first three tasks and settle the smallest additional batch/coverage
+- [ ] **4. Investigate profiler-induced slowdown.** Explain why enabling HOST
+  profiling increased matched nested-KVM medians by 13.7–16.1× in task 3.
+  Distinguish direct timestamp/counter overhead from changes to request timing,
+  BSP queue service, worker scheduling and transport completion observation.
+  Treat missing initial BSP notification and clock-read cost as hypotheses,
+  not established causes. Agree the smallest controlled experiments and their
+  instrumentation/ownership contract before implementation; isolate factors
+  rather than changing the profiler and scheduling policy together. Retain
+  matched profile-off/on controls, workload sizes, transfer counts, correctness
+  checks and environment provenance, and account for the investigation's own
+  perturbation. Report causal evidence, remaining uncertainty and whether the
+  profiler can support normal-workload attribution. Propose any clock-source,
+  notification or collection-policy correction separately, with its validation
+  contract. Carry the findings and any agreed corrections into task 5 and update
+  the profiling debt.
+
+- [ ] **5. Improve resolution and publish the comparison.** Review the evidence
+  from the first four tasks and settle the smallest additional batch/coverage
   changes needed for meaningful comparisons. In particular, short native and
   SEND intervals approach clock-call overhead; longer safe workloads can improve
   resolution without subtracting a presumed constant. Repeat affected benchmarks
@@ -680,7 +697,7 @@ rebuild is needed.
 Completion requires verified consumption of the formerly failing workloads,
 evidence-backed conclusions for file growth and host service, and a reproducible
 comparison report. Reruns belong both to the relevant correction PR and the final
-handoff; do not postpone validation of the reliability fix until task 4.
+handoff; do not postpone validation of the reliability fix until task 5.
 
 Userland owns benchmark changes; Pyxis owns kernel changes, integration and the
 report. Publish dependent userland PRs before updating gitlinks. No ports or

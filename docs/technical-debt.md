@@ -106,8 +106,10 @@ wakes the transport worker. This makes the first handoff a concrete follow-up
 candidate, not a proven explanation of all observed delay. Agree a bounded
 lower-perturbation measurement or notification investigation before optimizing;
 retain the same profile-off controls and lifetime/early-wakeup contract. Revisit
-this in the comparison-resolution task. Host-side component timing and durable
-storage remain separately scoped work; current fixtures are tmpfs with sync off.
+this in task 4 of the [reliability milestone](wip/io-reliability-attribution.md#focused-pr-tasks),
+which investigates the profiler-induced slowdown before task 5's final comparison.
+Host-side component timing and durable storage remain separately scoped work;
+current fixtures are tmpfs with sync off.
 
 ## Fixed userspace stacks
 
