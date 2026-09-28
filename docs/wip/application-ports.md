@@ -19,7 +19,7 @@ should improve daily use or exercise a reusable OS facility.
 | libpng | PNG decoding/encoding for viewers, drawing tools and screenshots; depends on zlib. |
 | SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. |
 | PDCurses | Investigate a native libterm backend for terminal applications, using its documented platform hooks for drawing, input, cursor control and delays. |
-| Mbed TLS | Evaluate a pinned userspace TLS release for HTTPS, including its crypto dependency, entropy, clock, transport callbacks, certificate trust and verification policy. No TLS in the kernel. |
+| Mbed TLS | Selected for the [HTTPS milestone](https.md). Probe a supported release and its crypto dependency, then settle entropy, clock, transport, trust and verification policy. No TLS in the kernel; SSH is deferred. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
 | awk | Text filtering, field processing and small scripts; select an implementation after a libc/dependency probe. |
 | grep, tail, wc, sort, uniq, hexdump | Small everyday commands that remain useful alongside awk. Decide which to port or implement separately; this is not a commitment to a complete Unix utility suite. |

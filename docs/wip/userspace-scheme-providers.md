@@ -3,9 +3,10 @@
 Status: future extensions to the [implemented userspace services](../userspace-services.md).
 Read-only HTTP, byte snapshots, scoped binding, capability transfer and export
 lifetime are implemented; their contracts live in the subsystem docs. Writes,
-TLS, media-type aliases, richer representations, caching, SQLite and Git remain
-later work. The URI examples below are proposals unless identified as existing
-behavior.
+media-type aliases, richer representations, caching, SQLite and Git remain
+later work. [Verified HTTPS with Mbed TLS](https.md) is the selected next
+milestone; its trust and integration decisions are not implemented yet. The URI
+examples below are proposals unless identified as existing behavior.
 
 ## Implemented foundation and extension boundary
 

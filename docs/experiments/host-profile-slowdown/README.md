@@ -1,10 +1,10 @@
 # HOST profiler slowdown investigation
 
-Task 4 of the [I/O reliability milestone](../../wip/io-reliability-attribution.md)
+Task 4 of the [I/O reliability milestone](../../io-reliability-attribution.md)
 used a controlled notification × collection experiment. These patches preserve
 the original experiment against its recorded baseline. The notification proposal
 was subsequently accepted and implemented; see the
-[correction and validation](../../wip/io-reliability-attribution.md#task-5-host-publication-notification).
+[correction and validation](../../io-reliability-attribution.md#host-publication-notification).
 The counts-only patches remain **experiment artifacts, not an SDK mode**. Do not use
 the counts-only kernel with normal profile consumers: its duration fields are
 unavailable, and only the patched iobench reporter describes that correctly.
@@ -104,10 +104,11 @@ keep these historical measurements intact.
 No clock replacement is proposed here: a faster cross-CPU clock needs its own
 monotonicity, synchronization and virtualization contract. A permanent counts-only
 mode would need explicit ABI/reporting availability semantics; zero duration
-fields must never masquerade as measurements. Defer that decision unless task 5
-needs it. Task 5 should settle this notification proposal first and continue to
-use profile-off timings for performance comparisons. Normal-workload phase
-attribution remains unresolved and is recorded in
+fields must never masquerade as measurements. The notification was subsequently
+implemented and its affected controls rerun. The milestone closed with further
+resolution work and the final combined matrix deferred; no permanent counts-only
+mode was accepted. Future comparisons must continue to use profile-off timings.
+Normal-workload phase attribution remains unresolved and is recorded in
 [technical debt](../../technical-debt.md#host-file-profiling-perturbation).
 
 ## Reproduction contract

@@ -155,7 +155,7 @@ After use, remove guest copies, quit QEMU, stop the host server with Ctrl-C, and
 remove the two copied fixtures and its temporary directory. Stop any owned
 virtiofsd/debugger jobs too. The 1 MiB HTTP command exposed the capacity failure
 recorded below in the original baseline. The subsequent
-[receipt-reuse correction](wip/io-reliability-attribution.md#task-1-implemented-receipt-reuse-and-benchmark-reruns)
+[receipt-reuse correction](io-reliability-attribution.md#receipt-reuse)
 completed that workload; the original tables remain historical observations.
 
 ## Recorded environment and source revisions
@@ -372,10 +372,10 @@ performance; the documentation handoff did not rerun these measurements.
 
 ## Follow-up investigations
 
-These investigations are now organized in the agreed
-[I/O reliability and bottleneck attribution milestone](wip/io-reliability-attribution.md),
-where task 1 has resolved completed-receipt retention. The attribution
-investigations remain pending.
+The closed [I/O reliability and bottleneck attribution report](io-reliability-attribution.md)
+records receipt reuse, RAM/HOST profiling and the HOST publication correction.
+Additional resolution work and the final combined matrix were deferred; the
+correction-specific reruns do not replace that matrix.
 The attribution/coverage gaps and revisit points are retained in
 [technical debt](technical-debt.md#io-baseline-attribution-and-coverage):
 
@@ -384,13 +384,15 @@ The attribution/coverage gaps and revisit points are retained in
   attachment and delivery lifetimes. The agreed 256-message IPC and 1 MiB HTTP
   reruns passed. The original failures and remaining live-work limit are in
   [technical debt](technical-debt.md#endpoint-throughput-limited-by-deferred-receipt-reclamation).
-- **RAM growth attribution:** isolate file-buffer growth and BSP queue/service
-  time before choosing allocation or notification changes. The grow/prepared gap
-  is measured; its internal causes are not. Existing caller-scoped
-  [allocation profiling](allocation-profiling.md) covers private memory, not this path.
-- **Host FILE attribution:** distinguish guest queueing, VirtIO/FUSE transport and
-  daemon/backing service time before changing batching or transfer limits. Use
-  explicit disk-backed fixtures if durable-media sync is the question.
+- **RAM growth attribution — measured:** independent FILE profiling identifies
+  publication-to-BSP-service wait as the dominant measured interval. A FILE
+  notification correction remains a separate proposal; queue timestamps do not
+  identify individual wake causes. See the
+  [RAM report](io-reliability-attribution.md#ram-file-profiling).
+- **Host FILE attribution — instrumented limits:** HOST profiling separates guest
+  queues, worker service and transport, but still perturbs execution after the
+  notification correction. Normal-workload phase attribution remains unresolved.
+  Use explicit disk-backed fixtures if durable-media sync is the question.
 - **Measurement resolution and coverage:** longer safe batches or scoped
   instrumentation need a separate contract. Keep owner-host repetitions separate
   from nested-VM data, recording revisions, devices, backing, warmup and clock cost.
@@ -402,5 +404,5 @@ and [synchronous FILE helper limits](technical-debt.md#provider-calls-through-sy
 IPC CALL deadlines do not bound RECEIVE, pipe or process waits. The HTTP fetch's
 thirty-second bound does not bound ordinary OPEN/FILE queueing. Capability
 attachment cost, cross-space contention, mixed-workload fairness, CPU accounting
-and tracing remain unmeasured. The follow-up milestone defines its own bounded
-coverage; this baseline does not authorize work on all of these gaps.
+and tracing remain unmeasured. Future investigations need their own bounded
+scope; this baseline does not authorize work on all of these gaps.
