@@ -14,8 +14,8 @@ compared against useful baselines rather than an unexplained throughput figure.
 
 Small manually invoked userspace applications are the primary deliverable:
 `iobench` for byte I/O and a focused IPC benchmark with a companion process.
-The read, write and copy contracts below are implemented; remaining CLI spelling, default
-sizes and workload bounds are settled before their implementation tasks.
+The read, write, copy, pipe and endpoint contracts below are implemented.
+Remaining exported-file/HTTP workload details are settled before task 4.
 Keep workloads bounded and build/package them normally;
 do not add a generic benchmark framework, boot automation or CI performance gates.
 
@@ -83,8 +83,9 @@ generic provider framework. Use existing launcher, endpoint and pipe authority.
 Stay within existing placement rules and report where each process runs; adding
 cross-space launch/placement control is outside scope. Keep requests bounded and
 account for queue-full behavior without treating rejected messages as completed
-work or spinning indefinitely for capacity. Exact payload sets, acknowledgment
-protocol and whether attachment-copy cost is included need discussion in task 3.
+work or spinning indefinitely for capacity. The task-3 contract below fixes payload sets and completion acknowledgments.
+Measured messages carry no capability attachments; startup grant transfers are
+outside timing.
 
 File-writing runs require explicitly selected output paths and an agreed policy
 for existing files before implementation. Do not silently truncate user data.
@@ -398,6 +399,120 @@ host lookup/open references, idle virtqueues and empty completed/file/memory
 queues. All owned QEMU/GDB/virtiofsd processes stopped and temporary host files
 were removed. Owner's-host measurements and finer attribution remain deferred.
 
+## Implemented task 3: pipes and IPC
+
+Userland supplies the [pipe mode](https://git.internal/chronium/pyxis-userland/src/branch/main/iobench/README.md#pipes)
+and [endpoint benchmark](https://git.internal/chronium/pyxis-userland/src/branch/main/ipcbench/README.md).
+`session` hands off the current shell; each invocation needs a fresh session
+after the preceding benchmark exits.
+
+- `session app://iobench.pxe pipe`: the fixed 1 MiB fixture, descriptor requests
+  1..65536 bytes, default 4096; representative requests 64, 4096 and 65536.
+  Separately time producer acceptance and consumer acknowledgment. A coordinator
+  batch-launches two workers to supply exclusive pipe stdout/stdin grants.
+- `session app://ipcbench.pxe call|send`: payloads 0..4096 bytes, default 64;
+  representative payloads 0, 64 and 4096. Default eight messages per pass, bounded
+  to 1..256 so retained contents stay at most 1 MiB per direction.
+- Fresh endpoint receivers for every warmup and measured pass, preventing prior
+  samples from occupying the next sample's delivery records. One untimed warmup,
+  five measured passes by default (1..100). Launch, allocation,
+  readiness, fixture preparation and verification remain outside timing. Received
+  bytes are retained for later validation; successful completion counts alone do
+  not make a verified sample. No measured capability attachments.
+- CALL echoes the same bytes and length. Explicit exported operation tags
+  distinguish echo and control without consuming application payload space.
+  Report round trips, per-direction bytes and batch means, not latency percentiles.
+- SEND admits groups of at most eight without concurrent consumer draining. A
+  separate control CALL supplies the admitted count; the receiver drains exactly
+  that prefix, finishes its receipts and acknowledges consumption. Sum admission
+  intervals and separately measure whole-pass completion, including control
+  exchanges and clock boundaries. Queue-full fails the sample, drains admitted
+  messages and reports rejected/admitted/acknowledged-consumed counts without
+  data retries. On failure, acknowledged consumption is a confirmed lower bound.
+  SEND uses raw data and exported control endpoints; CALL uses one exported
+  endpoint for echoes and control. Closing the last control client allows RETIRE
+  to wake a companion when queue saturation prevents STOP admission.
+- All workers use existing launch placement on the caller's CPU and space; no
+  cross-space or scheduler API changes. CALL deadlines do not bound pipe,
+  RECEIVE or process-WAIT stalls. Capability attachments and continuously
+  overlapping SEND traffic remain separate future workloads.
+
+### Pipe and IPC observations
+
+Manual four-CPU Q35 nested-KVM boots with 256 MiB, QEMU 10.2.2, networking
+disabled and entropy enabled used the development session on CPU 1. No host
+filesystem was attached. Host/compiler environment matches the task-2 run above.
+Each command used a fresh boot because `session` hands off and exits the shell.
+
+All three pipe configurations verified every byte in one warmup and five measured
+passes, with normal worker exits and no read/write errors. Values below are
+milliseconds, in sample order; acceptance and completion share the producer's
+start timestamp.
+
+| Request | Descriptor calls per direction | Positive shorts per direction | Acceptance samples (ms) | Completion samples (ms) |
+| --- | --- | --- | --- | --- |
+| 64 | 16,384 | 0 | 5.082440, 5.161530, 5.422950, 5.240930, 5.275590 | 5.391600, 5.628460, 5.869020, 5.547610, 5.579530 |
+| 4096 | 256 | 0 | 0.726260, 1.031070, 0.730660, 0.707180, 0.706410 | 1.034710, 1.339840, 1.038560, 1.032150, 1.026070 |
+| 65536 | 256 | 255 | 0.730930, 0.796430, 0.707640, 0.751530, 0.722510 | 1.099540, 1.119830, 1.025450, 1.067230, 1.031620 |
+
+Clock-call means were 36,306, 36,258 and 36,839 ns respectively. Acceptance medians
+were 5.241, 0.726 and 0.731 ms; completion medians were 5.580, 1.035 and 1.067 ms.
+Large requests did not reduce calls below the 4096-byte transfer boundary. These
+are nested-VM elapsed observations, including scheduler handoffs and clock/control
+cost; the submillisecond acceptance intervals do not isolate pipe-copy CPU cost.
+
+Zero-byte, 256-message endpoint runs exposed the existing deferred receipt
+reclamation limit during warmup. CALL completed 21 round trips before QUEUE_FULL;
+SEND admitted and acknowledged 16 messages, then rejected the 17th. Completed
+receipts retain delivery slots until BSP reclamation, so sequential CALLs and
+acknowledged SEND groups can still exhaust capacity. These are observed failure
+points, not deterministic thresholds.
+
+Both larger runs failed visibly without printing throughput. CALL also reported
+failed STOP admission; closing its last control client allowed retirement
+notification and a normal nonzero child exit. SEND verified its acknowledged
+prefix and completed normal shutdown. These checks used ordinary workloads,
+without fault injection. The default is eight messages on fresh endpoints;
+the 256-message upper bound remains available to expose capacity failures.
+This measures short batches, not sustainable endpoint throughput. The consequence
+and revisit point are recorded in
+[technical debt](../technical-debt.md#endpoint-throughput-limited-by-deferred-receipt-reclamation).
+
+All six final endpoint configurations passed one warmup and five measured
+samples on fresh receivers, eight messages per sample. Each CALL replied with
+exactly the requested length/content; each SEND admitted and acknowledged all
+eight with zero rejections. There were no measured attachments. At 64 bytes,
+CALL confirmed 512 request and 512 reply bytes, while SEND confirmed 512 bytes;
+at 4096 bytes those counts were 32,768 per direction and 32,768 respectively.
+Zero-byte samples report counts and elapsed time without byte throughput.
+
+| Mode / payload bytes | Clock loop ns/read | Completion samples (ms) | Completion median (ms) | SEND admission samples (ms) |
+| --- | --- | --- | --- | --- |
+| CALL 0 | 37,673 | 2.193, 6.950, 2.052, 2.080, 2.051 | 2.080 | — |
+| CALL 64 | 35,795 | 2.069, 2.047, 2.610, 2.090, 2.074 | 2.074 | — |
+| CALL 4096 | 38,190 | 2.250, 2.378, 2.168, 5.234, 2.175 | 2.250 | — |
+| SEND 0 | 36,128 | 0.361, 1.206, 1.218, 1.258, 1.203 | 1.206 | 0.037, 0.120, 0.123, 0.148, 0.127 |
+| SEND 64 | 39,265 | 0.385, 0.367, 1.053, 0.466, 0.435 | 0.435 | 0.039, 0.037, 0.123, 0.037, 0.055 |
+| SEND 4096 | 35,977 | 0.399, 0.422, 0.377, 0.377, 0.374 | 0.377 | 0.042, 0.040, 0.042, 0.042, 0.042 |
+
+SEND admission medians were 0.123, 0.039 and 0.042 ms for 0, 64 and 4096 bytes.
+The shortest admission intervals are comparable to clock-call overhead. CALL
+includes export dispatch, receiver retention and sender reply retention; SEND
+completion includes the control exchange, retention and finishing receipts.
+Fresh measured endpoints include first-delivery costs despite the separate
+warmup. Sample variability and these boundaries prevent interpreting payload
+rates as isolated kernel copy cost or sustainable service throughput. No clock
+constant is subtracted, and no scheduler or reclamation change was made.
+
+Validation used `make -j16 image`, interactive QEMU boots and GDB inspection.
+All nine representative configurations (three pipe and six endpoint) verified
+five samples. Manual checks rejected pipe `--sync`, oversized IPC payloads,
+zero message counts, duplicate options and missing session authority. The
+existing archive-read workload verified its fixture after the parser changes.
+GDB after the final 4096-byte SEND run showed four idle CPUs, CPU 1 online and
+empty completion/pipe/endpoint/memory queues and object-retirement list. All
+owned QEMU/debugger jobs were stopped. No compiler-container rebuild is needed.
+
 ## Focused PR tasks
 
 - [x] **1. Measurement contract and file reads.** Settle command syntax, default
@@ -407,7 +522,7 @@ were removed. Owner's-host measurements and finer attribution remain deferred.
 - [x] **2. Writes and copies.** Agree output-file and sync policies, then add
   bounded write/copy workloads. Report acceptance and requested sync separately,
   verify resulting data, and distinguish allocation/growth from steady I/O.
-- [ ] **3. Pipes and IPC.** Settle the small companion/acknowledgment protocol
+- [x] **3. Pipes and IPC.** Settle the small companion/acknowledgment protocol
   and payload sets. Measure pipe consumer completion, CALL round trips and SEND
   admission versus acknowledged completion with existing capabilities. Keep
   startup separate from transfer timing; do not introduce new scheduling APIs.

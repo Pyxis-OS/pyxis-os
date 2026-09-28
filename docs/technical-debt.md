@@ -415,6 +415,34 @@ Preserve delivery/outcome reporting and receipt ownership; cancellation must not
 silently revoke attachments already delivered. Integrate process termination
 when its authority and teardown contract exist.
 
+## Endpoint throughput limited by deferred receipt reclamation
+
+The sixteen delivery records count completed CALLs and finished SENDs until the
+BSP destroys their retired receipt objects. REPLY collection or `endpoint_finish()`
+does not immediately return the slot. A sequential caller, or a sender whose
+previous group has already been consumed and acknowledged, can therefore hit
+QUEUE_FULL despite having no outstanding application work.
+
+The [I/O and IPC baseline](wip/io-ipc-baselines.md) observed this on CPU 1 in
+four-CPU nested KVM: a zero-byte 256-call warmup completed 21 round trips before
+QUEUE_FULL; SEND admitted and acknowledged two groups of eight, then rejected
+message 17. These are observed failure points, not deterministic capacity
+thresholds: BSP scheduling/reclamation can change the number completed.
+
+Task 3 uses fresh endpoints and eight-message samples, with creation and teardown
+outside timing. Larger explicitly requested runs still expose capacity failures;
+there are no hidden data retries or sleeps to pace the measured workload. This
+keeps successful measurements possible but does not establish sustainable
+long-running endpoint throughput. Even control calls used for shutdown can meet
+this capacity limit.
+
+Revisit in a separate endpoint lifetime/reclamation investigation before using
+these samples to size a continuously busy service or adding a sustained IPC
+baseline. Preserve BSP destruction ownership, CALL delivery/outcome reporting,
+and attachment/receipt lifetimes; determine whether logical slot reuse can be
+separated safely from object destruction or reclamation scheduling needs work.
+No reclamation algorithm change is included in the measurement milestone.
+
 ## Service startup failure before publication
 
 The namespace publication command waits on the provider's registration endpoint.
@@ -425,6 +453,13 @@ the parent's RECEIVE. Revisit with endpoint/process wait sets or a bounded recei
 facility; do not infer provider readiness from launch success or add automatic
 restart. See [process termination and Ctrl-C](#process-termination-and-ctrl-c)
 for forced shutdown.
+
+The manually invoked pipe/IPC benchmarks have the same startup/reporting limit:
+a companion that faults before its readiness or result message can leave the
+coordinator in RECEIVE. Their CALL deadlines do not bound pipe or process waits.
+Revisit benchmark-wide timeouts with the same bounded-receive/wait-set work;
+retain explicit partial progress and never describe a CALL deadline as forced
+process termination. See [I/O and IPC baselines](wip/io-ipc-baselines.md).
 
 ## Provider calls through synchronous file helpers
 
