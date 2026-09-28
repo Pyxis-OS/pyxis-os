@@ -71,7 +71,8 @@ Updates are explicit: select a dated snapshot, review certificate changes,
 verify the published checksum, update ports metadata/notices, rebuild the image
 and restart providers. No boot-time download or automatic trust update occurs.
 Custom bundles augment these roots per instance under the same verification
-rules; configuration and startup are described in [HTTPS fetching](http-fetch.md).
+rules; configuration, platform integration and limits are described in
+[HTTPS trust](https.md), with launch commands in [fetching](http-fetch.md).
 
 ## Checksums with sbase cksum
 

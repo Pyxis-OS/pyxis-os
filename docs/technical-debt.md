@@ -339,7 +339,10 @@ VM is paused need not advance. A missing seed is an explicit error, but a
 plausible incorrect RTC value cannot be detected. Future adjustments must not
 change monotonic deadlines. [Zoneinfo-backed local time](timezones.md) is handled
 in userspace. TCC uses UTC calendar macros and monotonic `-bench`;
-Kilo uses monotonic time for status-message expiry.
+Kilo uses monotonic time for status-message expiry. HTTPS certificate validity
+also depends on this UTC value: an available but incorrect RTC date can cause
+incorrect acceptance or rejection. Revisit authenticated time synchronization
+before treating TLS date checks as independent of firmware/hypervisor time.
 
 HPET MMIO reads can be expensive, especially under virtualization. Consider a
 validated TSC source later, including frequency discovery and cross-CPU
@@ -572,9 +575,43 @@ body limit. Close-delimited responses cannot prove whether an orderly EOF was
 intended to end the content. Revisit these restrictions when expanding HTTP client
 compatibility; do not silently accept ambiguous framing or publish partial bodies.
 
+## HTTPS trust and platform limits
+
+The [HTTPS provider](https.md) uses a pinned Mozilla-derived PEM export, which
+omits Mozilla's additional trust-store constraints. It verifies chains, names
+and dates, but configures no revocation source or online revocation policy.
+A certificate can therefore remain accepted despite revocation or omitted
+constraints while its other verification checks pass. Trust updates are
+manual image/ports updates followed by provider restart, so a deployed instance
+does not automatically receive later removals. Revisit richer trust constraints,
+revocation and update policy for a deployment that requires them; preserve
+explicit authority and bounded failure rather than silently downloading policy.
+
+HTTPS accepts DNS names only. Numeric-address URIs fail as unsupported because
+IP-only SAN verification and SNI handling have not been implemented. Revisit when
+a concrete IP-address consumer needs HTTPS; do not route it through DNS/CN name
+matching. Scheme authority and optional custom roots do not confine destinations.
+Revisit destination policy separately when a consumer requires isolation.
+
+Entropy comes from the [VirtIO random capability](randomness.md) and trusts the
+hypervisor's bytes. There is no implemented physical-hardware entropy path or
+fallback. Missing entropy leaves HTTPS unpublished and also disables new kernel
+TCP connections for that boot. Inventory and implement a supported hardware
+source before claiming native-machine HTTPS; a presumed CPU feature is not an
+entropy source. UTC remains subject to the
+[wall-clock limits](#wall-clock-time-and-clock-source-performance) above.
+
+TLS buffers, chain depth and the 2 MiB counted allocation cap deliberately reject
+oversized handshakes. Successful controlled connections establish
+fit for the measured roots and peers, not all valid certificate chains or suites.
+Deadline checks between operations do not preempt CPU-bound cryptography. Revisit
+these limits only for a demonstrated endpoint or scheduling requirement, with
+measured demand and bounded ownership; do not weaken verification or silently
+raise budgets.
+
 ## HTTP provider responsiveness
 
-One [HTTP provider](http-fetch.md) task performs synchronous fetches. While it
+Each [HTTP/HTTPS provider](http-fetch.md) task performs synchronous fetches. While it
 fetches, existing snapshot reads and lifecycle processing wait behind it, and
 retired bodies can continue occupying the storage budget. Each fetch has a
 30-second budget or earlier caller deadline; ordinary file helpers still submit

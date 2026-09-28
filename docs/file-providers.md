@@ -114,15 +114,20 @@ lookup references close. The old process continues serving already-open files
 and exits after their exports retire too. There is no process-kill facility or
 supervisor; this is capability-driven shutdown, not forced cancellation.
 
-## HTTP snapshots
+## HTTP and HTTPS snapshots
 
-The [HTTP service](http-fetch.md) publishes OPEN_READ as `http` in each configured
-interactive namespace. It fetches a complete response before returning a read-only
-FILE snapshot, preserving the optional Content-Type and final HTTP status.
+Separate [HTTP and HTTPS services](http-fetch.md) publish OPEN_READ as `http` and
+`https` in configured interactive namespaces. Each fetches a complete response
+before returning a read-only FILE snapshot, preserving the optional Content-Type
+and final HTTP status.
 Existing `cat`, `cksum`, `tee`, libc and input redirection share this bridge.
 Each open fetches independently; copies retain the same immutable body.
 Retirement releases its allocation and shared storage reservation. The provider
 supports 63 live snapshots alongside its OPEN export, including empty snapshots.
+
+HTTPS additionally verifies chain, reference name and validity against its frozen
+trust before issuing the GET. See [TLS authority and trust](https.md) for setup,
+native integration and accepted limits.
 
 See the [service overview](userspace-services.md) for authority and lifetime across
 protocols. Format negotiation and writable providers remain

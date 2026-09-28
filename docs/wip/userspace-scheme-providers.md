@@ -1,18 +1,18 @@
 # Userspace URI scheme providers
 
 Status: future extensions to the [implemented userspace services](../userspace-services.md).
-Read-only HTTP, byte snapshots, scoped binding, capability transfer and export
+Read-only HTTP/HTTPS, byte snapshots, scoped binding, capability transfer and export
 lifetime are implemented; their contracts live in the subsystem docs. Writes,
 media-type aliases, richer representations, caching, SQLite and Git remain
-later work. [Verified HTTPS with Mbed TLS](https.md) is the selected next
-milestone; its trust and integration decisions are not implemented yet. The URI
+later work. [Verified HTTPS with Mbed TLS](../https.md) is implemented with
+packaged public roots and optional per-instance augmentation. The URI
 examples below are proposals unless identified as existing behavior.
 
 ## Implemented foundation and extension boundary
 
 Ordinary `fopen("http://example.com/hello.txt", "r")` and
 `cat http://example.com/hello.txt` use the [file-provider bridge](../file-providers.md).
-The [HTTP provider](../http-fetch.md) stages a complete bounded body and returns
+The [HTTP/HTTPS providers](../http-fetch.md) stage a complete bounded body and return
 an immutable snapshot. Copies retain its bytes; independent opens fetch again.
 Reads use retained bytes at explicit offsets without new range requests.
 Retirement governs storage release, and provider death invalidates its exports.
