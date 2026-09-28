@@ -40,10 +40,19 @@ enum virtio_fs_kind {
   VIRTIO_FS_OTHER,
 };
 
+/* Optional worker-owned aggregate for one native operation, including lazy
+ * OPEN. No wire identities escape; zero unless a chain was published. */
+struct virtio_fs_profile {
+  uint64_t submissions, completions, failures;
+  uint64_t completed_ns, completed_max_ns, failed_ns, failed_max_ns;
+  bool saturated;
+};
+
 struct virtio_fs_session {
   uint32_t major, minor, max_write, time_granularity;
   uint64_t next_unique, lookup_refs, open_handles;
   bool ready;
+  struct virtio_fs_profile *profile; /* Sole worker scopes this around native I/O. */
 };
 
 struct virtio_fs_attributes {

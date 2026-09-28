@@ -7,6 +7,8 @@
 
 struct profile_snapshot;
 struct profile_file_snapshot;
+struct profile_host_snapshot;
+enum hostfs_operation;
 struct task_wait;
 struct directory_entry;
 struct file_object;
@@ -99,6 +101,7 @@ enum mm_result task_request_memory(uint64_t operation, struct memory_region *reg
  * No allocation or remote inspection; one task per process at present. */
 enum call_status task_profile_control(uint64_t operation, struct profile_snapshot *reply);
 enum call_status task_profile_file_control(uint64_t operation, struct profile_file_snapshot *reply);
+enum call_status task_profile_host_control(uint64_t operation, struct profile_host_snapshot *reply);
 
 /* Same inactive-root handoff as private memory. The capability keeps display
  * alive while blocked; reply is copied through task metadata, never remotely. */
@@ -122,7 +125,7 @@ void task_discard_launch_group(struct launch_group *group);
  * then submit and block. Its capability and private mappings remain live;
  * only this caller copies user memory. Consume the reply before preparing
  * another request. There is no external task cancellation in this model. */
-struct hostfs_request *task_prepare_hostfs(void);
+struct hostfs_request *task_prepare_hostfs(enum hostfs_operation operation);
 void task_submit_hostfs(struct hostfs_request *request);
 
 /* BSP only, after boot_start_cpus(), VM and heap initialization. */

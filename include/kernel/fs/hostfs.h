@@ -25,12 +25,20 @@ enum hostfs_operation {
   HOSTFS_ENUMERATE,
 };
 
+struct hostfs_profile {
+  bool active;
+  size_t requested_bytes;
+  uint64_t started_ns, published_ns, forwarded_ns, service_started_ns, service_ended_ns;
+  struct virtio_fs_profile transport;
+};
+
 /* One request per calling task, in shared task metadata. No user addresses or
  * private-stack pointers cross the worker boundary. The live capability keeps
  * node alive until completion; a returned object is one owned reference. */
 struct hostfs_request {
   struct hostfs_request *next;
   struct task_wait *wait;
+  struct hostfs_profile profile;
   enum hostfs_operation operation;
   struct hostfs_node *node;
   uint64_t kind, offset;

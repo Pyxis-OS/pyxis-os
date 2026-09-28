@@ -281,8 +281,7 @@ static enum call_status capture_launch_request(const struct launch_request *requ
   }
   capture->image = (struct file_object *)image;
   if (capture->image->backing == FILE_HOST) {
-    struct hostfs_request *pending = task_prepare_hostfs();
-    pending->operation = HOSTFS_CAPTURE;
+    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_CAPTURE);
     pending->node = capture->image->host;
     pending->count = LAUNCH_HOST_IMAGE_MAX_SIZE;
     task_submit_hostfs(pending);

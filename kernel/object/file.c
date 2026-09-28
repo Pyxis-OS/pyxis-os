@@ -192,8 +192,7 @@ static struct syscall_result read_file(struct file_object *file,
   uintptr_t data_address = reply_address + sizeof(reply);
 
   if (file->backing == FILE_HOST) {
-    struct hostfs_request *pending = task_prepare_hostfs();
-    pending->operation = HOSTFS_READ;
+    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_READ);
     pending->node = file->host;
     pending->offset = request->offset;
     pending->count = request->capacity < VIRTIO_FS_READ_MAX ? request->capacity : VIRTIO_FS_READ_MAX;
@@ -248,8 +247,7 @@ static struct syscall_result write_file(struct file_object *file,
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (file->backing == FILE_HOST) {
-    struct hostfs_request *pending = task_prepare_hostfs();
-    pending->operation = HOSTFS_WRITE;
+    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_WRITE);
     pending->node = file->host;
     pending->offset = request->offset;
     pending->count = request->size < VIRTIO_FS_WRITE_MAX ? request->size : VIRTIO_FS_WRITE_MAX;
@@ -358,8 +356,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
     if (file->backing == FILE_HOST) {
-      struct hostfs_request *pending = task_prepare_hostfs();
-      pending->operation = HOSTFS_SYNC;
+      struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_SYNC);
       pending->node = file->host;
       task_submit_hostfs(pending);
       return (struct syscall_result){pending->status, 0};
@@ -375,8 +372,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
     if (file->backing == FILE_HOST) {
-      struct hostfs_request *pending = task_prepare_hostfs();
-      pending->operation = HOSTFS_RESIZE;
+      struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_RESIZE);
       pending->node = file->host;
       pending->offset = request.size;
       task_submit_hostfs(pending);
@@ -396,8 +392,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   if (file->backing == FILE_HOST) {
-    struct hostfs_request *pending = task_prepare_hostfs();
-    pending->operation = HOSTFS_SIZE;
+    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_SIZE);
     pending->node = file->host;
     task_submit_hostfs(pending);
     if (pending->status != CALL_OK) {

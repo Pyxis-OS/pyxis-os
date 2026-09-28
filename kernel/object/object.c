@@ -136,7 +136,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_PIPE:
     return !(rights & ~(PIPE_RIGHT_READ | PIPE_RIGHT_WRITE));
   case OBJECT_PROFILE:
-    return !(rights & ~(PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_FILE));
+    return !(rights & ~(PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_FILE | PROFILE_RIGHT_HOST));
   case OBJECT_SPACE:
     return !(rights & ~SPACE_RIGHT_SET_TITLE);
   case OBJECT_CONSOLE:

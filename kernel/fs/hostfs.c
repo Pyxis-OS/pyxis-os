@@ -1,5 +1,6 @@
 #include <abi/file.h>
 #include <arch/cpu.h>
+#include <arch/clock.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/memory.h>
@@ -72,6 +73,15 @@ void hostfs_prepare(void)
   starting = true;
 }
 
+static void reject_profile(struct hostfs_request *request)
+{
+  if (request->profile.active) {
+    uint64_t now = arch_monotonic_ns();
+    request->profile.service_started_ns = now;
+    request->profile.service_ended_ns = now;
+  }
+}
+
 void hostfs_start_failed(enum virtio_fs_result result)
 {
   KASSERT(arch_cpu_index() == 0 && !session && result != VIRTIO_FS_OK);
@@ -83,6 +93,7 @@ void hostfs_start_failed(enum virtio_fs_result result)
     first_request = request->next;
     request->next = NULL;
     request->status = startup_failure;
+    reject_profile(request);
     task_wait_wake(request->wait);
   }
   last_request = NULL;
@@ -104,6 +115,7 @@ void hostfs_submit(struct hostfs_request *request)
   request->next = NULL;
   if (!session && !starting) {
     request->status = startup_failure;
+    reject_profile(request);
     task_wait_wake(request->wait);
     return;
   }
@@ -542,8 +554,17 @@ bool hostfs_service(void)
   if (!request) {
     return false;
   }
+  KASSERT(!session->profile);
+  if (request->profile.active) {
+    request->profile.service_started_ns = arch_monotonic_ns();
+    session->profile = &request->profile.transport;
+  }
   request->status = perform(request);
+  session->profile = NULL;
   flags = cpu_save_interrupts();
+  if (request->profile.active) {
+    request->profile.service_ended_ns = arch_monotonic_ns();
+  }
   task_wait_wake(request->wait);
   /* Wake returns the record and any resulting object to the caller. */
   cpu_restore_interrupts(flags);
