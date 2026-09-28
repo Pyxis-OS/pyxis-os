@@ -602,7 +602,7 @@ entropy source. UTC remains subject to the
 [wall-clock limits](#wall-clock-time-and-clock-source-performance) above.
 
 TLS buffers, chain depth and the 2 MiB counted allocation cap deliberately reject
-oversized or expensive handshakes. Successful controlled connections establish
+oversized handshakes. Successful controlled connections establish
 fit for the measured roots and peers, not all valid certificate chains or suites.
 Deadline checks between operations do not preempt CPU-bound cryptography. Revisit
 these limits only for a demonstrated endpoint or scheduling requirement, with

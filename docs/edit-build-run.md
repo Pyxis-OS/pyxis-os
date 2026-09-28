@@ -54,9 +54,9 @@ and [terminal behavior](terminal.md) for details.
 ## Fetch source over HTTPS
 
 A controlled HTTPS endpoint can supply source through the same file interface.
-For this example, arrange DNS for `tls.pyxis.test`, serve the small program above
-at `https://tls.pyxis.test:8443/hello.c`, and provide a certificate valid for that
-name and the guest's UTC date. Networking must be enabled in QEMU. The controlled
+For this example, arrange DNS for `tls.pyxis.test`, serve a small C program such
+as the one above at `https://tls.pyxis.test:8443/hello.c`, and provide a certificate
+valid for that name and the guest's UTC date. Networking must be enabled in QEMU. The controlled
 CA's PEM certificate must be available as a native file, for example
 `home://custom-ca.pem`; it contains the public CA certificate, never a private key.
 

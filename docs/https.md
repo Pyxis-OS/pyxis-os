@@ -62,8 +62,9 @@ Monotonic milliseconds and UTC both come from the supplied clock. UTC is checked
 before verification, and failures from time hooks are latched and reject the
 fetch even if upstream otherwise reports success. Missing time cannot become a
 sentinel that bypasses date checks. Subsequent entropy or reseeding uses the
-fetch's authority and original deadline. The shared fetch deadline covers DNS,
-connect, handshake and response completion; checks between library operations
+fetch's authority, with each entropy-hook call capped at the earlier of five
+seconds ahead or the original fetch deadline. The shared fetch deadline covers
+DNS, connect, handshake and response completion; checks between library operations
 do not interrupt arbitrary CPU-bound cryptography.
 
 ## Trust configuration and updates
@@ -83,8 +84,9 @@ lookup. A scheme binding permits use of the provider under existing network
 policy; it is not a destination allowlist.
 
 After PSA initialization, setup reads public and configured custom trust,
-imports every PEM certificate individually, then freezes the parsed roots.
-Missing, empty, malformed or over-budget configured trust fails setup. A failed
+requires every counted PEM certificate to import successfully, then freezes
+the parsed roots. Missing, empty, malformed or over-budget configured trust fails
+setup. A failed
 import poisons the runtime; no partially accepted bundle is usable. Temporary
 input buffers are released before publication. Running providers retain immutable
 parsed trust, so changes to backing files require restart or replacement.
@@ -124,7 +126,8 @@ measured configuration, not allocator backing pools, process RSS or a guarantee
 for arbitrary chains and suites. Cleanup returns to the trust baseline; runtime
 retirement releases trust and crypto state.
 
-Certificate or trust rejection maps to `CALL_DENIED`; TLS protocol failure and
+Certificate verification and PEM-import rejection map to `CALL_DENIED`; native
+trust-file failures retain their setup status. TLS protocol failure and
 truncation map to `CALL_IO`. Native clock, entropy, transport and deadline errors
 retain their call status. Allocation-cap exhaustion maps to `CALL_QUOTA`,
 allocator failure to `CALL_NO_MEMORY`, and recognizable encoded-size limits to
@@ -139,6 +142,39 @@ of the original remaining deadline and does not wait for peer shutdown.
 Shutdown failure is diagnostic after valid framing; native handle-close failure
 still fails the fetch. See [HTTP framing and cleanup](http-fetch.md#request-and-response-policy)
 for authenticated EOF and incomplete-response rules.
+
+## Validation scope
+
+Manual closure checks used nested KVM QEMU with two vCPUs, 256 MiB, VirtIO
+networking/randomness and the pinned runtime/provider implementation. Public
+HTTPS with packaged roots alone fetched `https://example.com/`: the guest and
+host matched at 713 bytes and CRC 1346324142. Controlled peers supplied TLS 1.2
+and TLS 1.3 responses and disposable certificates; no private keys or probes
+are installed in the normal image.
+
+| Check | Observed result |
+| --- | --- |
+| Trusted, correctly named expired and not-yet-valid leaves | Certificate rejection, flags 1 and 512, before GET |
+| Wrong name and untrusted chain | Certificate rejection, flags 4 and 8, before GET |
+| Raw EOF in close-delimited TLS | TLS truncation; no snapshot |
+| Authenticated EOF before fixed/chunked HTTP completion | Malformed HTTP; no snapshot |
+| Missing clock authority in a disposable native probe | Setup rejected with `TLS_CLOCK_ERROR`/`CALL_BAD_HANDLE`; fetch rejected with `CALL_DENIED` before network activity |
+| Fetch, save, inspect, TCC compile and execute | An 88-byte controlled C source matched CRC 3122158114 and printed its expected message |
+| HTTP and valid TLS 1.3 chunked responses | Matching 12,000-byte bodies, CRC 4154493573 |
+
+GDB inspection after the exercised fetch failures found no body allocation or
+active TLS connection and exact recovery to the parsed-trust baseline. Framing
+failures retained HTTP status 200 as diagnostic metadata. The missing-clock
+probe left no runtime owner or borrowed authority after cleanup. This checks
+absent clock authority; unavailable UTC from an otherwise valid clock grant
+was inspected in code, not induced by a kernel modification.
+
+Earlier integration checks established no-NIC publication, no-RNG setup failure
+with continued local/HTTP startup, independent session trust, and retained
+snapshots across provider replacement. These are functional observations for
+the selected peers and configurations, not exhaustive cipher/chain coverage or
+performance measurements. Builds and temporary-validation cleanup accompany
+the changes; future source or trust updates require renewed validation.
 
 ## Accepted limits
 
