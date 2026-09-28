@@ -369,6 +369,11 @@ and handle closure to its caller. See the pinned userland `libtls/tls.h` for
 ownership and failure contracts. TLS archive headers/configuration remain ports
 development inputs, outside the base and guest SDKs.
 
+The userland build tracks the complete TLS export's content identity, including
+headers, configuration, make fragment and archives. Epoch-normalized export
+timestamps cannot leave an adapter compiled against an older library layout.
+An unchanged export preserves the identity stamp and avoids recompilation.
+
 The task-2 source/advisory/root update checkpoint retained the task-1 pins.
 Ordinary SDK, archive, adapter and image builds used Pyxis GCC 16.2.0 and CMake
 3.31.8. The builder recipe adds CMake, curl and bzip2 to its runtime stage;
@@ -398,6 +403,16 @@ the custom CA. Observed results:
 - A second boot with `VIRTIO_RNG=0` reached the probe normally; TLS runtime setup
   failed with `TLS_ENTROPY_ERROR`, native `CALL_UNAVAILABLE` and PSA error -148.
   Runtime ownership and active authority were cleared on this path too.
+- Review follow-up: ordinary builds against a disposable export recompiled
+  `tls.o` after header/configuration contents changed with their timestamps still
+  at epoch; unchanged exports did not rebuild. SDK-only `cat` still built without
+  TLS inputs. In the guest, a valid CA followed by paired garbage PEM delimiters
+  failed as `TLS_TRUST_ERROR` even though upstream returned zero, and subsequent
+  trust finalization failed as `TLS_BAD_STATE`. A trusted certificate restricted
+  to client authentication failed as `TLS_CERTIFICATE_ERROR`, preserving upstream
+  `MBEDTLS_ERR_SSL_BAD_CERTIFICATE` (-31232) and verification flag 4096. A valid
+  20,000-byte TLS 1.2 request still completed with authenticated EOF and the same
+  allocation baseline/peak.
 
 The probe, controlled certificates and private keys are not installed or
 committed. Date rejection and raw TCP truncation were inspected in code but
