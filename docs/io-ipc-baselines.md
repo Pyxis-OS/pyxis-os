@@ -369,7 +369,9 @@ performance; the documentation handoff did not rerun these measurements.
 
 ## Follow-up investigations
 
-These are bounded candidates for separate work, not implemented optimizations.
+These investigations are now organized in the agreed
+[I/O reliability and bottleneck attribution milestone](wip/io-reliability-attribution.md),
+with receipt reclamation first. They are not implemented optimizations.
 The attribution/coverage gaps and revisit points are retained in
 [technical debt](technical-debt.md#io-baseline-attribution-and-coverage):
 
@@ -396,5 +398,5 @@ and [synchronous FILE helper limits](technical-debt.md#provider-calls-through-sy
 IPC CALL deadlines do not bound RECEIVE, pipe or process waits. The HTTP fetch's
 thirty-second bound does not bound ordinary OPEN/FILE queueing. Capability
 attachment cost, cross-space contention, mixed-workload fairness, CPU accounting
-and tracing remain unmeasured. No further milestone or investigation is selected
-by this handoff.
+and tracing remain unmeasured. The follow-up milestone defines its own bounded
+coverage; this baseline does not authorize work on all of these gaps.
