@@ -286,7 +286,7 @@ Both modes produce the same deterministic 1 MiB fixture. Requests default to
 measured passes (1..100 selectable). Write generates payload bytes outside
 timing. Copy drains every read completely before the next read; confirmed read
 and written byte counts are independent, and copy throughput counts the output
-payload once. All output and verification are outside the transfer interval.
+payload once. All reporting and verification are outside the transfer interval.
 
 Default preparation resizes the newly created output to zero before every pass;
 timed writes include growth and any allocation. `--prepared` instead fully
