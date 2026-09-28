@@ -126,6 +126,11 @@ limits live in the subsystem docs, with the
 beside the local development loop. SSH/libssh remains deferred. No next milestone
 is selected; the following remain later alternatives.
 
+The next [discussion agenda](storage-and-terminal-agenda.md) covers persistent
+disk storage, a bounded Neovim/libuv requirements investigation, and native
+terminal sessions leading to a BSP multiplexer and independent navigators.
+Discuss these before selecting one implementation track.
+
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
 | SDL2 and graphical applications | A native software-rendered SDL2 backend supports a selected GrafX2 edit/save workflow. | Probe the pinned application first; settle input/presentation and image-library needs. zlib/libpng are useful shared candidates. Compositor and GPU support stay separate. |
