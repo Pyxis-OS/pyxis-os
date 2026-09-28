@@ -304,11 +304,14 @@ static enum virtio_fs_result request_failure(enum virtio_fs_result result, const
 
 static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virtqueue *other,
     const void *request, size_t request_bytes, void *reply, size_t reply_capacity,
-    size_t *reply_bytes, bool *submitted)
+    size_t *reply_bytes, bool *submitted, struct virtio_fs_timing *timing)
 {
   KASSERT(cpu_current() == cpu_bsp());
   *reply_bytes = 0;
   *submitted = false;
+  if (timing) {
+    *timing = (struct virtio_fs_timing){0};
+  }
   if (!filesystem.active) {
     return VIRTIO_FS_UNAVAILABLE;
   }
@@ -318,6 +321,9 @@ static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virt
   }
   uint64_t deadline = task_deadline_after_ms(VIRTIO_REQUEST_TIMEOUT_MS);
   memcpy(queue->request, request, request_bytes);
+  if (timing) {
+    timing->submitted_ns = arch_monotonic_ns();
+  }
   if (!virtqueue_submit(queue, request_bytes, reply_capacity)) {
     return VIRTIO_FS_INVALID;
   }
@@ -326,23 +332,39 @@ static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virt
   for (;;) {
     const char *failure = transport_failure();
     if (failure) {
+      if (timing) {
+        timing->ended_ns = arch_monotonic_ns();
+      }
       return request_failure(VIRTIO_FS_UNAVAILABLE, failure);
     }
     size_t ignored;
     if (virtqueue_complete(other, &ignored) != VIRTQUEUE_PENDING) {
+      if (timing) {
+        timing->ended_ns = arch_monotonic_ns();
+      }
       return request_failure(VIRTIO_FS_PROTOCOL, "unexpected completion on idle queue");
     }
     enum virtqueue_result result = virtqueue_complete(queue, reply_bytes);
     if (result == VIRTQUEUE_BROKEN) {
+      if (timing) {
+        timing->ended_ns = arch_monotonic_ns();
+      }
       return request_failure(VIRTIO_FS_PROTOCOL, "invalid queue completion");
     }
     if (result == VIRTQUEUE_COMPLETE) {
+      if (timing) {
+        timing->ended_ns = arch_monotonic_ns();
+        timing->completed = true;
+      }
       if (*reply_bytes) {
         memcpy(reply, queue->reply, *reply_bytes);
       }
       return VIRTIO_FS_OK;
     }
     if (task_deadline_expired(deadline)) {
+      if (timing) {
+        timing->ended_ns = arch_monotonic_ns();
+      }
       return request_failure(VIRTIO_FS_TIMED_OUT, "request timed out");
     }
     wait_interrupt(deadline);
@@ -350,10 +372,11 @@ static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virt
 }
 
 enum virtio_fs_result virtio_fs_pci_request(const void *request, size_t request_bytes,
-    void *reply, size_t reply_capacity, size_t *reply_bytes, bool *submitted)
+    void *reply, size_t reply_capacity, size_t *reply_bytes, bool *submitted,
+    struct virtio_fs_timing *timing)
 {
   return exchange_queue(&filesystem.request, &filesystem.hiprio,
-      request, request_bytes, reply, reply_capacity, reply_bytes, submitted);
+      request, request_bytes, reply, reply_capacity, reply_bytes, submitted, timing);
 }
 
 enum virtio_fs_result virtio_fs_pci_forget(const void *request, size_t request_bytes)
@@ -362,7 +385,7 @@ enum virtio_fs_result virtio_fs_pci_forget(const void *request, size_t request_b
   bool submitted;
   /* No FUSE reply, but the used-ring completion still returns DMA ownership. */
   return exchange_queue(&filesystem.hiprio, &filesystem.request,
-      request, request_bytes, NULL, 0, &ignored, &submitted);
+      request, request_bytes, NULL, 0, &ignored, &submitted, NULL);
 }
 
 static void stop_transport(const char *failure)

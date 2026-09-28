@@ -1,10 +1,11 @@
 # I/O reliability and bottleneck attribution
 
-Status: tasks 1 and 2 are complete. Logical receipt release fixes completed-work
+Status: tasks 1–3 are complete. Logical receipt release fixes completed-work
 capacity retention, and the agreed IPC/HTTP reruns passed. RAM file-growth
 attribution identifies publication-to-BSP-service wait as the dominant measured
-interval. Task 3 is host FILE attribution; its instrumentation contract remains
-to be discussed. This follows
+interval. Host profiling separates queue/service/transport intervals but strongly
+perturbs the measured workload; its limits and follow-up are recorded below.
+Task 4 is comparison resolution and the final handoff, with scope still to agree. This follows
 the completed [I/O and IPC baselines](../io-ipc-baselines.md).
 
 ## Outcome and scope
@@ -435,6 +436,207 @@ stops occurred during measurements. Owned QEMU/debugger jobs were stopped; RAM
 fixtures/logs disappeared with that boot. No new tests or automation were added,
 and no compiler-container rebuild is needed.
 
+## Task 3: implemented host FILE profiling
+
+The profile capability now has independent caller-local HOST authority and
+BEGIN/SNAPSHOT/END collection. Only native host READ/WRITE requests are counted.
+Preparation, publication, BSP forwarding, worker service start/end and caller
+resumption separate the two guest queues. Each transport interval runs from
+immediately before queue submission through worker-observed completion. Lazy OPEN
+transport traffic belongs to its native READ/WRITE; metadata-only requests, sync and deferred cleanup are excluded.
+
+Separate READ/WRITE counters record attempts, failures, requested/completed bytes,
+positive short transfers and zero-byte results for nonzero requests (EOF).
+Actual transport submissions and valid used-ring completions are independent
+of FUSE success. Failed published transport requests have separate elapsed sums/maxima ending at failure observation before reset;
+rejection before submission has no transport event. All counters saturate. Shared
+task storage follows caller-to-BSP-to-worker ownership and returns at wakeup;
+no worker touches it afterward. Disabled collection adds no clocks or allocations.
+Snapshots expose no addresses, names, node IDs or remote caller activity.
+
+`iobench --host-profile` covers measured reads/writes/copies; warmup, preparation
+and verification stay unprofiled. RAM and memory collection retain their meaning.
+Read BEGIN precedes its first clock/OPEN; only payload READ/WRITE work is counted,
+and END follows the payload end clock before EOF/close. END therefore contributes
+to complete-consumption elapsed, while BEGIN is outside all read intervals.
+Write/copy BEGIN and END sit outside transfer clocks, before optional sync.
+Any successful BEGIN receives an END attempt on error paths.
+
+The matched comparison uses profiling off/on for each agreed workload: host read
+at 4088 bytes, prepared host write at 4080, host-to-prepared-RAM copy at 4080, and
+archive-to-prepared-host copy at both 4080 and 4088. Each uses the same 1 MiB
+fixture, one warmup and five samples, with sync off. A disposable tmpfs export
+and recorded daemon/cache conditions bound the results. The 4088 copy exposes
+existing suffix writes;
+no transfer-size, batching, cache, notification or scheduling policy changes.
+Transport elapsed combines guest submission/completion work, host scheduling,
+daemon/backing service and device transport. Remaining worker/caller work stays
+unattributed; neither is CPU time or a physical-storage durability measurement.
+
+### Host measurement provenance and reproduction
+
+Measured on 2026-09-28 with kernel implementation
+`7d9f3557838d59e22751051506dcf2dd22dd68df` and userland runtime
+`f68b4d8c83fec862ebca47ed92ccccfcc6992aee`. Later userland documentation and parent
+report/gitlink commits do not change measured runtime code. Ports stayed
+`6ec1290f87882392390e6a889be61ba3ac1448d1`, lwIP
+`a1aadb91a50360ff5b52864f7cec810b8162ee85`. The same Fedora 44 nested-KVM host,
+Linux 6.19.10, exposed i9-12900K, QEMU 10.2.2/Q35, `-cpu max`, Pyxis GCC 16.2.0,
+matching `/usr/share/edk2/ovmf/OVMF_CODE.fd`/`OVMF_VARS.fd`, four CPUs and 256 MiB
+configuration was used. Work ran on CPU 1, with virtio entropy enabled and
+networking disabled. The virtio-fs device used the ordinary shared-memfd setup.
+
+A fresh writable virtiofsd 1.14.0 exported a dedicated directory in `/dev/shm`,
+using the [documented namespace setup](../virtio-fs.md#start-the-host-service):
+
+```sh
+unshare -Ur -- /usr/libexec/virtiofsd \
+  --shared-dir "$export_dir" --socket-path "$socket_dir/fs.sock" \
+  --sandbox namespace --inode-file-handles=never \
+  --no-announce-submounts --rlimit-nofile=0
+```
+
+Cache policy was the daemon's `auto` default; writeback was not enabled. The guest
+still negotiates no optional FUSE features. The full deterministic archive fixture
+was copied before boot as `iobench.bin` (POSIX checksum 1625934143, 1048576 bytes).
+No cache eviction, concurrent fixture mutation or host workload control was used.
+Preparation and the verified warmup warm the retained files. These are tmpfs and
+nested-VM observations, not durable-media, owner-host or physical-hardware results.
+
+Commands ran sequentially in this order, in one boot. Defaults supply 1 MiB and
+one warmup plus five measured passes; default requests are read=4088 and
+write/copy=4080 bytes. All sync options were off. Unique output files were created
+exclusively; stderr logs used RAM `home://` and were inspected manually afterward.
+
+```text
+iobench read host://iobench.bin 2> home://hr-off.log
+iobench read host://iobench.bin --host-profile 2> home://hr-on.log
+iobench write host://hw-off --prepared 2> home://hw-off.log
+iobench write host://hw-on --prepared --host-profile 2> home://hw-on.log
+iobench copy host://iobench.bin home://hc-off --prepared 2> home://hc-off.log
+iobench copy host://iobench.bin home://hc-on --prepared --host-profile 2> home://hc-on.log
+iobench copy app://share/iobench.bin host://ac-off --prepared 2> home://ac-off.log
+iobench copy app://share/iobench.bin host://ac-on --prepared --host-profile 2> home://ac-on.log
+iobench copy app://share/iobench.bin host://ac8-off --prepared --buffer 4088 2> home://ac8-off.log
+iobench copy app://share/iobench.bin host://ac8-on --prepared --buffer 4088 --host-profile 2> home://ac8-on.log
+```
+
+All 60 passes verified exact contents, length and EOF without failure. The
+[raw sample artifact](../io-host-profile-samples.json) preserves all individual
+transfer/OPEN/complete intervals, per-pass counters and every profile sum/maximum
+in nanoseconds. Its `hr`, `hw`, `hc`, `ac` and `ac8` keys correspond to the command
+names above; profile duration pairs are `[sum, maximum]`. Inactive directions and
+failed transport intervals were zero; no sample saturated.
+
+### Host counts and transfer controls
+
+| Workload | Benchmark reads / writes | Benchmark short writes | Native HOST calls | Transport submissions / completions |
+| --- | ---: | ---: | --- | ---: |
+| Host read, 4088 | 257 / 0 | 0 | 257 READ | 258 / 258 |
+| Prepared host write, 4080 | 0 / 258 | 0 | 258 WRITE | 258 / 258 |
+| Host → prepared RAM, 4080 | 258 / 258 | 0 | 258 READ | 258 / 258 |
+| Archive → prepared host, 4080 | 258 / 258 | 0 | 258 WRITE | 258 / 258 |
+| Archive → prepared host, 4088 | 257 / 513 | 256 | 513 WRITE | 513 / 513 |
+
+Counts apply to every measured pass. Each active HOST direction requested and
+completed 1048576 bytes, with zero native short transfers, failures and in-window
+EOF results. Final EOF verification is outside collection. `read` opens a fresh
+native handle each pass, and its first payload read includes lazy FUSE_OPEN;
+retained copy handles were already opened by source verification/preparation.
+
+The 4088-byte copy read is drained as a 4080-byte helper write and an 8-byte suffix.
+The benchmark counts 256 short helper writes relative to its original request;
+HOST profiling sees the already-capped native requests, all completed fully.
+There is no contradiction between these counts, and no change to transfer limits.
+
+All elapsed values below are milliseconds in sample order. Read uses payload
+elapsed; write/copy use transfer elapsed. Clock is the 1000-call mean ns/read,
+reported without subtraction. OPEN and complete-consumption raw values are in the
+sample artifact; profiled read END adds overhead to complete consumption only.
+Rows of medians need not sum: each interval is summarized independently.
+
+| Workload | Profile | Clock ns | Payload/transfer samples ms | Median ms |
+| --- | --- | ---: | --- | ---: |
+| Host read, 4088 | off | 35781 | 118.833710, 121.642990, 116.871290, 117.733190, 109.422430 | 117.733190 |
+| Host read, 4088 | on | 40471 | 1990.387220, 1819.903300, 1890.982310, 1932.871880, 1893.882960 | 1893.882960 |
+| Host write, 4080 | off | 37280 | 110.049920, 117.713440, 129.372100, 128.084550, 135.506310 | 128.084550 |
+| Host write, 4080 | on | 35213 | 1907.392660, 1884.386300, 1894.892910, 1986.641730, 1863.615980 | 1894.892910 |
+| Host → RAM, 4080 | off | 41022 | 124.535980, 123.419080, 164.349280, 159.752360, 143.897110 | 143.897110 |
+| Host → RAM, 4080 | on | 43002 | 1946.348300, 1907.570850, 1980.617040, 2018.702930, 1968.984920 | 1968.984920 |
+| Archive → host, 4080 | off | 36265 | 136.342380, 118.681490, 137.638680, 139.396990, 111.128180 | 136.342380 |
+| Archive → host, 4080 | on | 37024 | 2012.910680, 2025.281700, 1998.988580, 1838.549800, 1969.174180 | 1998.988580 |
+| Archive → host, 4088 | off | 37805 | 273.900060, 245.644270, 247.401830, 241.899980, 237.055290 | 245.644270 |
+| Archive → host, 4088 | on | 36601 | 3915.153510, 3882.482720, 3903.654050, 3748.162510, 3685.585720 | 3882.482720 |
+
+### Instrumented attribution and its limit
+
+Profile-on medians were **13.7–16.1 times** their profile-off controls. This is
+substantial workload perturbation, not a constant clock cost that can be
+subtracted. The unprofiled read median (117.733 ms/MiB) remains close to the
+historical baseline, but the profiled phases cannot partition that baseline.
+No baseline optimization or speedup is claimed.
+
+The following are medians of per-pass profile sums, in milliseconds. Transport
+is nested inside service. Host publication includes request setup and incoming
+write-payload capture; caller-side read-result copying follows the native total.
+Residual is payload/transfer elapsed minus the native total and includes caller
+work, aggregate updates, other copying and scheduling; it is not CPU time.
+
+| Workload | Publication | BSP queue | Worker queue | Service | Resume | Native total | Transport | Residual |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Host read, 4088 | 17.371380 | 1417.306840 | 68.441560 | 328.487540 | 25.697980 | 1872.986290 | 296.869070 | 18.975300 |
+| Host write, 4080 | 18.040710 | 1436.144180 | 60.196530 | 330.512690 | 29.260490 | 1874.674220 | 294.183410 | 19.077540 |
+| Host → RAM, 4080 | 15.767690 | 1499.748660 | 53.493210 | 340.541560 | 26.989640 | 1951.426140 | 306.620480 | 17.558780 |
+| Archive → host, 4080 | 15.940700 | 1526.561090 | 46.738220 | 338.962540 | 26.910070 | 1981.111490 | 302.507220 | 17.877090 |
+| Archive → host, 4088 | 35.466250 | 2910.432980 | 112.466510 | 697.396880 | 56.564610 | 3842.079380 | 625.711620 | 37.814070 |
+
+Across individual profiled samples, the initial publication-to-BSP-forwarding
+queue accounts for 73.8–78.8% of payload/transfer elapsed. Completed transport
+accounts for 88.6–90.7% of worker service. These identify where the **instrumented**
+workloads spend time, not the unprofiled distribution. Transport still combines
+host/device/daemon/backing activity with guest/host scheduling and completion
+observation. No guest-only timestamp can assign those components separately.
+All 25 profiled samples have exact top-level phase-sum equality and transport
+sums no greater than service; individual maxima remain available in the artifact.
+
+Code inspection shows the first scheduler host-request queue has no explicit BSP
+notification; forwarding wakes the transport worker. Additional clock reads can
+change which work is pending when the BSP checks queues and goes idle. That is a
+plausible explanation for the observed sensitivity, not a proven cause: no IRQ,
+queue sampling or host tracing was added. The initial queue wait is distinct from
+virtio-fs device wait. Neither changing virtio-fs batching nor blaming host tmpfs
+is justified by these results.
+
+Task 3 therefore delivers working phase/count attribution **with an explicit
+normal-workload attribution limit**. Before using these percentages to choose an
+optimization, agree a follow-up to reduce timestamp perturbation and/or isolate
+initial BSP notification while preserving the handoff contract. Rerun the same
+profile-off/on controls after any separately approved correction. No notification,
+clock-source, batching, cache, transfer-size or scheduling policy changes are in
+this PR. The limitation is recorded in
+[technical debt](../technical-debt.md#host-file-profiling-perturbation).
+
+### Host regression and cleanup checks
+
+The ordinary `make -j16 image` passed. Outside the comparison matrix, the existing
+`iobench copy host://iobench.bin home://combined --profile --host-profile --rounds 1`
+passed warmup and verification. Independent collections reported 258 successful
+HOST reads and transport completions plus ten successful RAM replacements and
+2,084,880 copied bytes. `allocbench pages --profile --size 4096 --live 1 --rounds 8`
+reported eight allocations and releases, zero failures and 32768 completed bytes
+in each direction. No new test program, fault injection or automation was added.
+Denied/malformed profile operations, simultaneous MEMORY/HOST collection and
+transport failure paths were reviewed but not separately exercised at runtime.
+
+Post-workload read-only GDB inspection found four CPUs, CPU 1 online, and empty
+completed-task, FILE, host scheduler, memory and retirement queues. The host
+worker request/retirement queues were empty, its session remained ready with no
+profile pointer, lookup references or open handles, and both VirtIO queues had
+no request in flight. These are point-in-time cleanup observations. No debugger
+stops occurred during measurements. QEMU and virtiofsd were stopped, and their
+disposable host files/socket directories were removed. No compiler-container
+rebuild is needed.
+
 ## Focused PR tasks
 
 - [x] **1. Resolve endpoint receipt reclamation.** Separate logical receipt
@@ -452,15 +654,13 @@ and no compiler-container rebuild is needed.
   Queue time dominates the profiled growing transfers; a separate FILE publication
   notification proposal and unresolved intervals are recorded above and in debt.
 
-- [ ] **3. Attribute host FILE latency.** Use matched read/write/copy workloads
-  to distinguish guest service-queue wait, submission-to-observed-completion,
-  and completion-to-caller-resumption time. Describe what the middle interval
-  combines rather than assigning it all to the host filesystem or the device.
-  Keep request counts and confirmed short transfers visible; the 4088/4080-byte
-  read/write mismatch can add suffix writes. Record daemon, cache and backing
-  conditions. Keep sync separate; disk-backed fixtures are needed only if the
-  agreed question concerns durable-media sync. Do not change transfer sizes,
-  batching, caching or scheduling merely to improve the reported number.
+- [x] **3. Attribute host FILE latency.** Independent HOST profiling separates
+  the initial BSP queue, worker queue/service, transport and caller resumption.
+  All ten agreed off/on configurations passed warmup plus five samples. Counts
+  distinguish lazy OPEN and helper suffix writes from native transfers. Profiling
+  strongly perturbs these nested-KVM workloads; the report limits phase conclusions
+  to instrumented behavior and records the required follow-up before applying them
+  to normal-workload optimization. Sync/durable-media costs remain out of scope.
 
 - [ ] **4. Improve resolution and publish the comparison.** Review the evidence
   from the first three tasks and settle the smallest additional batch/coverage

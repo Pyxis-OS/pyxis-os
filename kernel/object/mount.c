@@ -49,8 +49,7 @@ struct syscall_result mount_call(uint64_t rights, uint64_t operation,
   uint64_t directory_rights = open.access == MOUNT_ACCESS_READ_WRITE ? DIRECTORY_RIGHTS :
       DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES;
 
-  struct hostfs_request *request = task_prepare_hostfs();
-  request->operation = HOSTFS_ROOT;
+  struct hostfs_request *request = task_prepare_hostfs(HOSTFS_ROOT);
   task_submit_hostfs(request);
   if (request->status != CALL_OK) {
     return (struct syscall_result){request->status, 0};

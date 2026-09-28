@@ -243,8 +243,7 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     if (request->name_length > VIRTIO_FS_NAME_MAX) {
       return (struct syscall_result){CALL_LIMIT, 0};
     }
-    struct hostfs_request *pending = task_prepare_hostfs();
-    pending->operation = HOSTFS_LOOKUP;
+    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_LOOKUP);
     pending->node = directory->host;
     pending->kind = request->kind;
     pending->count = request->name_length;
@@ -305,8 +304,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     if (request->name_length > VIRTIO_FS_NAME_MAX) {
       return (struct syscall_result){CALL_LIMIT, 0};
     }
-    struct hostfs_request *pending = task_prepare_hostfs();
-    pending->operation = HOSTFS_CREATE;
+    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_CREATE);
     pending->node = directory->host;
     pending->kind = request->kind;
     pending->count = request->name_length;
@@ -393,8 +391,7 @@ static struct syscall_result remove_child(struct directory_object *directory,
     if (request->name_length > VIRTIO_FS_NAME_MAX) {
       return (struct syscall_result){CALL_LIMIT, 0};
     }
-    struct hostfs_request *pending = task_prepare_hostfs();
-    pending->operation = HOSTFS_REMOVE;
+    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_REMOVE);
     pending->node = directory->host;
     pending->kind = request->kind;
     pending->count = request->name_length;
@@ -519,8 +516,7 @@ static struct syscall_result rename_child(struct directory_object *source,
         request->destination_length > VIRTIO_FS_NAME_MAX) {
       return (struct syscall_result){CALL_LIMIT, 0};
     }
-    struct hostfs_request *pending = task_prepare_hostfs();
-    pending->operation = HOSTFS_RENAME;
+    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_RENAME);
     pending->node = source->host;
     pending->destination = destination->host;
     pending->count = request->source_length;
@@ -604,8 +600,7 @@ static struct syscall_result enumerate(struct directory_object *directory,
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (directory->backing == DIRECTORY_HOST) {
-    struct hostfs_request *pending = task_prepare_hostfs();
-    pending->operation = HOSTFS_ENUMERATE;
+    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_ENUMERATE);
     pending->node = directory->host;
     pending->cursor = request->cursor;
     pending->count = request->capacity;
@@ -710,8 +705,7 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (operation == DIRECTORY_SYNC) {
     if (directory->backing == DIRECTORY_HOST) {
-      struct hostfs_request *pending = task_prepare_hostfs();
-      pending->operation = HOSTFS_SYNC;
+      struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_SYNC);
       pending->node = directory->host;
       task_submit_hostfs(pending);
       return (struct syscall_result){pending->status, 0};

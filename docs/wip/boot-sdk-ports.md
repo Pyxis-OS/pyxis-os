@@ -114,8 +114,10 @@ live-work capacity and wait limits remain documented in
 [technical debt](../technical-debt.md#endpoint-throughput-limited-by-deferred-receipt-reclamation).
 The active milestone is [I/O reliability and bottleneck attribution](io-reliability-attribution.md):
 task 1 fixed logical receipt reuse and the previously failing IPC/HTTP matrix
-now passes. Task 2 is RAM file-growth attribution, followed by host FILE latency
-and comparable measurements. Instrumentation choices are settled per task;
+now passes. Task 2 attributed RAM growth mainly to BSP queue wait in nested KVM.
+Task 3 separated host queue/transport intervals and exposed strong profiling
+perturbation. Task 4 will settle comparison resolution and the final handoff.
+Instrumentation choices are settled per task;
 there is no blanket optimization assignment. The following remain later alternatives.
 
 | Path | First concrete completion point | Decisions and supporting work |

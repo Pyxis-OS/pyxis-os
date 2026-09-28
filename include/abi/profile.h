@@ -8,6 +8,10 @@
 #define PROFILE_FILE_BEGIN UINT64_C(4)
 #define PROFILE_FILE_SNAPSHOT UINT64_C(5)
 #define PROFILE_FILE_END UINT64_C(6)
+#define PROFILE_RIGHT_HOST (UINT64_C(1) << 2)
+#define PROFILE_HOST_BEGIN UINT64_C(7)
+#define PROFILE_HOST_SNAPSHOT UINT64_C(8)
+#define PROFILE_HOST_END UINT64_C(9)
 #define PROFILE_BEGIN UINT64_C(1)
 #define PROFILE_SNAPSHOT UINT64_C(2)
 #define PROFILE_END UINT64_C(3)
@@ -60,6 +64,43 @@ struct profile_file_snapshot {
  * File ownership waits, payload copying, validation and reply work are excluded.
  * No file addresses, names or remote task information are exposed. */
 _Static_assert(sizeof(struct profile_file_snapshot) == 176, "file profile layout");
+
+struct profile_host_operation {
+  uint64_t requests, failures, requested_bytes, completed_bytes;
+  uint64_t short_transfers, eof;
+  uint64_t submissions, completions, transport_failures;
+  struct profile_duration publication, bsp_queue, worker_queue, service, resume, total;
+  struct profile_duration transport, transport_failed;
+};
+
+struct profile_host_snapshot {
+  uint64_t flags;
+  struct profile_host_operation read, write;
+};
+
+/* HOST_BEGIN/SNAPSHOT/END require HOST authority, with independent caller-local
+ * state and the same control rules as MEMORY/FILE. Only native host READ/WRITE
+ * requests admitted to the scheduler are counted. Requested bytes are the
+ * captured native request size; completed bytes require CALL_OK. Positive short
+ * transfers and successful zero-byte reads of a nonzero request (EOF) are
+ * counted separately.
+ * Boundaries: preparation before wait setup, before publication locking, BSP
+ * forwarding, worker service start/end and caller resumption. Service includes
+ * lazy OPEN, protocol handling, transport waits and worker scheduling. A request
+ * rejected before worker service has zero service time; worker queue then ends
+ * at rejection. Initial syscall validation and caller reply copies are excluded.
+ * Transport counts include lazy OPEN under the native request. Completions mean
+ * valid used-ring completions, not successful FUSE replies. Transport duration
+ * runs from immediately before submission to worker-observed completion; failed
+ * published requests have a separate duration ending at failure observation,
+ * before reset recovery. Rejections before submission have no transport count.
+ * Queue/device/daemon/host/guest scheduling are combined; these are elapsed ns,
+ * not CPU time. Service contains transport intervals; do not add them together.
+ * No metadata-only requests, sync, deferred cleanup or remote caller activity.
+ * No added clocks/allocations when disabled; sums saturate with SATURATED.
+ * Snapshots contain no addresses, node IDs, names or handles. */
+_Static_assert(sizeof(struct profile_host_operation) == 200, "host operation layout");
+_Static_assert(sizeof(struct profile_host_snapshot) == 408, "host snapshot layout");
 
 /* All operations are header-only. BEGIN/SNAPSHOT/END require MEMORY authority. They always
  * act on the calling process, even through copied/delegated handles. One

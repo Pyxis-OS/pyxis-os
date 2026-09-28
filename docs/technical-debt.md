@@ -60,13 +60,13 @@ The [I/O/IPC baselines](io-ipc-baselines.md) measure elapsed workload boundaries
 in nested KVM. The [RAM attribution](wip/io-reliability-attribution.md#task-2-implemented-ram-file-profiling)
 now separates RAM replacement costs and identifies queue time as dominant in the
 measured growing writes/copies; see the FILE service-delay entry below.
-Host FILE results combine guest queueing, VirtIO/FUSE transport, daemon and backing
-service; write/sync runs used host tmpfs. These results cannot select an internal
-optimization or establish physical-disk durability cost.
+HOST profiling now separates guest queues, worker service and transport, but
+strongly perturbs the nested workload; see the profiling entry below. Transport
+still combines device/daemon/backing service and guest/host scheduling. Host
+write/sync baselines used tmpfs and do not establish physical-disk durability cost.
 
-Revisit host costs with a bounded host-service attribution investigation before
-changing batching or transfer limits. Private-memory and RAM replacement
-profiling do not instrument host FILE service. Short native
+Revisit host attribution resolution before changing batching or transfer limits.
+Private-memory, RAM replacement and HOST collections remain independent. Short native
 and SEND intervals are close to clock overhead; finer comparisons need a separate
 longer-batch or scoped-instrumentation contract. Owner-host/physical-hardware
 results, capability attachment cost, cross-space contention, mixed-workload
@@ -90,6 +90,24 @@ FILE publication-notification change, retaining the early-wakeup/lifetime contra
 and rerun matched profile-off/on grow/prepared controls. Do not infer a constant
 instrumentation cost, system-wide CPU time or owner-host performance from the
 five-sample groups. Other BSP queues and allocator concurrency remain separate.
+
+## Host FILE profiling perturbation
+
+The [HOST attribution matrix](wip/io-reliability-attribution.md#instrumented-attribution-and-its-limit)
+records separate initial BSP queue, worker queue/service, transport and resumption
+intervals. In the agreed five-sample nested-KVM groups, profiled medians were
+13.7–16.1 times their controls. Initial queue wait took 73.8–78.8% of profiled
+transfer time; these percentages cannot partition normal unprofiled transfer time
+or establish host filesystem cost. Timestamp overhead changes interleaving as
+well as adding elapsed time, so subtracting a constant is inappropriate.
+
+Host request publication does not explicitly notify the BSP, whereas forwarding
+wakes the transport worker. This makes the first handoff a concrete follow-up
+candidate, not a proven explanation of all observed delay. Agree a bounded
+lower-perturbation measurement or notification investigation before optimizing;
+retain the same profile-off controls and lifetime/early-wakeup contract. Revisit
+this in the comparison-resolution task. Host-side component timing and durable
+storage remain separately scoped work; current fixtures are tmpfs with sync off.
 
 ## Fixed userspace stacks
 

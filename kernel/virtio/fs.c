@@ -68,6 +68,37 @@ static enum virtio_fs_result host_error(int32_t error)
   }
 }
 
+static void profile_sum(struct virtio_fs_profile *profile, uint64_t *total, uint64_t value)
+{
+  if (value > UINT64_MAX - *total) {
+    *total = UINT64_MAX;
+    profile->saturated = true;
+  } else {
+    *total += value;
+  }
+}
+
+static void profile_exchange(struct virtio_fs_profile *profile,
+    const struct virtio_fs_timing *timing)
+{
+  KASSERT(timing->ended_ns >= timing->submitted_ns);
+  uint64_t elapsed = timing->ended_ns - timing->submitted_ns;
+  profile_sum(profile, &profile->submissions, 1);
+  uint64_t *maximum;
+  if (timing->completed) {
+    profile_sum(profile, &profile->completions, 1);
+    profile_sum(profile, &profile->completed_ns, elapsed);
+    maximum = &profile->completed_max_ns;
+  } else {
+    profile_sum(profile, &profile->failures, 1);
+    profile_sum(profile, &profile->failed_ns, elapsed);
+    maximum = &profile->failed_max_ns;
+  }
+  if (elapsed > *maximum) {
+    *maximum = elapsed;
+  }
+}
+
 static enum virtio_fs_result exchange(struct virtio_fs_session *session, uint32_t opcode,
     uint64_t node_id, const void *payload, size_t payload_bytes,
     size_t reply_capacity, size_t *reply_bytes)
@@ -92,8 +123,13 @@ static enum virtio_fs_result exchange(struct virtio_fs_session *session, uint32_
   }
   size_t length;
   bool submitted;
+  struct virtio_fs_timing timing;
   enum virtio_fs_result result = virtio_fs_pci_request(&request, request.header.length,
-      &response, sizeof(response.header) + reply_capacity, &length, &submitted);
+      &response, sizeof(response.header) + reply_capacity, &length, &submitted,
+      session->profile ? &timing : NULL);
+  if (session->profile && submitted) {
+    profile_exchange(session->profile, &timing);
+  }
   if (result != VIRTIO_FS_OK) {
     if (submitted && mutation_request(opcode)) {
       return VIRTIO_FS_OUTCOME_UNKNOWN;

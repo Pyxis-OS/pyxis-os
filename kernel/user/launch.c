@@ -134,7 +134,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   struct kernel_object *console = &process->space->console->object;
   if (capability_install(&process->capabilities, namespace_service, NAMESPACE_SERVICE_RIGHT_CREATE, 0, &namespace_service_handle) != CAP_OK ||
       capability_install(&process->capabilities, service, ENDPOINT_SERVICE_RIGHT_CREATE, 0, &service_handle) != CAP_OK ||
-      capability_install(&process->capabilities, profile, PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_FILE, 0, &profile_handle) != CAP_OK ||
+      capability_install(&process->capabilities, profile, PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_FILE | PROFILE_RIGHT_HOST, 0, &profile_handle) != CAP_OK ||
       capability_install(&process->capabilities, pipe, PIPE_SERVICE_RIGHT_CREATE, 0, &pipe_handle) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, 0, &input) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &output) != CAP_OK ||
