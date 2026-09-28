@@ -7,8 +7,9 @@ interval. Host profiling separates queue/service/transport intervals but strongl
 perturbs the measured workload; its limits and follow-up are recorded below.
 The task-4 experiment reproduces a 14.9× slowdown and reduces it to 2.0× with
 initial BSP notification; counts-only collection stays near the off controls.
-The notification correction is proposed, not implemented. Task 5 must settle
-that proposal before comparison resolution and the final handoff.
+Task 5 has implemented the accepted HOST notification correction and repeated its
+affected controls. Comparison resolution, the final IPC/HTTP-inclusive matrix
+and the documentation handoff remain open.
 This follows the completed [I/O and IPC baselines](../io-ipc-baselines.md).
 
 ## Outcome and scope
@@ -640,6 +641,96 @@ stops occurred during measurements. QEMU and virtiofsd were stopped, and their
 disposable host files/socket directories were removed. No compiler-container
 rebuild is needed.
 
+## Task 5: HOST publication notification
+
+The focused notification proposal from task 4 was accepted and implemented.
+`task_submit_hostfs()` saves its wait pointer before publishing the request,
+releases the scheduler queue lock, then calls the existing BSP reschedule helper
+before sleeping. An AP publication that misses the BSP's queue sweep can now
+wake it instead of relying on a later interrupt. CPU 0 sends no self-IPI and
+services the request through its scheduler when it blocks. The existing
+notified/parked handshake preserves completion before sleep and the normal parked
+wake path. Code review covered both cases; no artificial interleaving was forced.
+
+The change applies to all initial HOST operations, including metadata and error
+paths, without changing grants, request ownership, BSP allocation, worker or
+transport handling, clock source, 120 Hz timer, profiler or public ABI. Cleanup
+queues retain their existing service paths. See [SMP](../smp.md) and
+[HOST ownership](../virtio-fs.md#native-directory-and-file-objects) for the runtime contract.
+
+### Correction validation
+
+Runtime revision `8386424781b0ac8abcb29f43a7f51db2b7f20602` was built with
+`make -j16 image` and the existing GCC 16.2.0 toolchain. Userland remains
+`f86daf40ae2c59e00547cc2eb33c19a31731eebb`, ports
+`6ec1290f87882392390e6a889be61ba3ac1448d1`, and lwIP
+`a1aadb91a50360ff5b52864f7cec810b8162ee85`. No dependency pin or compiler
+container change. The [raw samples](../io-host-notification-samples.json) retain
+all sample intervals, profile sum/max pairs, counts, clock calibration and built
+ELF/ISO hashes; original task-3 and task-4 artifacts are unchanged.
+
+On 2026-09-28, the same image booted manually with four CPUs, then one CPU in
+nested KVM. QEMU 10.2.2/Q35, `-cpu max`, 256 MiB, GTK, virtio entropy on and network
+off; Fedora 44/Linux 6.19.10-300.fc44.x86_64 exposes an i9-12900K. Firmware uses
+the matching `/usr/share/edk2/ovmf/OVMF_CODE.fd` and `OVMF_VARS.fd` pair. Each boot
+used a fresh virtiofsd 1.14.0 session and tmpfs export with the same namespace,
+cache and no-sync setup as task 3. The fixture was again 1048576 bytes with POSIX
+checksum 1625934143. Work ran on CPU 1 with four CPUs and CPU 0 with one CPU.
+
+The four-CPU run repeated all ten task-3 commands in their original order and
+with identical byte counts, buffer sizes, preparation, warmup and profile timing
+boundaries. The one-CPU run repeated the first six commands (HOST read, prepared
+HOST write and HOST-to-prepared-RAM copy, off/on). Each group had one unprofiled
+warmup and five measured samples. Logs stayed in RAM and were manually inspected;
+debugger inspection occurred only after the timed work. No boot/output automation,
+new tests, fault injection or instrumentation was added.
+
+All **16 warmups and 80 measured passes** verified complete contents, length and
+EOF with zero failed passes. All 40 profiled samples matched the existing native
+and transport counts: fresh read handles have 257 native reads and 258 transport
+exchanges including lazy OPEN; ordinary write/copy have 258 native transfers and
+258 exchanges. The 4088-byte archive copy still has 513 writes/exchanges and
+256 helper short writes; each capped native HOST write completes fully. No native
+short transfer, in-window EOF, native/transport failure or saturation occurred.
+
+Median payload/transfer times in milliseconds (read uses payload, as before):
+
+| Workload | Task 3 off/on, four CPUs | Corrected off/on, four CPUs | Corrected off/on, one CPU |
+| --- | ---: | ---: | ---: |
+| HOST read, 4088 | 117.733 / 1893.883 | 118.143 / 219.829 | 132.632 / 229.833 |
+| Prepared HOST write, 4080 | 128.085 / 1894.893 | 98.343 / 220.392 | 128.666 / 234.705 |
+| HOST → prepared RAM, 4080 | 143.897 / 1968.985 | 116.196 / 216.977 | 134.428 / 237.846 |
+| Archive → prepared HOST, 4080 | 136.342 / 1998.989 | 121.205 / 208.027 | not run |
+| Archive → prepared HOST, 4088 | 245.644 / 3882.483 | 231.671 / 435.147 | not run |
+
+The corrected four-CPU full-profile medians are 88.4–89.6% lower than task 3,
+consistent with task 4's controlled notification experiment. Profile-on/off ratios
+are still 1.72–2.24×, so full profiling cannot partition normal unprofiled latency.
+The one-CPU ratios are 1.73–1.82×. These sequential five-sample groups, taken in
+separate boots from historical controls, are not randomized trials or owner-host
+results. Do not infer a precise unprofiled speedup, scalability, host storage cost,
+or constant subtractable profiling cost from these median differences. The
+remaining clock, scheduling and completion-observation limitations still apply.
+
+On both boots, ordinary `mkdir`, redirected `cat` of the fixture, `cksum`, `mv`,
+`ls`, `rm` and `rmdir` exercised create/open/read/write/close/rename/readdir/removal;
+the copied file matched the fixture checksum and length. `cat host://missing`
+returned Not found and the shell remained usable. On the four-CPU read-only
+session, `mkdir host://denied` returned permission denied without creating a
+directory. These metadata and error checks were outside benchmark collection.
+
+Read-only GDB inspection after each boot's workload found empty initial HOST,
+worker, completed-task, memory and retired-object/node queues; the session was
+ready, with no active profile pointer, zero lookup references/open handles and
+neither transport queue in flight. QEMU/daemon processes and owned tmpfs exports
+were cleaned up. Missing devices, timeout/reset recovery, concurrent clients and
+durable storage were not exercised by this correction's validation.
+
+This completes the accepted HOST correction and its affected reruns. Task 5's
+remaining scope is to agree any resolution/coverage changes, collect the final
+matched matrix including IPC/HTTP, and publish the milestone handoff. No clock
+replacement or permanent counts-only collection mode has been accepted.
+
 ## Focused PR tasks
 
 - [x] **1. Resolve endpoint receipt reclamation.** Separate logical receipt
@@ -689,6 +780,11 @@ rebuild is needed.
   finish this milestone. Publish results and limitations, resolve or update
   relevant technical debt, and move this WIP document into a concise implemented
   report under `docs`, removing the checklist and updating incoming links.
+
+  - [x] Implement the accepted initial HOST publication notification and repeat
+    affected controls, including single-CPU behavior and ordinary errors.
+  - [ ] Settle remaining resolution/coverage, collect the final comparison and
+    complete the documentation handoff.
 
 ## Completion and boundaries
 

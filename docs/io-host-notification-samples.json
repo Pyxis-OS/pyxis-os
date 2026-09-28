@@ -1,0 +1,2254 @@
+{
+  "metadata": {
+    "date": "2026-09-28",
+    "kernel_runtime": "8386424781b0ac8abcb29f43a7f51db2b7f20602",
+    "userland_runtime": "f86daf40ae2c59e00547cc2eb33c19a31731eebb",
+    "collection": "Manual QEMU commands and screenshot transcription; five measured samples in order after one unprofiled warmup per configuration.",
+    "duration_units": "nanoseconds; each durations_ns value is [sum, maximum]",
+    "configuration_keys": {
+      "hr": "host read, buffer4088",
+      "hw": "prepared host write, buffer4080",
+      "hc": "host to prepared RAM copy, buffer4080",
+      "ac": "archive to prepared host copy, buffer4080",
+      "ac8": "archive to prepared host copy, buffer4088"
+    },
+    "benchmark_counts": "Per-pass counts shared by all warmup/measured passes in that configuration; read EOF probe is outside HOST collection.",
+    "inactive_profile_direction": "All fields zero; no sample saturated.",
+    "environment": "One and four vCPUs in separate fresh boots of same image;256MiB,QEMU10.2.2/Q35/KVM/-cpu max on Fedora44 Linux6.19.10-300.fc44.x86_64 nested KVM; exposed i9-12900K;CPU0 or CPU1 workload respectively;network off,virtio entropy on;virtiofsd1.14.0 namespace sandbox,cache auto,no writeback flag,tmpfs export,no sync,no cache eviction. GCC16.2.0. See milestone section for commands and limits.",
+    "ports": "6ec1290f87882392390e6a889be61ba3ac1448d1",
+    "lwip": "a1aadb91a50360ff5b52864f7cec810b8162ee85",
+    "kernel_sha256": "52340ce160773df55b2643ae4496abfcf883f3ed5184d4c9f1cf76b007566331",
+    "iso_sha256": "81e3d67026da7bb82ae0834377f0861ccbcad7c5439f0a7ea81e8aed5d2a0906",
+    "validation": "Each configuration has one verified warmup and five verified measured samples. No profile saturation; inactive direction zero. Metadata/error checks and GDB inspection outside measured work on both boots."
+  },
+  "boots": {
+    "4cpu": {
+      "cpus": 4,
+      "workload_cpu": 1,
+      "configurations": {
+        "hr-off": {
+          "clock_ns": 36985,
+          "open_ns": [
+            4489890,
+            320690,
+            311450,
+            320280,
+            398030
+          ],
+          "payload_ns": [
+            118142700,
+            130992810,
+            114314910,
+            118065230,
+            119037540
+          ],
+          "complete_ns": [
+            123010090,
+            131684450,
+            115008060,
+            118726490,
+            119886190
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 257,
+            "write_calls": 0,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": 1,
+            "failed_pass": 0
+          }
+        },
+        "hr-on": {
+          "clock_ns": 36532,
+          "open_ns": [
+            311160,
+            311780,
+            397090,
+            315800,
+            375840
+          ],
+          "payload_ns": [
+            219829450,
+            219189350,
+            227383700,
+            235959950,
+            214519930
+          ],
+          "complete_ns": [
+            220492930,
+            219883930,
+            228146670,
+            236643890,
+            215345240
+          ],
+          "profile": [
+            {
+              "direction": "read",
+              "requests": 257,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  11233780,
+                  184460
+                ],
+                "bsp_queue": [
+                  40901740,
+                  2635040
+                ],
+                "worker_queue": [
+                  48284330,
+                  2053590
+                ],
+                "service": [
+                  90314860,
+                  2547570
+                ],
+                "resume": [
+                  17443470,
+                  264000
+                ],
+                "total": [
+                  208178180,
+                  5371130
+                ],
+                "transport": [
+                  60572330,
+                  2421170
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 257,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  11059390,
+                  232610
+                ],
+                "bsp_queue": [
+                  29413250,
+                  1575230
+                ],
+                "worker_queue": [
+                  54181850,
+                  2473090
+                ],
+                "service": [
+                  94500010,
+                  3908810
+                ],
+                "resume": [
+                  18088170,
+                  1661100
+                ],
+                "total": [
+                  207242670,
+                  5810650
+                ],
+                "transport": [
+                  65222580,
+                  3800760
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 257,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  12071930,
+                  369620
+                ],
+                "bsp_queue": [
+                  30490800,
+                  2132680
+                ],
+                "worker_queue": [
+                  53056290,
+                  3265650
+                ],
+                "service": [
+                  101332810,
+                  5145970
+                ],
+                "resume": [
+                  17743950,
+                  312380
+                ],
+                "total": [
+                  214695780,
+                  6291640
+                ],
+                "transport": [
+                  71741800,
+                  4953090
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 257,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  12699620,
+                  210250
+                ],
+                "bsp_queue": [
+                  30798910,
+                  1803230
+                ],
+                "worker_queue": [
+                  58931700,
+                  2185300
+                ],
+                "service": [
+                  101993620,
+                  4338910
+                ],
+                "resume": [
+                  18017970,
+                  185480
+                ],
+                "total": [
+                  222441820,
+                  6482790
+                ],
+                "transport": [
+                  70071630,
+                  3966350
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 257,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  11899600,
+                  323540
+                ],
+                "bsp_queue": [
+                  36432680,
+                  1898400
+                ],
+                "worker_queue": [
+                  40859060,
+                  2109140
+                ],
+                "service": [
+                  96401950,
+                  4244690
+                ],
+                "resume": [
+                  16649380,
+                  253830
+                ],
+                "total": [
+                  202242670,
+                  4578460
+                ],
+                "transport": [
+                  67260770,
+                  4128010
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            }
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 257,
+            "write_calls": 0,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": 1,
+            "failed_pass": 0
+          }
+        },
+        "hw-off": {
+          "clock_ns": 37387,
+          "transfer_ns": [
+            94998780,
+            111514470,
+            99439360,
+            98343250,
+            94009520
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 0,
+            "write_calls": 258,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        },
+        "hw-on": {
+          "clock_ns": 35939,
+          "transfer_ns": [
+            229986430,
+            220392260,
+            200051710,
+            224848780,
+            201464450
+          ],
+          "profile": [
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  13836650,
+                  329500
+                ],
+                "bsp_queue": [
+                  33330440,
+                  2227430
+                ],
+                "worker_queue": [
+                  51278710,
+                  4335740
+                ],
+                "service": [
+                  97310240,
+                  4190940
+                ],
+                "resume": [
+                  19685790,
+                  197830
+                ],
+                "total": [
+                  215441830,
+                  5043230
+                ],
+                "transport": [
+                  67565600,
+                  4079050
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  13531270,
+                  169750
+                ],
+                "bsp_queue": [
+                  30774270,
+                  2016310
+                ],
+                "worker_queue": [
+                  54221270,
+                  4473070
+                ],
+                "service": [
+                  87465010,
+                  2600860
+                ],
+                "resume": [
+                  20190690,
+                  347970
+                ],
+                "total": [
+                  206182510,
+                  5352770
+                ],
+                "transport": [
+                  57768340,
+                  2474590
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  12142440,
+                  200880
+                ],
+                "bsp_queue": [
+                  26597530,
+                  722050
+                ],
+                "worker_queue": [
+                  48547450,
+                  3343350
+                ],
+                "service": [
+                  83127600,
+                  3279960
+                ],
+                "resume": [
+                  17590710,
+                  215630
+                ],
+                "total": [
+                  188005730,
+                  3937790
+                ],
+                "transport": [
+                  54337040,
+                  3173420
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  13671210,
+                  179960
+                ],
+                "bsp_queue": [
+                  34009350,
+                  2045510
+                ],
+                "worker_queue": [
+                  49386850,
+                  3104130
+                ],
+                "service": [
+                  95513410,
+                  4203830
+                ],
+                "resume": [
+                  18220130,
+                  165670
+                ],
+                "total": [
+                  210800950,
+                  4816510
+                ],
+                "transport": [
+                  65783330,
+                  4086260
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  11925320,
+                  145200
+                ],
+                "bsp_queue": [
+                  27334110,
+                  2051190
+                ],
+                "worker_queue": [
+                  44076610,
+                  2602660
+                ],
+                "service": [
+                  89196730,
+                  4523130
+                ],
+                "resume": [
+                  16638260,
+                  255540
+                ],
+                "total": [
+                  189171030,
+                  4860240
+                ],
+                "transport": [
+                  60565750,
+                  4414270
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            }
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 0,
+            "write_calls": 258,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        },
+        "hc-off": {
+          "clock_ns": 36646,
+          "transfer_ns": [
+            123800180,
+            116196060,
+            113482740,
+            121020380,
+            114429380
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 258,
+            "write_calls": 258,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        },
+        "hc-on": {
+          "clock_ns": 36509,
+          "transfer_ns": [
+            211968790,
+            231440580,
+            206318190,
+            217815970,
+            216977020
+          ],
+          "profile": [
+            {
+              "direction": "read",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  10844210,
+                  207310
+                ],
+                "bsp_queue": [
+                  26431420,
+                  1197220
+                ],
+                "worker_queue": [
+                  52754410,
+                  2770810
+                ],
+                "service": [
+                  93452950,
+                  3073780
+                ],
+                "resume": [
+                  16634770,
+                  223350
+                ],
+                "total": [
+                  200117760,
+                  4137570
+                ],
+                "transport": [
+                  64658740,
+                  2878690
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  14957690,
+                  181260
+                ],
+                "bsp_queue": [
+                  29248600,
+                  1313070
+                ],
+                "worker_queue": [
+                  51493940,
+                  3242310
+                ],
+                "service": [
+                  100002350,
+                  4294520
+                ],
+                "resume": [
+                  19594520,
+                  217080
+                ],
+                "total": [
+                  215297100,
+                  4752880
+                ],
+                "transport": [
+                  70048790,
+                  4099980
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  11795460,
+                  136740
+                ],
+                "bsp_queue": [
+                  27585670,
+                  1652430
+                ],
+                "worker_queue": [
+                  42864810,
+                  4103760
+                ],
+                "service": [
+                  93547850,
+                  3300880
+                ],
+                "resume": [
+                  17695320,
+                  274430
+                ],
+                "total": [
+                  193489110,
+                  4548000
+                ],
+                "transport": [
+                  65199070,
+                  3192640
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  13055740,
+                  181220
+                ],
+                "bsp_queue": [
+                  29986400,
+                  1787980
+                ],
+                "worker_queue": [
+                  49621650,
+                  3530410
+                ],
+                "service": [
+                  92605960,
+                  5422970
+                ],
+                "resume": [
+                  18352720,
+                  335550
+                ],
+                "total": [
+                  203622470,
+                  6377040
+                ],
+                "transport": [
+                  63191030,
+                  5128840
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  13289310,
+                  367840
+                ],
+                "bsp_queue": [
+                  36821740,
+                  2500070
+                ],
+                "worker_queue": [
+                  49039210,
+                  3375690
+                ],
+                "service": [
+                  84653030,
+                  4439190
+                ],
+                "resume": [
+                  18892990,
+                  263660
+                ],
+                "total": [
+                  202696280,
+                  4778540
+                ],
+                "transport": [
+                  55674150,
+                  4325470
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            }
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 258,
+            "write_calls": 258,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        },
+        "ac-off": {
+          "clock_ns": 38565,
+          "transfer_ns": [
+            121997330,
+            122421200,
+            119998020,
+            117764460,
+            121204890
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 258,
+            "write_calls": 258,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        },
+        "ac-on": {
+          "clock_ns": 36084,
+          "transfer_ns": [
+            212892540,
+            207696210,
+            203498710,
+            208027320,
+            214667200
+          ],
+          "profile": [
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  13674470,
+                  377050
+                ],
+                "bsp_queue": [
+                  30917920,
+                  1944610
+                ],
+                "worker_queue": [
+                  52885250,
+                  2331720
+                ],
+                "service": [
+                  83160740,
+                  2395170
+                ],
+                "resume": [
+                  18154610,
+                  216840
+                ],
+                "total": [
+                  198792990,
+                  2976020
+                ],
+                "transport": [
+                  54397020,
+                  2287640
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  10144750,
+                  147430
+                ],
+                "bsp_queue": [
+                  29544920,
+                  1796910
+                ],
+                "worker_queue": [
+                  55847850,
+                  2419240
+                ],
+                "service": [
+                  85780570,
+                  2395510
+                ],
+                "resume": [
+                  15753030,
+                  192600
+                ],
+                "total": [
+                  197071120,
+                  2873540
+                ],
+                "transport": [
+                  55040050,
+                  2238650
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  10661140,
+                  146600
+                ],
+                "bsp_queue": [
+                  30972100,
+                  1952460
+                ],
+                "worker_queue": [
+                  40253640,
+                  1510640
+                ],
+                "service": [
+                  93514480,
+                  2346510
+                ],
+                "resume": [
+                  16868640,
+                  290230
+                ],
+                "total": [
+                  192270000,
+                  2928350
+                ],
+                "transport": [
+                  64270500,
+                  2228940
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  11401720,
+                  169030
+                ],
+                "bsp_queue": [
+                  34090190,
+                  2396300
+                ],
+                "worker_queue": [
+                  48029140,
+                  2264570
+                ],
+                "service": [
+                  86158570,
+                  2458680
+                ],
+                "resume": [
+                  16494580,
+                  231370
+                ],
+                "total": [
+                  196174200,
+                  3703130
+                ],
+                "transport": [
+                  56935220,
+                  2350320
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  13667550,
+                  146670
+                ],
+                "bsp_queue": [
+                  26838860,
+                  263850
+                ],
+                "worker_queue": [
+                  40500530,
+                  2313870
+                ],
+                "service": [
+                  100749250,
+                  2607340
+                ],
+                "resume": [
+                  18814200,
+                  337150
+                ],
+                "total": [
+                  200570390,
+                  2969140
+                ],
+                "transport": [
+                  71758700,
+                  2492930
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            }
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 258,
+            "write_calls": 258,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        },
+        "ac8-off": {
+          "clock_ns": 36180,
+          "transfer_ns": [
+            231670520,
+            225255960,
+            237437570,
+            230298900,
+            236660650
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 257,
+            "write_calls": 513,
+            "short_reads": 0,
+            "short_writes": 256,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        },
+        "ac8-on": {
+          "clock_ns": 36088,
+          "transfer_ns": [
+            437962870,
+            439822760,
+            433284720,
+            435147390,
+            433310300
+          ],
+          "profile": [
+            {
+              "direction": "write",
+              "requests": 513,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 513,
+              "completions": 513,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  28526160,
+                  251790
+                ],
+                "bsp_queue": [
+                  68061610,
+                  2355360
+                ],
+                "worker_queue": [
+                  90101810,
+                  2421150
+                ],
+                "service": [
+                  183645890,
+                  2487370
+                ],
+                "resume": [
+                  37930900,
+                  353280
+                ],
+                "total": [
+                  408266370,
+                  3116830
+                ],
+                "transport": [
+                  126621260,
+                  2378620
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 513,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 513,
+              "completions": 513,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  27013900,
+                  281150
+                ],
+                "bsp_queue": [
+                  64648380,
+                  1993120
+                ],
+                "worker_queue": [
+                  104131680,
+                  2419820
+                ],
+                "service": [
+                  177548450,
+                  2492670
+                ],
+                "resume": [
+                  37561590,
+                  249530
+                ],
+                "total": [
+                  410904000,
+                  3055010
+                ],
+                "transport": [
+                  119809900,
+                  2384430
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 513,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 513,
+              "completions": 513,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  23835800,
+                  380690
+                ],
+                "bsp_queue": [
+                  60494650,
+                  1686070
+                ],
+                "worker_queue": [
+                  114555550,
+                  4592910
+                ],
+                "service": [
+                  175575360,
+                  2712070
+                ],
+                "resume": [
+                  34550170,
+                  378560
+                ],
+                "total": [
+                  409011530,
+                  6961060
+                ],
+                "transport": [
+                  115077900,
+                  2539250
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 513,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 513,
+              "completions": 513,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  25300230,
+                  261940
+                ],
+                "bsp_queue": [
+                  62629930,
+                  1899010
+                ],
+                "worker_queue": [
+                  101519280,
+                  2289140
+                ],
+                "service": [
+                  182466600,
+                  2508510
+                ],
+                "resume": [
+                  36350360,
+                  393750
+                ],
+                "total": [
+                  408266400,
+                  3275040
+                ],
+                "transport": [
+                  124381360,
+                  2403630
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 513,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 513,
+              "completions": 513,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  23158410,
+                  157900
+                ],
+                "bsp_queue": [
+                  61927700,
+                  2087480
+                ],
+                "worker_queue": [
+                  103984040,
+                  2475520
+                ],
+                "service": [
+                  185277830,
+                  2582390
+                ],
+                "resume": [
+                  34670970,
+                  344970
+                ],
+                "total": [
+                  409018950,
+                  3191570
+                ],
+                "transport": [
+                  126182220,
+                  2472520
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            }
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 257,
+            "write_calls": 513,
+            "short_reads": 0,
+            "short_writes": 256,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        }
+      }
+    },
+    "1cpu": {
+      "cpus": 1,
+      "workload_cpu": 0,
+      "configurations": {
+        "hr-off": {
+          "clock_ns": 40653,
+          "open_ns": [
+            727340,
+            728940,
+            789620,
+            1502600,
+            984850
+          ],
+          "payload_ns": [
+            133908310,
+            152468660,
+            130548300,
+            132389160,
+            132631770
+          ],
+          "complete_ns": [
+            135053900,
+            153636130,
+            131759000,
+            134327620,
+            134093930
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 257,
+            "write_calls": 0,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": 1,
+            "failed_pass": 0
+          }
+        },
+        "hr-on": {
+          "clock_ns": 40296,
+          "open_ns": [
+            729730,
+            677510,
+            2948530,
+            773200,
+            824470
+          ],
+          "payload_ns": [
+            230609680,
+            226970430,
+            227333750,
+            229832860,
+            233799040
+          ],
+          "complete_ns": [
+            231763560,
+            228075090,
+            230720130,
+            231029050,
+            235043530
+          ],
+          "profile": [
+            {
+              "direction": "read",
+              "requests": 257,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9563280,
+                  140270
+                ],
+                "bsp_queue": [
+                  18603090,
+                  240680
+                ],
+                "worker_queue": [
+                  38788780,
+                  1803190
+                ],
+                "service": [
+                  87070880,
+                  2342690
+                ],
+                "resume": [
+                  66797300,
+                  2033920
+                ],
+                "total": [
+                  220823330,
+                  3372270
+                ],
+                "transport": [
+                  58125530,
+                  2233880
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 257,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9260530,
+                  48730
+                ],
+                "bsp_queue": [
+                  18479300,
+                  145660
+                ],
+                "worker_queue": [
+                  47083030,
+                  2052030
+                ],
+                "service": [
+                  84164830,
+                  2230550
+                ],
+                "resume": [
+                  58293860,
+                  2348290
+                ],
+                "total": [
+                  217281550,
+                  2946090
+                ],
+                "transport": [
+                  55887860,
+                  2114650
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 257,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9234950,
+                  46940
+                ],
+                "bsp_queue": [
+                  18365680,
+                  146680
+                ],
+                "worker_queue": [
+                  47220050,
+                  2230420
+                ],
+                "service": [
+                  90178800,
+                  2338760
+                ],
+                "resume": [
+                  52454750,
+                  2287910
+                ],
+                "total": [
+                  217454230,
+                  2882900
+                ],
+                "transport": [
+                  61560660,
+                  2232240
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 257,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9446720,
+                  129800
+                ],
+                "bsp_queue": [
+                  18415860,
+                  168670
+                ],
+                "worker_queue": [
+                  49818800,
+                  2143680
+                ],
+                "service": [
+                  88863770,
+                  2423020
+                ],
+                "resume": [
+                  53329610,
+                  2116770
+                ],
+                "total": [
+                  219874760,
+                  2795490
+                ],
+                "transport": [
+                  60670950,
+                  2315270
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 257,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9465640,
+                  130790
+                ],
+                "bsp_queue": [
+                  18639260,
+                  244990
+                ],
+                "worker_queue": [
+                  42508190,
+                  2278360
+                ],
+                "service": [
+                  95925580,
+                  2576440
+                ],
+                "resume": [
+                  56965770,
+                  2380880
+                ],
+                "total": [
+                  223504440,
+                  3067600
+                ],
+                "transport": [
+                  67441360,
+                  2469730
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            }
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 257,
+            "write_calls": 0,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": 1,
+            "failed_pass": 0
+          }
+        },
+        "hw-off": {
+          "clock_ns": 40138,
+          "transfer_ns": [
+            128666240,
+            126134450,
+            149915550,
+            129672920,
+            127901550
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 0,
+            "write_calls": 258,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        },
+        "hw-on": {
+          "clock_ns": 40246,
+          "transfer_ns": [
+            234127560,
+            246620490,
+            234705470,
+            242807840,
+            231718710
+          ],
+          "profile": [
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  10034500,
+                  394770
+                ],
+                "bsp_queue": [
+                  18876470,
+                  236220
+                ],
+                "worker_queue": [
+                  46012160,
+                  2363220
+                ],
+                "service": [
+                  94948480,
+                  2448090
+                ],
+                "resume": [
+                  54440030,
+                  2318510
+                ],
+                "total": [
+                  224311640,
+                  3089800
+                ],
+                "transport": [
+                  65957230,
+                  2262760
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9922320,
+                  131330
+                ],
+                "bsp_queue": [
+                  19292660,
+                  251130
+                ],
+                "worker_queue": [
+                  55193420,
+                  2361120
+                ],
+                "service": [
+                  97162050,
+                  3614580
+                ],
+                "resume": [
+                  54584120,
+                  1877780
+                ],
+                "total": [
+                  236154570,
+                  4494720
+                ],
+                "transport": [
+                  66607190,
+                  3317960
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9710100,
+                  152070
+                ],
+                "bsp_queue": [
+                  18717200,
+                  248080
+                ],
+                "worker_queue": [
+                  52923670,
+                  2264450
+                ],
+                "service": [
+                  88032540,
+                  3356570
+                ],
+                "resume": [
+                  55162390,
+                  2103810
+                ],
+                "total": [
+                  224545900,
+                  4269520
+                ],
+                "transport": [
+                  58810130,
+                  3079330
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9650070,
+                  118060
+                ],
+                "bsp_queue": [
+                  18928520,
+                  240870
+                ],
+                "worker_queue": [
+                  50836100,
+                  2889520
+                ],
+                "service": [
+                  96245010,
+                  2402130
+                ],
+                "resume": [
+                  56848180,
+                  2693980
+                ],
+                "total": [
+                  232507880,
+                  4242140
+                ],
+                "transport": [
+                  66874620,
+                  2293700
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "write",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9493460,
+                  64830
+                ],
+                "bsp_queue": [
+                  18686940,
+                  164650
+                ],
+                "worker_queue": [
+                  39703220,
+                  2207440
+                ],
+                "service": [
+                  83148510,
+                  2339220
+                ],
+                "resume": [
+                  68724540,
+                  2159670
+                ],
+                "total": [
+                  219756670,
+                  3071780
+                ],
+                "transport": [
+                  54311860,
+                  2230150
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            }
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 0,
+            "write_calls": 258,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        },
+        "hc-off": {
+          "clock_ns": 40187,
+          "transfer_ns": [
+            135001610,
+            138799350,
+            133702710,
+            134427990,
+            133187020
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 258,
+            "write_calls": 258,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        },
+        "hc-on": {
+          "clock_ns": 40215,
+          "transfer_ns": [
+            236872380,
+            237846410,
+            239841900,
+            249125420,
+            230908190
+          ],
+          "profile": [
+            {
+              "direction": "read",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9291510,
+                  48750
+                ],
+                "bsp_queue": [
+                  18749670,
+                  175990
+                ],
+                "worker_queue": [
+                  38344760,
+                  2287530
+                ],
+                "service": [
+                  91607800,
+                  2210110
+                ],
+                "resume": [
+                  68709450,
+                  2157640
+                ],
+                "total": [
+                  226703190,
+                  3411770
+                ],
+                "transport": [
+                  62850540,
+                  2103630
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9655110,
+                  129950
+                ],
+                "bsp_queue": [
+                  19006570,
+                  323940
+                ],
+                "worker_queue": [
+                  50329710,
+                  3256180
+                ],
+                "service": [
+                  84567200,
+                  2155780
+                ],
+                "resume": [
+                  63934630,
+                  3646140
+                ],
+                "total": [
+                  227493220,
+                  4099960
+                ],
+                "transport": [
+                  56137240,
+                  1957860
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9686260,
+                  189430
+                ],
+                "bsp_queue": [
+                  18813660,
+                  243270
+                ],
+                "worker_queue": [
+                  48936060,
+                  2171890
+                ],
+                "service": [
+                  95342290,
+                  2960250
+                ],
+                "resume": [
+                  56016480,
+                  2375250
+                ],
+                "total": [
+                  228794750,
+                  3790870
+                ],
+                "transport": [
+                  66674360,
+                  2752580
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9756770,
+                  125740
+                ],
+                "bsp_queue": [
+                  19160360,
+                  295390
+                ],
+                "worker_queue": [
+                  54608480,
+                  3413740
+                ],
+                "service": [
+                  104347750,
+                  3716250
+                ],
+                "resume": [
+                  50654230,
+                  1238310
+                ],
+                "total": [
+                  238527590,
+                  5366440
+                ],
+                "transport": [
+                  74923580,
+                  3512920
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            },
+            {
+              "direction": "read",
+              "requests": 258,
+              "failures": 0,
+              "short_transfers": 0,
+              "eof": 0,
+              "requested_bytes": 1048576,
+              "completed_bytes": 1048576,
+              "submissions": 258,
+              "completions": 258,
+              "transport_failures": 0,
+              "durations_ns": {
+                "publication": [
+                  9366120,
+                  114940
+                ],
+                "bsp_queue": [
+                  18527980,
+                  160640
+                ],
+                "worker_queue": [
+                  40909230,
+                  2198700
+                ],
+                "service": [
+                  96164290,
+                  2346790
+                ],
+                "resume": [
+                  55851890,
+                  2129050
+                ],
+                "total": [
+                  220819510,
+                  2753790
+                ],
+                "transport": [
+                  67565030,
+                  2239900
+                ],
+                "transport_failed": [
+                  0,
+                  0
+                ]
+              }
+            }
+          ],
+          "benchmark_counts": {
+            "requested_bytes": 1048576,
+            "read_calls": 258,
+            "write_calls": 258,
+            "short_reads": 0,
+            "short_writes": 0,
+            "eof_calls": null,
+            "failed_pass": 0
+          }
+        }
+      }
+    }
+  }
+}

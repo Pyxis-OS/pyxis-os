@@ -1,8 +1,11 @@
 # HOST profiler slowdown investigation
 
 Task 4 of the [I/O reliability milestone](../../wip/io-reliability-attribution.md)
-uses a controlled notification × collection experiment. These patches are
-experiment artifacts, **not changes installed in the kernel or SDK**. Do not use
+used a controlled notification × collection experiment. These patches preserve
+the original experiment against its recorded baseline. The notification proposal
+was subsequently accepted and implemented; see the
+[correction and validation](../../wip/io-reliability-attribution.md#task-5-host-publication-notification).
+The counts-only patches remain **experiment artifacts, not an SDK mode**. Do not use
 the counts-only kernel with normal profile consumers: its duration fields are
 unavailable, and only the patched iobench reporter describes that correctly.
 
@@ -77,7 +80,10 @@ reads, so this design does not isolate pure MMIO latency. Full profiles continue
 to describe **instrumented** execution; they cannot partition normal unprofiled
 latency, even after the experimental notification.
 
-## Proposed correction and validation, not yet accepted
+## Original correction proposal and validation
+
+This section records the task-4 proposal before acceptance; the implementation
+and its new measurements are linked above. Historical samples remain unchanged.
 
 Propose a focused permanent change to initial HOST publication: preserve the
 saved wait pointer and existing early-wakeup protocol, release the queue lock,

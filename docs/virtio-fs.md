@@ -381,8 +381,11 @@ and timeouts have their existing distinct statuses. Native executables and
 interpreters can be launched from host files through owned image capture; the
 loader never executes from live host mappings. See [the launch contract](processes.md#implemented-userspace-launch).
 
-A caller captures inputs in a record embedded in shared task metadata, then
-blocks through the existing wake-before-park contract. The BSP scheduler only
+A caller captures inputs in a record embedded in shared task metadata, publishes
+it under the scheduler queue lock, then notifies the BSP after unlocking. This
+wakes an idle BSP even if publication misses its queue sweep. The caller saves
+its wait pointer before publication and blocks through the existing
+wake-before-park contract; a BSP caller sends no self-IPI. The BSP scheduler only
 forwards queued records; blocking FUSE work runs in the transport worker. All
 user-buffer validation and copies happen on the caller's CPU. The worker never
 switches to a caller's root or accesses its private stack. Its reply and any new

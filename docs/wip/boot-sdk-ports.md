@@ -118,9 +118,10 @@ now passes. Task 2 attributed RAM growth mainly to BSP queue wait in nested KVM.
 Task 3 separated host queue/transport intervals and exposed strong profiling
 perturbation. Task 4 reproduced the slowdown and isolated a large interaction
 between timestamps and missing initial BSP notification; its
-[experiment report](../experiments/host-profile-slowdown/README.md) proposes a
-notification correction while recording residual profiling distortion. Task 5
-must settle that proposal, comparison resolution and the final handoff.
+[experiment report](../experiments/host-profile-slowdown/README.md) records residual
+profiling distortion. Task 5 has implemented the focused HOST publication
+notification correction and repeated its affected controls. Comparison resolution,
+the final IPC/HTTP-inclusive matrix and the documentation handoff remain to settle.
 Instrumentation choices are settled per task;
 there is no blanket optimization assignment. The following remain later alternatives.
 
