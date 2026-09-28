@@ -1,9 +1,10 @@
 # Verified HTTPS snapshots with Mbed TLS
 
-Status: task 1 complete. The source pair, trust model and contract below were
-agreed on 2026-09-28. They describe the implementation target, not a working TLS
-port. Task 2 is next; no runtime integration or dependency-pin changes are part
-of task 1. SSH/libssh remains deferred. This follows the closed
+Status: tasks 1–2 complete. The source pair, trust model and contract below were
+agreed on 2026-09-28. Ports now packages the client libraries and userland provides
+the native TLS adapter; controlled guest connections have been validated.
+HTTPS fetching, trust packaging and provider publication remain tasks 3–4.
+SSH/libssh remains deferred. This follows the closed
 [I/O reliability and attribution work](../io-reliability-attribution.md).
 
 ## Completion point
@@ -349,6 +350,77 @@ deployed image before asking the owner to publish an
 updated builder. This is a host build-tool change, not a compiler change. No
 container publication, runtime port or handshake validation occurred in task 1.
 
+## Task 2 implementation and validation, 2026-09-28
+
+[Ports PR 21](https://git.internal/chronium/pyxis-ports/pulls/21) packages the
+verified release archive and exports the configured libraries, headers and
+`share/mbedtls.mk`. [Userland PR 77](https://git.internal/chronium/pyxis-userland/pulls/77)
+provides `libtls.a`; merge these before the parent integration. The SDK runtime
+and public ABI are unchanged. No libc fixes were needed. The normal userland
+build compiles the adapter, but no application uses TLS yet.
+
+The adapter owns one process-local PSA/trust runtime and one connection. It
+uses explicit borrowed clock/random handles, a borrowed connected TCP stream,
+counted allocations and latched native errors. Public roots and optional custom
+roots are imported before freezing trust. Any partially malformed import poisons
+setup. It requires chain/name/date verification before exposing plaintext,
+distinguishes authenticated EOF from TCP truncation, and leaves stream shutdown
+and handle closure to its caller. See the pinned userland `libtls/tls.h` for
+ownership and failure contracts. TLS archive headers/configuration remain ports
+development inputs, outside the base and guest SDKs.
+
+The userland build tracks the complete TLS export's content identity, including
+headers, configuration, make fragment and archives. Epoch-normalized export
+timestamps cannot leave an adapter compiled against an older library layout.
+An unchanged export preserves the identity stamp and avoids recompilation.
+
+The task-2 source/advisory/root update checkpoint retained the task-1 pins.
+Ordinary SDK, archive, adapter and image builds used Pyxis GCC 16.2.0 and CMake
+3.31.8. The builder recipe adds CMake, curl and bzip2 to its runtime stage;
+GCC/binutils inputs are unchanged. Registry credentials are available only to
+Forgejo Actions, so the existing remote ports job checks the deployed builder.
+
+A disposable native probe was manually exercised under nested KVM QEMU with
+two vCPUs, 256 MiB, VirtIO networking and randomness, using a local OpenSSL peer
+and disposable CA. It loaded all 121 public roots from the pinned bundle plus
+the custom CA. Observed results:
+
+- TLS 1.2 negotiated `TLS-ECDHE-RSA-WITH-CHACHA20-POLY1305-SHA256` and TLS 1.3
+  negotiated `TLS1-3-CHACHA20-POLY1305-SHA256`. Both verified the controlled DNS
+  name, transferred an HTTP response and observed authenticated `close_notify`.
+- A 20,000-byte application write returned a positive 16,384-byte short count,
+  then accepted the remaining bytes. Responses exceeded the native 4,096-byte
+  transfer maximum and completed normally.
+- The root/configuration baseline was 357,602 charged bytes; peak charged TLS
+  demand across root import and these handshakes was 547,786 bytes. Connection
+  cleanup returned to the exact baseline. These measure requested allocations
+  plus accounting headers, not allocator backing pools or process RSS.
+- Wrong DNS name and missing custom trust failed certificate verification
+  (flags 4 and 8), before application data. Missing clock/random handles,
+  malformed PEM, allocation-cap exhaustion and an expired deadline failed
+  explicitly. Debugger inspection found runtime ownership and active borrowed
+  authority cleared after cleanup.
+- A second boot with `VIRTIO_RNG=0` reached the probe normally; TLS runtime setup
+  failed with `TLS_ENTROPY_ERROR`, native `CALL_UNAVAILABLE` and PSA error -148.
+  Runtime ownership and active authority were cleared on this path too.
+- Review follow-up: ordinary builds against a disposable export recompiled
+  `tls.o` after header/configuration contents changed with their timestamps still
+  at epoch; unchanged exports did not rebuild. SDK-only `cat` still built without
+  TLS inputs. In the guest, a valid CA followed by paired garbage PEM delimiters
+  failed as `TLS_TRUST_ERROR` even though upstream returned zero, and subsequent
+  trust finalization failed as `TLS_BAD_STATE`. A trusted certificate restricted
+  to client authentication failed as `TLS_CERTIFICATE_ERROR`, preserving upstream
+  `MBEDTLS_ERR_SSL_BAD_CERTIFICATE` (-31232) and verification flag 4096. A valid
+  20,000-byte TLS 1.2 request still completed with authenticated EOF and the same
+  allocation baseline/peak.
+
+The probe, controlled certificates and private keys are not installed or
+committed. Date rejection and raw TCP truncation were inspected in code but
+were not exercised in this task; the complete certificate/framing matrix remains
+task 5. Public HTTPS fetching and no-network HTTP/local-service regression checks
+belong to their integration tasks. These measurements cover this selected peer
+and root set, not arbitrary chains or all supported ciphersuites.
+
 ## Focused PR tasks
 
 - [x] **1. Pin/probe and settle the HTTPS contract.** Probe the selected Mbed TLS
@@ -357,7 +429,7 @@ container publication, runtime port or handshake validation occurred in task 1.
   including trust provisioning, numeric addresses, protocol configuration,
   memory bounds and error reporting. Record an update checkpoint. If requirements
   exceed this scope, discuss them before implementing a broader port.
-- [ ] **2. Package the TLS libraries and native platform support.** Add the ports
+- [x] **2. Package the TLS libraries and native platform support.** Add the ports
   recipe and development export, narrow demonstrated libc fixes if needed, and
   native entropy/time/transport integration with explicit ownership and failure
   handling. Preserve certificate validation. Validate a manually exercised

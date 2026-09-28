@@ -64,16 +64,18 @@ make -C userspace SDK=../build/sdk BUILD=../build/userspace shell
 make -C userspace SDK=../build/sdk BUILD=../build/userspace hello client server
 make -C /path/to/pyxis-userland SDK=/path/to/sdk \
   LUA_PREFIX=/path/to/ports-dev/lua \
-  PICOHTTPPARSER_PREFIX=/path/to/ports-dev/picohttpparser all
+  PICOHTTPPARSER_PREFIX=/path/to/ports-dev/picohttpparser \
+  MBEDTLS_PREFIX=/path/to/ports-dev/mbedtls all
 ```
 
 The `session` application also consumes Lua headers and `liblua.a` through
 `LUA_PREFIX`. The `httpfs` application consumes picohttpparser headers and
-`libpicohttpparser.a` through `PICOHTTPPARSER_PREFIX`. Both development prefixes
-are exported by the ports build. Other application targets can still build with
+`libpicohttpparser.a` through `PICOHTTPPARSER_PREFIX`. The native `libtls.a`
+adapter consumes the configured Mbed TLS export through `MBEDTLS_PREFIX`.
+These development prefixes are exported by the ports build. Other application targets can still build with
 the SDK alone.
 
-The userspace Makefile now builds applications only. It consumes a complete SDK
+The userspace Makefile builds applications and their support archives. It consumes a complete SDK
 and does not build the converter or runtime. `SDK` defaults to `build/sdk`
 within the userland checkout; application `BUILD` defaults to `build/apps`. The integrated
 Pyxis build passes both paths explicitly to keep its outputs in

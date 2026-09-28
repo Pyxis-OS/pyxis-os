@@ -49,15 +49,18 @@ compiler, but still needs the normal host assembly/boot tools and repository
 bootloader/data files.
 
 The ports bundle separates boot contents (`ports-root`) from development files
-(`ports-dev`). Lua and picohttpparser provide static libraries and public headers under
-`ports-dev/lua` and `ports-dev/picohttpparser`; these do not enter the boot archive or the SDK. Standalone
-userland builds select them with `LUA_PREFIX` and `PICOHTTPPARSER_PREFIX`. SDK runtime builds
+(`ports-dev`). Lua, picohttpparser and Mbed TLS provide static libraries and headers under
+`ports-dev/lua`, `ports-dev/picohttpparser` and `ports-dev/mbedtls`; these do not enter the boot archive or the SDK. Standalone
+userland builds select them with `LUA_PREFIX`, `PICOHTTPPARSER_PREFIX` and
+`MBEDTLS_PREFIX`. TLS consumers include the export's `share/mbedtls.mk` to use
+the matching configuration defines and ordered libraries. SDK runtime builds
 remain independent of ports, so there is no dependency cycle.
 
 Recorded payload checksums do not depend on timestamps. Application and ports
 bundles record the exact SDK content identity; image assembly also checks that
 the kernel and SDK ABI/format headers match. Userland also records and verifies
-the complete ports development tree used for its session launcher and HTTP library. Mismatches fail rather than silently
+the complete ports development tree used for its session launcher, HTTP library
+and native TLS adapter. Mismatches fail rather than silently
 building a different component. Records include source revisions, dirty state
 and local change hashes, selected builder image, and relevant compiler/flag
 provenance. These checks establish matching inputs, not a cryptographic trust
