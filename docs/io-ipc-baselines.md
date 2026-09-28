@@ -153,8 +153,10 @@ Repeat selected reads with `--buffer 65536`; the default is 4088. Each OPEN fetc
 afresh; retained reads fetch nothing. Reopening/warmup does not evict host caches.
 After use, remove guest copies, quit QEMU, stop the host server with Ctrl-C, and
 remove the two copied fixtures and its temporary directory. Stop any owned
-virtiofsd/debugger jobs too. The 1 MiB HTTP command currently exposes the capacity
-failure described below; it is not expected to produce a reliable throughput result.
+virtiofsd/debugger jobs too. The 1 MiB HTTP command exposed the capacity failure
+recorded below in the original baseline. The subsequent
+[receipt-reuse correction](wip/io-reliability-attribution.md#task-1-implemented-receipt-reuse-and-benchmark-reruns)
+completed that workload; the original tables remain historical observations.
 
 ## Recorded environment and source revisions
 

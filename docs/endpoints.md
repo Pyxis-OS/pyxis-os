@@ -60,8 +60,13 @@ RECEIVE supplies a kernel-authenticated `ENDPOINT_MESSAGE_CALL` or
 consumes it. A SEND receipt has no operation rights: REPLY returns `CALL_DENIED`
 and leaves it live. `endpoint_finish()` wraps CLOSE, finishing a SEND or waking
 an unanswered caller with `CALL_ABANDONED`. Separately received attachment
-handles remain owned by the provider. A completed record may stay occupied
-briefly after both sides finish, until the BSP reaps the retired receipt object.
+handles remain owned by the provider. A CALL record becomes reusable once the
+caller has collected its outcome and the final receipt reference is released;
+a SEND record becomes reusable when its receipt is finished. Final receipt
+release performs this logical cleanup synchronously under the endpoint lock,
+without allocation. Completed work does not wait for BSP reclamation before
+returning its delivery slot. The endpoint backing allocation is destroyed
+separately on the BSP after its endpoint, export and receipt owners are gone.
 
 Successful SEND means admission only, with no result or later completion report.
 The sender can close its original handles and exit before RECEIVE. The admitted
@@ -86,8 +91,9 @@ capability-table growth. SEND and REPLY descriptors must set their deadline to
 zero. SEND still reports only admission.
 
 An expired deadline returns `CALL_TIMED_OUT`. Before delivery, expiry removes
-the queued request and releases its retained attachments, with
-`ENDPOINT_NOT_DELIVERED`. After delivery, it returns `ENDPOINT_DELIVERED`:
+the queued request and releases its retained attachments and unpublished receipt,
+with `ENDPOINT_NOT_DELIVERED`; the record remains until the caller collects its
+outcome. After delivery, it returns `ENDPOINT_DELIVERED`:
 the provider may have performed the operation, so this is no basis for automatic
 retry. Expiry invalidates reply authority without revoking attachment handles
 already delivered to the provider. The canceled receipt retains its delivery

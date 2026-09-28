@@ -436,40 +436,44 @@ when its authority and teardown contract exist.
 
 ## Endpoint throughput limited by deferred receipt reclamation
 
-The sixteen delivery records count completed CALLs and finished SENDs until the
-BSP destroys their retired receipt objects. REPLY collection or `endpoint_finish()`
-does not immediately return the slot. A sequential caller, or a sender whose
-previous group has already been consumed and acknowledged, can therefore hit
-QUEUE_FULL despite having no outstanding application work.
+Resolved for completed work: final receipt release now performs logical cleanup
+synchronously under the endpoint lock. A delivery record becomes reusable once
+receipt ownership and CALL outcome collection, if any, have both ended. The
+embedded receipt never enters the retirement queue; a separate endpoint backing
+object preserves BSP destruction ownership. See the
+[endpoint contract](endpoints.md) and
+[reliability milestone](wip/io-reliability-attribution.md) for implementation and
+validation details.
 
-The [I/O and IPC baseline](io-ipc-baselines.md) observed this on CPU 1 in
+Historical observations before the fix: the sixteen delivery records retained
+completed CALLs and finished SENDs until the BSP destroyed their retired receipt
+objects. The [I/O and IPC baseline](io-ipc-baselines.md) observed this on CPU 1 in
 four-CPU nested KVM: a zero-byte 256-call warmup completed 21 round trips before
 QUEUE_FULL; SEND admitted and acknowledged two groups of eight, then rejected
 message 17. These are observed failure points, not deterministic capacity
-thresholds: BSP scheduling/reclamation can change the number completed.
+thresholds: BSP scheduling/reclamation changed the number completed.
 
 Matched HTTP runs also observed ordinary 1 MiB snapshot reads fail with EAGAIN
 after 61320 and 122640 confirmed bytes, at caller request sizes 4088 and 65536. Each
 OPEN fetched the full body successfully; the retained FILE reads then failed.
-The 32 KiB matched fixtures completed. This is consistent with the same receipt
-capacity limit and affects real exported-file consumers, not only synthetic IPC
-batches. Larger caller buffers do not bypass the 4088-byte FILE transfer limit.
-The exact failure position varies with reclamation; shrinking benchmark fixtures
-does not make sustained exported-file consumption reliable.
+The 32 KiB matched fixtures completed. These failures were consistent with the
+same receipt capacity limit and affected real exported-file consumers, not only
+synthetic IPC batches. Larger caller buffers did not bypass the 4088-byte FILE
+transfer limit.
 
-`ipcbench` uses fresh endpoints and eight-message samples, with creation and
-teardown outside timing. Larger explicitly requested runs still expose capacity failures;
-there are no hidden data retries or sleeps to pace the measured workload. This
-keeps successful measurements possible but does not establish sustainable
-long-running endpoint throughput. Even control calls used for shutdown can meet
-this capacity limit.
+The original baseline used fresh endpoints and eight-message `ipcbench` samples,
+with creation and teardown outside timing, to obtain successful measurements.
+This workaround did not establish sustainable throughput; even shutdown control
+calls could encounter the same limit. The original measurements remain
+historical evidence, separate from the reliability milestone's reruns.
 
-Revisit in a separate endpoint lifetime/reclamation investigation before using
-these samples to size a continuously busy service or adding a sustained IPC
-baseline, or relying on larger exported-file snapshots. Preserve BSP destruction
-ownership, CALL delivery/outcome reporting, and attachment/receipt lifetimes; determine whether logical slot reuse can be
-separated safely from object destruction or reclamation scheduling needs work.
-No reclamation algorithm change is included in the measurement milestone.
+The live-work limit remains sixteen delivery records. Queued messages,
+unfinished provider receipts and CALL outcomes awaiting collection still consume
+capacity, and genuine exhaustion still reports QUEUE_FULL. A deadline releases
+the caller, not a delivered receipt or the provider's attachment handles;
+calls without deadlines can still wait indefinitely. Revisit these remaining
+limits with the [cancellation and capacity work](#endpoint-cancellation-and-capacity),
+without retrying or pacing away admission failures.
 
 ## Service startup failure before publication
 

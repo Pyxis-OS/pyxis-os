@@ -150,11 +150,14 @@ even when there is no second runnable BSP task.
 
 Capability tables follow that same exclusive process ownership. The BSP installs
 entries before submission; the executing CPU can resolve or close them with
-IF=0. A last object release queues its embedded retirement link without touching
-the heap. The BSP scheduler drains this separate list after task cleanup and
-runs destruction callbacks outside its lock. Pending objects also cause a busy
-BSP task to return to the scheduler on its next timer interrupt. No table grows
-on an AP; final releases never require an AP allocator call.
+IF=0. A last object release normally queues its embedded retirement link without
+touching the heap. Endpoint receipts instead release logical delivery ownership
+synchronously under the endpoint lock; their reusable embedded objects never
+enter the retirement list. The BSP scheduler drains this separate list after
+task cleanup and runs destruction callbacks outside its lock. Pending objects
+also cause a busy BSP task to return to the scheduler on its next timer
+interrupt. No table grows on an AP; final releases never require an AP allocator
+call.
 
 Namespace creation uses a blocked caller's exclusive table loan for its fixed
 binding storage and initial grant. Namespace lookup captures a reference and both
@@ -167,10 +170,18 @@ its bounded delivery storage and installs both initial handles. Export creation
 uses the same table loan for backing allocation and client installation. Export
 control holds storage separately from client references, so it cannot prevent
 natural retirement. Accepted deliveries retain their target until caller and
-receipt ownership both end. Final client/backing destruction runs on the BSP.
-A caller
-reserves four free slots before admitting a request so collecting reply grants
-needs no growth. RECEIVE needs one slot for the receipt and one per request
+receipt ownership both end. A delivery slot becomes reusable as soon as the
+caller has collected its outcome, if any, and the final receipt reference is
+released. Reuse does not depend on BSP scheduling. Queued cancellation releases
+the unpublished receipt under the already-held endpoint lock; delivered work
+keeps its receipt until the provider finishes it or exits.
+
+Endpoint objects, exports and live receipts each retain endpoint backing
+storage. Its final owner queues a separate backing object after dropping the
+endpoint lock, so a concurrent BSP reaper cannot free the lock before unlock.
+Final client/backing destruction runs on the BSP. A caller reserves four free
+slots before admitting a request so collecting reply grants needs no growth.
+RECEIVE needs one slot for the receipt and one per request
 attachment. If those slots are unavailable, the task queues a capability-growth
 request and blocks outside the endpoint lock. Its metadata contains the queue
 link, completion result and wait record, so submitting work never allocates on

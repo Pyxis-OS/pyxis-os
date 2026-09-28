@@ -80,13 +80,14 @@ enum capability_result capability_resolve(struct capability_table *table,
     handle_t handle, uint64_t required_rights, uint64_t required_transport,
     struct kernel_object **object, uint64_t *rights, uint64_t *transport);
 
-/* IF=0, exclusive table ownership; no allocation or destruction. Immediately makes
- * the handle stale and releases its reference through BSP retirement. */
+/* IF=0, exclusive table ownership; no allocation or backing destruction. Makes
+ * the handle stale before release; receipt ownership ends synchronously. */
 enum capability_result capability_close(struct capability_table *table,
                                          handle_t handle);
 
 /* BSP, IF=0, with exclusive ownership. Releases all entries and table storage.
- * Object destruction is deferred to object_reap(), including on this path. */
+ * Backing destruction is deferred to object_reap(); receipt ownership ends
+ * synchronously, as with individual handle closure. */
 void capability_table_destroy(struct capability_table *table);
 
 #endif
