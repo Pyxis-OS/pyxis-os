@@ -71,10 +71,19 @@ by the shell closes that previous owned handle.
 
 `service start NAME IMAGE [ARG...]` requires LOOKUP and MANAGE and launches a
 provider with a `publication` endpoint client. The provider
-CALLs that endpoint with one exported-client attachment; the shell installs the
-binding and acknowledges before the provider serves clients. `service replace`
+CALLs that endpoint with a setup result and, on success, one exported-client
+attachment; the shell installs the binding and acknowledges before the provider
+serves clients. A reported setup failure carries no grant and leaves the
+namespace unchanged. `service replace`
 uses the same exchange but requires an existing name. `namespace remove NAME`
 removes only the binding. No numeric handle is used as a cross-process handoff.
+
+`service start --optional NAME IMAGE [ARG...]` logs a well-formed reported setup
+failure and permits script continuation. Launch errors, malformed publication,
+namespace errors and cleanup failures remain errors. `--read-only`, available
+for start and replace, attenuates native directory roots and working-directory
+grants to traversal and file reads for that launch. Existing grants are never
+expanded. Ordinary service starts retain their original delegation behavior.
 
 The publication launch does not pass the parent's namespace or namespace-creation
 service to the provider. Retaining a namespace containing its own binding could

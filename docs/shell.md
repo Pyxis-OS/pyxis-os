@@ -123,7 +123,15 @@ after the provider transfers an exported client through IPC. Existing clients
 keep their original object. `namespace remove` does not withdraw an export.
 Ordinary commands receive namespace LOOKUP only; trusted session handoff can
 retain held management authority. Provider publication launches omit the parent
-namespace. FILE/open routing through these services is a later milestone task.
+namespace. FILE providers expose ordinary read-only snapshots through the
+[shared file bridge](file-providers.md).
+
+`service start --optional` continues after a provider explicitly reports setup
+failure; malformed handshakes, launch failures, namespace errors and cleanup
+failures are still errors. `service start|replace --read-only` restricts the
+launched provider's native directory roots and working directories to traversal
+and file reads. HTTPS boot startup uses both options; custom trust is selected
+with `httpfs --https --ca-bundle URI`. See [HTTPS startup](http-fetch.md).
 
 ## File redirection and stdin
 

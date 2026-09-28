@@ -74,8 +74,10 @@ The userland repository supplies four shebang scripts using `app://shell.pxe`:
   export with `mount --optional --read-only host` and hands off with
   `session app://session.pxe --start-services`, leaving network settings alone.
 - `init/services.sh`, installed as `app://init-services`, publishes the HTTP
-  provider using the configured session environment, then hands off to the
-  interactive shell. It runs only when session selects `--start-services`.
+  provider using the configured session environment, then starts a separate
+  optional HTTPS provider with read-only trust grants and hands off to the
+  interactive shell. A reported HTTPS setup failure leaves HTTPS unpublished
+  and permits that handoff. It runs only when session selects `--start-services`.
 - `init/idle.sh`, installed as `app://init-idle`, sets its title and exits. No process
   remains; the scheduler uses its ordinary interruptible halt when idle. The
   space and its terminal remain available. This is not a machine shutdown or

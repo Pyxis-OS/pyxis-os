@@ -2,7 +2,7 @@
 
 Pyxis services run in ordinary userspace processes. Clients discover exported
 capabilities through explicitly delegated namespaces, then invoke the provider's
-protocol. The text and HTTP providers return immutable FILE snapshots that
+protocol. The text, HTTP and HTTPS providers return immutable FILE snapshots that
 ordinary `cat`, `cksum`, `tee`, libc readers and shell redirection can consume.
 
 The kernel owns capability enforcement, bounded delivery, routing and lifetime.
@@ -18,7 +18,7 @@ use the same namespace and IPC without exposing a FILE interface.
 | [Exported objects](endpoints.md) | Provider-owned receiver, authenticated object/protocol/rights metadata, withdrawal and acknowledged retirement |
 | [Namespaces](namespaces.md) | Flat exact-name bindings, separate LOOKUP and MANAGE rights, atomic replacement and explicit startup delegation |
 | [File providers](file-providers.md) | Full-URI OPEN, validated FILE grants and byte representation, shared native/exported file helpers |
-| [HTTP fetching](http-fetch.md) | Bounded plaintext GET, complete immutable snapshots and separate HTTP diagnostics |
+| [HTTP fetching](http-fetch.md) | Bounded HTTP/verified HTTPS GET, immutable snapshots and separate diagnostics |
 
 Endpoint creation requires a service grant; it supplies no namespace-publication,
 file or network authority. Each receiver and its export control belong to one
@@ -90,8 +90,8 @@ continues from confirmed short transfers. Exported standard streams retain CALL
 transport authority through launch and redirection. Direct execution of an
 exported binary is unsupported; the image loader requires a native file.
 
-Text and HTTP opens produce immutable snapshots with stable size and bytes.
-Copies retain the same snapshot; independent HTTP opens fetch independently.
+Text, HTTP and HTTPS opens produce immutable snapshots with stable size and bytes.
+Copies retain the same snapshot; independent HTTP/HTTPS opens fetch independently.
 Each provider has 63 file-export slots beside its OPEN service. Removing the
 binding does not close existing files: the provider serves retained exports and
 exits naturally after all its exports retire.
@@ -100,8 +100,11 @@ exits naturally after all its exports retire.
 
 Development and read-only init create separate namespaces and publish `textfs`
 as `text`. They launch `app://session.pxe` with `--start-services`, which applies
-configuration before running `app://init-services`. That script publishes `httpfs` as `http`
-with the configured DNS server, then hands off to the interactive shell. Idle
+configuration before running `app://init-services`. That script publishes `httpfs`
+as `http` with the configured DNS server, then optionally publishes a separate
+`httpfs --https` instance as `https` with read-only trust grants before handing
+off to the interactive shell. Explicitly reported HTTPS setup failure leaves
+that scheme unpublished and permits local/HTTP startup to continue. Idle
 spaces start no provider. Publication itself performs no remote fetch, so boot
 and local files remain usable without a NIC.
 
@@ -118,6 +121,7 @@ In the guest:
 cat text://welcome
 cat < text://guide
 cat http://example.com/
+cat https://example.com/
 cat http://example.com/ | tee home://example.html | cksum
 service replace text app://textfs.pxe --welcome "Replacement service"
 namespace remove http
@@ -135,8 +139,9 @@ Userspace owns DNS, TCP, framing policy and storage. Each fetch has a 2 KiB URI
 limit, 32 KiB aggregate header/trailer limit, 16 MiB body limit and a 30-second
 budget capped by an earlier caller deadline. Each instance reserves at most
 64 MiB for bodies, counting staging, retained snapshots and growth overlap.
-Only completed 200/204 responses become files. Redirects, TLS, decompression,
-writes and response caching are unsupported.
+Only completed 200/204 responses become files. HTTPS verifies chain, name and
+validity against packaged public roots plus optional instance-specific roots.
+Redirects, decompression, writes and response caching are unsupported.
 
 ## Limits and future work
 

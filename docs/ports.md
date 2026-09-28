@@ -2,7 +2,7 @@
 
 Pyxis pins [pyxis-ports](https://git.internal/chronium/pyxis-ports) at `ports`.
 Its host Lua runner fetches an exact upstream commit or a checksum-pinned release
-archive, applies ordered patches,
+archive or standalone data file, applies ordered patches,
 builds against the exported SDK and stages executables with their licenses.
 Recipes are trusted build code. They do not modify the SDK or resolve/install
 dependencies. Source pins, licenses, host/Pyxis dependencies, patch order and
@@ -53,9 +53,25 @@ and `share/mbedtls.mk` under `build/ports-dev/mbedtls`. Consumers use that make
 fragment's configuration flags and ordered libraries. Native clock, entropy,
 allocation and TCP integration lives in userland's `libtls`.
 
-Only licenses and provenance enter the boot archive. The base/guest SDK stays
-independent of TLS. HTTPS fetching and packaged public roots are subsequent
-[milestone tasks](wip/https.md).
+Only licenses and provenance from the TLS library recipe enter the boot archive.
+The base/guest SDK stays independent of TLS.
+
+## Public CA roots
+
+The `ca-certificates` data recipe installs curl's Mozilla-derived 2026-09-25
+snapshot at `app://share/ca-certificates/cacert.pem`, with its SHA-256 and
+provenance beside it. MPL-2.0 and retained notices are installed under
+`app://share/licenses/ca-certificates/`. The selected bundle contains 121
+certificates in 188,900 bytes, pinned by SHA-256
+`a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505`.
+The PEM export omits Mozilla's additional trust-store constraints; it is not the
+full browser trust policy. See the [recipe notes](../ports/ca-certificates/README.md).
+
+Updates are explicit: select a dated snapshot, review certificate changes,
+verify the published checksum, update ports metadata/notices, rebuild the image
+and restart providers. No boot-time download or automatic trust update occurs.
+Custom bundles augment these roots per instance under the same verification
+rules; configuration and startup are described in [HTTPS fetching](http-fetch.md).
 
 ## Checksums with sbase cksum
 
