@@ -1,0 +1,805 @@
+{
+  "date": "2026-09-28",
+  "source": {
+    "kernel": "0c847c3112186b5dba101a47f365690f66acb940",
+    "userland": "e7fb5ae5c7ee272cd9ad350506883473956a47a6",
+    "ports": "6ec1290f87882392390e6a889be61ba3ac1448d1",
+    "lwip": "a1aadb91a50360ff5b52864f7cec810b8162ee85"
+  },
+  "collection": "Manual transcription of interactive guest log displays; see README.md for environment and limits.",
+  "workload": {
+    "fixture_bytes": 1048576,
+    "buffer_bytes": 4080,
+    "warmups": 1,
+    "rounds": 5,
+    "prepared": true,
+    "sync": "none",
+    "export": "tmpfs"
+  },
+  "images": {
+    "base": {
+      "kernel_sha256": "ca234aa890e0142f12af9246dd319b2f0c151c4e6a301728006859080cb64e64",
+      "iso_sha256": "4b02928960e8fa26b656f78f20193837410d94fdd60a79ac3709448c16918feb",
+      "patches": []
+    },
+    "counts": {
+      "kernel_sha256": "710deaaf7cb62a49f1a729e4e9bc324580274db18a2ac6016d81f477cfde52e3",
+      "iso_sha256": "100e94e6dcca94dc8dbf2e04e88a88456c28a2589a4a41e24a9860b092bf6652",
+      "patches": [
+        "counts-kernel.patch",
+        "counts-userland.patch"
+      ]
+    },
+    "notify": {
+      "kernel_sha256": "a6cb222187acb274f05b789d9570a0f6d3633cec723cadd2dcdede1e267a2497",
+      "iso_sha256": "68728b203428689a7a4ca1f51f4db4854d8508c3bba3fd0b188f349f9914d92c",
+      "patches": [
+        "notify-kernel.patch"
+      ]
+    },
+    "notify-counts": {
+      "kernel_sha256": "286981e2544907fc5a02d5296a4f36230032a4acf9040fe9e10ab1341d939a05",
+      "iso_sha256": "b0d635bc8c68530eb50cd26f47c34517d985c8760bcf5a2a92bf800e4d7c897b",
+      "patches": [
+        "notify-kernel.patch",
+        "counts-kernel.patch",
+        "counts-userland.patch"
+      ]
+    }
+  },
+  "patch_sha256": {
+    "counts-kernel.patch": "5969f2b9eb5c8f38a8bd7095a366061b23c431934983d74cf2136dbadce6021a",
+    "counts-userland.patch": "0886477a5a0455226e414efd3845a199b82aeeb1c5bc45b7e685f783ac8cb439",
+    "notify-kernel.patch": "68771f8dc6848c911bc8d4adf74c22be3074fecdfcebf1d1839044ccff9dbd10"
+  },
+  "configurations": {
+    "base-off": {
+      "clock_ns": 37101,
+      "transfer_ns": [
+        124336620,
+        128663770,
+        118854780,
+        127990290,
+        118789480
+      ],
+      "benchmark_counts": {
+        "requested_bytes": 1048576,
+        "written_bytes": 1048576,
+        "read_bytes": 0,
+        "read_calls": 0,
+        "write_calls": 258,
+        "short_reads": 0,
+        "short_writes": 0,
+        "failed_pass": 0
+      },
+      "image": "base",
+      "warmup_verified": true,
+      "verified_samples": 5
+    },
+    "base-full": {
+      "clock_ns": 37786,
+      "transfer_ns": [
+        1923082540,
+        1856054240,
+        1749052750,
+        1827010850,
+        1855849580
+      ],
+      "profile": [
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "durations_ns": {
+            "publication": [
+              19255760,
+              226060
+            ],
+            "bsp_queue": [
+              1453856200,
+              8066330
+            ],
+            "worker_queue": [
+              75952450,
+              2412020
+            ],
+            "service": [
+              321744900,
+              4388160
+            ],
+            "resume": [
+              31439770,
+              363320
+            ],
+            "total": [
+              1902249080,
+              12464740
+            ],
+            "transport": [
+              287352520,
+              4279660
+            ],
+            "transport_failed": [
+              0,
+              0
+            ]
+          },
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "durations_ns": {
+            "publication": [
+              17842420,
+              170370
+            ],
+            "bsp_queue": [
+              1396775570,
+              8004920
+            ],
+            "worker_queue": [
+              70517020,
+              2742080
+            ],
+            "service": [
+              320852320,
+              4837520
+            ],
+            "resume": [
+              30149330,
+              479450
+            ],
+            "total": [
+              1836136660,
+              14420100
+            ],
+            "transport": [
+              285794530,
+              4524370
+            ],
+            "transport_failed": [
+              0,
+              0
+            ]
+          },
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "durations_ns": {
+            "publication": [
+              17783730,
+              505300
+            ],
+            "bsp_queue": [
+              1309951030,
+              8016300
+            ],
+            "worker_queue": [
+              40253300,
+              2517430
+            ],
+            "service": [
+              330738780,
+              6109010
+            ],
+            "resume": [
+              31798760,
+              2062010
+            ],
+            "total": [
+              1730525600,
+              14164700
+            ],
+            "transport": [
+              293779060,
+              5910630
+            ],
+            "transport_failed": [
+              0,
+              0
+            ]
+          },
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "durations_ns": {
+            "publication": [
+              19333390,
+              218750
+            ],
+            "bsp_queue": [
+              1364185810,
+              8020300
+            ],
+            "worker_queue": [
+              76936980,
+              2323230
+            ],
+            "service": [
+              314593870,
+              5769480
+            ],
+            "resume": [
+              31077520,
+              929910
+            ],
+            "total": [
+              1806127570,
+              14750310
+            ],
+            "transport": [
+              278736250,
+              5663930
+            ],
+            "transport_failed": [
+              0,
+              0
+            ]
+          },
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "durations_ns": {
+            "publication": [
+              17143930,
+              357590
+            ],
+            "bsp_queue": [
+              1351989260,
+              8096700
+            ],
+            "worker_queue": [
+              57025410,
+              2451000
+            ],
+            "service": [
+              380622770,
+              5677370
+            ],
+            "resume": [
+              30206860,
+              346410
+            ],
+            "total": [
+              1836988230,
+              14822510
+            ],
+            "transport": [
+              341914540,
+              5542240
+            ],
+            "transport_failed": [
+              0,
+              0
+            ]
+          },
+          "saturated": false
+        }
+      ],
+      "benchmark_counts": {
+        "requested_bytes": 1048576,
+        "written_bytes": 1048576,
+        "read_bytes": 0,
+        "read_calls": 0,
+        "write_calls": 258,
+        "short_reads": 0,
+        "short_writes": 0,
+        "failed_pass": 0
+      },
+      "image": "base",
+      "warmup_verified": true,
+      "verified_samples": 5
+    },
+    "base-counts": {
+      "clock_ns": 36776,
+      "transfer_ns": [
+        137220240,
+        131761840,
+        132160430,
+        135747030,
+        121486930
+      ],
+      "benchmark_counts": {
+        "requested_bytes": 1048576,
+        "written_bytes": 1048576,
+        "read_bytes": 0,
+        "read_calls": 0,
+        "write_calls": 258,
+        "short_reads": 0,
+        "short_writes": 0,
+        "failed_pass": 0
+      },
+      "profile": [
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "saturated": false
+        }
+      ],
+      "phase_timings": "unavailable: counts-only experiment",
+      "image": "counts",
+      "warmup_verified": true,
+      "verified_samples": 5
+    },
+    "notify-off": {
+      "clock_ns": 36855,
+      "transfer_ns": [
+        120889740,
+        116313270,
+        118276080,
+        114512540,
+        111245410
+      ],
+      "benchmark_counts": {
+        "requested_bytes": 1048576,
+        "written_bytes": 1048576,
+        "read_bytes": 0,
+        "read_calls": 0,
+        "write_calls": 258,
+        "short_reads": 0,
+        "short_writes": 0,
+        "failed_pass": 0
+      },
+      "image": "notify",
+      "warmup_verified": true,
+      "verified_samples": 5
+    },
+    "notify-full": {
+      "clock_ns": 36076,
+      "transfer_ns": [
+        253393200,
+        225163980,
+        234099700,
+        231620680,
+        235771970
+      ],
+      "profile": [
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "durations_ns": {
+            "publication": [
+              13349030,
+              255370
+            ],
+            "bsp_queue": [
+              41980410,
+              2528080
+            ],
+            "worker_queue": [
+              54908070,
+              3065930
+            ],
+            "service": [
+              108388220,
+              4503630
+            ],
+            "resume": [
+              20976540,
+              275210
+            ],
+            "total": [
+              239602270,
+              5471870
+            ],
+            "transport": [
+              76365560,
+              4137400
+            ],
+            "transport_failed": [
+              0,
+              0
+            ]
+          },
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "durations_ns": {
+            "publication": [
+              13765120,
+              200890
+            ],
+            "bsp_queue": [
+              37454020,
+              2433150
+            ],
+            "worker_queue": [
+              45245900,
+              2503170
+            ],
+            "service": [
+              95689660,
+              2527860
+            ],
+            "resume": [
+              18526940,
+              179860
+            ],
+            "total": [
+              210681640,
+              3339500
+            ],
+            "transport": [
+              66363820,
+              2320210
+            ],
+            "transport_failed": [
+              0,
+              0
+            ]
+          },
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "durations_ns": {
+            "publication": [
+              15561710,
+              316630
+            ],
+            "bsp_queue": [
+              29590750,
+              1696970
+            ],
+            "worker_queue": [
+              52415190,
+              2742940
+            ],
+            "service": [
+              101478250,
+              2504650
+            ],
+            "resume": [
+              19554140,
+              281320
+            ],
+            "total": [
+              218600040,
+              3486530
+            ],
+            "transport": [
+              71922760,
+              2400250
+            ],
+            "transport_failed": [
+              0,
+              0
+            ]
+          },
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "durations_ns": {
+            "publication": [
+              15377190,
+              156300
+            ],
+            "bsp_queue": [
+              31542270,
+              2477630
+            ],
+            "worker_queue": [
+              54762110,
+              2507170
+            ],
+            "service": [
+              93806110,
+              2395550
+            ],
+            "resume": [
+              20251730,
+              194600
+            ],
+            "total": [
+              215739410,
+              3340520
+            ],
+            "transport": [
+              64919160,
+              2265910
+            ],
+            "transport_failed": [
+              0,
+              0
+            ]
+          },
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "durations_ns": {
+            "publication": [
+              14757370,
+              242460
+            ],
+            "bsp_queue": [
+              35721090,
+              2201600
+            ],
+            "worker_queue": [
+              49607420,
+              2278310
+            ],
+            "service": [
+              100097640,
+              3367110
+            ],
+            "resume": [
+              20550410,
+              255200
+            ],
+            "total": [
+              220733930,
+              5077850
+            ],
+            "transport": [
+              67379870,
+              3091910
+            ],
+            "transport_failed": [
+              0,
+              0
+            ]
+          },
+          "saturated": false
+        }
+      ],
+      "benchmark_counts": {
+        "requested_bytes": 1048576,
+        "written_bytes": 1048576,
+        "read_bytes": 0,
+        "read_calls": 0,
+        "write_calls": 258,
+        "short_reads": 0,
+        "short_writes": 0,
+        "failed_pass": 0
+      },
+      "image": "notify",
+      "warmup_verified": true,
+      "verified_samples": 5
+    },
+    "notify-counts": {
+      "clock_ns": 39793,
+      "transfer_ns": [
+        116010770,
+        116875530,
+        115540180,
+        118526690,
+        126444490
+      ],
+      "benchmark_counts": {
+        "requested_bytes": 1048576,
+        "written_bytes": 1048576,
+        "read_bytes": 0,
+        "read_calls": 0,
+        "write_calls": 258,
+        "short_reads": 0,
+        "short_writes": 0,
+        "failed_pass": 0
+      },
+      "profile": [
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "saturated": false
+        },
+        {
+          "direction": "write",
+          "requests": 258,
+          "failures": 0,
+          "short_transfers": 0,
+          "eof": 0,
+          "requested_bytes": 1048576,
+          "completed_bytes": 1048576,
+          "submissions": 258,
+          "completions": 258,
+          "transport_failures": 0,
+          "saturated": false
+        }
+      ],
+      "phase_timings": "unavailable: counts-only experiment",
+      "image": "notify-counts",
+      "warmup_verified": true,
+      "verified_samples": 5
+    }
+  }
+}
