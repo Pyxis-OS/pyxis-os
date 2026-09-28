@@ -107,9 +107,10 @@ Next is [I/O and IPC performance baselines](io-ipc-baselines.md): manually invok
 userspace measurements for files, copies, pipes, endpoints and HTTP snapshots.
 Separate fetch/setup from transfer and producer acceptance from consumer
 completion. Reuse existing allocation/TCP benchmarks; identify bottlenecks without
-bundling optimizations. Task 1 is complete: verified file reads and initial
-archive/RAM/host observations. Task 2 discusses output-file and sync policies
-before adding writes and copies.
+bundling optimizations. Tasks 1 and 2 are complete: verified file reads,
+writes/copies with exclusive outputs and separate sync timing, and initial
+archive/RAM/host observations. Task 3 discusses pipe/IPC completion protocols
+and payloads before implementation.
 
 The following remain alternatives after that bounded measurement milestone.
 

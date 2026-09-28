@@ -14,7 +14,7 @@ compared against useful baselines rather than an unexplained throughput figure.
 
 Small manually invoked userspace applications are the primary deliverable:
 `iobench` for byte I/O and a focused IPC benchmark with a companion process.
-The read-mode contract below is implemented; remaining CLI spelling, default
+The read, write and copy contracts below are implemented; remaining CLI spelling, default
 sizes and workload bounds are settled before their implementation tasks.
 Keep workloads bounded and build/package them normally;
 do not add a generic benchmark framework, boot automation or CI performance gates.
@@ -255,13 +255,156 @@ idle request/hiprio queues and empty completed/file/memory work queues. No
 debugger stops occurred during samples. QEMU, GDB and virtiofsd were stopped and
 the disposable RAM/host fixtures removed. Owner's-host results remain for task 5.
 
+## Implemented task 2: writes and copies
+
+The new modes use libpyxis file capabilities, while task 1's read mode continues
+to use libc descriptors. This exposes exclusive creation, resize, explicit
+offsets and sync on a retained handle without extending libc or the kernel ABI.
+The [tool reference](../../userspace/iobench/README.md#writes-and-copies) describes
+the full command and accounting contract.
+
+```text
+iobench write home://write-grow.bin
+iobench write home://write-prepared.bin --prepared --sync
+iobench write host://write-grow.bin --sync
+iobench write host://write-prepared.bin --prepared --sync
+iobench copy app://share/iobench.bin home://copy.bin
+iobench copy app://share/iobench.bin home://copy-prepared.bin --prepared --sync --buffer 4088
+iobench copy host://iobench.bin home://copy-host.bin --buffer 65536
+```
+
+Each output must be a new file; an existing destination fails without being
+opened or truncated. There is no replacement option. The output handle remains
+held across all passes and is used for preparation, writes, sync and verification;
+copy retains its source handle too. Copy verifies its source before creating
+output, then performs actual reads within the measured loop. Dedicated files
+must remain free of concurrent mutation. A rename does not change the held
+object, but the output path printed afterward need no longer name it.
+
+Both modes produce the same deterministic 1 MiB fixture. Requests default to
+4080 bytes, with the existing 1..65536 bound, one untimed warm-up and five
+measured passes (1..100 selectable). Write generates payload bytes outside
+timing. Copy drains every read completely before the next read; confirmed read
+and written byte counts are independent, and copy throughput counts the output
+payload once. All reporting and verification are outside the transfer interval.
+
+Default preparation resizes the newly created output to zero before every pass;
+timed writes include growth and any allocation. `--prepared` instead fully
+writes contrasting bytes beforehand and measures overwrite of that storage.
+Host copy-on-write or other backing behavior can still allocate. Creation,
+resizing and preparation are not included in the transfer result, and neither
+case is a cold-cache workload.
+
+`--sync` syncs the reset/prefilled file outside timing, then separately measures
+one file sync immediately after the payload transfer and before verification.
+Warm-up also syncs, untimed. Transfer and sync samples and summaries remain
+separate; a requested sync failure fails the sample. RAM sync is a no-op. Host
+sync covers the file's data/metadata under the backend contract, without parent
+directory synchronization or a promise of durable creation of its pathname.
+
+Every completed pass verifies all bytes and EOF through the held output handle.
+Positive short transfers advance by confirmed progress; failures stop the run,
+never replay uncertain mutations and suppress the failed pass's throughput and
+the successful-run summary. Handles close on all exit paths. The file stays
+behind for inspection and manual removal, including on failure; host creation
+errors can themselves leave a file. No automatic unlink or rollback occurs.
+
+Use `iobench read OUTPUT` to inspect a successful output, then explicitly remove
+only the selected disposable names. For writable host runs, use the same
+[virtio-fs setup](../virtio-fs.md#start-the-host-service) as task 1 but omit the
+daemon's `--readonly`. The CPU 2 session still carries a read-only host grant.
+No compiler-container rebuild is needed.
+
+### Write/copy observations
+
+Measured on 2026-09-28 with kernel/source `cd99791`, userland implementation
+`0659684`, ports `6ec1290` and lwIP `a1aadb9`. The subsequent userland documentation
+clarification changes no measured code. The ordinary image build passed. This
+used the same Fedora 44 nested-KVM host, exposed i9-12900K, Linux 6.19.10, Pyxis
+GCC 16.2.0 and QEMU 10.2.2 Q35 configuration described in task 1: four CPUs,
+256 MiB, `-cpu max`, workload CPU 1, normal presenter/shell/provider tasks,
+networking off and entropy on. The new dedicated export was
+`/tmp/pyxis-iobench-write-share`, with the socket at
+`/tmp/pyxis-iobench-write-socket/fs.sock`; virtiofsd 1.14.0 used task 1's options
+except for omitting `--readonly`. The host's `/tmp` is tmpfs: the host-backed
+fixture and outputs were themselves RAM-backed. These host results exercise the
+VirtIO/FUSE path to host memory, including its sync request/acknowledgment; no
+disk-backed write or durable-media sync was measured. No cache eviction or
+debugger stops occurred during measurements.
+
+The commands above and these additional cases each ran once, one workload at a
+time, with one untimed warm-up and five measured passes. Every measured pass
+wrote and verified 1048576 bytes with no failure; copies also read that many.
+The fixtures and output names were all disposable.
+
+```text
+iobench write host://write-large.bin --prepared --buffer 65536
+iobench copy app://share/iobench.bin host://copy-app.bin --prepared --sync
+iobench copy host://iobench.bin host://copy-host.bin
+iobench write home://write-overwrite.bin --prepared
+```
+
+The following rows preserve sample order and show elapsed milliseconds rounded
+to three decimal places. Throughput counts one MiB of confirmed output and
+excludes any separately requested sync.
+
+| Workload | Request bytes | Sync | Transfer samples, ms | Median (range), ms | MiB/s at median | Clock loop, us/read |
+| --- | ---: | --- | --- | --- | ---: | ---: |
+| Write RAM grow | 4080 | no | 52.311, 58.975, 55.654, 52.200, 58.565 | 55.654 (52.200–58.975) | 17.968 | 36.025 |
+| Write RAM prepared | 4080 | yes | 0.296, 0.272, 0.262, 0.292, 0.276 | 0.276 (0.262–0.296) | 3628.184 | 38.579 |
+| Write host grow | 4080 | yes | 134.973, 130.145, 126.127, 124.094, 120.883 | 126.127 (120.883–134.973) | 7.929 | 35.961 |
+| Write host prepared | 4080 | yes | 146.636, 143.855, 138.121, 123.431, 119.709 | 138.121 (119.709–146.636) | 7.240 | 39.414 |
+| Write host prepared | 65536 | no | 139.330, 124.139, 117.045, 196.232, 128.607 | 128.607 (117.045–196.232) | 7.776 | 36.985 |
+| Copy archive to RAM grow | 4080 | no | 56.429, 58.390, 58.232, 58.710, 54.664 | 58.232 (54.664–58.710) | 17.173 | 37.223 |
+| Copy archive to RAM prepared | 4088 | yes | 0.574, 0.591, 0.691, 0.598, 0.554 | 0.591 (0.554–0.691) | 1691.561 | 34.780 |
+| Copy host to RAM grow | 65536 | no | 185.792, 202.436, 202.424, 175.258, 194.501 | 194.501 (175.258–202.436) | 5.141 | 38.314 |
+| Copy archive to host prepared | 4080 | yes | 144.825, 136.767, 124.494, 134.924, 142.196 | 136.767 (124.494–144.825) | 7.312 | 37.482 |
+| Copy host to host grow | 4080 | no | 262.924, 259.927, 283.478, 268.439, 269.459 | 268.439 (259.927–283.478) | 3.725 | 36.913 |
+| Write RAM prepared | 4080 | no | 0.314, 0.309, 0.355, 0.309, 0.347 | 0.314 (0.309–0.355) | 3181.876 | 40.152 |
+
+Sync samples come from the same passes in the same order:
+
+| Workload | File sync samples, ms | Median (range), ms |
+| --- | --- | --- |
+| Write RAM prepared | 0.036, 0.036, 0.036, 0.036, 0.036 | 0.036 (0.036–0.036) |
+| Write host grow | 0.260, 0.272, 6.820, 8.768, 0.378 | 0.378 (0.260–8.768) |
+| Write host prepared | 0.324, 0.809, 0.269, 0.285, 0.237 | 0.285 (0.237–0.809) |
+| Copy archive to RAM prepared | 0.032, 0.033, 0.033, 0.046, 0.032 | 0.033 (0.032–0.046) |
+| Copy archive to host prepared | 3.360, 1.476, 2.324, 1.136, 3.919 | 2.324 (1.136–3.919) |
+
+All writes took 258 payload helper calls. The 65536-byte write requests produced
+257 positive short writes; 4080-byte requests produced none. Copies at 4080
+took 258 reads and 258 writes, with no short transfers. Copies at 4088 and 65536
+took 257 reads and 513 writes, with 256 short writes; only the 65536 case also
+had 256 short reads. This confirms the expected cost of draining the eight-byte
+suffix when native read and write limits differ.
+
+For matched 4080-byte RAM writes without sync, grow-from-zero measured a
+55.654 ms median versus 0.314 ms for prepared overwrite. This establishes a
+large difference between those workload boundaries here, without attributing
+time to allocation, copying or BSP scheduling individually. Host transfer and
+sync observations include guest service, transport, host scheduling and backing
+filesystem behavior. Their spread is not a tail-latency distribution, and no
+physical-disk result or owner's-host result is claimed. RAM sync intervals are
+roughly the clock-call overhead itself; they do not measure persistence cost.
+
+Manual checks rejected an existing host destination, a RAM source/output alias,
+a short copy source before output creation, duplicate flags and CPU 2's
+read-only host grant, all with status 1 and no successful-run summary. The
+existing read mode verified a retained RAM output with two samples after the
+alias rejection. Every host output matched the fixture checksum; failed source,
+option and read-only checks created no destination. After removing the RAM outputs, GDB showed zero
+host lookup/open references, idle virtqueues and empty completed/file/memory
+queues. All owned QEMU/GDB/virtiofsd processes stopped and temporary host files
+were removed. Owner's-host measurements and finer attribution remain deferred.
+
 ## Focused PR tasks
 
 - [x] **1. Measurement contract and file reads.** Settle command syntax, default
   sizes, bounded fixtures, timing and repetition rules. Add `iobench` read mode
   for archive, RAM and optional host-backed files, with explicit short-transfer
   accounting. Document reproducible manual commands and initial observations.
-- [ ] **2. Writes and copies.** Agree output-file and sync policies, then add
+- [x] **2. Writes and copies.** Agree output-file and sync policies, then add
   bounded write/copy workloads. Report acceptance and requested sync separately,
   verify resulting data, and distinguish allocation/growth from steady I/O.
 - [ ] **3. Pipes and IPC.** Settle the small companion/acknowledgment protocol
