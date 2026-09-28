@@ -118,10 +118,11 @@ and HOST publication now notifies the BSP. Profiling perturbation and remaining
 measurement coverage are recorded in [technical debt](../technical-debt.md).
 
 The selected next milestone is [verified HTTPS snapshots with Mbed TLS](https.md).
-Mbed TLS is agreed; the exact supported version, platform configuration and trust
-policy must be settled before implementation. Start by probing the current 4.x
-line and its crypto dependency against the SDK. SSH/libssh remains deferred and
-does not constrain that version choice. The following remain later alternatives.
+Task 1 selected Mbed TLS 4.1.1 / TF-PSA-Crypto 1.1.1 and settled the HTTPS
+contract, including public roots augmented by optional instance-specific custom
+roots. The SDK compile/link probe identifies native time and entropy hooks; no
+handshake has run. Task 2 packages the libraries and native platform support.
+SSH/libssh remains deferred. The following remain later alternatives.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
