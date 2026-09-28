@@ -106,13 +106,17 @@ An opt-in [host-backed development overlay](host-development-overlay.md)
 remains postponed: programs can already run from `host://`, so it is not needed
 for the persistent development loop or as a replacement for the boot archive.
 
-## Later milestone candidates
+## Next milestone and later candidates
 
 The [I/O and IPC baseline](../io-ipc-baselines.md) and documentation handoff are
 complete. Deferred receipt reclamation limits sustained IPC and larger HTTP
 snapshot reads; its consequence and revisit point remain in
 [technical debt](../technical-debt.md#endpoint-throughput-limited-by-deferred-receipt-reclamation).
-No next milestone is selected. The following remain alternatives for discussion.
+Next is [I/O reliability and bottleneck attribution](io-reliability-attribution.md):
+resolve receipt reclamation first and rerun the failing IPC/HTTP workloads, then
+attribute RAM growth and host FILE latency and publish comparable measurements.
+Instrumentation and implementation choices are settled per task; there is no
+blanket optimization assignment. The following remain later alternatives.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
