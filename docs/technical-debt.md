@@ -413,9 +413,9 @@ restart. Process kill and running-command Ctrl-C remain separate debt.
 
 ## Provider calls through synchronous file helpers
 
-The shared FILE and provider OPEN helpers preserve their synchronous signatures
-and currently submit calls without a deadline. A live provider that stops replying
-can therefore block ordinary file readers and shell input redirection indefinitely.
+The shared FILE helpers and ordinary path/libc opens currently submit calls
+without a deadline. Native provider OPEN exposes an explicit caller deadline.
+A live provider that stops replying can therefore block ordinary file readers and shell input redirection indefinitely.
 Provider exit or withdrawal releases affected waits, but neither is automatic.
 The immutable text service does no blocking work inside a request. The HTTP fetch
 library bounds one fetch to thirty seconds (or an earlier caller deadline), but
@@ -433,3 +433,13 @@ overhead. Some otherwise valid origins can therefore fail before the configured
 body limit. Close-delimited responses cannot prove whether an orderly EOF was
 intended to end the content. Revisit these restrictions when expanding HTTP client
 compatibility; do not silently accept ambiguous framing or publish partial bodies.
+
+## HTTP provider responsiveness
+
+One [HTTP provider](http-fetch.md) task performs synchronous fetches. While it
+fetches, existing snapshot reads and lifecycle processing wait behind it, and
+retired bodies can continue occupying the storage budget. Each fetch has a
+30-second budget or earlier caller deadline; ordinary file helpers still submit
+unlimited IPC waits, and queued work can compound that delay. Cancellation cannot
+interrupt a blocking network operation instantly. Revisit with asynchronous
+service work and wait sets; no worker-process or thread framework is included.

@@ -65,14 +65,17 @@ Kernel-only builds do not select or package init.
 
 ## Packaged scripts
 
-The userland repository supplies three shebang scripts using `app://shell.pxe`:
+The userland repository supplies four shebang scripts using `app://shell.pxe`:
 
 - `init/development.sh`, installed as `app://init`, opens the optional host export
   with `mount --optional --read-write host` and hands off with
-  `session app://session.pxe --configure-network`.
+  `session app://session.pxe --configure-network --start-services`.
 - `init/readonly.sh`, installed as `app://init-readonly`, opens the same optional
   export with `mount --optional --read-only host` and hands off with
-  `session app://session.pxe`, leaving network settings alone.
+  `session app://session.pxe --start-services`, leaving network settings alone.
+- `init/services.sh`, installed as `app://init-services`, publishes the HTTP
+  provider using the configured session environment, then hands off to the
+  interactive shell. It runs only when session selects `--start-services`.
 - `init/idle.sh`, installed as `app://init-idle`, sets its title and exits. No process
   remains; the scheduler uses its ordinary interruptible halt when idle. The
   space and its terminal remain available. This is not a machine shutdown or

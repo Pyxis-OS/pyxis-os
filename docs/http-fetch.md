@@ -1,11 +1,11 @@
 # Userspace HTTP fetching
 
-Task 8 of [userspace services](wip/userspace-services.md) supplies a bounded,
-plain HTTP fetch library and a native development consumer. Task 9 will connect
-it to provider OPEN and exported snapshot files. There is no `http://` filesystem
-binding yet, and init performs no automatic remote fetch.
+The `httpfs` userspace service connects the bounded fetch library to
+[provider OPEN and exported FILE snapshots](file-providers.md). Ordinary file
+consumers use `http://` through their delegated namespace. Publication performs
+no fetch; boot and local files remain usable without networking.
 
-## Development use
+## Use and startup
 
 Build with `make -j16 image`, then boot with networking explicitly enabled:
 
@@ -16,19 +16,30 @@ make run CPUS=4 VIRTIO_NET=1
 In the guest:
 
 ```text
-http-fetch http://example.com/ > home://example.html
-cksum home://example.html
+cat http://example.com/
+cksum http://10.0.2.2:18080/sample.bin
+cat http://10.0.2.2:18080/sample.bin | tee home://sample.bin | cksum
+cat < http://example.com/
 ```
 
 For known host files, run `python3 -m http.server 18080 --bind 127.0.0.1` in their
-host directory, then fetch `http://10.0.2.2:18080/name` from QEMU user networking.
-The consumer reports the fetch result, final HTTP/native/DNS status, body size,
-reserved capacity and optional Content-Type to stderr. It writes the complete
-body to stdout only after a successful fetch. Redirecting stdout can create or
-truncate a local file even when the fetch later fails; failed fetching writes no
-partial response into it. This program has one URI argument and no header,
-credential, redirect, upload or retry options. It is a task-8 development consumer;
-revisit its need when ordinary file opens work in task 9.
+host directory. QEMU user networking exposes that listener at `10.0.2.2`.
+
+Development and read-only init each create a namespace and request
+`session --start-services`. After reading configuration and applying any requested
+NIC settings, session launches `app://init-services` with the configured
+`DNS_SERVER` and ordinary session grants. That trusted script publishes
+`service start http app://httpfs.pxe`, then hands off to the interactive shell.
+The read-only profile restricts host-file writes, not HTTP reads. Idle spaces
+start no provider. Ordinary session invocation without the flag starts its shell
+directly, so handing off within an existing namespace does not republish services.
+
+`httpfs` takes no arguments. It selects the inherited DNS configuration at startup
+without DNS traffic. Publication uses the existing explicit grant handoff;
+providers do not receive the parent namespace or namespace-creation grant.
+Providers may be replaced with `service replace http app://httpfs.pxe` or removed
+with `namespace remove http`. Each instance has its own snapshots and storage
+account. The temporary task-8 `http-fetch` consumer has been removed.
 
 ## Library and authority
 
@@ -42,15 +53,17 @@ same SDK. There are no kernel changes or new libc operations.
 The caller supplies borrowed TCP, UDP, random and monotonic-clock capabilities
 and a numeric DNS server. Numeric IPv4 destinations skip DNS and do not need
 UDP/random authority. The library does no startup lookup or printing. The
-consumer obtains its grants from startup and selects the existing `DNS_SERVER`
+HTTP provider obtains its grants from startup and selects the existing `DNS_SERVER`
 configuration. These grants permit access under existing networking policy;
 this is not a destination sandbox.
 
 The result distinguishes HTTP policy/parser failures, allocation/quota failures,
 DNS answer failures and native network errors. The final status from a parsed
 HTTP response remains available on later failure, with zero meaning no final
-status. Native call status and DNS RCODE have separate fields. No errno mapping
-or OPEN failure payload is introduced in this task.
+status. Native call status and DNS RCODE have separate fields inside the library.
+The provider maps these into native operation results; the shared OPEN bridge
+preserves final HTTP status separately in `provider_result.provider_status`.
+A caller must check the bridge's transport return before using the provider result.
 
 ## Request and response policy
 
@@ -122,5 +135,54 @@ exists and the bytes are copied. The 64 MiB ceiling counts that temporary overla
 as well as previously returned bodies. Allocation can fail below the ceiling;
 there is no eviction. An empty body requires no body allocation. Every failed
 fetch discards staging, returns its reservation and aborts/closes network state.
-No body is exposed before success. Live snapshot/export counts and service
-scheduling belong to task 9.
+No body is exposed before success.
+
+## Snapshot lifetime and scheduling
+
+The provider has 63 snapshot slots, including empty snapshots, plus one OPEN
+service export. A slot is reserved through retirement acknowledgment. Returned
+FILE grants carry READ and CALL authority. Copies/attachments retain the same
+body; READ uses explicit offsets and SIZE remains stable. Every OPEN fetches
+independently, with no shared cache or eviction.
+
+A completed fetch moves its body ownership into the export. If reply transfer
+fails or the caller's deadline expires, the provisional export is withdrawn and
+its local client closed. The receipt is finished; the body remains until RETIRE.
+Normal final-client retirement also releases the body/reservation, acknowledges
+retirement, then permits slot reuse. Removing a binding stops discovery; retained
+files remain served until retirement. Once its OPEN export and all file exports
+retire, the old provider exits naturally. Provider failure invalidates its exports.
+There is no kill operation or supervisor.
+
+One provider task fetches synchronously. While fetching, reads of existing files,
+new opens and retirement processing wait. The supplied caller deadline bounds
+network phases; otherwise one fetch has a 30-second budget. Cancellation notices
+cannot interrupt a blocking fetch immediately. Expiry is checked by the fetch
+library and a canceled reply is finished without terminating the service. This
+is not a bound on the total wait for ordinary file helpers, which supply no IPC
+deadline. No worker processes, threads or wait-set facility are introduced.
+
+## Operation errors
+
+Native OPEN returns transport/validation failure separately from a valid provider
+operation error. Only success transfers a FILE grant. The provider maps errors to
+existing native statuses; libc uses its ordinary translation, without HTTP logic.
+
+| Condition | Native result | libc errno |
+| --- | --- | --- |
+| HTTP 404/410 or DNS NXDOMAIN | NOT_FOUND | ENOENT |
+| HTTP 401/403 or missing OPEN authority | DENIED | EACCES |
+| Writable open through the OPEN_READ-only binding | DENIED | EACCES |
+| Redirect, unsupported success status, unsupported HTTP feature | BAD_OPERATION | ENOTSUP |
+| Other rejected HTTP status, malformed/truncated response or other DNS answer failure | IO | EIO |
+| Invalid URI syntax | BAD_REQUEST | EINVAL |
+| Fetch/call deadline expiry | TIMED_OUT | ETIMEDOUT |
+| URI/header/body limit | FILE_TOO_LARGE | EFBIG |
+| Aggregate body storage limit | QUOTA | EDQUOT |
+| Snapshot slots or IPC admission full | QUEUE_FULL | EAGAIN |
+| Allocation failure | NO_MEMORY | ENOMEM |
+
+Other native network errors retain their existing translation. Final HTTP status,
+when available, survives provider failures as diagnostic metadata; a transport
+failure does not promise a provider reply. Failed opens return no partial file.
+There is no automatic retry, reconnection, rebinding or redirect following.

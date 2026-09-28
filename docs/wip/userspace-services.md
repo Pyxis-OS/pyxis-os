@@ -1,11 +1,12 @@
 # Userspace services and the first HTTP provider
 
 Status: agreed next milestone after [libc portability](../libc-portability.md).
-Tasks 1 through 8 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
+Tasks 1 through 9 are implemented; see [the endpoint contract](../endpoints.md). Endpoint
 creation and process-owned receiver teardown moved forward from task 4 so the
 first delivery slice has a real consumer. Task 7 connects discovery and FILE delivery through the [OPEN bridge](../file-providers.md).
 Task 8 adds the [bounded HTTP fetch library](../http-fetch.md).
-Task 9 (HTTP service integration) is next.
+Task 9 publishes [HTTP snapshots](../http-fetch.md) through ordinary file opens.
+Task 10 (milestone documentation handoff) is next.
 This document records the selected contracts for handoff between agents; the
 [broader provider ideas](userspace-scheme-providers.md) remain future directions where they exceed this scope. Work through the focused
 tasks in order, updating their checkboxes in the corresponding PRs. Discuss a
@@ -325,7 +326,7 @@ response staging and cleanup. Do not import its tests into this milestone.
 | Headers/trailers | 32 KiB aggregate across the response, with bounded field and informational-response counts. |
 | Body | At most 16 MiB per completed resource. |
 | Provider storage | At most 64 MiB of body-storage reservations, including staging, retained bodies and temporary growth overlap. |
-| Snapshots | At most 64 live snapshots, including empty ones. |
+| Snapshots | At most 63 live snapshots, including empty ones; the service uses the 64th export. |
 | Time | 30-second overall fetch budget, including DNS, connection, sending and complete response receipt; respect an earlier caller deadline. |
 
 Use named constants for the policy limits. Account actual reserved body capacity,
@@ -365,7 +366,7 @@ without placing HTTP status handling inside the kernel:
 | --- | --- |
 | Missing scheme binding; HTTP 404 or 410 | ENOENT |
 | Missing authority; HTTP 401 or 403 | EACCES |
-| Writable open on the read-only provider | EROFS |
+| Writable open through the OPEN_READ-only service grant | EACCES |
 | Redirect, unsupported success status such as 206, unsupported version/encoding/feature | ENOTSUP |
 | Other rejected final HTTP status or malformed/truncated response | EIO |
 | Fetch/call deadline expiry | ETIMEDOUT |
@@ -385,8 +386,9 @@ One provider task performs synchronous fetches initially. While fetching, other
 work, including reads of previously opened snapshots and lifecycle processing,
 can wait. The fetch deadline bounds each interruption; caller deadlines bound
 individual waits. Cancellation cannot make the provider interrupt a blocking
-network call instantly. Inspect cancellation between bounded phases and discard
-a result whose caller is gone.
+network call instantly. Check the caller deadline between bounded phases and
+discard results that cannot be replied to. Finish canceled receipts and continue
+serving.
 
 Do not add user threads, network multiplexing or a worker-process framework to
 hide this limit. Record it as debt with asynchronous service responsiveness as
@@ -435,7 +437,7 @@ task; avoid publishing interfaces with fake successful operations.
   the fetch library with a small native development consumer. Reuse the existing
   resolver; any API adjustment must preserve its current consumers and limits.
   No new general-purpose HTTP CLI or unrelated libc/network feature scope.
-- [ ] **9. HTTP service integration.** Connect fetch results to exported snapshot
+- [x] **9. HTTP service integration.** Connect fetch results to exported snapshot
   files, publish per-space service authority and integrate ordinary file opens.
   Validate the examples below, the status/errno mapping, limits and cleanup.
   Keep networking opt-in and local-only boot working. Remove any temporary task-8

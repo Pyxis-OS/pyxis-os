@@ -23,7 +23,7 @@ Relative paths still use the retained native working directory.
 The [OPEN ABI](../include/abi/provider.h) carries the complete URI as copied bytes
 and a nonzero READ/WRITE mask. The provider interprets the URI without library
 decoding, normalization or component walking. URI bytes are bounded to 4,080;
-longer requests fail with LIMIT instead of being truncated. Requested access
+longer requests fail with FILE_TOO_LARGE instead of being truncated. Requested access
 needs the corresponding service OPEN right. Read-only services reject writable
 opens before producing an exported file.
 
@@ -33,9 +33,18 @@ declares the FILE interface and byte representation, with an optional printable
 ASCII media type of at most 127 bytes. Libpyxis checks these declarations against
 the kernel-authenticated handle query. Metadata grants no authority and does not
 prove that bytes conform to their media type. Malformed replies release received
-grants and fail; unsuccessful OPEN returns no resource.
+grants and fail; unsuccessful OPEN returns no resource. Every reply includes
+the fixed OPEN prefix. Failure zeroes the interface, representation and media-type
+fields, but may retain a provider-specific diagnostic status. HTTP uses its final
+response code; text uses zero. The kernel does not interpret this field.
 
-`provider_open()` exposes the metadata to native callers. `path_resolve()` for
+`provider_open(provider, uri, rights, deadline_ns, &result, &file)` returns a
+transport/local-validation status. When that is CALL_OK, `result.status` is the
+provider's operation result and `result.provider_status` is its diagnostic, on
+both success and failure. `result.delivery` retains IPC delivery state even on
+transport or validation failure. Successful representation metadata is in
+`result.metadata`; only operation success supplies an owned file.
+`deadline_ns` is an absolute monotonic deadline; zero means unlimited. `path_resolve()` for
 files and `path_open_file()` use the same bridge; libc and shell redirects share
 the latter's open/create routing. Provider directory operations, cwd changes,
 removal and rename are unsupported.
@@ -55,8 +64,9 @@ reply extents and application status; unexpected attachments are closed.
 Transport and operation failures remain distinct until the helper maps them to
 its native status. A delivered mutation whose transport fails reports
 OUTCOME_UNKNOWN. No automatic retry, reconnection or rebinding occurs. Existing
-FILE helpers and the OPEN bridge wait without a caller deadline; bounded-wait
-APIs remain future work, and an unresponsive provider can block its client.
+FILE helpers and ordinary path/libc opens still wait without a caller deadline.
+Native OPEN callers can supply one explicitly; an unresponsive provider can
+otherwise block its client. A fetch budget does not bound queueing time.
 
 Copying, transferring or inheriting a FILE grant retains the same opened object.
 Each libc descriptor keeps its own offset. Namespace replacement affects future
@@ -104,5 +114,15 @@ lookup references close. The old process continues serving already-open files
 and exits after their exports retire too. There is no process-kill facility or
 supervisor; this is capability-driven shutdown, not forced cancellation.
 
-HTTP fetching, format negotiation, shared-memory transfers and writable providers
-remain separate [userspace-services tasks](wip/userspace-services.md).
+## HTTP snapshots
+
+The [HTTP service](http-fetch.md) publishes OPEN_READ as `http` in each configured
+interactive namespace. It fetches a complete response before returning a read-only
+FILE snapshot, preserving the optional Content-Type and final HTTP status.
+Existing `cat`, `cksum`, `tee`, libc and input redirection share this bridge.
+Each open fetches independently; copies retain the same immutable body.
+Retirement releases its allocation and shared storage reservation. The provider
+supports 63 live snapshots alongside its OPEN export, including empty snapshots.
+
+Format negotiation, shared-memory transfers and writable providers remain future
+[userspace-services work](wip/userspace-services.md).

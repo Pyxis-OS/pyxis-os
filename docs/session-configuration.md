@@ -3,14 +3,17 @@
 `app://session.pxe` is a native userspace launcher that evaluates
 `app://config/session.lua` and optional `app://config/network.lua`, applies
 terminal tab spacing, and hands off to `app://shell.pxe`. The optional
-`--configure-network` argument also applies shared NIC settings. The development
+`--configure-network` argument also applies shared NIC settings.
+`--start-services` selects the trusted `app://init-services` script after
+configuration; it publishes HTTP with the configured resolver, then starts the
+interactive shell. Without it, session starts the shell directly. The development
 init script selects it:
 
 ```text
 #!app://shell.pxe
 mount --optional --read-write host
 namespace create
-session app://session.pxe --configure-network
+session app://session.pxe --configure-network --start-services
 ```
 
 `make run` uses this path without overrides. `INIT=/path/to/init.sh` can still
