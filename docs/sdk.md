@@ -62,20 +62,25 @@ After `make sdk`, build individual applications with:
 ```sh
 make -C userspace SDK=../build/sdk BUILD=../build/userspace shell
 make -C userspace SDK=../build/sdk BUILD=../build/userspace hello client server
-make -C /path/to/pyxis-userland SDK=/path/to/sdk LUA_PREFIX=/path/to/ports-dev/lua all
+make -C /path/to/pyxis-userland SDK=/path/to/sdk \
+  LUA_PREFIX=/path/to/ports-dev/lua \
+  PICOHTTPPARSER_PREFIX=/path/to/ports-dev/picohttpparser all
 ```
 
 The `session` application also consumes Lua headers and `liblua.a` through
-`LUA_PREFIX`, exported by the ports build. Other application targets can still
-build with the SDK alone.
+`LUA_PREFIX`. The `http-fetch` application consumes picohttpparser headers and
+`libpicohttpparser.a` through `PICOHTTPPARSER_PREFIX`. Both development prefixes
+are exported by the ports build. Other application targets can still build with
+the SDK alone.
 
 The userspace Makefile now builds applications only. It consumes a complete SDK
 and does not build the converter or runtime. `SDK` defaults to `build/sdk`
 within the userland checkout; application `BUILD` defaults to `build/apps`. The integrated
 Pyxis build passes both paths explicitly to keep its outputs in
 `build/userspace`. The SDK can be copied to another path.
-Application sources, their local helpers, the Makefile, compiler and SDK are
-sufficient; kernel and runtime source directories are not needed.
+Application sources, their local helpers, the Makefile, compiler, SDK and any
+required ports development files are sufficient; kernel and runtime source
+directories are not needed.
 
 `share/pyxis.mk` exposes `PYXIS_CPPFLAGS`, `PYXIS_CFLAGS`, `PYXIS_LDFLAGS`,
 `PYXIS_START`, `PYXIS_LIBRARIES`, `PYXIS_LDLIBS` and `PYXIS_ELF2PXE`. It supplies
