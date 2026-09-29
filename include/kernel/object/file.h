@@ -4,6 +4,7 @@
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
 #include <kernel/service/request.h>
+#include <kernel/wait.h>
 
 struct initrd_file;
 struct hostfs_node;
@@ -12,14 +13,6 @@ enum file_backing {
   FILE_INITRD,
   FILE_RAM,
   FILE_HOST,
-};
-
-struct task_wait;
-
-/* Embedded in task metadata, not a private stack: other CPUs detach and wake it. */
-struct file_wait {
-  struct file_wait *next;
-  struct task_wait *wait;
 };
 
 /* The short spinlock protects busy and its FIFO. An operation owns busy across
@@ -33,7 +26,7 @@ struct file_object {
   size_t size, capacity;
   atomic_bool locked;
   bool busy;
-  struct file_wait *first_waiter, *last_waiter;
+  struct task_wait_link *first_waiter, *last_waiter;
 };
 
 /* BSP, IF=0. view must be an immutable view from initrd_lookup(). Copies the

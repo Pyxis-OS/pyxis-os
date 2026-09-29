@@ -4,14 +4,7 @@
 #include <abi/process.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
-
-struct task_wait;
-
-/* Embedded in task metadata; other CPUs must not follow private-stack links. */
-struct process_wait {
-  struct process_wait *next;
-  struct task_wait *wait;
-};
+#include <kernel/wait.h>
 
 /* Retains only a result and waiters, never the process or its address space. */
 struct process_control {
@@ -19,7 +12,7 @@ struct process_control {
   atomic_bool locked;
   bool complete;
   struct process_result result;
-  struct process_wait *waiters;
+  struct task_wait_link *waiters;
 };
 
 /* BSP, IF=0. Returns one owned reference or NULL. An unsubmitted process may

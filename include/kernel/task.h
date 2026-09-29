@@ -2,18 +2,10 @@
 #define KERNEL_TASK_H
 
 #include <kernel/mm/types.h>
-#include <abi/syscall.h>
-#include <abi/handle.h>
 
-struct profile_snapshot;
-struct profile_file_snapshot;
-struct profile_host_snapshot;
+struct task_profile;
 struct task_wait;
-struct file_wait;
-struct process_wait;
-struct console_wait;
-struct pipe_wait;
-enum bsp_service;
+struct task_wait_link;
 struct bsp_request;
 
 /* Current user task or BSP kernel task, in task context with IF=0. Prepare its
@@ -44,35 +36,23 @@ bool task_deadline_expired(uint64_t deadline);
  * Recheck resource state under the lock; a wake is not a grant of ownership. */
 void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline);
 
-/* Current user task, IF=0. The file queue uses this task-owned record until it
- * detaches and wakes the waiter. One wait per task; no private-stack pointers. */
-struct file_wait *task_prepare_file_wait(void);
+/* Current user task, IF=0. One resource-queue link, separate from BSP request
+ * storage. Detach under the resource lock before wake or reuse; timed callers
+ * must remove any remaining link after resumption. See kernel/wait.h. */
+struct task_wait_link *task_wait_link_prepare(void);
 
-/* Same lifetime as the file wait record, for completion observers and readers. */
-struct process_wait *task_prepare_process_wait(void);
-struct console_wait *task_prepare_console_wait(void);
-struct pipe_wait *task_prepare_pipe_wait(void);
-
-/* Temporary storage adapters for the BSP request mechanism. Current user task,
- * IF=0. Acquire reserves one record across all service types until release after
- * result consumption. Typed records remain embedded until area provisioning. */
-struct bsp_request *task_bsp_request_acquire(enum bsp_service service);
+/* Current user task, IF=0. Reserve its preallocated area across all service
+ * types until release after result consumption. No submission-time allocation. */
+struct bsp_request *task_bsp_request_acquire(void);
 struct bsp_request *task_bsp_request_current(void);
 void task_bsp_request_release(struct bsp_request *request);
 /* Register a prepared deferred request, then sleep using its saved wait record.
  * Only the scheduler publishes it after leaving the private root/task stack. */
 void task_bsp_request_defer(struct bsp_request *request);
 
-/* Caller-only profile storage adapter; never lend this pointer to a service. */
-struct profile_snapshot *task_memory_profile(void);
-struct profile_file_snapshot *task_file_profile(void);
-struct profile_host_snapshot *task_host_profile(void);
-
-/* Current user task, IF=0. Caller validates reply storage before state changes.
- * No allocation or remote inspection; one task per process at present. */
-enum call_status task_profile_control(uint64_t operation, struct profile_snapshot *reply);
-enum call_status task_profile_file_control(uint64_t operation, struct profile_file_snapshot *reply);
-enum call_status task_profile_host_control(uint64_t operation, struct profile_host_snapshot *reply);
+/* Current user task, IF=0. Persistent caller-only storage; never lend it to a
+ * service. Kernel workers have no profiling block. */
+struct task_profile *task_profile_current(void);
 
 /* BSP only, after boot_start_cpus(), VM and heap initialization. */
 void task_init(void);

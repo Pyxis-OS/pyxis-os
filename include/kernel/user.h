@@ -23,8 +23,9 @@ enum mm_result user_task_create(struct process *process, uintptr_t entry,
 enum mm_result user_task_create_on(size_t cpu_index, struct process *process,
                                    uintptr_t entry, uintptr_t stack_top);
 
-/* BSP only. Preparation owns its stack but borrows the inactive process until
- * publication. Discard prepared tasks before destroying their processes. All
+/* BSP only. Preparation owns its stack and request/profile storage but borrows
+ * the inactive process until publication. Failure leaves process ownership with
+ * the caller. Discard prepared tasks before destroying their processes. All
  * tasks in a group must be ready before publication; afterward neither tasks
  * nor processes may be inspected by the caller. */
 enum mm_result user_task_prepare_on(size_t cpu_index, struct process *process,

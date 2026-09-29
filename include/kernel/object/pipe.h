@@ -6,7 +6,6 @@
 #include <kernel/object/object.h>
 #include <kernel/service/request.h>
 
-struct task_wait;
 struct pipe_pair;
 struct capability_table;
 
@@ -19,12 +18,6 @@ struct pipe_create_request {
 
 /* BSP, IF=0. Install both endpoints or unwind both; caller owns completion. */
 void pipe_create_execute(struct pipe_create_request *request);
-
-/* Published queue links live in task metadata, never a remote kernel stack. */
-struct pipe_wait {
-  struct pipe_wait *next;
-  struct task_wait *wait;
-};
 
 struct pipe_end {
   struct kernel_object object;

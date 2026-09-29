@@ -50,8 +50,9 @@ void process_control_complete(struct process_control *control, struct process_re
   control->complete = true;
 
   while (control->waiters) {
-    struct process_wait *waiter = control->waiters;
+    struct task_wait_link *waiter = control->waiters;
     control->waiters = waiter->next;
+    waiter->next = NULL;
     /* Never access a detached record after wake: its task can immediately run. */
     task_wait_wake(waiter->wait);
   }
@@ -76,7 +77,7 @@ struct syscall_result process_control_call(struct process_control *control,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
-  struct process_wait *waiter = task_prepare_process_wait();
+  struct task_wait_link *waiter = task_wait_link_prepare();
   lock_control(control);
   if (!control->complete) {
     waiter->next = control->waiters;
