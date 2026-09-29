@@ -1,8 +1,8 @@
 # Task state and BSP service requests
 
 Status: in progress, with the BSP executor serving pipe creation, private memory,
-display, capability growth, namespace/endpoint creation and RAMFS/FILE backing
-operations after the completed
+display, capability growth, namespace/endpoint creation, RAMFS/FILE backing
+operations and launch preparation after the completed
 [read-only filesystem milestone](../filesystem-readonly.md). This document selects
 the boundaries and scheduling policy; individual tasks still require their own
 implementation PRs. It does not authorize concurrent allocation, task migration
@@ -197,16 +197,18 @@ an operation. Remove obsolete paths as their consumers move.
 - [x] **5. Migrate directory and file backing services.** Move entry/name allocation,
   discard and buffer replacement to their owning subsystems. Preserve logical
   file-operation ownership, guaranteed cleanup submission and profiling results.
-- [ ] **6. Migrate launch preparation and HOST forwarding.** Preserve capture/group
-  lifetimes, batch publication/rollback, HOST worker ownership, staged data and
-  final completion. Keep launch-local operations direct on BSP, with no executor
-  self-waits. These migrations may use separate focused dependency-free PRs.
-- [ ] **7. Consolidate storage and finish the task boundary.** Provision the reusable
+- [x] **6. Migrate launch preparation.** Preserve capture/group lifetimes and
+  batch publication/rollback. Keep launch-local operations direct on BSP, with
+  no executor self-waits.
+- [ ] **7. Migrate HOST forwarding.** Preserve HOST worker ownership, staged data,
+  profiling and final completion. Forward from the common executor without
+  blocking its progress on another caller's request.
+- [ ] **8. Consolidate storage and finish the task boundary.** Provision the reusable
   user-request area, separate persistent profiling, and remove superseded payloads,
   queue links, service sweeps and task API dependencies. Review wait-link sharing
   without changing wait semantics. Confirm kernel workers pay no user-request
   storage cost, and task creation/retirement handles all ownership exactly once.
-- [ ] **8. Validate and close.** Exercise migrated operations together; compare fresh
+- [ ] **9. Validate and close.** Exercise migrated operations together; compare fresh
   sizes and existing benchmarks with the baseline. Update implemented SMP/memory
   and profiling contracts and technical debt. Move this document into `docs/`,
   replacing completed worklists with implemented behavior and retained limits.
@@ -236,7 +238,7 @@ discard assert that the embedded request is FREE.
 
 Task 1 used `task_bsp_request_storage` to provide the typed record embedded in
 task metadata; task 3 replaces that adapter with a reservation across service
-types. Both user and kernel tasks still include the records until task 7. Task 1
+types. Both user and kernel tasks still include the records until task 8. Task 1
 used scheduler-driven detached batches and an explicit pending check; task 2
 removed both dispatch adapters in favor of the executor described below. Other
 subsystem queues and resource waits are unchanged. No public ABI or dependency
@@ -352,7 +354,7 @@ state; old subsystem queues keep their existing visibility. At task 2, pipe
 creation was the only migrated operation. `struct task` remains 7,104 bytes and the pipe
 record remains 56 bytes. The executor adds one task allocation and a 16 KiB stack,
 plus their existing allocator/VM bookkeeping. Kernel-worker request storage
-remains an accepted intermediate cost until task 7.
+remains an accepted intermediate cost until task 8.
 
 Ordinary kernel/image builds passed using verified unchanged SDK, userspace and
 ports bundles; only the pre-existing HOST-profile shadow warning was emitted.
@@ -414,7 +416,7 @@ Existing authority, user-buffer validation, allocation rollback, display backing
 references and process-exit cleanup remain in their owning subsystems.
 
 Transient memory profiling samples travel in the typed request. Persistent
-aggregates and controls remain task-local until task 7; only the resumed caller
+aggregates and controls remain task-local until task 8; only the resumed caller
 accesses them. Profiling still reads five clocks per admitted request and none
 when disabled. Publication is measured just before taking the request lock,
 after the scheduler has established parking. Queue time therefore includes FIFO
@@ -424,7 +426,7 @@ operation itself. Saturation and public profile results are unchanged.
 GDB sizes with the same compiler/flags as the baseline are 7,184 bytes for
 `struct task` (7,104 after task 2), 104 for the memory record and 112 for display.
 The common header remains 24 bytes and persistent profiling remains 816 bytes.
-The temporary 80-byte task increase also affects kernel workers until task 7.
+The temporary 80-byte task increase also affects kernel workers until task 8.
 No public ABI, dependency pins or compiler-container inputs changed.
 
 ### Validation and allocation observations
@@ -509,7 +511,7 @@ With the same compiler and flags as prior measurements, `struct task` grows from
 24-byte common header, are 40 bytes for growth, 48 for namespace creation, 56 for
 endpoint creation and 104 for export. These replace the former raw fields but
 add 112 bytes overall. Records remain embedded in user and kernel tasks until
-task 7; this is another intermediate storage cost, not a size reduction. The
+task 8; this is another intermediate storage cost, not a size reduction. The
 capability table remains 16 bytes and endpoint backing remains 136,784 bytes.
 
 Ordinary kernel/image builds passed with verified unchanged SDK/userspace/ports
@@ -572,7 +574,7 @@ Both services use ordinary FIFO publication and prompt executor notification;
 neither mutates private mappings. Old task payloads, service APIs, directory/file
 queues, scheduler sweeps and pending checks are removed. Local allocation/disposal
 and replacement helpers are private to their subsystems. Persistent FILE profile
-aggregates and controls remain task-local until task 7. Transient samples travel
+aggregates and controls remain task-local until task 8. Transient samples travel
 in the request: preparation starts before wait preparation, publication is stamped
 immediately before the request lock, service brackets the unchanged local helper,
 and caller resumption precedes aggregation. Missing allocation/copy/release phases
@@ -582,7 +584,7 @@ GDB sizes from ordinary builds with the existing compiler/flags are 7,296 bytes
 for `struct task` on baseline main `74a0bf3`, and 7,328 after task 5. The RAMFS
 record is 56 bytes and the FILE record 144, including their 24-byte headers.
 `file_wait` remains 16 bytes and persistent FILE profiling 176. The temporary
-32-byte task increase also affects kernel workers until task 7. No public ABI,
+32-byte task increase also affects kernel workers until task 8. No public ABI,
 dependency pins or compiler-container inputs changed.
 
 ### Validation and matched RAM controls
@@ -645,7 +647,72 @@ and 6.816 ms profiled, with unchanged replacement counts/bytes. Prepared profile
 copy had median 0.472 ms and zero replacement events. Each included one warmup
 and five verified samples. The missing FILE publication notification is resolved;
 individual non-preemptible services and shared FIFO scheduling remain the agreed
-limits. The next unchecked task is launch preparation and HOST forwarding.
+limits. The remaining migrations are launch preparation (task 6) and HOST forwarding
+(task 7).
+
+## Task 6 launch preparation
+
+Launch capture allocation/disposal, single launch and batch group operations now
+use a typed `launcher_request` on the ordinary common FIFO. The launcher owns
+submission, service and result consumption. The caller captures its parent
+process and assigned CPU for child preparation, lending the parent table and image
+operation. The service clears capture/group/parent pointers before completion.
+Capture and group allocation results transfer to the caller before request
+release. Their independent heap allocations persist across calls; transient
+request reuse does not overwrite captured startup data or prepared children.
+
+START and GROUP_PREPARE consume capture and any owned HOST image bytes on success
+or failure. Group preparation retains unpublished children and observers until a
+later publish/discard request. Publication copies the ordered handles, preserves
+zero unused slots, publishes every child and consumes the group. Rollback still
+removes provisional observers and destroys prepared children without publishing
+any. Submission/discard needs no allocation. Caller-side user capture, authority,
+file operation waits, reply validation and CPU assignment remain unchanged.
+
+BSP-local loading, capability installation and task preparation remain direct
+calls. HOST image capture still completes through the existing HOST worker before
+launch submission; the executor never submits to itself or blocks on transport.
+The old launch task fields, APIs, queue, scheduler sweep and preemption check are
+removed. HOST forwarding is the remaining subsystem queue migration (task 7).
+Launch-local capture/helper declarations now live in a private header shared by
+the launcher and spawn implementation.
+
+Ordinary GCC 16.2.0 build/debug sizes are 7,328 bytes for `struct task` on baseline
+main `b64151f` and 7,376 after task 6. The typed launch record is 160 bytes;
+`launch_capture` remains 65,736 bytes and `launch_group` 208. The temporary 48-byte
+task increase also affects kernel workers until storage consolidation in task 8.
+No public ABI, submodule pin or compiler-container input changed.
+
+Kernel and image builds passed with verified unchanged SDK/userspace/ports
+bundles, as did `git diff --check` and independent read-only code review. Only the
+existing HOST-profile shadow warning remained. Interactive validation used one
+and four CPUs under nested KVM, QEMU 10.2.2 with the documented AHCI fix, CPU `max`,
+256 MiB, matching OVMF, entropy and a private virtiofsd 1.14.0 export; network and
+block devices were absent. All QEMU/GDB/daemon processes were stopped afterward.
+
+On both CPU counts, boot/session and single launches, repeated-image pipelines,
+invalid-image batch rollback, and RAM/HOST executable pipelines passed. Both RAM
+and HOST copies of `cat.pxe` piped the 32 KiB fixture to `cksum`, producing
+`1349564844 32768`. A batch with a valid first child writing a marker and an invalid
+second image failed at stage 2, leaving the marker empty; a later valid pipeline
+completed normally. Four-CPU early-reader closure produced the expected upstream
+closed-end errors and returned to the prompt.
+
+GDB observed launch service in the BSP kernel worker with kernel root active,
+IF=0, a parked caller and matching captured parent/CPU. INITRD image operation
+ownership was held without its spinlock. HOST launch used an owned 49,087-byte
+image capture. Completed requests had detached wait/queue links and cleared
+capture/group/parent loans; allocation-result ownership had been removed before
+release. During four-CPU rollback, one child was prepared, its provisional
+observer slot was cleared, its task was discarded, and the group count became
+zero before disposal. On one CPU, a three-stage publication returned its three
+ordered handles with all five unused slots zero.
+
+Early completion and allocation-exhaustion unwinding were reviewed by code;
+this task did not inject failures or force an early-completion interleaving.
+No new tests, self-tests or boot/output automation were added. Individual launch
+operations remain non-preemptible; no launch latency or owner-host performance
+claim is made from these interactive checks.
 
 ## Validation and exclusions
 
