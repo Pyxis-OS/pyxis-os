@@ -26,14 +26,18 @@ free of spaces, as required by the upstream builds. The script downloads and
 builds tools only; it does not install host packages or run tests.
 
 `ci/Containerfile` runs the same build script. The owner builds and publishes
-`git.internal/chronium/pyxis-builder:pyxis-gcc16.2-binutils2.47` before merging
+`git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47` before merging
 consumers of that image. Normal workflows consume the image without rebuilding
-GCC or binutils. Ordinary SDK changes do not require a container rebuild:
+GCC or binutils. The public image is pulled anonymously by CI; the Forgejo
+instance must allow anonymous registry access. Publishing still requires login
+with an account allowed to write packages in `PyxisOS`. Container paths use the
+lowercase namespace `pyxisos`. Ordinary SDK changes do not require a container
+rebuild:
 
 ```sh
 podman build -f ci/Containerfile \
-  -t git.internal/chronium/pyxis-builder:pyxis-gcc16.2-binutils2.47 .
-podman push git.internal/chronium/pyxis-builder:pyxis-gcc16.2-binutils2.47
+  -t git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47 .
+podman push git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
 ```
 
 ## Target contract

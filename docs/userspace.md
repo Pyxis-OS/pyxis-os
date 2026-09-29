@@ -4,12 +4,12 @@
 
 `make userspace` first builds the [SDK](sdk.md), then the freestanding
 applications against it. Each application has a directory and an explicit target
-in the [userspace Makefile](https://git.internal/chronium/pyxis-userland/src/branch/main/Makefile); after `make sdk`, for example,
+in the [userspace Makefile](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/Makefile); after `make sdk`, for example,
 `make -C userspace SDK=../build/sdk BUILD=../build/userspace hello` builds just that program. Pass `CROSS_COMPILE` as for
 kernel builds and `HOSTCC` for the converter. Outputs live under `build/`.
 
 Runtime libraries and startup are built separately by
-[userspace/runtime.mk](https://git.internal/chronium/pyxis-userland/src/branch/main/runtime.mk) into `build/runtime`, then exported
+[userspace/runtime.mk](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/runtime.mk) into `build/runtime`, then exported
 to `build/sdk/sysroot/usr/lib`. Applications link the SDK's startup object,
 libc, libpyxis and libterm archives, plus compiler-provided libgcc. Only referenced
 archive objects are pulled in. No host runtime is linked. Libpyxis owns native
@@ -24,7 +24,7 @@ build/sdk/bin/elf2pxe --format p1f -o hello.pxe hello.elf
 
 The input must be a fixed-address, little-endian x86_64 ELF executable with no
 interpreter, dynamic linking, runtime relocations or TLS. The
-[linker script](https://git.internal/chronium/pyxis-userland/src/branch/main/linker.ld) separates segment permissions on page
+[linker script](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/linker.ld) separates segment permissions on page
 boundaries; writable executable mappings are rejected. The
 [P1F header](../include/pxe/p1f.h) defines the image layout and constraints.
 Keep the ELF for debugging; the converted image does not replace its symbols.
@@ -68,7 +68,7 @@ The libc entry validates and initializes the native startup snapshot without
 heap allocation, prepares the allocator and standard streams, then calls
 `main(int argc, char **argv)`,
 then exits with main's return value. Use
-[startup_resource() and the other native accessors](https://git.internal/chronium/pyxis-userland/src/branch/main/include/startup.h)
+[startup_resource() and the other native accessors](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/startup.h)
 to find supplied handles and environment values. Lookup borrows an existing
 handle and never duplicates it. Missing resource names return HANDLE_INVALID;
 missing environment values return NULL, while an empty value is an empty string.
@@ -85,7 +85,7 @@ input on Caelum is discarded. The single-CPU fallback accepts input on Caelum,
 where kernel logs can disrupt the editor's display. See [keyboard input](keyboard.md)
 and [libterm](terminal.md) for input and editing behavior.
 
-The [console wrapper](https://git.internal/chronium/pyxis-userland/src/branch/main/include/console.h) reports bytes written and
+The [console wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/console.h) reports bytes written and
 its helpers finish partial writes. The kernel renders bounded chunks under the
 output lock. Terminal input is blocking, with no EOF convention.
 
@@ -95,7 +95,7 @@ checked against the handle's object type, so the same bit may mean console
 WRITE or file READ. Kernel and userspace are rebuilt together against the
 shared ABI headers. Older layouts are not supported.
 
-The [file wrappers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/file.h) query size, read/write at explicit
+The [file wrappers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/file.h) query size, read/write at explicit
 offsets, resize and synchronize files. FILE payloads contain copied bytes rather
 than caller buffer addresses. Each wrapper performs one bounded transfer: reads
 return at most 4,088 bytes and writes submit at most 4,080 bytes, leaving room for
@@ -111,7 +111,7 @@ use bounded stack storage and require valid caller buffers; copying adds no heap
 or memory-service dependency. The [file-provider bridge](file-providers.md) routes exported files through
 endpoint invocation and shares OPEN resolution with libc and shell redirection.
 
-The [handle wrapper](https://git.internal/chronium/pyxis-userland/src/branch/main/include/handle.h) releases the calling process's
+The [handle wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/handle.h) releases the calling process's
 reference. A closed handle is immediately stale; other owners, including the
 space that owns the console, retain their references. Process exit releases
 handles left open. The read-only startup record is not updated after close.
@@ -178,7 +178,7 @@ and terminal contents remain visible. No shell restart is performed.
 
 ## Foundational libc
 
-Headers under [userspace/libc/include](https://git.internal/chronium/pyxis-userland/src/branch/main/libc/include) define the
+Headers under [userspace/libc/include](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/libc/include) define the
 implemented subset: allocation, byte memory operations, string length/comparison/
 search/copy/duplication, numeric conversion/formatting, environment lookup and
 [unbuffered file/terminal stdio](stdio.md).

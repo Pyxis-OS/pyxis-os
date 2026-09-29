@@ -1,6 +1,6 @@
 # Terminal input and editing
 
-[`libterm`](https://git.internal/chronium/pyxis-userland/src/branch/main/include/term.h) builds terminal behavior on libpyxis's
+[`libterm`](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/term.h) builds terminal behavior on libpyxis's
 console calls. A `struct terminal` borrows explicit input and output handles;
 it neither allocates nor closes them. The named startup `input`/`output` console
 grants are separate from libc's dedicated standard-stream handles. Redirecting

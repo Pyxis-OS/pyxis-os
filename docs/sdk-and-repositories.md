@@ -1,8 +1,8 @@
 # SDK and repository integration
 
-Pyxis pins [pyxis-userland](https://git.internal/chronium/pyxis-userland) as the
-`userspace` Git submodule and [pyxis-ports](https://git.internal/chronium/pyxis-ports)
-as `ports`, and [pyxis-lwip](https://git.internal/chronium/pyxis-lwip) as
+Pyxis pins [pyxis-userland](https://git.internal/PyxisOS/pyxis-userland) as the
+`userspace` Git submodule and [pyxis-ports](https://git.internal/PyxisOS/pyxis-ports)
+as `ports`, and [pyxis-lwip](https://git.internal/PyxisOS/pyxis-lwip) as
 `third_party/lwip`. The committed gitlinks select exact revisions;
 normal builds never follow a remote branch or update the pin automatically.
 
@@ -23,10 +23,23 @@ starting work. Local uncommitted source edits are usable for development;
 the exported SDK manifest records dirty userland inputs.
 
 The relative URL in `.gitmodules` resolves beside the Pyxis repository, using
-the parent remote's host and transport. CI checks out submodules using the
-`PYXIS_SOURCE_READ_TOKEN` secret, which must grant repository read access to
-Pyxis, pyxis-userland, pyxis-ports and pyxis-lwip. The existing workflow builds the integrated
-kernel and ISO. It does not build a compiler or follow any submodule's latest main.
+the parent remote's host and transport. All four repositories are public under
+`PyxisOS`. CI uses the checkout action's automatic token for its own repository
+and reads the public submodules without a custom source-read secret. Anonymous
+Git reads must be allowed by the Forgejo instance. The workflow builds the
+integrated kernel and ISO; it does not build a compiler or follow any
+submodule's latest main.
+
+To update a checkout that still points to the former personal namespace:
+
+```sh
+git remote set-url origin ssh://git@git.internal:2222/PyxisOS/pyxis-os.git
+git submodule sync --recursive
+```
+
+Linked worktrees share their repository's remote configuration. Update the origin
+of standalone dependency clones separately; changing a remote does not change
+the checked-out revision or dependency pins.
 
 ## Ownership and build order
 
@@ -61,7 +74,7 @@ their own adapters and upstream/license records; allocator logic was unchanged
 by extraction.
 
 The userland import preserves relevant source/vendor history, authors, dates
-and license notices from Pyxis. Its [import record](https://git.internal/chronium/pyxis-userland/src/branch/main/IMPORT.md)
+and license notices from Pyxis. Its [import record](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/IMPORT.md)
 identifies the source revision and filtering operation. The original full
 history remains in Pyxis.
 

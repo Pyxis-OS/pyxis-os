@@ -150,7 +150,7 @@ are never retained; source storage may be released after the call.
 The shared assembly entry calls the native C startup routine, which checks the
 record's bounds and initializes accessors before invoking `main(argc, argv)`.
 Its return value goes to exit. Programs use
-[the startup helpers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/startup.h) instead of decoding the
+[the startup helpers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/startup.h) instead of decoding the
 record. The boot launcher supplies three dedicated console stream handles in
 addition to the shell's named terminal input/output, memory,
 launcher, [display](graphics.md), [clock](timekeeping.md) and
@@ -404,7 +404,7 @@ reply length for CALL; the diagnostic log call preserves its previous value.
 No endpoint queues or general object-operation table are involved.
 
 Hello closes its startup grants after printing through the
-[handle wrapper](https://git.internal/chronium/pyxis-userland/src/branch/main/include/handle.h). The native close wrapper accounts
+[handle wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/handle.h). The native close wrapper accounts
 for the RDX result; the one-argument syscall wrapper cannot be used for
 close because it assumes RDX is preserved. Closing leaves the startup record
 unchanged, so its output binding then contains a stale handle. Exit releases any
@@ -467,7 +467,7 @@ metadata is captured before any data/reply write, including overlapping buffers.
 All fallible work precedes mutation. Shared user memory, task cancellation or
 multiple tasks per process would require revisiting these assumptions.
 
-[Libpyxis wrappers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/file.h) return native status for all four
+[Libpyxis wrappers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/file.h) return native status for all four
 operations and validate reply sizes/counts; failure clears output values.
 [Libc stdio](stdio.md) composes these operations into independently positioned
 FILE streams without a kernel descriptor table.
@@ -507,7 +507,7 @@ syscalls remain unchanged and do not yet use these helpers.
 
 A process-control capability exposes WAIT through a tagged native CALL. Its
 [protocol](../include/abi/process.h) has one right, WAIT, and a header-only request.
-The [libpyxis wrapper](https://git.internal/chronium/pyxis-userland/src/branch/main/include/process.h) preserves native errors and
+The [libpyxis wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/process.h) preserves native errors and
 returns either EXITED with a signed exit status or FAULTED. Fault results carry
 no exit status; detailed architecture diagnostics remain in the kernel log.
 
@@ -626,7 +626,7 @@ may remain for reuse after failure. Invalid image/startup data uses BAD_REQUEST;
 invalid handles, denied rights, wrong image object type, bad user buffers and
 allocation exhaustion retain their native statuses.
 
-[Libpyxis](https://git.internal/chronium/pyxis-userland/src/branch/main/include/launcher.h) exposes launcher_launch without heap
+[Libpyxis](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/launcher.h) exposes launcher_launch without heap
 allocation. The shell receives a launcher from boot setup and explicitly
 constructs its children's grants, arguments, environment and directory context.
 The optional client/server example requires a readable server image and endpoint
