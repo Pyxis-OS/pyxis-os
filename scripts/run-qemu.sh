@@ -10,6 +10,8 @@ set -eu
 : "${VIRTIO_FS_SOCKET:=}"
 : "${VIRTIO_NET:=0}"
 : "${VIRTIO_RNG:=1}"
+: "${VIRTIO_BLK_IMAGE:=}"
+: "${VIRTIO_BLK_READONLY:=0}"
 : "${UDP_FORWARD:=}"
 command -v "$QEMU" >/dev/null 2>&1 || {
   echo "Missing $QEMU: install QEMU or set QEMU, then run make run." >&2
@@ -65,6 +67,29 @@ case "$VIRTIO_RNG" in
        -device virtio-rng-pci,rng=pyxis_rng,disable-legacy=on ;;
   *) echo 'VIRTIO_RNG must be 0 or 1.' >&2; exit 1 ;;
 esac
+case "$VIRTIO_BLK_READONLY" in
+  0) blk_readonly=off ;;
+  1) blk_readonly=on ;;
+  *) echo 'VIRTIO_BLK_READONLY must be 0 or 1.' >&2; exit 1 ;;
+esac
+if [ -n "$VIRTIO_BLK_IMAGE" ]; then
+  [ -f "$VIRTIO_BLK_IMAGE" ] || {
+    echo 'VIRTIO_BLK_IMAGE must name an existing regular raw image file.' >&2
+    exit 1
+  }
+  # An absolute filename keeps QEMU from interpreting a relative path prefix
+  # as a block protocol. Commas would introduce additional drive options.
+  case "$VIRTIO_BLK_IMAGE" in
+    /*) blk_image=$VIRTIO_BLK_IMAGE ;;
+    *) blk_image="$(pwd -P)/$VIRTIO_BLK_IMAGE" ;;
+  esac
+  case "$blk_image" in
+    *,*) echo 'VIRTIO_BLK_IMAGE absolute path must not contain commas.' >&2; exit 1 ;;
+  esac
+  set -- "$@" \
+    -drive "if=none,id=pyxis_blk,format=raw,cache=writeback,readonly=$blk_readonly,file=$blk_image" \
+    -device virtio-blk-pci,drive=pyxis_blk,disable-legacy=on,num-queues=1
+fi
 machine=q35
 if [ -n "$VIRTIO_FS_SOCKET" ]; then
   [ -S "$VIRTIO_FS_SOCKET" ] || {

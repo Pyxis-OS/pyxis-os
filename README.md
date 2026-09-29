@@ -41,6 +41,9 @@ The shell starts at `home://`, which is RAM-backed and lost on reboot. `app://`
 contains the read-only boot archive. Optional [virtio-fs setup](docs/virtio-fs.md)
 provides persistent `host://` files and executable loading; no overlay is needed.
 Networking is opt-in with `VIRTIO_NET=1`; see [network setup](docs/networking.md).
+Kernel-only [block storage](docs/block-storage.md) is opt-in with
+`VIRTIO_BLK_IMAGE=/path/to/disk.raw`.
+See [QEMU troubleshooting](docs/qemu.md) for host emulator boot failures.
 The [shell guide](docs/shell.md) and [edit/build/run walkthrough](docs/edit-build-run.md)
 cover ordinary guest use.
 

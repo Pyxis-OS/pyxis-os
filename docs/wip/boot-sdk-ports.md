@@ -145,11 +145,13 @@ COW pool, volume guarantees, migration strategy, durability and compatibility
 contracts. The [block-storage foundation](persistent-storage.md#agreed-block-storage-foundation)
 has an agreed queue ownership/lifetime contract and focused task sequence.
 [Configurable split queues](../virtio-queues.md) and the filesystem/entropy
-migration are complete; virtio-blk with an internal block interface and GPT
-discovery remain. Device/transport failure is terminal until reboot. Later shared-core,
-recovery, FUSE and native-persistence milestones remain proposed. Exact APIs,
-capacities and validation exercise for block storage remain open; these design
-notes do not authorize subsequent implementation.
+migration are complete. [Virtio-blk and the internal block interface](../block-storage.md)
+now provide bounded ticketed reads/writes and ordered flushes; GPT discovery
+remains. Device/transport failure is terminal until reboot. Later shared-core,
+recovery, FUSE and native-persistence milestones remain proposed. The block API,
+capacities and manual debugger exercise are documented; GPT validation bounds and
+degraded-copy handling must be settled before its task. These design notes do
+not authorize subsequent implementation.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
