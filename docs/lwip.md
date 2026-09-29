@@ -1,8 +1,8 @@
 # lwIP TCP integration
 
 Caelum embeds the pinned IPv4/TCP subset from
-[pyxis-lwip](https://git.internal/chronium/pyxis-lwip) at `third_party/lwip`.
-[UPSTREAM.md](https://git.internal/chronium/pyxis-lwip/src/branch/main/UPSTREAM.md)
+[pyxis-lwip](https://git.internal/PyxisOS/pyxis-lwip) at `third_party/lwip`.
+[UPSTREAM.md](https://git.internal/PyxisOS/pyxis-lwip/src/branch/main/UPSTREAM.md)
 records lwIP 2.2.1's upstream revision, license and local adaptations.
 Configuration, freestanding headers and allocator/clock hooks belong to Pyxis
 under `kernel/net/lwip`. Ordinary `make kernel` and `make image` include the port;

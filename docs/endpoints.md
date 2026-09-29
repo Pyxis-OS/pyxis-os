@@ -11,7 +11,7 @@ name or implicit discovery.
 
 The [ABI](../include/abi/endpoint.h) defines three distinct protocols for
 client delivery, receiving and replying, plus the service creation/export protocol. The
-[userspace helpers](https://git.internal/chronium/pyxis-userland/src/branch/main/include/endpoint.h) wrap the native CALL
+[userspace helpers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/endpoint.h) wrap the native CALL
 and CLOSE syscalls:
 
 | Helper | Handle | Behavior |

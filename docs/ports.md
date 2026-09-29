@@ -1,6 +1,6 @@
 # Ports
 
-Pyxis pins [pyxis-ports](https://git.internal/chronium/pyxis-ports) at `ports`.
+Pyxis pins [pyxis-ports](https://git.internal/PyxisOS/pyxis-ports) at `ports`.
 Its host Lua runner fetches an exact upstream commit or a checksum-pinned release
 archive or standalone data file, applies ordered patches,
 builds against the exported SDK and stages executables with their licenses.

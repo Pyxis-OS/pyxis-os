@@ -1,7 +1,7 @@
 # I/O reliability and bottleneck attribution
 
 The milestone closed after the HOST publication correction in
-[PR 205](https://git.internal/chronium/pyxis-os/pulls/205). Completed endpoint
+[PR 205](https://git.internal/PyxisOS/pyxis-os/pulls/205). Completed endpoint
 receipts release delivery capacity immediately, and the agreed IPC/HTTP reruns
 passed. Independent FILE and HOST profiling expose request phases and counts.
 The HOST correction removes most of the measured profiler slowdown, while full
@@ -259,7 +259,7 @@ Ports stayed `6ec1290f87882392390e6a889be61ba3ac1448d1`; lwIP stayed
 `a1aadb91a50360ff5b52864f7cec810b8162ee85`. Later documentation/gitlink commits
 did not alter measured runtime code. The experiment report records its own
 baseline and patch/image identities. The
-[original full report](https://git.internal/chronium/pyxis-os/src/commit/627331f6d3aa080fd1cbe131472a032f2375d33c/docs/wip/io-reliability-attribution.md)
+[original full report](https://git.internal/PyxisOS/pyxis-os/src/commit/627331f6d3aa080fd1cbe131472a032f2375d33c/docs/wip/io-reliability-attribution.md)
 preserves every individual IPC/HTTP/RAM sample, RAM phase sum/maximum, clock
 calibration, original command and detailed lifecycle observation.
 

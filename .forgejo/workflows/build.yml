@@ -7,21 +7,17 @@ on:
   workflow_dispatch:
 
 env:
-  BUILDER_IMAGE: git.internal/chronium/pyxis-builder:pyxis-gcc16.2-binutils2.47
+  BUILDER_IMAGE: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
 
 jobs:
   kernel:
     runs-on: pyxis
     container:
-      image: git.internal/chronium/pyxis-builder:pyxis-gcc16.2-binutils2.47
-      credentials:
-        username: chronium
-        password: ${{ secrets.PYXIS_REGISTRY_READ_TOKEN }}
+      image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
         with:
           submodules: recursive
-          token: ${{ secrets.PYXIS_SOURCE_READ_TOKEN }}
           persist-credentials: false
       - name: Build kernel bundle
         run: make -j16 bundle-kernel
@@ -36,15 +32,11 @@ jobs:
   sdk:
     runs-on: pyxis
     container:
-      image: git.internal/chronium/pyxis-builder:pyxis-gcc16.2-binutils2.47
-      credentials:
-        username: chronium
-        password: ${{ secrets.PYXIS_REGISTRY_READ_TOKEN }}
+      image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
         with:
           submodules: recursive
-          token: ${{ secrets.PYXIS_SOURCE_READ_TOKEN }}
           persist-credentials: false
       - name: Build sdk bundle
         run: make -j16 bundle-sdk
@@ -60,15 +52,11 @@ jobs:
     needs: [sdk, ports]
     runs-on: pyxis
     container:
-      image: git.internal/chronium/pyxis-builder:pyxis-gcc16.2-binutils2.47
-      credentials:
-        username: chronium
-        password: ${{ secrets.PYXIS_REGISTRY_READ_TOKEN }}
+      image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
         with:
           submodules: recursive
-          token: ${{ secrets.PYXIS_SOURCE_READ_TOKEN }}
           persist-credentials: false
       - uses: https://data.forgejo.org/actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
         env:
@@ -100,15 +88,11 @@ jobs:
     needs: sdk
     runs-on: pyxis
     container:
-      image: git.internal/chronium/pyxis-builder:pyxis-gcc16.2-binutils2.47
-      credentials:
-        username: chronium
-        password: ${{ secrets.PYXIS_REGISTRY_READ_TOKEN }}
+      image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
         with:
           submodules: recursive
-          token: ${{ secrets.PYXIS_SOURCE_READ_TOKEN }}
           persist-credentials: false
       - uses: https://data.forgejo.org/actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
         env:
@@ -132,15 +116,11 @@ jobs:
     needs: [kernel, sdk, userland, ports]
     runs-on: pyxis
     container:
-      image: git.internal/chronium/pyxis-builder:pyxis-gcc16.2-binutils2.47
-      credentials:
-        username: chronium
-        password: ${{ secrets.PYXIS_REGISTRY_READ_TOKEN }}
+      image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
         with:
           submodules: false
-          token: ${{ secrets.PYXIS_SOURCE_READ_TOKEN }}
           persist-credentials: false
       - uses: https://data.forgejo.org/actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
         env:

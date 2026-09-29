@@ -72,7 +72,7 @@ single-task process model, pinned tasks and absence of process cancellation.
 
 ## Native use
 
-[Libpyxis](https://git.internal/chronium/pyxis-userland/src/branch/main/include/memory.h) exposes `memory_allocate()` and
+[Libpyxis](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/memory.h) exposes `memory_allocate()` and
 `memory_release()`, returning native statuses and validating allocation replies.
 Allocation clears its output on failure. Release takes the region by value and
 writes no output, so its descriptor need not outlive the call.
