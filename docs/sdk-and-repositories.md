@@ -26,7 +26,8 @@ the exported SDK manifest records dirty userland inputs.
 The filesystem core is opt-in: `git submodule update --init fs` followed by
 `make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs.a`, `mkpyxisfs` and
 `pyxisfs-inspect`. Kernel/SDK/image builds do not require it. See the
-[host-tool guide](../fs/docs/host-tools.md) for empty-image creation and inspection.
+[host-tool guide](../fs/docs/host-tools.md) for source import, extraction and
+`pyxisfs-inspect check` whole-image consistency inspection.
 
 The relative URL in `.gitmodules` resolves beside the Pyxis repository, using
 the parent remote's host and transport. These repositories are public under

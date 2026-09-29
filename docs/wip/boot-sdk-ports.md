@@ -157,7 +157,8 @@ bounded platform boundary. Task 3 adds empty sparse-image construction and
 `info`/`volumes` reopening through `make fs-tools`. Task 4 supplies readonly
 traversal, acquisition, `list`/`stat`/`access` and explicit GPT image selection.
 Task 5 supplies bounded source import and extraction with populated round-trip
-validation. Task 6 next adds whole-image consistency inspection.
+validation. Task 6 supplies bounded whole-image consistency inspection of both
+retained states. Task 7 next validates and closes the milestone.
 Writable recovery, FUSE and native-persistence milestones remain proposed.
 
 | Path | First concrete completion point | Decisions and supporting work |
