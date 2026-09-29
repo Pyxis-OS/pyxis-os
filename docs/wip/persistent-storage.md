@@ -257,7 +257,8 @@ This envelope does not settle the remaining format/interface choices.
 This breakdown is a proposal, not an implementation assignment or an agreed
 ordering. Each milestone needs its own focused PR tasks before work starts.
 
-1. **Block storage foundation.** Virtio-blk discovery, bounded asynchronous block
+1. **Block storage foundation.** First improve the shared split-queue helper as
+   scoped below, then add virtio-blk discovery, bounded asynchronous block
    requests/completion, capacity and sector constraints, write/flush errors and
    GPT partition discovery. Operate only on an explicitly selected development
    disk image. Deliver usable read/write/flush support without a filesystem or
@@ -290,6 +291,43 @@ ordering. Each milestone needs its own focused PR tasks before work starts.
 Later milestones can add native NVMe, real format conversion when needed and an
 installation/update workflow. The first milestone does not depend on finalizing
 all filesystem record layouts or the full identity broker.
+
+### Block-storage prerequisite: configurable split queues
+
+Agreed addition to the proposed milestone: improve the shared queue helper before
+adding another driver-specific queue implementation. This is planning scope, not
+authorization to implement the helper or tune existing drivers.
+
+The existing filesystem/entropy helper has fixed 8 KiB request/reply buffers and
+one request in flight. Networking uses a separate queue implementation with 16
+slots, 2 KiB packet buffers and multiple outstanding packets. Configurable buffer
+sizes alone would leave the shared helper's fixed request/reply shape in place.
+
+The intended boundary is shared descriptor allocation/chaining, ring publication,
+DMA barriers, completion identification/validation and notification mechanics.
+Drivers choose queue size within device limits, DMA buffer sizes/layouts and
+their number of outstanding requests. Drivers retain protocol-specific validation
+and request scheduling. Configuration at queue creation is enough; live resizing
+is outside this slice.
+
+Proposed focused tasks within the block-storage milestone:
+
+- [ ] Define a narrow submission/completion contract using explicit DMA buffers
+  and device access directions, with request identity and bounded descriptor
+  ownership. Settle queue-full behavior, completion validation and reset/failure
+  lifetime rules before implementation; timeout does not return DMA ownership.
+- [ ] Implement the helper and migrate filesystem/entropy while preserving their
+  existing transfer limits, concurrency, deadlines and protocol behavior. Move
+  those choices out of shared queue mechanics without adding callback frameworks
+  or a general driver abstraction layer.
+- [ ] Use the helper for virtio-blk, choosing its transfer and outstanding-request
+  limits explicitly rather than inheriting filesystem defaults.
+
+Network consolidation is a separate follow-up after the helper serves storage;
+preserve packet batching and validation if that migration is selected. Throughput
+tuning is separate as well: queue configurability does not remove serialization
+in a driver, worker or application interface. Exact APIs and capacities remain
+decisions for the implementation proposal.
 
 ## Remaining identity and policy details
 
