@@ -162,10 +162,12 @@ This also exercised logical-block to 512-byte sector conversion across restarts.
 
 A four-CPU nested-KVM boot with 256 MiB RAM reached userspace with a writable
 block disk plus entropy/network devices. The no-disk four-CPU boot passed under
-TCG, reporting block I/O unavailable. Two no-disk nested-KVM attempts instead
-ended in a host QEMU segmentation fault before any Caelum output; that
-configuration remains unverified under KVM. These are boot and correctness
-observations, not owner-host performance measurements.
+TCG, reporting block I/O unavailable. Initial no-disk KVM failures were traced
+to a pre-existing [QEMU AHCI CD-ROM bug](qemu.md#ahci-cd-rom-crash-before-kernel-entry),
+also reproduced with the pre-milestone kernel. With upstream's fix applied to
+a separate QEMU 10.2.2 build, the same no-disk four-CPU KVM configuration reached
+userspace. These are boot and correctness observations, not owner-host
+performance measurements.
 
 The sleeping client wrapper, active abandonment, write-failure latch, watchdog,
 malformed completion and reset-failure paths have code inspection only. No
