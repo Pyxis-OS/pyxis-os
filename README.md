@@ -58,3 +58,8 @@ AVX and physical-hardware support remain outside the current implementation.
 For development, follow [AGENTS.md](AGENTS.md) and the
 [milestone index](docs/wip/boot-sdk-ports.md). BOOTSTRAP.md is the historical
 bring-up assignment, not the current scope.
+
+## License
+
+Original Pyxis material is licensed under [MPL-2.0](LICENSE). See
+[LICENSING.md](LICENSING.md) for scope and third-party exceptions.
