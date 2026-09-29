@@ -678,26 +678,31 @@ service work and wait sets; no worker-process or thread framework is included.
 
 ## Filesystem host prototype limits
 
-The empty-image tools record the accepted reserve policy, but no writable
+The host-image tools record the accepted reserve policy, but no writable
 transaction/recovery cost bound proves those reserves sufficient. Sparse host
 image sizing also does not reserve host disk space. Keep writable admission
 separate; revisit the operation-cost and allocation-map construction bounds before
 the writable milestone. See the [filesystem milestone](wip/filesystem-readonly.md)
 and [host-tool limits](../fs/docs/host-tools.md).
 
-The empty planner reserves workspace for the maximum 256-volume profile even for
-a single volume, so small explicit memory caps can reject otherwise tiny images.
-Revisit proportional workspace sizing with populated-image construction in task 5;
-all allocations remain bounded and failures occur before output creation.
+The bulk planner sizes object/tree bookkeeping from the import but still reserves
+fixed buffers for the volume profile and conservative node bounds. Host scanning
+and extraction reserve depth-256 workspaces. Small explicit memory caps can reject
+otherwise tiny images, and the default cap does not promise to fit the maximum
+record profile. Revisit workspace sizing if real imports hit these limits; there
+is no temporary-file spill strategy. Planning failures precede image creation.
 
 Readonly object access scans each consulted ancestor directory to validate unique
 naming. Separate operations repeat ancestry, grant and allocation-proof work;
 file reads may revisit proof closure for each block. Memory is capped, but this
-does not promise a small I/O count. Revisit measured costs with populated images
-in task 5 before introducing caches or making performance claims.
+does not promise a small I/O count. Task 5 successfully extracted repository
+source trees and a 476776-byte binary, but this establishes correctness for those
+inputs rather than scaling bounds. Revisit measured costs during milestone
+closure or when larger inputs justify caches; no performance guarantee follows.
 
-Task-4 runtime coverage uses empty roots and healthy GPT images. Nested policy,
-populated directory paging and file contents await task 5's importer. Sparse and
-multiple extents, grant-free volumes, malformed metadata and GPT degradation have
-source-review coverage only. Revisit these limits during tasks 5 and 7 using
+Task-5 runtime coverage includes populated directory paging, nested policy and
+inline file extents. Source holes are materialized into data, so sparse and
+multiple-extent reader paths still have source-review coverage only, as do
+grant-free volumes, malformed metadata, GPT degradation, concurrent source-change
+detection and actual I/O/flush failure. Revisit these limits during task 7 using
 agreed tooling; do not infer runtime coverage from compilation or code review.
