@@ -88,20 +88,23 @@ history remains in Pyxis.
 
 ## Filesystem repository
 
-[PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) will own the shared native
+[PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) owns the shared native
 filesystem format/core, host formatter/inspector and eventual Linux FUSE adapter.
-The [initial format milestone](wip/filesystem-readonly.md) now pins the MPL-2.0
+The completed [read-only filesystem milestone](filesystem-readonly.md) pins the MPL-2.0
 shared core at `fs/`. Its opt-in `make fs-tools` builds the freestanding archive
 and Linux host formatter/inspector
 with `HOSTCC`/`HOSTAR` forwarded as `HOST_CC`/`HOST_AR`, explicit source/output
 directories and no kernel or SDK include paths. The tools create standalone
 sparse images from selected source directories, extract files/subtrees,
-inspect pool/volume/object metadata and simulate bounded policy
-acquisition. Explicit GPT selection supplies a readonly partition extent. Its
-[format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/8c4ffa67595f05eeef97b159d0af0cfb84da1ef5/docs/format.md)
+inspect pool/volume/object metadata, simulate bounded policy
+acquisition and check both committed states for structural consistency. Explicit
+GPT selection supplies a readonly partition extent. Its
+[format and tool contract](../fs/docs/format.md)
 lives in that repository, including accepted follow-up decisions. See the
 [implemented core boundary](../fs/docs/core.md) for codec, construction, selection,
-allocation-proof, traversal, policy and lifetime contracts. Pyxis retains the public OS ABI, capabilities
+allocation-proof, traversal, policy, checking and lifetime contracts, and
+[host validation](../fs/docs/host-tools.md#validation) for measured coverage.
+Pyxis retains the public OS ABI, capabilities
 and namespace integration. Default kernel, SDK, ports and image targets do not
 build the core or acquire a filesystem dependency. CI and the compiler container
 are unchanged.
