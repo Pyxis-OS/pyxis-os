@@ -3,29 +3,44 @@
 
 #include <abi/launcher.h>
 #include <abi/syscall.h>
-#include <kernel/user/startup.h>
+#include <kernel/service/request.h>
 
 struct kernel_object;
-struct file_object;
 struct process;
+struct launch_capture;
 struct launch_group;
 
-/* Heap storage shared with BSP, never a remote task stack. Bindings/directory
- * entries initially hold grant indices; optional namespace holds index + 1.
- * BSP replaces them with child handles.
- * Source handles and image are borrowed from the blocked caller's table. */
-struct launch_capture {
-  struct process_startup startup;
-  struct launch_grant *grants;
-  size_t grant_count;
-  struct file_object *image;
-  /* Host backing only: owned stable bytes, freed with capture on the BSP. */
-  void *host_image;
-  size_t host_image_size;
-  size_t used;
-  enum call_status error;
-  _Alignas(uint64_t) unsigned char data[LAUNCH_CAPTURE_MAX_SIZE];
+enum launcher_action {
+  LAUNCH_ALLOCATE,
+  LAUNCH_DISCARD,
+  LAUNCH_START,
+  LAUNCH_GROUP_CREATE,
+  LAUNCH_GROUP_PREPARE,
+  LAUNCH_GROUP_PUBLISH,
+  LAUNCH_GROUP_DISCARD,
 };
+
+/* Capture/group storage survives successive requests independently. START and
+ * GROUP_PREPARE lend the parent table and stable image operation; every loan
+ * is cleared before completion. Allocation results transfer to the caller
+ * before release, while START/DISCARD/PREPARE consume their capture and
+ * PUBLISH/DISCARD consume their group. No caller private mappings are mutated. */
+struct launcher_request {
+  struct bsp_request request;
+  enum launcher_action action;
+  struct launch_capture *capture;
+  struct launch_group *group;
+  struct process *parent;
+  size_t cpu_index;
+  struct launch_capture *capture_result;
+  struct launch_group *group_result;
+  enum call_status result;
+  handle_t child;
+  handle_t children[LAUNCH_BATCH_MAX];
+};
+
+/* BSP executor, IF=0. Local launch helpers never submit nested requests. */
+void launcher_request_execute(struct launcher_request *request);
 
 /* BSP, IF=0. Stateless, caller-scoped launch authority; one owned reference. */
 struct kernel_object *launcher_create(void);
@@ -35,20 +50,5 @@ struct kernel_object *launcher_create(void);
 struct syscall_result launcher_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);
-
-/* BSP, IF=0. Caller lends its table and either an in-memory file operation or
- * owned host bytes. Releases the file operation on every path. Prepares reply
- * handle before submission; failure unwinds child resources. Capture and host
- * bytes remain owned by the launch service until it frees both. */
-enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
-                                 size_t cpu_index, handle_t *result);
-
-/* BSP service internals. A group owns prepared processes and task stacks until
- * publication; abort removes provisional observers and all child grants. */
-struct launch_group *launcher_group_create(void);
-enum call_status launcher_group_prepare(struct launch_group *group,
-    struct launch_capture *capture, struct process *parent, size_t cpu_index);
-void launcher_group_publish(struct launch_group *group, handle_t *children);
-void launcher_group_discard(struct launch_group *group);
 
 #endif

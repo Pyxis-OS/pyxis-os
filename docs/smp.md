@@ -266,9 +266,9 @@ The [BSP request executor](wip/bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.
 It currently services pipe creation, private memory, display, capability growth,
 namespace creation, endpoint creation/export, RAMFS entry/name allocation and
-discard, and RAM FILE backing replacement; HOST and launch queues retain their
-existing scheduler paths. The executor runs one FIFO operation with IF=0, enables
-interrupts, and conditionally yields between operations. An individual operation
+discard, RAM FILE backing replacement, and launch preparation/publication. HOST
+forwarding retains its existing scheduler path. The executor runs one FIFO
+operation with IF=0, enables interrupts, and conditionally yields between operations. An individual operation
 remains non-preemptible. Only the scheduler inspects ready queues.
 
 When its queue is empty, the executor publishes an untimed wait under the request
@@ -285,6 +285,8 @@ The executor always finishes a published wait before reusing its wait record.
 Synchronous BSP request clients remain user-only, so the executor cannot submit
 to itself and wait. Its subsystem operations use local helpers; RAMFS allocation
 and disposal and FILE buffer replacement helpers are static to their subsystems.
+Launch preparation calls BSP-local loading, capability installation and task
+preparation directly; it does not submit nested service requests.
 
 Framebuffer presentation runs as a BSP kernel task. It copies the active
 space on a roughly 60 Hz monotonic deadline schedule, skipping missed frames.

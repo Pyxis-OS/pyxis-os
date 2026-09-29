@@ -627,6 +627,17 @@ makes the child runnable. The image operation is released before submission,
 and staging storage is freed before waking the caller. BSP never dereferences
 caller addresses or a remote task-stack request. Caller mappings are unchanged.
 
+Launch capture allocation/disposal, single-child preparation/publication and
+batch group operations use typed requests on the common BSP FIFO. The request
+captures the parent process and assigned CPU before publication. Loading and
+capability installation use BSP-local helpers directly, without executor
+self-waits. The caller consumes returned handles or owned allocation results
+before releasing the request; cleanup submission itself needs no allocation.
+Capture and group allocations outlive individual requests. Each stage consumes
+its capture, while the group retains prepared children and provisional observers
+until a later publish or discard request. No user address or remote stack pointer
+is part of the service record.
+
 Success returns one owned process-control handle. The child may run or exit
 before the parent resumes; the handle retains completion independently. Failure
 leaves no runnable child and preserves parent source grants. Handle-table growth

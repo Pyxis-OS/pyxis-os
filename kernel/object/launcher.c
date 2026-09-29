@@ -2,6 +2,7 @@
 #include <abi/console.h>
 #include <abi/namespace.h>
 #include <abi/pipe.h>
+#include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/mm/heap.h>
@@ -12,6 +13,8 @@
 #include <kernel/process.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
+
+#include "launcher_internal.h"
 
 static void destroy_launcher(struct kernel_object *object)
 {
@@ -26,6 +29,142 @@ struct kernel_object *launcher_create(void)
     object_init(object, OBJECT_LAUNCHER, destroy_launcher);
   }
   return object;
+}
+
+static void discard_capture(struct launch_capture *capture)
+{
+  kfree(capture->host_image);
+  kfree(capture);
+}
+
+void launcher_request_execute(struct launcher_request *request)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(request->request.state == BSP_REQUEST_SERVICING);
+  switch (request->action) {
+  case LAUNCH_ALLOCATE:
+    request->capture_result = kmalloc(sizeof(*request->capture_result));
+    if (request->capture_result) {
+      memset(request->capture_result, 0, sizeof(*request->capture_result));
+    } else {
+      request->result = CALL_NO_MEMORY;
+    }
+    break;
+  case LAUNCH_GROUP_CREATE:
+    request->group_result = launcher_group_create();
+    if (!request->group_result) {
+      request->result = CALL_NO_MEMORY;
+    }
+    break;
+  case LAUNCH_START:
+    KASSERT(request->capture && request->parent && !request->group);
+    request->result = launcher_start(request->capture, request->parent,
+        request->cpu_index, &request->child);
+    discard_capture(request->capture);
+    break;
+  case LAUNCH_GROUP_PREPARE:
+    KASSERT(request->capture && request->group && request->parent);
+    request->result = launcher_group_prepare(request->group, request->capture,
+        request->parent, request->cpu_index);
+    discard_capture(request->capture);
+    break;
+  case LAUNCH_DISCARD:
+    KASSERT(request->capture && !request->group && !request->parent);
+    discard_capture(request->capture);
+    break;
+  case LAUNCH_GROUP_PUBLISH:
+    KASSERT(request->group && !request->capture && !request->parent);
+    launcher_group_publish(request->group, request->children);
+    launcher_group_discard(request->group);
+    break;
+  case LAUNCH_GROUP_DISCARD:
+    KASSERT(request->group && !request->capture && !request->parent);
+    launcher_group_discard(request->group);
+    break;
+  default:
+    KASSERT(false);
+  }
+  request->capture = NULL;
+  request->group = NULL;
+  request->parent = NULL;
+}
+
+static struct launcher_request *request_launch_service(enum launcher_action action,
+    struct launch_capture *capture, struct launch_group *group)
+{
+  struct launcher_request *request =
+      (struct launcher_request *)bsp_request_prepare(BSP_SERVICE_LAUNCHER);
+  *request = (struct launcher_request){
+    .request = request->request,
+    .action = action,
+    .capture = capture,
+    .group = group,
+    .result = CALL_OK,
+    .child = HANDLE_INVALID,
+  };
+  if (action == LAUNCH_START || action == LAUNCH_GROUP_PREPARE) {
+    request->parent = process_current();
+    KASSERT(request->parent);
+    request->cpu_index = arch_cpu_index();
+  }
+  bsp_request_submit_and_wait(&request->request);
+  return request;
+}
+
+static struct launch_capture *allocate_launch_capture(void)
+{
+  struct launcher_request *request = request_launch_service(LAUNCH_ALLOCATE, NULL, NULL);
+  struct launch_capture *capture = request->capture_result;
+  request->capture_result = NULL;
+  bsp_request_release(&request->request);
+  return capture;
+}
+
+static void discard_launch_capture(struct launch_capture *capture)
+{
+  struct launcher_request *request = request_launch_service(LAUNCH_DISCARD, capture, NULL);
+  bsp_request_release(&request->request);
+}
+
+static enum call_status launch_process(struct launch_capture *capture, handle_t *child)
+{
+  struct launcher_request *request = request_launch_service(LAUNCH_START, capture, NULL);
+  *child = request->child;
+  enum call_status result = request->result;
+  bsp_request_release(&request->request);
+  return result;
+}
+
+static struct launch_group *create_launch_group(void)
+{
+  struct launcher_request *request = request_launch_service(LAUNCH_GROUP_CREATE, NULL, NULL);
+  struct launch_group *group = request->group_result;
+  request->group_result = NULL;
+  bsp_request_release(&request->request);
+  return group;
+}
+
+static enum call_status prepare_launch_group(struct launch_group *group,
+    struct launch_capture *capture)
+{
+  struct launcher_request *request = request_launch_service(LAUNCH_GROUP_PREPARE, capture, group);
+  enum call_status result = request->result;
+  bsp_request_release(&request->request);
+  return result;
+}
+
+static void publish_launch_group(struct launch_group *group, handle_t *children)
+{
+  struct launcher_request *request = request_launch_service(LAUNCH_GROUP_PUBLISH, NULL, group);
+  memcpy(children, request->children, sizeof(request->children));
+  bsp_request_release(&request->request);
+}
+
+static void discard_launch_group(struct launch_group *group)
+{
+  struct launcher_request *request = request_launch_service(LAUNCH_GROUP_DISCARD, NULL, group);
+  bsp_request_release(&request->request);
 }
 
 /* Arrays use at most 8-byte alignment. All pointer/count arithmetic is bounded
@@ -269,14 +408,14 @@ static enum call_status capture_launch_request(const struct launch_request *requ
     return CALL_WRONG_TYPE;
   }
 
-  struct launch_capture *capture = task_allocate_launch_capture();
+  struct launch_capture *capture = allocate_launch_capture();
   if (!capture) {
     return CALL_NO_MEMORY;
   }
   capture_startup(capture, request);
   if (capture->error != CALL_OK) {
     enum call_status error = capture->error;
-    task_discard_launch_capture(capture);
+    discard_launch_capture(capture);
     return error;
   }
   capture->image = (struct file_object *)image;
@@ -287,7 +426,7 @@ static enum call_status capture_launch_request(const struct launch_request *requ
     task_submit_hostfs(pending);
     if (pending->status != CALL_OK) {
       enum call_status error = pending->status;
-      task_discard_launch_capture(capture);
+      discard_launch_capture(capture);
       return error;
     }
     capture->host_image = pending->captured;
@@ -323,7 +462,7 @@ static struct syscall_result launch_one(uintptr_t request_address, size_t reques
    * borrows the table and stable image, releases any file operation before
    * child submission, and frees staging before waking this caller. */
   handle_t child;
-  status = task_launch_process(capture, &child);
+  status = launch_process(capture, &child);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -364,7 +503,7 @@ static struct syscall_result launch_batch(uintptr_t request_address, size_t requ
     return batch_reply(reply_address, &reply, CALL_BAD_BUFFER);
   }
 
-  struct launch_group *group = task_create_launch_group();
+  struct launch_group *group = create_launch_group();
   if (!group) {
     return batch_reply(reply_address, &reply, CALL_NO_MEMORY);
   }
@@ -375,16 +514,16 @@ static struct syscall_result launch_batch(uintptr_t request_address, size_t requ
     if (status == CALL_OK) {
       /* The BSP releases this stage's image operation before the next stage
        * acquires one, including repeated reads of the same file object. */
-      status = task_prepare_launch_group(group, capture);
+      status = prepare_launch_group(group, capture);
     }
     if (status != CALL_OK) {
       reply.failed_index = i;
-      task_discard_launch_group(group);
+      discard_launch_group(group);
       return batch_reply(reply_address, &reply, status);
     }
   }
 
-  task_publish_launch_group(group, reply.children);
+  publish_launch_group(group, reply.children);
   return batch_reply(reply_address, &reply, CALL_OK);
 }
 

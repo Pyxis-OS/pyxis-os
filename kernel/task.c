@@ -42,12 +42,6 @@ struct task_wait {
   struct task_wait *timeout_next;
 };
 
-enum launch_action {
-  LAUNCH_ALLOCATE, LAUNCH_DISCARD, LAUNCH_START,
-  LAUNCH_GROUP_CREATE, LAUNCH_GROUP_PREPARE, LAUNCH_GROUP_PUBLISH,
-  LAUNCH_GROUP_DISCARD,
-};
-
 struct task {
   struct task *next;
   struct hostfs_request hostfs_request;
@@ -59,6 +53,7 @@ struct task {
   struct pipe_create_request pipe_request;
   struct ramfs_request ramfs_request;
   struct file_replace_request file_request;
+  struct launcher_request launcher_request;
   struct capability_growth_request growth_request;
   struct namespace_create_request namespace_request;
   struct endpoint_create_request endpoint_create_request;
@@ -67,13 +62,6 @@ struct task {
   struct display_request display_request;
   struct bsp_request *bsp_request; /* Reserved through result consumption. */
   struct bsp_request *deferred_request; /* Published only after the safe handoff. */
-  struct task *launch_next;
-  enum launch_action launch_action;
-  struct launch_capture *launch_capture;
-  struct launch_group *launch_group;
-  enum call_status launch_result;
-  handle_t launch_child;
-  handle_t launch_children[LAUNCH_BATCH_MAX];
   /* Only the caller updates aggregates. The parked request lends timestamps
    * to the BSP until wakeup transfers ownership back. */
   struct profile_snapshot profile;
@@ -105,7 +93,6 @@ struct scheduler {
 static struct scheduler *schedulers;
 static struct task *completed_head;
 static struct hostfs_request *hostfs_head, *hostfs_tail;
-static struct task *launch_head, *launch_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
 static struct task_wait *timed_waits; /* queues_locked, expired by the BSP. */
@@ -373,6 +360,9 @@ struct bsp_request *task_bsp_request_acquire(enum bsp_service service)
   case BSP_SERVICE_FILE_REPLACE:
     request = &task->file_request.request;
     break;
+  case BSP_SERVICE_LAUNCHER:
+    request = &task->launcher_request.request;
+    break;
   case BSP_SERVICE_MEMORY:
     request = &task->memory_request.request;
     break;
@@ -615,119 +605,6 @@ static void finish_host_profile(struct task *task)
   profile_duration_merge(flags, &stats->transport_failed, transport->failed_ns, transport->failed_max_ns);
   if (transport->saturated) {
     *flags |= PROFILE_SATURATED;
-  }
-}
-
-static struct task *request_launch_service(enum launch_action action,
-    struct launch_capture *capture, struct launch_group *group)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-  task->launch_action = action;
-  task->launch_capture = capture;
-  task->launch_group = group;
-  task->launch_child = HANDLE_INVALID;
-
-  lock_queues();
-  task->launch_next = NULL;
-  if (launch_tail) {
-    launch_tail->launch_next = task;
-  } else {
-    launch_head = task;
-  }
-  launch_tail = task;
-  unlock_queues();
-  task_wait_sleep(wait);
-  return task;
-}
-
-struct launch_capture *task_allocate_launch_capture(void)
-{
-  struct task *task = request_launch_service(LAUNCH_ALLOCATE, NULL, NULL);
-  struct launch_capture *capture = task->launch_capture;
-  task->launch_capture = NULL;
-  return capture;
-}
-
-void task_discard_launch_capture(struct launch_capture *capture)
-{
-  request_launch_service(LAUNCH_DISCARD, capture, NULL);
-}
-
-enum call_status task_launch_process(struct launch_capture *capture, handle_t *child)
-{
-  struct task *task = request_launch_service(LAUNCH_START, capture, NULL);
-  *child = task->launch_child;
-  return task->launch_result;
-}
-
-struct launch_group *task_create_launch_group(void)
-{
-  struct task *task = request_launch_service(LAUNCH_GROUP_CREATE, NULL, NULL);
-  struct launch_group *group = task->launch_group;
-  task->launch_group = NULL;
-  return group;
-}
-
-enum call_status task_prepare_launch_group(struct launch_group *group,
-    struct launch_capture *capture)
-{
-  struct task *task = request_launch_service(LAUNCH_GROUP_PREPARE, capture, group);
-  return task->launch_result;
-}
-
-void task_publish_launch_group(struct launch_group *group, handle_t *children)
-{
-  struct task *task = request_launch_service(LAUNCH_GROUP_PUBLISH, NULL, group);
-  memcpy(children, task->launch_children, sizeof(task->launch_children));
-}
-
-void task_discard_launch_group(struct launch_group *group)
-{
-  request_launch_service(LAUNCH_GROUP_DISCARD, NULL, group);
-}
-
-static void service_launch_requests(void)
-{
-  lock_queues();
-  struct task *task = launch_head;
-  launch_head = launch_tail = NULL;
-  unlock_queues();
-
-  while (task) {
-    struct task *next = task->launch_next;
-    if (task->launch_action == LAUNCH_ALLOCATE) {
-      task->launch_capture = kmalloc(sizeof(*task->launch_capture));
-      if (task->launch_capture) {
-        memset(task->launch_capture, 0, sizeof(*task->launch_capture));
-      }
-    } else if (task->launch_action == LAUNCH_GROUP_CREATE) {
-      task->launch_group = launcher_group_create();
-    } else if (task->launch_action == LAUNCH_GROUP_PUBLISH) {
-      memset(task->launch_children, 0, sizeof(task->launch_children));
-      launcher_group_publish(task->launch_group, task->launch_children);
-      launcher_group_discard(task->launch_group);
-      task->launch_group = NULL;
-    } else if (task->launch_action == LAUNCH_GROUP_DISCARD) {
-      launcher_group_discard(task->launch_group);
-      task->launch_group = NULL;
-    } else {
-      if (task->launch_action == LAUNCH_START) {
-        task->launch_result = launcher_start(task->launch_capture, task->process,
-            task->cpu_index, &task->launch_child);
-      } else if (task->launch_action == LAUNCH_GROUP_PREPARE) {
-        task->launch_result = launcher_group_prepare(task->launch_group,
-            task->launch_capture, task->process, task->cpu_index);
-      } else {
-        KASSERT(task->launch_action == LAUNCH_DISCARD);
-      }
-      kfree(task->launch_capture->host_image);
-      kfree(task->launch_capture);
-      task->launch_capture = NULL;
-    }
-    task_wait_wake(&task->wait_record);
-    /* Caller regains its table and may immediately exit; do not touch task. */
-    task = next;
   }
 }
 
@@ -994,7 +871,6 @@ void kernel_task_yield_if_runnable(void)
     if (cpu_index == 0) {
       expire_timed_waits();
       service_hostfs_requests();
-      service_launch_requests();
       reap_completed();
       object_reap();
       wake_sleepers();
@@ -1084,7 +960,7 @@ void task_preempt(bool user_mode)
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
-     (completed_head != NULL || launch_head != NULL || hostfs_head != NULL));
+     (completed_head != NULL || hostfs_head != NULL));
   unlock_queues();
   if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;
