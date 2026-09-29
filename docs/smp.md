@@ -107,13 +107,13 @@ are non-preemptible; kernel tasks run preemptibly on the BSP. An interrupt arriv
 while the scheduler is idle returns to its ready-queue loop. IF=0 and STI/HLT's
 interrupt shadow cover publication between the empty-queue check and halt.
 
-Private-memory allocation/release requests also notify the BSP after publication.
-The requester has already left its private root and task stack before linking
-its parked task into the memory queue. Notification happens after unlocking and
-never dereferences that task again. The existing rescheduling handler can wake
-an idle BSP or preempt an eligible BSP task because it checks the memory queue.
-A BSP caller sends no self-IPI: its scheduler loop services the request directly.
-There is no remote allocation, change to VM ownership, or new interrupt handler.
+Private-memory and display requests publish to the common BSP request FIFO only
+once their caller has left its private root and task stack, cleared entry/current
+state and become parked. Publication detaches an idle executor's waiter under the
+request lock and wakes it after unlocking. The ordinary ready queue and existing
+rescheduling IPI make the worker runnable on the BSP. A BSP caller sends no
+self-IPI and uses the same deferred handoff. Scheduler/preemption code has no
+memory/display queue checks. No remote allocation or new interrupt handler is added.
 
 Initial HOST request publication also notifies the BSP after releasing the queue
 lock, so a request arriving after its queue sweep can wake an idle BSP. The
@@ -256,8 +256,8 @@ or replace timer handling of deadlines and unmigrated service queues.
 
 The [BSP request executor](wip/bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.
-It currently services pipe creation; other subsystem queues retain their existing
-scheduler paths. The executor runs one FIFO operation with IF=0, enables
+It currently services pipe creation, private memory and display; other queues
+retain their existing scheduler paths. The executor runs one FIFO operation with IF=0, enables
 interrupts, and conditionally yields between operations. An individual operation
 remains non-preemptible. Only the scheduler inspects ready queues.
 
@@ -291,10 +291,11 @@ and stable user mappings. They do not use shared scratch slots or VM metadata.
 General `vm_query()` and page-table mutation remain BSP-only.
 
 Private spaces are built before publication and reclaimed only after retirement.
-The [memory service](memory.md) can also borrow a parked task's inactive space:
-its scheduler publishes the request only after leaving the task stack and
-reloading the kernel root. The BSP changes private mappings before waking the
-owner; normal resumption reloads CR3 before any task access. No other CPU uses
+The [memory](memory.md) and [display](graphics.md) services can borrow a parked
+task's inactive space: its scheduler publishes the request only after leaving
+the task stack and
+reloading the kernel root and clearing entry/current state. The BSP executor
+changes private mappings before waking the owner; normal resumption reloads CR3 before any task access. No other CPU uses
 that private root during the loan.
 Kernel code, CPU records, scheduler stacks, heap pools and framebuffer mappings
 remain mapped throughout AP execution. A shared kernel range must not be

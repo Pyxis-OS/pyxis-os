@@ -1,6 +1,8 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/object/pipe.h>
+#include <kernel/object/memory.h>
+#include <kernel/object/display.h>
 #include <kernel/panic.h>
 #include <kernel/service/request.h>
 #include <kernel/task.h>
@@ -28,7 +30,7 @@ static void unlock_requests(void)
 struct bsp_request *bsp_request_prepare(enum bsp_service service)
 {
   KASSERT(initialized);
-  struct bsp_request *request = task_bsp_request_storage(service);
+  struct bsp_request *request = task_bsp_request_acquire(service);
   KASSERT(request->state == BSP_REQUEST_FREE);
   *request = (struct bsp_request){
     .wait = task_wait_prepare(),
@@ -38,13 +40,21 @@ struct bsp_request *bsp_request_prepare(enum bsp_service service)
   return request;
 }
 
-void bsp_request_submit_and_wait(struct bsp_request *request)
+static bool requires_handoff(enum bsp_service service)
 {
-  KASSERT(initialized && request && request->state == BSP_REQUEST_PREPARED);
-  KASSERT(request == task_bsp_request_storage(request->service));
-  struct task_wait *wait = request->wait;
-  KASSERT(wait && !request->next);
+  switch (service) {
+  case BSP_SERVICE_PIPE_CREATE:
+    return false;
+  case BSP_SERVICE_MEMORY:
+  case BSP_SERVICE_DISPLAY:
+    return true;
+  default:
+    panic("unknown BSP service %u", (unsigned)service);
+  }
+}
 
+static void publish_request(struct bsp_request *request)
+{
   lock_requests();
   request->state = BSP_REQUEST_QUEUED;
   if (request_tail) {
@@ -62,9 +72,33 @@ void bsp_request_submit_and_wait(struct bsp_request *request)
   if (wake) {
     task_wait_wake(wake);
   }
+}
 
-  /* Publication lends the record and subsystem resources. Only use the saved
-   * wait until notification, even if service completes before we park. */
+void bsp_request_publish_deferred(struct bsp_request *request)
+{
+  KASSERT(request && request->state == BSP_REQUEST_DEFERRED);
+  KASSERT(requires_handoff(request->service));
+  if (request->service == BSP_SERVICE_MEMORY) {
+    memory_request_published((struct memory_request *)request);
+  }
+  publish_request(request);
+}
+
+void bsp_request_submit_and_wait(struct bsp_request *request)
+{
+  KASSERT(initialized && request && request->state == BSP_REQUEST_PREPARED);
+  KASSERT(request == task_bsp_request_current());
+  struct task_wait *wait = request->wait;
+  KASSERT(wait && !request->next);
+
+  if (requires_handoff(request->service)) {
+    request->state = BSP_REQUEST_DEFERRED;
+    task_bsp_request_defer(request);
+  } else {
+    publish_request(request);
+  }
+  /* Only the saved wait is accessible until notification. Deferred requests
+   * cannot complete early: publication requires the scheduler's safe handoff. */
   task_wait_sleep(wait);
   KASSERT(request->state == BSP_REQUEST_COMPLETE && !request->wait && !request->next);
 }
@@ -73,6 +107,7 @@ void bsp_request_release(struct bsp_request *request)
 {
   KASSERT(request && request->state == BSP_REQUEST_COMPLETE);
   KASSERT(!request->next && !request->wait);
+  task_bsp_request_release(request);
   *request = (struct bsp_request){0};
 }
 
@@ -119,6 +154,12 @@ static void request_worker(void *argument)
     switch (request->service) {
     case BSP_SERVICE_PIPE_CREATE:
       pipe_create_execute((struct pipe_create_request *)request);
+      break;
+    case BSP_SERVICE_MEMORY:
+      memory_request_execute((struct memory_request *)request);
+      break;
+    case BSP_SERVICE_DISPLAY:
+      display_request_execute((struct display_request *)request);
       break;
     default:
       KASSERT(false);

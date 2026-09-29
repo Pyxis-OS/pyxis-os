@@ -84,23 +84,26 @@ not release those pools. Existing pools and fragmentation are not inspected.
 Each admitted private-memory request records five boundaries:
 
 1. Request preparation before parking.
-2. After leaving the task stack/private root, just before taking the publication lock.
+2. After leaving the task stack/private root and establishing the parked handoff,
+   just before taking the request publication lock.
 3. Immediately before BSP private-memory service.
 4. Immediately after service, before wakeup.
 5. Caller resumption after restoring its address space and task stack.
 
 The four intervals and their end-to-end total have elapsed-time sums and maxima.
-Queue time includes publication lock/link overhead and waiting for the BSP; service
-includes private allocation bookkeeping, pages, zeroing, mappings and any kernel
-heap growth it causes. Resume includes notification and scheduling. Totals exclude
+Queue time includes publication lock/link overhead and waiting for the BSP
+executor; service includes private allocation bookkeeping, pages, zeroing, mappings
+and any kernel heap growth it causes. Resume includes notification and scheduling. Totals exclude
 initial syscall validation, reply copying and aggregate-counter updates. Invalid
 requests rejected before scheduler admission are not counted. No additional clock
 reads occur for unprofiled memory requests.
 
-State lives with the task, matching the current one-task-per-process model. The
-existing queue handoff gives the BSP exclusive access while the caller is parked;
-it records timestamps before waking the caller. The resumed caller updates the
-aggregates. No new scheduler queue, allocator lock or allocation policy is added.
+Transient timing samples live in the typed memory request. Persistent aggregates
+and profile controls remain with the task, matching the current one-task-per-process
+model. The deferred handoff gives the BSP executor exclusive access to the request
+while the caller is parked; it records service timestamps before waking the caller.
+The resumed caller alone updates the aggregates. No allocator lock or allocation
+policy is added.
 
 This measures userspace heap performance and kernel private-memory service.
 Standalone `kmalloc` throughput, PMM/VM subphase timings and system-wide accounting
@@ -145,10 +148,11 @@ these elapsed intervals must not be presented as uninstrumented CPU costs.
 
 ## Prompt BSP notification comparison
 
-Private-memory requests now notify the BSP through the existing rescheduling IPI
-after leaving the caller's task stack and address space and publishing the parked
-request. Allocation policy and service code are unchanged. Other BSP request
-queues retain their existing notification behavior; see [SMP scheduling](smp.md).
+The notification change measured below sent the existing rescheduling IPI after
+leaving the caller's task stack/address space and publishing the parked request.
+Private memory now uses the common BSP executor and its ordinary ready-queue
+notification; see [SMP scheduling](smp.md) and the task-3 measurements in
+[BSP service requests](wip/bsp-service-requests.md). Allocation policy is unchanged.
 
 A before/after comparison used baseline `7383e20` and notification commit
 `9d07838`, identical userspace, and the same four-CPU nested-KVM setup described

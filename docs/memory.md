@@ -51,23 +51,24 @@ disabled. A memory call cannot use the existing early-publication pattern of a
 capability-table growth request: the requester must stop using its private root
 before the BSP may modify it.
 
-The task captures its operation and region in task metadata, marks a pending
-request, and switches to its scheduler. After moving to the permanent stack,
-activating the kernel root and clearing the current task, the scheduler marks
-the task parked and publishes its request under the queue lock. Publication
-lends exclusive private-VM ownership to the BSP. Neither the old CPU nor any
-other task accesses that address space during the loan.
+The memory subsystem captures its operation, process loan and region in a typed
+BSP request. The closed service catalog requires deferred submission: after moving
+to the permanent stack, activating the kernel root and clearing entry/current-task
+state, the scheduler marks the task parked and publishes the request to the common
+FIFO. Publication lends exclusive private-VM ownership to the BSP. Neither the
+old CPU nor any other task accesses that address space during the loan.
 
-The BSP detaches requests, changes the inactive space outside the queue lock,
-and stores results in task metadata. Waking returns ownership; the BSP makes
-no further access to that task. Normal resumption reloads CR3 before touching
-the saved task stack. Only then does the allocation handler write its already
+The BSP executor changes the inactive space outside the request-queue lock with
+interrupts disabled, stores results in the typed record and clears the process
+loan. Completion precedes waking, which returns ownership; the executor makes
+no further access to that request or caller. Normal resumption reloads CR3 before
+touching the saved task stack. Only then does the allocation handler write its already
 validated user reply. Allocation cannot invalidate that reply because it adds
 a disjoint range. Release requires no user-memory access on resumption.
 
-The same path handles BSP userspace. Pending requests also bring a busy BSP task
-back to its scheduler at the next timer interrupt. No remote stack access,
-shared user mappings or TLB shootdown is introduced. This depends on the current
+The same path handles BSP userspace. Publication wakes the executor through the
+ordinary ready queue; there is no memory-specific scheduler sweep. No remote
+stack access, shared user mappings or TLB shootdown is introduced. This depends on the current
 single-task process model, pinned tasks and absence of process cancellation.
 
 ## Native use

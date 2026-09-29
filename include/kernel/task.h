@@ -21,9 +21,6 @@ struct bsp_request;
 struct endpoint_create_reply;
 struct endpoint_export_message;
 struct endpoint_export_reply;
-struct memory_region;
-struct display_object;
-struct display_buffer;
 struct launch_capture;
 struct launch_group;
 struct hostfs_request;
@@ -80,9 +77,18 @@ struct process_wait *task_prepare_process_wait(void);
 struct console_wait *task_prepare_console_wait(void);
 struct pipe_wait *task_prepare_pipe_wait(void);
 
-/* Temporary storage adapter for the BSP request mechanism. Current user task,
- * IF=0. The typed record remains embedded until reusable areas are provisioned. */
-struct bsp_request *task_bsp_request_storage(enum bsp_service service);
+/* Temporary storage adapters for the BSP request mechanism. Current user task,
+ * IF=0. Acquire reserves one record across all service types until release after
+ * result consumption. Typed records remain embedded until area provisioning. */
+struct bsp_request *task_bsp_request_acquire(enum bsp_service service);
+struct bsp_request *task_bsp_request_current(void);
+void task_bsp_request_release(struct bsp_request *request);
+/* Register a prepared deferred request, then sleep using its saved wait record.
+ * Only the scheduler publishes it after leaving the private root/task stack. */
+void task_bsp_request_defer(struct bsp_request *request);
+
+/* Caller-only profile storage adapter; never lend this pointer to a service. */
+struct profile_snapshot *task_memory_profile(void);
 
 /* Current user task lends its table to the BSP for creation/installation. */
 enum call_status task_create_namespace(handle_t *handle);
@@ -94,22 +100,11 @@ enum call_status task_export_endpoint(const struct endpoint_export_message *requ
  * ownership to the BSP to replace/release backing; return it after completion. */
 bool task_replace_file_buffer(struct file_object *file, size_t capacity);
 
-/* Current user task, IF=0, no held locks. Copies the checked operation/region
- * into task metadata and blocks. The scheduler publishes only after leaving
- * the private root and task stack; BSP returns ownership through wakeup.
- * region is local caller storage, never dereferenced remotely. */
-enum mm_result task_request_memory(uint64_t operation, struct memory_region *region);
-
 /* Current user task, IF=0. Caller validates reply storage before state changes.
  * No allocation or remote inspection; one task per process at present. */
 enum call_status task_profile_control(uint64_t operation, struct profile_snapshot *reply);
 enum call_status task_profile_file_control(uint64_t operation, struct profile_file_snapshot *reply);
 enum call_status task_profile_host_control(uint64_t operation, struct profile_host_snapshot *reply);
-
-/* Same inactive-root handoff as private memory. The capability keeps display
- * alive while blocked; reply is copied through task metadata, never remotely. */
-enum call_status task_request_display(struct display_object *display,
-    uint64_t operation, struct display_buffer *reply);
 
 /* Current user task, IF=0, no spinlocks. Staging allocation/disposal runs on
  * BSP. Launch/discard consumes capture and any owned host image. Launch borrows
