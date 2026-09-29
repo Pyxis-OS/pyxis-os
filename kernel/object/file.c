@@ -1,12 +1,14 @@
 #include <abi/file.h>
 #include <arch/smp.h>
 #include <arch/clock.h>
+#include <arch/cpu.h>
 #include <kernel/object/file.h>
 #include <kernel/initrd.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
+#include <kernel/service/profile.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 
@@ -120,7 +122,7 @@ void file_end_operation(struct file_object *file)
   unlock_file(file);
 }
 
-bool file_replace_buffer(struct file_object *file, size_t capacity,
+static bool file_replace_buffer(struct file_object *file, size_t capacity,
     struct file_buffer_profile *profile)
 {
   KASSERT(arch_cpu_index() == 0 && file->backing == FILE_RAM && file->busy);
@@ -160,6 +162,77 @@ bool file_replace_buffer(struct file_object *file, size_t capacity,
   return true;
 }
 
+void file_replace_published(struct file_replace_request *request)
+{
+  KASSERT(request && request->request.state == BSP_REQUEST_PREPARED);
+  if (request->profile.active) {
+    request->profile.published_ns = arch_monotonic_ns();
+  }
+}
+
+void file_replace_execute(struct file_replace_request *request)
+{
+  KASSERT(arch_cpu_index() == 0 && request && request->file);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(request->request.state == BSP_REQUEST_SERVICING);
+  if (request->profile.active) {
+    request->profile.service_started_ns = arch_monotonic_ns();
+  }
+  request->result = file_replace_buffer(request->file, request->capacity,
+      request->profile.active ? &request->profile.buffer : NULL);
+  if (request->profile.active) {
+    request->profile.service_ended_ns = arch_monotonic_ns();
+  }
+  request->file = NULL;
+}
+
+static void finish_file_profile(struct profile_file_snapshot *stats,
+    const struct file_replace_request *request)
+{
+  uint64_t resumed = arch_monotonic_ns();
+  const struct file_replace_profile *sample = &request->profile;
+  const struct file_buffer_profile *service = &sample->buffer;
+  profile_add(&stats->flags, &stats->requests, 1);
+  profile_add(&stats->flags, request->result ? &stats->successes : &stats->failures, 1);
+  profile_add(&stats->flags, &stats->requested_capacity, request->capacity);
+  profile_add(&stats->flags, &stats->copied_bytes, service->copied_bytes);
+  profile_duration_add(&stats->flags, &stats->publication, sample->started_ns,
+      sample->published_ns);
+  profile_duration_add(&stats->flags, &stats->queue, sample->published_ns,
+      sample->service_started_ns);
+  profile_duration_add(&stats->flags, &stats->service, sample->service_started_ns,
+      sample->service_ended_ns);
+  profile_duration_add(&stats->flags, &stats->resume, sample->service_ended_ns, resumed);
+  profile_duration_add(&stats->flags, &stats->total, sample->started_ns, resumed);
+  profile_duration_add(&stats->flags, &stats->allocation, service->allocation_started,
+      service->allocation_ended);
+  profile_duration_add(&stats->flags, &stats->copy, service->copy_started,
+      service->copy_ended);
+  profile_duration_add(&stats->flags, &stats->release, service->release_started,
+      service->release_ended);
+}
+
+static bool replace_buffer(struct file_object *file, size_t capacity)
+{
+  struct profile_file_snapshot *profile = task_file_profile();
+  bool profiled = profile->flags & PROFILE_ACTIVE;
+  uint64_t started = profiled ? arch_monotonic_ns() : 0;
+  struct file_replace_request *request =
+      (struct file_replace_request *)bsp_request_prepare(BSP_SERVICE_FILE_REPLACE);
+  request->file = file;
+  request->capacity = capacity;
+  request->result = false;
+  request->profile = (struct file_replace_profile){.active = profiled, .started_ns = started};
+
+  bsp_request_submit_and_wait(&request->request);
+  if (profiled) {
+    finish_file_profile(profile, request);
+  }
+  bool result = request->result;
+  bsp_request_release(&request->request);
+  return result;
+}
+
 static bool reserve_buffer(struct file_object *file, size_t size)
 {
   if (size <= file->capacity) {
@@ -169,11 +242,11 @@ static bool reserve_buffer(struct file_object *file, size_t size)
   if (file->capacity <= SIZE_MAX / 2 && capacity < file->capacity * 2) {
     capacity = file->capacity * 2;
   }
-  if (task_replace_file_buffer(file, capacity)) {
+  if (replace_buffer(file, capacity)) {
     return true;
   }
   /* Spare capacity is an optimization, not a requirement for this write. */
-  return capacity != size && task_replace_file_buffer(file, size);
+  return capacity != size && replace_buffer(file, size);
 }
 
 static struct syscall_result read_file(struct file_object *file,
@@ -290,7 +363,7 @@ static struct syscall_result resize_file(struct file_object *file, size_t size)
 {
   file_begin_operation(file);
   if (!size && file->capacity) {
-    KASSERT(task_replace_file_buffer(file, 0));
+    KASSERT(replace_buffer(file, 0));
   } else if (!reserve_buffer(file, size)) {
     file_end_operation(file);
     return (struct syscall_result){CALL_NO_MEMORY, 0};

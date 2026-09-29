@@ -10,8 +10,6 @@ struct profile_file_snapshot;
 struct profile_host_snapshot;
 enum hostfs_operation;
 struct task_wait;
-struct directory_entry;
-struct file_object;
 struct file_wait;
 struct process_wait;
 struct console_wait;
@@ -50,16 +48,6 @@ bool task_deadline_expired(uint64_t deadline);
  * Recheck resource state under the lock; a wake is not a grant of ownership. */
 void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline);
 
-/* Current user task, IF=0, no held locks. A focused BSP service allocates or
- * discards an unpublished or removed RAM entry. Requests live in task metadata,
- * never on a remote private stack. Allocation returns NULL on exhaustion.
- * The caller fills the name and publishes the entry or returns it for disposal.
- * Removed entries must have no list links or borrowed readers before disposal. */
-struct directory_entry *task_allocate_directory_entry(uint64_t kind, size_t name_length);
-/* Name storage only; its child reference remains NULL until rename commits. */
-struct directory_entry *task_allocate_directory_name(size_t name_length);
-void task_discard_directory_entry(struct directory_entry *entry);
-
 /* Current user task, IF=0. The file queue uses this task-owned record until it
  * detaches and wakes the waiter. One wait per task; no private-stack pointers. */
 struct file_wait *task_prepare_file_wait(void);
@@ -81,10 +69,7 @@ void task_bsp_request_defer(struct bsp_request *request);
 
 /* Caller-only profile storage adapter; never lend this pointer to a service. */
 struct profile_snapshot *task_memory_profile(void);
-
-/* Current user task, IF=0, no spinlocks held. Lend exclusive file operation
- * ownership to the BSP to replace/release backing; return it after completion. */
-bool task_replace_file_buffer(struct file_object *file, size_t capacity);
+struct profile_file_snapshot *task_file_profile(void);
 
 /* Current user task, IF=0. Caller validates reply storage before state changes.
  * No allocation or remote inspection; one task per process at present. */

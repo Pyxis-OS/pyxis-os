@@ -1,6 +1,8 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/object/pipe.h>
+#include <kernel/fs/ramfs.h>
+#include <kernel/object/file.h>
 #include <kernel/object/capability.h>
 #include <kernel/object/namespace.h>
 #include <kernel/object/endpoint.h>
@@ -51,6 +53,8 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_NAMESPACE_CREATE:
   case BSP_SERVICE_ENDPOINT_CREATE:
   case BSP_SERVICE_ENDPOINT_EXPORT:
+  case BSP_SERVICE_RAMFS:
+  case BSP_SERVICE_FILE_REPLACE:
     return false;
   case BSP_SERVICE_MEMORY:
   case BSP_SERVICE_DISPLAY:
@@ -62,6 +66,9 @@ static bool requires_handoff(enum bsp_service service)
 
 static void publish_request(struct bsp_request *request)
 {
+  if (request->service == BSP_SERVICE_FILE_REPLACE) {
+    file_replace_published((struct file_replace_request *)request);
+  }
   lock_requests();
   request->state = BSP_REQUEST_QUEUED;
   if (request_tail) {
@@ -173,6 +180,12 @@ static void request_worker(void *argument)
       break;
     case BSP_SERVICE_ENDPOINT_EXPORT:
       endpoint_export_execute((struct endpoint_export_request *)request);
+      break;
+    case BSP_SERVICE_RAMFS:
+      ramfs_request_execute((struct ramfs_request *)request);
+      break;
+    case BSP_SERVICE_FILE_REPLACE:
+      file_replace_execute((struct file_replace_request *)request);
       break;
     case BSP_SERVICE_MEMORY:
       memory_request_execute((struct memory_request *)request);

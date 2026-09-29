@@ -47,15 +47,9 @@ enum launch_action {
   LAUNCH_GROUP_CREATE, LAUNCH_GROUP_PREPARE, LAUNCH_GROUP_PUBLISH,
   LAUNCH_GROUP_DISCARD,
 };
-enum directory_action { DIRECTORY_ALLOCATE_ENTRY, DIRECTORY_ALLOCATE_NAME, DIRECTORY_DISCARD };
 
 struct task {
   struct task *next;
-  struct task *directory_next;
-  struct directory_entry *directory_entry;
-  uint64_t directory_kind;
-  size_t directory_name_length;
-  enum directory_action directory_action;
   struct hostfs_request hostfs_request;
   struct file_wait file_wait;
   struct console_wait console_wait;
@@ -63,6 +57,8 @@ struct task {
   struct pipe_wait pipe_wait;
   /* Temporary typed storage until the reusable user-request area is provisioned. */
   struct pipe_create_request pipe_request;
+  struct ramfs_request ramfs_request;
+  struct file_replace_request file_request;
   struct capability_growth_request growth_request;
   struct namespace_create_request namespace_request;
   struct endpoint_create_request endpoint_create_request;
@@ -71,10 +67,6 @@ struct task {
   struct display_request display_request;
   struct bsp_request *bsp_request; /* Reserved through result consumption. */
   struct bsp_request *deferred_request; /* Published only after the safe handoff. */
-  struct task *file_next;
-  struct file_object *file;
-  size_t file_capacity;
-  bool file_result;
   struct task *launch_next;
   enum launch_action launch_action;
   struct launch_capture *launch_capture;
@@ -87,9 +79,6 @@ struct task {
   struct profile_snapshot profile;
   struct profile_file_snapshot file_profile;
   struct profile_host_snapshot host_profile;
-  struct file_buffer_profile file_buffer_profile;
-  uint64_t file_started_ns, file_published_ns;
-  uint64_t file_service_started_ns, file_service_ended_ns;
   enum task_kind kind;
   struct process *process; /* Owned by a user task; NULL for a kernel task. */
   uintptr_t kernel_stack;
@@ -115,8 +104,6 @@ struct scheduler {
 
 static struct scheduler *schedulers;
 static struct task *completed_head;
-static struct task *directory_head, *directory_tail;
-static struct task *file_head, *file_tail;
 static struct hostfs_request *hostfs_head, *hostfs_tail;
 static struct task *launch_head, *launch_tail;
 static atomic_bool started;
@@ -380,6 +367,12 @@ struct bsp_request *task_bsp_request_acquire(enum bsp_service service)
   case BSP_SERVICE_ENDPOINT_EXPORT:
     request = &task->endpoint_export_request.request;
     break;
+  case BSP_SERVICE_RAMFS:
+    request = &task->ramfs_request.request;
+    break;
+  case BSP_SERVICE_FILE_REPLACE:
+    request = &task->file_request.request;
+    break;
   case BSP_SERVICE_MEMORY:
     request = &task->memory_request.request;
     break;
@@ -434,78 +427,9 @@ struct profile_snapshot *task_memory_profile(void)
   return &current_user_task()->profile;
 }
 
-static void queue_directory_request(struct task *task, struct task_wait *wait)
+struct profile_file_snapshot *task_file_profile(void)
 {
-  lock_queues();
-  task->directory_next = NULL;
-  if (directory_tail) {
-    directory_tail->directory_next = task;
-  } else {
-    directory_head = task;
-  }
-  directory_tail = task;
-  unlock_queues();
-  task_wait_sleep(wait);
-}
-
-struct directory_entry *task_allocate_directory_entry(uint64_t kind, size_t name_length)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-  task->directory_kind = kind;
-  task->directory_name_length = name_length;
-  task->directory_action = DIRECTORY_ALLOCATE_ENTRY;
-  task->directory_entry = NULL;
-  queue_directory_request(task, wait);
-  struct directory_entry *entry = task->directory_entry;
-  task->directory_entry = NULL;
-  return entry;
-}
-
-struct directory_entry *task_allocate_directory_name(size_t name_length)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-  task->directory_name_length = name_length;
-  task->directory_action = DIRECTORY_ALLOCATE_NAME;
-  task->directory_entry = NULL;
-  queue_directory_request(task, wait);
-  struct directory_entry *entry = task->directory_entry;
-  task->directory_entry = NULL;
-  return entry;
-}
-
-void task_discard_directory_entry(struct directory_entry *entry)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-  task->directory_action = DIRECTORY_DISCARD;
-  task->directory_entry = entry;
-  queue_directory_request(task, wait);
-}
-
-static void service_directory_requests(void)
-{
-  lock_queues();
-  struct task *task = directory_head;
-  directory_head = directory_tail = NULL;
-  unlock_queues();
-
-  while (task) {
-    struct task *next = task->directory_next;
-    if (task->directory_action == DIRECTORY_DISCARD) {
-      ramfs_discard_entry(task->directory_entry);
-      task->directory_entry = NULL;
-    } else if (task->directory_action == DIRECTORY_ALLOCATE_NAME) {
-      task->directory_entry = ramfs_allocate_name(task->directory_name_length);
-    } else {
-      task->directory_entry = ramfs_allocate_entry(task->directory_kind,
-          task->directory_name_length);
-    }
-    task_wait_wake(&task->wait_record);
-    /* All result storage is published before waking; task may now exit. */
-    task = next;
-  }
+  return &current_user_task()->file_profile;
 }
 
 struct hostfs_request *task_prepare_hostfs(enum hostfs_operation operation)
@@ -573,65 +497,6 @@ struct file_wait *task_prepare_file_wait(void)
   struct file_wait *record = &wait->task->file_wait;
   *record = (struct file_wait){.wait = wait};
   return record;
-}
-
-static void finish_file_profile(struct task *task);
-
-bool task_replace_file_buffer(struct file_object *file, size_t capacity)
-{
-  struct task *task = local_scheduler()->current_task;
-  bool profiled = task->file_profile.flags & PROFILE_ACTIVE;
-  if (profiled) {
-    task->file_started_ns = arch_monotonic_ns();
-    task->file_buffer_profile = (struct file_buffer_profile){0};
-  }
-  struct task_wait *wait = prepare_user_wait();
-  task->file = file;
-  task->file_capacity = capacity;
-
-  if (profiled) {
-    task->file_published_ns = arch_monotonic_ns();
-  }
-  lock_queues();
-  task->file_next = NULL;
-  if (file_tail) {
-    file_tail->file_next = task;
-  } else {
-    file_head = task;
-  }
-  file_tail = task;
-  unlock_queues();
-
-  task_wait_sleep(wait);
-  if (profiled) {
-    finish_file_profile(task);
-  }
-  task->file = NULL;
-  return task->file_result;
-}
-
-static void service_file_requests(void)
-{
-  lock_queues();
-  struct task *task = file_head;
-  file_head = file_tail = NULL;
-  unlock_queues();
-
-  while (task) {
-    struct task *next = task->file_next;
-    bool profiled = task->file_profile.flags & PROFILE_ACTIVE;
-    if (profiled) {
-      task->file_service_started_ns = arch_monotonic_ns();
-    }
-    task->file_result = file_replace_buffer(task->file, task->file_capacity,
-        profiled ? &task->file_buffer_profile : NULL);
-    if (profiled) {
-      task->file_service_ended_ns = arch_monotonic_ns();
-    }
-    task_wait_wake(&task->wait_record);
-    /* The requester owns the file again and may immediately exit. */
-    task = next;
-  }
 }
 
 enum call_status task_profile_control(uint64_t operation, struct profile_snapshot *reply)
@@ -751,25 +616,6 @@ static void finish_host_profile(struct task *task)
   if (transport->saturated) {
     *flags |= PROFILE_SATURATED;
   }
-}
-
-static void finish_file_profile(struct task *task)
-{
-  uint64_t resumed = arch_monotonic_ns();
-  struct profile_file_snapshot *stats = &task->file_profile;
-  struct file_buffer_profile *service = &task->file_buffer_profile;
-  profile_add(&stats->flags, &stats->requests, 1);
-  profile_add(&stats->flags, task->file_result ? &stats->successes : &stats->failures, 1);
-  profile_add(&stats->flags, &stats->requested_capacity, task->file_capacity);
-  profile_add(&stats->flags, &stats->copied_bytes, service->copied_bytes);
-  profile_duration_add(&stats->flags, &stats->publication, task->file_started_ns, task->file_published_ns);
-  profile_duration_add(&stats->flags, &stats->queue, task->file_published_ns, task->file_service_started_ns);
-  profile_duration_add(&stats->flags, &stats->service, task->file_service_started_ns, task->file_service_ended_ns);
-  profile_duration_add(&stats->flags, &stats->resume, task->file_service_ended_ns, resumed);
-  profile_duration_add(&stats->flags, &stats->total, task->file_started_ns, resumed);
-  profile_duration_add(&stats->flags, &stats->allocation, service->allocation_started, service->allocation_ended);
-  profile_duration_add(&stats->flags, &stats->copy, service->copy_started, service->copy_ended);
-  profile_duration_add(&stats->flags, &stats->release, service->release_started, service->release_ended);
 }
 
 static struct task *request_launch_service(enum launch_action action,
@@ -1147,8 +993,6 @@ void kernel_task_yield_if_runnable(void)
   for (;;) {
     if (cpu_index == 0) {
       expire_timed_waits();
-      service_directory_requests();
-      service_file_requests();
       service_hostfs_requests();
       service_launch_requests();
       reap_completed();
@@ -1240,8 +1084,7 @@ void task_preempt(bool user_mode)
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
-     (completed_head != NULL || directory_head != NULL ||
-      file_head != NULL || launch_head != NULL || hostfs_head != NULL));
+     (completed_head != NULL || launch_head != NULL || hostfs_head != NULL));
   unlock_queues();
   if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;
