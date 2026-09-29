@@ -151,6 +151,10 @@ bool kernel_task_is_current(void (*entry)(void *));
  * deadline; a past deadline yields to the ready queue. Resumes with IF=1. */
 void kernel_task_sleep_until(uint64_t deadline);
 
+/* Current BSP kernel task, IF=1, no held locks. Yield to the normal ready queue
+ * only when another task is runnable; otherwise return. Resumes with IF=1. */
+void kernel_task_yield_if_runnable(void);
+
 /* Round-robin queue per CPU. The boot stack becomes the scheduler/cleanup
  * stack. Call once per CPU with IF=0; the BSP releases waiting AP schedulers.
  * Only kernel task bodies and userspace run with interrupts enabled. */

@@ -1,8 +1,6 @@
 #ifndef KERNEL_SERVICE_REQUEST_H
 #define KERNEL_SERVICE_REQUEST_H
 
-#include <stdbool.h>
-
 struct task_wait;
 
 enum bsp_service {
@@ -35,10 +33,9 @@ struct bsp_request *bsp_request_prepare(enum bsp_service service);
 void bsp_request_submit_and_wait(struct bsp_request *request);
 void bsp_request_release(struct bsp_request *request);
 
-/* Temporary scheduler adapters. BSP, IF=0; drain a detached FIFO batch without
- * holding the queue lock across service. Pending may also run in timer entry.
- * Worker notification and yielding replace these adapters in the next task. */
-void bsp_requests_service(void);
-bool bsp_requests_pending(void);
+/* BSP, IF=0, once after task_init() and before publishing request producers.
+ * Failure is fatal: the executor is required infrastructure. Kernel tasks,
+ * including the executor, cannot use the synchronous client transport. */
+void bsp_requests_init(void);
 
 #endif

@@ -249,7 +249,29 @@ so a busy task cannot prevent a sleeper from becoming runnable. Sleep requires
 interrupts enabled and no held locks. The [task header](../include/kernel/task.h)
 defines the calling contracts.
 
-Framebuffer presentation is the first BSP kernel task. It copies the active
+`kernel_task_yield_if_runnable()` requires the same IF=1/no-lock calling context.
+It checks the BSP ready queue under the scheduler lock, then yields if another
+task is runnable; otherwise it returns. It does not make sleeping tasks runnable
+or replace timer handling of deadlines and unmigrated service queues.
+
+The [BSP request executor](wip/bsp-service-requests.md) is created immediately
+after `task_init()`, before user tasks are published. Creation failure is fatal.
+It currently services pipe creation; other subsystem queues retain their existing
+scheduler paths. The executor runs one FIFO operation with IF=0, enables
+interrupts, and conditionally yields between operations. An individual operation
+remains non-preemptible. Only the scheduler inspects ready queues.
+
+When its queue is empty, the executor publishes an untimed wait under the request
+lock. The first subsequent publisher detaches that wait and wakes it after
+unlocking; later publishers need no additional wake while it is already notified
+or servicing work. An early wake is remembered through the normal parking
+handshake. A parked worker becomes runnable, with an IPI only for a remote
+publisher. There is no polling, self-IPI or scheduler sweep of this request queue.
+The executor always finishes a published wait before reusing its wait record.
+Synchronous BSP request clients remain user-only, so the executor cannot submit
+to itself and wait. Its subsystem operations use local helpers.
+
+Framebuffer presentation runs as a BSP kernel task. It copies the active
 space on a roughly 60 Hz monotonic deadline schedule, skipping missed frames.
 Rendering stays out of interrupt entry; APIC interrupts still bound wakeup
 latency. The scheduler does not know about display timing. See

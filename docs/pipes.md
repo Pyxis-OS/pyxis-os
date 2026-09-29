@@ -21,9 +21,11 @@ shared record, submits and waits, then consumes its result before releasing the
 record for reuse. Allocation, installation and rollback run on the BSP with
 interrupts disabled. Completion detaches the request and table references before
 notifying the caller; an early notification does not enqueue a still-running task.
-The record is temporarily embedded in task metadata, and the scheduler services
-detached FIFO batches. A dedicated worker and notification policy remain in the
-[BSP service milestone](wip/bsp-service-requests.md).
+The record is temporarily embedded in task metadata. A dedicated BSP worker
+services requests in FIFO order, parks when idle, and receives a notification
+when new work arrives. Between operations it enables interrupts and yields if
+another BSP task is runnable. See the [BSP service milestone](wip/bsp-service-requests.md)
+for request lifetime, scheduling and remaining subsystem migrations.
 
 Boot delegates the named `pipe` service through init and session launch to the
 shell. The shell forwards it on session handoff, but ordinary commands do not
