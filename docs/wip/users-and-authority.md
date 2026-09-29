@@ -23,7 +23,7 @@ do not themselves authorize kernel operations.
   Linking another authentication method/provider requires explicit authority.
 - Persistent resource ownership refers to the Pyxis principal, independently of
   token expiry, account renaming or an authorized authentication-provider change.
-  The initial filesystem milestone selects opaque 128-bit principal IDs generated
+  The shared filesystem core uses opaque 128-bit principal IDs generated
   from strong randomness, with zero invalid; import procedures remain undecided. The
   [storage identity rules](persistent-storage.md#agreed-persistent-identity-and-imported-ownership)
   require trusted mappings and retain unmapped ownership.
@@ -37,8 +37,9 @@ do not themselves authorize kernel operations.
 - Keep authentication, external claim interpretation and machine/session policy
   in userspace. The shared storage core evaluates native persistent grants against
   trusted context; the kernel enforces capabilities without interpreting JWTs,
-  external groups or OIDC. The exact storage acquisition interface still needs
-  specification in the initial filesystem milestone.
+  external groups or OIDC. The
+  [storage acquisition interface](../../fs/docs/core.md#policy-acquisition-and-ordinary-views)
+  is implemented in the host-only core; native broker integration remains future work.
 - Restricted applications cannot recover the user's full authority merely by
   identifying as that user. Access to PCA and particular grant requests must be
   controlled; sensitive elevation may require trusted user interaction. Login
@@ -88,10 +89,14 @@ and [OAuth Device Authorization Grant](https://www.rfc-editor.org/rfc/rfc8628.ht
   is defined. Terminating a session releases its own resources but cannot recall
   copies delegated outside it or data already read.
 
-The [initial filesystem model](filesystem-readonly.md#ownership-and-acquisition-policy)
+The [initial filesystem model](../filesystem-readonly.md#ownership-and-acquisition-policy)
 selects persistent policy owners and explicit individual-principal grants with
-object/subtree scope, plus bounded policy-based acquisition. Exact rights, disk
-layouts, trusted interfaces and immediate revocation machinery are not selected.
+object/subtree scope, plus implemented bounded policy-based acquisition. The
+[format contract](../../fs/docs/format.md#rights-and-trusted-acquisition) specifies
+rights and layouts; the
+[core contract](../../fs/docs/core.md#policy-acquisition-and-ordinary-views)
+specifies trusted acquisition inputs and held views. Native broker integration
+and immediate revocation machinery remain open.
 
 ## Agreed creation and namespace changes
 
@@ -140,8 +145,9 @@ earlier checkpoint. The current init and host-mount slices do not need
 a complete account system, but their prototype grants are not the eventual
 multi-user policy.
 
-The [initial format milestone](filesystem-readonly.md) now scopes storage ownership
-and read/list acquisition enforcement. It does not authorize placeholder login
+The completed [initial format and read-only core](../filesystem-readonly.md)
+implements storage ownership records and read/list acquisition enforcement. It
+does not authorize placeholder login
 APIs, Unix IDs or mode bits, or implementation of the full identity broker.
 
 ## Remaining decisions
@@ -153,9 +159,9 @@ APIs, Unix IDs or mode bits, or implementation of the full identity broker.
 - How do users relate to sessions, spaces and processes? A space is an execution
   domain, not automatically a user; one user may have several spaces. Decide
   which component creates them and supplies their initial resources.
-- Define concrete broker/storage interfaces for the agreed acquisition policy,
-  initial grants, restricted launches and intentional delegation. Identity must
-  not widen authority; policy administration needs explicit rights.
+- Integrate the implemented storage acquisition interface with concrete broker
+  contracts for initial grants, restricted launches and intentional delegation.
+  Identity must not widen authority; policy administration needs explicit rights.
 - What does `home://` expose for each user? The earlier shared-home idea must not
   imply that all users can access one another's data. Decide sharing across one
   user's spaces separately from explicit sharing between users, including how

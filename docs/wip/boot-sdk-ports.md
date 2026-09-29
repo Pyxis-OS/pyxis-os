@@ -125,8 +125,8 @@ limits live in the subsystem docs, with the
 [fetch/inspect/compile/run workflow](../edit-build-run.md#fetch-source-over-https)
 beside the local development loop. SSH/libssh remains deferred. The
 [block-storage foundation](../block-storage.md) is also complete. The
-[initial filesystem format and read-only core](filesystem-readonly.md) is selected
-next; other paths remain proposals.
+[initial filesystem format and read-only core](../filesystem-readonly.md) is
+complete; later writable recovery, FUSE and native integration remain proposals.
 
 The next [discussion agenda](storage-and-terminal-agenda.md) covers persistent
 disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
@@ -148,18 +148,14 @@ contracts. The [block-storage foundation](../block-storage.md) is complete:
 virtio-blk; bounded ticketed reads/writes and ordered flushes support
 [GPT discovery](../gpt.md). Final validation combined those devices on the merged
 implementation. Device/transport failure remains terminal until reboot. The
-[initial format and read-only shared core](filesystem-readonly.md) is now selected:
-PyxisOS/pyxis-fs will own the core and host tools. Its
-[format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/8c4ffa67595f05eeef97b159d0af0cfb84da1ef5/docs/format.md)
-completes task 1, including inline extent mapping, revised reserve defaults and
-lookup checks for ID acquisition. Task 2 supplies the pinned shared codecs and
-bounded platform boundary. Task 3 adds empty sparse-image construction and
-`info`/`volumes` reopening through `make fs-tools`. Task 4 supplies readonly
-traversal, acquisition, `list`/`stat`/`access` and explicit GPT image selection.
-Task 5 supplies bounded source import and extraction with populated round-trip
-validation. Task 6 supplies bounded whole-image consistency inspection of both
-retained states. Task 7 next validates and closes the milestone.
-Writable recovery, FUSE and native-persistence milestones remain proposed.
+[initial format and read-only shared core](../filesystem-readonly.md) is complete.
+PyxisOS/pyxis-fs owns the pinned freestanding core and Linux host tools built by
+`make fs-tools`. They create populated images, reopen and extract them, evaluate
+bounded acquisition and check both retained states. The
+[format contract](../../fs/docs/format.md), [core interfaces](../../fs/docs/core.md)
+and [measured host validation](../../fs/docs/host-tools.md#validation) are durable
+references. Writable recovery, FUSE and native-persistence milestones remain
+proposed; completing this host-only milestone does not select the next task.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
@@ -167,7 +163,7 @@ Writable recovery, FUSE and native-persistence milestones remain proposed.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../block-storage.md), populated-image tools and shared readonly traversal/acquisition are complete. | The selected [initial format and read-only core](filesystem-readonly.md) next adds whole-image consistency inspection. |
+| Native disk storage | The [block-storage foundation](../block-storage.md) and [initial format and read-only core](../filesystem-readonly.md), including populated image tools and whole-image checking, are complete. | Writable recovery, FUSE and native mounts remain proposals with separate policy and implementation gates. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The

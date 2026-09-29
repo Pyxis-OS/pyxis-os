@@ -678,43 +678,43 @@ service work and wait sets; no worker-process or thread framework is included.
 
 ## Filesystem host prototype limits
 
-The host-image tools record the accepted reserve policy, but no writable
-transaction/recovery cost bound proves those reserves sufficient. Sparse host
-image sizing also does not reserve host disk space. Keep writable admission
-separate; revisit the operation-cost and allocation-map construction bounds before
-the writable milestone. See the [filesystem milestone](wip/filesystem-readonly.md)
-and [host-tool limits](../fs/docs/host-tools.md).
+The host-image tools record prototype reserve defaults, but no writable
+transaction/recovery cost bound proves those budgets sufficient. Sparse host
+image sizing also does not reserve host disk space. Before writable work, settle
+bounded admission costs, allocator self-hosting, orphan retention and recovery
+bookkeeping under the agreed
+[commit rules](../fs/docs/format.md#future-publication-and-reclamation-envelope).
+The [implemented filesystem contracts](filesystem-readonly.md) do not promise
+crash recovery or production-data safety.
 
-The bulk planner sizes object/tree bookkeeping from the import but still reserves
-fixed buffers for the volume profile and conservative node bounds. Host scanning
-and extraction reserve depth-256 workspaces. Small explicit memory caps can reject
-otherwise tiny images, and the default cap does not promise to fit the maximum
-record profile. Revisit workspace sizing if real imports hit these limits; there
-is no temporary-file spill strategy. Planning failures precede image creation.
-The diagnostic checker also retains bounded tables for both committed states,
-with fixed volume/frame workspaces and transient old/new arrays during growth.
-Its cap can stop either state before a full consistency result is available.
+The bulk planner reserves fixed volume/depth workspaces and conservative tree
+bounds. Small explicit memory caps can reject tiny images; the default cap does
+not guarantee the maximum record profile fits. There is no temporary-file spill
+strategy. Planning fails before image creation. The checker retains bounded
+records for both committed states, including transient old/new arrays during
+growth, and resource exhaustion leaves the result explicitly incomplete.
+Revisit workspace sizing when real imports need larger manifests or lower caps.
 
-Readonly object access scans each consulted ancestor directory to validate unique
-naming. Separate operations repeat ancestry, grant and allocation-proof work;
-file reads may revisit proof closure for each block. Memory is capped, but this
-does not promise a small I/O count. Task 5 successfully extracted repository
-source trees and a 476776-byte binary, but this establishes correctness for those
-inputs rather than scaling bounds. Revisit measured costs during milestone
-closure or when larger inputs justify caches; no performance guarantee follows.
+Readonly object access scans consulted ancestor directories to validate unique
+naming. Separate calls repeat ancestry, grant and allocation-proof work; file
+reads can repeat proof closure. Memory is capped, but I/O work has no small-count
+or performance guarantee. Successful source-tree and binary extraction establishes
+correctness for the recorded inputs, not scaling bounds. Measure costs before
+larger workloads justify caches or change the lifetime contract.
 
-Task-5 runtime coverage includes populated directory paging, nested policy and
-inline file extents. Source holes are materialized into data, so sparse and
-multiple-extent reader paths still have source-review coverage only, as do
-grant-free volumes, malformed metadata, GPT degradation, concurrent source-change
-detection and actual I/O/flush failure. Revisit these limits during task 7 using
-agreed tooling; do not infer runtime coverage from compilation or code review.
+[Host validation](../fs/docs/host-tools.md#validation) covers populated directory
+paging, nested policy decisions, inline file extents, empty and multi-level
+images, 256 volumes and explicit GPT selection with both sector sizes. All
+runtime-checked committed pairs have identical generation-1 roots. Sparse host
+files are materialized into data, so sparse and multiple-extent reader paths
+retain source-review coverage. Grant-free volumes, degraded GPT, concurrent
+source changes, malformed/unknown metadata and actual I/O/flush failures also
+have source-review coverage only.
 
-Task 6 adds whole-image consistency checking, with runtime coverage of empty,
-populated and 256-volume images and both GPT sector sizes. These images all have
-identical generation-1 roots. Cross-generation retention/reuse, retired charges,
-unknown features and malformed metadata still have source-review coverage only.
-The checker validates structural allocation claims without reading file payloads;
-file-data integrity checksums remain deferred. Revisit these coverage gaps during
-closure using agreed tooling and before writable transactions rely on retention
-or recovery behavior.
+Cross-generation retention/reuse, retired charges and differing committed roots
+have no runtime evidence. Revisit those paths using agreed tooling before writable
+transactions rely on retention or recovery behavior. Structural checking verifies
+allocation claims without reading payloads; file-data checksums remain deferred.
+Extraction and host comparison establish content equality only for the exercised
+inputs. The offline checker cannot prove runtime readers or outstanding I/O have
+released storage, so it cannot authorize reclamation by itself.

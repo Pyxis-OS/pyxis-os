@@ -1,13 +1,13 @@
 # Pyxis pool and persistent filesystem
 
 Status: agreed design direction, 2026-09-29. The
-[block-storage foundation](../block-storage.md) is complete; the filesystem
-remains planned. The [initial format and read-only core](filesystem-readonly.md)
-is the selected next milestone; writable recovery, FUSE and native mounts remain
-proposals.
+[block-storage foundation](../block-storage.md) and
+[initial format and read-only core](../filesystem-readonly.md) are complete.
+Writable recovery, FUSE and native mounts remain proposals.
 These notes do not authorize subsequent implementation. Agreed design choices
 and remaining proposals are identified separately; disk formats, enforcement
-interfaces and focused task plans still need specification.
+interfaces and focused task plans for later writable/integration work still need
+specification.
 
 Related: [planning agenda](storage-and-terminal-agenda.md),
 [filesystem direction](../vfs.md), and
@@ -26,14 +26,18 @@ Related: [planning agenda](storage-and-terminal-agenda.md),
   reservation and an upper bound. Volumes also shrink as data is released.
 - Reserve emergency/migration capacity as an allocator-protected budget, not a
   fixed physical region. The discussed 4–8 GiB sizes were examples. Derive defaults
-  from usable pool capacity with explicit overrides; exact formulas remain open.
+  from usable pool capacity with explicit overrides. The implemented prototype
+  defaults are specified in
+  [format accounting](../../fs/docs/format.md#accounting-and-defaults);
+  writable operation-cost bounds remain open.
 - Use COW and design for NVMe-oriented workloads from the beginning.
 - Reserve on-disk structure space for future fields. Each structure should have
   a format version that changes for incompatible layout/meaning changes, not
   merely because a backward-compatible field uses reserved bytes.
 - A 4 KiB superblock with reserved space, and copies at the beginning and end,
   is the starting layout. The initial format uses 4 KiB B+ tree nodes with packed
-  records; exact node encoding and entry layouts remain specification work.
+  records; the [format specification](../../fs/docs/format.md) defines the implemented
+  node encoding and entry layouts.
 - Provide a Linux FUSE implementation so the filesystem can be mounted on the
   development host.
 
@@ -63,8 +67,8 @@ capabilities and prospective policy changes are also agreed. The
 [creation and move rules](users-and-authority.md#agreed-creation-and-namespace-changes)
 use parent-controlled policy ownership, destination subtree exposure,
 identity-preserving within-volume moves and new identities for ordinary copies.
-The [initial format milestone](filesystem-readonly.md#identity-names-and-namespace-bindings)
-selects typed opaque 128-bit IDs. Immediate revocation remains undecided.
+The [identity contract](../filesystem-readonly.md#identity-names-and-namespace-bindings)
+uses typed opaque 128-bit IDs. Immediate revocation remains undecided.
 
 ## Agreed persistent identity and imported ownership
 
@@ -73,7 +77,7 @@ selects typed opaque 128-bit IDs. Immediate revocation remains undecided.
   volume, object and principal IDs are distinct opaque 128-bit types generated
   from strong randomness, with zero invalid. Object identity includes its pool
   and volume IDs. Names and namespace bindings follow the
-  [initial format contract](filesystem-readonly.md#identity-names-and-namespace-bindings).
+  [initial format contract](../filesystem-readonly.md#identity-names-and-namespace-bindings).
 - A format migration preserves the logical volume and its object identities,
   ownership and sharing policy. Replacement storage is a new physical generation
   of that logical volume, not an ordinary cross-volume copy. Temporary migration
@@ -97,7 +101,7 @@ selects typed opaque 128-bit IDs. Immediate revocation remains undecided.
 
 ## Agreed pool allocation and accounting
 
-Sizes and transaction-level mechanisms remain open.
+Writable operation costs and transaction-level mechanisms remain open.
 
 - Use a shared extent allocator rather than contiguous virtual partitions.
   Volume growth/shrink becomes allocation/reclamation, not boundary relocation.
@@ -109,7 +113,7 @@ Sizes and transaction-level mechanisms remain open.
   not apparent file lengths; sparse holes consume no data blocks. Distinguish
   live blocks, unreclaimable old blocks and bounded transaction workspace. The
   agreed COW workspace rules below separate temporary duplication from resulting
-  volume allocation; exact accounting and admission algorithms remain open.
+  volume allocation; writable admission algorithms remain open.
 - Capacity guarantees are hard promises, not overcommit. Creating a volume or
   increasing its guarantee must fit alongside current allocations, other volumes'
   unused guarantees and pool reserves. Set the quota at least as high as the
@@ -127,9 +131,10 @@ Sizes and transaction-level mechanisms remain open.
 Defaults scale with usable pool capacity and the initial volume set, with explicit
 overrides and no overcommit. Persist the resulting budgets; later volume creation
 must not silently reduce existing guarantees. Correctness minimums depend on
-bounded transaction/recovery costs and cannot shrink arbitrarily. Numerical rules
-and transaction admission algorithms remain open; see the
-[selected accounting scope](filesystem-readonly.md#allocation-and-capacity-accounting).
+bounded transaction/recovery costs and cannot shrink arbitrarily. The
+[implemented accounting scope](../filesystem-readonly.md#allocation-and-capacity-accounting)
+records the prototype numerical defaults. Writable operation costs and admission
+algorithms remain open.
 
 ## Agreed migration data strategy
 
@@ -194,8 +199,9 @@ and transaction admission algorithms remain open; see the
 
 - Define disk encoding independently of C layouts: fixed-width fields, explicit
   byte order and record boundaries. Metadata records have identifiable types and
-  structure versions; exact headers and sizes remain open. Keep structure versions
-  separate from transaction generations and enabled feature declarations.
+  structure versions; [format encoding](../../fs/docs/format.md) defines the initial
+  headers and sizes. Keep structure versions separate from transaction generations
+  and enabled feature declarations.
 - Initialize reserved bytes to zero and define zero as the old/default behavior
   when assigning a compatible new field. Existing writers must preserve unknown
   extension bytes when rewriting records, including COW replacements, or refuse
@@ -228,11 +234,14 @@ policies still need discussion:
   safe out-of-space suspension; no fixed reserve guarantees every future migration.
 - Define a separate procedure for incompatible pool/allocator changes; volume
   conversion does not solve changes to the allocator beneath it.
-- The [two-slot publication model](filesystem-readonly.md#physical-encoding-and-committed-roots)
+- [Two-slot publication](../filesystem-readonly.md#physical-encoding-and-committed-roots)
   is agreed: flush replacement state before replacing the older slot, then flush
-  publication. Both durable roots protect storage. Exact root validation and
-  reclamation bookkeeping still need specification. A 4 KiB superblock is not
-  an assumption of atomic power-failure-safe writes.
+  publication. Both durable roots protect storage. The
+  [format contract](../../fs/docs/format.md#future-publication-and-reclamation-envelope)
+  specifies the agreed reclamation evidence requirements; candidate validation is
+  specified [separately](../../fs/docs/format.md#candidate-validation-and-selection).
+  Writable bookkeeping, operation bounds and recovery mechanisms remain open.
+  A 4 KiB superblock is not an assumption of atomic power-failure-safe writes.
 
 ## Agreed initial implementation scope
 
@@ -258,8 +267,9 @@ This envelope does not settle the remaining format/interface choices.
   the core rather than maintaining two format/allocator implementations.
   [PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) owns the core and tools,
   with the eventual FUSE adapter alongside them. Initial read-only operations are
-  synchronous over narrow allocation/block-I/O hooks. Exact build packaging is
-  a decision in the selected milestone.
+  synchronous over narrow allocation/block-I/O hooks. The opt-in
+  [repository integration](../sdk-and-repositories.md#filesystem-repository) builds
+  host tools without a kernel, SDK or image dependency.
 - Preserve migration requirements in the format/core design, but implement a
   concrete converter when there are actual source and destination formats. Do
   not claim the initial format has validated upgrade support or create an artificial
@@ -272,22 +282,22 @@ This envelope does not settle the remaining format/interface choices.
 ## Proposed milestone sequence
 
 The [block-storage foundation](../block-storage.md) is complete. The initial
-format/read-only milestone now has an agreed scope and task sequence. Later
-breakdown and ordering remain proposals; each needs focused PR tasks before work
-starts. Planning agreement does not authorize implementation.
+format/read-only milestone is complete. Later breakdown and ordering remain
+proposals; each needs focused PR tasks before work starts. Planning agreement does not authorize implementation.
 
 1. **Block storage foundation — complete.** Caelum discovers an explicitly
    selected development image, validates GPT and provides bounded asynchronous
    reads/writes and ordered flushes. Implemented contracts and validation live in
    [block storage](../block-storage.md), [shared queues](../virtio-queues.md) and
-   [GPT discovery](../gpt.md). There is no userspace raw-disk interface, filesystem,
-   mounting, installation UI or NVMe driver.
-2. **Initial format and read-only core — selected.** Follow the
-   [dedicated milestone and tasks](filesystem-readonly.md): specify the format
-   first, then build shared-core host formatting, traversal, policy evaluation,
-   extraction and whole-image inspection. Create new populated images only;
-   no existing-pool mutation, kernel mount or FUSE adapter. Record the agreed
-   publication/reclamation design without claiming implemented crash recovery.
+   [GPT discovery](../gpt.md). That milestone added no userspace raw-disk interface,
+   filesystem mount, installation UI or NVMe driver.
+2. **Initial format and read-only core — complete.** The
+   [implemented contracts](../filesystem-readonly.md) cover shared-core host
+   formatting, traversal, bounded policy acquisition, extraction and whole-image
+   inspection. New populated images round-trip through the reader; there is no
+   existing-pool mutation, kernel mount or FUSE adapter. The agreed publication/
+   reclamation envelope preserves future constraints without claiming implemented
+   crash recovery.
 3. **Writable core and recovery.** Add bounded COW transactions, volume allocation,
    guarantees/quotas/reserves, file/directory mutations, checkpointing and recovery.
    Implement the storage-side policy checks selected in the preceding milestone.
@@ -325,5 +335,7 @@ Questions to settle:
 No Unix UID/GID layout, mode bits, ACL format, universal administrator bypass
 or per-user volume requirement is selected. Persistent policy owners and explicit
 principal grants are agreed in the
-[initial model](filesystem-readonly.md#ownership-and-acquisition-policy); exact
-rights, encodings and trusted enforcement interfaces remain specification work.
+[implemented host-only model](../filesystem-readonly.md#ownership-and-acquisition-policy),
+including rights, encodings and bounded acquisition interfaces. Writable policy
+administration, bootstrap admission and native broker integration still need
+focused contracts before implementation.
