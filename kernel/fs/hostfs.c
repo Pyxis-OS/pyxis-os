@@ -9,6 +9,7 @@
 #include <kernel/object/directory.h>
 #include <kernel/object/file.h>
 #include <kernel/panic.h>
+#include <kernel/service/profile.h>
 #include <kernel/task.h>
 #include <kernel/virtio/pci.h>
 
@@ -67,6 +68,105 @@ static uint64_t native_kind(enum virtio_fs_kind kind)
   }
 }
 
+static void profile_duration_merge(uint64_t *flags, struct profile_duration *duration,
+    uint64_t total, uint64_t maximum)
+{
+  profile_add(flags, &duration->total_ns, total);
+  if (maximum > duration->maximum_ns) {
+    duration->maximum_ns = maximum;
+  }
+}
+
+static void finish_host_profile(struct profile_host_snapshot *profile,
+    struct hostfs_request *request)
+{
+  uint64_t resumed = arch_monotonic_ns();
+  struct hostfs_profile *sample = &request->profile;
+  struct profile_host_operation *stats = request->operation == HOSTFS_READ ?
+      &profile->read : &profile->write;
+  uint64_t *flags = &profile->flags;
+  profile_add(flags, &stats->requests, 1);
+  profile_add(flags, &stats->requested_bytes, sample->requested_bytes);
+  if (request->status == CALL_OK) {
+    profile_add(flags, &stats->completed_bytes, request->count);
+    if (request->count && request->count < sample->requested_bytes) {
+      profile_add(flags, &stats->short_transfers, 1);
+    }
+    if (!request->count && sample->requested_bytes && request->operation == HOSTFS_READ) {
+      profile_add(flags, &stats->eof, 1);
+    }
+  } else {
+    profile_add(flags, &stats->failures, 1);
+  }
+  profile_duration_add(flags, &stats->publication, sample->started_ns, sample->published_ns);
+  profile_duration_add(flags, &stats->bsp_queue, sample->published_ns, sample->forwarded_ns);
+  profile_duration_add(flags, &stats->worker_queue, sample->forwarded_ns, sample->service_started_ns);
+  profile_duration_add(flags, &stats->service, sample->service_started_ns, sample->service_ended_ns);
+  profile_duration_add(flags, &stats->resume, sample->service_ended_ns, resumed);
+  profile_duration_add(flags, &stats->total, sample->started_ns, resumed);
+  struct virtio_fs_profile *transport = &sample->transport;
+  profile_add(flags, &stats->submissions, transport->submissions);
+  profile_add(flags, &stats->completions, transport->completions);
+  profile_add(flags, &stats->transport_failures, transport->failures);
+  profile_duration_merge(flags, &stats->transport, transport->completed_ns, transport->completed_max_ns);
+  profile_duration_merge(flags, &stats->transport_failed, transport->failed_ns, transport->failed_max_ns);
+  if (transport->saturated) {
+    *flags |= PROFILE_SATURATED;
+  }
+}
+
+struct hostfs_request *hostfs_request_prepare(enum hostfs_operation operation)
+{
+  struct profile_host_snapshot *profile = task_host_profile();
+  bool profiled = (profile->flags & PROFILE_ACTIVE) &&
+      (operation == HOSTFS_READ || operation == HOSTFS_WRITE);
+  uint64_t started_ns = profiled ? arch_monotonic_ns() : 0;
+  struct hostfs_request *request =
+      (struct hostfs_request *)bsp_request_prepare(BSP_SERVICE_HOSTFS);
+  *request = (struct hostfs_request){
+    .request = request->request,
+    .operation = operation,
+    .profile = {.active = profiled, .started_ns = started_ns},
+  };
+  return request;
+}
+
+void hostfs_request_submit_and_wait(struct hostfs_request *request)
+{
+  struct profile_host_snapshot *profile = task_host_profile();
+  bool profiled = request->profile.active;
+  bsp_request_submit_and_wait(&request->request);
+  if (profiled) {
+    finish_host_profile(profile, request);
+  }
+}
+
+void hostfs_request_release(struct hostfs_request *request)
+{
+  KASSERT(request && !request->next && !request->node && !request->destination && !request->table);
+  KASSERT(!request->captured && !request->object);
+  bsp_request_release(&request->request);
+}
+
+void hostfs_request_published(struct hostfs_request *request)
+{
+  KASSERT(request && request->request.state == BSP_REQUEST_PREPARED);
+  if (request->profile.active) {
+    request->profile.requested_bytes = request->count;
+    request->profile.published_ns = arch_monotonic_ns();
+  }
+}
+
+/* Detach every worker reference and input loan before returning ownership. */
+static void complete_request(struct hostfs_request *request)
+{
+  request->next = NULL;
+  request->node = NULL;
+  request->destination = NULL;
+  request->table = NULL;
+  bsp_request_complete(&request->request);
+}
+
 void hostfs_prepare(void)
 {
   KASSERT(arch_cpu_index() == 0 && !session && !starting);
@@ -91,12 +191,14 @@ void hostfs_start_failed(enum virtio_fs_result result)
   while (first_request) {
     struct hostfs_request *request = first_request;
     first_request = request->next;
+    if (!first_request) {
+      last_request = NULL;
+    }
     request->next = NULL;
     request->status = startup_failure;
     reject_profile(request);
-    task_wait_wake(request->wait);
+    complete_request(request);
   }
-  last_request = NULL;
   cpu_restore_interrupts(flags);
 }
 
@@ -111,12 +213,16 @@ void hostfs_start(struct virtio_fs_session *started)
 
 void hostfs_submit(struct hostfs_request *request)
 {
-  KASSERT(arch_cpu_index() == 0);
+  KASSERT(arch_cpu_index() == 0 && request->request.state == BSP_REQUEST_FORWARDED);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (request->profile.active) {
+    request->profile.forwarded_ns = arch_monotonic_ns();
+  }
   request->next = NULL;
   if (!session && !starting) {
     request->status = startup_failure;
     reject_profile(request);
-    task_wait_wake(request->wait);
+    complete_request(request);
     return;
   }
   if (last_request) {
@@ -554,7 +660,7 @@ bool hostfs_service(void)
   if (!request) {
     return false;
   }
-  KASSERT(!session->profile);
+  KASSERT(request->request.state == BSP_REQUEST_FORWARDED && !session->profile);
   if (request->profile.active) {
     request->profile.service_started_ns = arch_monotonic_ns();
     session->profile = &request->profile.transport;
@@ -565,8 +671,8 @@ bool hostfs_service(void)
   if (request->profile.active) {
     request->profile.service_ended_ns = arch_monotonic_ns();
   }
-  task_wait_wake(request->wait);
-  /* Wake returns the record and any resulting object to the caller. */
+  complete_request(request);
+  /* Completion returns the record and any resulting object to the caller. */
   cpu_restore_interrupts(flags);
   return true;
 }

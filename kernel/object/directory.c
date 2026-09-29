@@ -8,7 +8,6 @@
 #include <kernel/object/directory.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
-#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 /* REMOVE may lock parent then child, while RENAME locks two arbitrary parents.
@@ -244,15 +243,16 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     if (request->name_length > VIRTIO_FS_NAME_MAX) {
       return (struct syscall_result){CALL_LIMIT, 0};
     }
-    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_LOOKUP);
+    struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_LOOKUP);
     pending->node = directory->host;
     pending->kind = request->kind;
     pending->count = request->name_length;
     KASSERT(copy_from_user(pending->name, request->name, request->name_length));
-    task_submit_hostfs(pending);
+    hostfs_request_submit_and_wait(pending);
     status = pending->status;
     object = pending->object;
     pending->object = NULL;
+    hostfs_request_release(pending);
   } else {
     lock_directory(directory);
     struct directory_entry *entry = find_user_entry(directory, request->name, request->name_length);
@@ -305,19 +305,22 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     if (request->name_length > VIRTIO_FS_NAME_MAX) {
       return (struct syscall_result){CALL_LIMIT, 0};
     }
-    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_CREATE);
+    struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_CREATE);
     pending->node = directory->host;
     pending->kind = request->kind;
     pending->count = request->name_length;
     pending->table = &process_current()->capabilities;
     pending->rights = request->rights;
     KASSERT(copy_from_user(pending->name, request->name, request->name_length));
-    task_submit_hostfs(pending);
-    if (pending->status != CALL_OK) {
-      return (struct syscall_result){pending->status, 0};
+    hostfs_request_submit_and_wait(pending);
+    status = pending->status;
+    if (status != CALL_OK) {
+      hostfs_request_release(pending);
+      return (struct syscall_result){status, 0};
     }
     struct directory_child_reply reply = {.handle = pending->handle};
     KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    hostfs_request_release(pending);
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (directory->backing != DIRECTORY_RAM) {
@@ -392,13 +395,15 @@ static struct syscall_result remove_child(struct directory_object *directory,
     if (request->name_length > VIRTIO_FS_NAME_MAX) {
       return (struct syscall_result){CALL_LIMIT, 0};
     }
-    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_REMOVE);
+    struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_REMOVE);
     pending->node = directory->host;
     pending->kind = request->kind;
     pending->count = request->name_length;
     KASSERT(copy_from_user(pending->name, request->name, request->name_length));
-    task_submit_hostfs(pending);
-    return (struct syscall_result){pending->status, 0};
+    hostfs_request_submit_and_wait(pending);
+    status = pending->status;
+    hostfs_request_release(pending);
+    return (struct syscall_result){status, 0};
   }
   if (directory->backing != DIRECTORY_RAM) {
     return (struct syscall_result){CALL_READ_ONLY, 0};
@@ -517,7 +522,7 @@ static struct syscall_result rename_child(struct directory_object *source,
         request->destination_length > VIRTIO_FS_NAME_MAX) {
       return (struct syscall_result){CALL_LIMIT, 0};
     }
-    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_RENAME);
+    struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_RENAME);
     pending->node = source->host;
     pending->destination = destination->host;
     pending->count = request->source_length;
@@ -526,8 +531,10 @@ static struct syscall_result rename_child(struct directory_object *source,
     KASSERT(copy_from_user(pending->name, request->source_name, request->source_length));
     KASSERT(copy_from_user(pending->destination_name, request->destination_name,
         request->destination_length));
-    task_submit_hostfs(pending);
-    return (struct syscall_result){pending->status, 0};
+    hostfs_request_submit_and_wait(pending);
+    status = pending->status;
+    hostfs_request_release(pending);
+    return (struct syscall_result){status, 0};
   }
   if (source->backing != DIRECTORY_RAM || destination->backing != DIRECTORY_RAM) {
     return (struct syscall_result){CALL_READ_ONLY, 0};
@@ -601,19 +608,22 @@ static struct syscall_result enumerate(struct directory_object *directory,
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (directory->backing == DIRECTORY_HOST) {
-    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_ENUMERATE);
+    struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_ENUMERATE);
     pending->node = directory->host;
     pending->cursor = request->cursor;
     pending->count = request->capacity;
-    task_submit_hostfs(pending);
-    if (pending->status != CALL_OK) {
-      return (struct syscall_result){pending->status, 0};
+    hostfs_request_submit_and_wait(pending);
+    enum call_status status = pending->status;
+    if (status != CALL_OK) {
+      hostfs_request_release(pending);
+      return (struct syscall_result){status, 0};
     }
     if (pending->entry.outcome == DIRECTORY_ENTRY) {
       KASSERT(copy_to_user(request->name, pending->name, pending->entry.name_size));
     }
     KASSERT(copy_to_user(reply_address, &pending->entry, sizeof(pending->entry)));
-    return (struct syscall_result){CALL_OK, sizeof(pending->entry)};
+    hostfs_request_release(pending);
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (!request->cursor.generation && request->cursor.position) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
@@ -706,10 +716,12 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (operation == DIRECTORY_SYNC) {
     if (directory->backing == DIRECTORY_HOST) {
-      struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_SYNC);
+      struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_SYNC);
       pending->node = directory->host;
-      task_submit_hostfs(pending);
-      return (struct syscall_result){pending->status, 0};
+      hostfs_request_submit_and_wait(pending);
+      enum call_status status = pending->status;
+      hostfs_request_release(pending);
+      return (struct syscall_result){status, 0};
     }
     return (struct syscall_result){directory->backing == DIRECTORY_RAM ? CALL_OK : CALL_READ_ONLY, 0};
   }

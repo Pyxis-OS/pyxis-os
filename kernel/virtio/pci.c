@@ -87,7 +87,8 @@ static void wait_interrupt(uint64_t deadline)
   KASSERT(cpu_current() == cpu_bsp() && (flags & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(!filesystem.interrupt_wait);
 
-  while (!filesystem.interrupt_pending && !task_deadline_expired(deadline)) {
+  while (!filesystem.interrupt_pending &&
+      (deadline == UINT64_MAX || !task_deadline_expired(deadline))) {
     struct task_wait *wait = task_wait_prepare();
     filesystem.interrupt_wait = wait;
     if (deadline == UINT64_MAX) {

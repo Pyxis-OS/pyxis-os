@@ -8,7 +8,6 @@
 struct profile_snapshot;
 struct profile_file_snapshot;
 struct profile_host_snapshot;
-enum hostfs_operation;
 struct task_wait;
 struct file_wait;
 struct process_wait;
@@ -16,7 +15,6 @@ struct console_wait;
 struct pipe_wait;
 enum bsp_service;
 struct bsp_request;
-struct hostfs_request;
 
 /* Current user task or BSP kernel task, in task context with IF=0. Prepare its
  * wait record before publishing it under the resource lock, after checking the
@@ -68,19 +66,13 @@ void task_bsp_request_defer(struct bsp_request *request);
 /* Caller-only profile storage adapter; never lend this pointer to a service. */
 struct profile_snapshot *task_memory_profile(void);
 struct profile_file_snapshot *task_file_profile(void);
+struct profile_host_snapshot *task_host_profile(void);
 
 /* Current user task, IF=0. Caller validates reply storage before state changes.
  * No allocation or remote inspection; one task per process at present. */
 enum call_status task_profile_control(uint64_t operation, struct profile_snapshot *reply);
 enum call_status task_profile_file_control(uint64_t operation, struct profile_file_snapshot *reply);
 enum call_status task_profile_host_control(uint64_t operation, struct profile_host_snapshot *reply);
-
-/* Current user task, IF=0, no held locks. Fill the prepared shared record,
- * then submit and block. Its capability and private mappings remain live;
- * only this caller copies user memory. Consume the reply before preparing
- * another request. There is no external task cancellation in this model. */
-struct hostfs_request *task_prepare_hostfs(enum hostfs_operation operation);
-void task_submit_hostfs(struct hostfs_request *request);
 
 /* BSP only, after boot_start_cpus(), VM and heap initialization. */
 void task_init(void);

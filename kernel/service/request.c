@@ -2,6 +2,7 @@
 #include <arch/smp.h>
 #include <kernel/object/pipe.h>
 #include <kernel/fs/ramfs.h>
+#include <kernel/fs/hostfs.h>
 #include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/capability.h>
@@ -57,6 +58,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_RAMFS:
   case BSP_SERVICE_FILE_REPLACE:
   case BSP_SERVICE_LAUNCHER:
+  case BSP_SERVICE_HOSTFS:
     return false;
   case BSP_SERVICE_MEMORY:
   case BSP_SERVICE_DISPLAY:
@@ -70,6 +72,8 @@ static void publish_request(struct bsp_request *request)
 {
   if (request->service == BSP_SERVICE_FILE_REPLACE) {
     file_replace_published((struct file_replace_request *)request);
+  } else if (request->service == BSP_SERVICE_HOSTFS) {
+    hostfs_request_published((struct hostfs_request *)request);
   }
   lock_requests();
   request->state = BSP_REQUEST_QUEUED;
@@ -127,15 +131,64 @@ void bsp_request_release(struct bsp_request *request)
   *request = (struct bsp_request){0};
 }
 
-static void complete_request(struct bsp_request *request)
+void bsp_request_complete(struct bsp_request *request)
 {
-  KASSERT(request->state == BSP_REQUEST_SERVICING && !request->next);
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(request->state == BSP_REQUEST_SERVICING ||
+      (request->service == BSP_SERVICE_HOSTFS && request->state == BSP_REQUEST_FORWARDED));
+  KASSERT(!request->next && request->wait);
   struct task_wait *wait = request->wait;
   request->wait = NULL;
   request->state = BSP_REQUEST_COMPLETE;
   /* Results and completion precede notification. The caller may consume,
    * reuse or retire storage as soon as wake publishes it; no accesses follow. */
   task_wait_wake(wait);
+}
+
+static void service_request(struct bsp_request *request)
+{
+  switch (request->service) {
+  case BSP_SERVICE_HOSTFS:
+    request->state = BSP_REQUEST_FORWARDED;
+    hostfs_submit((struct hostfs_request *)request);
+    /* Forwarding can complete immediately. The worker owns final completion;
+     * even inspecting the request after this transfer would race its caller. */
+    return;
+  case BSP_SERVICE_PIPE_CREATE:
+    pipe_create_execute((struct pipe_create_request *)request);
+    break;
+  case BSP_SERVICE_CAPABILITY_GROW:
+    capability_growth_execute((struct capability_growth_request *)request);
+    break;
+  case BSP_SERVICE_NAMESPACE_CREATE:
+    namespace_create_execute((struct namespace_create_request *)request);
+    break;
+  case BSP_SERVICE_ENDPOINT_CREATE:
+    endpoint_create_execute((struct endpoint_create_request *)request);
+    break;
+  case BSP_SERVICE_ENDPOINT_EXPORT:
+    endpoint_export_execute((struct endpoint_export_request *)request);
+    break;
+  case BSP_SERVICE_RAMFS:
+    ramfs_request_execute((struct ramfs_request *)request);
+    break;
+  case BSP_SERVICE_FILE_REPLACE:
+    file_replace_execute((struct file_replace_request *)request);
+    break;
+  case BSP_SERVICE_LAUNCHER:
+    launcher_request_execute((struct launcher_request *)request);
+    break;
+  case BSP_SERVICE_MEMORY:
+    memory_request_execute((struct memory_request *)request);
+    break;
+  case BSP_SERVICE_DISPLAY:
+    display_request_execute((struct display_request *)request);
+    break;
+  default:
+    KASSERT(false);
+  }
+  bsp_request_complete(request);
 }
 
 static void request_worker(void *argument)
@@ -167,41 +220,7 @@ static void request_worker(void *argument)
     request->state = BSP_REQUEST_SERVICING;
     unlock_requests();
 
-    switch (request->service) {
-    case BSP_SERVICE_PIPE_CREATE:
-      pipe_create_execute((struct pipe_create_request *)request);
-      break;
-    case BSP_SERVICE_CAPABILITY_GROW:
-      capability_growth_execute((struct capability_growth_request *)request);
-      break;
-    case BSP_SERVICE_NAMESPACE_CREATE:
-      namespace_create_execute((struct namespace_create_request *)request);
-      break;
-    case BSP_SERVICE_ENDPOINT_CREATE:
-      endpoint_create_execute((struct endpoint_create_request *)request);
-      break;
-    case BSP_SERVICE_ENDPOINT_EXPORT:
-      endpoint_export_execute((struct endpoint_export_request *)request);
-      break;
-    case BSP_SERVICE_RAMFS:
-      ramfs_request_execute((struct ramfs_request *)request);
-      break;
-    case BSP_SERVICE_FILE_REPLACE:
-      file_replace_execute((struct file_replace_request *)request);
-      break;
-    case BSP_SERVICE_LAUNCHER:
-      launcher_request_execute((struct launcher_request *)request);
-      break;
-    case BSP_SERVICE_MEMORY:
-      memory_request_execute((struct memory_request *)request);
-      break;
-    case BSP_SERVICE_DISPLAY:
-      display_request_execute((struct display_request *)request);
-      break;
-    default:
-      KASSERT(false);
-    }
-    complete_request(request);
+    service_request(request);
     cpu_restore_interrupts(flags);
     kernel_task_yield_if_runnable();
   }

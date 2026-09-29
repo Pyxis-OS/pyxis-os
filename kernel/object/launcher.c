@@ -11,7 +11,6 @@
 #include <kernel/object/launcher.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
-#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 #include "launcher_internal.h"
@@ -420,18 +419,20 @@ static enum call_status capture_launch_request(const struct launch_request *requ
   }
   capture->image = (struct file_object *)image;
   if (capture->image->backing == FILE_HOST) {
-    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_CAPTURE);
+    struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_CAPTURE);
     pending->node = capture->image->host;
     pending->count = LAUNCH_HOST_IMAGE_MAX_SIZE;
-    task_submit_hostfs(pending);
+    hostfs_request_submit_and_wait(pending);
     if (pending->status != CALL_OK) {
       enum call_status error = pending->status;
+      hostfs_request_release(pending);
       discard_launch_capture(capture);
       return error;
     }
     capture->host_image = pending->captured;
     capture->host_image_size = pending->count;
     pending->captured = NULL;
+    hostfs_request_release(pending);
   } else {
     file_begin_operation(capture->image);
   }
