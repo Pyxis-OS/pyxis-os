@@ -16,8 +16,9 @@ repository contains the MPL-2.0 shared encoding layer. Task 2 implements
 [local codecs and platform contracts](../../fs/docs/core.md), pinned at `fs/`;
 `make fs-tools` builds the core archive and host tools. Tasks 3 and 4 provide empty
 construction, opening, readonly traversal/acquisition and explicit GPT inspection.
-Task 5 supplies source population and extraction. Whole-image checking is next
-in task 6. The repository split and host-only scope are unchanged.
+Task 5 supplies source population and extraction; task 6 adds whole-image
+consistency checking. Task 7 validates and closes the milestone. The repository
+split and host-only scope are unchanged.
 
 ## Completion target and boundaries
 
@@ -340,10 +341,25 @@ dependent PRs and update this checklist with each completed task.
   refusals were checked. Whole-image consistency is not established; sparse and
   multi-extent reader paths, concurrent-change and I/O-failure paths remain
   source-review coverage. See [host-tool details](../../fs/docs/host-tools.md).
-- [ ] **6. Add whole-image consistency inspection.** Reconcile reachable records,
+- [x] **6. Add whole-image consistency inspection.** Reconcile reachable records,
   namespace structure, extents, metadata ownership, retained roots and budgets.
   Detect conflicting allocations and report incomplete/unsupported checks
   explicitly. This operation diagnoses; it does not repair or reclaim.
+  `pyxisfs-inspect check` uses the shared bounded `pfs_check` core to walk both
+  committed candidates, reconcile allocation coverage, cached counts and reserve
+  charges, and compare retained storage incarnations. Unsupported and incomplete
+  state stays explicit; known contradictions still report corruption. Implemented
+  in [pyxis-fs PR #6](https://git.internal/PyxisOS/pyxis-fs/pulls/6). File
+  payloads are not read or integrity-checked. Native and Pyxis-cross builds passed
+  without unresolved core symbols. Existing empty, mixed-content, three-volume
+  and 256-volume images checked successfully, including multi-level indexes;
+  the three-volume image reconciled 193 objects, 190 directory entries and 174
+  extents per state. Healthy 512-byte and 4096-byte GPT images passed; the populated
+  GPT image's hash stayed unchanged. A 64 KiB cap reported incomplete checks and
+  exit 4; debugger inspection confirmed zero charged memory after success and
+  refusal. All checked images have identical generation-1 roots. Differing
+  generations, retired storage, malformed/unknown metadata and actual I/O failure
+  remain source-review coverage. See [host-tool details](../../fs/docs/host-tools.md).
 - [ ] **7. Validate and close the milestone.** Build normally, format disposable
   populated images, close/reopen them, inspect and compare extracted data using
   ordinary host tools. Exercise empty/nested directories, Unicode names, multiple

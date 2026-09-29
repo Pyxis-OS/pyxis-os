@@ -691,6 +691,9 @@ and extraction reserve depth-256 workspaces. Small explicit memory caps can reje
 otherwise tiny images, and the default cap does not promise to fit the maximum
 record profile. Revisit workspace sizing if real imports hit these limits; there
 is no temporary-file spill strategy. Planning failures precede image creation.
+The diagnostic checker also retains bounded tables for both committed states,
+with fixed volume/frame workspaces and transient old/new arrays during growth.
+Its cap can stop either state before a full consistency result is available.
 
 Readonly object access scans each consulted ancestor directory to validate unique
 naming. Separate operations repeat ancestry, grant and allocation-proof work;
@@ -706,3 +709,12 @@ multiple-extent reader paths still have source-review coverage only, as do
 grant-free volumes, malformed metadata, GPT degradation, concurrent source-change
 detection and actual I/O/flush failure. Revisit these limits during task 7 using
 agreed tooling; do not infer runtime coverage from compilation or code review.
+
+Task 6 adds whole-image consistency checking, with runtime coverage of empty,
+populated and 256-volume images and both GPT sector sizes. These images all have
+identical generation-1 roots. Cross-generation retention/reuse, retired charges,
+unknown features and malformed metadata still have source-review coverage only.
+The checker validates structural allocation claims without reading file payloads;
+file-data integrity checksums remain deferred. Revisit these coverage gaps during
+closure using agreed tooling and before writable transactions rely on retention
+or recovery behavior.
