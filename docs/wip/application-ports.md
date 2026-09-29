@@ -90,7 +90,7 @@ parallel tracks or to port every dependency speculatively.
 ## Distant candidates
 
 The [toolchain and runtime notes](toolchains-and-runtimes.md) record Go and C++
-prerequisites, **wild possible future idea: Tailscale** for tailnet access, and
+prerequisites, [Tailscale SSH for homelab administration](toolchains-and-runtimes.md#homelab-administration-over-tailscale), and
 **wilder even later idea: Ladybird** as a graphical browser. Both need independent
 probes and milestones; neither is an immediate port assignment.
 

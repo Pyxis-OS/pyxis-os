@@ -45,7 +45,8 @@ object/archive format is not required for the working development loop.
 [Hosted toolchains and language runtimes](toolchains-and-runtimes.md) records
 the chosen LLVM/Clang transition and hosted compiler direction, C++ userspace, a Go
 cross compiler and later hosted Go tools. Rust is a separate possible direction.
-Tailscale is a wild later candidate; Ladybird is a wilder, much later one. These
+Tailscale has a concrete future [homelab administration target](toolchains-and-runtimes.md#homelab-administration-over-tailscale);
+Ladybird is a wilder, much later candidate. These
 are parked alongside the ports, not extra tasks in the libc milestone.
 
 ## Lua follow-ups
