@@ -10,8 +10,9 @@
   state before editing. The initial checkout can be old; find the active work
   rather than assuming it is main. Preserve user changes and local commits,
   including documentation intentionally saved for the next PR.
-- Use docs/wip/boot-sdk-ports.md as the milestone index. Read the selected
-  milestone, its unchecked task and relevant subsystem docs/code, not the entire
+- Use docs/README.md to find subsystem references and docs/wip/boot-sdk-ports.md
+  as the milestone index. Read the selected milestone, its unchecked task and
+  relevant subsystem docs/code, not the entire
   planning backlog. Milestone order is flexible; the user's current choice wins.
 - A new thread should recover scope from the user's request, milestone checklist,
   Git history and open PRs. Do not rely on private chat history for a decision.
@@ -51,7 +52,8 @@
   do not assume a missing comment means there was no review or expose credentials.
 - Pyxis owns the kernel, public ABI, SDK export, toolchain integration and image
   assembly. userspace, ports and third_party/lwip are separately versioned
-  repositories. Consult docs/sdk-and-repositories.md before crossing a boundary.
+  repositories. Consult docs/development/sdk-and-repositories.md before crossing
+  a boundary.
 - Check for detached submodule HEADs and local edits. Publish dependency commits
   and open focused PRs in their repositories before updating the parent gitlink;
   never pin an unpublished commit. Link dependent PRs and state merge order. Do
@@ -78,8 +80,9 @@
   Do not link kernel or target userspace against host libc; host tools are native.
 - Physical addresses are not C pointers. Keep ownership, overflow checks and
   failure unwinding explicit. Follow the current BSP allocation/VM-mutation and
-  scheduler handoff contracts in docs/smp.md and docs/memory.md. Do not casually
-  add allocator locks, remote mutations or access after relinquishing ownership.
+  scheduler handoff contracts in docs/kernel/smp.md and docs/kernel/memory.md.
+  Do not casually add allocator locks, remote mutations or access after
+  relinquishing ownership.
 - Pin dependencies and record local changes and licenses. Do not preserve backwards
   compatibility unless requested. Replace obsolete interfaces, formats and
   implementations, updating in-tree consumers together. Do not increment versions
@@ -99,7 +102,8 @@
 - Inspect existing CI for the exact submitted revision, including dependent repo
   jobs when relevant. Report pending, failed or unavailable checks honestly.
   Existing independent bundles can avoid unnecessary rebuilds; follow
-  docs/build-bundles.md and never substitute stale artifacts for changed inputs.
+  docs/development/build-bundles.md and never substitute stale artifacts for
+  changed inputs.
 - Read/search only relevant files and summarize build output. Avoid repeatedly
   reading whole documents, polling excessively or rerunning checks after a pass
   without a new change or unresolved concern. Keep progress updates concise.
@@ -118,8 +122,9 @@
 - Keep README short and practical; no roadmap prose, directory trees, marketing
   language or emojis. Put interface invariants beside code and usage in docs.
 - On milestone completion, rewrite its docs/wip document as concise implemented
-  behavior, interfaces and limits; move it into docs and update links. Remove
-  completed worklists and superseded discussion; Git preserves history. Carry
+  behavior, interfaces and limits; move it into the appropriate docs subject
+  folder and update links. Remove completed worklists and superseded discussion;
+  Git preserves history. Carry
   relevant deferred work into WIP or technical debt without duplicate archives.
 - Before ending unfinished work or handing off to another thread, leave a concise
   recoverable status: branch/PR and dependency revisions, completed work, remaining

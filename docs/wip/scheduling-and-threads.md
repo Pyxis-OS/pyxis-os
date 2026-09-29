@@ -4,13 +4,13 @@ Status: future design direction, 2026-09-29. Discuss decoupling spaces from CPUs
 alongside multiple threads per process and scheduling across CPUs. Keep the BSP's
 current service responsibilities initially. The stages below are proposals, not
 implementation authorization. The separate
-[block-storage foundation](../block-storage.md) is complete.
+[block-storage foundation](../devices/block-storage.md) is complete.
 
-Related: [current SMP ownership rules](../smp.md),
-[private-memory handoff](../memory.md), [spaces](../spaces.md) and
+Related: [current SMP ownership rules](../kernel/smp.md),
+[private-memory handoff](../kernel/memory.md), [spaces](spaces.md) and
 [Neovim/libuv requirements](neovim-libuv.md).
 
-The completed [BSP request separation](../bsp-service-requests.md) clarifies
+The completed [BSP request separation](../kernel/bsp-service-requests.md) clarifies
 subsystem service and request lifetimes without changing CPU placement
 or introducing threads. Its synchronous resource loans still rely on today's
 single-task process model; the sibling-thread requirements below remain necessary.

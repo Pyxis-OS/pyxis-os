@@ -9,7 +9,7 @@ schedule. Other language runtimes remain future candidates.
 ## Distinct results
 
 The existing [GCC/binutils toolchain](../../toolchain/README.md) runs on the host
-and targets Pyxis. TCC already provides a native [edit/build/run loop](../edit-build-run.md).
+and targets Pyxis. TCC already provides a native [edit/build/run loop](../development/edit-build-run.md).
 Keep three larger achievements separate:
 
 1. A host-running compiler produces programs that run on Pyxis.

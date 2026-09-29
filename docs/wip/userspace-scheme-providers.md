@@ -1,23 +1,23 @@
 # Userspace URI scheme providers
 
-Status: future extensions to the [implemented userspace services](../userspace-services.md).
+Status: future extensions to the [implemented userspace services](../interfaces/userspace-services.md).
 Read-only HTTP/HTTPS, byte snapshots, scoped binding, capability transfer and export
 lifetime are implemented; their contracts live in the subsystem docs. Writes,
 media-type aliases, richer representations, caching, SQLite and Git remain
-later work. [Verified HTTPS with Mbed TLS](../https.md) is implemented with
+later work. [Verified HTTPS with Mbed TLS](../userland/https.md) is implemented with
 packaged public roots and optional per-instance augmentation. The URI
 examples below are proposals unless identified as existing behavior.
 
 ## Implemented foundation and extension boundary
 
 Ordinary `fopen("http://example.com/hello.txt", "r")` and
-`cat http://example.com/hello.txt` use the [file-provider bridge](../file-providers.md).
-The [HTTP/HTTPS providers](../http-fetch.md) stage a complete bounded body and return
+`cat http://example.com/hello.txt` use the [file-provider bridge](../interfaces/file-providers.md).
+The [HTTP/HTTPS providers](../userland/http-fetch.md) stage a complete bounded body and return
 an immutable snapshot. Copies retain its bytes; independent opens fetch again.
 Reads use retained bytes at explicit offsets without new range requests.
 Retirement governs storage release, and provider death invalidates its exports.
 
-[Namespaces](../namespaces.md) supply exact-name publication, atomic replacement
+[Namespaces](../interfaces/namespaces.md) supply exact-name publication, atomic replacement
 and explicit startup delegation. Libpyxis selects the URI scheme; the provider
 interprets the full URI. Directory roots retain their existing traversal, and
 ambiguous directory/provider bindings fail. Removal or replacement changes future
@@ -43,7 +43,7 @@ The working conceptual model separates the resource from the caller's grant:
 Representations describe how content or results can be consumed; they are not
 required for every resource. A process-control resource may chiefly expose
 operations. This is a design guide, not a universal kernel class or framework;
-the current [object/capability contract](../processes.md#objects-capabilities-and-handles)
+the current [object/capability contract](../interfaces/processes.md#objects-capabilities-and-handles)
 already defines references and rights, while representation discovery is future
 work.
 
@@ -149,7 +149,7 @@ A future `http` helper could prepare a request with URL, method and request-scop
 headers, then return a capability to the shell. It uses the userspace provider;
 it does not contain another HTTP implementation. The shell can grant a body
 writer to `echo` or another producer, and later a response reader to `cat` or jq.
-This uses the same [capability-based stdio bindings](../shell-streams.md) as pipes
+This uses the same [capability-based stdio bindings](../userland/shell-streams.md) as pipes
 and ordinary file redirection. The commands only read/write their given streams.
 
 The helper must hand back a real grant through an authorized capability-transfer
@@ -322,7 +322,7 @@ a command language or editor feature to implement alongside the first provider.
 
 ## Decisions for later extensions
 
-The [implemented service contracts](../userspace-services.md) provide discovery,
+The [implemented service contracts](../interfaces/userspace-services.md) provide discovery,
 request/reply capability transfer, deadlines, immutable files and acknowledged
 retirement. Future work builds on those contracts rather than reopening them:
 

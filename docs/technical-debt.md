@@ -21,7 +21,7 @@ the heap's existing pools remain mapped.
 Reconsider this when larger files or memory pressure make those costs material.
 Chunked backing and a policy for releasing excess capacity are possible changes,
 not requirements for the current milestone. RAM writes retain full completion
-or unchanged-on-failure behavior; the general [file contract](processes.md#implemented-file-calls)
+or unchanged-on-failure behavior; the general [file contract](interfaces/processes.md#implemented-file-calls)
 also permits short writes.
 
 ## Retained userspace heap pools
@@ -40,7 +40,7 @@ thread-local errno when introducing userspace threads.
 
 ## Allocation measurement follow-ups
 
-The [allocation benchmark and caller-scoped memory profile](allocation-profiling.md)
+The [allocation benchmark and caller-scoped memory profile](development/allocation-profiling.md)
 separate warm userspace heap throughput, heap expansion and direct private-page
 requests. Profiling splits parking/publication, BSP queue time, service and
 resumption. Report the accelerator, CPU count, live set and host/nested-VM context;
@@ -49,15 +49,15 @@ the instrumentation itself reads HPET and perturbs timings.
 Standalone kernel `kmalloc`/`kfree` throughput and deeper PMM/VM timing remain
 unmeasured. Pool growth counters describe backing acquired during a measurement
 window, not total retained memory or a fragmentation metric. Private-memory
-requests now [notify the BSP after publication](smp.md), removing their dependency
+requests now [notify the BSP after publication](kernel/smp.md), removing their dependency
 on a later timer wakeup. The common executor now admits all migrated services,
 including HOST forwarding; measure queue and worker costs before changing
 allocation policy.
 
 ## I/O baseline attribution and coverage
 
-The [I/O/IPC baselines](io-ipc-baselines.md) measure elapsed workload boundaries
-in nested KVM. The [RAM attribution](io-reliability-attribution.md#ram-file-profiling)
+The [I/O/IPC baselines](development/io-ipc-baselines.md) measure elapsed workload boundaries
+in nested KVM. The [RAM attribution](development/io-reliability-attribution.md#ram-file-profiling)
 separates RAM replacement costs and identified queue time as dominant in the
 earlier growing writes/copies. The common executor now resolves their missing
 notification; see the FILE service-delay entry below.
@@ -79,7 +79,7 @@ claims; keep each environment and completion boundary distinct.
 
 ## RAM FILE BSP service delay
 
-Resolved by the [BSP request migration](bsp-service-requests.md#profiling-and-scheduling-costs):
+Resolved by the [BSP request migration](kernel/bsp-service-requests.md#profiling-and-scheduling-costs):
 RAM replacements now notify the common executor promptly. Matched four-CPU
 nested-KVM controls reduced unprofiled growing-write median from 59.041 to
 1.957 ms and growing-copy median from 58.852 to 2.540 ms. Prepared controls and
@@ -87,7 +87,7 @@ replacement/copy counts stayed comparable. The
 [implementation PR](https://git.internal/PyxisOS/pyxis-os/pulls/237) retains all
 off/on controls and separates queue from service observations.
 
-The [earlier attribution](io-reliability-attribution.md#ram-file-profiling) remains
+The [earlier attribution](development/io-reliability-attribution.md#ram-file-profiling) remains
 historical evidence. These results do not remove individual non-preemptible
 allocation/copy costs or establish owner-host performance. Revisit scheduling
 limits when mixed-workload measurements justify a different service policy;
@@ -95,7 +95,7 @@ this task does not change buffer growth or allocator concurrency.
 
 ## Host FILE profiling perturbation
 
-The [HOST attribution matrix](io-reliability-attribution.md#host-profiling-and-attribution-limits)
+The [HOST attribution matrix](development/io-reliability-attribution.md#host-profiling-and-attribution-limits)
 records separate initial BSP queue, worker queue/service, transport and resumption
 intervals. In the agreed five-sample nested-KVM groups, profiled medians were
 13.7–16.1 times their controls. Initial queue wait took 73.8–78.8% of profiled
@@ -103,7 +103,7 @@ transfer time; these percentages cannot partition normal unprofiled transfer tim
 or establish host filesystem cost. Timestamp overhead changes interleaving as
 well as adding elapsed time, so subtracting a constant is inappropriate.
 
-The [task-4 controlled experiment](experiments/host-profile-slowdown/README.md)
+The [task-4 controlled experiment](development/experiments/host-profile-slowdown/README.md)
 reproduces 14.9× full-profile slowdown on prepared HOST writes. Explicit initial
 BSP notification reduces it to 2.0×; counts-only runs stay near their off controls.
 Initial queue mean drops from 5.331 to 0.137 ms/request. This establishes a large
@@ -115,7 +115,7 @@ correction or normal-workload phase partition is justified.
 
 Initial HOST publication now uses the common executor's synchronized idle
 notification, preserving request ownership and early wake semantics. The
-[correction validation](io-reliability-attribution.md#host-publication-notification)
+[correction validation](development/io-reliability-attribution.md#host-publication-notification)
 repeats the affected off/on controls; full profiling still perturbs execution.
 The milestone closed after this correction. Additional resolution/coverage and
 the final combined IPC/HTTP/RAM/HOST matrix were deferred as independent work,
@@ -163,7 +163,7 @@ invalidation contract.
 
 Reconsider BSP-only service when its latency becomes material or before allowing
 concurrent use and mutation of one private address space. The
-[implemented BSP request contract](bsp-service-requests.md) has separated operation
+[implemented BSP request contract](kernel/bsp-service-requests.md) has separated operation
 ownership, submission/completion and subsystem service from scheduling while
 retaining BSP-only allocation and the inactive-root handoff. Allowing allocation
 on other CPUs remains a separate decision; an allocator spinlock alone does not
@@ -199,7 +199,7 @@ from those writes. A real terminal ownership policy or separate log view is
 needed before treating that fallback as a normal interactive environment.
 
 The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
-on screen. History, Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](terminal.md).
+on screen. History, Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](userland/terminal.md).
 
 ## Process termination and Ctrl-C
 
@@ -215,7 +215,7 @@ and blocked tasks, outstanding IPC and other waits, resource reclamation, and
 the completion result visible to waiters. Native termination need not require a
 general POSIX signal implementation.
 
-[Endpoint call expiry](endpoints.md) releases its caller, not the provider
+[Endpoint call expiry](interfaces/endpoints.md) releases its caller, not the provider
 process. Integrate externally terminated callers with IPC cancellation when the
 termination operation exists.
 
@@ -234,7 +234,7 @@ signal handling.
 
 ## Libc compatibility gaps
 
-The completed [descriptor portability slice](libc-portability.md) supplies
+The completed [descriptor portability slice](userland/libc-portability.md) supplies
 open/read/write/close for cksum and restricted tee. Public O_RDWR, seeking,
 fdopen/fileno and duplication remain absent even though fopen supports update
 modes and stdio seeking internally. Consumers requiring those interfaces need
@@ -299,7 +299,7 @@ open rollback applies the same policy while retaining the original open errno.
 This limit is accepted for unexpected failures, not ordinary deferred release.
 Revisit it if CLOSE gains additional outcomes or asynchronous release semantics;
 define whether ownership remains before introducing retries or pending-close
-storage. The [close contract](libc-portability.md#close-failure-and-cleanup)
+storage. The [close contract](userland/libc-portability.md#close-failure-and-cleanup)
 records the current status and errno rules.
 
 ## Directory APIs in libpyxis
@@ -327,21 +327,21 @@ that directive explicitly for now; ordinary include guards remain usable.
 Revisit an identity operation when adding this facility. Define its comparison
 scope, lifetime and behavior across mounts and file replacement before exposing
 it; do not substitute normalized path strings or add `realpath` just for TCC.
-See [the TCC contract](tcc.md#remaining-limits).
+See [the TCC contract](userland/tcc.md#remaining-limits).
 
 ## Wall-clock time and clock-source performance
 
-[Monotonic time and deadline sleep](timekeeping.md) now use the shared HPET
+[Monotonic time and deadline sleep](kernel/timekeeping.md) now use the shared HPET
 counter. Console timeouts no longer count delivered BSP interrupts. APIC timer
 interrupts still bound wakeup latency; nanosecond units do not promise precise
 wakeup, and time spent with the VM paused need not count.
 
-[UTC wall time](wall-clock.md) uses a whole-second Limine RTC seed plus elapsed
+[UTC wall time](kernel/wall-clock.md) uses a whole-second Limine RTC seed plus elapsed
 monotonic time. Firmware accuracy, subsecond alignment and boot handoff delay
 are not known; there is no drift correction or resynchronization. Time while the
 VM is paused need not advance. A missing seed is an explicit error, but a
 plausible incorrect RTC value cannot be detected. Future adjustments must not
-change monotonic deadlines. [Zoneinfo-backed local time](timezones.md) is handled
+change monotonic deadlines. [Zoneinfo-backed local time](userland/timezones.md) is handled
 in userspace. TCC uses UTC calendar macros and monotonic `-bench`;
 Kilo uses monotonic time for status-message expiry. HTTPS certificate validity
 also depends on this UTC value: an available but incorrect RTC date can cause
@@ -349,7 +349,7 @@ incorrect acceptance or rejection. Revisit authenticated time synchronization
 before treating TLS date checks as independent of firmware/hypervisor time.
 
 HPET MMIO reads can be expensive, especially under virtualization. The
-[HOST forwarding investigation](bsp-service-requests.md#profiling-and-scheduling-costs)
+[HOST forwarding investigation](kernel/bsp-service-requests.md#profiling-and-scheduling-costs)
 removed unnecessary reads for empty scheduler deadline lists and untimed HOST
 idle waits, restoring the measured unprofiled transfer times to baseline. Active
 deadlines and profiling still pay the clock cost. Consider a
@@ -360,8 +360,8 @@ RTC remains deferred until PCI/VirtIO infrastructure exists.
 
 ## Doom configuration and save-format limits
 
-[Doom save/load](doom.md#saves) now uses checked temporary writes and atomic
-replacement through the [RAM filesystem](filesystem-mutations.md). Saves remain
+[Doom save/load](userland/doom.md#saves) now uses checked temporary writes and atomic
+replacement through the [RAM filesystem](interfaces/filesystem-mutations.md). Saves remain
 volatile across reboot. The upstream parser assumes trusted saves matching the
 loaded game data; full malformed-file validation and separation by PWAD are not
 implemented. Interrupted saves can leave temporary files for manual removal.
@@ -374,7 +374,7 @@ gameplay and demo playback. Wall-clock time is not a prerequisite.
 
 ## Virtio-fs runtime resource retention
 
-The first [virtio-fs transport](virtio-fs.md) reserves queue storage and device
+The first [virtio-fs transport](devices/virtio-fs.md) reserves queue storage and device
 mappings before AP startup. A runtime failure masks interrupts, disables bus
 mastering and attempts reset, but retains the claim, 40 KiB of ring/payload
 allocations, CPU-side queue bookkeeping and their mappings until reboot. Even a
@@ -389,7 +389,7 @@ until the next request or device event; there is no heartbeat.
 
 ## Shared split-queue scaling and validation
 
-The [shared queue helper](virtio-queues.md) supports multiple direct chains and
+The [shared queue helper](devices/virtio-queues.md) supports multiple direct chains and
 allocates storage for the selected queue size. Request-ID uniqueness checks and
 completion validation scan queue-sized bookkeeping arrays. Current filesystem
 and entropy queues are small and remain serialized; no throughput improvement
@@ -405,7 +405,7 @@ expanding the storage reliability claims.
 
 ## Virtio-blk failure and validation limits
 
-The [block driver](block-storage.md) latches write failure after an ordinary
+The [block driver](devices/block-storage.md) latches write failure after an ordinary
 write or flush error. Further writes and flushes fail until reboot, while reads
 can continue on a healthy transport. This prevents a later flush from hiding an
 earlier persistence failure, but makes transient backend write errors require a
@@ -428,7 +428,7 @@ recovery or support for production data.
 
 ## GPT snapshot and profile limits
 
-[GPT discovery](gpt.md) publishes one immutable boot-time snapshot. There is no
+[GPT discovery](devices/gpt.md) publishes one immutable boot-time snapshot. There is no
 raw-block write gate, metadata generation tracking or rescan, so trusted kernel
 clients must preserve GPT metadata and avoid external mutation for the entire
 boot. Snapshot health does not track later device failure. Revisit with the first
@@ -445,7 +445,7 @@ recovery policy; no automatic repair is available.
 
 ## Virtio-net runtime resource retention
 
-The [network transport](networking.md#virtio-net-transport) uses two nine-page
+The [network transport](devices/networking.md#virtio-net-transport) uses two nine-page
 contiguous allocations for rings and packet buffers (72 KiB total). Runtime
 failure attempts reset and disables delivery/DMA, but retains the PCI claim,
 allocations and mappings until reboot, for the same shared-mapping lifetime
@@ -454,7 +454,7 @@ drivers' reclamation with a real teardown and SMP invalidation contract.
 
 ## Host filesystem request storage and enumeration
 
-The [native virtio-fs backend](virtio-fs.md#native-directory-and-file-objects)
+The [native virtio-fs backend](devices/virtio-fs.md#native-directory-and-file-objects)
 uses the largest record in each user task's reusable 4,920-byte request allocation,
 including a 4 KiB read/write buffer. A separate 816-byte persistent profile
 allocation is also eager. Kernel workers allocate neither area. This avoids
@@ -480,7 +480,7 @@ concurrency design that preserves this lifetime contract.
 
 ## UDP ICMP errors and ephemeral selection
 
-The first [UDP implementation](networking.md#udp-datagrams-and-deadlines) silently
+The first [UDP implementation](devices/networking.md#udp-datagrams-and-deadlines) silently
 drops traffic for unbound ports and does not deliver received ICMP errors to
 applications. A remote absent listener can therefore look like packet loss until
 a receive deadline expires. Add bounded, rate-limited ICMP error generation and
@@ -489,8 +489,8 @@ keep completed/retired calls immune to late errors.
 
 Generic ephemeral binding currently scans 49152–65535 from a rotating cursor;
 this allocator is not a defense against off-path reply guessing. The
-[DNS client shared by dig and ping](dns.md) explicitly chooses random ports
-using [host-backed randomness](randomness.md). Revisit the generic allocator's
+[DNS client shared by dig and ping](userland/dns.md) explicitly chooses random ports
+using [host-backed randomness](devices/randomness.md). Revisit the generic allocator's
 policy for other consumers. Network authority and resource
 bounds also remain system-wide rather than isolated by space.
 
@@ -508,7 +508,7 @@ the same file. Their writes can overwrite each other; this does not implement
 descriptor duplication or merged output. These limitations are accepted for the first
 redirection scope. Revisit if alias-safe copying or shared-position output becomes
 an explicit requirement; batch launch does not promise filesystem rollback.
-See [shell redirection](shell.md#file-redirection-and-stdin).
+See [shell redirection](userland/shell.md#file-redirection-and-stdin).
 
 ## Pipe scheduling and resource limits
 
@@ -519,7 +519,7 @@ allocation limits; there is no separate per-process pipe-memory quota. A holder
 of unused endpoint copies can delay EOF or EPIPE indefinitely. There are no
 nonblocking operations, deadlines, wait sets or cancellation. Revisit these
 limits when a concrete multi-producer or multiplexed consumer needs them.
-[Shell streams](shell-streams.md) documents the implemented launch ownership.
+[Shell streams](userland/shell-streams.md) documents the implemented launch ownership.
 
 ## Batch launch after publication
 
@@ -533,7 +533,7 @@ larger batches only for a concrete lifecycle requirement. Foreground pipelines
 wait for all children; an unrelated or terminal-blocked stage can therefore keep
 the shell waiting even when the last stage has finished. Last-stage success does
 not hide earlier diagnostics, but it permits scripts to continue; no pipefail
-policy is provided. See [shell pipelines](shell.md#foreground-pipelines).
+policy is provided. See [shell pipelines](userland/shell.md#foreground-pipelines).
 
 ## Exact line limits in head
 
@@ -543,11 +543,11 @@ lines. Byte mode retains bounded bulk reads. Revisit buffering or a native
 bounded-delimiter read only when a concrete consumer needs both throughput and
 exact stream consumption; do not silently discard read-ahead. Multi-file output
 headers and additional head options are outside the current consumer scope.
-See [head usage](shell.md#bounded-input-with-head).
+See [head usage](userland/shell.md#bounded-input-with-head).
 
 ## Endpoint cancellation and capacity
 
-[Endpoints](endpoints.md) have no external cancellation operation, wait sets or
+[Endpoints](interfaces/endpoints.md) have no external cancellation operation, wait sets or
 wait-for-capacity facility. Admission to a full endpoint fails immediately.
 A provider can retain all sixteen delivery slots by leaving receipts unfinished;
 deadlines release callers but do not reclaim delivered work. Calls without a
@@ -567,13 +567,13 @@ synchronously under the endpoint lock. A delivery record becomes reusable once
 receipt ownership and CALL outcome collection, if any, have both ended. The
 embedded receipt never enters the retirement queue; a separate endpoint backing
 object preserves BSP destruction ownership. See the
-[endpoint contract](endpoints.md) and
-[reliability milestone](io-reliability-attribution.md) for implementation and
+[endpoint contract](interfaces/endpoints.md) and
+[reliability milestone](development/io-reliability-attribution.md) for implementation and
 validation details.
 
 Historical observations before the fix: the sixteen delivery records retained
 completed CALLs and finished SENDs until the BSP destroyed their retired receipt
-objects. The [I/O and IPC baseline](io-ipc-baselines.md) observed this on CPU 1 in
+objects. The [I/O and IPC baseline](development/io-ipc-baselines.md) observed this on CPU 1 in
 four-CPU nested KVM: a zero-byte 256-call warmup completed 21 round trips before
 QUEUE_FULL; SEND admitted and acknowledged two groups of eight, then rejected
 message 17. These are observed failure points, not deterministic capacity
@@ -619,7 +619,7 @@ a companion that faults before its readiness or result message can leave the
 coordinator in RECEIVE. Their CALL deadlines do not bound pipe or process waits.
 Revisit benchmark-wide timeouts with the same bounded-receive/wait-set work;
 retain explicit partial progress and never describe a CALL deadline as forced
-process termination. See [I/O and IPC baselines](io-ipc-baselines.md).
+process termination. See [I/O and IPC baselines](development/io-ipc-baselines.md).
 
 ## Provider calls through synchronous file helpers
 
@@ -636,7 +636,7 @@ sets; do not introduce hidden retries or an arbitrary global timeout. Existing e
 
 ## HTTP framing compatibility
 
-The [initial HTTP library](http-fetch.md) deliberately rejects duplicate or list
+The [initial HTTP library](userland/http-fetch.md) deliberately rejects duplicate or list
 Content-Length, folded fields, non-CRLF headers and unsupported transfer/content
 codings. The pinned chunk decoder also rejects sufficiently excessive framing
 overhead. Some otherwise valid origins can therefore fail before the configured
@@ -646,7 +646,7 @@ compatibility; do not silently accept ambiguous framing or publish partial bodie
 
 ## HTTPS trust and platform limits
 
-The [HTTPS provider](https.md) uses a pinned Mozilla-derived PEM export, which
+The [HTTPS provider](userland/https.md) uses a pinned Mozilla-derived PEM export, which
 omits Mozilla's additional trust-store constraints. It verifies chains, names
 and dates, but configures no revocation source or online revocation policy.
 A certificate can therefore remain accepted despite revocation or omitted
@@ -662,7 +662,7 @@ a concrete IP-address consumer needs HTTPS; do not route it through DNS/CN name
 matching. Scheme authority and optional custom roots do not confine destinations.
 Revisit destination policy separately when a consumer requires isolation.
 
-Entropy comes from the [VirtIO random capability](randomness.md) and trusts the
+Entropy comes from the [VirtIO random capability](devices/randomness.md) and trusts the
 hypervisor's bytes. There is no implemented physical-hardware entropy path or
 fallback. Missing entropy leaves HTTPS unpublished and also disables new kernel
 TCP connections for that boot. Inventory and implement a supported hardware
@@ -680,7 +680,7 @@ raise budgets.
 
 ## HTTP provider responsiveness
 
-Each [HTTP/HTTPS provider](http-fetch.md) task performs synchronous fetches. While it
+Each [HTTP/HTTPS provider](userland/http-fetch.md) task performs synchronous fetches. While it
 fetches, existing snapshot reads and lifecycle processing wait behind it, and
 retired bodies can continue occupying the storage budget. Each fetch has a
 30-second budget or earlier caller deadline; ordinary file helpers still submit
@@ -696,7 +696,7 @@ image sizing also does not reserve host disk space. Before writable work, settle
 bounded admission costs, allocator self-hosting, orphan retention and recovery
 bookkeeping under the agreed
 [commit rules](../fs/docs/format.md#future-publication-and-reclamation-envelope).
-The [implemented filesystem contracts](filesystem-readonly.md) do not promise
+The [implemented filesystem contracts](devices/filesystem-readonly.md) do not promise
 crash recovery or production-data safety.
 
 The bulk planner reserves fixed volume/depth workspaces and conservative tree

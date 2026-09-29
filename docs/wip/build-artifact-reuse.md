@@ -1,6 +1,6 @@
 # Selecting existing build artifacts
 
-[Independent build bundles](../build-bundles.md) are implemented. The next reuse
+[Independent build bundles](../development/build-bundles.md) are implemented. The next reuse
 step should let a developer consume successful CI work without manually finding
 and extracting every component, particularly after a port change has already
 been built in CI.

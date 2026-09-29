@@ -93,7 +93,7 @@ fi
 machine=q35
 if [ -n "$VIRTIO_FS_SOCKET" ]; then
   [ -S "$VIRTIO_FS_SOCKET" ] || {
-    echo "Missing virtio-fs socket $VIRTIO_FS_SOCKET: start virtiofsd first; see docs/virtio-fs.md." >&2
+    echo "Missing virtio-fs socket $VIRTIO_FS_SOCKET: start virtiofsd first; see docs/devices/virtio-fs.md." >&2
     exit 1
   }
   # QEMU key/value arguments use commas as separators. Keep this interface

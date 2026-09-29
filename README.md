@@ -5,22 +5,22 @@ QEMU booted through OVMF/UEFI and Limine, with a native userspace and capability
 
 Requires GNU Make, a host C compiler, the [Pyxis GCC/binutils toolchain](toolchain/README.md),
 QEMU, GNU cpio, xorriso, host Lua 5.4, and a matching raw OVMF code/variables pair.
-Userspace, ports, lwIP and the filesystem core are [pinned submodules](docs/sdk-and-repositories.md).
-See [port builds](docs/ports.md) for application dependencies. CI publishes
-[independent build bundles](docs/build-bundles.md) for local reuse.
+Userspace, ports, lwIP and the filesystem core are [pinned submodules](docs/development/sdk-and-repositories.md).
+See [port builds](docs/development/ports.md) for application dependencies. CI publishes
+[independent build bundles](docs/development/build-bundles.md) for local reuse.
 
 ```sh
 git submodule update --init userspace ports third_party/lwip
 make -j16                 # kernel: build/caelum.elf
 make -j16 image           # kernel, userspace and ports: build/pyxis.iso
-make sdk                  # export build/sdk; see docs/sdk.md
+make sdk                  # export build/sdk; see docs/development/sdk.md
 make fs-tools             # opt-in formatter/inspector; requires submodule fs
 make run CPUS=4
 make run CPUS=4 VIRTIO_NET=1
 make run ACCEL=tcg        # software emulation when KVM is unavailable
 make image INIT=/tmp/init.sh  # optional native PXE or shebang init
 make run LOG_LEVEL=trace  # include scheduler idle diagnostics
-make debug CPUS=4        # paused; see docs/gdb.md
+make debug CPUS=4        # paused; see docs/development/gdb.md
 make clean
 ```
 
@@ -36,26 +36,27 @@ On a four-CPU boot, the first tab is Caelum's live kernel log. Super+Left/Right
 switches spaces; select CPU 1 for the development shell or CPU 2 for the read-only
 host-access session. Further CPUs run idle init scripts; navigation currently
 shows four tabs. A single-CPU boot shares the BSP's terminal with its shell.
-[Init scripts](docs/init.md) select these sessions and their grants.
+[Init scripts](docs/userland/init.md) select these sessions and their grants.
 
 The shell starts at `home://`, which is RAM-backed and lost on reboot. `app://`
-contains the read-only boot archive. Optional [virtio-fs setup](docs/virtio-fs.md)
+contains the read-only boot archive. Optional [virtio-fs setup](docs/devices/virtio-fs.md)
 provides persistent `host://` files and executable loading; no overlay is needed.
-Networking is opt-in with `VIRTIO_NET=1`; see [network setup](docs/networking.md).
-Kernel-only [block storage](docs/block-storage.md) is opt-in with
+Networking is opt-in with `VIRTIO_NET=1`; see [network setup](docs/devices/networking.md).
+Kernel-only [block storage](docs/devices/block-storage.md) is opt-in with
 `VIRTIO_BLK_IMAGE=/path/to/disk.raw`.
-See [QEMU troubleshooting](docs/qemu.md) for host emulator boot failures.
-The [shell guide](docs/shell.md) and [edit/build/run walkthrough](docs/edit-build-run.md)
+See [QEMU troubleshooting](docs/development/qemu.md) for host emulator boot failures.
+The [shell guide](docs/userland/shell.md) and [edit/build/run walkthrough](docs/development/edit-build-run.md)
 cover ordinary guest use.
 
 Processes stay on their assigned CPU. The BSP owns kernel allocation, VM mutation
 and cleanup, and runs preemptible kernel tasks; user syscall paths remain
-non-preemptible. See [SMP ownership](docs/smp.md), [userspace](docs/userspace.md)
-and [memory](docs/memory.md). Low-level allocation contracts live in
+non-preemptible. See [SMP ownership](docs/kernel/smp.md), [userspace](docs/kernel/userspace.md)
+and [memory](docs/kernel/memory.md). Low-level allocation contracts live in
 [PMM](include/kernel/mm/pmm.h), [VM](include/kernel/mm/vm.h) and
 [heap](include/kernel/mm/heap.h) headers. Task migration, cross-CPU TLB shootdowns,
 AVX and physical-hardware support remain outside the current implementation.
 
+Find subsystem references in the [documentation guide](docs/README.md).
 For development, follow [AGENTS.md](AGENTS.md) and the
 [milestone index](docs/wip/boot-sdk-ports.md). BOOTSTRAP.md is the historical
 bring-up assignment, not the current scope.

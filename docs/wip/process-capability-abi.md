@@ -1,12 +1,12 @@
 # First process and capability ABI: worklist
 
 Historical worklist: the blob object and protocol described below were replaced
-by initrd-backed file objects during the [first-shell milestone](../first-shell.md). See
-[the current file contract](../processes.md#implemented-file-calls). Earlier
+by initrd-backed file objects during the [first-shell milestone](../userland/first-shell.md). See
+[the current file contract](../interfaces/processes.md#implemented-file-calls). Earlier
 handoffs retain the names used by their original commits.
 
 Working sequence for the console-and-blob milestone described in
-[the process draft](../processes.md). Tasks may be taken by either the project
+[the process draft](../interfaces/processes.md). Tasks may be taken by either the project
 owner or an assistant in separate turns. No task is assigned or started by
 this document; implementation begins when that task is explicitly requested.
 
@@ -283,7 +283,7 @@ process tables, blocked-syscall parking, and paired endpoints using tagged
 CALL/RECEIVE/REPLY messages. The startup record adds an endpoint role and retains
 version 1. A client and server run beside hello; the client requests a numeric transformation and
 prints the reply, then the server observes peer closure. Boot program setup
-now lives in `kernel/user/`. See [the endpoint contract](../endpoints.md).
+now lives in `kernel/user/`. See [the endpoint contract](../interfaces/endpoints.md).
 
 Each direction has one outstanding request and bounded inline data. Shared
 message and wait records use stable heap mappings, preserving the current

@@ -2,7 +2,7 @@
 
 Status: bounded source and SDK investigation, 2026-09-29. This report records findings
 and proposes future work; it does not authorize a port. The separate
-[block-storage foundation](../block-storage.md) is complete. This report
+[block-storage foundation](../devices/block-storage.md) is complete. This report
 completes the initial investigation in the [planning
 agenda](storage-and-terminal-agenda.md#2-investigate-neovim-and-libuv-requirements). No
 kernel, userland or port implementation is included.

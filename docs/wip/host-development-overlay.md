@@ -26,12 +26,12 @@ kernel image; overlays do not make incompatible userspace builds safe. Executabl
 loading from host-backed files and concurrent replacement must be accounted for
 before demonstrating launch through the composed view.
 
-The [host mount](../virtio-fs.md) is implemented. Settle this experiment's
-contract alongside the [overlay design](../vfs.md) before implementation.
+The [host mount](../devices/virtio-fs.md) is implemented. Settle this experiment's
+contract alongside the [overlay design](vfs.md) before implementation.
 
 ## Deferred work
 
-[Writable host access](../virtio-fs.md) is available without an overlay. The
+[Writable host access](../devices/virtio-fs.md) is available without an overlay. The
 [user/authority checkpoint](users-and-authority.md) still
 applies: explicit directory grants and a single host-service identity do not
 settle future guest-user ownership or host identity mapping.

@@ -6,15 +6,15 @@ See the [planning index](boot-sdk-ports.md) for the current sequence.
 
 ## Execution lifecycle
 
-The implemented [init handoff](../init.md) launches a successor and exits. Real
+The implemented [init handoff](../userland/init.md) launches a successor and exits. Real
 process replacement (`exec`) still needs its own resource and failure contract.
 Init supervision and restart policies remain deferred to the first web-server
 milestone; this does not commit to Unix PID 1 semantics.
 
 ## Additional ports
 
-Kilo and TCC provide the [edit/build/run workflow](../edit-build-run.md).
-[Guest Lua](../lua.md) now supplies scripts, a REPL and session configuration. The [Doom port](../doom.md) provides initial
+Kilo and TCC provide the [edit/build/run workflow](../development/edit-build-run.md).
+[Guest Lua](../userland/lua.md) now supplies scripts, a REPL and session configuration. The [Doom port](../userland/doom.md) provides initial
 gameplay and demo playback. The [application and library port candidates](application-ports.md)
 record SQLite, zlib/libpng, SDL2, PDCurses, Mbed TLS, text utilities, awk, jq,
 Quake, DevilutionX, the C AbyssEngine investigation, a CHIP-8 interpreter,
@@ -51,7 +51,7 @@ are parked alongside the ports, not extra tasks in the libc milestone.
 
 ## Lua follow-ups
 
-The shared [C configuration helper](../lua.md#embedding-and-session-configuration)
+The shared [C configuration helper](../userland/lua.md#embedding-and-session-configuration)
 now serves session and network settings. Further consumers should keep their own
 schemas, defaults and application policy; a generic schema framework is not needed.
 
@@ -67,17 +67,17 @@ these tasks do not depend on virtio-fs.
 
 ## Networking and applications
 
-[Outbound TCP](../tcp.md) is implemented, including native tcp and ttcp tools.
+[Outbound TCP](../devices/tcp.md) is implemented, including native tcp and ttcp tools.
 The priority is making Pyxis useful for simple daily tasks; website hosting is
 an eventual application, not the main project target.
 
-The completed [initial networking milestone](../networking.md) provides loopback,
+The completed [initial networking milestone](../devices/networking.md) provides loopback,
 virtio-net, manually configured IPv4 and ping. Native
-[UDP endpoints and tools](../networking.md#udp-tools) now support bounded loopback
+[UDP endpoints and tools](../devices/networking.md#udp-tools) now support bounded loopback
 and host exchanges. DHCP follows through the same
 configuration operations once broadcast handling and lease deadlines are
-available. [DNS queries and hostname ping](../dns.md) are complete. The
-[lwIP integration](../lwip.md) owns the TCP engine; keep the
+available. [DNS queries and hostname ping](../userland/dns.md) are complete. The
+[lwIP integration](../devices/lwip.md) owns the TCP engine; keep the
 [user/authority checkpoint](users-and-authority.md) ahead of remotely accessible
 services. Server resource contracts need their own scope. Hosting the Pyxis
 landing page remains an eventual application; revisit init supervision and
@@ -127,11 +127,11 @@ leave it as account UI to bolt on after those interfaces are fixed.
 
 ## Persistent storage and installation
 
-[Writable virtio-fs](../virtio-fs.md) lets the Kilo/TCC workflow keep source and
+[Writable virtio-fs](../devices/virtio-fs.md) lets the Kilo/TCC workflow keep source and
 executables across boots without first choosing a disk filesystem. Trusted init
 selects access grants over one host-service identity; the
 [users/authority checkpoint](users-and-authority.md) records what that prototype
-boundary leaves open. [Space titles](../init.md#space-titles) are also implemented.
+boundary leaves open. [Space titles](../userland/init.md#space-titles) are also implemented.
 
 Keep three choices separate: Pyxis file/directory capability requests, a backend
 operation interface, and the disk format. A FUSE-inspired backend need not force
@@ -148,4 +148,4 @@ port development while those decisions remain open.
 ## References
 
 - [Broader development candidates](development-paths.md).
-- [Filesystem direction](../vfs.md) and [space direction](../spaces.md).
+- [Filesystem direction](vfs.md) and [space direction](spaces.md).
