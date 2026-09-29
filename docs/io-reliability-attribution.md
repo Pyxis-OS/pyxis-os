@@ -89,8 +89,13 @@ nested inside service. Counters record attempts, success/failure, summed request
 capacity and actual copied bytes; they saturate and expose no addresses.
 
 BSP owns request results/timestamps from publication until wakeup; the caller
-then aggregates. Disabled collection adds no clocks or allocations. Existing
-allocation, geometric growth, failure fallback and early-wakeup behavior remain.
+then aggregates into its task-local FILE snapshot before releasing the request.
+Transient samples live in the typed FILE replacement request, which uses the
+common BSP FIFO and promptly notifies an idle executor without a VM handoff.
+The publication timestamp remains immediately before publication locking, and
+service timestamps still bracket the local replacement helper. Disabled
+collection adds no clocks or allocations. Existing allocation, geometric growth,
+failure fallback and early-wakeup behavior remain.
 FILE ownership waits, incoming payload copies and nonreplacement work remain
 an unattributed residual. None of these elapsed intervals is kernel CPU time.
 
@@ -122,10 +127,10 @@ transfer time and 83–92% of copy time. BSP service was 2.799–5.357 ms, inclu
 allocation-call sums of 0.357–0.695 ms, copy of 0.629–1.119 ms and release of
 0.351–0.685 ms. Allocation/copy service was not the dominant measured cost.
 Queue timestamps combine publication locking, BSP availability and scheduling.
-FILE publication has no explicit BSP notification; near-8 ms maxima are
-consistent with delayed BSP service but do not identify individual wake causes.
-A FILE publication-notification change remains a separate proposal, with matched
-off/on reruns and ownership review required; no growth-policy change was made.
+These original samples predate the common-FIFO migration, when FILE publication
+had no explicit BSP notification. Their near-8 ms maxima are consistent with
+delayed BSP service but do not identify individual wake causes or measure the
+current executor path. No growth-policy change was made.
 See [RAM service-delay debt](technical-debt.md#ram-file-bsp-service-delay).
 
 The sequential five-sample groups combine run ordering, cache and nested

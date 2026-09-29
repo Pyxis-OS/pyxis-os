@@ -115,10 +115,13 @@ rescheduling IPI make the worker runnable on the BSP. A BSP caller sends no
 self-IPI and uses the same deferred handoff. Scheduler/preemption code has no
 memory/display queue checks. No remote allocation or new interrupt handler is added.
 
-Capability growth, namespace creation and endpoint creation/export publish to
-that same FIFO before the caller sleeps. Their typed records live in task metadata
-and lend the capability table exclusively until completion; endpoint creation also
-lends the process's receiver owner list. The caller stops accessing the loan and
+Capability growth, namespace creation, endpoint creation/export, RAMFS entry/name
+allocation and discard, and RAM FILE backing replacement publish to that same
+FIFO before the caller sleeps. Their typed records live in task metadata.
+Capability/endpoint operations lend the capability table exclusively until
+completion; endpoint creation also lends the process's receiver owner list. FILE
+replacement lends exclusive operation ownership while `busy` remains set; RAMFS
+discard transfers the detached entry. The caller stops accessing the loan and
 request at publication and waits through its saved wait pointer. Completion may
 arrive before parking, but only records notification and cannot enqueue a
 still-running caller. These operations change no private mappings and require no
@@ -262,8 +265,9 @@ or replace timer handling of deadlines and unmigrated service queues.
 The [BSP request executor](wip/bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.
 It currently services pipe creation, private memory, display, capability growth,
-namespace creation and endpoint creation/export; other queues retain their existing
-scheduler paths. The executor runs one FIFO operation with IF=0, enables
+namespace creation, endpoint creation/export, RAMFS entry/name allocation and
+discard, and RAM FILE backing replacement; HOST and launch queues retain their
+existing scheduler paths. The executor runs one FIFO operation with IF=0, enables
 interrupts, and conditionally yields between operations. An individual operation
 remains non-preemptible. Only the scheduler inspects ready queues.
 
@@ -279,7 +283,8 @@ the caller can consume the result, release the request reservation and reuse or
 retire its storage immediately after notification.
 The executor always finishes a published wait before reusing its wait record.
 Synchronous BSP request clients remain user-only, so the executor cannot submit
-to itself and wait. Its subsystem operations use local helpers.
+to itself and wait. Its subsystem operations use local helpers; RAMFS allocation
+and disposal and FILE buffer replacement helpers are static to their subsystems.
 
 Framebuffer presentation runs as a BSP kernel task. It copies the active
 space on a roughly 60 Hz monotonic deadline schedule, skipping missed frames.

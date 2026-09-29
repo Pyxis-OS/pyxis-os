@@ -454,12 +454,20 @@ memory-cost tradeoff.
 
 A short per-file spinlock protects operation ownership and a FIFO of waiters.
 Only the owner accesses bytes, size and capacity. It can lend that ownership to
-the BSP while blocked for backing replacement; no spinlock spans the wait.
-Other operations sleep and receive ownership directly in FIFO order. Waiters
-and allocation requests live in task metadata, never private syscall stacks.
-The BSP allocates, copies the old live prefix and frees the old buffer; failure
-keeps the old allocation. The requester then zeroes/copies bytes and publishes
-size before handing ownership on. Readers cannot observe an intermediate state.
+the BSP while blocked for backing replacement; `busy` remains set and no spinlock
+spans the wait. Other operations sleep and receive ownership directly in FIFO
+order. The previous owner detaches the resource waiter before waking it; only
+after that wait finishes can the new owner prepare a BSP service wait.
+
+The typed FILE replacement request uses the common BSP FIFO and its ordinary
+executor notification, with no VM handoff. Waiters and requests live in task
+metadata, never private syscall stacks. The BSP's local replacement helper
+allocates, copies the old live prefix and frees the old buffer; failure keeps the
+old allocation and capacity. Capacity zero releases backing without allocation.
+Submission also allocates nothing. The BSP clears its file loan before completion
+and never changes logical size. The requester consumes the result, releases its
+request, then zeroes/copies bytes and publishes size before handing operation
+ownership on. Readers cannot observe an intermediate state.
 
 The current single-task/private-mapping contract keeps checked user sources and
 replies stable across waits. Only the resumed caller accesses them. Request

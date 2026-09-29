@@ -119,10 +119,11 @@ file protocol. A WRITE grant permits subsequent writes and resizing; see the
 [file contract](processes.md#implemented-file-calls).
 
 [RAM entry preparation](../include/kernel/fs/ramfs.h) runs on the BSP through a
-focused request recorded in task metadata. The requester waits with no directory
-lock held. The BSP allocates an unpublished entry and child; it never dereferences
-a remote private stack or user address. The resumed caller copies its validated
-name into that allocation and installs the provisional child handle, using the
+typed RAMFS request in the common BSP FIFO. Entry allocation, name-only allocation
+and discard use task-owned records, with no directory lock held and no VM handoff.
+The BSP allocates an unpublished entry and child; it never dereferences a remote
+private stack or user address. The resumed caller owns the returned entry, copies
+its validated name into it and installs the provisional child handle, using the
 existing BSP table-growth request if needed.
 
 Under the directory lock, CREATE rechecks detached state, the name and generation
@@ -134,10 +135,13 @@ A directory removed while staging waited rejects publication with NOT_FOUND.
 Failed staging also discards partial ownership. Existing handles and names remain
 valid; a failed request may have grown its own capability table.
 
-There is no allocator call or wait under a directory lock. The BSP request queue
-participates in scheduler wake/preemption decisions, including single-CPU use.
-Disposal releases the child through normal object retirement and frees the entry
-on the BSP. Closing a successful creation handle never deletes the name: its
+There is no allocator call or wait under a directory lock. Publication promptly
+notifies an idle executor through its ordinary wait/ready-queue path, including
+single-CPU use; the scheduler does not inspect RAMFS requests. Discard transfers
+an unpublished or removed entry with no list links or borrowed readers. Submission
+allocates nothing, so cleanup remains available after allocation failure. The
+BSP's local helpers release the child through normal object retirement and free
+the entry. Closing a successful creation handle never deletes the name: its
 parent keeps an independent child reference.
 
 ## Removal
@@ -190,9 +194,9 @@ either policy. Ordinary source REMOVE/destination CREATE checks still apply.
 A missing source never becomes a successful no-op.
 
 Rename first checks the operation under both parent locks. If work is needed,
-it releases all locks and asks the existing BSP directory service for name
-storage without a new child object. The caller's private mappings and directory
-capabilities remain stable while waiting. After filling the name, it reacquires
+it releases all locks and submits a name-only RAMFS request for storage with a
+`NULL` child. The caller's private mappings and directory capabilities remain
+stable while waiting. After filling the name, it reacquires
 both parents and rechecks entries, rights, detached state and generation/count
 capacity. It never carries borrowed entry pointers across that wait.
 
