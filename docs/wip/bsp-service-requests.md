@@ -1,6 +1,7 @@
 # Task state and BSP service requests
 
-Status: in progress, with request ownership and the BSP executor implemented after the completed
+Status: in progress, with request ownership, the BSP executor and private-memory/display
+handoffs implemented after the completed
 [read-only filesystem milestone](../filesystem-readonly.md). This document selects
 the boundaries and scheduling policy; individual tasks still require their own
 implementation PRs. It does not authorize concurrent allocation, task migration
@@ -120,7 +121,9 @@ The service must make no request or caller-state accesses afterward: the caller
 may immediately consume, reuse or retire it. Early completion records notification;
 it must never enqueue a task whose execution has not safely stopped.
 
-Memory/display requests use deferred publication. The scheduler first switches to
+Memory and all display operations, including PRESENT, use deferred publication.
+The closed service catalog enforces this choice; callers cannot select an
+early-publication mode for these operations. The scheduler first switches to
 its permanent stack, activates the kernel root, clears entry/current-task state
 and establishes the parked handoff, then publishes the request. The BSP receives
 an inactive private address space. Dispatch reloads the process root before
@@ -182,7 +185,7 @@ an operation. Remove obsolete paths as their consumers move.
   yield. Establish initialization/failure ordering, single-CPU progress, and the
   prohibition on self-submission. Keep pending-work visibility correct while
   older queues coexist; remove the migrated queue from scheduler/preemption logic.
-- [ ] **3. Migrate private-memory and display handoffs.** Replace subsystem-specific
+- [x] **3. Migrate private-memory and display handoffs.** Replace subsystem-specific
   scheduler payload/pending knowledge with one explicit deferred submission path.
   Keep authority and reply validation in callers, operations in their subsystems,
   inactive-root ownership and CR3 reload ordering unchanged.
@@ -230,8 +233,9 @@ caller retains existing authority and user-buffer validation and copies the
 result locally before releasing the request. Task retirement and prepared-task
 discard assert that the embedded request is FREE.
 
-`task_bsp_request_storage` still provides the typed record embedded in task
-metadata; both user and kernel task allocations include it until task 7. Task 1
+Task 1 used `task_bsp_request_storage` to provide the typed record embedded in
+task metadata; task 3 replaces that adapter with a reservation across service
+types. Both user and kernel tasks still include the records until task 7. Task 1
 used scheduler-driven detached batches and an explicit pending check; task 2
 removed both dispatch adapters in favor of the executor described below. Other
 subsystem queues and resource waits are unchanged. No public ABI or dependency
@@ -343,8 +347,8 @@ storage ownership, excluding kernel clients and executor self-submission.
 
 `bsp_requests_service` and `bsp_requests_pending` are removed. Scheduler dispatch
 and preemption now see this service only through the executor's normal ready
-state; old subsystem queues keep their existing visibility. Pipe creation is
-still the only migrated operation. `struct task` remains 7,104 bytes and the pipe
+state; old subsystem queues keep their existing visibility. At task 2, pipe
+creation was the only migrated operation. `struct task` remains 7,104 bytes and the pipe
 record remains 56 bytes. The executor adds one task allocation and a 16 KiB stack,
 plus their existing allocator/VM bookkeeping. Kernel-worker request storage
 remains an accepted intermediate cost until task 7.
@@ -385,8 +389,98 @@ check regression behavior and make no executor-latency improvement claim. FIFO
 order, notification coalescing across publishers, startup failure unwinding and
 preservation of old pending queues were also reviewed by inspection. No failure
 injection, new tests, boot/output automation or CI changes were introduced. All
-validation QEMU/GDB processes were stopped. The next unchecked task is deferred
-private-memory/display publication; this change does not migrate those services.
+validation QEMU/GDB processes were stopped. These observations precede the
+private-memory/display migration below.
+
+## Task 3 private-memory/display migration
+
+Private-memory and display requests now use the executor. Their subsystems own
+capture, typed payloads, operations, results and loans. The scheduler has one
+pending deferred-request pointer; its memory/display payload fields, queues,
+service sweeps, pending checks and public submission APIs are removed. Typed
+records remain embedded temporarily, and one common reservation rejects any
+second preparation until the previous result is consumed and released. Retirement
+and prepared-task discard assert that neither this reservation nor a deferred
+request remains.
+
+Submission enters DEFERRED and saves the wait without queue publication. After
+the ordinary stack/root switch and entry/current-task clearing, the scheduler
+establishes parking under its lock, clears the deferred pointer, unlocks, then
+publishes to the request FIFO. No caller/request access follows publication.
+This applies to both memory operations and ACQUIRE/PRESENT/RELEASE, including on
+CPU 0. The executor clears process/display loans before completing the request.
+Existing authority, user-buffer validation, allocation rollback, display backing
+references and process-exit cleanup remain in their owning subsystems.
+
+Transient memory profiling samples travel in the typed request. Persistent
+aggregates and controls remain task-local until task 7; only the resumed caller
+accesses them. Profiling still reads five clocks per admitted request and none
+when disabled. Publication is measured just before taking the request lock,
+after the scheduler has established parking. Queue time therefore includes FIFO
+and executor scheduling delay; service remains bounded by the private-memory
+operation itself. Saturation and public profile results are unchanged.
+
+GDB sizes with the same compiler/flags as the baseline are 7,184 bytes for
+`struct task` (7,104 after task 2), 104 for the memory record and 112 for display.
+The common header remains 24 bytes and persistent profiling remains 816 bytes.
+The temporary 80-byte task increase also affects kernel workers until task 7.
+No public ABI, dependency pins or compiler-container inputs changed.
+
+### Validation and allocation observations
+
+Ordinary kernel/image builds and `git diff --check` passed; only the existing
+HOST-profile shadow warning remained. An independent read-only review found no
+concrete defect in publication ordering, cross-service ownership, retirement,
+profiling or display backing lifetime. Allocation failure unwinding and fatal
+fault cleanup were reviewed by inspection, without failure/fault injection.
+
+Interactive one/four-CPU checks used the same nested-KVM configuration recorded
+above and verified unchanged SDK/userspace/ports bundles. GDB observed memory
+publication under the kernel root, on the permanent stack, with cleared entry
+stack/current task and a parked caller. Service ran in the BSP kernel executor
+with IF=0; completed records had detached wait/queue links and cleared loans.
+Both callers resumed under their original private root and task stack.
+All three display operations were observed at deferred publication on four CPUs,
+including PRESENT, followed by successful release and resumption. Mandelbrot
+rendered and returned to the shell; a subsequent run reacquired the display.
+
+Four-CPU allocation observations compare task-2 main `9d52266` with task 3,
+with GDB detached during measurement. Each command ran once, using its defaults:
+64 KiB pages, 64 page allocate/release pairs; growth held 128 blocks with 8 MiB
+peak payload. All allocations succeeded. The page profile counted 64 requests
+in each direction and 4,194,304 bytes each; growth counted 128 backing allocations
+and 9,961,472 bytes, with no backing release because libc retains its pools.
+Elapsed time, in milliseconds:
+
+| Workload | Task 2 | Task 3 |
+| --- | ---: | ---: |
+| `allocbench pages` | 27.645 | 32.844 |
+| `allocbench pages --profile` | 39.863 | 52.239 |
+| `allocbench growth` | 44.919 | 46.375 |
+| `allocbench growth --profile` | 55.043 | 64.112 |
+
+Profile interval sums below are milliseconds; each cell is task 2 → task 3.
+
+| Operation | Publication | Queue | Service | Resume | Total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Page allocate | 2.034 → 2.337 | 5.473 → 7.780 | 10.638 → 10.908 | 3.196 → 5.203 | 21.341 → 26.228 |
+| Page release | 2.033 → 2.422 | 5.529 → 9.742 | 3.689 → 3.711 | 3.016 → 5.411 | 14.267 → 21.285 |
+| Growth allocate | 4.873 → 4.726 | 11.913 → 17.829 | 26.454 → 26.255 | 6.630 → 10.481 | 49.870 → 59.290 |
+
+These samples show additional queue/resume delay while service time is similar.
+They are single nested-VM observations with background workers, not statistically
+established costs or owner-host performance. Clock-call means were 34–41 µs;
+profiling overhead is material and was not subtracted. FIFO admission and a
+scheduling opportunity between operations are intentional policy changes.
+
+Single-CPU page and growth workloads also completed with zero failures, with the
+same request/byte counts. Page elapsed time was 28.525 ms unprofiled and 53.071 ms
+profiled; growth was 40.155 ms and 62.954 ms. In both CPU configurations,
+Mandelbrot rendered, released its display/keyboard ownership on exit and
+reacquired them on a second run. Checksum pipelines verified a 32 KiB transfer;
+the four-CPU three-stage `head -c 32` pipeline also verified early-reader closure,
+expected upstream EPIPE and child cleanup. All validation QEMU/GDB processes were
+stopped. The next unchecked task is capability/object creation migration.
 
 ## Validation and exclusions
 

@@ -67,10 +67,13 @@ and captured input is withheld from the console stream.
 ## Mapping and teardown invariants
 
 All display state and backing allocation are BSP-owned, with interrupts disabled
-while mutating them. A syscall parks the requesting task outside its private root
-and stack before publishing a display request. The BSP creates/removes user page
-aliases, then wakes the task; resumption reloads CR3. Failed acquisition unwinds
-partial mappings and backing without claiming the display.
+while mutating them. All three operations, including PRESENT, use typed requests
+on the common BSP FIFO. The service catalog requires the scheduler to park the
+requesting task outside its private root and stack, with entry/current-task state
+cleared, before publication. The BSP executor performs the operation and clears
+its process/display loans before completion and wakeup; resumption reloads CR3.
+The display capability keeps the object alive during the request. Failed
+acquisition unwinds partial mappings and backing without claiming the display.
 
 VM owns the kernel allocation; user mappings borrow its physical frames. The
 session holds one buffer reference. Presentation acquires another with interrupts
