@@ -33,7 +33,7 @@ applied: MPL's standard secondary-license provisions remain available.
 - `toolchain/*.patch`: upstream-derived patches follow the licenses of the
   files they modify, including applicable GNU runtime exceptions. See
   [toolchain provenance](toolchain/README.md).
-- `userspace`, `ports` and `third_party/lwip` are separately versioned
+- `userspace`, `ports`, `third_party/lwip` and `fs` are separately versioned
   repositories. Their own licensing files and upstream notices govern their
   contents; the parent license does not override them.
 

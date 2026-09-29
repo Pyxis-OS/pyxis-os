@@ -1,6 +1,7 @@
 CROSS_COMPILE ?= x86_64-unknown-pyxis-
 CC := $(CROSS_COMPILE)gcc
 HOSTCC ?= cc
+HOSTAR ?= ar
 LUA ?= lua
 export CROSS_COMPILE HOSTCC LUA
 QEMU ?= qemu-system-x86_64
@@ -56,7 +57,7 @@ OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM
 .DEFAULT_GOAL := all
 include kernel/net/lwip/build.mk
 
-.PHONY: all kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools sdk sdk-headers userspace ports initrd image run debug clean check-toolchain FORCE
+.PHONY: all kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools fs-tools sdk sdk-headers userspace ports initrd image run debug clean check-toolchain FORCE
 all: kernel
 
 ifneq ($(filter kernel,$(PREBUILT)),)
@@ -69,6 +70,12 @@ endif
 
 tools:
 	$(MAKE) -C tools
+
+fs-tools:
+	@test -f fs/Makefile || { \
+	  echo 'Missing filesystem submodule: run git submodule update --init fs.' >&2; \
+	  exit 1; }
+	$(MAKE) -C fs SOURCE=$(abspath fs) BUILD=$(abspath build/fs-tools) HOST_CC="$(HOSTCC)" HOST_AR="$(HOSTAR)"
 
 sdk-headers:
 	@test -f userspace/runtime.mk || { \

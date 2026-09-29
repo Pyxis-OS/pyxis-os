@@ -2,8 +2,9 @@
 
 Pyxis pins [pyxis-userland](https://git.internal/PyxisOS/pyxis-userland) as the
 `userspace` Git submodule and [pyxis-ports](https://git.internal/PyxisOS/pyxis-ports)
-as `ports`, and [pyxis-lwip](https://git.internal/PyxisOS/pyxis-lwip) as
-`third_party/lwip`. The committed gitlinks select exact revisions;
+as `ports`, [pyxis-lwip](https://git.internal/PyxisOS/pyxis-lwip) as
+`third_party/lwip`, and [pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) as `fs`.
+The committed gitlinks select exact revisions;
 normal builds never follow a remote branch or update the pin automatically.
 
 ## Checkout and updates
@@ -22,8 +23,12 @@ in Pyxis. A submodule checkout may be detached; create a branch there before
 starting work. Local uncommitted source edits are usable for development;
 the exported SDK manifest records dirty userland inputs.
 
+The filesystem core is opt-in: `git submodule update --init fs` followed by
+`make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs.a`. Kernel/SDK/image builds
+do not require it. Formatter and inspector executables arrive in the next task.
+
 The relative URL in `.gitmodules` resolves beside the Pyxis repository, using
-the parent remote's host and transport. All four repositories are public under
+the parent remote's host and transport. These repositories are public under
 `PyxisOS`. CI uses the checkout action's automatic token for its own repository
 and reads the public submodules without a custom source-read secret. Anonymous
 Git reads must be allowed by the Forgejo instance. The workflow builds the
@@ -49,6 +54,7 @@ the checked-out revision or dependency pins.
 | pyxis-userland | libc, libpyxis, libterm, native TLS adapter, startup/link support, applications, initial boot scripts and its TLSF vendor copy |
 | pyxis-ports | Host Lua runner, pinned third-party recipes, ordered patches and staged executables/licenses and development libraries/headers |
 | pyxis-lwip | Pinned lwIP source subset, license/provenance and any local upstream adaptations |
+| pyxis-fs | Native filesystem format, freestanding codecs and platform boundary; host tools and adapters follow under its milestone |
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime, then installs startup, libraries, linker support
@@ -78,18 +84,22 @@ and license notices from Pyxis. Its [import record](https://git.internal/PyxisOS
 identifies the source revision and filtering operation. The original full
 history remains in Pyxis.
 
-## Planned filesystem repository
+## Filesystem repository
 
 [PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) will own the shared native
 filesystem format/core, host formatter/inspector and eventual Linux FUSE adapter.
-It has an MPL-2.0 licensing bootstrap but is not yet a pinned build dependency.
-The [initial format milestone](wip/filesystem-readonly.md) selects `fs/` and an
-opt-in `make fs-tools` host build. Its
+The [initial format milestone](wip/filesystem-readonly.md) now pins the MPL-2.0
+shared core at `fs/`. Its opt-in `make fs-tools` builds the freestanding archive
+with `HOSTCC`/`HOSTAR` forwarded as `HOST_CC`/`HOST_AR`, explicit source/output
+directories and no kernel or SDK include paths. Real formatter/inspector commands
+follow in task 3; there are no placeholder executables. Its
 [format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/8c4ffa67595f05eeef97b159d0af0cfb84da1ef5/docs/format.md)
-lives in that repository, including accepted follow-up decisions; implementation
-follows in separate tasks. Pyxis retains
-the public OS ABI, capabilities and namespace integration. This planning decision
-changes no current checkout, SDK or workflow.
+lives in that repository, including accepted follow-up decisions. See the
+[implemented core boundary](../fs/docs/core.md) for local validation, buffer
+ownership and platform contracts. Pyxis retains the public OS ABI, capabilities
+and namespace integration. Default kernel, SDK, ports and image targets do not
+build the core or acquire a filesystem dependency. CI and the compiler container
+are unchanged.
 
 ## Toolchain and remaining boundaries
 
