@@ -1,11 +1,11 @@
 #include <arch/smp.h>
+#include <arch/cpu.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/display.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
-#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 static void destroy_display(struct kernel_object *object)
@@ -131,7 +131,7 @@ static void release_display(struct display_object *display)
   display_frame_release(frame);
 }
 
-enum call_status display_service(struct display_object *display,
+static enum call_status service_display(struct display_object *display,
     struct process *process, uint64_t operation, struct display_buffer *reply)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -151,6 +151,35 @@ enum call_status display_service(struct display_object *display,
     release_display(display);
   }
   return CALL_OK;
+}
+
+void display_request_execute(struct display_request *request)
+{
+  KASSERT(arch_cpu_index() == 0 && request->loan && request->display);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(request->request.state == BSP_REQUEST_SERVICING);
+  request->result = service_display(request->display, request->loan,
+      request->operation, &request->reply);
+  request->loan = NULL;
+  request->display = NULL;
+}
+
+static enum call_status request_display(struct display_object *display,
+    uint64_t operation, struct display_buffer *reply)
+{
+  struct display_request *request =
+      (struct display_request *)bsp_request_prepare(BSP_SERVICE_DISPLAY);
+  request->loan = process_current();
+  KASSERT(request->loan);
+  request->display = display;
+  request->operation = operation;
+  request->reply = (struct display_buffer){0};
+
+  bsp_request_submit_and_wait(&request->request);
+  *reply = request->reply;
+  enum call_status result = request->result;
+  bsp_request_release(&request->request);
+  return result;
 }
 
 void display_process_exit(struct process *process)
@@ -185,7 +214,7 @@ struct syscall_result display_call(struct display_object *display, uint64_t righ
     }
   }
 
-  enum call_status status = task_request_display(display, operation, &reply);
+  enum call_status status = request_display(display, operation, &reply);
   if (status != CALL_OK || operation != DISPLAY_ACQUIRE) {
     return (struct syscall_result){status, 0};
   }

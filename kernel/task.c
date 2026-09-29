@@ -1,8 +1,9 @@
 #include <kernel/object/namespace.h>
 #include <kernel/object/endpoint.h>
-#include <abi/memory.h>
 #include <abi/profile.h>
 #include <kernel/object/display.h>
+#include <kernel/object/memory.h>
+#include <kernel/service/profile.h>
 #include <arch/cpu.h>
 #include <arch/clock.h>
 #include <arch/smp.h>
@@ -12,7 +13,6 @@
 #include <kernel/fs/hostfs.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
-#include <kernel/mm/private.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/object.h>
 #include <kernel/object/file.h>
@@ -72,7 +72,12 @@ struct task {
   struct task *namespace_next;
   handle_t namespace_handle;
   enum call_status namespace_result;
-  struct pipe_create_request pipe_request; /* Temporary BSP request storage adapter. */
+  /* Temporary typed storage until the reusable user-request area is provisioned. */
+  struct pipe_create_request pipe_request;
+  struct memory_request memory_request;
+  struct display_request display_request;
+  struct bsp_request *bsp_request; /* Reserved through result consumption. */
+  struct bsp_request *deferred_request; /* Published only after the safe handoff. */
   struct task *file_next;
   struct file_object *file;
   size_t file_capacity;
@@ -92,19 +97,6 @@ struct task {
   struct file_buffer_profile file_buffer_profile;
   uint64_t file_started_ns, file_published_ns;
   uint64_t file_service_started_ns, file_service_ended_ns;
-  uint64_t memory_started_ns, memory_published_ns;
-  uint64_t memory_service_started_ns, memory_service_ended_ns;
-  struct task *memory_next;
-  struct memory_region memory_region;
-  uint64_t memory_operation;
-  enum mm_result memory_result;
-  bool memory_pending; /* Awaiting scheduler publication after leaving the private root. */
-  struct task *display_next;
-  struct display_object *display;
-  struct display_buffer display_reply;
-  uint64_t display_operation;
-  enum call_status display_result;
-  bool display_pending; /* Published only after leaving the private root. */
   enum task_kind kind;
   struct process *process; /* Owned by a user task; NULL for a kernel task. */
   uintptr_t kernel_stack;
@@ -134,9 +126,7 @@ static struct task *growth_head, *growth_tail;
 static struct task *directory_head, *directory_tail;
 static struct task *file_head, *file_tail;
 static struct hostfs_request *hostfs_head, *hostfs_tail;
-static struct task *memory_head, *memory_tail;
 static struct task *launch_head, *launch_tail;
-static struct task *display_head, *display_tail;
 static struct task *endpoint_head, *endpoint_tail;
 static struct task *namespace_head, *namespace_tail;
 static atomic_bool started;
@@ -440,13 +430,75 @@ static void service_namespace_requests(void)
   }
 }
 
-struct bsp_request *task_bsp_request_storage(enum bsp_service service)
+static struct task *current_user_task(void)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct task *task = local_scheduler()->current_task;
   KASSERT(task && task->kind == TASK_USER && !task->exited);
-  KASSERT(service == BSP_SERVICE_PIPE_CREATE);
-  return &task->pipe_request.request;
+  return task;
+}
+
+struct bsp_request *task_bsp_request_acquire(enum bsp_service service)
+{
+  struct task *task = current_user_task();
+  KASSERT(!task->bsp_request);
+  struct bsp_request *request;
+  switch (service) {
+  case BSP_SERVICE_PIPE_CREATE:
+    request = &task->pipe_request.request;
+    break;
+  case BSP_SERVICE_MEMORY:
+    request = &task->memory_request.request;
+    break;
+  case BSP_SERVICE_DISPLAY:
+    request = &task->display_request.request;
+    break;
+  default:
+    panic("unknown BSP service %u", (unsigned)service);
+  }
+  KASSERT(request->state == BSP_REQUEST_FREE);
+  task->bsp_request = request;
+  return request;
+}
+
+struct bsp_request *task_bsp_request_current(void)
+{
+  return current_user_task()->bsp_request;
+}
+
+void task_bsp_request_release(struct bsp_request *request)
+{
+  struct task *task = current_user_task();
+  KASSERT(task->bsp_request == request && !task->deferred_request);
+  KASSERT(request->state == BSP_REQUEST_COMPLETE);
+  task->bsp_request = NULL;
+}
+
+void task_bsp_request_defer(struct bsp_request *request)
+{
+  struct task *task = current_user_task();
+  KASSERT(task->bsp_request == request && !task->deferred_request);
+  KASSERT(request->state == BSP_REQUEST_DEFERRED && request->wait == &task->wait_record);
+  task->deferred_request = request;
+}
+
+static void publish_deferred_request(struct task *task)
+{
+  struct bsp_request *request = task->deferred_request;
+  lock_queues();
+  KASSERT(task->kind == TASK_USER && request && request == task->bsp_request);
+  KASSERT(task->wait == &task->wait_record && !task->wait->notified && !task->parked);
+  task->deferred_request = NULL;
+  task->parked = true;
+  unlock_queues();
+  /* The permanent stack and kernel root are active. Publication lends the
+   * inactive process; no task/request accesses may follow this call. */
+  bsp_request_publish_deferred(request);
+}
+
+struct profile_snapshot *task_memory_profile(void)
+{
+  return &current_user_task()->profile;
 }
 
 static void submit_endpoint_request(struct task *task, struct task_wait *wait)
@@ -777,27 +829,6 @@ enum call_status task_profile_host_control(uint64_t operation, struct profile_ho
   return CALL_OK;
 }
 
-static void profile_add(uint64_t *flags, uint64_t *total, uint64_t amount)
-{
-  if (amount > UINT64_MAX - *total) {
-    *total = UINT64_MAX;
-    *flags |= PROFILE_SATURATED;
-  } else {
-    *total += amount;
-  }
-}
-
-static void profile_duration_add(uint64_t *flags, struct profile_duration *duration,
-    uint64_t start, uint64_t end)
-{
-  KASSERT(end >= start);
-  uint64_t elapsed = end - start;
-  profile_add(flags, &duration->total_ns, elapsed);
-  if (elapsed > duration->maximum_ns) {
-    duration->maximum_ns = elapsed;
-  }
-}
-
 static void profile_duration_merge(uint64_t *flags, struct profile_duration *duration,
     uint64_t total, uint64_t maximum)
 {
@@ -862,154 +893,6 @@ static void finish_file_profile(struct task *task)
   profile_duration_add(&stats->flags, &stats->allocation, service->allocation_started, service->allocation_ended);
   profile_duration_add(&stats->flags, &stats->copy, service->copy_started, service->copy_ended);
   profile_duration_add(&stats->flags, &stats->release, service->release_started, service->release_ended);
-}
-
-static void finish_memory_profile(struct task *task)
-{
-  uint64_t resumed = arch_monotonic_ns();
-  struct profile_memory_operation *stats = task->memory_operation == MEMORY_ALLOCATE ?
-      &task->profile.allocate : &task->profile.release;
-  profile_add(&task->profile.flags, &stats->requests, 1);
-  profile_add(&task->profile.flags, &stats->requested_bytes, task->memory_region.size);
-  if (task->memory_result == MM_OK) {
-    profile_add(&task->profile.flags, &stats->completed_bytes, task->memory_region.size);
-  } else {
-    profile_add(&task->profile.flags, &stats->failures, 1);
-  }
-  profile_duration_add(&task->profile.flags, &stats->publication, task->memory_started_ns, task->memory_published_ns);
-  profile_duration_add(&task->profile.flags, &stats->queue, task->memory_published_ns, task->memory_service_started_ns);
-  profile_duration_add(&task->profile.flags, &stats->service, task->memory_service_started_ns, task->memory_service_ended_ns);
-  profile_duration_add(&task->profile.flags, &stats->resume, task->memory_service_ended_ns, resumed);
-  profile_duration_add(&task->profile.flags, &stats->total, task->memory_started_ns, resumed);
-}
-
-enum mm_result task_request_memory(uint64_t operation, struct memory_region *region)
-{
-  KASSERT(operation == MEMORY_ALLOCATE || operation == MEMORY_RELEASE);
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-  KASSERT(!task->memory_pending);
-  if (task->profile.flags & PROFILE_ACTIVE) {
-    task->memory_started_ns = arch_monotonic_ns();
-  }
-  task->memory_operation = operation;
-  task->memory_region = *region;
-  task->memory_pending = true;
-
-  /* Unlike heap requests, VM ownership cannot be lent while this CPU still
-   * runs on the private root. The scheduler publishes after the switch. */
-  task_wait_sleep(wait);
-  if (task->profile.flags & PROFILE_ACTIVE) {
-    finish_memory_profile(task);
-  }
-  *region = task->memory_region;
-  return task->memory_result;
-}
-
-static void publish_memory_request(struct task *task)
-{
-  if (task->profile.flags & PROFILE_ACTIVE) {
-    task->memory_published_ns = arch_monotonic_ns();
-  }
-  lock_queues();
-  KASSERT(task->wait == &task->wait_record && !task->wait->notified);
-  KASSERT(task->memory_pending && !task->parked);
-  task->memory_pending = false;
-  task->parked = true;
-  task->memory_next = NULL;
-  if (memory_tail) {
-    memory_tail->memory_next = task;
-  } else {
-    memory_head = task;
-  }
-  memory_tail = task;
-  unlock_queues();
-  /* Ownership is now with BSP; do not touch task or its private VM again.
-   * Wake its scheduler after publication instead of waiting for a timer tick. */
-  notify_remote_cpu(0);
-}
-
-static void service_memory_requests(void)
-{
-  lock_queues();
-  struct task *task = memory_head;
-  memory_head = memory_tail = NULL;
-  unlock_queues();
-
-  while (task) {
-    struct task *next = task->memory_next;
-    KASSERT(task->parked && task->wait == &task->wait_record);
-    struct memory_region *region = &task->memory_region;
-    if (task->profile.flags & PROFILE_ACTIVE) {
-      task->memory_service_started_ns = arch_monotonic_ns();
-    }
-    if (task->memory_operation == MEMORY_ALLOCATE) {
-      task->memory_result = private_memory_allocate(task->process, region->size,
-          &region->address);
-    } else {
-      KASSERT(task->memory_operation == MEMORY_RELEASE);
-      task->memory_result = private_memory_release(task->process, region->address,
-          region->size);
-    }
-    if (task->profile.flags & PROFILE_ACTIVE) {
-      task->memory_service_ended_ns = arch_monotonic_ns();
-    }
-    task_wait_wake(&task->wait_record);
-    /* Resumption reloads CR3 before returning to the private task stack. */
-    task = next;
-  }
-}
-
-enum call_status task_request_display(struct display_object *display,
-    uint64_t operation, struct display_buffer *reply)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-  KASSERT(!task->display_pending);
-  task->display = display;
-  task->display_operation = operation;
-  task->display_reply = (struct display_buffer){0};
-  task->display_pending = true;
-
-  task_wait_sleep(wait);
-  *reply = task->display_reply;
-  task->display = NULL;
-  return task->display_result;
-}
-
-static void publish_display_request(struct task *task)
-{
-  lock_queues();
-  KASSERT(task->wait == &task->wait_record && !task->wait->notified);
-  KASSERT(task->display_pending && !task->parked);
-  task->display_pending = false;
-  task->parked = true;
-  task->display_next = NULL;
-  if (display_tail) {
-    display_tail->display_next = task;
-  } else {
-    display_head = task;
-  }
-  display_tail = task;
-  unlock_queues();
-  /* The BSP owns the private root now and may immediately resume the task. */
-}
-
-static void service_display_requests(void)
-{
-  lock_queues();
-  struct task *task = display_head;
-  display_head = display_tail = NULL;
-  unlock_queues();
-
-  while (task) {
-    struct task *next = task->display_next;
-    KASSERT(task->parked && task->wait == &task->wait_record);
-    task->display_result = display_service(task->display, task->process,
-        task->display_operation, &task->display_reply);
-    task_wait_wake(&task->wait_record);
-    task = next;
-  }
 }
 
 static struct task *request_launch_service(enum launch_action action,
@@ -1236,7 +1119,7 @@ enum mm_result user_task_prepare_on(size_t cpu_index, struct process *process,
 void user_task_discard_prepared(struct task *task)
 {
   KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
-  KASSERT(task->pipe_request.request.state == BSP_REQUEST_FREE);
+  KASSERT(!task->bsp_request && !task->deferred_request);
   KASSERT(vm_free(vm_kernel_space(), task->kernel_stack, TASK_STACK_SIZE) == MM_OK);
   kfree(task);
 }
@@ -1276,7 +1159,7 @@ enum mm_result user_task_create(struct process *process, uintptr_t entry,
 
 static void complete_task(struct task *task)
 {
-  KASSERT(task->pipe_request.request.state == BSP_REQUEST_FREE);
+  KASSERT(!task->bsp_request && !task->deferred_request);
   lock_queues();
   task->next = completed_head;
   completed_head = task;
@@ -1393,8 +1276,6 @@ void kernel_task_yield_if_runnable(void)
       service_directory_requests();
       service_file_requests();
       service_hostfs_requests();
-      service_memory_requests();
-      service_display_requests();
       service_launch_requests();
       reap_completed();
       object_reap();
@@ -1436,10 +1317,8 @@ void kernel_task_yield_if_runnable(void)
     scheduler->current_task = NULL;
     if (task->exited) {
       complete_task(task);
-    } else if (task->memory_pending) {
-      publish_memory_request(task);
-    } else if (task->display_pending) {
-      publish_display_request(task);
+    } else if (task->deferred_request) {
+      publish_deferred_request(task);
     } else if (task->wait) {
       lock_queues();
       if (task->wait->notified) {
@@ -1490,8 +1369,7 @@ void task_preempt(bool user_mode)
      (completed_head != NULL || growth_head != NULL ||
       endpoint_head != NULL || namespace_head != NULL ||
       directory_head != NULL ||
-      file_head != NULL || memory_head != NULL || launch_head != NULL ||
-      display_head != NULL || hostfs_head != NULL));
+      file_head != NULL || launch_head != NULL || hostfs_head != NULL));
   unlock_queues();
   if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;
