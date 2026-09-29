@@ -244,6 +244,10 @@ change.
    do not add locks to the old ownership model and hope it holds. Make libc shared state
    safe. Useful consumers: libuv worker callbacks and Lua background work; eager vs
    guarded/lazy stacks and cross-CPU execution can be separately bounded decisions.
+   The [scheduling and threads direction](scheduling-and-threads.md) proposes
+   separating spaces from CPUs and adding migration before concurrent siblings,
+   while initially retaining BSP services. Sibling coordination is required even
+   if the first threaded processes stay on one CPU.
 3. **Truthful native file metadata, identity and editor conflict information.** Define
    identity comparison scope/lifetime, file kind/size, modification indication and
    actual access/ownership information across RAM/host and the selected
