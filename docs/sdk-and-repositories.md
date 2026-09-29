@@ -85,8 +85,9 @@ filesystem format/core, host formatter/inspector and eventual Linux FUSE adapter
 It has an MPL-2.0 licensing bootstrap but is not yet a pinned build dependency.
 The [initial format milestone](wip/filesystem-readonly.md) selects `fs/` and an
 opt-in `make fs-tools` host build. Its
-[accepted format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/53d7f2a70841db237d5dded6e84e13ed5eef67ca/docs/format.md)
-lives in that repository; implementation follows in separate tasks. Pyxis retains
+[format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/e04f78fce1dfb3a8870b7f6580d92aaeea6b2f4d/docs/format.md)
+lives in that repository and is under follow-up review; implementation follows in
+separate tasks. Pyxis retains
 the public OS ABI, capabilities and namespace integration. This planning decision
 changes no current checkout, SDK or workflow.
 

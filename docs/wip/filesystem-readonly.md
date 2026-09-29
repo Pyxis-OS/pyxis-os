@@ -2,16 +2,18 @@
 
 Status: agreed next storage milestone. The [block-storage foundation](../block-storage.md)
 is complete. This document records the selected scope and focused tasks; it does
-not start implementation. Task 1's format contract is accepted; implementation
+not start implementation. Task 1's format contract is under follow-up review; implementation
 continues through separately authorized tasks. The broader
 [persistent-storage design](persistent-storage.md) and
 [identity rules](users-and-authority.md) remain authoritative for later work.
 
-Task 1's [format and host-tool specification](https://git.internal/PyxisOS/pyxis-fs/src/commit/53d7f2a70841db237d5dded6e84e13ed5eef67ca/docs/format.md)
-is in [pyxis-fs PR #1](https://git.internal/PyxisOS/pyxis-fs/pulls/1). Exact layouts,
-numerical limits, rights assignments and budget rules were accepted by the owner
-on 2026-09-29, completing the task. The filesystem repository contains its
-MPL-2.0 licensing bootstrap.
+Task 1's [format and host-tool specification](https://git.internal/PyxisOS/pyxis-fs/src/commit/e04f78fce1dfb3a8870b7f6580d92aaeea6b2f4d/docs/format.md)
+is in [pyxis-fs PR #1](https://git.internal/PyxisOS/pyxis-fs/pulls/1). After initial
+acceptance on 2026-09-29, the owner reopened review for validation/accounting,
+compatibility, rights and reclamation clarifications, a single inline extent
+descriptor and lower reserve defaults. The new reserve formula and ID-acquisition
+lookup rule require explicit review. The filesystem repository contains its
+MPL-2.0 licensing bootstrap; the repository split and host-only scope are unchanged.
 
 ## Completion target and boundaries
 
@@ -93,7 +95,7 @@ unallocated storage or bytes beyond the file's logical end.
 Each object records a policy owner and explicit allow grants. A grant names an
 individual principal, object-specific rights and object-only or directory-subtree
 scope. Groups wait for a trusted membership source. Exact rights, bit assignments
-and acquisition interfaces are defined in the accepted specification; file content,
+and acquisition interfaces are defined in the specification; file content,
 directory operations and policy administration must remain distinct.
 
 The builder requires explicit owner principal IDs and gives each initial root
@@ -177,7 +179,7 @@ format is required to demonstrate the design.
 | Volume record | ID, name, guarantee/quota, policy and volume root |
 | Object index | Object ID to file/directory record |
 | Directory index | Name to object ID |
-| File extent index | Logical file ranges to physical pool blocks |
+| File extent index | Multiple logical file ranges to physical pool blocks; one extent lives inline in the object record |
 
 Use 4 KiB B+ tree nodes for variable-sized indexes. Pack small records in leaves;
 file contents occupy separate extents. Share concrete node encoding, bounds and
@@ -227,7 +229,7 @@ silently skipping them. Import host hard links as independent files with new
 identities. Apply selected Pyxis ownership/grants rather than host permissions.
 Fail on detected source changes and read errors; do not claim an atomic host
 snapshot. Exact command syntax, destination protection, image/container handling
-and extraction-path safety are defined in the accepted specification.
+and extraction-path safety are defined in the specification.
 
 `pyxisfs-inspect` lists volumes/directories, reports IDs, ownership, grants and
 accounting, and extracts files using the shared reader. Its explicit whole-image
@@ -244,7 +246,7 @@ or lifetime decision before implementation; the checklist is not permission to
 guess. Publish pyxis-fs dependency commits before updating a Pyxis gitlink, link
 dependent PRs and update this checklist with each completed task.
 
-- [x] **1. Specify the initial format and host-tool contract.** Document exact
+- [ ] **1. Specify the initial format and host-tool contract.** Document exact
   headers, checksum coverage, feature/version fields, typed IDs, root validation
   and selection, index/node/extent layouts, allocation ownership and reserve
   arithmetic. Set bounds for names, trees, files, images and validation memory;
@@ -254,8 +256,10 @@ dependent PRs and update this checklist with each completed task.
   submodule location and host build integration. Agree a bounded future commit
   and reclamation design sufficient to avoid an incompatible initial layout;
   do not implement writable transactions. This is a specification PR first.
-  The owner accepted the linked specification on 2026-09-29. Later allocator and
-  writable-implementation gates remain explicit. Licensing is MPL-2.0.
+  Reopened after follow-up review of the initially accepted specification. Resolve
+  the revised reserve formula and ID-acquisition lookup rule before closing this
+  task. Later allocator and writable-implementation gates remain explicit.
+  Licensing is MPL-2.0.
 - [ ] **2. Establish the shared core and encoding.** Initialize pyxis-fs with
   agreed build/ownership instructions, platform allocation/I/O interfaces and
   concrete ID, checksum and record codecs. Keep the core freestanding, error
@@ -267,7 +271,8 @@ dependent PRs and update this checklist with each completed task.
   shared selection path. Show named empty volumes and useful diagnostics. This
   is new-image construction, not existing-pool mutation.
 - [ ] **4. Implement read-only traversal and acquisition.** Traverse B+ trees,
-  resolve object IDs and names, enumerate directories and read extents/holes.
+  resolve object IDs and names, enumerate directories and read inline/tree extents
+  and holes.
   Validate references and bounds; implement read/list policy evaluation with
   an explicit acquisition ceiling and scope. Keep diagnostic inspection separate
   from that policy path and expose no unrestricted-by-identity shortcut.
