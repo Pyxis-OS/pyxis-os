@@ -128,18 +128,17 @@ still-running caller. These operations change no private mappings and require no
 VM handoff. They use the executor's ordinary wake and ready-queue path, including
 for BSP userspace; scheduling and preemption inspect none of their request queues.
 
-Initial HOST request publication also notifies the BSP after releasing the queue
-lock, so a request arriving after its queue sweep can wake an idle BSP. The
-caller saves its own wait pointer before publication and uses the existing
-early-wakeup handshake; it does not inspect the borrowed request until completion.
-The BSP forwards the record to the transport worker as before. CPU 0 callers send
-no self-IPI and reach forwarding through their scheduler when they block.
+HOST requests use the same FIFO and synchronized idle-executor notification.
+The caller saves its wait pointer before publication and does not inspect the
+borrowed record until final completion. The executor forwards it to the existing
+transport worker, which completes it through the common wakeup path. BSP callers
+use the same executor path and send no self-IPI.
 
-The periodic timer remains 120 Hz. Timed-wait expiry, sleeping tasks, other
-BSP-only request queues and exit cleanup retain their existing scheduler/timer
-service paths. Resource wakeups on the same CPU do not send a self-IPI; interrupt
-return, the current task's yield/block/return or timer preemption reaches the
-scheduler. This change adds no migration, priorities or tickless timers.
+The periodic timer remains 120 Hz. Timed-wait expiry, sleeping tasks and exit
+cleanup retain their existing scheduler/timer service paths. Resource wakeups on
+the same CPU do not send a self-IPI; interrupt return, the current task's
+yield/block/return or timer preemption reaches the scheduler. This change adds no
+migration, priorities or tickless timers.
 
 Blocking userspace syscalls and BSP kernel tasks use a wait record embedded in
 task metadata. The resource publishes it under its own lock and removes it before
@@ -260,15 +259,17 @@ defines the calling contracts.
 `kernel_task_yield_if_runnable()` requires the same IF=1/no-lock calling context.
 It checks the BSP ready queue under the scheduler lock, then yields if another
 task is runnable; otherwise it returns. It does not make sleeping tasks runnable
-or replace timer handling of deadlines and unmigrated service queues.
+or replace timer handling of deadlines and task retirement. Empty timed-wait and
+kernel-sleeper lists skip clock reads; nonempty lists keep their existing checks
+and wake ordering.
 
 The [BSP request executor](wip/bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.
 It currently services pipe creation, private memory, display, capability growth,
 namespace creation, endpoint creation/export, RAMFS entry/name allocation and
-discard, RAM FILE backing replacement, and launch preparation/publication. HOST
-forwarding retains its existing scheduler path. The executor runs one FIFO
-operation with IF=0, enables interrupts, and conditionally yields between operations. An individual operation
+discard, RAM FILE backing replacement, launch preparation/publication and HOST
+forwarding. The executor runs one FIFO operation with IF=0, enables interrupts,
+and conditionally yields between operations. An individual operation
 remains non-preemptible. Only the scheduler inspects ready queues.
 
 When its queue is empty, the executor publishes an untimed wait under the request
@@ -277,10 +278,15 @@ unlocking; later publishers need no additional wake while it is already notified
 or servicing work. An early wake is remembered through the normal parking
 handshake. A parked worker becomes runnable, with an IPI only for a remote
 publisher. There is no polling, self-IPI or scheduler sweep of this request queue.
-Each operation writes its result and publishes completion before waking the
-caller. The executor then makes no further access to the request or loaned state;
-the caller can consume the result, release the request reservation and reuse or
-retire its storage immediately after notification.
+Local operations write their result and publish completion before waking the
+caller. HOST forwarding instead transfers the request to its existing transport
+worker in FORWARDED state. The executor makes no further request access and
+continues its normal scheduling boundary; only HOST completion paths publish the
+final result, including immediate unavailability and initialization failure.
+Completion makes no further access to the request or loaned state. The caller
+consumes the result before releasing its reservation, including staged HOST user
+copies and ownership transfer of returned objects or image captures. Only then
+may another service reuse the storage; retirement asserts no reservation remains.
 The executor always finishes a published wait before reusing its wait record.
 Synchronous BSP request clients remain user-only, so the executor cannot submit
 to itself and wait. Its subsystem operations use local helpers; RAMFS allocation

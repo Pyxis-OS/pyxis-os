@@ -50,8 +50,8 @@ Standalone kernel `kmalloc`/`kfree` throughput and deeper PMM/VM timing remain
 unmeasured. Pool growth counters describe backing acquired during a measurement
 window, not total retained memory or a fragmentation metric. Private-memory
 requests now [notify the BSP after publication](smp.md), removing their dependency
-on a later timer wakeup. Other BSP request queues retain their existing service
-paths; measure them separately before extending notification or changing
+on a later timer wakeup. The common executor now admits all migrated services,
+including HOST forwarding; measure queue and worker costs before changing
 allocation policy.
 
 ## I/O baseline attribution and coverage
@@ -112,8 +112,8 @@ individual wake causes were not traced. The residual includes direct timestamp
 work and unresolved scheduling/transport observation effects; no constant
 correction or normal-workload phase partition is justified.
 
-Initial HOST publication now explicitly notifies the BSP after unlocking,
-preserving request ownership and early wake semantics. The
+Initial HOST publication now uses the common executor's synchronized idle
+notification, preserving request ownership and early wake semantics. The
 [correction validation](io-reliability-attribution.md#host-publication-notification)
 repeats the affected off/on controls; full profiling still perturbs execution.
 The milestone closed after this correction. Additional resolution/coverage and
@@ -348,7 +348,11 @@ also depends on this UTC value: an available but incorrect RTC date can cause
 incorrect acceptance or rejection. Revisit authenticated time synchronization
 before treating TLS date checks as independent of firmware/hypervisor time.
 
-HPET MMIO reads can be expensive, especially under virtualization. Consider a
+HPET MMIO reads can be expensive, especially under virtualization. The
+[HOST forwarding investigation](wip/bsp-service-requests.md#task-7-host-forwarding)
+removed unnecessary reads for empty scheduler deadline lists and untimed HOST
+idle waits, restoring the measured unprofiled transfer times to baseline. Active
+deadlines and profiling still pay the clock cost. Consider a
 validated TSC source later, including frequency discovery and cross-CPU
 consistency, without changing the clock protocol. The current source requires
 a 64-bit, memory-mapped HPET; there is no source registry or fallback. VirtIO
