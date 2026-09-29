@@ -11,8 +11,9 @@ The active [pool/filesystem working draft](persistent-storage.md) records the
 discussion and explicitly agreed choices; other mechanisms remain proposals.
 
 Writable `host://` already provides host-backed persistence. The
-[block-storage foundation](../block-storage.md) is complete; later filesystem
-and installation work remain proposed. Use the existing
+[block-storage foundation](../block-storage.md) is complete. The
+[initial format and read-only core](filesystem-readonly.md) is selected next;
+writable recovery, native mounts and installation remain proposed. Use the existing
 [filesystem direction](../vfs.md) and
 [storage notes](later-os-directions.md#persistent-storage-and-installation).
 

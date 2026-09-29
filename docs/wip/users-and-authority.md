@@ -23,7 +23,8 @@ do not themselves authorize kernel operations.
   Linking another authentication method/provider requires explicit authority.
 - Persistent resource ownership refers to the Pyxis principal, independently of
   token expiry, account renaming or an authorized authentication-provider change.
-  Identifier encoding and import procedures remain undecided; the
+  The initial filesystem milestone selects opaque 128-bit principal IDs generated
+  from strong randomness, with zero invalid; import procedures remain undecided. The
   [storage identity rules](persistent-storage.md#agreed-persistent-identity-and-imported-ownership)
   require trusted mappings and retain unmapped ownership.
 - A user directory may eventually be local, remote or federated. It supplies
@@ -33,9 +34,11 @@ do not themselves authorize kernel operations.
   Its expansion is undecided. It holds explicit bootstrap/setup capabilities
   and constructs bounded sessions; its name or process identity confers no
   universal bypass. Broad capabilities still make it security-critical.
-- Keep authentication and policy interpretation in userspace. The kernel
-  enforces capabilities without interpreting JWTs, external groups or OIDC.
-  The exact persistent-storage policy enforcement interface is not yet designed.
+- Keep authentication, external claim interpretation and machine/session policy
+  in userspace. The shared storage core evaluates native persistent grants against
+  trusted context; the kernel enforces capabilities without interpreting JWTs,
+  external groups or OIDC. The exact storage acquisition interface still needs
+  specification in the initial filesystem milestone.
 - Restricted applications cannot recover the user's full authority merely by
   identifying as that user. Access to PCA and particular grant requests must be
   controlled; sensitive elevation may require trusted user interaction. Login
@@ -85,7 +88,10 @@ and [OAuth Device Authorization Grant](https://www.rfc-editor.org/rfc/rfc8628.ht
   is defined. Terminating a session releases its own resources but cannot recall
   copies delegated outside it or data already read.
 
-Concrete interfaces, disk fields and immediate revocation machinery are not selected.
+The [initial filesystem model](filesystem-readonly.md#ownership-and-acquisition-policy)
+selects persistent policy owners and explicit individual-principal grants with
+object/subtree scope, plus bounded policy-based acquisition. Exact rights, disk
+layouts, trusted interfaces and immediate revocation machinery are not selected.
 
 ## Agreed creation and namespace changes
 
@@ -134,14 +140,16 @@ earlier checkpoint. The current init and host-mount slices do not need
 a complete account system, but their prototype grants are not the eventual
 multi-user policy.
 
-Do not add placeholder user fields, Unix IDs, permission bits or login APIs in
-anticipation. Turn the decisions into a focused milestone when that checkpoint
-is reached.
+The [initial format milestone](filesystem-readonly.md) now scopes storage ownership
+and read/list acquisition enforcement. It does not authorize placeholder login
+APIs, Unix IDs or mode bits, or implementation of the full identity broker.
 
 ## Remaining decisions
 
-- Choose principal encoding, local authentication and bootstrap admission policy,
-  plus the interfaces for establishing/changing a session's authenticated context.
+- Principal IDs and explicit formatter-supplied bootstrap ownership are selected.
+  Specify local authentication and bootstrap admission, plus the interfaces for
+  establishing/changing a session's authenticated context; a recorded owner alone
+  neither authenticates a principal nor bypasses acquisition authority.
 - How do users relate to sessions, spaces and processes? A space is an execution
   domain, not automatically a user; one user may have several spaces. Decide
   which component creates them and supplies their initial resources.

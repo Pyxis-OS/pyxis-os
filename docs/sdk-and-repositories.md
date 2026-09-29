@@ -78,6 +78,16 @@ and license notices from Pyxis. Its [import record](https://git.internal/PyxisOS
 identifies the source revision and filtering operation. The original full
 history remains in Pyxis.
 
+## Planned filesystem repository
+
+[PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) will own the shared native
+filesystem format/core, host formatter/inspector and eventual Linux FUSE adapter.
+It is not yet a pinned build dependency. The
+[initial format milestone](wip/filesystem-readonly.md) settles its submodule path
+and host build integration before implementation. Disk-format definitions belong
+in that repository; Pyxis retains the public OS ABI, capabilities and namespace
+integration. This planning decision changes no current checkout, SDK or workflow.
+
 ## Toolchain and remaining boundaries
 
 The prebuilt [Pyxis toolchain](../toolchain/README.md) uses an external SDK

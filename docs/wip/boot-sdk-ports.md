@@ -124,8 +124,9 @@ optional instance-specific augmentation. Implemented behavior, configuration and
 limits live in the subsystem docs, with the
 [fetch/inspect/compile/run workflow](../edit-build-run.md#fetch-source-over-https)
 beside the local development loop. SSH/libssh remains deferred. The
-[block-storage foundation](../block-storage.md) is also complete; later paths
-remain proposals.
+[block-storage foundation](../block-storage.md) is also complete. The
+[initial filesystem format and read-only core](filesystem-readonly.md) is selected
+next; other paths remain proposals.
 
 The next [discussion agenda](storage-and-terminal-agenda.md) covers persistent
 disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
@@ -146,9 +147,11 @@ contracts. The [block-storage foundation](../block-storage.md) is complete:
 [configurable split queues](../virtio-queues.md) serve filesystem, entropy and
 virtio-blk; bounded ticketed reads/writes and ordered flushes support
 [GPT discovery](../gpt.md). Final validation combined those devices on the merged
-implementation. Device/transport failure remains terminal until reboot. Later
-shared-core, recovery, FUSE and native-persistence milestones remain proposed;
-none is selected or authorized by closing this milestone.
+implementation. Device/transport failure remains terminal until reboot. The
+[initial format and read-only shared core](filesystem-readonly.md) is now selected:
+PyxisOS/pyxis-fs will own the core and host tools. Start with its format-specification
+task and settle remaining choices before implementation. Writable recovery, FUSE
+and native-persistence milestones remain proposed.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
@@ -156,7 +159,7 @@ none is selected or authorized by closing this milestone.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../block-storage.md) is complete. | The proposed [initial format and read-only core](persistent-storage.md#proposed-milestone-sequence) needs disk layouts, repository ownership and initial policy enforcement agreed before implementation. |
+| Native disk storage | The [block-storage foundation](../block-storage.md) is complete. | The selected [initial format and read-only core](filesystem-readonly.md) builds and inspects populated host images. Its first task settles exact format and interface choices before code. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The
