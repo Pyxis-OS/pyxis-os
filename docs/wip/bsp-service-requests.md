@@ -1,7 +1,8 @@
 # Task state and BSP service requests
 
 Status: in progress, with the BSP executor serving pipe creation, private memory,
-display, capability growth and namespace/endpoint creation after the completed
+display, capability growth, namespace/endpoint creation and RAMFS/FILE backing
+operations after the completed
 [read-only filesystem milestone](../filesystem-readonly.md). This document selects
 the boundaries and scheduling policy; individual tasks still require their own
 implementation PRs. It does not authorize concurrent allocation, task migration
@@ -193,7 +194,7 @@ an operation. Remove obsolete paths as their consumers move.
   namespace and endpoint creation/export onto the mechanism with typed records.
   Preserve exclusive table loans, capability references and failure unwinding;
   remove their old task APIs and queues.
-- [ ] **5. Migrate directory and file backing services.** Move entry/name allocation,
+- [x] **5. Migrate directory and file backing services.** Move entry/name allocation,
   discard and buffer replacement to their owning subsystems. Preserve logical
   file-operation ownership, guaranteed cleanup submission and profiling results.
 - [ ] **6. Migrate launch preparation and HOST forwarding.** Preserve capture/group
@@ -548,7 +549,103 @@ zero rejections: completion median 0.504 ms (0.502–0.516), admission median
 these are delivery regression observations, not measurements of request queue
 latency or owner-host performance. All QEMU/GDB processes were stopped.
 
-The next unchecked task is directory/file backing migration.
+These observations precede the directory/file backing migration below.
+
+## Task 5 directory and file backing
+
+RAM entry allocation, rename-name allocation and detached-entry disposal now
+belong to a typed request in `kernel/fs/ramfs.c`. Allocation returns an owned,
+unpublished entry; the caller fills the name, performs existing capability and
+directory rechecks, and either publishes or disposes of it. Disposal transfers
+the detached entry, releases its child reference and clears the pointer before
+completion. Submission never allocates, including cleanup after failure.
+
+RAM file replacement now belongs to `kernel/object/file.c`. The caller keeps its
+live file reference and logical `busy` ownership across the request, without
+holding the file spinlock. Resource waiters detach before wakeup; a caller can
+finish that wait and then prepare a service wait. The executor clears its file
+loan before completion. Only the caller updates logical size and hands operation
+ownership onward. Zero-capacity replacement frees backing without allocation;
+geometric growth and exact-size fallback remain separate, fully consumed requests.
+
+Both services use ordinary FIFO publication and prompt executor notification;
+neither mutates private mappings. Old task payloads, service APIs, directory/file
+queues, scheduler sweeps and pending checks are removed. Local allocation/disposal
+and replacement helpers are private to their subsystems. Persistent FILE profile
+aggregates and controls remain task-local until task 7. Transient samples travel
+in the request: preparation starts before wait preparation, publication is stamped
+immediately before the request lock, service brackets the unchanged local helper,
+and caller resumption precedes aggregation. Missing allocation/copy/release phases
+remain zero; inactive collection adds no clock reads.
+
+GDB sizes from ordinary builds with the existing compiler/flags are 7,296 bytes
+for `struct task` on baseline main `74a0bf3`, and 7,328 after task 5. The RAMFS
+record is 56 bytes and the FILE record 144, including their 24-byte headers.
+`file_wait` remains 16 bytes and persistent FILE profiling 176. The temporary
+32-byte task increase also affects kernel workers until task 7. No public ABI,
+dependency pins or compiler-container inputs changed.
+
+### Validation and matched RAM controls
+
+Kernel/image builds and `git diff --check` passed using verified unchanged
+SDK/userspace/ports bundles. Only the existing HOST-profile shadow warning
+remained. Independent read-only review found no concrete defect. Failure fallback,
+allocation-failure cleanup and file waiter detachment were reviewed by inspection;
+no failure injection or new tests/boot automation were added.
+
+Interactive checks used the one/four-CPU nested-KVM configuration recorded above:
+QEMU 10.2.2 with the documented AHCI fix, CPU `max`, 256 MiB, matching OVMF,
+entropy enabled, and no network, HOST or block device. GDB observed an AP's RAMFS
+allocation complete before sleeping: notification and an owned entry were ready
+while the caller remained unparked, and consumption cleared the request's entry
+pointer. FILE service ran in the BSP kernel worker under the kernel root with
+IF=0, a parked caller, `busy` set and no file spinlock held, on both CPU counts.
+Completion cleared the file loan. For a zero-capacity request, data/capacity were
+cleared while logical size still held 32,768 and `busy` remained set; the caller
+then finished resize and regrowth. No remote user-buffer or stack access was used.
+
+Directory create, rename, replacement rename, file removal and empty-directory
+removal passed. Truncate/regrow preserved the 32 KiB fixture checksum; replacement
+rename preserved the 1 MiB checksum. A PXE copied into a RAM file after truncation
+loaded and ran successfully. All QEMU/GDB processes were stopped.
+
+Four-CPU baseline and migrated builds each ran eight matched `iobench` controls:
+write/generated and copy/`app://share/iobench.bin`, grow-from-zero and `--prepared`,
+profiling off and `--profile`. Each used a unique RAM output, default 4,080-byte
+buffer, one warmup and five samples, no sync and GDB detached during measurement.
+All 96 passes verified the 1 MiB contents, length and EOF, with 258 writes and no
+short writes or failures; copy also used 258 reads with no shorts. Transfer times
+below are median (minimum–maximum) milliseconds.
+
+| Workload | Profile | Baseline | Task 5 |
+| --- | --- | ---: | ---: |
+| Write, grow | off | 59.041 (52.402–59.180) | 1.957 (1.900–2.721) |
+| Write, grow | on | 52.634 (52.103–71.288) | 6.149 (5.657–7.676) |
+| Write, prepared | off | 0.275 (0.265–0.293) | 0.284 (0.269–0.291) |
+| Write, prepared | on | 0.299 (0.291–0.377) | 0.293 (0.292–0.317) |
+| Copy, grow | off | 58.852 (58.218–59.218) | 2.540 (2.171–2.605) |
+| Copy, grow | on | 57.780 (51.943–59.660) | 6.280 (6.189–6.705) |
+| Copy, prepared | off | 0.481 (0.478–0.493) | 0.491 (0.479–0.536) |
+| Copy, prepared | on | 0.491 (0.479–0.586) | 0.487 (0.479–0.492) |
+
+Profiled growth retained ten successful replacements per pass, requested-capacity
+sum 4,173,840 and copied-byte sum 2,084,880; prepared passes reported zero events.
+For illustration, the third profiled write pass's queue sum fell from 46.504 to
+1.283 ms while service was 2.826 versus 2.763 ms. The corresponding copy pass's
+queue sum fell from 51.411 to 1.485 ms, with service 2.745 versus 2.692 ms.
+This is consistent with removing the missing-notification delay; allocation and
+copy policy did not change. Queue intervals still combine locking, worker
+availability and scheduling. These sequential five-sample nested-VM groups do
+not isolate a constant instrumentation cost or establish owner-host performance.
+Prepared controls remain close to baseline. Profiling adds material overhead to
+the now-shorter growing transfers and must not be subtracted as a constant.
+
+Single-CPU controls also passed: growing writes had median 2.153 ms unprofiled
+and 6.816 ms profiled, with unchanged replacement counts/bytes. Prepared profiled
+copy had median 0.472 ms and zero replacement events. Each included one warmup
+and five verified samples. The missing FILE publication notification is resolved;
+individual non-preemptible services and shared FIFO scheduling remain the agreed
+limits. The next unchecked task is launch preparation and HOST forwarding.
 
 ## Validation and exclusions
 

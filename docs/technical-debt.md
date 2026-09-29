@@ -58,8 +58,9 @@ allocation policy.
 
 The [I/O/IPC baselines](io-ipc-baselines.md) measure elapsed workload boundaries
 in nested KVM. The [RAM attribution](io-reliability-attribution.md#ram-file-profiling)
-now separates RAM replacement costs and identifies queue time as dominant in the
-measured growing writes/copies; see the FILE service-delay entry below.
+separates RAM replacement costs and identified queue time as dominant in the
+earlier growing writes/copies. The common executor now resolves their missing
+notification; see the FILE service-delay entry below.
 HOST profiling now separates guest queues, worker service and transport, but
 strongly perturbs the nested workload; see the profiling entry below. Transport
 still combines device/daemon/backing service and guest/host scheduling. Host
@@ -78,20 +79,18 @@ claims; keep each environment and completion boundary distinct.
 
 ## RAM FILE BSP service delay
 
-RAM buffer replacements publish work to the BSP queue without explicit remote
-notification. In the [matched nested-KVM attribution](io-reliability-attribution.md#ram-file-profiling),
-ten successful replacements copied 2,084,880 existing-data bytes per 1 MiB grow
-pass. Publication-to-service queue sums were 44.783–54.129 ms and accounted for
-83–92% of profiled transfer time, while BSP service was 2.799–5.357 ms. Prepared
-overwrite made no replacement requests. Buffer-growth/copy policy is therefore
-not the dominant measured cost for this workload.
+Resolved by the [BSP request migration](wip/bsp-service-requests.md#task-5-directory-and-file-backing):
+RAM replacements now notify the common executor promptly. Matched four-CPU
+nested-KVM controls reduced unprofiled growing-write median from 59.041 to
+1.957 ms and growing-copy median from 58.852 to 2.540 ms. Prepared controls and
+replacement/copy counts stayed comparable; the milestone records all off/on
+controls and separates queue from service observations.
 
-The timestamps combine queue locking, BSP availability and scheduling; they do
-not prove which wakeup caused service. Revisit with a separate, explicitly agreed
-FILE publication-notification change, retaining the early-wakeup/lifetime contract,
-and rerun matched profile-off/on grow/prepared controls. Do not infer a constant
-instrumentation cost, system-wide CPU time or owner-host performance from the
-five-sample groups. Other BSP queues and allocator concurrency remain separate.
+The [earlier attribution](io-reliability-attribution.md#ram-file-profiling) remains
+historical evidence. These results do not remove individual non-preemptible
+allocation/copy costs or establish owner-host performance. Revisit scheduling
+limits when mixed-workload measurements justify a different service policy;
+this task does not change buffer growth or allocator concurrency.
 
 ## Host FILE profiling perturbation
 

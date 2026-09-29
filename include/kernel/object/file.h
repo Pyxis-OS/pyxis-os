@@ -3,6 +3,7 @@
 
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
+#include <kernel/service/request.h>
 
 struct initrd_file;
 struct hostfs_node;
@@ -53,9 +54,6 @@ struct file_object *file_create_host(struct hostfs_node *host);
 void file_begin_operation(struct file_object *file);
 void file_end_operation(struct file_object *file);
 
-/* BSP, IF=0. Requester lends exclusive operation ownership while blocked.
- * Capacity must cover the live prefix, or be zero to release the buffer.
- * Failure leaves the old buffer/capacity intact. Does not change logical size. */
 struct file_buffer_profile {
   uint64_t allocation_started, allocation_ended;
   uint64_t copy_started, copy_ended;
@@ -63,9 +61,29 @@ struct file_buffer_profile {
   size_t copied_bytes;
 };
 
-/* Optional BSP-owned result storage, initialized by the requester. */
-bool file_replace_buffer(struct file_object *file, size_t capacity,
-    struct file_buffer_profile *profile);
+struct file_replace_profile {
+  bool active;
+  uint64_t started_ns, published_ns;
+  uint64_t service_started_ns, service_ended_ns;
+  struct file_buffer_profile buffer;
+};
+
+/* Requester lends exclusive operation ownership while blocked. Capacity must
+ * cover the live prefix, or be zero to release the buffer. Failure leaves the
+ * old buffer/capacity intact. The caller retains responsibility for logical
+ * size and consumes result only after waiting. */
+struct file_replace_request {
+  struct bsp_request request;
+  struct file_object *file;
+  size_t capacity;
+  bool result;
+  struct file_replace_profile profile;
+};
+
+/* IF=0, immediately before publication locking while caller-owned/PREPARED. */
+void file_replace_published(struct file_replace_request *request);
+/* BSP, IF=0, SERVICING. Clears the file loan before completion. */
+void file_replace_execute(struct file_replace_request *request);
 
 /* Current process, IF=0. Caller holds a live reference and supplies its granted
  * rights and operation from a checked protocol tag. request_address/size

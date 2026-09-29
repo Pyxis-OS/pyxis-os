@@ -3,6 +3,7 @@
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/fs/hostfs.h>
+#include <kernel/fs/ramfs.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/directory.h>
 #include <kernel/panic.h>
@@ -337,7 +338,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     return (struct syscall_result){CALL_ALREADY_EXISTS, 0};
   }
 
-  struct directory_entry *entry = task_allocate_directory_entry(request->kind, request->name_length);
+  struct directory_entry *entry = ramfs_request_entry(request->kind, request->name_length);
   if (!entry) {
     return (struct syscall_result){CALL_NO_MEMORY, 0};
   }
@@ -348,7 +349,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   struct directory_child_reply reply;
   status = install_child(entry->object, request->rights, &reply.handle);
   if (status != CALL_OK) {
-    task_discard_directory_entry(entry);
+    ramfs_request_discard(entry);
     return (struct syscall_result){status, 0};
   }
 
@@ -369,7 +370,7 @@ static struct syscall_result create_child(struct directory_object *directory, ui
 
   if (status != CALL_OK) {
     KASSERT(capability_close(&process_current()->capabilities, reply.handle) == CAP_OK);
-    task_discard_directory_entry(entry);
+    ramfs_request_discard(entry);
     return (struct syscall_result){status, 0};
   }
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
@@ -435,7 +436,7 @@ static struct syscall_result remove_child(struct directory_object *directory,
   if (status == CALL_OK) {
     /* The removed entry still owns its child until BSP disposal. Independent
      * handles keep the object alive after that reference is released. */
-    task_discard_directory_entry(entry);
+    ramfs_request_discard(entry);
   }
   return (struct syscall_result){status, 0};
 }
@@ -546,7 +547,7 @@ static struct syscall_result rename_child(struct directory_object *source,
 
   /* The caller's sole task keeps both directory capabilities alive while BSP
    * allocates. No entry pointer or lock survives the wait; recheck both names. */
-  struct directory_entry *entry = task_allocate_directory_name(request->destination_length);
+  struct directory_entry *entry = ramfs_request_name(request->destination_length);
   if (!entry) {
     return (struct syscall_result){CALL_NO_MEMORY, 0};
   }
@@ -573,11 +574,11 @@ static struct syscall_result rename_child(struct directory_object *source,
   unlock_parents(source, destination);
 
   if (status != CALL_OK) {
-    task_discard_directory_entry(entry);
+    ramfs_request_discard(entry);
   } else {
-    task_discard_directory_entry(old);
+    ramfs_request_discard(old);
     if (replaced) {
-      task_discard_directory_entry(replaced);
+      ramfs_request_discard(replaced);
     }
   }
   return (struct syscall_result){status, 0};
