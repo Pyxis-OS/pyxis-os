@@ -271,14 +271,30 @@ dependent PRs and update this checklist with each completed task.
   Native and Pyxis-cross builds produce an archive without unresolved symbols.
   Validation is compilation and source/symbol inspection; no runtime image or
   policy/traversal claim follows. Host adapters and commands begin in task 3.
-- [ ] **3. Format and reopen an empty pool.** Implement initial pool/volume/root
+- [x] **3. Format and reopen an empty pool.** Implement initial pool/volume/root
   construction, ownership/grant records, allocation accounting and capacity plan
   using shared codecs. Write both initial superblocks and read them through the
   shared selection path. Show named empty volumes and useful diagnostics. This
-  is new-image construction, not existing-pool mutation.
+  is new-image construction, not existing-pool mutation. The accepted empty layout
+  places pool metadata in a contiguous prefix, two root-object/grant blocks per
+  volume, then free space: N+2 allocation records and at most seven map blocks.
+  `mkpyxisfs` creates sparse standalone images; `--plan` creates no file.
+  `pyxisfs-inspect info` reports recorded accounting, and `volumes` validates both
+  catalogs and consulted metadata ownership before publishing copied envelopes.
+  Neither command claims complete checking. See the dependency's
+  [host usage](../../fs/docs/host-tools.md) and
+  [construction bound](../../fs/docs/empty-layout.md). Implemented in
+  [pyxis-fs PR #3](https://git.internal/PyxisOS/pyxis-fs/pulls/3).
+  Native and Pyxis-cross builds passed, with no unresolved core symbols.
+  Manual format/reopen covered 1 and 256 volumes, maximum-length names and
+  explicit capacity policy; low-capacity/memory and invalid-input refusals were
+  checked. Debugger inspection confirmed root ownership and subtree grants.
+  Malformed/alternate-generation and actual I/O-failure paths remain source
+  review only; no damaged fixtures or QEMU validation were introduced.
 - [ ] **4. Implement read-only traversal and acquisition.** Traverse B+ trees,
   resolve object IDs and names, enumerate directories and read inline/tree extents
-  and holes.
+  and holes. Add the agreed explicit GPT image-selection adapter alongside these
+  readonly commands; task 3 deliberately handles standalone images only.
   Validate references and bounds; implement read/list policy evaluation with
   an explicit acquisition ceiling and scope. Keep diagnostic inspection separate
   from that policy path and expose no unrestricted-by-identity shortcut.

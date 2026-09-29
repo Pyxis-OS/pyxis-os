@@ -675,3 +675,17 @@ retired bodies can continue occupying the storage budget. Each fetch has a
 unlimited IPC waits, and queued work can compound that delay. Cancellation cannot
 interrupt a blocking network operation instantly. Revisit with asynchronous
 service work and wait sets; no worker-process or thread framework is included.
+
+## Filesystem host prototype limits
+
+The empty-image tools record the accepted reserve policy, but no writable
+transaction/recovery cost bound proves those reserves sufficient. Sparse host
+image sizing also does not reserve host disk space. Keep writable admission
+separate; revisit the operation-cost and allocation-map construction bounds before
+the writable milestone. See the [filesystem milestone](wip/filesystem-readonly.md)
+and [host-tool limits](../fs/docs/host-tools.md).
+
+The empty planner reserves workspace for the maximum 256-volume profile even for
+a single volume, so small explicit memory caps can reject otherwise tiny images.
+Revisit proportional workspace sizing with populated-image construction in task 5;
+all allocations remain bounded and failures occur before output creation.

@@ -24,8 +24,9 @@ starting work. Local uncommitted source edits are usable for development;
 the exported SDK manifest records dirty userland inputs.
 
 The filesystem core is opt-in: `git submodule update --init fs` followed by
-`make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs.a`. Kernel/SDK/image builds
-do not require it. Formatter and inspector executables arrive in the next task.
+`make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs.a`, `mkpyxisfs` and
+`pyxisfs-inspect`. Kernel/SDK/image builds do not require it. See the
+[host-tool guide](../fs/docs/host-tools.md) for empty-image creation and inspection.
 
 The relative URL in `.gitmodules` resolves beside the Pyxis repository, using
 the parent remote's host and transport. These repositories are public under
@@ -54,7 +55,7 @@ the checked-out revision or dependency pins.
 | pyxis-userland | libc, libpyxis, libterm, native TLS adapter, startup/link support, applications, initial boot scripts and its TLSF vendor copy |
 | pyxis-ports | Host Lua runner, pinned third-party recipes, ordered patches and staged executables/licenses and development libraries/headers |
 | pyxis-lwip | Pinned lwIP source subset, license/provenance and any local upstream adaptations |
-| pyxis-fs | Native filesystem format, freestanding codecs and platform boundary; host tools and adapters follow under its milestone |
+| pyxis-fs | Native filesystem format, freestanding core, empty-image formatter and diagnostic inspector with Linux host adapter |
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime, then installs startup, libraries, linker support
@@ -90,13 +91,14 @@ history remains in Pyxis.
 filesystem format/core, host formatter/inspector and eventual Linux FUSE adapter.
 The [initial format milestone](wip/filesystem-readonly.md) now pins the MPL-2.0
 shared core at `fs/`. Its opt-in `make fs-tools` builds the freestanding archive
+and Linux host formatter/inspector
 with `HOSTCC`/`HOSTAR` forwarded as `HOST_CC`/`HOST_AR`, explicit source/output
-directories and no kernel or SDK include paths. Real formatter/inspector commands
-follow in task 3; there are no placeholder executables. Its
+directories and no kernel or SDK include paths. The tools create empty standalone
+sparse images and report pool/volume diagnostics. Its
 [format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/8c4ffa67595f05eeef97b159d0af0cfb84da1ef5/docs/format.md)
 lives in that repository, including accepted follow-up decisions. See the
-[implemented core boundary](../fs/docs/core.md) for local validation, buffer
-ownership and platform contracts. Pyxis retains the public OS ABI, capabilities
+[implemented core boundary](../fs/docs/core.md) for codec, construction, selection,
+catalog allocation-proof and lifetime contracts. Pyxis retains the public OS ABI, capabilities
 and namespace integration. Default kernel, SDK, ports and image targets do not
 build the core or acquire a filesystem dependency. CI and the compiler container
 are unchanged.
