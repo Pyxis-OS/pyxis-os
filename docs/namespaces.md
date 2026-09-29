@@ -25,9 +25,12 @@ through ordinary COPY. Management does not itself imply lookup authority.
 
 Replacement swaps the reference and both masks atomically. A racing lookup
 captures either the old binding or the new one; capability-table growth cannot
-change the captured target. Removal/replacement affects future lookups, never
-retargets old handles and never withdraws the old export. Last namespace release
-releases its bindings through BSP retirement. A binding is a client reference
+change the captured target. Lookup retains that client and its captured authority
+masks until installation completes or fails, including across a growth request
+on the common BSP FIFO. It holds no namespace lock while waiting and retains no
+pointer into replaceable capability-table storage. Removal/replacement affects
+future lookups, never retargets old handles and never withdraws the old export.
+Last namespace release releases its bindings through BSP retirement. A binding is a client reference
 and can keep an otherwise unused export alive until removed.
 
 A withdrawn export or a dead provider remains bound, and lookup reports
@@ -36,8 +39,18 @@ or automatic rebinding occurs. Closure can race a successful lookup just as it
 can race a direct invocation; holding the returned handle does not keep a provider
 operational. See [export lifetime](endpoints.md).
 
-Creation allocates fixed binding storage on the BSP while the caller lends its
-capability table. Publish/remove use no heap allocation. The namespace lock
+Creation uses a typed request on the common
+[BSP executor](smp.md#scheduling-and-ownership) FIFO. Publication lends the caller's
+capability table exclusively until completion, for fixed binding allocation and
+initial grant installation. After publication the caller uses only its saved wait
+pointer until notification; early completion cannot enqueue a still-running task.
+There is no private-VM mutation or deferred handoff, including for BSP userspace.
+The executor runs with interrupts disabled and calls local allocation/installation
+helpers directly, without a nested request or wait. Failed installation releases
+the new namespace. Results and completion precede notification, after which the
+worker makes no further request or loaned-table access.
+
+Publish/remove use no heap allocation. The namespace lock
 protects the map and reference capture, but never spans user-memory access,
 capability growth, endpoint locking or parking. Final object destruction remains
 BSP-owned.

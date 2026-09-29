@@ -9,6 +9,24 @@ cannot be copied, attached to a message or inherited by a child. The callable
 handle can be copied with equal or reduced resource and transport authority. There is no global endpoint
 name or implicit discovery.
 
+Creation and export use typed requests on the common
+[BSP executor](smp.md#scheduling-and-ownership) FIFO. Publication lends the caller's
+capability table exclusively until completion; creation also lends its receiver
+owner list. Export copies its descriptor into the request, and the table keeps
+the owned receiver and CONTROL authority live during the loan. The caller uses
+only its saved wait pointer after publication. An early completion records a
+notification without enqueueing a still-running caller. Neither operation changes
+private mappings or needs a VM handoff, including for BSP userspace.
+
+The BSP runs each operation with interrupts disabled and no queue lock held.
+Its local helpers grow the loaned table directly, never by submitting another
+request and waiting on the executor. Creation installs both handles atomically
+or neither. Export checks descriptor validity, receiver authority/ownership,
+closure, duplicate ID and export limit before growing the table or allocating
+backing; failed installation releases that backing without publishing an export.
+Completion returns the loan before the caller consumes the result, and the worker
+makes no further request or caller-state access after notification.
+
 The [ABI](../include/abi/endpoint.h) defines three distinct protocols for
 client delivery, receiving and replying, plus the service creation/export protocol. The
 [userspace helpers](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/endpoint.h) wrap the native CALL
@@ -122,10 +140,12 @@ notification is needed for expiry before delivery.
 The caller reserves four capability slots before admission so a completed reply
 can transfer its attachments without later table growth. RECEIVE needs one
 slot for the receipt and one per request attachment. If its table is short, the
-task lends that table to the BSP for growth, outside the endpoint lock, then
-rechecks the queued delivery. Growth failure leaves it queued for a later
-receive attempt. Endpoint state and wait records live in stable kernel storage;
-the endpoint lock may nest the scheduler lock, but no lock spans user copying,
+task lends that table through an ordinary capability-growth request on the common
+FIFO, outside the endpoint lock, then rechecks the queued delivery after completion.
+The invoking handle keeps the endpoint or export alive across the loan; no pointer
+into replaceable table storage is retained. Growth failure leaves the delivery
+queued for a later receive attempt. Endpoint state and wait records live in stable
+kernel storage; the endpoint lock may nest the scheduler lock, but no lock spans user copying,
 allocation or parking. See [scheduling ownership](smp.md#scheduling-and-ownership).
 
 An endpoint supports up to 64 live or unacknowledged exports, independently of
