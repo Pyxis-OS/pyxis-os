@@ -171,7 +171,7 @@ this checklist does not turn missing decisions into implementation permission.
 Temporary coexistence during migration must not double-submit or double-service
 an operation. Remove obsolete paths as their consumers move.
 
-- [ ] **1. Establish request ownership and one ordinary consumer.** Implement the
+- [x] **1. Establish request ownership and one ordinary consumer.** Implement the
   narrow operation lifecycle and synchronous wrapper using pipe creation first.
   Put pipe creation/rollback in its subsystem. Storage can temporarily use the
   existing task record, and dispatch can temporarily run from the scheduler, but
@@ -206,6 +206,111 @@ an operation. Remove obsolete paths as their consumers move.
   sizes and existing benchmarks with the baseline. Update implemented SMP/memory
   and profiling contracts and technical debt. Move this document into `docs/`,
   replacing completed worklists with implemented behavior and retained limits.
+
+## Task 1 implementation and baseline
+
+Task 1 is implemented by `cad461c` on `kernel/bsp-pipe-requests`. The request
+mechanism lives in `kernel/service/request.c`; pipe records, capture, allocation,
+installation and rollback belong to `kernel/object/pipe.c` and its header.
+`task_create_pipe` and the pipe-specific scheduler queue/service body are removed.
+
+The request header records FREE, PREPARED, QUEUED, SERVICING and COMPLETE states.
+Preparation requires FREE storage and prepares the existing task wait. Submission
+publishes the record under a separate FIFO queue lock, saving the wait pointer
+before lending the record. The synchronous wrapper only inspects results after
+wait notification. Completion clears queue/wait references and publishes COMPLETE
+before waking; the dispatcher saves the next record before completion and makes
+no further accesses to the completed record. Consumption ends with explicit
+release to FREE. This state is not an asynchronous polling interface.
+
+The pipe record carries only the capability-table loan, reply and status in
+addition to the common header. The service installs both endpoints or closes a
+partially installed reader and drops both temporary references, preserving the
+previous failure results. It clears the table pointer before completion. The
+caller retains existing authority and user-buffer validation and copies the
+result locally before releasing the request. Task retirement and prepared-task
+discard assert that the embedded request is FREE.
+
+Two temporary adapters keep this PR bounded. `task_bsp_request_storage` provides
+the typed record embedded in task metadata; both user and kernel task allocations
+still include it. `bsp_requests_service` drains a detached FIFO batch in the
+scheduler's former pipe-service position; `bsp_requests_pending` preserves BSP
+timer/preemption visibility. Neither adds publication notification nor a yield
+between requests. Task 2 replaces scheduler dispatch with the agreed worker;
+task 7 replaces embedded storage. Other subsystem queues and resource waits are
+unchanged. No public ABI or dependency revision changed.
+
+### Fresh sizes
+
+Measured with GDB from a forced ordinary kernel rebuild of baseline `3cdb965`
+and the task-1 implementation, using GCC 16.2.0, GNU C23, `-O2 -g3` and the
+repository's normal freestanding flags. Sizes are bytes, excluding heap overhead
+and the separate 16 KiB task stack.
+
+| Storage | Baseline | Task 1 |
+| --- | ---: | ---: |
+| `struct task` | 7,088 | 7,104 |
+| Pipe service fields/typed record | 32 | 56 |
+| Common `struct bsp_request` header, included in the typed record | — | 24 |
+| `struct task_wait` | 32 | 32 |
+| `struct pipe_wait` | 16 | 16 |
+| `struct hostfs_request` | 4,904 | 4,904 |
+| Persistent memory/file/HOST profile aggregates combined | 816 | 816 |
+| `struct pipe_pair`, including its 64 KiB buffer | 65,680 | 65,680 |
+
+The old pipe fields occupied 32 bytes through the next field's alignment; overall
+task layout padding makes the task-size increase 16 bytes. This intermediate
+migration is not a storage reduction. The 816-byte profile total comprises
+232-byte memory, 176-byte file and 408-byte HOST aggregates.
+
+### Interactive validation and measurements
+
+Validation on 2026-09-29 used nested KVM, QEMU 10.2.2 with the documented
+[AHCI fix](../qemu.md), CPU model `max`, 256 MiB RAM, matching Fedora OVMF
+`/usr/share/edk2/ovmf/OVMF_{CODE,VARS}.fd`, virtio entropy enabled, and no network,
+HOST export or block device. One-CPU runs used CPU 0; four-CPU runs used the
+Development session on CPU 1. The display backend was `none`, with manual QEMU
+monitor keyboard input and framebuffer inspection. SDK, userspace and ports
+bundles passed the existing verifier and match the unchanged pinned inputs.
+
+Both revisions ran `session app://iobench.pxe pipe --buffer 4096`: one verified
+warmup and five verified 1 MiB samples with fresh pipes/workers per pass. Every
+sample wrote and consumed 1,048,576 bytes with 256 write and 256 read calls,
+zero short transfers and zero errors. All workers completed successfully.
+Elapsed values below are median (minimum–maximum), in milliseconds.
+
+| CPUs | Revision | Write acceptance | Consumer acknowledgment |
+| --- | --- | ---: | ---: |
+| 1 | Baseline | 2.921 (2.842–3.847) | 3.370 (3.342–4.298) |
+| 1 | Task 1 | 3.095 (2.850–3.641) | 3.544 (3.300–4.091) |
+| 4 | Baseline | 0.734 (0.720–1.730) | 1.043 (1.030–2.668) |
+| 4 | Task 1 | 0.718 (0.707–0.726) | 1.031 (0.993–1.251) |
+
+These are regression observations, not an improvement claim. Pipe creation and
+worker launch are outside this benchmark's timed interval; it does not isolate
+request queue, service or resumption costs. No timing instrumentation was added.
+Owner-host measurements remain unavailable.
+
+Four-CPU GDB inspection stopped the AP immediately after publication and ran
+only the BSP until completion. The unparked caller received notification without
+being enqueued, returned from its wait without parking, consumed COMPLETE results
+and released the header to FREE. A subsequent pipeline reused the same request
+address. Its ordinary parked completion cleared the wait and queued the task on
+CPU 1. Service ran with IF=0, the kernel root active and no current BSP task.
+Single-CPU inspection likewise found the CPU 0 caller parked before service under
+the kernel root with IF=0. Debugger-controlled runs were separate from timing.
+
+Checksum pipelines verified 32 KiB stream transfer and a three-stage 1 MiB input
+with `head -c 32`; early reader closure produced the expected upstream EPIPE and
+the final 32-byte checksum. Both single- and four-CPU shells resumed after child
+cleanup. Allocation/install failure unwinding and retirement were also reviewed
+by inspection; no allocation failure or task fault was injected.
+
+Ordinary kernel/image builds and `git diff --check` passed. The existing HOST
+profiling local named `started` still produces its pre-existing shadow warning;
+this change adds no compiler warnings. No tests, boot/output automation or CI
+configuration were added. Worker initialization, notification, conditional yield
+and VM/display handoff inspection belong to later tasks.
 
 ## Validation and exclusions
 
