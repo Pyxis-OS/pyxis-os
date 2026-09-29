@@ -12,6 +12,7 @@
 #include <kernel/object/clock.h>
 #include <kernel/panic.h>
 #include <kernel/pci.h>
+#include <kernel/virtio/blk.h>
 #include <kernel/virtio/pci.h>
 #include <kernel/virtio/net.h>
 #include <kernel/virtio/rng.h>
@@ -36,6 +37,7 @@
   virtio_fs_pci_prepare(boot);
   virtio_net_prepare(boot);
   virtio_rng_prepare(boot);
+  virtio_blk_prepare(boot);
 
   boot_start_cpus();
 
@@ -45,6 +47,7 @@
 
   virtio_fs_pci_start();
   virtio_rng_start();
+  virtio_blk_start();
 
   enum mm_result result = net_init();
   if (result != MM_OK) {

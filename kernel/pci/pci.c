@@ -5,6 +5,7 @@
 #include <kernel/pci/registers.h>
 
 static struct pci_device *devices;
+static bool inventory_complete;
 
 struct pci_bus {
   uint8_t number, last_bus, parent;
@@ -208,6 +209,7 @@ static void discover_function(struct pci_scan *scan, struct pci_address address,
 
 void pci_discover(void)
 {
+  inventory_complete = false;
   unsigned buses = arch_pci_bus_count();
   if (!buses) {
     return;
@@ -236,6 +238,7 @@ void pci_discover(void)
   }
   klog("PCI: %u functions on %u buses; read-only inventory%s\n",
        scan.functions, scan.bus_count, scan.incomplete ? " incomplete" : " complete");
+  inventory_complete = !scan.incomplete;
 }
 
 struct pci_device *pci_find_device(uint16_t vendor, uint16_t device)
@@ -247,4 +250,22 @@ struct pci_device *pci_find_device(uint16_t vendor, uint16_t device)
     }
   }
   return first;
+}
+
+struct pci_device *pci_find_unique_device(uint16_t vendor, uint16_t device)
+{
+  if (!inventory_complete) {
+    return NULL;
+  }
+
+  struct pci_device *match = NULL;
+  for (struct pci_device *entry = devices; entry; entry = entry->next) {
+    if (entry->vendor_id == vendor && entry->device_id == device) {
+      if (match) {
+        return NULL;
+      }
+      match = entry;
+    }
+  }
+  return match;
 }

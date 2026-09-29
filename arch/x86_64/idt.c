@@ -7,6 +7,7 @@
 #include <kernel/panic.h>
 #include <kernel/user.h>
 #include <kernel/task.h>
+#include <kernel/virtio/blk.h>
 #include <kernel/virtio/pci.h>
 #include <kernel/virtio/net.h>
 #include <kernel/virtio/rng.h>
@@ -86,6 +87,11 @@ static void finish_interrupt(const struct exception_frame *frame)
 
 void interrupt_handler(struct exception_frame *frame)
 {
+  if (frame->vector == APIC_VIRTIO_BLK_VECTOR) {
+    virtio_blk_interrupt();
+    finish_interrupt(frame);
+    return;
+  }
   if (frame->vector == APIC_VIRTIO_NET_VECTOR) {
     virtio_net_interrupt();
     finish_interrupt(frame);

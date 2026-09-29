@@ -388,11 +388,35 @@ and entropy queues are small and remain serialized; no throughput improvement
 or scaling result is established. Revisit these scans if a measured block or
 network workload makes their cost material.
 
-Runtime validation currently covers the migrated serialized consumers. Multiple
-outstanding requests and out-of-order completion require coverage with the
-virtio-blk consumer before relying on them for storage. Allocation and malformed
-completion/reset failure paths have code inspection only; no fault injection
-was authorized for this slice.
+Runtime validation covers the migrated serialized consumers and the block
+driver's eight outstanding writes. Two concurrent block reads also completed
+out of order with correct ticket association and full readback. Allocation and
+malformed-completion/reset failure paths have code inspection only; no fault
+injection was authorized for these tasks. Revisit those failure paths before
+expanding the storage reliability claims.
+
+## Virtio-blk failure and validation limits
+
+The [block driver](block-storage.md) latches write failure after an ordinary
+write or flush error. Further writes and flushes fail until reboot, while reads
+can continue on a healthy transport. This prevents a later flush from hiding an
+earlier persistence failure, but makes transient backend write errors require a
+reboot before writes can resume. Revisit with a concrete filesystem consumer and
+an explicit error-acknowledgment/recovery contract; never silently retry writes
+that may already have modified storage.
+
+Runtime device failure retains the PCI claim, queue bookkeeping, DMA allocations
+and mappings even after confirmed reset. The default profile reserves 512 KiB
+of payload storage plus control buffers and rings. This bounds retained memory
+but provides no reconnect or reclamation. Revisit alongside shared-mapping TLB
+invalidation, DMA ownership and a defined device teardown lifecycle. Timeout alone
+cannot release storage still accessible to the device.
+
+Physical hardware and power-loss persistence have no coverage in this milestone.
+Normal QEMU restart/readback cannot establish either. Error, reset-failure and
+malformed-completion behavior require separate validation if fault injection is
+later authorized. Revisit durability evidence before promising filesystem
+recovery or support for production data.
 
 ## Virtio-net runtime resource retention
 

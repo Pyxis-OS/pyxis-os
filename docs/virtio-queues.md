@@ -1,6 +1,6 @@
 # Shared VirtIO split queues
 
-Filesystem and entropy use the direct split-queue helper in
+Filesystem, entropy and block storage use the direct split-queue helper in
 [`queue.h`](../include/kernel/virtio/queue.h). Drivers own protocol buffers,
 concurrency, deadlines and device reset; the helper owns descriptors, ring
 publication, notification ordering and checked completions. Networking retains
@@ -83,6 +83,11 @@ same descriptor-selection policy and one 8 KiB writable buffer, with at most
 256 bytes requested by its current public operation. Both drivers use request
 ID zero while enforcing one outstanding request per queue.
 
+[Block storage](block-storage.md) selects up to 32 descriptors and eight
+outstanding requests, each with separate control and up to 64 KiB data storage.
+Numeric generation IDs associate completions with tickets independently of
+submission order. Flush drains earlier I/O and holds later I/O until completion.
+
 Validation used QEMU 10.2.2 with nested KVM, 256 MiB RAM, one and four CPUs,
 virtiofsd 1.14.0, and filesystem, entropy and network devices enabled. Single-CPU
 file copy/readback and DNS lookup passed. On four CPUs, the existing iobench
@@ -96,7 +101,9 @@ The four-CPU filesystem request queue had consumed 4685 chains and its FORGET
 queue seven; entropy had consumed six. Inspection also observed a four-byte
 entropy completion with one active writable descriptor on the single-CPU boot.
 
-These consumers cannot exercise multiple outstanding requests or out-of-order
-completion. That runtime coverage belongs to the next virtio-blk task; malformed
-completion, reset-failure and allocation-failure paths are inspected rather than
-fault-injected. No throughput improvement is claimed by this refactoring.
+Subsequent block-driver validation exercised eight outstanding writes under TCG.
+A restart with a smaller queue and 4 KiB logical blocks produced two concurrent
+reads completing out of order; both tickets returned the correct 64 KiB contents.
+See [block validation](block-storage.md#validation). Malformed completion,
+reset-failure and allocation-failure paths are inspected rather than fault-injected.
+No throughput improvement is claimed by this refactoring.

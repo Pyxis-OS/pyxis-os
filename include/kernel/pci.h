@@ -25,6 +25,8 @@ struct pci_device {
 /* BSP boot inventory, retained for driver lookup. Records live for the boot. */
 void pci_discover(void);
 struct pci_device *pci_find_device(uint16_t vendor, uint16_t device);
+/* Requires a complete inventory and exactly one match; otherwise NULL. */
+struct pci_device *pci_find_unique_device(uint16_t vendor, uint16_t device);
 
 /* Six BAR registers and at most 48 aligned capability headers are hardware
  * layout limits, not limits on the number of devices the kernel can own. */

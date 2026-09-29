@@ -1,11 +1,11 @@
 # Pyxis pool and persistent filesystem
 
 Status: agreed design direction, 2026-09-29, with a selected block-storage
-foundation milestone and a proposed sequence after it. The shared split-queue
-prerequisite is implemented; block storage and the filesystem remain planned.
+foundation milestone and a proposed sequence after it. Shared split queues and
+the internal block driver are implemented; GPT and the filesystem remain planned.
 These notes do not authorize subsequent implementation. The contract and focused
-task sequence are agreed below; block APIs, capacities, disk formats and enforcement interfaces
-still need specification. Remaining proposals are identified separately.
+task sequence are agreed below; disk formats and enforcement interfaces still
+need specification. Remaining proposals are identified separately.
 
 Related: [planning agenda](storage-and-terminal-agenda.md),
 [filesystem direction](../vfs.md), and
@@ -305,9 +305,10 @@ mounting, installation or NVMe driver is part of this milestone.
 
 ### Configurable split-queue prerequisite
 
-Implemented for filesystem and entropy; see the [shared queue contract](../virtio-queues.md).
-Virtio-blk adoption remains the next task. This does not authorize tuning existing
-drivers or starting subsequent tasks.
+Implemented for filesystem, entropy and virtio-blk; see the
+[shared queue contract](../virtio-queues.md) and
+[internal block interface](../block-storage.md). This does not authorize tuning
+existing drivers or starting subsequent tasks.
 
 Filesystem and entropy now own their buffers and preserve their existing
 serialization above configurable ring mechanics. Networking retains its separate
@@ -369,21 +370,23 @@ Direct-chain ordering and ring ownership follow the
 
 ### Internal block interface and durability
 
-- Start with kernel-internal device geometry, bounded request admission,
-  read/write/flush operations and explicit completions. Use driver-owned DMA
-  buffers so abandonment cannot leave a device writing into reclaimed caller
-  memory. Transfer size and outstanding-request count are explicit driver choices,
-  not inherited filesystem defaults.
-- Flush drains earlier accepted writes, issues the device flush and holds later
-  writes until completion. Successful write completion alone does not promise
-  durability. Require negotiated flush support for the first writable profile.
-- Failed or timed-out writes may have modified storage. Report uncertainty and
-  avoid automatic retries. Required write/flush errors must propagate to the
-  consumer; sync must not hide them. Distinguish ordinary request errors from
-  terminal device/transport failure when specifying completion statuses.
-- GPT discovery is read-only: validate checksums, bounds and primary/backup
-  consistency. Ambiguous metadata prevents writable partition use. No automatic
-  repair is included.
+Implemented behavior is described in [block storage](../block-storage.md): one
+explicit development disk, 512-byte or 4 KiB logical blocks, up to eight ticketed
+requests and 64 KiB per transfer, reduced by device limits. Driver-owned DMA
+buffers isolate caller lifetime from published requests. Raw access remains
+kernel-internal; read-only attachment permits reads only.
+
+Flush fences all I/O: it drains earlier admitted requests, issues the device
+flush and holds later requests until completion. Successful write completion
+alone does not promise durability. Writable devices require negotiated flush
+support. Failed published writes may have modified storage; completions retain
+that uncertainty and no automatic retries occur. A write/flush error latches
+write failure until reboot while reads remain available on a healthy transport.
+Device/transport failure is terminal until reboot with runtime resources retained.
+
+GPT discovery remains planned and read-only: validate checksums, bounds and
+primary/backup consistency. Ambiguous metadata prevents writable partition use.
+No automatic repair is included.
 
 ### Focused tasks and remaining decisions
 
@@ -393,26 +396,23 @@ Direct-chain ordering and ring ownership follow the
   existing transfer limits, concurrency, deadlines and protocol behavior. Move
   those choices out of shared queue mechanics without adding callback frameworks
   or a general driver abstraction layer.
-- [ ] Add virtio-blk using the helper and the internal block interface, including
+- [x] Add virtio-blk using the helper and the internal block interface, including
   explicit development-disk selection, geometry and sector checks, bounded
   requests, ordered flush and error reporting.
 - [ ] Add read-only GPT discovery and validation under the agreed ambiguity policy.
 - [ ] Validate with ordinary builds, interactive QEMU boots and debugger inspection,
   including filesystem/entropy regression checks and block read/write/flush use.
 
-The queue API and limits are documented in the implemented shared queue contract.
-Before the relevant subsequent task, specify block APIs and capacities,
-block-request admission/completion and caller-abandonment handling, device
-selection and supported geometry/features, deadlines and completion statuses,
-and GPT validation bounds and degraded-copy handling. These details must preserve
-the agreed contract rather than reopening unrelated filesystem-format decisions.
+The queue and block APIs, capacities, ownership, deadlines and completion statuses
+are documented in their implemented contracts. Before GPT implementation, specify
+validation bounds and degraded-copy handling without reopening unrelated
+filesystem-format decisions.
 
-Settle the manual block-I/O exercise before implementing the block driver: there
-is no filesystem consumer yet. The exercise must use the explicitly selected
-development image and define how readback and persistence across guest restarts
-will be inspected. Ordinary reboot/readback is not proof of power-loss recovery.
-No tests, self-tests, fault injection or boot/output automation are authorized by
-this plan.
+The [manual block-I/O exercise](../block-storage.md#manual-debugger-exercise)
+uses the ordinary nonblocking API from GDB and an explicitly selected disposable
+image; there is no filesystem consumer yet. Ordinary reboot/readback is not
+proof of power-loss recovery. No tests, self-tests, fault injection or boot/output
+automation are authorized by this plan.
 
 Network consolidation is a separate follow-up after the helper serves storage;
 preserve packet batching and validation if that migration is selected. Throughput
