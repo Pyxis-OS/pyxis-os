@@ -12,8 +12,10 @@ is in [pyxis-fs PR #1](https://git.internal/PyxisOS/pyxis-fs/pulls/1). Follow-up
 clarified validation/accounting, compatibility, rights and reclamation. The owner
 accepted a single inline extent descriptor, lower proportional reserves and ancestor
 lookup checks for ID acquisition on 2026-09-29, completing task 1. The filesystem
-repository contains its MPL-2.0 licensing bootstrap; the repository split and
-host-only scope are unchanged.
+repository contains the MPL-2.0 shared encoding layer. Task 2 implements
+[local codecs and platform contracts](../../fs/docs/core.md), pinned at `fs/`;
+`make fs-tools` currently builds the core archive. Image construction and opening
+start in task 3. The repository split and host-only scope are unchanged.
 
 ## Completion target and boundaries
 
@@ -38,9 +40,10 @@ metadata checksums do not verify file contents.
 
 The owner has created [PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs).
 It will own the freestanding GNU C23 core, host tools and eventual Linux FUSE
-adapter. Agreed integration pins published revisions at `fs/` and adds an opt-in
-`make fs-tools` host build. These are accepted contracts, not an existing dependency
-or build target. The specification lives in pyxis-fs; Pyxis retains the milestone
+adapter. Integration pins published revisions at `fs/` and provides the opt-in
+`make fs-tools` build. During task 2 this produces `build/fs-tools/libpyxis-fs.a`;
+task 3 adds the formatter and inspector executables. The specification lives in
+pyxis-fs; Pyxis retains the milestone
 and integration decisions. Repository and workflow references use the PyxisOS
 organization.
 
@@ -259,11 +262,15 @@ dependent PRs and update this checklist with each completed task.
   Follow-up review and owner decisions are incorporated, including inline extent
   mapping, lower reserve defaults and lookup checks for ID acquisition. Later
   allocator and writable-implementation gates remain explicit. Licensing is MPL-2.0.
-- [ ] **2. Establish the shared core and encoding.** Initialize pyxis-fs with
+- [x] **2. Establish the shared core and encoding.** Initialize pyxis-fs with
   agreed build/ownership instructions, platform allocation/I/O interfaces and
   concrete ID, checksum and record codecs. Keep the core freestanding, error
   paths explicit and adapters narrow. Publish and pin the dependency under the
   agreed integration contract; no kernel mount or unrelated workflow changes.
+  Implemented in [pyxis-fs PR #2](https://git.internal/PyxisOS/pyxis-fs/pulls/2).
+  Native and Pyxis-cross builds produce an archive without unresolved symbols.
+  Validation is compilation and source/symbol inspection; no runtime image or
+  policy/traversal claim follows. Host adapters and commands begin in task 3.
 - [ ] **3. Format and reopen an empty pool.** Implement initial pool/volume/root
   construction, ownership/grant records, allocation accounting and capacity plan
   using shared codecs. Write both initial superblocks and read them through the

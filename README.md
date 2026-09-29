@@ -5,7 +5,7 @@ QEMU booted through OVMF/UEFI and Limine, with a native userspace and capability
 
 Requires GNU Make, a host C compiler, the [Pyxis GCC/binutils toolchain](toolchain/README.md),
 QEMU, GNU cpio, xorriso, host Lua 5.4, and a matching raw OVMF code/variables pair.
-Userspace, ports and lwIP are [pinned submodules](docs/sdk-and-repositories.md).
+Userspace, ports, lwIP and the filesystem core are [pinned submodules](docs/sdk-and-repositories.md).
 See [port builds](docs/ports.md) for application dependencies. CI publishes
 [independent build bundles](docs/build-bundles.md) for local reuse.
 
@@ -14,6 +14,7 @@ git submodule update --init userspace ports third_party/lwip
 make -j16                 # kernel: build/caelum.elf
 make -j16 image           # kernel, userspace and ports: build/pyxis.iso
 make sdk                  # export build/sdk; see docs/sdk.md
+make fs-tools             # opt-in core archive; requires submodule fs
 make run CPUS=4
 make run CPUS=4 VIRTIO_NET=1
 make run ACCEL=tcg        # software emulation when KVM is unavailable
