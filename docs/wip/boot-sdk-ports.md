@@ -128,19 +128,20 @@ beside the local development loop. SSH/libssh remains deferred. The
 [initial filesystem format and read-only core](../filesystem-readonly.md) is
 complete; later writable recovery, FUSE and native integration remain proposals.
 
-The selected next milestone is [task state and BSP service requests](bsp-service-requests.md).
-It separates subsystem requests from scheduling while retaining BSP allocation
-and VM ownership, with FIFO service, prompt worker notification and scheduling
-opportunities between operations. Request completion is separate from waiting;
-public asynchronous I/O and process threads are outside this milestone.
+The [task state and BSP service requests milestone](../bsp-service-requests.md)
+is complete. Subsystem requests are separate from scheduling while retaining
+BSP allocation and VM ownership, with FIFO service, prompt notification and
+scheduling opportunities between operations. Request completion is separate from waiting;
+user tasks have reusable request storage and separate persistent profiling.
+Public asynchronous I/O and process threads remain outside the implementation.
 
-After its closure, the agreed next milestone is [native remote terminal sessions](remote-terminal.md):
+The agreed next milestone is [native remote terminal sessions](remote-terminal.md):
 TCP listeners, readiness waits, independent terminals and contained execution
 lifetime lead to a text-based remote shell for agent/developer work. A host client
 supports interactive Kilo and machine-readable command completion; framebuffer
 screenshots remain for graphical work. Authentication, a multiplexer and process
 threads are separate. The milestone records remaining task-local decisions and
-does not start implementation before BSP request closure.
+does not authorize implementation on its own.
 
 The broader [discussion agenda](storage-and-terminal-agenda.md) covers persistent
 disk storage, bounded Neovim/libuv and LLVM requirements investigations, and

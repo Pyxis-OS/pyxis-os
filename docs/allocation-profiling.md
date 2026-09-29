@@ -155,8 +155,8 @@ these elapsed intervals must not be presented as uninstrumented CPU costs.
 The notification change measured below sent the existing rescheduling IPI after
 leaving the caller's task stack/address space and publishing the parked request.
 Private memory now uses the common BSP executor and its ordinary ready-queue
-notification; see [SMP scheduling](smp.md) and the task-3 measurements in
-[BSP service requests](wip/bsp-service-requests.md). Allocation policy is unchanged.
+notification; see [SMP scheduling](smp.md) and
+[BSP service requests](bsp-service-requests.md). Allocation policy is unchanged.
 
 A before/after comparison used baseline `7383e20` and notification commit
 `9d07838`, identical userspace, and the same four-CPU nested-KVM setup described

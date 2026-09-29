@@ -101,8 +101,8 @@ into bounded milestones before implementation; do not bundle the whole chain.
 
 ## Selected next slice
 
-After closure of the current [BSP request milestone](bsp-service-requests.md),
-continue with [native remote terminal sessions](remote-terminal.md). Its agreed
+The [BSP request milestone](../bsp-service-requests.md) is complete; the next slice
+is [native remote terminal sessions](remote-terminal.md). Its agreed
 contracts and focused task list replace the earlier open choice for this slice.
 Persistent writable storage, the toolchain transition, multiplexer and navigator
 remain parked directions. Discuss each task's remaining behavior, authority and
