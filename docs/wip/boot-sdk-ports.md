@@ -129,8 +129,11 @@ foundation is selected for planning next; the other paths remain alternatives.
 The next [discussion agenda](storage-and-terminal-agenda.md) covers persistent
 disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
 native terminal sessions leading to a BSP multiplexer and independent navigators.
-Block storage is the selected planning track; the other investigations remain
-deferred.
+Block storage is the selected implementation track. The initial
+[Neovim/libuv investigation](neovim-libuv.md) is complete, with pinned source
+evidence and header probes; its proposed native event, threading, metadata and
+terminal milestones remain deferred. No Neovim build or runtime compatibility
+is claimed. The LLVM investigation remains separate future work.
 
 The [persistent storage design](persistent-storage.md) records the agreed custom
 COW pool, volume guarantees, migration strategy, durability and compatibility

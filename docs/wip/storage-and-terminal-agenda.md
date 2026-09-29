@@ -31,33 +31,22 @@ not a combined block driver, filesystem, installer and account-system project.
 
 ## 2. Investigate Neovim and libuv requirements
 
-Perform a bounded, pinned source/build investigation against the current SDK.
-Use these consumers to identify useful missing OS capabilities, rather than
-collecting application workarounds until an editor happens to start.
+The initial [Neovim/libuv investigation](neovim-libuv.md) is complete: pinned
+source inspection, SDK header provenance checks and two header-only compiler
+probes. No full build, target link or runtime compatibility was demonstrated.
 
-- Trace concrete requirements to upstream operations and distinguish basic
-  open/edit/save from plugins, subprocesses, embedded terminals and language servers.
-- Inventory existing Pyxis equivalents, semantic gaps and demonstrated libc or
-  dependency gaps. Check the required Lua implementation/version; the current Lua
-  port and a future PDCurses port do not establish Neovim compatibility.
-- Examine multiple threads in one process: shared address space and handle table,
-  synchronization, thread-local state, thread exit and process-wide cleanup.
-- Examine asynchronous I/O and events: operation submission, completion, waiting
-  on several resources, deadlines, cancellation, buffer ownership and backpressure.
-  Existing SEND/RECEIVE is a foundation, not a complete asynchronous I/O contract.
-- Relate filesystem requirements to the preceding metadata/persistence discussion,
-  and terminal/process requirements to the terminal-session direction below.
+Even the selected Neovim's basic TUI launches an editor subprocess and exchanges
+RPC over pipes. The report separates native event waiting, shared-process threads,
+metadata/identity and terminal-session gaps from libc/libuv adapters and dependency
+work. It also distinguishes basic editing from jobs, embedded terminals, native
+modules and language-server executables. Existing Lua and possible PDCurses ports
+do not establish Neovim compatibility.
 
-Describe native Pyxis contracts for the missing behavior, with a libuv platform
-backend or libc adapter where appropriate. A requirement such as waiting for
-input, a timer or child completion does not prescribe epoll, signals or fork.
-Do not add successful stubs, blocking substitutes that freeze the event loop, or
-invasive application rewrites to conceal missing functionality. A compile result
-alone does not establish working semantics.
-
-Deliver an evidence-based gap list, unresolved decisions, and ordered, focused
-milestones with independently useful consumers. This investigation is not a
-commitment to finish Neovim before pursuing another application.
+Six bounded follow-up milestones are proposals, not additional active tracks.
+Block storage remains selected. Use the report when selecting later native OS
+work; do not import fork/epoll/signals or add successful stubs just to satisfy a
+particular upstream backend. Dependency build/link closure and runtime behavior
+remain to be investigated during a future port milestone.
 
 ## 3. Investigate LLVM/Clang transition and hosting
 
