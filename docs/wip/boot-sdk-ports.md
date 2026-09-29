@@ -131,13 +131,19 @@ disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
 native terminal sessions leading to a BSP multiplexer and independent navigators.
 Discuss these before selecting one implementation track.
 
+The [persistent storage design](persistent-storage.md) records the agreed custom
+COW pool, volume guarantees, migration strategy, durability and compatibility
+contracts. Its proposed sequence separates block I/O, shared filesystem core,
+writable recovery, Linux FUSE and native persistence. Exact layouts and focused
+PR tasks remain open; no storage code is authorized by these design notes.
+
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
 | SDL2 and graphical applications | A native software-rendered SDL2 backend supports a selected GrafX2 edit/save workflow. | Probe the pinned application first; settle input/presentation and image-library needs. zlib/libpng are useful shared candidates. Compositor and GPU support stay separate. |
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | Virtio-blk reaches a bounded block-I/O milestone before filesystem/installation work. | Block capability/backend contract, flush/error semantics and later disk-format selection; retain the user/ownership checkpoint before durable home policy. |
+| Native disk storage | Virtio-blk reaches a bounded block-I/O milestone before filesystem/installation work. | Follow the [agreed pool/filesystem direction](persistent-storage.md); settle block request lifetime and error handling before code, then exact disk layouts and initial ownership enforcement. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The
@@ -175,10 +181,10 @@ implicitly.
 ## User and permission design checkpoint
 
 Multiple users with restricted permissions are a requirement. The
-[users and authority notes](users-and-authority.md) identify decisions to make
-before persistent home storage, writable shared mounts and cross-user services
-make ownership assumptions expensive to change. This is a design checkpoint,
-not a requirement to implement accounts before the current init work.
+[users and authority notes](users-and-authority.md) record stable principals,
+policy-based acquisition, runtime capabilities and prospective permission changes.
+They retain the unresolved enforcement and lifecycle decisions before persistent
+ownership is implemented. External login and account UI are separate work.
 
 ## Shell follow-ups
 
