@@ -2,9 +2,9 @@
 
 Caelum exposes one modern virtio-blk disk through the kernel-only
 [block interface](../include/kernel/block.h). It supports bounded asynchronous
-reads, writes and flushes. There is no userspace raw-disk capability, partition
-discovery, filesystem or mount interface yet. GPT is the next task in the
-[block-storage foundation](wip/persistent-storage.md#agreed-block-storage-foundation).
+reads, writes and flushes. [GPT discovery](gpt.md) publishes an immutable boot-time
+partition map through a separate kernel interface. There is no userspace raw-disk
+capability, filesystem or mount interface yet.
 
 ## Attach a development image
 
@@ -21,6 +21,8 @@ resolved to absolute paths; commas are rejected because they introduce QEMU
 options. `VIRTIO_BLK_READONLY` accepts `0` (default) or `1`. QEMU uses explicit raw
 format, writeback caching that honors flushes, and one modern virtio-blk queue.
 Writable attachment permits kernel clients to modify the supplied image.
+Trusted raw-block clients must preserve GPT metadata throughout the boot;
+discovery does not gate raw writes or rescan after them.
 
 The guest requires exactly one matching device in a complete PCI inventory. An
 absent or ambiguous device, incomplete inventory, or unsupported configuration
@@ -169,6 +171,7 @@ a separate QEMU 10.2.2 build, the same no-disk four-CPU KVM configuration reache
 userspace. These are boot and correctness observations, not owner-host
 performance measurements.
 
-The sleeping client wrapper, active abandonment, write-failure latch, watchdog,
-malformed completion and reset-failure paths have code inspection only. No
-fault injection, physical-hardware or power-loss validation was performed.
+Subsequent [GPT validation](gpt.md#validation) exercised the sleeping client
+wrapper through ordinary kernel-task reads. Active abandonment, write-failure
+latch, watchdog, malformed completion and reset-failure paths have code inspection
+only. No fault injection, physical-hardware or power-loss validation was performed.

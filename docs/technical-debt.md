@@ -418,6 +418,23 @@ malformed-completion behavior require separate validation if fault injection is
 later authorized. Revisit durability evidence before promising filesystem
 recovery or support for production data.
 
+## GPT snapshot and profile limits
+
+[GPT discovery](gpt.md) publishes one immutable boot-time snapshot. There is no
+raw-block write gate, metadata generation tracking or rescan, so trusted kernel
+clients must preserve GPT metadata and avoid external mutation for the entire
+boot. Snapshot health does not track later device failure. Revisit with the first
+partition I/O consumer and any format/repair workflow, defining authority,
+metadata exclusion and replacement lifetimes before allowing live changes.
+
+The supported profile is GPT 1.0 on 512-byte or 4 KiB blocks, at most 256 entries
+and 64 KiB per array. Unsupported revisions, larger layouts, reserved attributes
+and legacy/hybrid MBRs expose no map. One valid copy supplies a read-only degraded
+map only when the other is absent or invalid; I/O errors, timeouts and unsupported
+metadata prevent fallback. These conservative bounds can exclude otherwise usable
+media. Revisit only for a concrete consumer with explicit resource limits and
+recovery policy; no automatic repair is available.
+
 ## Virtio-net runtime resource retention
 
 The [network transport](networking.md#virtio-net-transport) uses two nine-page
