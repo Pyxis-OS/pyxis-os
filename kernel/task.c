@@ -1,29 +1,21 @@
-#include <kernel/object/namespace.h>
-#include <kernel/object/endpoint.h>
-#include <abi/profile.h>
-#include <kernel/object/display.h>
-#include <kernel/object/memory.h>
 #include <kernel/service/profile.h>
 #include <arch/cpu.h>
 #include <arch/clock.h>
 #include <arch/smp.h>
 #include <arch/user.h>
 #include <kernel/log.h>
-#include <kernel/fs/ramfs.h>
-#include <kernel/fs/hostfs.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/object.h>
-#include <kernel/object/file.h>
-#include <kernel/object/console.h>
 #include <kernel/object/process.h>
-#include <kernel/object/launcher.h>
-#include <kernel/object/pipe.h>
+#include <abi/launcher.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/user.h>
 #include <kernel/task.h>
+#include <kernel/service/request.h>
+#include <kernel/wait.h>
 #include <stdatomic.h>
 #include <arch/cpu_local.h>
 
@@ -44,29 +36,11 @@ struct task_wait {
 
 struct task {
   struct task *next;
-  struct hostfs_request hostfs_request;
-  struct file_wait file_wait;
-  struct console_wait console_wait;
-  struct process_wait process_wait;
-  struct pipe_wait pipe_wait;
-  /* Temporary typed storage until the reusable user-request area is provisioned. */
-  struct pipe_create_request pipe_request;
-  struct ramfs_request ramfs_request;
-  struct file_replace_request file_request;
-  struct launcher_request launcher_request;
-  struct capability_growth_request growth_request;
-  struct namespace_create_request namespace_request;
-  struct endpoint_create_request endpoint_create_request;
-  struct endpoint_export_request endpoint_export_request;
-  struct memory_request memory_request;
-  struct display_request display_request;
+  struct task_wait_link resource_wait;
+  struct bsp_request *request_storage;
   struct bsp_request *bsp_request; /* Reserved through result consumption. */
   struct bsp_request *deferred_request; /* Published only after the safe handoff. */
-  /* Only the caller updates aggregates. The parked request lends timestamps
-   * to the BSP until wakeup transfers ownership back. */
-  struct profile_snapshot profile;
-  struct profile_file_snapshot file_profile;
-  struct profile_host_snapshot host_profile;
+  struct task_profile *profile;
   enum task_kind kind;
   struct process *process; /* Owned by a user task; NULL for a kernel task. */
   uintptr_t kernel_stack;
@@ -183,35 +157,13 @@ struct task_wait *task_wait_prepare(void)
   return &task->wait_record;
 }
 
-/* Process-specific service requests still require a user task. */
-static struct task_wait *prepare_user_wait(void)
+struct task_wait_link *task_wait_link_prepare(void)
 {
   struct task_wait *wait = task_wait_prepare();
   KASSERT(wait->task->kind == TASK_USER);
-  return wait;
-}
-
-struct process_wait *task_prepare_process_wait(void)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-  task->process_wait = (struct process_wait){.wait = wait};
-  return &task->process_wait;
-}
-
-struct console_wait *task_prepare_console_wait(void)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct console_wait *record = &wait->task->console_wait;
-  *record = (struct console_wait){.wait = wait};
-  return record;
-}
-
-struct pipe_wait *task_prepare_pipe_wait(void)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct pipe_wait *record = &wait->task->pipe_wait;
-  *record = (struct pipe_wait){.wait = wait};
+  struct task_wait_link *record = &wait->task->resource_wait;
+  KASSERT(!record->next);
+  *record = (struct task_wait_link){.wait = wait};
   return record;
 }
 
@@ -336,48 +288,11 @@ static struct task *current_user_task(void)
   return task;
 }
 
-struct bsp_request *task_bsp_request_acquire(enum bsp_service service)
+struct bsp_request *task_bsp_request_acquire(void)
 {
   struct task *task = current_user_task();
-  KASSERT(!task->bsp_request);
-  struct bsp_request *request;
-  switch (service) {
-  case BSP_SERVICE_PIPE_CREATE:
-    request = &task->pipe_request.request;
-    break;
-  case BSP_SERVICE_CAPABILITY_GROW:
-    request = &task->growth_request.request;
-    break;
-  case BSP_SERVICE_NAMESPACE_CREATE:
-    request = &task->namespace_request.request;
-    break;
-  case BSP_SERVICE_ENDPOINT_CREATE:
-    request = &task->endpoint_create_request.request;
-    break;
-  case BSP_SERVICE_ENDPOINT_EXPORT:
-    request = &task->endpoint_export_request.request;
-    break;
-  case BSP_SERVICE_RAMFS:
-    request = &task->ramfs_request.request;
-    break;
-  case BSP_SERVICE_FILE_REPLACE:
-    request = &task->file_request.request;
-    break;
-  case BSP_SERVICE_HOSTFS:
-    request = &task->hostfs_request.request;
-    break;
-  case BSP_SERVICE_LAUNCHER:
-    request = &task->launcher_request.request;
-    break;
-  case BSP_SERVICE_MEMORY:
-    request = &task->memory_request.request;
-    break;
-  case BSP_SERVICE_DISPLAY:
-    request = &task->display_request.request;
-    break;
-  default:
-    panic("unknown BSP service %u", (unsigned)service);
-  }
+  KASSERT(task->request_storage && !task->bsp_request);
+  struct bsp_request *request = task->request_storage;
   KASSERT(request->state == BSP_REQUEST_FREE);
   task->bsp_request = request;
   return request;
@@ -418,99 +333,11 @@ static void publish_deferred_request(struct task *task)
   bsp_request_publish_deferred(request);
 }
 
-struct profile_snapshot *task_memory_profile(void)
+struct task_profile *task_profile_current(void)
 {
-  return &current_user_task()->profile;
-}
-
-struct profile_file_snapshot *task_file_profile(void)
-{
-  return &current_user_task()->file_profile;
-}
-
-struct profile_host_snapshot *task_host_profile(void)
-{
-  return &current_user_task()->host_profile;
-}
-
-struct file_wait *task_prepare_file_wait(void)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct file_wait *record = &wait->task->file_wait;
-  *record = (struct file_wait){.wait = wait};
-  return record;
-}
-
-enum call_status task_profile_control(uint64_t operation, struct profile_snapshot *reply)
-{
-  struct task *task = local_scheduler()->current_task;
-  KASSERT(task && task->kind == TASK_USER);
-  bool active = task->profile.flags & PROFILE_ACTIVE;
-  if (operation == PROFILE_BEGIN) {
-    if (active) {
-      return CALL_BUSY;
-    }
-    task->profile = (struct profile_snapshot){.flags = PROFILE_ACTIVE};
-  } else {
-    if (operation == PROFILE_END) {
-      if (!active) {
-        return CALL_BAD_REQUEST;
-      }
-      task->profile.flags &= ~PROFILE_ACTIVE;
-    } else {
-      KASSERT(operation == PROFILE_SNAPSHOT);
-    }
-    *reply = task->profile;
-  }
-  return CALL_OK;
-}
-
-enum call_status task_profile_file_control(uint64_t operation, struct profile_file_snapshot *reply)
-{
-  struct task *task = local_scheduler()->current_task;
-  KASSERT(task && task->kind == TASK_USER);
-  bool active = task->file_profile.flags & PROFILE_ACTIVE;
-  if (operation == PROFILE_FILE_BEGIN) {
-    if (active) {
-      return CALL_BUSY;
-    }
-    task->file_profile = (struct profile_file_snapshot){.flags = PROFILE_ACTIVE};
-  } else {
-    if (operation == PROFILE_FILE_END) {
-      if (!active) {
-        return CALL_BAD_REQUEST;
-      }
-      task->file_profile.flags &= ~PROFILE_ACTIVE;
-    } else {
-      KASSERT(operation == PROFILE_FILE_SNAPSHOT);
-    }
-    *reply = task->file_profile;
-  }
-  return CALL_OK;
-}
-
-enum call_status task_profile_host_control(uint64_t operation, struct profile_host_snapshot *reply)
-{
-  struct task *task = local_scheduler()->current_task;
-  KASSERT(task && task->kind == TASK_USER);
-  bool active = task->host_profile.flags & PROFILE_ACTIVE;
-  if (operation == PROFILE_HOST_BEGIN) {
-    if (active) {
-      return CALL_BUSY;
-    }
-    task->host_profile = (struct profile_host_snapshot){.flags = PROFILE_ACTIVE};
-  } else {
-    if (operation == PROFILE_HOST_END) {
-      if (!active) {
-        return CALL_BAD_REQUEST;
-      }
-      task->host_profile.flags &= ~PROFILE_ACTIVE;
-    } else {
-      KASSERT(operation == PROFILE_HOST_SNAPSHOT);
-    }
-    *reply = task->host_profile;
-  }
-  return CALL_OK;
+  struct task_profile *profile = current_user_task()->profile;
+  KASSERT(profile);
+  return profile;
 }
 
 static struct task *dequeue(struct scheduler *scheduler)
@@ -564,6 +391,17 @@ static enum mm_result allocate_task(struct task **result)
   return MM_OK;
 }
 
+static void free_task(struct task *task)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!task->bsp_request && !task->deferred_request);
+  KASSERT(!task->wait && !task->wait_record.timed && !task->resource_wait.next);
+  bsp_request_storage_destroy(task->request_storage);
+  profile_storage_destroy(task->profile);
+  KASSERT(vm_free(vm_kernel_space(), task->kernel_stack, TASK_STACK_SIZE) == MM_OK);
+  kfree(task);
+}
+
 enum mm_result kernel_task_create(void (*entry)(void *), void *argument)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -611,6 +449,17 @@ enum mm_result user_task_prepare_on(size_t cpu_index, struct process *process,
     return status;
   }
 
+  task->request_storage = bsp_request_storage_create();
+  if (!task->request_storage) {
+    free_task(task);
+    return MM_NO_MEMORY;
+  }
+  task->profile = profile_storage_create();
+  if (!task->profile) {
+    free_task(task);
+    return MM_NO_MEMORY;
+  }
+
   task->kind = TASK_USER;
   task->process = process;
   task->entry = entry;
@@ -624,9 +473,7 @@ enum mm_result user_task_prepare_on(size_t cpu_index, struct process *process,
 void user_task_discard_prepared(struct task *task)
 {
   KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
-  KASSERT(!task->bsp_request && !task->deferred_request);
-  KASSERT(vm_free(vm_kernel_space(), task->kernel_stack, TASK_STACK_SIZE) == MM_OK);
-  kfree(task);
+  free_task(task);
 }
 
 void user_task_publish_group(struct task **tasks, size_t count)
@@ -691,7 +538,6 @@ static void reap_completed(void)
       result.exit_status = task->faulted ? 0 : task->exit_status;
       KASSERT(process_destroy(task->process) == MM_OK);
     }
-    KASSERT(vm_free(vm_kernel_space(), task->kernel_stack, TASK_STACK_SIZE) == MM_OK);
     if (task->kind == TASK_USER) {
       if (task->faulted) {
         klog("userspace: CPU %zu faulted task released\n", task->cpu_index);
@@ -700,7 +546,7 @@ static void reap_completed(void)
              task->cpu_index, task->exit_status);
       }
     }
-    kfree(task);
+    free_task(task);
     if (control) {
       process_control_complete(control, result);
       object_release(&control->object);

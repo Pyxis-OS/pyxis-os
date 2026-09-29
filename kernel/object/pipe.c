@@ -7,11 +7,12 @@
 #include <kernel/process.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
+#include <kernel/wait.h>
 
 struct pipe_pair {
   atomic_bool locked;
   struct pipe_end reader, writer;
-  struct pipe_wait *readers, *writers;
+  struct task_wait_link *readers, *writers;
   size_t head, count;
   bool reader_closed, writer_closed;
   uint8_t data[PIPE_CAPACITY];
@@ -33,12 +34,12 @@ static void unlock_pipe(struct pipe_pair *pair)
 }
 
 /* Called under the pipe lock. Remove every published pointer before waking. */
-static void wake_all(struct pipe_wait **queue)
+static void wake_all(struct task_wait_link **queue)
 {
-  struct pipe_wait *record = *queue;
+  struct task_wait_link *record = *queue;
   *queue = NULL;
   while (record) {
-    struct pipe_wait *next = record->next;
+    struct task_wait_link *next = record->next;
     struct task_wait *wait = record->wait;
     record->next = NULL;
     task_wait_wake(wait);
@@ -214,7 +215,7 @@ static size_t read_pipe(struct pipe_pair *pair, uint8_t *data, size_t capacity)
     return 0;
   }
   for (;;) {
-    struct pipe_wait *record = task_prepare_pipe_wait();
+    struct task_wait_link *record = task_wait_link_prepare();
     lock_pipe(pair);
     if (pair->count || pair->writer_closed) {
       size_t length = pair->count < capacity ? pair->count : capacity;
@@ -241,7 +242,7 @@ static enum call_status write_pipe(struct pipe_pair *pair, const uint8_t *data,
     return CALL_OK;
   }
   for (;;) {
-    struct pipe_wait *record = task_prepare_pipe_wait();
+    struct task_wait_link *record = task_wait_link_prepare();
     lock_pipe(pair);
     if (pair->reader_closed) {
       unlock_pipe(pair);

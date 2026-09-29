@@ -2,18 +2,12 @@
 #define KERNEL_CONSOLE_H
 
 #include <kernel/object/object.h>
+#include <kernel/wait.h>
 #include <abi/syscall.h>
 
 struct tty;
-struct task_wait;
 
 #define CONSOLE_INPUT_CAPACITY 4096
-
-/* Shared task metadata, never a pointer into a private kernel stack. */
-struct console_wait {
-  struct console_wait *next;
-  struct task_wait *wait;
-};
 
 struct console_object {
   struct kernel_object object;
@@ -23,7 +17,7 @@ struct console_object {
   size_t input_head, input_count;
   /* A reader keeps ownership while sleeping; queued readers cannot overtake. */
   bool input_lost, reader_active;
-  struct console_wait *first_reader, *last_reader;
+  struct task_wait_link *first_reader, *last_reader;
   struct task_wait *input_wait;
 };
 

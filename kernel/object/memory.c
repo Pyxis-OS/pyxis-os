@@ -89,7 +89,7 @@ static enum mm_result request_memory(uint64_t operation, struct memory_region *r
   KASSERT(operation == MEMORY_ALLOCATE || operation == MEMORY_RELEASE);
   struct memory_request *request =
       (struct memory_request *)bsp_request_prepare(BSP_SERVICE_MEMORY);
-  struct profile_snapshot *profile = task_memory_profile();
+  struct profile_snapshot *profile = profile_memory_current();
   request->profile.active = profile->flags & PROFILE_ACTIVE;
   if (request->profile.active) {
     request->profile.started_ns = arch_monotonic_ns();

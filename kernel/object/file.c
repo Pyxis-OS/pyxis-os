@@ -88,7 +88,7 @@ void file_begin_operation(struct file_object *file)
     return;
   }
 
-  struct file_wait *waiter = task_prepare_file_wait();
+  struct task_wait_link *waiter = task_wait_link_prepare();
   struct task_wait *wait = waiter->wait;
   if (file->last_waiter) {
     file->last_waiter->next = waiter;
@@ -105,7 +105,7 @@ void file_begin_operation(struct file_object *file)
 void file_end_operation(struct file_object *file)
 {
   lock_file(file);
-  struct file_wait *waiter = file->first_waiter;
+  struct task_wait_link *waiter = file->first_waiter;
   if (waiter) {
     file->first_waiter = waiter->next;
     if (!file->first_waiter) {
@@ -214,7 +214,7 @@ static void finish_file_profile(struct profile_file_snapshot *stats,
 
 static bool replace_buffer(struct file_object *file, size_t capacity)
 {
-  struct profile_file_snapshot *profile = task_file_profile();
+  struct profile_file_snapshot *profile = profile_file_current();
   bool profiled = profile->flags & PROFILE_ACTIVE;
   uint64_t started = profiled ? arch_monotonic_ns() : 0;
   struct file_replace_request *request =

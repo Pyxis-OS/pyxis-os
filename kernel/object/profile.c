@@ -2,7 +2,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/object/profile.h>
 #include <kernel/panic.h>
-#include <kernel/task.h>
+#include <kernel/service/profile.h>
 #include <kernel/user_memory.h>
 
 static void destroy_profile(struct kernel_object *object)
@@ -47,8 +47,8 @@ struct syscall_result profile_call(uint64_t rights, uint64_t operation,
   if (returns_snapshot && !user_buffer_check(reply_address, size, USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  enum call_status status = host ? task_profile_host_control(operation, &reply.host) : file ? task_profile_file_control(operation, &reply.file) :
-      task_profile_control(operation, &reply.memory);
+  enum call_status status = host ? profile_host_control(operation, &reply.host) : file ? profile_file_control(operation, &reply.file) :
+      profile_memory_control(operation, &reply.memory);
   if (status != CALL_OK || !returns_snapshot) {
     return (struct syscall_result){status, 0};
   }

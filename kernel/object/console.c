@@ -173,7 +173,7 @@ static bool begin_read(struct console_object *console, bool timed, uint64_t dead
     return false;
   }
 
-  struct console_wait *reader = task_prepare_console_wait();
+  struct task_wait_link *reader = task_wait_link_prepare();
   struct task_wait *wait = reader->wait;
   if (console->last_reader) {
     console->last_reader->next = reader;
@@ -192,8 +192,8 @@ static bool begin_read(struct console_object *console, bool timed, uint64_t dead
   if (!acquired) {
     /* Timeout can race the previous reader's handoff. Only remove a record
      * still queued; end_read clears wait when it grants ownership. */
-    struct console_wait **link = &console->first_reader;
-    struct console_wait *previous = NULL;
+    struct task_wait_link **link = &console->first_reader;
+    struct task_wait_link *previous = NULL;
     while (*link != reader) {
       KASSERT(*link);
       previous = *link;
@@ -214,7 +214,7 @@ static bool begin_read(struct console_object *console, bool timed, uint64_t dead
 static void end_read(struct console_object *console)
 {
   lock_input(console);
-  struct console_wait *reader = console->first_reader;
+  struct task_wait_link *reader = console->first_reader;
   if (reader) {
     console->first_reader = reader->next;
     if (!console->first_reader) {

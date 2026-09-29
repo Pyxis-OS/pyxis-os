@@ -142,12 +142,14 @@ allocation and page-table mutation; they are not just a fault-handler shortcut.
 ## BSP-only allocation and VM mutation
 
 Kernel allocation and page-table mutation remain owned by the BSP. Tasks submit
-specific requests and wait for BSP service. This keeps allocator and VM ownership
-explicit, but moves subsystem coordination into [the scheduler](../kernel/task.c):
-capability-table growth, directory-entry allocation, file-buffer replacement,
-private memory, mapped graphics and launch preparation each carry request state in the task and
-have their own queue and BSP service path. More consumers mean more scheduler
-coupling, and long service operations delay other requests and BSP work.
+specific requests and wait for BSP service. The
+[common executor](../kernel/service/request.c) separates subsystem operations
+from scheduling through a closed service catalog and one FIFO. Each user task
+owns one reusable request allocation and a separate caller-only profiling
+allocation; kernel workers own neither. Subsystems own request capture, service
+helpers and profile controls. This keeps allocator and VM ownership explicit,
+but long non-preemptible service operations still delay other requests and BSP
+work.
 
 The handoff ordering is part of correctness, not incidental queue plumbing.
 Private-memory requests are published only after the requester has left its
@@ -158,17 +160,14 @@ Changes to service placement or synchronization must preserve these guarantees
 or explicitly replace them with an equally defined ownership and translation
 invalidation contract.
 
-Reconsider this split when adding a subsystem repeatedly expands task state and
-scheduler service paths, when BSP service latency becomes material, or before
-allowing concurrent use and mutation of one private address space. Moving
-subsystem work out of the scheduler and allowing allocation on other CPUs are
-separate decisions. A generic request framework or allocator spinlock alone
-does not resolve the ownership constraints. The selected
-[BSP request milestone](wip/bsp-service-requests.md) separates operation ownership,
-submission/completion and subsystem service from scheduling. It retains BSP-only
-allocation and the inactive-root handoff; these changes are planned, not yet
-implemented. Task-lifetime request reservation and long non-preemptible operations
-remain explicit costs rather than being solved by moving the service code.
+Reconsider BSP-only service when its latency becomes material or before allowing
+concurrent use and mutation of one private address space. The
+[BSP request milestone](wip/bsp-service-requests.md) has separated operation
+ownership, submission/completion and subsystem service from scheduling while
+retaining BSP-only allocation and the inactive-root handoff. Allowing allocation
+on other CPUs remains a separate decision; an allocator spinlock alone does not
+resolve these ownership constraints. Eager task-lifetime storage and long
+non-preemptible operations remain explicit costs.
 
 ## Synchronous launch preparation
 
@@ -455,12 +454,16 @@ drivers' reclamation with a real teardown and SMP invalidation contract.
 ## Host filesystem request storage and enumeration
 
 The [native virtio-fs backend](virtio-fs.md#native-directory-and-file-objects)
-keeps one bounded request record in each task, including a 4 KiB read/write buffer.
-This avoids allocating on APs or exposing private stacks to the worker, but
-charges that storage to every task even if it never accesses the host. Revisit
-lazy staging if task counts make the cost material; do not add another fixed
-request registry. The BSP scheduler only forwards these records, never performs
-blocking host I/O.
+uses the largest record in each user task's reusable 4,920-byte request allocation,
+including a 4 KiB read/write buffer. A separate 816-byte persistent profile
+allocation is also eager. Kernel workers allocate neither area. This avoids
+allocating on APs or exposing private stacks to the worker, but every user task
+pays both costs even if it never accesses HOST or enables profiling. Eager
+provisioning is accepted to keep submission allocation-free and guarantee cleanup
+capacity. Revisit lazy provisioning if user-task counts or memory pressure make
+the cost material, with explicit allocation-failure, BSP handoff and guaranteed
+cleanup ownership; do not add another fixed request registry. The common BSP
+executor forwards these records without waiting for blocking host I/O.
 
 The native enumeration ABI returns one name per call. The backend requests a
 fresh 4 KiB READDIR batch and discards unused entries, so a large listing can

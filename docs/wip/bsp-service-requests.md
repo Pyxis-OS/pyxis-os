@@ -2,7 +2,8 @@
 
 Status: in progress, with the BSP executor serving pipe creation, private memory,
 display, capability growth, namespace/endpoint creation, RAMFS/FILE backing
-operations, launch preparation and HOST forwarding after the completed
+operations, launch preparation and HOST forwarding, and consolidated user-request
+and profiling storage after the completed
 [read-only filesystem milestone](../filesystem-readonly.md). This document selects
 the boundaries and scheduling policy; individual tasks still require their own
 implementation PRs. It does not authorize concurrent allocation, task migration
@@ -10,11 +11,11 @@ or process threads.
 
 ## Problem and completion target
 
-[`task.c`](../../kernel/task.c) combines execution state with capability growth,
+[`task.c`](../../kernel/task.c) originally combined execution state with capability growth,
 directory allocation, file-buffer replacement, HOST requests, launch preparation,
 memory/display operations, and pipe, endpoint and namespace creation. Request
-payloads, queue links, service bodies and profiling state accumulate in `task`.
-Both the scheduler loop and preemption decision enumerate subsystem queues.
+payloads, queue links, service bodies and profiling state accumulated in `task`.
+Both the scheduler loop and preemption decision enumerated subsystem queues.
 
 Separate task execution, request submission/completion, and subsystem operations.
 Adding a service should change its subsystem and the explicit BSP service catalog,
@@ -203,7 +204,7 @@ an operation. Remove obsolete paths as their consumers move.
 - [x] **7. Migrate HOST forwarding.** Preserve HOST worker ownership, staged data,
   profiling and final completion. Forward from the common executor without
   blocking its progress on another caller's request.
-- [ ] **8. Consolidate storage and finish the task boundary.** Provision the reusable
+- [x] **8. Consolidate storage and finish the task boundary.** Provision the reusable
   user-request area, separate persistent profiling, and remove superseded payloads,
   queue links, service sweeps and task API dependencies. Review wait-link sharing
   without changing wait semantics. Confirm kernel workers pay no user-request
@@ -818,6 +819,116 @@ initialization failure were reviewed by inspection without forced interleavings
 or injected failure. No new tests, self-tests or boot/output automation were added.
 Individual BSP operations remain non-preemptible; active deadlines and profiling
 still incur HPET cost.
+
+## Task 8 storage consolidation and task boundary
+
+Each user task now provisions one reusable request allocation and one separate
+persistent profiling allocation on the BSP before publication. The explicit
+service catalog records every typed request's size, alignment and header offset;
+initialization validates them against the heap alignment contract and computes
+the maximum. Every preparation checks its layout, reserves the same allocation
+and zeroes the selected typed range. There is no union or fixed page-size limit.
+Submission allocates nothing, including cleanup operations under memory pressure.
+
+The task layer no longer embeds service payloads or selects storage by service
+tag. Its adapters reserve/release the area, expose the caller's current storage,
+and register the deferred scheduler handoff. Profiling controls and accessors now
+belong to `kernel/service/profile.c`. MEMORY, FILE and HOST aggregates retain their
+independent caller scope and BEGIN/SNAPSHOT/END behavior across request reuse.
+Kernel workers allocate neither user area and cannot enter the synchronous client
+path. Launch captures/groups and HOST image captures keep their separate owned
+lifetimes; this change does not fold them into the transient area.
+
+A common 16-byte resource link replaces four identical file/console/process/pipe
+records and their task APIs. Resource queues retain their existing locks and
+ordering; a waker detaches the link before returning ownership. Process completion
+also clears the removed next pointer. Console timeout cleanup removes any queued
+link under its resource lock before reuse. The link remains separate from service
+storage and the scheduler wait record; no deadline or early-wake semantics change.
+
+Preparation failure, unpublished-task discard and retirement share cleanup of
+request/profile storage, the kernel stack and task metadata. The failed preparer
+still owns its inactive process. Cleanup asserts no active reservation, deferred
+publication, timed wait or resource queue link remains, and request destruction
+requires FREE state. Allocation-exhaustion paths were reviewed without injection.
+
+Fresh ordinary GCC 16.2.0 builds compared merged main `e887df5` with this change:
+
+| Storage | Before | After |
+| --- | ---: | ---: |
+| Task metadata, user or kernel | 7,392 B | 752 B |
+| User request allocation | embedded records | 4,920 B |
+| Persistent user profiling | embedded 816 B | 816 B |
+| Combined user metadata/request/profiles | 7,392 B | 6,488 B |
+| Combined kernel metadata/request/profiles | 7,392 B | 752 B |
+| Resource links per task | 4 × 16 B | 16 B |
+
+The largest request is HOST, requiring 8-byte alignment; kmalloc guarantees at
+least 16. User storage decreases by 904 bytes and worker storage by 6,640 bytes.
+These totals exclude allocator rounding/headers and unchanged 16 KiB kernel
+stacks. User metadata now uses three heap allocations rather than one. Eager
+request/profile provisioning remains an accepted cost even for users that never
+access HOST or enable collection; revisit conditions are in technical debt.
+
+### Validation and performance controls
+
+Kernel/image builds passed without warnings using verified unchanged SDK,
+userspace and ports bundles. Diff checks and independent read-only review passed.
+No public ABI, dependency pin, compiler-container input, test infrastructure or
+boot/output automation changed. Interactive validation used one and four CPUs,
+nested KVM, fixed QEMU 10.2.2, CPU `max`, 256 MiB, matching OVMF, entropy and a
+private virtiofsd 1.14.0 export with default cache policy; no network/block devices
+or cache eviction. All QEMU/GDB/daemon jobs were stopped after validation.
+
+GDB observed the same caller and allocation reused for HOST then RAM FILE service,
+with FREE state and no reservation between them. Service ran in the BSP executor
+under kernel CR3/IF=0; the caller was parked, and the executor's request/profile
+pointers were NULL. Normal retirement reached cleanup with no outstanding wait,
+reservation or resource link. Stepping through request and profile destruction
+reduced the heap live-allocation count once for each. Invalid second-image launch
+reached unpublished-task discard with a FREE request and separate profile block;
+the first child's marker remained empty, followed by successful later commands.
+
+Four-CPU memory and one-CPU display requests retained deferred publication under
+the kernel root with the local current task cleared and the reserved allocation
+still attached to the caller. The display caller was parked; Mandelbrot rendered
+and Escape returned to the shell. A one-CPU HOST executable pipeline returned
+`1349564844 32768`, followed by successful enumeration, rename, sync and removal.
+Four-CPU `allocbench pages --profile` completed 64 allocations and releases with
+4,194,304 bytes in each direction and no failures. Pipe transfer warmup and five
+samples verified all 1 MiB with no errors. One-CPU IPC SEND warmup and five samples
+verified eight 64-byte messages each, normal child exit and cleanup.
+
+Growing HOST-to-RAM copies with both `--profile --host-profile` verified a warmup
+and five samples on both CPU counts. Each measured pass kept 258 HOST READs and
+258 successful transport completions independent of ten RAM replacements,
+4,173,840 bytes of requested capacity and 2,084,880 copied bytes. The profiles
+survived repeated HOST/FILE storage reuse. This is functional evidence, not an
+unprofiled throughput comparison.
+
+Fresh four-CPU HOST controls used the corrected task-7 main as baseline. Each
+cell is median milliseconds (minimum–maximum), five verified 1 MiB samples after
+one warmup. Read uses 4,088-byte buffers and reports payload time; prepared writes
+and HOST-to-RAM copies use 4,080-byte buffers and report transfer time. Sync was
+off, and no debugger was attached during either set. All 72 passes verified
+contents and length with unchanged native/transport counts and no failures or
+short transfers; read's final EOF check remained outside HOST profiling.
+
+| Workload | Main `e887df5` | Consolidated storage |
+| --- | ---: | ---: |
+| Read, profile off | 87.080 (84.688–89.368) | 86.098 (85.249–93.095) |
+| Read, profile on | 164.119 (155.568–168.088) | 156.455 (155.762–192.088) |
+| Prepared write, off | 87.611 (84.755–88.829) | 87.048 (85.353–89.120) |
+| Prepared write, on | 156.771 (155.896–165.279) | 158.575 (156.087–161.233) |
+| HOST → prepared RAM, off | 86.011 (85.154–88.906) | 85.038 (84.796–85.288) |
+| HOST → prepared RAM, on | 158.418 (156.641–167.654) | 162.378 (158.348–169.866) |
+
+These controls show no material regression in this nested environment; they do
+not establish owner-host performance. Profiling remains intrusive, with occasional
+outliers, and no constant correction is justified. Early completion, allocation
+exhaustion, concurrent console timeout/handoff and fatal-fault retirement were
+reviewed by inspection rather than forced. Task 9 remains the combined validation
+and milestone closure step.
 
 ## Validation and exclusions
 

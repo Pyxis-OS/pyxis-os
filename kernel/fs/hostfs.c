@@ -117,7 +117,7 @@ static void finish_host_profile(struct profile_host_snapshot *profile,
 
 struct hostfs_request *hostfs_request_prepare(enum hostfs_operation operation)
 {
-  struct profile_host_snapshot *profile = task_host_profile();
+  struct profile_host_snapshot *profile = profile_host_current();
   bool profiled = (profile->flags & PROFILE_ACTIVE) &&
       (operation == HOSTFS_READ || operation == HOSTFS_WRITE);
   uint64_t started_ns = profiled ? arch_monotonic_ns() : 0;
@@ -133,7 +133,7 @@ struct hostfs_request *hostfs_request_prepare(enum hostfs_operation operation)
 
 void hostfs_request_submit_and_wait(struct hostfs_request *request)
 {
-  struct profile_host_snapshot *profile = task_host_profile();
+  struct profile_host_snapshot *profile = profile_host_current();
   bool profiled = request->profile.active;
   bsp_request_submit_and_wait(&request->request);
   if (profiled) {

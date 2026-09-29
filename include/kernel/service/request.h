@@ -15,6 +15,7 @@ enum bsp_service {
   BSP_SERVICE_FILE_REPLACE,
   BSP_SERVICE_LAUNCHER,
   BSP_SERVICE_HOSTFS,
+  BSP_SERVICE_COUNT,
 };
 
 enum bsp_request_state {
@@ -39,6 +40,12 @@ struct bsp_request {
   enum bsp_service service;
   enum bsp_request_state state;
 };
+
+/* BSP, IF=0. Provision the catalog's largest typed record before publishing a
+ * user task. Returns NULL on exhaustion; submission never allocates storage.
+ * Destroy only after all requests are released. Kernel workers do not provision. */
+struct bsp_request *bsp_request_storage_create(void);
+void bsp_request_storage_destroy(struct bsp_request *storage);
 
 /* Current user task, IF=0, no held locks. One operation through consumption:
  * prepare, fill the typed record, submit/wait, consume results, release.

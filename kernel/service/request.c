@@ -11,10 +11,44 @@
 #include <kernel/object/memory.h>
 #include <kernel/object/display.h>
 #include <kernel/panic.h>
+#include <kernel/memory.h>
+#include <kernel/mm/heap.h>
 #include <kernel/service/request.h>
 #include <kernel/task.h>
 #include <stdatomic.h>
 
+struct request_layout {
+  size_t size;
+  size_t alignment;
+  size_t header_offset;
+};
+
+static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_PIPE_CREATE] = {sizeof(struct pipe_create_request), alignof(struct pipe_create_request),
+      offsetof(struct pipe_create_request, request)},
+  [BSP_SERVICE_MEMORY] = {sizeof(struct memory_request), alignof(struct memory_request),
+      offsetof(struct memory_request, request)},
+  [BSP_SERVICE_DISPLAY] = {sizeof(struct display_request), alignof(struct display_request),
+      offsetof(struct display_request, request)},
+  [BSP_SERVICE_CAPABILITY_GROW] = {sizeof(struct capability_growth_request), alignof(struct capability_growth_request),
+      offsetof(struct capability_growth_request, request)},
+  [BSP_SERVICE_NAMESPACE_CREATE] = {sizeof(struct namespace_create_request), alignof(struct namespace_create_request),
+      offsetof(struct namespace_create_request, request)},
+  [BSP_SERVICE_ENDPOINT_CREATE] = {sizeof(struct endpoint_create_request), alignof(struct endpoint_create_request),
+      offsetof(struct endpoint_create_request, request)},
+  [BSP_SERVICE_ENDPOINT_EXPORT] = {sizeof(struct endpoint_export_request), alignof(struct endpoint_export_request),
+      offsetof(struct endpoint_export_request, request)},
+  [BSP_SERVICE_RAMFS] = {sizeof(struct ramfs_request), alignof(struct ramfs_request),
+      offsetof(struct ramfs_request, request)},
+  [BSP_SERVICE_FILE_REPLACE] = {sizeof(struct file_replace_request), alignof(struct file_replace_request),
+      offsetof(struct file_replace_request, request)},
+  [BSP_SERVICE_LAUNCHER] = {sizeof(struct launcher_request), alignof(struct launcher_request),
+      offsetof(struct launcher_request, request)},
+  [BSP_SERVICE_HOSTFS] = {sizeof(struct hostfs_request), alignof(struct hostfs_request),
+      offsetof(struct hostfs_request, request)},
+};
+
+static size_t storage_size, storage_alignment;
 static struct bsp_request *request_head, *request_tail;
 static atomic_bool requests_locked;
 static struct task_wait *worker_wait; /* requests_locked; detached before notification. */
@@ -34,11 +68,37 @@ static void unlock_requests(void)
   atomic_store_explicit(&requests_locked, false, memory_order_release);
 }
 
+struct bsp_request *bsp_request_storage_create(void)
+{
+  KASSERT(arch_cpu_index() == 0 && initialized);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct bsp_request *storage = kmalloc(storage_size);
+  if (storage) {
+    KASSERT((uintptr_t)storage % storage_alignment == 0);
+    *storage = (struct bsp_request){0};
+  }
+  return storage;
+}
+
+void bsp_request_storage_destroy(struct bsp_request *storage)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (storage) {
+    KASSERT(storage->state == BSP_REQUEST_FREE && !storage->next && !storage->wait);
+    kfree(storage);
+  }
+}
+
 struct bsp_request *bsp_request_prepare(enum bsp_service service)
 {
-  KASSERT(initialized);
-  struct bsp_request *request = task_bsp_request_acquire(service);
+  KASSERT(initialized && (unsigned)service < BSP_SERVICE_COUNT);
+  const struct request_layout *layout = &request_layouts[service];
+  KASSERT(layout->size <= storage_size && layout->alignment <= storage_alignment);
+  struct bsp_request *request = task_bsp_request_acquire();
   KASSERT(request->state == BSP_REQUEST_FREE);
+  KASSERT((uintptr_t)request % layout->alignment == 0);
+  memset(request, 0, layout->size);
   *request = (struct bsp_request){
     .wait = task_wait_prepare(),
     .service = service,
@@ -230,6 +290,17 @@ void bsp_requests_init(void)
 {
   KASSERT(arch_cpu_index() == 0 && !initialized);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  for (size_t i = 0; i < BSP_SERVICE_COUNT; ++i) {
+    const struct request_layout *layout = &request_layouts[i];
+    KASSERT(layout->size >= sizeof(struct bsp_request) && !layout->header_offset);
+    KASSERT(layout->alignment && layout->alignment <= alignof(max_align_t));
+    if (layout->size > storage_size) {
+      storage_size = layout->size;
+    }
+    if (layout->alignment > storage_alignment) {
+      storage_alignment = layout->alignment;
+    }
+  }
   enum mm_result result = kernel_task_create(request_worker, NULL);
   if (result != MM_OK) {
     panic("cannot create BSP request executor (error %u)", (unsigned)result);

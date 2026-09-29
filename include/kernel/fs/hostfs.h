@@ -32,7 +32,7 @@ struct hostfs_profile {
   struct virtio_fs_profile transport;
 };
 
-/* One request per calling task, in shared task metadata. No user addresses or
+/* One request per calling task, in its shared request area. No user addresses or
  * private-stack pointers cross the worker boundary. The live capability keeps
  * node alive until completion; a returned object is one owned reference. Keep
  * the common reservation through result consumption, then explicitly release. */

@@ -89,9 +89,11 @@ nested inside service. Counters record attempts, success/failure, summed request
 capacity and actual copied bytes; they saturate and expose no addresses.
 
 BSP owns request results/timestamps from publication until wakeup; the caller
-then aggregates into its task-local FILE snapshot before releasing the request.
-Transient samples live in the typed FILE replacement request, which uses the
-common BSP FIFO and promptly notifies an idle executor without a VM handoff.
+then aggregates into its caller-local FILE snapshot in the separate persistent
+profile allocation before releasing the request. Transient samples live in the
+typed FILE replacement record in the reusable user-request allocation, which
+uses the common BSP FIFO and promptly notifies an idle executor without a VM
+handoff.
 The publication timestamp remains immediately before publication locking, and
 service timestamps still bracket the local replacement helper. Disabled
 collection adds no clocks or allocations. Existing allocation, geometric growth,
@@ -158,7 +160,10 @@ before submission has no transport event. Counters saturate. Transient samples
 follow caller → executor → HOST worker ownership in the typed request. The HOST
 worker clears links and input loans and publishes common completion before waking;
 it never touches the record afterward. The caller merges the sample into its
-task-local HOST aggregate at resumption; services never access that aggregate.
+caller-local HOST aggregate in the separate persistent profile allocation at
+resumption; services never access that aggregate. The typed request uses the
+reusable user-request allocation, and profile controls belong to the profiling
+subsystem rather than the scheduler.
 The common reservation remains held through reply/user-buffer copying and owned
 output detachment, then ends with explicit release before another synchronous BSP
 service. Disabled collection adds no clocks/allocations. Snapshots expose no
