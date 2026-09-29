@@ -3,6 +3,9 @@
 #include <kernel/boot.h>
 #include <kernel/virtio/fs.h>
 
+#define VIRTIO_FS_REQUEST_BYTES 8192u
+#define VIRTIO_FS_REPLY_BYTES 8192u
+
 /* BSP/IF=0 before AP startup. Own resources, negotiate features, prepare masked
  * MSI-X routing and allocate/program both queues. DRIVER_OK and DMA stay clear.
  * Boot failure unwinds only after confirmed reset; otherwise resources remain. */

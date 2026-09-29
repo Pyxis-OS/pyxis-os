@@ -2,7 +2,6 @@
 #include <kernel/panic.h>
 #include <kernel/virtio/fs.h>
 #include <kernel/virtio/pci.h>
-#include <kernel/virtio/queue.h>
 #include "fuse.h"
 
 /* One worker/session, no concurrent calls. Keep bounded wire scratch off the
@@ -21,7 +20,8 @@ static struct {
   uint8_t data[VIRTIO_FS_WRITE_MAX];
 } write_request;
 
-_Static_assert(sizeof(request) <= VIRTQUEUE_REQUEST_BYTES, "FUSE request DMA capacity");
+_Static_assert(sizeof(request) <= VIRTIO_FS_REQUEST_BYTES, "FUSE request DMA capacity");
+_Static_assert(sizeof(response) <= VIRTIO_FS_REPLY_BYTES, "FUSE reply DMA capacity");
 
 static bool mutation_request(uint32_t opcode)
 {
