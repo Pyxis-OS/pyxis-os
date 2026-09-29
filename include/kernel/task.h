@@ -16,7 +16,8 @@ struct file_wait;
 struct process_wait;
 struct console_wait;
 struct pipe_wait;
-struct pipe_create_reply;
+enum bsp_service;
+struct bsp_request;
 struct endpoint_create_reply;
 struct endpoint_export_message;
 struct endpoint_export_reply;
@@ -79,10 +80,12 @@ struct process_wait *task_prepare_process_wait(void);
 struct console_wait *task_prepare_console_wait(void);
 struct pipe_wait *task_prepare_pipe_wait(void);
 
-/* Current user task lends its table to the BSP for atomic pipe creation and
- * installation. Failure installs neither handle. */
+/* Temporary storage adapter for the BSP request mechanism. Current user task,
+ * IF=0. The typed record remains embedded until reusable areas are provisioned. */
+struct bsp_request *task_bsp_request_storage(enum bsp_service service);
+
+/* Current user task lends its table to the BSP for creation/installation. */
 enum call_status task_create_namespace(handle_t *handle);
-enum call_status task_create_pipe(struct pipe_create_reply *reply);
 enum call_status task_create_endpoint(struct endpoint_create_reply *reply);
 enum call_status task_export_endpoint(const struct endpoint_export_message *request,
     struct endpoint_export_reply *reply);

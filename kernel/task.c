@@ -2,7 +2,6 @@
 #include <kernel/object/endpoint.h>
 #include <abi/memory.h>
 #include <abi/profile.h>
-#include <abi/pipe.h>
 #include <kernel/object/display.h>
 #include <arch/cpu.h>
 #include <arch/clock.h>
@@ -73,9 +72,7 @@ struct task {
   struct task *namespace_next;
   handle_t namespace_handle;
   enum call_status namespace_result;
-  struct task *pipe_next;
-  struct pipe_create_reply pipe_reply;
-  enum call_status pipe_result;
+  struct pipe_create_request pipe_request; /* Temporary BSP request storage adapter. */
   struct task *file_next;
   struct file_object *file;
   size_t file_capacity;
@@ -140,7 +137,6 @@ static struct hostfs_request *hostfs_head, *hostfs_tail;
 static struct task *memory_head, *memory_tail;
 static struct task *launch_head, *launch_tail;
 static struct task *display_head, *display_tail;
-static struct task *pipe_head, *pipe_tail;
 static struct task *endpoint_head, *endpoint_tail;
 static struct task *namespace_head, *namespace_tail;
 static atomic_bool started;
@@ -444,24 +440,13 @@ static void service_namespace_requests(void)
   }
 }
 
-enum call_status task_create_pipe(struct pipe_create_reply *reply)
+struct bsp_request *task_bsp_request_storage(enum bsp_service service)
 {
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-  lock_queues();
-  task->pipe_next = NULL;
-  if (pipe_tail) {
-    pipe_tail->pipe_next = task;
-  } else {
-    pipe_head = task;
-  }
-  pipe_tail = task;
-  unlock_queues();
-  task_wait_sleep(wait);
-  if (task->pipe_result == CALL_OK) {
-    *reply = task->pipe_reply;
-  }
-  return task->pipe_result;
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct task *task = local_scheduler()->current_task;
+  KASSERT(task && task->kind == TASK_USER && !task->exited);
+  KASSERT(service == BSP_SERVICE_PIPE_CREATE);
+  return &task->pipe_request.request;
 }
 
 static void submit_endpoint_request(struct task *task, struct task_wait *wait)
@@ -516,52 +501,6 @@ static void service_endpoint_requests(void)
         endpoint_export_create(task->process, &task->export_request, &task->export_reply) :
         endpoint_create(task->process, &task->endpoint_reply);
     task_wait_wake(&task->wait_record);
-    task = next;
-  }
-}
-
-static enum call_status pipe_install_status(enum capability_result result)
-{
-  if (result == CAP_NO_MEMORY) {
-    return CALL_NO_MEMORY;
-  }
-  KASSERT(result == CAP_LIMIT);
-  return CALL_LIMIT;
-}
-
-static void service_pipe_requests(void)
-{
-  lock_queues();
-  struct task *task = pipe_head;
-  pipe_head = pipe_tail = NULL;
-  unlock_queues();
-
-  while (task) {
-    struct task *next = task->pipe_next;
-    struct pipe_end *reader, *writer;
-    task->pipe_result = CALL_NO_MEMORY;
-    if (pipe_pair_create(&reader, &writer)) {
-      handle_t read_handle, write_handle;
-      enum capability_result result = capability_install(&task->process->capabilities,
-          &reader->object, PIPE_RIGHT_READ, 0, &read_handle);
-      if (result == CAP_OK) {
-        result = capability_install(&task->process->capabilities,
-            &writer->object, PIPE_RIGHT_WRITE, 0, &write_handle);
-        if (result == CAP_OK) {
-          task->pipe_reply = (struct pipe_create_reply){read_handle, write_handle};
-          task->pipe_result = CALL_OK;
-        } else {
-          KASSERT(capability_close(&task->process->capabilities, read_handle) == CAP_OK);
-          task->pipe_result = pipe_install_status(result);
-        }
-      } else {
-        task->pipe_result = pipe_install_status(result);
-      }
-      object_release(&reader->object);
-      object_release(&writer->object);
-    }
-    task_wait_wake(&task->wait_record);
-    /* The caller owns its table again and may immediately exit. */
     task = next;
   }
 }
@@ -1297,6 +1236,7 @@ enum mm_result user_task_prepare_on(size_t cpu_index, struct process *process,
 void user_task_discard_prepared(struct task *task)
 {
   KASSERT(arch_cpu_index() == 0 && task && task->kind == TASK_USER);
+  KASSERT(task->pipe_request.request.state == BSP_REQUEST_FREE);
   KASSERT(vm_free(vm_kernel_space(), task->kernel_stack, TASK_STACK_SIZE) == MM_OK);
   kfree(task);
 }
@@ -1336,6 +1276,7 @@ enum mm_result user_task_create(struct process *process, uintptr_t entry,
 
 static void complete_task(struct task *task)
 {
+  KASSERT(task->pipe_request.request.state == BSP_REQUEST_FREE);
   lock_queues();
   task->next = completed_head;
   completed_head = task;
@@ -1430,7 +1371,7 @@ void kernel_task_sleep_until(uint64_t deadline)
     if (cpu_index == 0) {
       expire_timed_waits();
       grow_requested_tables();
-      service_pipe_requests();
+      bsp_requests_service();
       service_namespace_requests();
       service_endpoint_requests();
       service_directory_requests();
@@ -1530,13 +1471,13 @@ void task_preempt(bool user_mode)
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
-     (completed_head != NULL || growth_head != NULL || pipe_head != NULL ||
+     (completed_head != NULL || growth_head != NULL ||
       endpoint_head != NULL || namespace_head != NULL ||
       directory_head != NULL ||
       file_head != NULL || memory_head != NULL || launch_head != NULL ||
       display_head != NULL || hostfs_head != NULL));
   unlock_queues();
-  if (arch_cpu_index() == 0 && object_reap_pending()) {
+  if (arch_cpu_index() == 0 && (bsp_requests_pending() || object_reap_pending())) {
     schedule_needed = true;
   }
   if (!schedule_needed) {

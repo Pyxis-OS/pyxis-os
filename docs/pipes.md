@@ -15,6 +15,16 @@ only `PIPE_RIGHT_WRITE`. Allocation or capability-table failure installs neither
 endpoint. Each pipe allocates a fixed 64 KiB buffer at creation; there is no
 resize, configurable capacity or independent pipe-memory quota.
 
+Creation uses an internal [BSP request](../include/kernel/service/request.h).
+The pipe subsystem captures an exclusive capability-table loan in a typed
+shared record, submits and waits, then consumes its result before releasing the
+record for reuse. Allocation, installation and rollback run on the BSP with
+interrupts disabled. Completion detaches the request and table references before
+notifying the caller; an early notification does not enqueue a still-running task.
+The record is temporarily embedded in task metadata, and the scheduler services
+detached FIFO batches. A dedicated worker and notification policy remain in the
+[BSP service milestone](wip/bsp-service-requests.md).
+
 Boot delegates the named `pipe` service through init and session launch to the
 shell. The shell forwards it on session handoff, but ordinary commands do not
 receive creation authority by default. Native launchers may explicitly delegate

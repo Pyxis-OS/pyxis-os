@@ -4,6 +4,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/object/pipe.h>
 #include <kernel/panic.h>
+#include <kernel/process.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 
@@ -67,7 +68,7 @@ static void destroy_pipe_end(struct kernel_object *object)
   }
 }
 
-bool pipe_pair_create(struct pipe_end **reader, struct pipe_end **writer)
+static bool pipe_pair_create(struct pipe_end **reader, struct pipe_end **writer)
 {
   KASSERT(arch_cpu_index() == 0 && reader && writer && reader != writer);
   *reader = NULL;
@@ -86,6 +87,62 @@ bool pipe_pair_create(struct pipe_end **reader, struct pipe_end **writer)
   *reader = &pair->reader;
   *writer = &pair->writer;
   return true;
+}
+
+static enum call_status pipe_install_status(enum capability_result result)
+{
+  if (result == CAP_NO_MEMORY) {
+    return CALL_NO_MEMORY;
+  }
+  KASSERT(result == CAP_LIMIT);
+  return CALL_LIMIT;
+}
+
+void pipe_create_execute(struct pipe_create_request *request)
+{
+  KASSERT(arch_cpu_index() == 0 && request->table);
+  struct pipe_end *reader, *writer;
+  request->result = CALL_NO_MEMORY;
+  if (pipe_pair_create(&reader, &writer)) {
+    handle_t read_handle, write_handle;
+    enum capability_result result = capability_install(request->table,
+        &reader->object, PIPE_RIGHT_READ, 0, &read_handle);
+    if (result == CAP_OK) {
+      result = capability_install(request->table,
+          &writer->object, PIPE_RIGHT_WRITE, 0, &write_handle);
+      if (result == CAP_OK) {
+        request->reply = (struct pipe_create_reply){read_handle, write_handle};
+        request->result = CALL_OK;
+      } else {
+        KASSERT(capability_close(request->table, read_handle) == CAP_OK);
+        request->result = pipe_install_status(result);
+      }
+    } else {
+      request->result = pipe_install_status(result);
+    }
+    object_release(&reader->object);
+    object_release(&writer->object);
+  }
+  request->table = NULL;
+}
+
+static enum call_status create_pipe(struct pipe_create_reply *reply)
+{
+  struct process *process = process_current();
+  KASSERT(process);
+  struct pipe_create_request *request =
+      (struct pipe_create_request *)bsp_request_prepare(BSP_SERVICE_PIPE_CREATE);
+  request->table = &process->capabilities;
+  request->reply = (struct pipe_create_reply){0};
+  request->result = CALL_NO_MEMORY;
+
+  bsp_request_submit_and_wait(&request->request);
+  enum call_status result = request->result;
+  if (result == CALL_OK) {
+    *reply = request->reply;
+  }
+  bsp_request_release(&request->request);
+  return result;
 }
 
 static void destroy_pipe_service(struct kernel_object *object)
@@ -119,7 +176,7 @@ struct syscall_result pipe_service_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   struct pipe_create_reply reply;
-  enum call_status status = task_create_pipe(&reply);
+  enum call_status status = create_pipe(&reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
