@@ -6,6 +6,7 @@
 #include <arch/pci.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
+#include <kernel/mm/dma.h>
 #include <kernel/panic.h>
 #include <kernel/pci/registers.h>
 #include <kernel/task.h>
@@ -17,6 +18,10 @@
 #define VIRTIO_RNG_DEVICE_ID 4
 #define VIRTIO_RNG_QUEUE 0
 #define VIRTIO_RNG_MSIX_ENTRY 0
+#define VIRTIO_RNG_QUEUE_SIZE 16u
+#define VIRTIO_RNG_BUFFER_BYTES 8192u
+/* The DMA request survives caller expiry and reuse of its call slot. */
+#define VIRTIO_RNG_DMA_REQUEST_ID 0
 #define RNG_CALL_LIMIT 8
 #define RNG_DEVICE_TIMEOUT_MS 5000
 
@@ -33,6 +38,7 @@ struct rng_call {
 static struct {
   struct virtio_pci_transport pci;
   struct virtqueue queue;
+  struct dma_buffer buffer;
   struct virtio_queue_info queue_info;
   bool prepared, active, interrupt_ready;
   uint64_t dma_deadline;
@@ -264,6 +270,7 @@ enum call_status virtio_rng_read(void *bytes, size_t length, uint64_t deadline)
 
 static void stop_transport(const char *reason)
 {
+  virtqueue_stop(&entropy.queue);
   uint64_t flags = cpu_save_interrupts();
   entropy.active = false;
   entropy.current = NULL;
@@ -290,8 +297,8 @@ static void stop_transport(const char *reason)
   }
   bool reset = common_config()->device_status == 0;
   if (reset) {
-    entropy.queue.in_flight = false;
-    memset(entropy.queue.reply, 0, VIRTQUEUE_REPLY_BYTES);
+    virtqueue_confirm_reset(&entropy.queue);
+    memset((void *)entropy.buffer.address, 0, VIRTIO_RNG_BUFFER_BYTES);
   }
   /* Keep shared mappings and DMA storage until reboot, even after reset. */
   klog("virtio-rng: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
@@ -327,7 +334,7 @@ static void finish_chunk(size_t length)
   struct rng_call *call = entropy.current;
   if (call) {
     KASSERT(length <= call->length - call->filled);
-    memcpy(call->bytes + call->filled, entropy.queue.reply, length);
+    memcpy(call->bytes + call->filled, (const void *)entropy.buffer.address, length);
     call->filled += length;
     if (call->filled == call->length) {
       uint64_t flags = cpu_save_interrupts();
@@ -339,7 +346,7 @@ static void finish_chunk(size_t length)
     }
   }
   /* Only the used ring returned ownership. Never read/reuse a pending buffer. */
-  memset(entropy.queue.reply, 0, VIRTQUEUE_REPLY_BYTES);
+  memset((void *)entropy.buffer.address, 0, VIRTIO_RNG_BUFFER_BYTES);
 }
 
 static void select_call(void)
@@ -361,7 +368,7 @@ static void wait_for_work(void)
 {
   uint64_t flags = cpu_save_interrupts();
   lock_rng();
-  uint64_t deadline = entropy.queue.in_flight ? entropy.dma_deadline : UINT64_MAX;
+  uint64_t deadline = entropy.queue.outstanding ? entropy.dma_deadline : UINT64_MAX;
   for (size_t i = 0; i < RNG_CALL_LIMIT; ++i) {
     if ((calls[i].state == RNG_QUEUED || calls[i].state == RNG_ACTIVE) &&
         calls[i].deadline < deadline) {
@@ -405,21 +412,24 @@ static void entropy_worker(void *argument)
       stop_transport("device status changed or reset requested");
       return;
     }
-    size_t length;
-    enum virtqueue_result result = virtqueue_complete(&entropy.queue, &length);
-    if (result == VIRTQUEUE_BROKEN || (result == VIRTQUEUE_COMPLETE && !length)) {
+    struct virtqueue_completion completion;
+    size_t count;
+    enum virtqueue_result result = virtqueue_complete(&entropy.queue, &completion, 1, &count);
+    if ((result != VIRTQUEUE_PENDING && result != VIRTQUEUE_COMPLETE) ||
+        (result == VIRTQUEUE_COMPLETE && (count != 1 ||
+         completion.request_id != VIRTIO_RNG_DMA_REQUEST_ID || !completion.written))) {
       stop_transport("invalid entropy completion");
       return;
     }
     if (result == VIRTQUEUE_COMPLETE) {
-      finish_chunk(length);
+      finish_chunk(completion.written);
       worked = true;
     }
-    if (entropy.queue.in_flight && task_deadline_expired(entropy.dma_deadline)) {
+    if (entropy.queue.outstanding && task_deadline_expired(entropy.dma_deadline)) {
       stop_transport("device request timed out");
       return;
     }
-    if (!entropy.queue.in_flight) {
+    if (!entropy.queue.outstanding) {
       if (!entropy.current) {
         select_call();
       }
@@ -427,7 +437,14 @@ static void entropy_worker(void *argument)
       if (call) {
         if (!task_deadline_expired(call->deadline)) {
           entropy.dma_deadline = task_deadline_after_ms(RNG_DEVICE_TIMEOUT_MS);
-          KASSERT(virtqueue_submit(&entropy.queue, 0, call->length - call->filled));
+          struct virtqueue_segment segment = {
+            .physical = entropy.buffer.physical,
+            .bytes = call->length - call->filled,
+            .access = VIRTQUEUE_DEVICE_WRITE,
+          };
+          KASSERT(virtqueue_submit(&entropy.queue, &segment, 1,
+              VIRTIO_RNG_DMA_REQUEST_ID) == VIRTQUEUE_ACCEPTED);
+          virtqueue_notify(&entropy.queue);
         }
         worked = true;
       }
@@ -471,9 +488,17 @@ void virtio_rng_prepare(const struct boot_info *boot)
   if (!failure && !prepare_msix()) {
     failure = "MSI-X routing rejected";
   }
+  if (!failure && entropy.queue_info.max_size < 2) {
+    failure = "entropy queue requires at least two descriptors";
+  }
   if (!failure) {
+    unsigned maximum = entropy.queue_info.max_size;
+    unsigned size = maximum < VIRTIO_RNG_QUEUE_SIZE ? maximum : VIRTIO_RNG_QUEUE_SIZE;
     enum mm_result result = virtqueue_allocate(&entropy.queue, VIRTIO_RNG_QUEUE,
-        entropy.queue_info.max_size, entropy.queue_info.notify_address);
+        size, maximum, entropy.queue_info.notify_address);
+    if (result == MM_OK) {
+      result = dma_buffer_allocate(&entropy.buffer, VIRTIO_RNG_BUFFER_BYTES);
+    }
     if (result != MM_OK || !configure_queue(&entropy.queue)) {
       failure = "cannot allocate or configure entropy queue";
     }
@@ -485,6 +510,7 @@ void virtio_rng_prepare(const struct boot_info *boot)
     klog("virtio-rng PCI: %s (reset=%u MSI-X disabled=%u)\n", failure,
          (unsigned)reset, (unsigned)interrupts_disabled);
     if (reset && interrupts_disabled) {
+      dma_buffer_release(&entropy.buffer);
       virtqueue_release(&entropy.queue);
       pci_release_device(&entropy.pci.claim);
       entropy = (typeof(entropy)){0};

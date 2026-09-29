@@ -143,12 +143,13 @@ decisions do not start another implementation track.
 The [persistent storage design](persistent-storage.md) records the agreed custom
 COW pool, volume guarantees, migration strategy, durability and compatibility
 contracts. The [block-storage foundation](persistent-storage.md#agreed-block-storage-foundation)
-now has an agreed queue ownership/lifetime contract and focused task sequence:
-configurable split queues, virtio-blk with an internal block interface, and GPT
-discovery. Device/transport failure is terminal until reboot. Later shared-core,
+has an agreed queue ownership/lifetime contract and focused task sequence.
+[Configurable split queues](../virtio-queues.md) and the filesystem/entropy
+migration are complete; virtio-blk with an internal block interface and GPT
+discovery remain. Device/transport failure is terminal until reboot. Later shared-core,
 recovery, FUSE and native-persistence milestones remain proposed. Exact APIs,
-capacities and validation exercise remain open; no storage code is authorized by
-these design notes.
+capacities and validation exercise for block storage remain open; these design
+notes do not authorize subsequent implementation.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

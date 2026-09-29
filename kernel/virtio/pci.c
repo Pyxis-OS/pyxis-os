@@ -7,6 +7,7 @@
 #include <kernel/log.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/memory.h>
+#include <kernel/mm/dma.h>
 #include <kernel/panic.h>
 #include <kernel/pci/registers.h>
 #include <kernel/task.h>
@@ -23,6 +24,8 @@
 /* No notification queue: VIRTIO_FS_F_NOTIFICATION is not negotiated. */
 #define VIRTIO_FS_FIRST_REQUEST_QUEUE 1
 #define VIRTIO_FS_MSIX_ENTRY 0
+#define VIRTIO_FS_QUEUE_SIZE 16u
+#define VIRTIO_FS_DMA_REQUEST_ID 0
 #define VIRTIO_REQUEST_TIMEOUT_MS 5000u
 
 struct virtio_fs_config {
@@ -33,13 +36,18 @@ struct virtio_fs_config {
 _Static_assert(sizeof(struct virtio_fs_config) == VIRTIO_FS_CONFIG_BYTES,
                "VirtIO filesystem configuration layout");
 
+struct virtio_fs_queue {
+  struct virtqueue queue;
+  struct dma_buffer request, reply;
+};
+
 static struct {
   struct virtio_pci_transport pci;
   uint64_t offered_features, accepted_features;
   char tag[VIRTIO_FS_TAG_BYTES + 1];
   uint32_t request_queues;
   struct virtio_queue_info hiprio_info, request_info;
-  struct virtqueue hiprio, request;
+  struct virtio_fs_queue hiprio, request;
   struct virtio_fs_session session;
   bool negotiated, prepared, active;
   uint8_t config_generation;
@@ -226,19 +234,44 @@ static bool configure_queue(struct virtqueue *queue)
   return true;
 }
 
+static enum mm_result allocate_queue(struct virtio_fs_queue *queue, unsigned index,
+    const struct virtio_queue_info *info)
+{
+  if (info->max_size < 2) {
+    return MM_INVALID;
+  }
+  unsigned size = info->max_size < VIRTIO_FS_QUEUE_SIZE ? info->max_size : VIRTIO_FS_QUEUE_SIZE;
+  enum mm_result result = virtqueue_allocate(&queue->queue, index, size,
+      info->max_size, info->notify_address);
+  if (result == MM_OK) {
+    result = dma_buffer_allocate(&queue->request, VIRTIO_FS_REQUEST_BYTES);
+  }
+  if (result == MM_OK) {
+    result = dma_buffer_allocate(&queue->reply, VIRTIO_FS_REPLY_BYTES);
+  }
+  return result;
+}
+
+static void release_queue(struct virtio_fs_queue *queue)
+{
+  dma_buffer_release(&queue->reply);
+  dma_buffer_release(&queue->request);
+  virtqueue_release(&queue->queue);
+}
+
 static const char *prepare_queues(void)
 {
-  enum mm_result result = virtqueue_allocate(&filesystem.hiprio, VIRTIO_FS_HIPRIO_QUEUE,
-      filesystem.hiprio_info.max_size, filesystem.hiprio_info.notify_address);
+  enum mm_result result = allocate_queue(&filesystem.hiprio, VIRTIO_FS_HIPRIO_QUEUE,
+      &filesystem.hiprio_info);
   if (result == MM_OK) {
-    result = virtqueue_allocate(&filesystem.request, VIRTIO_FS_FIRST_REQUEST_QUEUE,
-        filesystem.request_info.max_size, filesystem.request_info.notify_address);
+    result = allocate_queue(&filesystem.request, VIRTIO_FS_FIRST_REQUEST_QUEUE,
+        &filesystem.request_info);
   }
   if (result != MM_OK) {
     klog("virtio-fs PCI: queue allocation failed (error %u)\n", (unsigned)result);
     return "cannot allocate queue storage";
   }
-  if (!configure_queue(&filesystem.hiprio) || !configure_queue(&filesystem.request)) {
+  if (!configure_queue(&filesystem.hiprio.queue) || !configure_queue(&filesystem.request.queue)) {
     return "queue configuration rejected";
   }
   filesystem.config_generation = common_config()->config_generation;
@@ -302,7 +335,23 @@ static enum virtio_fs_result request_failure(enum virtio_fs_result result, const
   return result;
 }
 
-static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virtqueue *other,
+static enum virtqueue_result complete_queue(struct virtio_fs_queue *queue, size_t *reply_bytes)
+{
+  struct virtqueue_completion completion;
+  size_t count;
+  enum virtqueue_result result = virtqueue_complete(&queue->queue, &completion, 1, &count);
+  if (result == VIRTQUEUE_COMPLETE) {
+    if (count != 1 || completion.request_id != VIRTIO_FS_DMA_REQUEST_ID) {
+      virtqueue_stop(&queue->queue);
+      return VIRTQUEUE_BROKEN;
+    }
+    *reply_bytes = completion.written;
+  }
+  return result;
+}
+
+static enum virtio_fs_result exchange_queue(struct virtio_fs_queue *queue,
+    struct virtio_fs_queue *other,
     const void *request, size_t request_bytes, void *reply, size_t reply_capacity,
     size_t *reply_bytes, bool *submitted, struct virtio_fs_timing *timing)
 {
@@ -315,19 +364,25 @@ static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virt
   if (!filesystem.active) {
     return VIRTIO_FS_UNAVAILABLE;
   }
-  if (queue->in_flight || other->in_flight || !request_bytes ||
-      request_bytes > VIRTQUEUE_REQUEST_BYTES || reply_capacity > VIRTQUEUE_REPLY_BYTES) {
+  if (queue->queue.outstanding || other->queue.outstanding || !request_bytes ||
+      request_bytes > VIRTIO_FS_REQUEST_BYTES || reply_capacity > VIRTIO_FS_REPLY_BYTES) {
     return VIRTIO_FS_INVALID;
   }
   uint64_t deadline = task_deadline_after_ms(VIRTIO_REQUEST_TIMEOUT_MS);
-  memcpy(queue->request, request, request_bytes);
+  memcpy((void *)queue->request.address, request, request_bytes);
   if (timing) {
     timing->submitted_ns = arch_monotonic_ns();
   }
-  if (!virtqueue_submit(queue, request_bytes, reply_capacity)) {
+  struct virtqueue_segment segments[] = {
+    { .physical = queue->request.physical, .bytes = request_bytes, .access = VIRTQUEUE_DEVICE_READ },
+    { .physical = queue->reply.physical, .bytes = reply_capacity, .access = VIRTQUEUE_DEVICE_WRITE },
+  };
+  if (virtqueue_submit(&queue->queue, segments, reply_capacity ? 2 : 1,
+      VIRTIO_FS_DMA_REQUEST_ID) != VIRTQUEUE_ACCEPTED) {
     return VIRTIO_FS_INVALID;
   }
   *submitted = true;
+  virtqueue_notify(&queue->queue);
 
   for (;;) {
     const char *failure = transport_failure();
@@ -338,14 +393,14 @@ static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virt
       return request_failure(VIRTIO_FS_UNAVAILABLE, failure);
     }
     size_t ignored;
-    if (virtqueue_complete(other, &ignored) != VIRTQUEUE_PENDING) {
+    if (complete_queue(other, &ignored) != VIRTQUEUE_PENDING) {
       if (timing) {
         timing->ended_ns = arch_monotonic_ns();
       }
       return request_failure(VIRTIO_FS_PROTOCOL, "unexpected completion on idle queue");
     }
-    enum virtqueue_result result = virtqueue_complete(queue, reply_bytes);
-    if (result == VIRTQUEUE_BROKEN) {
+    enum virtqueue_result result = complete_queue(queue, reply_bytes);
+    if (result != VIRTQUEUE_PENDING && result != VIRTQUEUE_COMPLETE) {
       if (timing) {
         timing->ended_ns = arch_monotonic_ns();
       }
@@ -357,7 +412,7 @@ static enum virtio_fs_result exchange_queue(struct virtqueue *queue, struct virt
         timing->completed = true;
       }
       if (*reply_bytes) {
-        memcpy(reply, queue->reply, *reply_bytes);
+        memcpy(reply, (const void *)queue->reply.address, *reply_bytes);
       }
       return VIRTIO_FS_OK;
     }
@@ -392,6 +447,8 @@ static void stop_transport(const char *failure)
 {
   /* Shared kernel mappings stay live after AP startup. Even a successful reset
    * does not authorize unmapping them without an SMP invalidation contract. */
+  virtqueue_stop(&filesystem.hiprio.queue);
+  virtqueue_stop(&filesystem.request.queue);
   uint64_t flags = cpu_save_interrupts();
   filesystem.active = false;
   filesystem.prepared = false;
@@ -416,8 +473,8 @@ static void stop_transport(const char *failure)
   }
   bool reset = common_config()->device_status == 0;
   if (reset) {
-    filesystem.hiprio.in_flight = false;
-    filesystem.request.in_flight = false;
+    virtqueue_confirm_reset(&filesystem.hiprio.queue);
+    virtqueue_confirm_reset(&filesystem.request.queue);
   }
   klog("virtio-fs: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
        "resources retained until reboot\n", failure, (unsigned)reset,
@@ -462,8 +519,8 @@ static void filesystem_worker(void *argument)
     if (filesystem.active) {
       const char *failure = transport_failure();
       size_t ignored;
-      if (!failure && (virtqueue_complete(&filesystem.hiprio, &ignored) != VIRTQUEUE_PENDING ||
-                       virtqueue_complete(&filesystem.request, &ignored) != VIRTQUEUE_PENDING)) {
+      if (!failure && (complete_queue(&filesystem.hiprio, &ignored) != VIRTQUEUE_PENDING ||
+                       complete_queue(&filesystem.request, &ignored) != VIRTQUEUE_PENDING)) {
         failure = "unexpected completion while idle";
       }
       if (failure) {
@@ -533,8 +590,8 @@ void virtio_fs_pci_prepare(const struct boot_info *boot)
 
 fail:
   klog("virtio-fs PCI: %s; releasing resources with DMA and interrupts disabled\n", failure);
-  virtqueue_release(&filesystem.request);
-  virtqueue_release(&filesystem.hiprio);
+  release_queue(&filesystem.request);
+  release_queue(&filesystem.hiprio);
   pci_release_device(claim);
   filesystem = (typeof(filesystem)){0};
 }

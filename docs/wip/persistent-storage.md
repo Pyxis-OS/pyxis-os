@@ -1,9 +1,10 @@
 # Pyxis pool and persistent filesystem
 
 Status: agreed design direction, 2026-09-29, with a selected block-storage
-foundation milestone and a proposed sequence after it. Nothing here is implemented
-or authorizes implementation. The block-storage contract and focused task sequence
-are agreed below; exact APIs, capacities, disk formats and enforcement interfaces
+foundation milestone and a proposed sequence after it. The shared split-queue
+prerequisite is implemented; block storage and the filesystem remain planned.
+These notes do not authorize subsequent implementation. The contract and focused
+task sequence are agreed below; block APIs, capacities, disk formats and enforcement interfaces
 still need specification. Remaining proposals are identified separately.
 
 Related: [planning agenda](storage-and-terminal-agenda.md),
@@ -304,14 +305,14 @@ mounting, installation or NVMe driver is part of this milestone.
 
 ### Configurable split-queue prerequisite
 
-Improve the shared queue helper before adding another driver-specific queue
-implementation. This is agreed planning scope, not authorization to implement
-the helper or tune existing drivers.
+Implemented for filesystem and entropy; see the [shared queue contract](../virtio-queues.md).
+Virtio-blk adoption remains the next task. This does not authorize tuning existing
+drivers or starting subsequent tasks.
 
-The existing filesystem/entropy helper has fixed 8 KiB request/reply buffers and
-one request in flight. Networking uses a separate queue implementation with 16
-slots, 2 KiB packet buffers and multiple outstanding packets. Configurable buffer
-sizes alone would leave the shared helper's fixed request/reply shape in place.
+Filesystem and entropy now own their buffers and preserve their existing
+serialization above configurable ring mechanics. Networking retains its separate
+queue implementation with 16 slots, 2 KiB packet buffers and multiple outstanding
+packets.
 
 The agreed boundary is shared descriptor allocation/chaining, ring publication,
 DMA barriers, completion identification/validation and notification mechanics.
@@ -388,7 +389,7 @@ Direct-chain ordering and ring ownership follow the
 
 - [x] Agree the queue submission/completion contract, ownership, completion
   validation and failure lifetime, and select the block-storage boundaries.
-- [ ] Implement the helper and migrate filesystem/entropy while preserving their
+- [x] Implement the helper and migrate filesystem/entropy while preserving their
   existing transfer limits, concurrency, deadlines and protocol behavior. Move
   those choices out of shared queue mechanics without adding callback frameworks
   or a general driver abstraction layer.
@@ -399,7 +400,8 @@ Direct-chain ordering and ring ownership follow the
 - [ ] Validate with ordinary builds, interactive QEMU boots and debugger inspection,
   including filesystem/entropy regression checks and block read/write/flush use.
 
-Before the relevant implementation task, specify exact APIs and capacities,
+The queue API and limits are documented in the implemented shared queue contract.
+Before the relevant subsequent task, specify block APIs and capacities,
 block-request admission/completion and caller-abandonment handling, device
 selection and supported geometry/features, deadlines and completion statuses,
 and GPT validation bounds and degraded-copy handling. These details must preserve

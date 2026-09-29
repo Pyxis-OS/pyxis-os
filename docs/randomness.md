@@ -54,13 +54,16 @@ original caller consumes the result, then clears them before reuse.
 
 The driver is in `kernel/virtio/rng.c`, with the native object facade in
 `kernel/object/random.c`. It reuses PCI claims, register mapping and the split
-queue implementation. Device ID 4 requires no device-specific configuration
-region; the transport permits that case while retaining required configuration
-for filesystem and network devices. Writable-only queue submissions omit the
-request descriptor, keeping descriptor zero as the chain head.
+[queue implementation](virtio-queues.md). Device ID 4 requires no device-specific
+configuration region; the transport permits that case while retaining required configuration
+for filesystem and network devices. The driver owns one 8 KiB writable DMA
+buffer separately from ring storage; no unused request buffer is allocated.
+Submissions carry one writable segment and a DMA request ID independent of the
+caller slot. The helper allocates the descriptor head.
 
 Preparation runs on the BSP before AP startup. Only `VIRTIO_F_VERSION_1` is
-negotiated. Queue 0 uses the existing boot-allocated coherent DMA storage; MSI-X
+negotiated. Queue 0 selects 16 descriptors or the smaller supported size, with a
+minimum of two, and uses boot-allocated coherent DMA storage; MSI-X
 entry 0 routes to a dedicated BSP vector. DMA and delivery remain disabled until
 the entropy worker starts. The interrupt handler only records notification and
 wakes that worker; it does not inspect descriptors or copy bytes.
