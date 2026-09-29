@@ -13,6 +13,7 @@ enum bsp_service {
   BSP_SERVICE_ENDPOINT_EXPORT,
   BSP_SERVICE_RAMFS,
   BSP_SERVICE_FILE_REPLACE,
+  BSP_SERVICE_LAUNCHER,
 };
 
 enum bsp_request_state {

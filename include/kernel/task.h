@@ -16,8 +16,6 @@ struct console_wait;
 struct pipe_wait;
 enum bsp_service;
 struct bsp_request;
-struct launch_capture;
-struct launch_group;
 struct hostfs_request;
 
 /* Current user task or BSP kernel task, in task context with IF=0. Prepare its
@@ -76,19 +74,6 @@ struct profile_file_snapshot *task_file_profile(void);
 enum call_status task_profile_control(uint64_t operation, struct profile_snapshot *reply);
 enum call_status task_profile_file_control(uint64_t operation, struct profile_file_snapshot *reply);
 enum call_status task_profile_host_control(uint64_t operation, struct profile_host_snapshot *reply);
-
-/* Current user task, IF=0, no spinlocks. Staging allocation/disposal runs on
- * BSP. Launch/discard consumes capture and any owned host image. Launch borrows
- * the caller's table and any in-memory image operation, returning after their
- * release. No remote user/stack access. */
-struct launch_capture *task_allocate_launch_capture(void);
-void task_discard_launch_capture(struct launch_capture *capture);
-enum call_status task_launch_process(struct launch_capture *capture, handle_t *child);
-struct launch_group *task_create_launch_group(void);
-enum call_status task_prepare_launch_group(struct launch_group *group,
-    struct launch_capture *capture);
-void task_publish_launch_group(struct launch_group *group, handle_t *children);
-void task_discard_launch_group(struct launch_group *group);
 
 /* Current user task, IF=0, no held locks. Fill the prepared shared record,
  * then submit and block. Its capability and private mappings remain live;

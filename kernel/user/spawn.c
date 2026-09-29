@@ -8,6 +8,8 @@
 #include <kernel/user/launch.h>
 #include <kernel/mm/heap.h>
 
+#include "../object/launcher_internal.h"
+
 struct launch_prepared {
   struct process *process;
   struct task *task;
