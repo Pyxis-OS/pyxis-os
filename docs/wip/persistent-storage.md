@@ -2,7 +2,9 @@
 
 Status: agreed design direction, 2026-09-29. The
 [block-storage foundation](../block-storage.md) is complete; the filesystem
-remains planned. Later milestones below are proposals.
+remains planned. The [initial format and read-only core](filesystem-readonly.md)
+is the selected next milestone; writable recovery, FUSE and native mounts remain
+proposals.
 These notes do not authorize subsequent implementation. Agreed design choices
 and remaining proposals are identified separately; disk formats, enforcement
 interfaces and focused task plans still need specification.
@@ -22,17 +24,16 @@ Related: [planning agenda](storage-and-terminal-agenda.md),
   separate GPT partition holds the Pyxis pool and its virtual volumes.
 - Volumes grow automatically from available pool capacity, with a baseline
   reservation and an upper bound. Volumes also shrink as data is released.
-- Reserve emergency/migration capacity. The user's initial candidate is 4–8 GiB,
-  rather than reserving an impractical theoretical maximum file size. The exact
-  size remains open; the agreed reserve is an allocator-protected capacity budget,
-  not a fixed physical region.
+- Reserve emergency/migration capacity as an allocator-protected budget, not a
+  fixed physical region. The discussed 4–8 GiB sizes were examples. Derive defaults
+  from usable pool capacity with explicit overrides; exact formulas remain open.
 - Use COW and design for NVMe-oriented workloads from the beginning.
 - Reserve on-disk structure space for future fields. Each structure should have
   a format version that changes for incompatible layout/meaning changes, not
   merely because a backward-compatible field uses reserved bytes.
 - A 4 KiB superblock with reserved space, and copies at the beginning and end,
-  is the requested starting layout. Other metadata may use block-sized containers;
-  exact node/entry sizes are undecided.
+  is the starting layout. The initial format uses 4 KiB B+ tree nodes with packed
+  records; exact node encoding and entry layouts remain specification work.
 - Provide a Linux FUSE implementation so the filesystem can be mounted on the
   development host.
 
@@ -48,10 +49,11 @@ The exact atomic publication protocol remains to be specified.
    How to drain or reject outstanding handles/mappings remains to be designed.
 2. **Migration is crash-resumable and forward-only.** Once old extents have been
    reclaimed, whole-volume rollback is not promised. Recovery resumes conversion.
-3. **The baseline is a total-capacity guarantee.** The discussed baseline is 8 GiB
-   per volume, including its existing allocation, not an extra 8 GiB kept free.
-   A volume using 3 GiB retains a protected 5 GiB of unused guarantee. It may grow
-   beyond the baseline up to its upper bound using unreserved pool space.
+3. **The baseline is a total-capacity guarantee.** It includes existing allocation,
+   not an additional free-space promise. For example, an 8 GiB guarantee with
+   3 GiB allocated protects 5 GiB unused. The sizes are illustrative: defaults
+   scale with pool capacity and the initial volume set. A volume may grow beyond
+   its guarantee up to its quota using unreserved pool space.
 
 Persistent object identity and ownership must be considered before record
 layouts are fixed. The agreed [identity and authority direction](users-and-authority.md#agreed-identity-and-authority-direction)
@@ -61,13 +63,17 @@ capabilities and prospective policy changes are also agreed. The
 [creation and move rules](users-and-authority.md#agreed-creation-and-namespace-changes)
 use parent-controlled policy ownership, destination subtree exposure,
 identity-preserving within-volume moves and new identities for ordinary copies.
-Identifier encoding and immediate revocation mechanisms remain undecided.
+The [initial format milestone](filesystem-readonly.md#identity-names-and-namespace-bindings)
+selects typed opaque 128-bit IDs. Immediate revocation remains undecided.
 
 ## Agreed persistent identity and imported ownership
 
 - Separate pool identity, logical volume identity and object identity within that
-  volume. Names and block locations are mutable attributes, not identity. The
-  bit widths and identifier-generation algorithms remain undecided.
+  volume. Names and block locations are mutable attributes, not identity. Pool,
+  volume, object and principal IDs are distinct opaque 128-bit types generated
+  from strong randomness, with zero invalid. Object identity includes its pool
+  and volume IDs. Names and namespace bindings follow the
+  [initial format contract](filesystem-readonly.md#identity-names-and-namespace-bindings).
 - A format migration preserves the logical volume and its object identities,
   ownership and sharing policy. Replacement storage is a new physical generation
   of that logical volume, not an ordinary cross-volume copy. Temporary migration
@@ -118,8 +124,12 @@ Sizes and transaction-level mechanisms remain open.
   Its operation bounds and replenishment rules need explicit design; merely
   leaving some space unused is not a proof that recovery always has enough.
 
-Exact reserve sizes, initial defaults for small development disks and transaction
-admission algorithms remain open.
+Defaults scale with usable pool capacity and the initial volume set, with explicit
+overrides and no overcommit. Persist the resulting budgets; later volume creation
+must not silently reduce existing guarantees. Correctness minimums depend on
+bounded transaction/recovery costs and cannot shrink arbitrarily. Numerical rules
+and transaction admission algorithms remain open; see the
+[selected accounting scope](filesystem-readonly.md#allocation-and-capacity-accounting).
 
 ## Agreed migration data strategy
 
@@ -218,9 +228,11 @@ policies still need discussion:
   safe out-of-space suspension; no fixed reserve guarantees every future migration.
 - Define a separate procedure for incompatible pool/allocator changes; volume
   conversion does not solve changes to the allocator beneath it.
-- Specify root slots, storage ordering, recovery selection and reclamation under
-  the agreed durability contract. A 4 KiB superblock is not an assumption of
-  atomic power-failure-safe writes.
+- The [two-slot publication model](filesystem-readonly.md#physical-encoding-and-committed-roots)
+  is agreed: flush replacement state before replacing the older slot, then flush
+  publication. Both durable roots protect storage. Exact root validation and
+  reclamation bookkeeping still need specification. A 4 KiB superblock is not
+  an assumption of atomic power-failure-safe writes.
 
 ## Agreed initial implementation scope
 
@@ -243,8 +255,11 @@ This envelope does not settle the remaining format/interface choices.
   still grow/shrink within the fixed pool as agreed. COW transaction support does
   not require implementing snapshots immediately.
 - Provide host formatting and inspection tools alongside the FUSE adapter. Share
-  the core rather than maintaining two format/allocator implementations; repository
-  ownership and build packaging remain undecided.
+  the core rather than maintaining two format/allocator implementations.
+  [PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) owns the core and tools,
+  with the eventual FUSE adapter alongside them. Initial read-only operations are
+  synchronous over narrow allocation/block-I/O hooks. Exact build packaging is
+  a decision in the selected milestone.
 - Preserve migration requirements in the format/core design, but implement a
   concrete converter when there are actual source and destination formats. Do
   not claim the initial format has validated upgrade support or create an artificial
@@ -256,9 +271,10 @@ This envelope does not settle the remaining format/interface choices.
 
 ## Proposed milestone sequence
 
-The [block-storage foundation](../block-storage.md) is complete. The subsequent
-breakdown and ordering remain proposals; each later milestone needs focused PR
-tasks before work starts. Planning agreement does not authorize implementation.
+The [block-storage foundation](../block-storage.md) is complete. The initial
+format/read-only milestone now has an agreed scope and task sequence. Later
+breakdown and ordering remain proposals; each needs focused PR tasks before work
+starts. Planning agreement does not authorize implementation.
 
 1. **Block storage foundation — complete.** Caelum discovers an explicitly
    selected development image, validates GPT and provides bounded asynchronous
@@ -266,14 +282,12 @@ tasks before work starts. Planning agreement does not authorize implementation.
    [block storage](../block-storage.md), [shared queues](../virtio-queues.md) and
    [GPT discovery](../gpt.md). There is no userspace raw-disk interface, filesystem,
    mounting, installation UI or NVMe driver.
-2. **Initial format and read-only core.** Specify the first pool/volume format,
-   root publication/reclamation design, identifier encoding and reserve accounting.
-   Settle the initial local-principal/bootstrap and storage-policy enforcement
-   subset before encoding ownership or introducing persistent mutations.
-   Build shared-core host formatting/inspection tools and read-only traversal of
-   populated images. Define the population method in this milestone's task plan;
-   do not invent a second independent format writer. Settle repository ownership
-   before placing the shared core. No production data is promised safe yet.
+2. **Initial format and read-only core — selected.** Follow the
+   [dedicated milestone and tasks](filesystem-readonly.md): specify the format
+   first, then build shared-core host formatting, traversal, policy evaluation,
+   extraction and whole-image inspection. Create new populated images only;
+   no existing-pool mutation, kernel mount or FUSE adapter. Record the agreed
+   publication/reclamation design without claiming implemented crash recovery.
 3. **Writable core and recovery.** Add bounded COW transactions, volume allocation,
    guarantees/quotas/reserves, file/directory mutations, checkpointing and recovery.
    Implement the storage-side policy checks selected in the preceding milestone.
@@ -298,9 +312,9 @@ filesystem record layouts nor the full identity broker.
 
 Questions to settle:
 
-- Choose principal and object identifier encodings and implement the agreed
-  identity lifetime rules. Define account deletion and authorized disk-import
-  mapping procedures without accidental reassignment of old data.
+- Implement the agreed typed 128-bit identity and lifetime rules. Define account
+  deletion and authorized disk-import mapping without accidental reassignment of
+  old data.
 - Specify rights for administering sharing and transferring policy ownership,
   separately from storage quotas and ordinary content mutation.
 - Work out concrete enforcement interfaces for the agreed acquisition/delegation
@@ -308,6 +322,8 @@ Questions to settle:
   logout cleanup remain open.
 - Decide nested namespace boundaries and each session's `home://` mapping.
 
-No Unix UID/GID layout, mode bits, ACL format, universal administrator bypass,
-per-user volume requirement or new persistent fields have been agreed. Settle
-the model before choosing field sizes and record layouts.
+No Unix UID/GID layout, mode bits, ACL format, universal administrator bypass
+or per-user volume requirement is selected. Persistent policy owners and explicit
+principal grants are agreed in the
+[initial model](filesystem-readonly.md#ownership-and-acquisition-policy); exact
+rights, encodings and trusted enforcement interfaces remain specification work.
