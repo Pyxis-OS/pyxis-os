@@ -149,9 +149,10 @@ virtio-blk; bounded ticketed reads/writes and ordered flushes support
 [GPT discovery](../gpt.md). Final validation combined those devices on the merged
 implementation. Device/transport failure remains terminal until reboot. The
 [initial format and read-only shared core](filesystem-readonly.md) is now selected:
-PyxisOS/pyxis-fs will own the core and host tools. Start with its format-specification
-task and settle remaining choices before implementation. Writable recovery, FUSE
-and native-persistence milestones remain proposed.
+PyxisOS/pyxis-fs will own the core and host tools. Its
+[format and tool contract draft](https://git.internal/PyxisOS/pyxis-fs/src/commit/7498f8e757015b8890dc08aa176efd7041b36a77/docs/format.md)
+makes task 1's remaining choices concrete for review before implementation.
+Writable recovery, FUSE and native-persistence milestones remain proposed.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

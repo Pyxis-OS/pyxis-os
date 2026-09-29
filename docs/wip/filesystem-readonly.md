@@ -6,6 +6,12 @@ not start implementation. Discuss unresolved choices in task 1 before writing
 format code. The broader [persistent-storage design](persistent-storage.md) and
 [identity rules](users-and-authority.md) remain authoritative for later work.
 
+Task 1 has a [format and host-tool specification draft](https://git.internal/PyxisOS/pyxis-fs/src/commit/7498f8e757015b8890dc08aa176efd7041b36a77/docs/format.md)
+in [pyxis-fs PR #1](https://git.internal/PyxisOS/pyxis-fs/pulls/1). Exact layouts,
+numerical limits, rights assignments and budget rules
+remain proposals until reviewed; the task is not yet complete. The filesystem
+repository now contains its MPL-2.0 licensing bootstrap.
+
 ## Completion target and boundaries
 
 Create a new populated Pyxis pool image from explicitly selected host directories,
@@ -29,9 +35,11 @@ metadata checksums do not verify file contents.
 
 The owner has created [PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs).
 It will own the freestanding GNU C23 core, host tools and eventual Linux FUSE
-adapter. Pyxis will pin published revisions as a submodule; the path and initial
-build integration are task-1 decisions, not an existing dependency. Repository
-and workflow references use the PyxisOS organization.
+adapter. Proposed integration pins published revisions at `fs/` and adds an opt-in
+`make fs-tools` host build. These are task-1 proposals, not an existing dependency
+or build target. The specification lives in pyxis-fs; Pyxis retains the milestone
+and integration decisions. Repository and workflow references use the PyxisOS
+organization.
 
 The core owns disk encoding, checksums, compatibility, metadata traversal, file
 reads and storage-policy evaluation. Later allocation, transactions and recovery
@@ -244,6 +252,8 @@ dependent PRs and update this checklist with each completed task.
   submodule location and host build integration. Agree a bounded future commit
   and reclamation design sufficient to avoid an incompatible initial layout;
   do not implement writable transactions. This is a specification PR first.
+  The linked draft makes these choices reviewable; resolve its review gates before
+  marking this task complete. Licensing is established as MPL-2.0 by the repository.
 - [ ] **2. Establish the shared core and encoding.** Initialize pyxis-fs with
   agreed build/ownership instructions, platform allocation/I/O interfaces and
   concrete ID, checksum and record codecs. Keep the core freestanding, error
