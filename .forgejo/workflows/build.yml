@@ -10,17 +10,21 @@ env:
   BUILDER_IMAGE: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
 
 jobs:
-  kernel:
+  build:
     runs-on: pyxis
     container:
       image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
     steps:
       - uses: https://data.forgejo.org/actions/checkout@v4
+        env:
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: submodule.fetchJobs
+          GIT_CONFIG_VALUE_0: '8'
         with:
           submodules: recursive
           persist-credentials: false
-      - name: Build kernel bundle
-        run: make -j16 bundle-kernel
+      - name: Build image and component bundles
+        run: make -j16 image bundle-kernel bundle-sdk bundle-ports bundle-userspace
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'
@@ -28,18 +32,6 @@ jobs:
           name: pyxis-kernel
           path: build/bundles/kernel.tar
           if-no-files-found: error
-
-  sdk:
-    runs-on: pyxis
-    container:
-      image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
-    steps:
-      - uses: https://data.forgejo.org/actions/checkout@v4
-        with:
-          submodules: recursive
-          persist-credentials: false
-      - name: Build sdk bundle
-        run: make -j16 bundle-sdk
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'
@@ -47,35 +39,6 @@ jobs:
           name: pyxis-sdk
           path: build/bundles/sdk.tar
           if-no-files-found: error
-
-  userland:
-    needs: [sdk, ports]
-    runs-on: pyxis
-    container:
-      image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
-    steps:
-      - uses: https://data.forgejo.org/actions/checkout@v4
-        with:
-          submodules: recursive
-          persist-credentials: false
-      - uses: https://data.forgejo.org/actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-sdk
-          path: build/bundles
-      - name: Extract SDK bundle
-        run: tar -xf build/bundles/sdk.tar
-      - uses: https://data.forgejo.org/actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-ports
-          path: build/bundles
-      - name: Extract ports bundle
-        run: tar -xf build/bundles/ports.tar
-      - name: Build userland bundle
-        run: make -j16 bundle-userspace PREBUILT="sdk ports"
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'
@@ -83,27 +46,6 @@ jobs:
           name: pyxis-userland
           path: build/bundles/userspace.tar
           if-no-files-found: error
-
-  ports:
-    needs: sdk
-    runs-on: pyxis
-    container:
-      image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
-    steps:
-      - uses: https://data.forgejo.org/actions/checkout@v4
-        with:
-          submodules: recursive
-          persist-credentials: false
-      - uses: https://data.forgejo.org/actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-sdk
-          path: build/bundles
-      - name: Extract SDK bundle
-        run: tar -xf build/bundles/sdk.tar
-      - name: Build ports bundle
-        run: make -j16 bundle-ports PREBUILT=sdk
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'
@@ -111,48 +53,6 @@ jobs:
           name: pyxis-ports
           path: build/bundles/ports.tar
           if-no-files-found: error
-
-  image:
-    needs: [kernel, sdk, userland, ports]
-    runs-on: pyxis
-    container:
-      image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
-    steps:
-      - uses: https://data.forgejo.org/actions/checkout@v4
-        with:
-          submodules: false
-          persist-credentials: false
-      - uses: https://data.forgejo.org/actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-kernel
-          path: build/bundles
-      - uses: https://data.forgejo.org/actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-sdk
-          path: build/bundles
-      - uses: https://data.forgejo.org/actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-userland
-          path: build/bundles
-      - uses: https://data.forgejo.org/actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
-        env:
-          NODE_USE_SYSTEM_CA: '1'
-        with:
-          name: pyxis-ports
-          path: build/bundles
-      - name: Assemble image from bundles
-        run: |
-          tar -xf build/bundles/kernel.tar
-          tar -xf build/bundles/sdk.tar
-          tar -xf build/bundles/userspace.tar
-          tar -xf build/bundles/ports.tar
-          make -j16 image PREBUILT="kernel sdk userspace ports"
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'
