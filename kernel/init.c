@@ -18,6 +18,7 @@
 #include <kernel/virtio/net.h>
 #include <kernel/virtio/rng.h>
 #include <kernel/task.h>
+#include <kernel/service/request.h>
 #include <kernel/space.h>
 
 [[noreturn]] void kernel_init(const struct boot_info *boot)
@@ -46,6 +47,7 @@
   space_init_all(&boot->framebuffer);
 
   task_init();
+  bsp_requests_init();
 
   virtio_fs_pci_start();
   virtio_rng_start();

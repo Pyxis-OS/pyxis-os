@@ -8,6 +8,8 @@
 
 static struct bsp_request *request_head, *request_tail;
 static atomic_bool requests_locked;
+static struct task_wait *worker_wait; /* requests_locked; detached before notification. */
+static bool initialized; /* Published to APs by scheduler startup. */
 
 /* IF=0. Never enter the scheduler or a subsystem while holding this lock. */
 static void lock_requests(void)
@@ -25,6 +27,7 @@ static void unlock_requests(void)
 
 struct bsp_request *bsp_request_prepare(enum bsp_service service)
 {
+  KASSERT(initialized);
   struct bsp_request *request = task_bsp_request_storage(service);
   KASSERT(request->state == BSP_REQUEST_FREE);
   *request = (struct bsp_request){
@@ -37,7 +40,8 @@ struct bsp_request *bsp_request_prepare(enum bsp_service service)
 
 void bsp_request_submit_and_wait(struct bsp_request *request)
 {
-  KASSERT(request && request->state == BSP_REQUEST_PREPARED);
+  KASSERT(initialized && request && request->state == BSP_REQUEST_PREPARED);
+  KASSERT(request == task_bsp_request_storage(request->service));
   struct task_wait *wait = request->wait;
   KASSERT(wait && !request->next);
 
@@ -49,7 +53,15 @@ void bsp_request_submit_and_wait(struct bsp_request *request)
     request_head = request;
   }
   request_tail = request;
+  struct task_wait *wake = worker_wait;
+  worker_wait = NULL;
   unlock_requests();
+
+  /* Only the first publisher takes the idle worker's waiter. A running or
+   * already notified worker needs no additional notification. */
+  if (wake) {
+    task_wait_wake(wake);
+  }
 
   /* Publication lends the record and subsystem resources. Only use the saved
    * wait until notification, even if service completes before we park. */
@@ -75,19 +87,35 @@ static void complete_request(struct bsp_request *request)
   task_wait_wake(wait);
 }
 
-void bsp_requests_service(void)
+static void request_worker(void *argument)
 {
-  KASSERT(arch_cpu_index() == 0);
-  lock_requests();
-  struct bsp_request *request = request_head;
-  request_head = request_tail = NULL;
-  unlock_requests();
+  (void)argument;
+  for (;;) {
+    uint64_t flags = cpu_save_interrupts();
+    KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
+    lock_requests();
+    struct bsp_request *request = request_head;
+    if (!request) {
+      struct task_wait *wait = task_wait_prepare();
+      KASSERT(!worker_wait);
+      worker_wait = wait;
+      unlock_requests();
+      /* Always finish this wait: a publisher may already hold its pointer.
+       * Queue inspection must not bypass notification and reuse the record. */
+      task_wait_sleep(wait);
+      cpu_restore_interrupts(flags);
+      continue;
+    }
 
-  while (request) {
-    struct bsp_request *next = request->next;
+    request_head = request->next;
+    if (!request_head) {
+      request_tail = NULL;
+    }
     KASSERT(request->state == BSP_REQUEST_QUEUED);
     request->next = NULL;
     request->state = BSP_REQUEST_SERVICING;
+    unlock_requests();
+
     switch (request->service) {
     case BSP_SERVICE_PIPE_CREATE:
       pipe_create_execute((struct pipe_create_request *)request);
@@ -96,14 +124,18 @@ void bsp_requests_service(void)
       KASSERT(false);
     }
     complete_request(request);
-    request = next;
+    cpu_restore_interrupts(flags);
+    kernel_task_yield_if_runnable();
   }
 }
 
-bool bsp_requests_pending(void)
+void bsp_requests_init(void)
 {
-  lock_requests();
-  bool pending = request_head != NULL;
-  unlock_requests();
-  return pending;
+  KASSERT(arch_cpu_index() == 0 && !initialized);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  enum mm_result result = kernel_task_create(request_worker, NULL);
+  if (result != MM_OK) {
+    panic("cannot create BSP request executor (error %u)", (unsigned)result);
+  }
+  initialized = true;
 }

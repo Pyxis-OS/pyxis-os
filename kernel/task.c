@@ -1352,6 +1352,23 @@ void kernel_task_sleep_until(uint64_t deadline)
   cpu_restore_interrupts(flags);
 }
 
+void kernel_task_yield_if_runnable(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(arch_cpu_index() == 0 && (flags & RFLAGS_INTERRUPT_ENABLE));
+  struct scheduler *scheduler = local_scheduler();
+  struct task *task = scheduler->current_task;
+  KASSERT(task && task->kind == TASK_KERNEL && !task->exited);
+
+  lock_queues();
+  bool runnable = scheduler->ready_head != NULL;
+  unlock_queues();
+  if (runnable) {
+    arch_context_switch(&task->saved_stack, scheduler->stack);
+  }
+  cpu_restore_interrupts(flags);
+}
+
 [[noreturn]] void task_schedule(void)
 {
   size_t cpu_index = arch_cpu_index();
@@ -1371,7 +1388,6 @@ void kernel_task_sleep_until(uint64_t deadline)
     if (cpu_index == 0) {
       expire_timed_waits();
       grow_requested_tables();
-      bsp_requests_service();
       service_namespace_requests();
       service_endpoint_requests();
       service_directory_requests();
@@ -1477,7 +1493,7 @@ void task_preempt(bool user_mode)
       file_head != NULL || memory_head != NULL || launch_head != NULL ||
       display_head != NULL || hostfs_head != NULL));
   unlock_queues();
-  if (arch_cpu_index() == 0 && (bsp_requests_pending() || object_reap_pending())) {
+  if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;
   }
   if (!schedule_needed) {
