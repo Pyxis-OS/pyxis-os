@@ -150,7 +150,7 @@ virtio-blk; bounded ticketed reads/writes and ordered flushes support
 implementation. Device/transport failure remains terminal until reboot. The
 [initial format and read-only shared core](filesystem-readonly.md) is now selected:
 PyxisOS/pyxis-fs will own the core and host tools. Its
-[format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/bc514a4000bb5d78c7ab7378188f71718b15e8c9/docs/format.md)
+[format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/8c4ffa67595f05eeef97b159d0af0cfb84da1ef5/docs/format.md)
 completes task 1, including inline extent mapping, revised reserve defaults and
 lookup checks for ID acquisition. Task 2 establishes the shared core and encoding
 under the contract.

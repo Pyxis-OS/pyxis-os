@@ -7,7 +7,7 @@ continues through separately authorized tasks. The broader
 [persistent-storage design](persistent-storage.md) and
 [identity rules](users-and-authority.md) remain authoritative for later work.
 
-Task 1's [format and host-tool specification](https://git.internal/PyxisOS/pyxis-fs/src/commit/bc514a4000bb5d78c7ab7378188f71718b15e8c9/docs/format.md)
+Task 1's [format and host-tool specification](https://git.internal/PyxisOS/pyxis-fs/src/commit/8c4ffa67595f05eeef97b159d0af0cfb84da1ef5/docs/format.md)
 is in [pyxis-fs PR #1](https://git.internal/PyxisOS/pyxis-fs/pulls/1). Follow-up review
 clarified validation/accounting, compatibility, rights and reclamation. The owner
 accepted a single inline extent descriptor, lower proportional reserves and ancestor
