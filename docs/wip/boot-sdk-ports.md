@@ -7,80 +7,80 @@ milestone's remaining interface details before starting its code work.
 
 ## Suggested focus order
 
-1. [Init and primitive scripts](../init.md) — complete: selected native or
+1. [Init and primitive scripts](../userland/init.md) — complete: selected native or
    shebang init and explicit handoff to an interactive shell.
-2. [SDK and repository separation](../sdk-and-repositories.md) — complete:
+2. [SDK and repository separation](../development/sdk-and-repositories.md) — complete:
    exported SDK, prebuilt Pyxis compiler and pinned userspace submodule with
    the integrated build preserved.
-3. [Port recipes and Kilo](../ports.md) — complete: pinned host Lua recipes,
+3. [Port recipes and Kilo](../development/ports.md) — complete: pinned host Lua recipes,
    SDK-based Kilo build and ordinary boot-archive integration. The
-   [edit/build/run workflow](../edit-build-run.md) with TCC is also complete.
-4. [Filesystem mutations and Doom saves](../filesystem-mutations.md) — complete.
+   [edit/build/run workflow](../development/edit-build-run.md) with TCC is also complete.
+4. [Filesystem mutations and Doom saves](../interfaces/filesystem-mutations.md) — complete.
 5. TTY horizontal tabs — complete: eight-column stops, clamped at the right edge,
-   without erasing cells or wrapping. See [terminal controls](../terminal.md#tty-output-controls).
-6. [UTC wall-clock and calendar conversion](../wall-clock.md) — complete:
+   without erasing cells or wrapping. See [terminal controls](../userland/terminal.md#tty-output-controls).
+6. [UTC wall-clock and calendar conversion](../kernel/wall-clock.md) — complete:
    ISO date display, independent monotonic deadlines and TCC time features.
-7. [Boot archive assembly](../boot-archive.md) — complete: install trees, Lua
-   manifest and [independent build bundles](../build-bundles.md).
+7. [Boot archive assembly](../development/boot-archive.md) — complete: install trees, Lua
+   manifest and [independent build bundles](../development/build-bundles.md).
    [Automatic artifact selection](build-artifact-reuse.md) remains follow-up work.
-8. Complete: [zoneinfo-backed local time](../timezones.md), including the full
+8. Complete: [zoneinfo-backed local time](../userland/timezones.md), including the full
    pinned database, UTC for absent/empty `TZ`, named zones and `date -u`.
    Locale and reverse conversion remain deferred.
-9. Complete: [guest Lua](../lua.md), including scripts, REPL and default
-   [session configuration](../session-configuration.md) for timezone and tab width.
-10. Complete: [PCI and VirtIO host filesystem access](../virtio-fs.md).
+9. Complete: [guest Lua](../userland/lua.md), including scripts, REPL and default
+   [session configuration](../userland/session-configuration.md) for timezone and tab width.
+10. Complete: [PCI and VirtIO host filesystem access](../devices/virtio-fs.md).
     Init opens the opt-in export and delegates `host://` through the
     session launcher to the shell and children. Existing `ls`/`cat` use native
     directory/file capabilities; archive-only boot remains the default without
     a device/socket.
-11. Complete: [initial networking](../networking.md), with loopback and virtio-net,
+11. Complete: [initial networking](../devices/networking.md), with loopback and virtio-net,
     manual IPv4 configuration and native ping. DHCP follows later through the
     same configuration interface; TCP and website hosting remain separate.
-12. Complete: [userspace UDP datagrams](../networking.md#udp-tools), with explicit
+12. Complete: [userspace UDP datagrams](../devices/networking.md#udp-tools), with explicit
     address binding, endpoint capabilities, bounded queues and loopback/host
     client-server use.
     DHCP and TCP follow as separate milestones.
 
-13. Complete: [host-backed randomness](../randomness.md), using VirtIO entropy
+13. Complete: [host-backed randomness](../devices/randomness.md), using VirtIO entropy
     and a bounded native READ capability.
-14. Complete: [DNS queries and hostname ping](../dns.md), using a shared
+14. Complete: [DNS queries and hostname ping](../userland/dns.md), using a shared
     userspace client, route-aware UDP opening and a configured default resolver
     at `1.1.1.1`. Numeric ping remains independent of DNS and randomness.
 
-15. Complete: [outbound TCP streams](../tcp.md), native connection capabilities,
+15. Complete: [outbound TCP streams](../devices/tcp.md), native connection capabilities,
     a request/response client and a transmit-only ttcp tool. Listening and application protocols follow separately.
-16. Complete: [per-CPU trusted init scripts](../init.md), with development,
+16. Complete: [per-CPU trusted init scripts](../userland/init.md), with development,
     read-only and idle selections driven by Make/Limine configuration.
-17. Complete: [writable virtio-fs](../virtio-fs.md), with persistent host-backed
+17. Complete: [writable virtio-fs](../devices/virtio-fs.md), with persistent host-backed
     source and executables, and different grants in two spaces.
-18. Complete: [space titles](../init.md#space-titles), with a caller-space
+18. Complete: [space titles](../userland/init.md#space-titles), with a caller-space
     capability and `title` shell builtin. Labels survive init exit; fixed tab
     widths and navigation are unchanged.
 
-19. Complete: [allocation benchmarks and memory profiling](../allocation-profiling.md),
+19. Complete: [allocation benchmarks and memory profiling](../development/allocation-profiling.md),
     with native heap/growth/page workloads and opt-in caller-scoped BSP timing.
     The measured follow-up now notifies the BSP promptly after private-memory
     publication, reducing queue delay without changing allocation policy.
 
-20. Complete: [standard streams, redirection and pipelines](../shell-streams.md),
+20. Complete: [standard streams, redirection and pipelines](../userland/shell-streams.md),
     with dedicated capability grants, bounded native pipes, all-or-none batch
     preparation, foreground shell pipelines and exact bounded `head` consumption.
-21. Complete: [libc portability](../libc-portability.md), with descriptor ownership
+21. Complete: [libc portability](../userland/libc-portability.md), with descriptor ownership
     shared with stdio, public open/read/write/close, and packaged sbase cksum and
     restricted tee. The documentation handoff is complete; accepted compatibility
     limits and their revisit points are recorded in technical debt.
 
-22. Complete: [userspace services and HTTP snapshots](../userspace-services.md),
+22. Complete: [userspace services and HTTP snapshots](../interfaces/userspace-services.md),
     with bounded call/send/receive, deadlines, exported objects, scoped namespaces
     and ordinary file consumers using immutable text and HTTP snapshots. The
     documentation handoff is complete; accepted limits remain in technical debt.
 
-23. Complete: [I/O and IPC performance baselines](../io-ipc-baselines.md),
+23. Complete: [I/O and IPC performance baselines](../development/io-ipc-baselines.md),
     with verified file, pipe, endpoint and HTTP workloads, separate completion
     boundaries, and a recorded nested-KVM baseline. Owner-host results remain
     unavailable; capacity and attribution follow-ups are documented.
 
-24. Complete: [I/O reliability and attribution](../io-reliability-attribution.md),
+24. Complete: [I/O reliability and attribution](../development/io-reliability-attribution.md),
     with prompt receipt reuse, RAM/HOST attribution, and initial HOST publication
     notification. Remaining resolution and combined-matrix work is deferred.
 
@@ -94,13 +94,13 @@ init. Each milestone should become several focused PRs where needed.
 
 [Later directions](later-os-directions.md) park the remaining ports, later networking,
 website hosting, block storage, filesystem-format choices and an installer.
-The [edit/build/run workflow](../edit-build-run.md) now supports writing C in
+The [edit/build/run workflow](../development/edit-build-run.md) now supports writing C in
 Pyxis, compiling it there and running the native P1F result. Guest Lua now has a
-concrete configuration consumer in the [session launcher](../session-configuration.md).
+concrete configuration consumer in the [session launcher](../userland/session-configuration.md).
 Clock/calendar functions and host Lua build tools
 remain independent of that port.
 
-The [Doom port](../doom.md) uses the mapped display, keyboard sessions and
+The [Doom port](../userland/doom.md) uses the mapped display, keyboard sessions and
 monotonic clock for single-player gameplay and demo playback. Images include
 shareware data; local retail WADs and demos are optional overrides. PCI/VirtIO
 is not a prerequisite.
@@ -112,23 +112,23 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Closed HTTPS milestone and later candidates
 
-The [I/O reliability and attribution report](../io-reliability-attribution.md)
+The [I/O reliability and attribution report](../development/io-reliability-attribution.md)
 closes the performance milestone. The former IPC/HTTP failures are resolved,
 and HOST publication now notifies the BSP. Profiling perturbation and remaining
 measurement coverage are recorded in [technical debt](../technical-debt.md).
 
-The [verified HTTPS snapshots milestone](../https.md) is complete. Mbed TLS
+The [verified HTTPS snapshots milestone](../userland/https.md) is complete. Mbed TLS
 4.1.1 / TF-PSA-Crypto 1.1.1 supplies client TLS through native userland hooks;
 separate providers publish verified snapshots using packaged public roots and
 optional instance-specific augmentation. Implemented behavior, configuration and
 limits live in the subsystem docs, with the
-[fetch/inspect/compile/run workflow](../edit-build-run.md#fetch-source-over-https)
+[fetch/inspect/compile/run workflow](../development/edit-build-run.md#fetch-source-over-https)
 beside the local development loop. SSH/libssh remains deferred. The
-[block-storage foundation](../block-storage.md) is also complete. The
-[initial filesystem format and read-only core](../filesystem-readonly.md) is
+[block-storage foundation](../devices/block-storage.md) is also complete. The
+[initial filesystem format and read-only core](../devices/filesystem-readonly.md) is
 complete; later writable recovery, FUSE and native integration remain proposals.
 
-The [task state and BSP service requests milestone](../bsp-service-requests.md)
+The [task state and BSP service requests milestone](../kernel/bsp-service-requests.md)
 is complete. Subsystem requests are separate from scheduling while retaining
 BSP allocation and VM ownership, with FIFO service, prompt notification and
 scheduling opportunities between operations. Request completion is separate from waiting;
@@ -158,12 +158,12 @@ decisions do not start another implementation track.
 
 The [persistent storage design](persistent-storage.md) records the agreed custom
 COW pool, volume guarantees, migration strategy, durability and compatibility
-contracts. The [block-storage foundation](../block-storage.md) is complete:
-[configurable split queues](../virtio-queues.md) serve filesystem, entropy and
+contracts. The [block-storage foundation](../devices/block-storage.md) is complete:
+[configurable split queues](../devices/virtio-queues.md) serve filesystem, entropy and
 virtio-blk; bounded ticketed reads/writes and ordered flushes support
-[GPT discovery](../gpt.md). Final validation combined those devices on the merged
+[GPT discovery](../devices/gpt.md). Final validation combined those devices on the merged
 implementation. Device/transport failure remains terminal until reboot. The
-[initial format and read-only shared core](../filesystem-readonly.md) is complete.
+[initial format and read-only shared core](../devices/filesystem-readonly.md) is complete.
 PyxisOS/pyxis-fs owns the pinned freestanding core and Linux host tools built by
 `make fs-tools`. They create populated images, reopen and extract them, evaluate
 bounded acquisition and check both retained states. The
@@ -178,7 +178,7 @@ proposed; BSP request separation is selected before continuing those tracks.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../block-storage.md) and [initial format and read-only core](../filesystem-readonly.md), including populated image tools and whole-image checking, are complete. | Writable recovery, FUSE and native mounts remain proposals with separate policy and implementation gates. |
+| Native disk storage | The [block-storage foundation](../devices/block-storage.md) and [initial format and read-only core](../devices/filesystem-readonly.md), including populated image tools and whole-image checking, are complete. | Writable recovery, FUSE and native mounts remain proposals with separate policy and implementation gates. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The
@@ -226,8 +226,8 @@ ownership is implemented. External login and account UI are separate work.
 ## Shell follow-ups
 
 The fresh-line prompt and current working-path display are implemented. Their
-behavior and limits are documented in [the shell reference](../shell.md) and
-[terminal reference](../terminal.md).
+behavior and limits are documented in [the shell reference](../userland/shell.md) and
+[terminal reference](../userland/terminal.md).
 
 ## Completing a milestone
 
@@ -239,6 +239,6 @@ technical-debt document. Do not retain a duplicate archive of the old plan.
 
 ## Existing context
 
-- [Shell, filesystem and application runtime](../first-shell.md).
+- [Shell, filesystem and application runtime](../userland/first-shell.md).
 - [Earlier development candidates](development-paths.md).
-- [Filesystem direction](../vfs.md) and [space direction](../spaces.md).
+- [Filesystem direction](vfs.md) and [space direction](spaces.md).

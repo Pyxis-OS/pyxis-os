@@ -1,7 +1,7 @@
 # Persistent storage and native terminal applications
 
 Discussion agenda for 2026-09-29, following the completed
-[HTTPS milestone](../https.md). Record the next decisions and select one bounded
+[HTTPS milestone](../userland/https.md). Record the next decisions and select one bounded
 implementation track; this document does not authorize implementation or settle
 the interfaces below.
 
@@ -11,10 +11,10 @@ The active [pool/filesystem working draft](persistent-storage.md) records the
 discussion and explicitly agreed choices; other mechanisms remain proposals.
 
 Writable `host://` already provides host-backed persistence. The
-[block-storage foundation](../block-storage.md) is complete. The
-[initial format and read-only core](../filesystem-readonly.md) is complete;
+[block-storage foundation](../devices/block-storage.md) is complete. The
+[initial format and read-only core](../devices/filesystem-readonly.md) is complete;
 writable recovery, native mounts and installation remain proposed. Use the existing
-[filesystem direction](../vfs.md) and
+[filesystem direction](vfs.md) and
 [storage notes](later-os-directions.md#persistent-storage-and-installation).
 
 - The first milestone delivered kernel-internal block I/O and GPT discovery.
@@ -101,7 +101,7 @@ into bounded milestones before implementation; do not bundle the whole chain.
 
 ## Selected next slice
 
-The [BSP request milestone](../bsp-service-requests.md) is complete; the next slice
+The [BSP request milestone](../kernel/bsp-service-requests.md) is complete; the next slice
 is [native remote terminal sessions](remote-terminal.md). Its agreed
 contracts and focused task list replace the earlier open choice for this slice.
 Persistent writable storage, the toolchain transition, multiplexer and navigator

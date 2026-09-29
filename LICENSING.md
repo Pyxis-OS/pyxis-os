@@ -28,8 +28,8 @@ applied: MPL's standard secondary-license provisions remain available.
 - `third_party/doom-shareware/`: game data retains its own
   [distribution terms](third_party/doom-shareware/LICENSE), independently of
   both Pyxis code and the Doom engine.
-- `docs/libc-probe/scratch.patch` contains sbase-derived code covered by
-  [LICENSE.sbase](docs/libc-probe/LICENSE.sbase).
+- `docs/userland/libc-probe/scratch.patch` contains sbase-derived code covered by
+  [LICENSE.sbase](docs/userland/libc-probe/LICENSE.sbase).
 - `toolchain/*.patch`: upstream-derived patches follow the licenses of the
   files they modify, including applicable GNU runtime exceptions. See
   [toolchain provenance](toolchain/README.md).

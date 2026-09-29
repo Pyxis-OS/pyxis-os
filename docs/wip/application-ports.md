@@ -7,10 +7,10 @@ ports in userspace and adapt their platform interfaces without reshaping the
 kernel around an individual application.
 
 Kilo, TCC, Lua and Doom already provide useful applications; see the
-[port workflow](../ports.md), [edit/build/run loop](../edit-build-run.md),
-[Lua reference](../lua.md) and [Doom reference](../doom.md). The next candidates
+[port workflow](../development/ports.md), [edit/build/run loop](../development/edit-build-run.md),
+[Lua reference](../userland/lua.md) and [Doom reference](../userland/doom.md). The next candidates
 should improve daily use or exercise a reusable OS facility.
-[Verified HTTPS](../https.md) already uses the packaged Mbed TLS and
+[Verified HTTPS](../userland/https.md) already uses the packaged Mbed TLS and
 TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 
 ## Libraries and terminal tools
@@ -48,8 +48,8 @@ to jq:
 cat http://example.com/ | pup 'a json{}' | jq '.[].href'
 ```
 
-[Shell pipelines and native head](../shell-streams.md) are implemented. The
-[libc portability milestone](../libc-portability.md) packages upstream cksum and
+[Shell pipelines and native head](../userland/shell-streams.md) are implemented. The
+[libc portability milestone](../userland/libc-portability.md) packages upstream cksum and
 restricted tee through conventional descriptor APIs. jq and pup remain unported
 candidates. The separate [userspace scheme provider](userspace-scheme-providers.md)
 proposal for media-type aliases such as `json+http://` remains future work.

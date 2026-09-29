@@ -4,7 +4,7 @@ Status: working notes from discussion, not an approved design or ordered task
 list. These are candidates to revisit and split into focused milestones. No
 implementation is assigned by this document.
 
-The [shell and runtime reference](../first-shell.md) describes the implemented
+The [shell and runtime reference](../userland/first-shell.md) describes the implemented
 filesystem, application runtime and libraries selected from these candidates.
 The remaining paths below stay parked for later discussion.
 
@@ -21,7 +21,7 @@ capability-table growth are implemented. Their handoff is recorded in
 
 2. **Userspace process launching.** An authorized program supplies an image
    capability and initial grants, starts a child, and observes its exit. This
-   begins the supervisor role described in the [spaces draft](../spaces.md).
+   begins the supervisor role described in the [spaces draft](spaces.md).
    The initial design can retain one task per process and pinned CPUs. Launch
    authority, startup resources, arguments and exit observation need discussion.
 
@@ -56,7 +56,7 @@ A proposed practical milestone is: boot into a shell, browse files, launch
 programs, edit a file, and run a Lua script. The kernel candidates above remain
 supporting work; this list gives them concrete applications to serve.
 
-1. **VFS and namespaces.** Develop the [filesystem draft](../vfs.md), including
+1. **VFS and namespaces.** Develop the [filesystem draft](vfs.md), including
    the shared read-only system base, per-space overlays, publishing overlay
    changes to the shared base, and a common writable home area. Scheme-based
    names such as `app://` and `home://` remain part of the direction.
@@ -120,7 +120,7 @@ supporting work; this list gives them concrete applications to serve.
    requirements should be evaluated separately.
 
 The implemented filesystem and application-runtime contracts are described in
-[the shell and runtime reference](../first-shell.md). The shell and libc-backed
+[the shell and runtime reference](../userland/first-shell.md). The shell and libc-backed
 utilities provide the foundation for subsequent application ports.
 
 ## References for that discussion

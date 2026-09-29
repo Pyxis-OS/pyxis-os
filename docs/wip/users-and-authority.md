@@ -89,7 +89,7 @@ and [OAuth Device Authorization Grant](https://www.rfc-editor.org/rfc/rfc8628.ht
   is defined. Terminating a session releases its own resources but cannot recall
   copies delegated outside it or data already read.
 
-The [initial filesystem model](../filesystem-readonly.md#ownership-and-acquisition-policy)
+The [initial filesystem model](../devices/filesystem-readonly.md#ownership-and-acquisition-policy)
 selects persistent policy owners and explicit individual-principal grants with
 object/subtree scope, plus implemented bounded policy-based acquisition. The
 [format contract](../../fs/docs/format.md#rights-and-trusted-acquisition) specifies
@@ -145,7 +145,7 @@ earlier checkpoint. The current init and host-mount slices do not need
 a complete account system, but their prototype grants are not the eventual
 multi-user policy.
 
-The completed [initial format and read-only core](../filesystem-readonly.md)
+The completed [initial format and read-only core](../devices/filesystem-readonly.md)
 implements storage ownership records and read/list acquisition enforcement. It
 does not authorize placeholder login
 APIs, Unix IDs or mode bits, or implementation of the full identity broker.
@@ -177,7 +177,7 @@ APIs, Unix IDs or mode bits, or implementation of the full identity broker.
 
 ## Writable host prototype boundary
 
-For the implemented [writable virtio-fs development mount](../virtio-fs.md), trusted
+For the implemented [writable virtio-fs development mount](../devices/virtio-fs.md), trusted
 boot-selected init scripts receive the available setup authority and delegate
 read-write or read-only roots over the same export to their sessions. The kernel
 enforces those grants and descendants cannot widen them. Mount authority stays
@@ -201,6 +201,6 @@ implicit when introducing writable persistent storage.
 
 ## Related direction
 
-- [Spaces](../spaces.md) and [filesystem namespaces](../vfs.md).
-- [Initial session handoff](../init.md).
-- [First host mount](../virtio-fs.md) and [later storage/services](later-os-directions.md).
+- [Spaces](spaces.md) and [filesystem namespaces](vfs.md).
+- [Initial session handoff](../userland/init.md).
+- [First host mount](../devices/virtio-fs.md) and [later storage/services](later-os-directions.md).

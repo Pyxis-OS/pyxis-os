@@ -1,8 +1,8 @@
 # Pyxis pool and persistent filesystem
 
 Status: agreed design direction, 2026-09-29. The
-[block-storage foundation](../block-storage.md) and
-[initial format and read-only core](../filesystem-readonly.md) are complete.
+[block-storage foundation](../devices/block-storage.md) and
+[initial format and read-only core](../devices/filesystem-readonly.md) are complete.
 Writable recovery, FUSE and native mounts remain proposals.
 These notes do not authorize subsequent implementation. Agreed design choices
 and remaining proposals are identified separately; disk formats, enforcement
@@ -10,7 +10,7 @@ interfaces and focused task plans for later writable/integration work still need
 specification.
 
 Related: [planning agenda](storage-and-terminal-agenda.md),
-[filesystem direction](../vfs.md), and
+[filesystem direction](vfs.md), and
 [users and authority checkpoint](users-and-authority.md).
 
 ## Requested direction
@@ -67,7 +67,7 @@ capabilities and prospective policy changes are also agreed. The
 [creation and move rules](users-and-authority.md#agreed-creation-and-namespace-changes)
 use parent-controlled policy ownership, destination subtree exposure,
 identity-preserving within-volume moves and new identities for ordinary copies.
-The [identity contract](../filesystem-readonly.md#identity-names-and-namespace-bindings)
+The [identity contract](../devices/filesystem-readonly.md#identity-names-and-namespace-bindings)
 uses typed opaque 128-bit IDs. Immediate revocation remains undecided.
 
 ## Agreed persistent identity and imported ownership
@@ -77,7 +77,7 @@ uses typed opaque 128-bit IDs. Immediate revocation remains undecided.
   volume, object and principal IDs are distinct opaque 128-bit types generated
   from strong randomness, with zero invalid. Object identity includes its pool
   and volume IDs. Names and namespace bindings follow the
-  [initial format contract](../filesystem-readonly.md#identity-names-and-namespace-bindings).
+  [initial format contract](../devices/filesystem-readonly.md#identity-names-and-namespace-bindings).
 - A format migration preserves the logical volume and its object identities,
   ownership and sharing policy. Replacement storage is a new physical generation
   of that logical volume, not an ordinary cross-volume copy. Temporary migration
@@ -132,7 +132,7 @@ Defaults scale with usable pool capacity and the initial volume set, with explic
 overrides and no overcommit. Persist the resulting budgets; later volume creation
 must not silently reduce existing guarantees. Correctness minimums depend on
 bounded transaction/recovery costs and cannot shrink arbitrarily. The
-[implemented accounting scope](../filesystem-readonly.md#allocation-and-capacity-accounting)
+[implemented accounting scope](../devices/filesystem-readonly.md#allocation-and-capacity-accounting)
 records the prototype numerical defaults. Writable operation costs and admission
 algorithms remain open.
 
@@ -234,7 +234,7 @@ policies still need discussion:
   safe out-of-space suspension; no fixed reserve guarantees every future migration.
 - Define a separate procedure for incompatible pool/allocator changes; volume
   conversion does not solve changes to the allocator beneath it.
-- [Two-slot publication](../filesystem-readonly.md#physical-encoding-and-committed-roots)
+- [Two-slot publication](../devices/filesystem-readonly.md#physical-encoding-and-committed-roots)
   is agreed: flush replacement state before replacing the older slot, then flush
   publication. Both durable roots protect storage. The
   [format contract](../../fs/docs/format.md#future-publication-and-reclamation-envelope)
@@ -268,7 +268,7 @@ This envelope does not settle the remaining format/interface choices.
   [PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) owns the core and tools,
   with the eventual FUSE adapter alongside them. Initial read-only operations are
   synchronous over narrow allocation/block-I/O hooks. The opt-in
-  [repository integration](../sdk-and-repositories.md#filesystem-repository) builds
+  [repository integration](../development/sdk-and-repositories.md#filesystem-repository) builds
   host tools without a kernel, SDK or image dependency.
 - Preserve migration requirements in the format/core design, but implement a
   concrete converter when there are actual source and destination formats. Do
@@ -281,18 +281,18 @@ This envelope does not settle the remaining format/interface choices.
 
 ## Proposed milestone sequence
 
-The [block-storage foundation](../block-storage.md) is complete. The initial
+The [block-storage foundation](../devices/block-storage.md) is complete. The initial
 format/read-only milestone is complete. Later breakdown and ordering remain
 proposals; each needs focused PR tasks before work starts. Planning agreement does not authorize implementation.
 
 1. **Block storage foundation — complete.** Caelum discovers an explicitly
    selected development image, validates GPT and provides bounded asynchronous
    reads/writes and ordered flushes. Implemented contracts and validation live in
-   [block storage](../block-storage.md), [shared queues](../virtio-queues.md) and
-   [GPT discovery](../gpt.md). That milestone added no userspace raw-disk interface,
+   [block storage](../devices/block-storage.md), [shared queues](../devices/virtio-queues.md) and
+   [GPT discovery](../devices/gpt.md). That milestone added no userspace raw-disk interface,
    filesystem mount, installation UI or NVMe driver.
 2. **Initial format and read-only core — complete.** The
-   [implemented contracts](../filesystem-readonly.md) cover shared-core host
+   [implemented contracts](../devices/filesystem-readonly.md) cover shared-core host
    formatting, traversal, bounded policy acquisition, extraction and whole-image
    inspection. New populated images round-trip through the reader; there is no
    existing-pool mutation, kernel mount or FUSE adapter. The agreed publication/
@@ -335,7 +335,7 @@ Questions to settle:
 No Unix UID/GID layout, mode bits, ACL format, universal administrator bypass
 or per-user volume requirement is selected. Persistent policy owners and explicit
 principal grants are agreed in the
-[implemented host-only model](../filesystem-readonly.md#ownership-and-acquisition-policy),
+[implemented host-only model](../devices/filesystem-readonly.md#ownership-and-acquisition-policy),
 including rights, encodings and bounded acquisition interfaces. Writable policy
 administration, bootstrap admission and native broker integration still need
 focused contracts before implementation.
