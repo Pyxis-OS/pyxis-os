@@ -1,7 +1,7 @@
 # Native remote terminal sessions
 
-Status: agreed milestone scope, not implemented. Finish the current
-[BSP request milestone](bsp-service-requests.md) before starting this track.
+Status: agreed milestone scope, not implemented. The prerequisite
+[BSP request milestone](../bsp-service-requests.md) is complete.
 Wire layouts and the bounded implementation details listed below still need
 review before their respective tasks; this document does not authorize code.
 

@@ -279,7 +279,7 @@ or replace timer handling of deadlines and task retirement. Empty timed-wait and
 kernel-sleeper lists skip clock reads; nonempty lists keep their existing checks
 and wake ordering.
 
-The [BSP request executor](wip/bsp-service-requests.md) is created immediately
+The [BSP request executor](bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.
 It currently services pipe creation, private memory, display, capability growth,
 namespace creation, endpoint creation/export, RAMFS entry/name allocation and

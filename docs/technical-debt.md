@@ -79,12 +79,13 @@ claims; keep each environment and completion boundary distinct.
 
 ## RAM FILE BSP service delay
 
-Resolved by the [BSP request migration](wip/bsp-service-requests.md#task-5-directory-and-file-backing):
+Resolved by the [BSP request migration](bsp-service-requests.md#profiling-and-scheduling-costs):
 RAM replacements now notify the common executor promptly. Matched four-CPU
 nested-KVM controls reduced unprofiled growing-write median from 59.041 to
 1.957 ms and growing-copy median from 58.852 to 2.540 ms. Prepared controls and
-replacement/copy counts stayed comparable; the milestone records all off/on
-controls and separates queue from service observations.
+replacement/copy counts stayed comparable. The
+[implementation PR](https://git.internal/PyxisOS/pyxis-os/pulls/237) retains all
+off/on controls and separates queue from service observations.
 
 The [earlier attribution](io-reliability-attribution.md#ram-file-profiling) remains
 historical evidence. These results do not remove individual non-preemptible
@@ -162,7 +163,7 @@ invalidation contract.
 
 Reconsider BSP-only service when its latency becomes material or before allowing
 concurrent use and mutation of one private address space. The
-[BSP request milestone](wip/bsp-service-requests.md) has separated operation
+[implemented BSP request contract](bsp-service-requests.md) has separated operation
 ownership, submission/completion and subsystem service from scheduling while
 retaining BSP-only allocation and the inactive-root handoff. Allowing allocation
 on other CPUs remains a separate decision; an allocator spinlock alone does not
@@ -348,7 +349,7 @@ incorrect acceptance or rejection. Revisit authenticated time synchronization
 before treating TLS date checks as independent of firmware/hypervisor time.
 
 HPET MMIO reads can be expensive, especially under virtualization. The
-[HOST forwarding investigation](wip/bsp-service-requests.md#task-7-host-forwarding)
+[HOST forwarding investigation](bsp-service-requests.md#profiling-and-scheduling-costs)
 removed unnecessary reads for empty scheduler deadline lists and untimed HOST
 idle waits, restoring the measured unprofiled transfer times to baseline. Active
 deadlines and profiling still pay the clock cost. Consider a
