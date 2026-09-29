@@ -150,10 +150,10 @@ virtio-blk; bounded ticketed reads/writes and ordered flushes support
 implementation. Device/transport failure remains terminal until reboot. The
 [initial format and read-only shared core](filesystem-readonly.md) is now selected:
 PyxisOS/pyxis-fs will own the core and host tools. Its
-[format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/e04f78fce1dfb3a8870b7f6580d92aaeea6b2f4d/docs/format.md)
-is under follow-up review for task 1, including inline extent mapping and revised
-reserve defaults. After that review closes, task 2 establishes the shared core
-and encoding under the contract.
+[format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/bc514a4000bb5d78c7ab7378188f71718b15e8c9/docs/format.md)
+completes task 1, including inline extent mapping, revised reserve defaults and
+lookup checks for ID acquisition. Task 2 establishes the shared core and encoding
+under the contract.
 Writable recovery, FUSE and native-persistence milestones remain proposed.
 
 | Path | First concrete completion point | Decisions and supporting work |
@@ -162,7 +162,7 @@ Writable recovery, FUSE and native-persistence milestones remain proposed.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../block-storage.md) is complete. | The selected [initial format and read-only core](filesystem-readonly.md) builds and inspects populated host images. Follow-up format review precedes shared core and encoding. |
+| Native disk storage | The [block-storage foundation](../block-storage.md) is complete. | The selected [initial format and read-only core](filesystem-readonly.md) builds and inspects populated host images. The format contract includes the follow-up decisions; shared core and encoding are next. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The

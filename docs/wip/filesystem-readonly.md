@@ -2,18 +2,18 @@
 
 Status: agreed next storage milestone. The [block-storage foundation](../block-storage.md)
 is complete. This document records the selected scope and focused tasks; it does
-not start implementation. Task 1's format contract is under follow-up review; implementation
+not start implementation. Task 1's format contract is accepted; implementation
 continues through separately authorized tasks. The broader
 [persistent-storage design](persistent-storage.md) and
 [identity rules](users-and-authority.md) remain authoritative for later work.
 
-Task 1's [format and host-tool specification](https://git.internal/PyxisOS/pyxis-fs/src/commit/e04f78fce1dfb3a8870b7f6580d92aaeea6b2f4d/docs/format.md)
-is in [pyxis-fs PR #1](https://git.internal/PyxisOS/pyxis-fs/pulls/1). After initial
-acceptance on 2026-09-29, the owner reopened review for validation/accounting,
-compatibility, rights and reclamation clarifications, a single inline extent
-descriptor and lower reserve defaults. The new reserve formula and ID-acquisition
-lookup rule require explicit review. The filesystem repository contains its
-MPL-2.0 licensing bootstrap; the repository split and host-only scope are unchanged.
+Task 1's [format and host-tool specification](https://git.internal/PyxisOS/pyxis-fs/src/commit/bc514a4000bb5d78c7ab7378188f71718b15e8c9/docs/format.md)
+is in [pyxis-fs PR #1](https://git.internal/PyxisOS/pyxis-fs/pulls/1). Follow-up review
+clarified validation/accounting, compatibility, rights and reclamation. The owner
+accepted a single inline extent descriptor, lower proportional reserves and ancestor
+lookup checks for ID acquisition on 2026-09-29, completing task 1. The filesystem
+repository contains its MPL-2.0 licensing bootstrap; the repository split and
+host-only scope are unchanged.
 
 ## Completion target and boundaries
 
@@ -246,7 +246,7 @@ or lifetime decision before implementation; the checklist is not permission to
 guess. Publish pyxis-fs dependency commits before updating a Pyxis gitlink, link
 dependent PRs and update this checklist with each completed task.
 
-- [ ] **1. Specify the initial format and host-tool contract.** Document exact
+- [x] **1. Specify the initial format and host-tool contract.** Document exact
   headers, checksum coverage, feature/version fields, typed IDs, root validation
   and selection, index/node/extent layouts, allocation ownership and reserve
   arithmetic. Set bounds for names, trees, files, images and validation memory;
@@ -256,10 +256,9 @@ dependent PRs and update this checklist with each completed task.
   submodule location and host build integration. Agree a bounded future commit
   and reclamation design sufficient to avoid an incompatible initial layout;
   do not implement writable transactions. This is a specification PR first.
-  Reopened after follow-up review of the initially accepted specification. Resolve
-  the revised reserve formula and ID-acquisition lookup rule before closing this
-  task. Later allocator and writable-implementation gates remain explicit.
-  Licensing is MPL-2.0.
+  Follow-up review and owner decisions are incorporated, including inline extent
+  mapping, lower reserve defaults and lookup checks for ID acquisition. Later
+  allocator and writable-implementation gates remain explicit. Licensing is MPL-2.0.
 - [ ] **2. Establish the shared core and encoding.** Initialize pyxis-fs with
   agreed build/ownership instructions, platform allocation/I/O interfaces and
   concrete ID, checksum and record codecs. Keep the core freestanding, error
