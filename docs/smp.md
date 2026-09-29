@@ -70,15 +70,26 @@ The target CPU must host the process's owning space. Do not inspect or mutate
 the process or its address space after transfer. There is one task per process.
 
 Batch launch splits submission into BSP-only `user_task_prepare_on()` and
-`user_task_publish_group()`. Preparation allocates and initializes each task and
-kernel stack without enqueueing it; its process remains inactive and owned by
-the preparer. `user_task_discard_prepared()` releases only that task and stack,
-leaving process destruction to the preparer. Publication enqueues the complete
+`user_task_publish_group()`. Preparation allocates and initializes each task,
+kernel stack, reusable request area and separate profiling storage without
+enqueueing it; its process remains inactive and owned by the preparer.
+`user_task_discard_prepared()` releases those task allocations, leaving process
+destruction to the preparer. Publication enqueues the complete
 group under the queue lock and transfers every process and task together. It
 allocates nothing; after unlocking, the BSP retains only the destination CPU
 index for notification. All observer handles and result slots exist before this
 transfer. The blocked caller lends its capability table to BSP preparation;
-cross-CPU requests and results live in task metadata, never remote stack pointers.
+cross-CPU requests and results live in the shared request allocation, never remote
+stack pointers.
+
+Task metadata occupies 752 bytes. Each user task eagerly owns one 4,920-byte
+request allocation, sized for the explicit service catalog's largest typed
+record, HOST, with an 8-byte alignment requirement, and a separate zeroed
+816-byte profiling allocation. Their combined size is 6,488 bytes, down from
+7,392 bytes before storage consolidation, excluding heap overhead and the
+unchanged 16 KiB kernel stack. Kernel workers use only the 752-byte task metadata
+and allocate neither user area. Preparation failure, prepared-task discard and
+retirement release each owned allocation exactly once on the BSP with IF=0.
 
 `process_create(owner, address_space, &process)` takes ownership of an inactive
 private address space only on success. `process_destroy(process)` releases an
@@ -117,7 +128,8 @@ memory/display queue checks. No remote allocation or new interrupt handler is ad
 
 Capability growth, namespace creation, endpoint creation/export, RAMFS entry/name
 allocation and discard, and RAM FILE backing replacement publish to that same
-FIFO before the caller sleeps. Their typed records live in task metadata.
+FIFO before the caller sleeps. Their typed records use the caller's reusable
+shared request allocation.
 Capability/endpoint operations lend the capability table exclusively until
 completion; endpoint creation also lends the process's receiver owner list. FILE
 replacement lends exclusive operation ownership while `busy` remains set; RAMFS
@@ -142,7 +154,10 @@ migration, priorities or tickless timers.
 
 Blocking userspace syscalls and BSP kernel tasks use a wait record embedded in
 task metadata. The resource publishes it under its own lock and removes it before
-waking the task. The scheduler queue lock protects notification and parking.
+waking the task. File, process, console and pipe resources share a separate
+16-byte link in task metadata; they detach it before reuse, including after a
+timed wait. It never overlaps service request storage. The scheduler queue lock
+protects notification and parking.
 An early wake is remembered; a task is only enqueued after execution has returned
 to the permanent scheduler stack.
 This prevents lost wakeups or resuming a stack still in use. The resource lock
@@ -162,8 +177,9 @@ Exit and ordinary user faults return to the local scheduler. After switching
 to its permanent stack and reloading the kernel root, the CPU clears its task
 entry-stack pointer and publishes completion. It must not touch the task afterward.
 The BSP detaches completed tasks under the lock, destroys each user process and
-its private address space, then frees the task's kernel stack and metadata
-outside the lock. Kernel tasks have no process. If the BSP itself runs userspace,
+its private address space, then frees the task's kernel stack, request and profile
+allocations and metadata outside the lock. Kernel tasks have no process or user
+request/profile allocations. If the BSP itself runs userspace,
 a pending completion makes its next user timer interrupt return to the scheduler
 even when there is no second runnable BSP task.
 
@@ -268,7 +284,14 @@ after `task_init()`, before user tasks are published. Creation failure is fatal.
 It currently services pipe creation, private memory, display, capability growth,
 namespace creation, endpoint creation/export, RAMFS entry/name allocation and
 discard, RAM FILE backing replacement, launch preparation/publication and HOST
-forwarding. The executor runs one FIFO operation with IF=0, enables interrupts,
+forwarding. Preparation zeroes the selected typed record in the caller's reusable
+request area. One reservation spans preparation, publication, completion and
+result consumption; it does not allocate. Task adapters expose reservation,
+current request/profile storage and deferred handoff. Subsystems own their
+operation capture, service helpers and profiling controls; persistent aggregates
+remain caller-only in the separate profile allocation.
+
+The executor runs one FIFO operation with IF=0, enables interrupts,
 and conditionally yields between operations. An individual operation
 remains non-preemptible. Only the scheduler inspects ready queues.
 

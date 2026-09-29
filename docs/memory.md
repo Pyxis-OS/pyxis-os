@@ -52,7 +52,11 @@ capability-table growth request: the requester must stop using its private root
 before the BSP may modify it.
 
 The memory subsystem captures its operation, process loan and region in a typed
-BSP request. The closed service catalog requires deferred submission: after moving
+BSP request in the caller's eagerly allocated reusable request area. Preparation
+zeroes that typed record and reserves the area through result consumption;
+submission allocates nothing. Persistent profiling uses a separate caller-only
+allocation, and resource wait links remain in task metadata. The closed service
+catalog requires deferred submission: after moving
 to the permanent stack, activating the kernel root and clearing entry/current-task
 state, the scheduler marks the task parked and publishes the request to the common
 FIFO. Publication lends exclusive private-VM ownership to the BSP. Neither the
@@ -64,7 +68,10 @@ loan. Completion precedes waking, which returns ownership; the executor makes
 no further access to that request or caller. Normal resumption reloads CR3 before
 touching the saved task stack. Only then does the allocation handler write its already
 validated user reply. Allocation cannot invalidate that reply because it adds
-a disjoint range. Release requires no user-memory access on resumption.
+a disjoint range. Release requires no user-memory access on resumption. The
+caller merges any timing sample into its profile and explicitly releases the
+request reservation after consuming the result; only then may another service
+reuse the area.
 
 The same path handles BSP userspace. Publication wakes the executor through the
 ordinary ready queue; there is no memory-specific scheduler sweep. No remote

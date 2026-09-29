@@ -384,8 +384,10 @@ and timeouts have their existing distinct statuses. Native executables and
 interpreters can be launched from host files through owned image capture; the
 loader never executes from live host mappings. See [the launch contract](processes.md#implemented-userspace-launch).
 
-A caller reserves its common BSP request storage, captures inputs in the typed
-HOST record embedded in shared task metadata, then submits to the common FIFO.
+A caller reserves its eagerly allocated common BSP request area, prepares a
+zeroed typed HOST record there and captures inputs before submitting to the
+common FIFO. The reusable area is separate from task metadata and persistent
+profiling; kernel workers allocate neither user area.
 The publication lock orders admission with other BSP services; after unlocking,
 publication wakes the executor only if it detached an idle executor's waiter.
 The caller saves its wait pointer before publication and blocks through the
@@ -441,8 +443,10 @@ before common reservation; the publication hook records requested bytes and its
 timestamp immediately before the FIFO publication lock. HOST forwarding records
 its timestamp at worker-queue entry, followed by worker service start/end and
 caller resumption. After waiting, the caller merges the sample into its local
-HOST aggregate before consuming the reply; neither executor nor worker accesses
-that aggregate.
+HOST aggregate in the separate persistent profile allocation before consuming
+the reply; neither executor nor worker accesses that aggregate. The profiling
+subsystem owns caller-local BEGIN/SNAPSHOT/END controls; task exposes only the
+current profile storage adapter.
 
 The HOST worker skips the deadline clock check for its untimed idle wait; finite
 transport deadlines retain their existing checks and wakeup behavior.

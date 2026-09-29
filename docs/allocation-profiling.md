@@ -98,12 +98,16 @@ initial syscall validation, reply copying and aggregate-counter updates. Invalid
 requests rejected before scheduler admission are not counted. No additional clock
 reads occur for unprofiled memory requests.
 
-Transient timing samples live in the typed memory request. Persistent aggregates
-and profile controls remain with the task, matching the current one-task-per-process
-model. The deferred handoff gives the BSP executor exclusive access to the request
-while the caller is parked; it records service timestamps before waking the caller.
-The resumed caller alone updates the aggregates. No allocator lock or allocation
-policy is added.
+Transient timing samples live in the typed memory request in the caller's reusable
+request allocation. Persistent memory, FILE and HOST aggregates share a separate
+816-byte allocation, eagerly zeroed during user-task preparation; kernel workers
+allocate neither area. Collection remains caller-scoped under the current
+one-task-per-process model. The profiling subsystem owns controls and caller
+accessors; task provides only the current profile storage adapter. The deferred
+handoff gives the BSP executor exclusive access to the request while the caller
+is parked; it records service timestamps before waking the caller. The resumed
+caller alone updates the aggregates before releasing the request reservation.
+No allocator lock or private-memory allocation policy is changed.
 
 This measures userspace heap performance and kernel private-memory service.
 Standalone `kmalloc` throughput, PMM/VM subphase timings and system-wide accounting
