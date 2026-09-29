@@ -115,6 +115,16 @@ rescheduling IPI make the worker runnable on the BSP. A BSP caller sends no
 self-IPI and uses the same deferred handoff. Scheduler/preemption code has no
 memory/display queue checks. No remote allocation or new interrupt handler is added.
 
+Capability growth, namespace creation and endpoint creation/export publish to
+that same FIFO before the caller sleeps. Their typed records live in task metadata
+and lend the capability table exclusively until completion; endpoint creation also
+lends the process's receiver owner list. The caller stops accessing the loan and
+request at publication and waits through its saved wait pointer. Completion may
+arrive before parking, but only records notification and cannot enqueue a
+still-running caller. These operations change no private mappings and require no
+VM handoff. They use the executor's ordinary wake and ready-queue path, including
+for BSP userspace; scheduling and preemption inspect none of their request queues.
+
 Initial HOST request publication also notifies the BSP after releasing the queue
 lock, so a request arriving after its queue sweep can wake an idle BSP. The
 caller saves its own wait pointer before publication and uses the existing
@@ -142,7 +152,7 @@ restores the same CPU, process root and private entry stack, with interrupts
 still disabled. The process remains alive while blocked. User mappings stay
 stable except during an explicit private-memory loan after the task has left
 its address space.
-Only an explicit table-growth loan allows the BSP to modify its capability table.
+Only an explicit capability-table loan allows the BSP to modify its table.
 A wake that precedes parking only records notification; it sends no IPI and
 does not make a still-running task available to another context.
 
@@ -166,17 +176,19 @@ also cause a busy BSP task to return to the scheduler on its next timer
 interrupt. No table grows on an AP; final releases never require an AP allocator
 call.
 
-Namespace creation uses a blocked caller's exclusive table loan for its fixed
+Namespace creation uses the caller's exclusive table loan for its fixed
 binding storage and initial grant. Namespace lookup captures a reference and both
 authority masks under its own lock, releases the lock, then installs the grant or
 lends the table for growth. Replacement cannot alter a captured lookup. Namespace
 locks never span allocation, endpoint locking or parking.
 
-Endpoint creation lends the blocked task's table to the BSP, which allocates
+Endpoint creation lends the calling task's table to the BSP, which allocates
 its bounded delivery storage and installs both initial handles. Export creation
-uses the same table loan for backing allocation and client installation. Export
-control holds storage separately from client references, so it cannot prevent
-natural retirement. Accepted deliveries retain their target until caller and
+uses the same table loan for backing allocation and client installation. Its owned
+receiver and authority remain live throughout the loan. The BSP helpers grow the
+loaned table directly when needed; they never submit a nested request or wait on
+the executor. Export control holds storage separately from client references,
+so it cannot prevent natural retirement. Accepted deliveries retain their target until caller and
 receipt ownership both end. A delivery slot becomes reusable as soon as the
 caller has collected its outcome, if any, and the final receipt reference is
 released. Reuse does not depend on BSP scheduling. Queued cancellation releases
@@ -189,14 +201,13 @@ endpoint lock, so a concurrent BSP reaper cannot free the lock before unlock.
 Final client/backing destruction runs on the BSP. A caller reserves four free
 slots before admitting a request so collecting reply grants needs no growth.
 RECEIVE needs one slot for the receipt and one per request
-attachment. If those slots are unavailable, the task queues a capability-growth
-request and blocks outside the endpoint lock. Its metadata contains the queue
-link, completion result and wait record, so submitting work never allocates on
-an AP. Publication lends exclusive table ownership to the BSP; the submitting
-task must not access the table again until completion. The BSP may complete
-before the task finishes parking, using the same early-wake handling as endpoint
-calls. After waking, RECEIVE rechecks the endpoint queue before installing
-handles atomically and consuming a delivery.
+attachment. If those slots are unavailable, the task submits a capability-growth
+request to the common FIFO outside the endpoint lock. Submission never allocates
+on an AP. After completion, RECEIVE rechecks the endpoint queue before installing
+handles atomically and consuming a delivery; growth failure leaves it queued.
+COPY's source slot and the invoking syscall's handle keep their objects alive
+across growth, without retaining pointers into replaceable table storage. Namespace
+lookup separately retains its captured client and authority masks through growth.
 
 Endpoint CALL deadlines use timed waits. On resumption the caller checks the
 delivery under the endpoint lock and detaches its published waiter before
@@ -205,12 +216,6 @@ cannot win merely because the caller has not run yet. A delivered timeout keeps
 its receipt storage while releasing the caller; its pending cancellation notice
 uses that same record and existing recipient handle, without table growth or
 additional queue capacity.
-
-The BSP scheduler detaches a batch of requests under the queue lock, grows each
-table with IF=0 outside the lock, and wakes its owner with the result. It does
-not touch that task again after wake. Pending growth also makes a busy BSP task
-return to its scheduler on the next timer interrupt. BSP userspace uses the
-same path; there is no special AP allocator or generic work-item framework.
 
 Kernel tasks share the BSP ready queue with any BSP userspace. Create one with
 `kernel_task_create(entry, argument)` after scheduler initialization, on the BSP
@@ -256,8 +261,9 @@ or replace timer handling of deadlines and unmigrated service queues.
 
 The [BSP request executor](wip/bsp-service-requests.md) is created immediately
 after `task_init()`, before user tasks are published. Creation failure is fatal.
-It currently services pipe creation, private memory and display; other queues
-retain their existing scheduler paths. The executor runs one FIFO operation with IF=0, enables
+It currently services pipe creation, private memory, display, capability growth,
+namespace creation and endpoint creation/export; other queues retain their existing
+scheduler paths. The executor runs one FIFO operation with IF=0, enables
 interrupts, and conditionally yields between operations. An individual operation
 remains non-preemptible. Only the scheduler inspects ready queues.
 
@@ -267,6 +273,10 @@ unlocking; later publishers need no additional wake while it is already notified
 or servicing work. An early wake is remembered through the normal parking
 handshake. A parked worker becomes runnable, with an IPI only for a remote
 publisher. There is no polling, self-IPI or scheduler sweep of this request queue.
+Each operation writes its result and publishes completion before waking the
+caller. The executor then makes no further access to the request or loaned state;
+the caller can consume the result, release the request reservation and reuse or
+retire its storage immediately after notification.
 The executor always finishes a published wait before reusing its wait record.
 Synchronous BSP request clients remain user-only, so the executor cannot submit
 to itself and wait. Its subsystem operations use local helpers.

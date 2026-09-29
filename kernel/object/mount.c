@@ -65,7 +65,7 @@ struct syscall_result mount_call(uint64_t rights, uint64_t operation,
     if (result != CAP_FULL) {
       break;
     }
-    result = task_grow_capabilities();
+    result = capability_request_growth();
     if (result != CAP_OK) {
       break;
     }

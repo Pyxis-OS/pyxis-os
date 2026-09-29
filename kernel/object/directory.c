@@ -217,7 +217,7 @@ static enum call_status install_child(struct kernel_object *object, uint64_t rig
     if (result != CAP_FULL) {
       break;
     }
-    result = task_grow_capabilities();
+    result = capability_request_growth();
     if (result != CAP_OK) {
       break;
     }

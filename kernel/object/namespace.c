@@ -1,4 +1,5 @@
 #include <arch/smp.h>
+#include <arch/cpu.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/endpoint.h>
@@ -6,7 +7,6 @@
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/string.h>
-#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 struct namespace_binding {
@@ -120,7 +120,7 @@ struct kernel_object *namespace_service_create(void)
   return service;
 }
 
-enum call_status namespace_create(struct process *owner, handle_t *handle)
+static enum call_status namespace_create(struct capability_table *table, handle_t *handle)
 {
   KASSERT(arch_cpu_index() == 0);
   *handle = HANDLE_INVALID;
@@ -131,10 +131,33 @@ enum call_status namespace_create(struct process *owner, handle_t *handle)
   memset(namespace, 0, sizeof(*namespace));
   atomic_init(&namespace->locked, false);
   object_init(&namespace->object, OBJECT_NAMESPACE, destroy_namespace);
-  enum capability_result result = capability_install(&owner->capabilities,
+  enum capability_result result = capability_install(table,
       &namespace->object, NAMESPACE_RIGHTS, 0, handle);
   object_release(&namespace->object);
   return grant_status(result);
+}
+
+void namespace_create_execute(struct namespace_create_request *request)
+{
+  KASSERT(arch_cpu_index() == 0 && request->table);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(request->request.state == BSP_REQUEST_SERVICING);
+  request->result = namespace_create(request->table, &request->handle);
+  request->table = NULL;
+}
+
+static enum call_status create_namespace(handle_t *handle)
+{
+  struct namespace_create_request *request =
+      (struct namespace_create_request *)bsp_request_prepare(BSP_SERVICE_NAMESPACE_CREATE);
+  struct process *process = process_current();
+  KASSERT(process);
+  request->table = &process->capabilities;
+  bsp_request_submit_and_wait(&request->request);
+  *handle = request->handle;
+  enum call_status result = request->result;
+  bsp_request_release(&request->request);
+  return result;
 }
 
 struct syscall_result namespace_service_call(uint64_t rights, uint64_t operation,
@@ -153,7 +176,7 @@ struct syscall_result namespace_service_call(uint64_t rights, uint64_t operation
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   struct namespace_reply reply;
-  enum call_status status = task_create_namespace(&reply.handle);
+  enum call_status status = create_namespace(&reply.handle);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -258,7 +281,7 @@ static enum call_status lookup_binding(struct namespace_object *namespace,
     struct capability_table *table = &process_current()->capabilities;
     enum capability_result result;
     while ((result = capability_insert(table, client, rights, transport, handle)) == CAP_FULL) {
-      result = task_grow_capabilities();
+      result = capability_request_growth();
       if (result != CAP_OK) {
         break;
       }

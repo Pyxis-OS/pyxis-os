@@ -4,6 +4,7 @@
 #include <abi/endpoint.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
+#include <kernel/service/request.h>
 
 struct process;
 struct endpoint_state;
@@ -14,11 +15,24 @@ struct endpoint {
   struct endpoint *owner_next;
 };
 
-/* BSP, IF=0, with exclusive ownership of the caller's capability table.
- * Reserves all delivery storage and installs both handles or neither. */
-enum call_status endpoint_create(struct process *owner, struct endpoint_create_reply *reply);
-enum call_status endpoint_export_create(struct process *owner,
-    const struct endpoint_export_message *request, struct endpoint_export_reply *reply);
+struct endpoint_create_request {
+  struct bsp_request request;
+  struct process *loan; /* Exclusive capability table and endpoint owner list. */
+  struct endpoint_create_reply reply;
+  enum call_status result;
+};
+
+struct endpoint_export_request {
+  struct bsp_request request;
+  struct process *loan; /* Exclusive table; its receiver authority stays live. */
+  struct endpoint_export_message input;
+  struct endpoint_export_reply reply;
+  enum call_status result;
+};
+
+/* BSP, IF=0. Preserve atomic installation and rollback; caller owns completion. */
+void endpoint_create_execute(struct endpoint_create_request *request);
+void endpoint_export_execute(struct endpoint_export_request *request);
 bool endpoint_export_authority_valid(const struct kernel_object *object,
     uint64_t rights, uint64_t transport);
 /* IF=0, held export reference; closure can still race after this snapshot. */

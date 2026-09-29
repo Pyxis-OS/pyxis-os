@@ -114,7 +114,7 @@ static struct syscall_result copy_handle(handle_t source, uint64_t rights,
     if (result != CAP_FULL) {
       break;
     }
-    result = task_grow_capabilities();
+    result = capability_request_growth();
     if (result != CAP_OK) {
       break;
     }

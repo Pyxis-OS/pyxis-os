@@ -1,7 +1,7 @@
 # Task state and BSP service requests
 
-Status: in progress, with request ownership, the BSP executor and private-memory/display
-handoffs implemented after the completed
+Status: in progress, with the BSP executor serving pipe creation, private memory,
+display, capability growth and namespace/endpoint creation after the completed
 [read-only filesystem milestone](../filesystem-readonly.md). This document selects
 the boundaries and scheduling policy; individual tasks still require their own
 implementation PRs. It does not authorize concurrent allocation, task migration
@@ -189,7 +189,7 @@ an operation. Remove obsolete paths as their consumers move.
   scheduler payload/pending knowledge with one explicit deferred submission path.
   Keep authority and reply validation in callers, operations in their subsystems,
   inactive-root ownership and CR3 reload ordering unchanged.
-- [ ] **4. Migrate capability and object creation services.** Move table growth,
+- [x] **4. Migrate capability and object creation services.** Move table growth,
   namespace and endpoint creation/export onto the mechanism with typed records.
   Preserve exclusive table loans, capability references and failure unwinding;
   remove their old task APIs and queues.
@@ -480,7 +480,75 @@ Mandelbrot rendered, released its display/keyboard ownership on exit and
 reacquired them on a second run. Checksum pipelines verified a 32 KiB transfer;
 the four-CPU three-stage `head -c 32` pipeline also verified early-reader closure,
 expected upstream EPIPE and child cleanup. All validation QEMU/GDB processes were
-stopped. The next unchecked task is capability/object creation migration.
+stopped. These observations precede the capability/object migration below.
+
+## Task 4 capability and object creation
+
+Capability growth, namespace creation and endpoint creation/export now use four
+ordinary request tags on the common FIFO. Capability and namespace records lend
+only the caller's table. Endpoint records lend the process, including its receiver
+owner list for creation; export captures its descriptor by value. All handlers
+clear loans before common completion. Callers consume results before releasing
+the cross-service reservation. The scheduler's old payloads, queues, service
+sweeps, pending checks and submission APIs for these operations are removed.
+
+These requests do not mutate private mappings and may complete before parking.
+The caller accesses only its saved wait until notification. Growth preserves
+entries, generations and references; its consumers keep a retained object or
+live source slot, never an entry pointer into replaced storage. Export retains
+its existing service-authority/user-buffer checks in the caller and receiver
+CONTROL/type/owner checks in the BSP helper. It still validates metadata and
+receiver state before allocation; namespace creation still allocates before
+installation. Local BSP helpers grow tables directly, without submitting a
+nested request. Existing atomic endpoint installation, rollback, object retirement
+and namespace capture semantics remain unchanged.
+
+With the same compiler and flags as prior measurements, `struct task` grows from
+7,184 bytes on main `3a7cb06` to 7,296 bytes. Typed records, including the unchanged
+24-byte common header, are 40 bytes for growth, 48 for namespace creation, 56 for
+endpoint creation and 104 for export. These replace the former raw fields but
+add 112 bytes overall. Records remain embedded in user and kernel tasks until
+task 7; this is another intermediate storage cost, not a size reduction. The
+capability table remains 16 bytes and endpoint backing remains 136,784 bytes.
+
+Ordinary kernel/image builds passed with verified unchanged SDK/userspace/ports
+bundles; only the existing HOST-profile shadow warning remained. `git diff --check` and independent read-only review passed. No public ABI, dependency pins,
+compiler-container inputs, tests or CI configuration changed.
+
+Interactive validation used the same one/four-CPU nested-KVM, QEMU/OVMF, 256 MiB,
+CPU `max` and entropy configuration recorded above, without network, HOST or
+block devices. GDB established:
+
+- Four-CPU namespace creation and endpoint export ran in the BSP kernel executor
+  under the kernel root with IF=0 and parked AP callers. Completion detached
+  request links/waits, cleared loans and preserved the reservation for consumption.
+- A naturally occurring capability-growth request was stopped on CPU 1 after
+  publication but before sleeping. With that AP held, the BSP grew its table
+  from 16 to 32 slots and recorded completion/notification while the caller stayed
+  unparked. The AP then consumed the result without parking or a lost wake.
+- On one CPU, growth and endpoint creation ran with the caller parked. Growth
+  returned its record to FREE before the same caller submitted endpoint creation;
+  creation returned both handles with a cleared process loan.
+
+Four-CPU provider checks exercised publication, lookup, update, denied namespace
+removal and restricted ADD, replacement, provider exit/closed lookup, and removal
+followed by NOT_FOUND. One-CPU publication, restricted lookup and removal also
+passed. A one-CPU pipe regression produced checksum `1349564844` for 32,768 bytes.
+Failure unwinding, retained-reference lifetime and unchanged error ordering were
+reviewed by inspection; no allocation failure or task fault was injected.
+
+With GDB detached, `ipcbench` used 64-byte messages, eight messages per pass, one
+verified warmup and five verified samples with fresh receivers/endpoints. The
+four-CPU CALL baseline on `3a7cb06` had completion median 2.177 ms (2.026–2.855);
+task 4 measured 2.068 ms (2.042–3.222). Every pass verified eight round trips,
+512 request and 512 reply bytes, with no failed calls/deliveries. The one-CPU
+SEND run admitted and acknowledged all eight messages/512 bytes per pass with
+zero rejections: completion median 0.504 ms (0.502–0.516), admission median
+0.037 ms. Creation, launch and cleanup are outside these timed intervals, so
+these are delivery regression observations, not measurements of request queue
+latency or owner-host performance. All QEMU/GDB processes were stopped.
+
+The next unchecked task is directory/file backing migration.
 
 ## Validation and exclusions
 

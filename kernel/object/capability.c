@@ -1,9 +1,11 @@
 #include <arch/smp.h>
+#include <arch/cpu.h>
 #include <kernel/object/capability.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/object.h>
 #include <kernel/panic.h>
+#include <kernel/process.h>
 
 #define INITIAL_CAPACITY 8
 #define HANDLE_INDEX_BITS 32
@@ -47,6 +49,28 @@ enum capability_result capability_grow(struct capability_table *table)
   table->entries = entries;
   table->capacity = capacity;
   return CAP_OK;
+}
+
+void capability_growth_execute(struct capability_growth_request *request)
+{
+  KASSERT(arch_cpu_index() == 0 && request->table);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(request->request.state == BSP_REQUEST_SERVICING);
+  request->result = capability_grow(request->table);
+  request->table = NULL;
+}
+
+enum capability_result capability_request_growth(void)
+{
+  struct capability_growth_request *request =
+      (struct capability_growth_request *)bsp_request_prepare(BSP_SERVICE_CAPABILITY_GROW);
+  struct process *process = process_current();
+  KASSERT(process);
+  request->table = &process->capabilities;
+  bsp_request_submit_and_wait(&request->request);
+  enum capability_result result = request->result;
+  bsp_request_release(&request->request);
+  return result;
 }
 
 enum capability_result capability_insert(struct capability_table *table,

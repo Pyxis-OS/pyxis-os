@@ -4,13 +4,23 @@
 #include <abi/namespace.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
+#include <kernel/service/request.h>
 #include <stdbool.h>
 
-struct process;
+struct capability_table;
+
+struct namespace_create_request {
+  struct bsp_request request;
+  struct capability_table *table;
+  handle_t handle;
+  enum call_status result;
+};
+
+/* BSP executor, IF=0, with exclusive table ownership. */
+void namespace_create_execute(struct namespace_create_request *request);
 
 /* BSP, IF=0. Creation borrows an exclusively owned caller table. */
 struct kernel_object *namespace_service_create(void);
-enum call_status namespace_create(struct process *owner, handle_t *handle);
 
 /* IF=0, caller holds a namespace reference. Presence includes dead exports;
  * this checks name ambiguity, not liveness or lookup authority. */
