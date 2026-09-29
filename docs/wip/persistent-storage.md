@@ -1,9 +1,10 @@
 # Pyxis pool and persistent filesystem
 
-Status: agreed design direction, 2026-09-29, with a proposed milestone sequence.
-Nothing here is implemented or authorizes implementation. The exact disk format,
-enforcement interfaces and individual PR tasks still need specification; remaining
-proposals are identified separately below.
+Status: agreed design direction, 2026-09-29, with a selected block-storage
+foundation milestone and a proposed sequence after it. Nothing here is implemented
+or authorizes implementation. The block-storage contract and focused task sequence
+are agreed below; exact APIs, capacities, disk formats and enforcement interfaces
+still need specification. Remaining proposals are identified separately.
 
 Related: [planning agenda](storage-and-terminal-agenda.md),
 [filesystem direction](../vfs.md), and
@@ -254,16 +255,18 @@ This envelope does not settle the remaining format/interface choices.
 
 ## Proposed milestone sequence
 
-This breakdown is a proposal, not an implementation assignment or an agreed
-ordering. Each milestone needs its own focused PR tasks before work starts.
+Block storage foundation is selected as the first bounded milestone, with its
+agreed contract and tasks below. The subsequent breakdown and ordering remain
+proposals; each later milestone needs focused PR tasks before work starts.
+Planning agreement does not authorize implementation.
 
 1. **Block storage foundation.** First improve the shared split-queue helper as
    scoped below, then add virtio-blk discovery, bounded asynchronous block
    requests/completion, capacity and sector constraints, write/flush errors and
    GPT partition discovery. Operate only on an explicitly selected development
    disk image. Deliver usable read/write/flush support without a filesystem or
-   installation UI. DMA ownership, cancellation/lifetime and device-error policy
-   must be settled before implementation.
+   installation UI. Follow the agreed ownership, lifetime and failure contract
+   below; settle remaining task-specific decisions before implementation.
 2. **Initial format and read-only core.** Specify the first pool/volume format,
    root publication/reclamation design, identifier encoding and reserve accounting.
    Settle the initial local-principal/bootstrap and storage-policy enforcement
@@ -292,42 +295,127 @@ Later milestones can add native NVMe, real format conversion when needed and an
 installation/update workflow. The first milestone does not depend on finalizing
 all filesystem record layouts or the full identity broker.
 
-### Block-storage prerequisite: configurable split queues
+## Agreed block-storage foundation
 
-Agreed addition to the proposed milestone: improve the shared queue helper before
-adding another driver-specific queue implementation. This is planning scope, not
-authorization to implement the helper or tune existing drivers.
+Completion target: Caelum discovers an explicitly attached development disk,
+reads its GPT, and supports bounded asynchronous reads, writes and durable flushes.
+Raw block access is kernel-internal. No userspace raw-disk capability, filesystem,
+mounting, installation or NVMe driver is part of this milestone.
+
+### Configurable split-queue prerequisite
+
+Improve the shared queue helper before adding another driver-specific queue
+implementation. This is agreed planning scope, not authorization to implement
+the helper or tune existing drivers.
 
 The existing filesystem/entropy helper has fixed 8 KiB request/reply buffers and
 one request in flight. Networking uses a separate queue implementation with 16
 slots, 2 KiB packet buffers and multiple outstanding packets. Configurable buffer
 sizes alone would leave the shared helper's fixed request/reply shape in place.
 
-The intended boundary is shared descriptor allocation/chaining, ring publication,
+The agreed boundary is shared descriptor allocation/chaining, ring publication,
 DMA barriers, completion identification/validation and notification mechanics.
 Drivers choose queue size within device limits, DMA buffer sizes/layouts and
 their number of outstanding requests. Drivers retain protocol-specific validation
 and request scheduling. Configuration at queue creation is enough; live resizing
 is outside this slice.
 
-Proposed focused tasks within the block-storage milestone:
+The submission/completion contract is:
 
-- [ ] Define a narrow submission/completion contract using explicit DMA buffers
-  and device access directions, with request identity and bounded descriptor
-  ownership. Settle queue-full behavior, completion validation and reset/failure
-  lifetime rules before implementation; timeout does not return DMA ownership.
+- Drivers select descriptor count within device limits at creation. Allocate ring
+  storage and bounded CPU-side ownership bookkeeping before AP startup. Drivers
+  own DMA allocations and supply physical ranges, lengths and explicit device
+  access directions; CPU mappings remain distinct from physical addresses.
+- Submit a complete direct descriptor chain with a driver request identifier.
+  Support readable-only, writable-only and mixed chains, with device-readable
+  segments before device-writable segments. The helper owns descriptor allocation
+  and chaining; drivers own protocol layout and request scheduling.
+- Acceptance transfers buffer access to the device at ring publication. Invalid
+  submissions and descriptor exhaustion publish nothing and retain caller
+  ownership. Queue-full returns immediately; drivers choose whether to wait or
+  reject work. The helper has no hidden pending-request queue.
+- Allow multiple outstanding requests and completion out of submission order.
+  Return request identity and the reported writable length. Validate used-index
+  advancement, active descriptor heads, duplicate completions and writable-length
+  bounds before recycling corresponding chains. Keep chain ownership in CPU-side
+  bookkeeping; drivers validate protocol replies.
+- Separate publication from notification so drivers can publish several requests
+  and kick once. Existing drivers may continue notifying after each submission.
+  The helper retains DMA barriers and device notification-suppression handling.
+- One BSP worker owns each queue; interrupt handlers only record activity and
+  wake workers. Submission and completion allocate nothing. Preserve the current
+  coherent DMA and allocation/VM ownership contracts in [memory](../memory.md)
+  and [SMP](../smp.md).
+
+Direct-chain ordering and ring ownership follow the
+[VirtIO split-ring contract](https://docs.oasis-open.org/virtio/virtio/v1.2/virtio-v1.2.html).
+
+### Lifetime and failure
+
+- Caller abandonment does not cancel device access. Request identity and DMA
+  storage remain valid until checked completion or confirmed reset. Timeout alone
+  never returns DMA ownership.
+- Malformed completions or a device watchdog expiry stop submissions and trigger
+  the driver's bounded reset procedure. The helper reports corruption; drivers
+  own deadlines, reset and reporting errors to callers.
+- Device/transport failure is terminal until reboot. Runtime failure retains DMA
+  allocations and mappings, including after successful reset. No automatic
+  reconnect or retry is introduced. Boot failure cleanup continues to require
+  unpublished storage or confirmed reset before releasing it.
+- Preserve filesystem and entropy behavior during migration, including entropy's
+  separate caller timeout and device watchdog. A detached caller's eventual DMA
+  completion must never be delivered to a new caller reusing its slot.
+
+### Internal block interface and durability
+
+- Start with kernel-internal device geometry, bounded request admission,
+  read/write/flush operations and explicit completions. Use driver-owned DMA
+  buffers so abandonment cannot leave a device writing into reclaimed caller
+  memory. Transfer size and outstanding-request count are explicit driver choices,
+  not inherited filesystem defaults.
+- Flush drains earlier accepted writes, issues the device flush and holds later
+  writes until completion. Successful write completion alone does not promise
+  durability. Require negotiated flush support for the first writable profile.
+- Failed or timed-out writes may have modified storage. Report uncertainty and
+  avoid automatic retries. Required write/flush errors must propagate to the
+  consumer; sync must not hide them. Distinguish ordinary request errors from
+  terminal device/transport failure when specifying completion statuses.
+- GPT discovery is read-only: validate checksums, bounds and primary/backup
+  consistency. Ambiguous metadata prevents writable partition use. No automatic
+  repair is included.
+
+### Focused tasks and remaining decisions
+
+- [x] Agree the queue submission/completion contract, ownership, completion
+  validation and failure lifetime, and select the block-storage boundaries.
 - [ ] Implement the helper and migrate filesystem/entropy while preserving their
   existing transfer limits, concurrency, deadlines and protocol behavior. Move
   those choices out of shared queue mechanics without adding callback frameworks
   or a general driver abstraction layer.
-- [ ] Use the helper for virtio-blk, choosing its transfer and outstanding-request
-  limits explicitly rather than inheriting filesystem defaults.
+- [ ] Add virtio-blk using the helper and the internal block interface, including
+  explicit development-disk selection, geometry and sector checks, bounded
+  requests, ordered flush and error reporting.
+- [ ] Add read-only GPT discovery and validation under the agreed ambiguity policy.
+- [ ] Validate with ordinary builds, interactive QEMU boots and debugger inspection,
+  including filesystem/entropy regression checks and block read/write/flush use.
+
+Before the relevant implementation task, specify exact APIs and capacities,
+block-request admission/completion and caller-abandonment handling, device
+selection and supported geometry/features, deadlines and completion statuses,
+and GPT validation bounds and degraded-copy handling. These details must preserve
+the agreed contract rather than reopening unrelated filesystem-format decisions.
+
+Settle the manual block-I/O exercise before implementing the block driver: there
+is no filesystem consumer yet. The exercise must use the explicitly selected
+development image and define how readback and persistence across guest restarts
+will be inspected. Ordinary reboot/readback is not proof of power-loss recovery.
+No tests, self-tests, fault injection or boot/output automation are authorized by
+this plan.
 
 Network consolidation is a separate follow-up after the helper serves storage;
 preserve packet batching and validation if that migration is selected. Throughput
 tuning is separate as well: queue configurability does not remove serialization
-in a driver, worker or application interface. Exact APIs and capacities remain
-decisions for the implementation proposal.
+in a driver, worker or application interface.
 
 ## Remaining identity and policy details
 

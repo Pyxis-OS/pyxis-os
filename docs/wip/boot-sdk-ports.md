@@ -123,19 +123,24 @@ separate providers publish verified snapshots using packaged public roots and
 optional instance-specific augmentation. Implemented behavior, configuration and
 limits live in the subsystem docs, with the
 [fetch/inspect/compile/run workflow](../edit-build-run.md#fetch-source-over-https)
-beside the local development loop. SSH/libssh remains deferred. No next milestone
-is selected; the following remain later alternatives.
+beside the local development loop. SSH/libssh remains deferred. Block storage
+foundation is selected for planning next; the other paths remain alternatives.
 
 The next [discussion agenda](storage-and-terminal-agenda.md) covers persistent
 disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
 native terminal sessions leading to a BSP multiplexer and independent navigators.
-Discuss these before selecting one implementation track.
+Block storage is the selected planning track; the other investigations remain
+deferred.
 
 The [persistent storage design](persistent-storage.md) records the agreed custom
 COW pool, volume guarantees, migration strategy, durability and compatibility
-contracts. Its proposed sequence separates block I/O, shared filesystem core,
-writable recovery, Linux FUSE and native persistence. Exact layouts and focused
-PR tasks remain open; no storage code is authorized by these design notes.
+contracts. The [block-storage foundation](persistent-storage.md#agreed-block-storage-foundation)
+now has an agreed queue ownership/lifetime contract and focused task sequence:
+configurable split queues, virtio-blk with an internal block interface, and GPT
+discovery. Device/transport failure is terminal until reboot. Later shared-core,
+recovery, FUSE and native-persistence milestones remain proposed. Exact APIs,
+capacities and validation exercise remain open; no storage code is authorized by
+these design notes.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
@@ -143,7 +148,7 @@ PR tasks remain open; no storage code is authorized by these design notes.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | Virtio-blk reaches a bounded block-I/O milestone before filesystem/installation work. | Follow the [agreed pool/filesystem direction](persistent-storage.md); settle block request lifetime and error handling before code, then exact disk layouts and initial ownership enforcement. |
+| Native disk storage | Virtio-blk reaches a bounded block-I/O milestone before filesystem/installation work. | Follow the [agreed block-storage contract and tasks](persistent-storage.md#agreed-block-storage-foundation); settle remaining task-specific interfaces and validation before code. Disk layouts and initial ownership enforcement follow later. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The
