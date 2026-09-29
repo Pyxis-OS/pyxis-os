@@ -94,11 +94,12 @@ shared core at `fs/`. Its opt-in `make fs-tools` builds the freestanding archive
 and Linux host formatter/inspector
 with `HOSTCC`/`HOSTAR` forwarded as `HOST_CC`/`HOST_AR`, explicit source/output
 directories and no kernel or SDK include paths. The tools create empty standalone
-sparse images and report pool/volume diagnostics. Its
+sparse images, inspect pool/volume/object metadata and simulate bounded policy
+acquisition. Explicit GPT selection supplies a readonly partition extent. Its
 [format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/8c4ffa67595f05eeef97b159d0af0cfb84da1ef5/docs/format.md)
 lives in that repository, including accepted follow-up decisions. See the
 [implemented core boundary](../fs/docs/core.md) for codec, construction, selection,
-catalog allocation-proof and lifetime contracts. Pyxis retains the public OS ABI, capabilities
+allocation-proof, traversal, policy and lifetime contracts. Pyxis retains the public OS ABI, capabilities
 and namespace integration. Default kernel, SDK, ports and image targets do not
 build the core or acquire a filesystem dependency. CI and the compiler container
 are unchanged.

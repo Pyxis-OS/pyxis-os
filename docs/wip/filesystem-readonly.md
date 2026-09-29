@@ -14,8 +14,10 @@ accepted a single inline extent descriptor, lower proportional reserves and ance
 lookup checks for ID acquisition on 2026-09-29, completing task 1. The filesystem
 repository contains the MPL-2.0 shared encoding layer. Task 2 implements
 [local codecs and platform contracts](../../fs/docs/core.md), pinned at `fs/`;
-`make fs-tools` currently builds the core archive. Image construction and opening
-start in task 3. The repository split and host-only scope are unchanged.
+`make fs-tools` builds the core archive and host tools. Tasks 3 and 4 provide empty
+construction, opening, readonly traversal/acquisition and explicit GPT inspection.
+Task 5 next adds population and extraction. The repository split and host-only
+scope are unchanged.
 
 ## Completion target and boundaries
 
@@ -291,13 +293,29 @@ dependent PRs and update this checklist with each completed task.
   checked. Debugger inspection confirmed root ownership and subtree grants.
   Malformed/alternate-generation and actual I/O-failure paths remain source
   review only; no damaged fixtures or QEMU validation were introduced.
-- [ ] **4. Implement read-only traversal and acquisition.** Traverse B+ trees,
+- [x] **4. Implement read-only traversal and acquisition.** Traverse B+ trees,
   resolve object IDs and names, enumerate directories and read inline/tree extents
   and holes. Add the agreed explicit GPT image-selection adapter alongside these
   readonly commands; task 3 deliberately handles standalone images only.
   Validate references and bounds; implement read/list policy evaluation with
   an explicit acquisition ceiling and scope. Keep diagnostic inspection separate
   from that policy path and expose no unrestricted-by-identity shortcut.
+  Implemented shared object/path lookup, directory paging, inline/tree extent and
+  hole reads, trusted ID/path acquisition and opaque views with held-rights child
+  derivation. Pool/volume close refuses while retained handles remain. Host
+  `list`, `stat` and `access` expose diagnostic inspection and explicit policy
+  simulation; GPT selection requires paired partition-entry and sector-size
+  options. Implemented in
+  [pyxis-fs PR #4](https://git.internal/PyxisOS/pyxis-fs/pulls/4).
+  See [core contracts](../../fs/docs/core.md) and
+  [host usage and validation](../../fs/docs/host-tools.md).
+  Native and Pyxis-cross builds passed with no unresolved core symbols. Manual
+  empty-root inspection, owner/ceiling policy cases, busy-close and memory cleanup
+  checks passed. Healthy 512-byte and 4096-byte GPT images reopened without byte
+  changes, including a partition start not aligned to 4 KiB. Populated namespace,
+  nested acquisition and file-content runtime validation wait for task 5's
+  importer; sparse/multiple extents and malformed-media paths remain source
+  review only. No fixtures, test harness, CI changes or kernel mount were added.
 - [ ] **5. Populate and extract images.** Extend the formatter with bounded
   bulk construction from selected host directories, including multi-level trees
   and multiple volumes. Complete listing and extraction through the shared reader;

@@ -689,3 +689,15 @@ The empty planner reserves workspace for the maximum 256-volume profile even for
 a single volume, so small explicit memory caps can reject otherwise tiny images.
 Revisit proportional workspace sizing with populated-image construction in task 5;
 all allocations remain bounded and failures occur before output creation.
+
+Readonly object access scans each consulted ancestor directory to validate unique
+naming. Separate operations repeat ancestry, grant and allocation-proof work;
+file reads may revisit proof closure for each block. Memory is capped, but this
+does not promise a small I/O count. Revisit measured costs with populated images
+in task 5 before introducing caches or making performance claims.
+
+Task-4 runtime coverage uses empty roots and healthy GPT images. Nested policy,
+populated directory paging and file contents await task 5's importer. Sparse and
+multiple extents, grant-free volumes, malformed metadata and GPT degradation have
+source-review coverage only. Revisit these limits during tasks 5 and 7 using
+agreed tooling; do not infer runtime coverage from compilation or code review.

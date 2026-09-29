@@ -154,8 +154,9 @@ PyxisOS/pyxis-fs will own the core and host tools. Its
 completes task 1, including inline extent mapping, revised reserve defaults and
 lookup checks for ID acquisition. Task 2 supplies the pinned shared codecs and
 bounded platform boundary. Task 3 adds empty sparse-image construction and
-`info`/`volumes` reopening through `make fs-tools`; task 4 adds general readonly
-traversal, acquisition and explicit GPT image selection.
+`info`/`volumes` reopening through `make fs-tools`. Task 4 supplies readonly
+traversal, acquisition, `list`/`stat`/`access` and explicit GPT image selection.
+Task 5 next adds bounded source import and extraction for populated validation.
 Writable recovery, FUSE and native-persistence milestones remain proposed.
 
 | Path | First concrete completion point | Decisions and supporting work |
@@ -164,7 +165,7 @@ Writable recovery, FUSE and native-persistence milestones remain proposed.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../block-storage.md) and shared encoding layer are complete. | The selected [initial format and read-only core](filesystem-readonly.md) next constructs and reopens empty pool images. |
+| Native disk storage | The [block-storage foundation](../block-storage.md), empty-image tools and shared readonly traversal/acquisition are complete. | The selected [initial format and read-only core](filesystem-readonly.md) next populates and extracts images. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The
