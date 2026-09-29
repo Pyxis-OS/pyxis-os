@@ -3,8 +3,8 @@
 Status: future design direction, 2026-09-29. Discuss decoupling spaces from CPUs
 alongside multiple threads per process and scheduling across CPUs. Keep the BSP's
 current service responsibilities initially. The stages below are proposals, not
-implementation authorization; [block storage](persistent-storage.md#agreed-block-storage-foundation)
-remains the active track.
+implementation authorization. The separate
+[block-storage foundation](../block-storage.md) is complete.
 
 Related: [current SMP ownership rules](../smp.md),
 [private-memory handoff](../memory.md), [spaces](../spaces.md) and

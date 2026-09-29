@@ -6,6 +6,12 @@ reads, writes and flushes. [GPT discovery](gpt.md) publishes an immutable boot-t
 partition map through a separate kernel interface. There is no userspace raw-disk
 capability, filesystem or mount interface yet.
 
+The block-storage foundation milestone is complete. Its implemented contracts
+live here, in [shared VirtIO queues](virtio-queues.md) for filesystem, entropy and
+block storage, and in [GPT discovery](gpt.md). The
+[persistent filesystem design](wip/persistent-storage.md) remains planned;
+completing this foundation does not select or authorize a later milestone.
+
 ## Attach a development image
 
 Pass an existing regular raw image explicitly:
@@ -175,3 +181,43 @@ Subsequent [GPT validation](gpt.md#validation) exercised the sleeping client
 wrapper through ordinary kernel-task reads. Active abandonment, write-failure
 latch, watchdog, malformed completion and reset-failure paths have code inspection
 only. No fault injection, physical-hardware or power-loss validation was performed.
+
+### Foundation completion
+
+The final regression used merged revision `18cf655` with the unchanged pinned
+userspace, ports and lwIP repositories. `make -j16 image
+PREBUILT='sdk userspace ports'` passed using verified bundles. The four-CPU,
+256 MiB nested-KVM boot combined filesystem, entropy, networking and a writable
+64 MiB GPT disk with 512-byte logical blocks. It used virtiofsd 1.14.0 and a
+local QEMU 10.2.2 build with the documented upstream AHCI fix, plus user-network
+and vhost-user support; the installed QEMU package was unchanged.
+
+From the development shell, `iobench write host://written.bin --sync` and
+`iobench read host://written.bin` each completed a warmup and five verified
+1 MiB samples. `dig example.com` succeeded; entropy's completion count increased
+from five to six. Host inspection after shutdown matched the written file to
+the complete fixture. These are correctness checks, not performance claims.
+
+Debugger inspection after the operations found:
+
+| Queue | Descriptor count | Completed chains | Outstanding |
+| --- | --- | --- | --- |
+| Filesystem requests | 16 | 4685 | 0 |
+| Filesystem FORGET | 16 | 7 | 0 |
+| Entropy | 8 | 6 | 0 |
+| Block | 32 | 5 | 0 |
+
+All descriptors were free, publication and completion indices matched, and none
+of the queues was stopped. The filesystem session had no retained lookup or open
+references. All entropy caller slots were free and cleared, and its full 8 KiB
+DMA buffer was zero. GPT published a healthy two-partition snapshot after five
+successful block reads and released its scratch allocation. The block device
+remained writable with no failure latch. The entire disk image's SHA-256 was
+unchanged after shutdown.
+
+Together with the write/flush/restart exercise above and the
+[512-byte/4 KiB GPT checks](gpt.md#validation), this closes the foundation's
+ordinary-build, interactive-boot and debugger validation task. Earlier profile
+and block mutation checks were not repeated by this documentation-only closure.
+The [failure and durability limits](technical-debt.md#virtio-blk-failure-and-validation-limits)
+and [GPT limits](technical-debt.md#gpt-snapshot-and-profile-limits) still apply.

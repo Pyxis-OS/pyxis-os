@@ -6,6 +6,10 @@ concurrency, deadlines and device reset; the helper owns descriptors, ring
 publication, notification ordering and checked completions. Networking retains
 its separate packet queue implementation.
 
+Network migration is a deferred follow-up and must preserve packet batching and
+validation. Throughput tuning is separate: configurable queues do not remove
+serialization in drivers, workers or application interfaces.
+
 ## Configuration and memory
 
 The driver selects a power-of-two descriptor count from 1 through 32768, bounded
