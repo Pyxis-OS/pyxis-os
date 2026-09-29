@@ -4,9 +4,21 @@
 #include <abi/pipe.h>
 #include <abi/syscall.h>
 #include <kernel/object/object.h>
+#include <kernel/service/request.h>
 
 struct task_wait;
 struct pipe_pair;
+struct capability_table;
+
+struct pipe_create_request {
+  struct bsp_request request;
+  struct capability_table *table; /* Exclusive loan until completion. */
+  struct pipe_create_reply reply;
+  enum call_status result;
+};
+
+/* BSP, IF=0. Install both endpoints or unwind both; caller owns completion. */
+void pipe_create_execute(struct pipe_create_request *request);
 
 /* Published queue links live in task metadata, never a remote kernel stack. */
 struct pipe_wait {
@@ -20,8 +32,7 @@ struct pipe_end {
   bool reader;
 };
 
-/* BSP, IF=0. Each returned end has one owned reference. */
-bool pipe_pair_create(struct pipe_end **reader, struct pipe_end **writer);
+/* BSP, IF=0. Returned service has one owned reference. */
 struct kernel_object *pipe_service_create(void);
 
 struct syscall_result pipe_service_call(uint64_t rights, uint64_t operation,
