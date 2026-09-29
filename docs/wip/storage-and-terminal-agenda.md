@@ -10,13 +10,14 @@ the interfaces below.
 The active [pool/filesystem working draft](persistent-storage.md) records the
 discussion and explicitly agreed choices; other mechanisms remain proposals.
 
-Writable `host://` already provides host-backed persistence. Discuss the next
-step toward storage owned by Pyxis, beginning with virtio-blk before filesystem
-and installation work. Use the existing [filesystem direction](../vfs.md) and
+Writable `host://` already provides host-backed persistence. The
+[block-storage foundation](../block-storage.md) is complete; later filesystem
+and installation work remain proposed. Use the existing
+[filesystem direction](../vfs.md) and
 [storage notes](later-os-directions.md#persistent-storage-and-installation).
 
-- Choose a first useful persistence result and its block-device scope. Separate
-  basic block I/O from mounting a filesystem, installation and system updates.
+- The first milestone delivered kernel-internal block I/O and GPT discovery.
+  Mounting a filesystem, installation and system updates remain separate work.
 - The storage discussion selected a custom COW pool/filesystem with a shared
   core for Caelum and Linux FUSE. Exact disk layouts and recovery algorithms
   remain open; see the working draft rather than reopening the selected direction.
@@ -26,8 +27,8 @@ and installation work. Use the existing [filesystem direction](../vfs.md) and
   encoding persistent ownership or shared-home assumptions. Native authority
   rules should drive the design; Unix IDs and permission bits are not defaults.
 
-The result should be a concrete first milestone plus explicitly deferred policy,
-not a combined block driver, filesystem, installer and account-system project.
+Use the working draft to scope a later milestone and its policy decisions before
+implementation.
 
 ## 2. Investigate Neovim and libuv requirements
 
@@ -43,8 +44,8 @@ modules and language-server executables. Existing Lua and possible PDCurses port
 do not establish Neovim compatibility.
 
 Six bounded follow-up milestones are proposals, not additional active tracks.
-Block storage remains selected. Use the report when selecting later native OS
-work; do not import fork/epoll/signals or add successful stubs just to satisfy a
+Use the report when selecting later native OS work; do not import fork/epoll/signals
+or add successful stubs just to satisfy a
 particular upstream backend. Dependency build/link closure and runtime behavior
 remain to be investigated during a future port milestone.
 

@@ -123,14 +123,14 @@ separate providers publish verified snapshots using packaged public roots and
 optional instance-specific augmentation. Implemented behavior, configuration and
 limits live in the subsystem docs, with the
 [fetch/inspect/compile/run workflow](../edit-build-run.md#fetch-source-over-https)
-beside the local development loop. SSH/libssh remains deferred. Block storage
-foundation is selected for planning next; the other paths remain alternatives.
+beside the local development loop. SSH/libssh remains deferred. The
+[block-storage foundation](../block-storage.md) is also complete; later paths
+remain proposals.
 
 The next [discussion agenda](storage-and-terminal-agenda.md) covers persistent
 disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
 native terminal sessions leading to a BSP multiplexer and independent navigators.
-Block storage is the selected implementation track. The initial
-[Neovim/libuv investigation](neovim-libuv.md) is complete, with pinned source
+The initial [Neovim/libuv investigation](neovim-libuv.md) is complete, with pinned source
 evidence and header probes; its proposed native event, threading, metadata and
 terminal milestones remain deferred. No Neovim build or runtime compatibility
 is claimed. The LLVM investigation remains separate future work.
@@ -142,16 +142,13 @@ decisions do not start another implementation track.
 
 The [persistent storage design](persistent-storage.md) records the agreed custom
 COW pool, volume guarantees, migration strategy, durability and compatibility
-contracts. The [block-storage foundation](persistent-storage.md#agreed-block-storage-foundation)
-has an agreed queue ownership/lifetime contract and focused task sequence.
-[Configurable split queues](../virtio-queues.md) and the filesystem/entropy
-migration are complete. [Virtio-blk and the internal block interface](../block-storage.md)
-now provide bounded ticketed reads/writes and ordered flushes.
-[GPT discovery](../gpt.md) publishes one immutable boot-time map with bounded
-validation and read-only degraded-copy handling. Final milestone validation
-remains. Device/transport failure is terminal until reboot. Later shared-core,
-recovery, FUSE and native-persistence milestones remain proposed. These design
-notes do not authorize subsequent implementation.
+contracts. The [block-storage foundation](../block-storage.md) is complete:
+[configurable split queues](../virtio-queues.md) serve filesystem, entropy and
+virtio-blk; bounded ticketed reads/writes and ordered flushes support
+[GPT discovery](../gpt.md). Final validation combined those devices on the merged
+implementation. Device/transport failure remains terminal until reboot. Later
+shared-core, recovery, FUSE and native-persistence milestones remain proposed;
+none is selected or authorized by closing this milestone.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
@@ -159,7 +156,7 @@ notes do not authorize subsequent implementation.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | Virtio-blk reaches a bounded block-I/O milestone before filesystem/installation work. | Follow the [agreed block-storage contract and tasks](persistent-storage.md#agreed-block-storage-foundation); settle remaining task-specific interfaces and validation before code. Disk layouts and initial ownership enforcement follow later. |
+| Native disk storage | The [block-storage foundation](../block-storage.md) is complete. | The proposed [initial format and read-only core](persistent-storage.md#proposed-milestone-sequence) needs disk layouts, repository ownership and initial policy enforcement agreed before implementation. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The
