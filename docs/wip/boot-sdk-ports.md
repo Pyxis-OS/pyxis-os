@@ -150,8 +150,9 @@ virtio-blk; bounded ticketed reads/writes and ordered flushes support
 implementation. Device/transport failure remains terminal until reboot. The
 [initial format and read-only shared core](filesystem-readonly.md) is now selected:
 PyxisOS/pyxis-fs will own the core and host tools. Its
-[format and tool contract draft](https://git.internal/PyxisOS/pyxis-fs/src/commit/7498f8e757015b8890dc08aa176efd7041b36a77/docs/format.md)
-makes task 1's remaining choices concrete for review before implementation.
+[format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/53d7f2a70841db237d5dded6e84e13ed5eef67ca/docs/format.md)
+was accepted on 2026-09-29, completing task 1. Task 2 establishes the shared core
+and encoding under that contract.
 Writable recovery, FUSE and native-persistence milestones remain proposed.
 
 | Path | First concrete completion point | Decisions and supporting work |
@@ -160,7 +161,7 @@ Writable recovery, FUSE and native-persistence milestones remain proposed.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../block-storage.md) is complete. | The selected [initial format and read-only core](filesystem-readonly.md) builds and inspects populated host images. Its first task settles exact format and interface choices before code. |
+| Native disk storage | The [block-storage foundation](../block-storage.md) is complete. | The selected [initial format and read-only core](filesystem-readonly.md) builds and inspects populated host images. Its format contract is accepted; shared core and encoding are next. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The

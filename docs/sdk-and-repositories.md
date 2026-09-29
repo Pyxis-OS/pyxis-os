@@ -83,10 +83,10 @@ history remains in Pyxis.
 [PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) will own the shared native
 filesystem format/core, host formatter/inspector and eventual Linux FUSE adapter.
 It has an MPL-2.0 licensing bootstrap but is not yet a pinned build dependency.
-The [initial format milestone](wip/filesystem-readonly.md) proposes `fs/` and an
+The [initial format milestone](wip/filesystem-readonly.md) selects `fs/` and an
 opt-in `make fs-tools` host build. Its
-[format and tool contract draft](https://git.internal/PyxisOS/pyxis-fs/src/commit/7498f8e757015b8890dc08aa176efd7041b36a77/docs/format.md)
-lives in that repository and requires review before implementation. Pyxis retains
+[accepted format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/53d7f2a70841db237d5dded6e84e13ed5eef67ca/docs/format.md)
+lives in that repository; implementation follows in separate tasks. Pyxis retains
 the public OS ABI, capabilities and namespace integration. This planning decision
 changes no current checkout, SDK or workflow.
 
