@@ -55,7 +55,7 @@ the checked-out revision or dependency pins.
 | pyxis-userland | libc, libpyxis, libterm, native TLS adapter, startup/link support, applications, initial boot scripts and its TLSF vendor copy |
 | pyxis-ports | Host Lua runner, pinned third-party recipes, ordered patches and staged executables/licenses and development libraries/headers |
 | pyxis-lwip | Pinned lwIP source subset, license/provenance and any local upstream adaptations |
-| pyxis-fs | Native filesystem format, freestanding core, empty-image formatter and diagnostic inspector with Linux host adapter |
+| pyxis-fs | Native filesystem format, freestanding core, source-importing formatter and diagnostic inspector/extractor with Linux host adapter |
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime, then installs startup, libraries, linker support
@@ -93,8 +93,9 @@ The [initial format milestone](wip/filesystem-readonly.md) now pins the MPL-2.0
 shared core at `fs/`. Its opt-in `make fs-tools` builds the freestanding archive
 and Linux host formatter/inspector
 with `HOSTCC`/`HOSTAR` forwarded as `HOST_CC`/`HOST_AR`, explicit source/output
-directories and no kernel or SDK include paths. The tools create empty standalone
-sparse images, inspect pool/volume/object metadata and simulate bounded policy
+directories and no kernel or SDK include paths. The tools create standalone
+sparse images from selected source directories, extract files/subtrees,
+inspect pool/volume/object metadata and simulate bounded policy
 acquisition. Explicit GPT selection supplies a readonly partition extent. Its
 [format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/8c4ffa67595f05eeef97b159d0af0cfb84da1ef5/docs/format.md)
 lives in that repository, including accepted follow-up decisions. See the

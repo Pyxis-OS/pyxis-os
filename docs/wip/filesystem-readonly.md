@@ -16,8 +16,8 @@ repository contains the MPL-2.0 shared encoding layer. Task 2 implements
 [local codecs and platform contracts](../../fs/docs/core.md), pinned at `fs/`;
 `make fs-tools` builds the core archive and host tools. Tasks 3 and 4 provide empty
 construction, opening, readonly traversal/acquisition and explicit GPT inspection.
-Task 5 next adds population and extraction. The repository split and host-only
-scope are unchanged.
+Task 5 supplies source population and extraction. Whole-image checking is next
+in task 6. The repository split and host-only scope are unchanged.
 
 ## Completion target and boundaries
 
@@ -316,11 +316,30 @@ dependent PRs and update this checklist with each completed task.
   nested acquisition and file-content runtime validation wait for task 5's
   importer; sparse/multiple extents and malformed-media paths remain source
   review only. No fixtures, test harness, CI changes or kernel mount were added.
-- [ ] **5. Populate and extract images.** Extend the formatter with bounded
+- [x] **5. Populate and extract images.** Extend the formatter with bounded
   bulk construction from selected host directories, including multi-level trees
   and multiple volumes. Complete listing and extraction through the shared reader;
   apply source, ownership, destination-safety and partial-build rules. No second
   format writer, incremental tree mutation or host-permission import.
+  One shared bulk builder now handles empty and populated volumes. It retains a
+  contiguous pool-metadata prefix and one range per volume, so the allocation
+  map still has N+2 records including free space. Source metadata, sorting and
+  tree layouts are planned within the memory cap; file data streams into one
+  inline extent per nonempty file. Descriptor-relative traversal rejects
+  symlinks/special entries, detects source changes and excludes output parents
+  inside imported trees. Extraction creates fresh files/subtrees through the
+  shared reader, leaving reported partial output on failure. Implemented in
+  [pyxis-fs PR #5](https://git.internal/PyxisOS/pyxis-fs/pulls/5).
+  Native and Pyxis-cross builds passed without unresolved core symbols. A 128 MiB
+  three-volume image round-tripped repository docs and kernel trees; a 64 MiB
+  image covered Unicode/space names, empty files/directories, hard-link copies,
+  non-block-aligned lengths and a larger binary. Extracted contents matched.
+  Nested acquisition and held-rights file reads passed; missing lookup authority
+  and unrelated principals were denied. GPT extraction preserved image bytes.
+  Low memory/quota, source symlink, source/output overlap and existing-destination
+  refusals were checked. Whole-image consistency is not established; sparse and
+  multi-extent reader paths, concurrent-change and I/O-failure paths remain
+  source-review coverage. See [host-tool details](../../fs/docs/host-tools.md).
 - [ ] **6. Add whole-image consistency inspection.** Reconcile reachable records,
   namespace structure, extents, metadata ownership, retained roots and budgets.
   Detect conflicting allocations and report incomplete/unsupported checks
