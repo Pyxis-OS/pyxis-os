@@ -164,7 +164,12 @@ scheduler service paths, when BSP service latency becomes material, or before
 allowing concurrent use and mutation of one private address space. Moving
 subsystem work out of the scheduler and allowing allocation on other CPUs are
 separate decisions. A generic request framework or allocator spinlock alone
-does not resolve the ownership constraints; no replacement is chosen yet.
+does not resolve the ownership constraints. The selected
+[BSP request milestone](wip/bsp-service-requests.md) separates operation ownership,
+submission/completion and subsystem service from scheduling. It retains BSP-only
+allocation and the inactive-root handoff; these changes are planned, not yet
+implemented. Task-lifetime request reservation and long non-preemptible operations
+remain explicit costs rather than being solved by moving the service code.
 
 ## Synchronous launch preparation
 

@@ -10,6 +10,11 @@ Related: [current SMP ownership rules](../smp.md),
 [private-memory handoff](../memory.md), [spaces](../spaces.md) and
 [Neovim/libuv requirements](neovim-libuv.md).
 
+The selected [BSP request separation milestone](bsp-service-requests.md) first
+clarifies subsystem service and request lifetimes without changing CPU placement
+or introducing threads. Its synchronous resource loans still rely on today's
+single-task process model; the sibling-thread requirements below remain necessary.
+
 ## Direction
 
 - A space owns processes and their resource/authority domain. A process owns its

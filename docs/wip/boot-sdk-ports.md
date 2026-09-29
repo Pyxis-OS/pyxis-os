@@ -128,7 +128,13 @@ beside the local development loop. SSH/libssh remains deferred. The
 [initial filesystem format and read-only core](../filesystem-readonly.md) is
 complete; later writable recovery, FUSE and native integration remain proposals.
 
-The next [discussion agenda](storage-and-terminal-agenda.md) covers persistent
+The selected next milestone is [task state and BSP service requests](bsp-service-requests.md).
+It separates subsystem requests from scheduling while retaining BSP allocation
+and VM ownership, with FIFO service, prompt worker notification and scheduling
+opportunities between operations. Request completion is separate from waiting;
+public asynchronous I/O and process threads are outside this milestone.
+
+The broader [discussion agenda](storage-and-terminal-agenda.md) covers persistent
 disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
 native terminal sessions leading to a BSP multiplexer and independent navigators.
 The initial [Neovim/libuv investigation](neovim-libuv.md) is complete, with pinned source
@@ -155,7 +161,7 @@ bounded acquisition and check both retained states. The
 [format contract](../../fs/docs/format.md), [core interfaces](../../fs/docs/core.md)
 and [measured host validation](../../fs/docs/host-tools.md#validation) are durable
 references. Writable recovery, FUSE and native-persistence milestones remain
-proposed; completing this host-only milestone does not select the next task.
+proposed; BSP request separation is selected before continuing those tracks.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
