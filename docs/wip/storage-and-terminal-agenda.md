@@ -7,6 +7,9 @@ the interfaces below.
 
 ## 1. Discuss persistent disk storage
 
+The active [pool/filesystem working draft](persistent-storage.md) records the
+discussion and explicitly agreed choices; other mechanisms remain proposals.
+
 Writable `host://` already provides host-backed persistence. Discuss the next
 step toward storage owned by Pyxis, beginning with virtio-blk before filesystem
 and installation work. Use the existing [filesystem direction](../vfs.md) and
@@ -14,8 +17,9 @@ and installation work. Use the existing [filesystem direction](../vfs.md) and
 
 - Choose a first useful persistence result and its block-device scope. Separate
   basic block I/O from mounting a filesystem, installation and system updates.
-- Discuss an existing filesystem versus a custom format, including host-side
-  inspection and recovery tools. No format is selected yet.
+- The storage discussion selected a custom COW pool/filesystem with a shared
+  core for Caelum and Linux FUSE. Exact disk layouts and recovery algorithms
+  remain open; see the working draft rather than reopening the selected direction.
 - Identify required file metadata and identity, replacement/open-handle behavior,
   flush and durability boundaries, and expected behavior after interrupted writes.
 - Resolve the [users and authority checkpoint](users-and-authority.md) before
