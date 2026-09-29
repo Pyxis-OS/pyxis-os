@@ -184,8 +184,11 @@ matters; see [synchronization](#synchronization).
 ## Queue and worker contract
 
 `virtio_fs_pci_prepare` allocates and maps both queues on the BSP before AP
-startup. Each owns a contiguous 20 KiB physical extent: one page of ring storage,
-an 8 KiB request buffer and an 8 KiB reply buffer. Mappings are kernel-only,
+startup. Each uses one page of ring storage plus separate driver-owned 8 KiB
+request and reply allocations, each physically contiguous. CPU-side descriptor
+bookkeeping and completion snapshots are heap-owned. The
+[shared queue helper](virtio-queues.md) handles ring mechanics; the driver chooses
+buffer sizes and concurrency. Mappings are kernel-only,
 read/write, non-executable, ordinary write-back RAM. Device MMIO remains uncached.
 CPU virtual addresses are never used as descriptor addresses.
 

@@ -368,15 +368,31 @@ gameplay and demo playback. Wall-clock time is not a prerequisite.
 
 The first [virtio-fs transport](virtio-fs.md) reserves queue storage and device
 mappings before AP startup. A runtime failure masks interrupts, disables bus
-mastering and attempts reset, but retains the claim, two 20 KiB queue/buffer
-allocations and their mappings until reboot. Even a confirmed reset does not
-make it safe to change shared kernel mappings without a TLB invalidation and
+mastering and attempts reset, but retains the claim, 40 KiB of ring/payload
+allocations, CPU-side queue bookkeeping and their mappings until reboot. Even a
+confirmed reset does not make it safe to change shared kernel mappings without
+a TLB invalidation and
 reader-lifetime contract. No reconnect or repeated allocation occurs.
 
 Revisit reclamation alongside shared-mapping invalidation and a defined device
 teardown/reconnect lifecycle. Never free an outstanding DMA buffer solely because
 a request timed out. Idle daemon disconnection is not necessarily observable
 until the next request or device event; there is no heartbeat.
+
+## Shared split-queue scaling and validation
+
+The [shared queue helper](virtio-queues.md) supports multiple direct chains and
+allocates storage for the selected queue size. Request-ID uniqueness checks and
+completion validation scan queue-sized bookkeeping arrays. Current filesystem
+and entropy queues are small and remain serialized; no throughput improvement
+or scaling result is established. Revisit these scans if a measured block or
+network workload makes their cost material.
+
+Runtime validation currently covers the migrated serialized consumers. Multiple
+outstanding requests and out-of-order completion require coverage with the
+virtio-blk consumer before relying on them for storage. Allocation and malformed
+completion/reset failure paths have code inspection only; no fault injection
+was authorized for this slice.
 
 ## Virtio-net runtime resource retention
 
