@@ -149,9 +149,12 @@ virtio-blk; bounded ticketed reads/writes and ordered flushes support
 [GPT discovery](../gpt.md). Final validation combined those devices on the merged
 implementation. Device/transport failure remains terminal until reboot. The
 [initial format and read-only shared core](filesystem-readonly.md) is now selected:
-PyxisOS/pyxis-fs will own the core and host tools. Start with its format-specification
-task and settle remaining choices before implementation. Writable recovery, FUSE
-and native-persistence milestones remain proposed.
+PyxisOS/pyxis-fs will own the core and host tools. Its
+[format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/8c4ffa67595f05eeef97b159d0af0cfb84da1ef5/docs/format.md)
+completes task 1, including inline extent mapping, revised reserve defaults and
+lookup checks for ID acquisition. Task 2 establishes the shared core and encoding
+under the contract.
+Writable recovery, FUSE and native-persistence milestones remain proposed.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
@@ -159,7 +162,7 @@ and native-persistence milestones remain proposed.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../block-storage.md) is complete. | The selected [initial format and read-only core](filesystem-readonly.md) builds and inspects populated host images. Its first task settles exact format and interface choices before code. |
+| Native disk storage | The [block-storage foundation](../block-storage.md) is complete. | The selected [initial format and read-only core](filesystem-readonly.md) builds and inspects populated host images. The format contract includes the follow-up decisions; shared core and encoding are next. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The
