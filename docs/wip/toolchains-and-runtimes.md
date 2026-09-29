@@ -1,9 +1,10 @@
 # Hosted toolchains and language runtimes
 
-Status: future directions, not an implementation milestone or a fixed sequence.
-The completed [libc portability milestone](../libc-portability.md) supports
-cksum and restricted tee. Promote one result below into a separate milestone
-after a pinned build probe and discussion of missing OS contracts.
+Status: LLVM/Clang is the chosen toolchain direction as of 2026-09-29, including
+Clang as the first large hosted C toolchain. The current build still uses
+GCC/binutils; no migration or hosted LLVM support is implemented. The boundaries
+below guide a pinned investigation, not an implementation assignment or a fixed
+schedule. Other language runtimes remain future candidates.
 
 ## Distinct results
 
@@ -20,33 +21,54 @@ systems run in the guest. Compiler drivers still need real file, process-launch,
 completion and diagnostic behavior on Pyxis. Building the compiler itself adds
 its build tools and dependencies; it is a later completion point.
 
-## Binutils, P1F and a hosted C compiler
+## LLVM/Clang transition and hosting
 
-Start a future investigation with a pinned binutils subset: assembler, linker
-and the archive tools actually needed to assemble and link a small program in
-Pyxis. Probe libc, path handling, temporary files and build dependencies rather
-than assuming that mostly C source means a trivial port.
+LLVM/Clang replaces the earlier open GCC-versus-LLVM choice. The intended
+toolchain includes Clang, LLD and the LLVM archive/object tools needed by Pyxis.
+This supports the owner's language experiments as well as a later Rust direction;
+it is not a measured claim that LLVM will be the easiest compiler to host.
 
-Current binutils uses ELF objects/executables and ordinary ar archives; elf2pxe
-converts the linked result to P1F/PXE. Investigate teaching binutils/linking tools
-about native executable output, but compare that with retaining the converter.
-P1F is an executable image, not today's relocatable object or symbol-bearing
-library format. Supporting it does not require inventing replacements for ELF
-object files and static archives. Decide relocation, layout and diagnostic needs
-before proposing a BFD backend or changing the format.
+Keep three implementation milestones separate, refining their scope after a
+pinned probe:
 
-GCC is a natural hosted candidate because the Pyxis target integration already
-exists. It is not a C-only project: current upstream
-[GCC prerequisites](https://gcc.gnu.org/install/prerequisites.html) require a
-C++14 compiler, while [LLVM](https://llvm.org/docs/CMake.html) requires C++17.
-Both need investigation of their actual target runtime dependencies.
+1. **Host-running LLVM toolchain.** Establish the Pyxis target/driver contract,
+   SDK discovery, startup and link defaults, predefined macros and compiler
+   runtime helpers. Probe compiler-rt builtins as the replacement for libgcc.
+   Preserve the existing ABI, kernel register restrictions and userspace CPU-state
+   assumptions. Validate kernel, SDK, userspace and ports builds and ordinary boots
+   before replacing the normal GCC/binutils build. Identify the exact owner-built
+   container update; ordinary CI must consume it rather than rebuild LLVM.
+2. **Native C++ and OS prerequisites.** Clang is a C++ application even when it
+   compiles C. Determine the runtime/library subset it actually requires and
+   investigate libc++, libc++abi and unwinding needs explicitly. Establish useful
+   native file, process, memory, synchronization and thread contracts through
+   bounded consumers. Do not bury missing OS behavior in compiler-specific stubs.
+3. **Clang hosted on Pyxis.** Cross-build the selected compiler, linker and tools
+   to run in the guest. First completion: compile, link and run one small C program
+   entirely inside Pyxis. Rebuilding LLVM itself in the guest is a later result,
+   with its own build tools, resource requirements and dependencies.
 
-Keep GCC versus Clang/LLVM open until comparable pinned probes establish the
-smallest useful hosted configuration, runtime/library gaps, memory requirements
-and maintenance cost. Existing GNU work gives GCC a head start; that is a
-reason to investigate it, not a measured claim that it will be easier. A first
-hosted compiler should compile and run a small utility, without also requiring
-its own bootstrap, every language frontend or a complete OS build.
+Retain ELF objects, static archives and the ELF-to-P1F/PXE conversion initially.
+The hosted workflow must include a usable converter or equivalent explicit final
+step. Native P1F linker output can be investigated later; this transition does not
+require inventing a relocatable format or rewriting the loader. Keep the working
+toolchain available during validation, without committing to maintaining two
+permanent default toolchains.
+
+The [Clang toolchain guide](https://clang.llvm.org/docs/Toolchain.html) separates
+compiler, assembler, linker and runtime pieces. Cross-compilation and LLVM hosting
+have different requirements: a host-running compiler targeting Pyxis does not
+prove that LLVM's own OS-facing support library can run there.
+
+The [planning agenda](storage-and-terminal-agenda.md) pairs a bounded LLVM hosting
+requirements probe with Neovim/libuv inspection. Record missing native contracts,
+dependency/runtime gaps and measured resource needs. Select one implementation
+milestone afterward rather than starting all prerequisites concurrently.
+
+The owner's approximately 1,600-line, self-hosted C-subset compiler is a possible
+later consumer for a guest compiler-to-compiler workflow. Its requirements and
+reproduction steps have not been inspected; it is not a prerequisite or a promise
+that it builds unchanged. TCC retains its existing small native development role.
 
 ## C++ in userspace
 
@@ -89,7 +111,7 @@ Syncthing, Tailscale, then Forgejo. This is a way to record possible reach, not
 a prerequisite graph or fixed implementation order. Hosted Go development is
 also a separate result from cross-compiling Go programs on the host for Pyxis.
 
-## Rust without choosing the C compiler around it
+## Rust alongside the LLVM direction
 
 LLVM makes Rust worth keeping on the list, but running LLVM tools inside Pyxis
 is not a prerequisite for cross-compiling Rust applications to it. A pinned
@@ -98,8 +120,10 @@ Target/ABI integration, allocation and runtime support, and eventually a Pyxis
 standard-library port remain real work. A small no_std program is a different
 completion point from general std-based applications or a hosted Rust toolchain.
 
-Keep this as a separate future investigation. Choosing GNU for initial hosted C
-development would not prevent a later LLVM-based Rust cross toolchain.
+Keep this as a separate future investigation. Choosing LLVM does not provide
+Rust's OS integration automatically, and the selected Clang release need not be
+the LLVM version required by a future pinned rustc. Cross-compiled no_std, std
+support and a hosted Rust toolchain are separate completion points.
 
 ## Distant application ideas
 

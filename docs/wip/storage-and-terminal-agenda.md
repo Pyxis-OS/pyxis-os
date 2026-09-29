@@ -55,7 +55,22 @@ Deliver an evidence-based gap list, unresolved decisions, and ordered, focused
 milestones with independently useful consumers. This investigation is not a
 commitment to finish Neovim before pursuing another application.
 
-## 3. Native terminal sessions, multiplexer and navigator
+## 3. Investigate LLVM/Clang transition and hosting
+
+LLVM/Clang is now the chosen toolchain direction, with Clang the first large
+hosted C compiler target. The [toolchain notes](toolchains-and-runtimes.md)
+separate host-side cross-toolchain migration, native C++/OS prerequisites, and
+running Clang inside Pyxis. Hosting does not require bootstrapping LLVM in the
+guest as its first result; Rust remains a separate runtime/OS integration effort.
+
+Add a bounded, pinned LLVM requirements probe alongside Neovim/libuv. Identify
+the needed compiler tools and runtime libraries, distinguish host build tools
+from guest dependencies, and trace missing filesystem, process, threading and
+synchronization behavior to native Pyxis contracts. Use common requirements to
+inform milestone selection; neither consumer should define the kernel by its
+current Unix implementation. No toolchain/container change is part of this agenda.
+
+## 4. Native terminal sessions, multiplexer and navigator
 
 The preferred direction replaces a multi-panel file-manager application with
 independent applications inside a terminal multiplexer:
@@ -87,8 +102,9 @@ into bounded milestones before implementation; do not bundle the whole chain.
 
 ## End-of-discussion decision
 
-After the storage discussion and Neovim/libuv investigation, select one next
-implementation milestone: native disk storage or the first terminal-session
-slice, with any demonstrated prerequisites made explicit. Keep the other track
-parked. Starting implementation is optional; unresolved behavior, authority and
-lifetime decisions should be discussed first.
+After the storage discussion and bounded Neovim/libuv and LLVM investigations,
+select one next implementation milestone. Native disk storage and the first
+terminal-session slice remain candidates; the toolchain transition or a shared
+prerequisite can be selected explicitly instead. Keep the other tracks parked.
+Starting implementation is optional; unresolved behavior, authority and lifetime
+decisions should be discussed first.

@@ -127,8 +127,8 @@ beside the local development loop. SSH/libssh remains deferred. No next mileston
 is selected; the following remain later alternatives.
 
 The next [discussion agenda](storage-and-terminal-agenda.md) covers persistent
-disk storage, a bounded Neovim/libuv requirements investigation, and native
-terminal sessions leading to a BSP multiplexer and independent navigators.
+disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
+native terminal sessions leading to a BSP multiplexer and independent navigators.
 Discuss these before selecting one implementation track.
 
 | Path | First concrete completion point | Decisions and supporting work |
@@ -145,10 +145,11 @@ DevilutionX and C AbyssEngine/Diablo II investigations. The
 database sessions and the editor worksheet idea. Their URI examples are future
 interactions, not supported shell syntax or a settled ABI.
 
-[Hosted toolchains and language runtimes](toolchains-and-runtimes.md) park
-binutils/P1F investigation, the GCC-versus-LLVM choice, C++ userspace, Go cross
-compilation and a later hosted Go toolchain. Rust, Tailscale and Ladybird are
-future directions with their own scope decisions.
+[Hosted toolchains and language runtimes](toolchains-and-runtimes.md) record
+LLVM/Clang as the chosen direction: host-side toolchain migration, native C++
+prerequisites and then Clang running inside Pyxis are separate milestones to
+scope. Go cross compilation, hosted Go, Rust, Tailscale and Ladybird remain
+future directions with their own decisions.
 
 SDL2/GrafX2 remains a later graphical alternative. A desktop/compositor remains
 a separate [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting
