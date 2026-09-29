@@ -384,16 +384,30 @@ and timeouts have their existing distinct statuses. Native executables and
 interpreters can be launched from host files through owned image capture; the
 loader never executes from live host mappings. See [the launch contract](processes.md#implemented-userspace-launch).
 
-A caller captures inputs in a record embedded in shared task metadata, publishes
-it under the scheduler queue lock, then notifies the BSP after unlocking. This
-wakes an idle BSP even if publication misses its queue sweep. The caller saves
-its wait pointer before publication and blocks through the existing
-wake-before-park contract; a BSP caller sends no self-IPI. The BSP scheduler only
-forwards queued records; blocking FUSE work runs in the transport worker. All
-user-buffer validation and copies happen on the caller's CPU. The worker never
-switches to a caller's root or accesses its private stack. Its reply and any new
-owned object are fully published before wakeup, and it never touches the record
-after waking its owner. Requests hold no spinlock across a transport wait.
+A caller reserves its common BSP request storage, captures inputs in the typed
+HOST record embedded in shared task metadata, then submits to the common FIFO.
+The publication lock orders admission with other BSP services; after unlocking,
+publication wakes the executor only if it detached an idle executor's waiter.
+The caller saves its wait pointer before publication and blocks through the
+existing wake-before-park contract. The executor marks the record FORWARDED and
+passes it to the HOST transport worker without waiting for FUSE work or touching
+the record afterward. It reaches its normal scheduling boundary and can service
+another caller while HOST work remains outstanding. FIFO admission does not
+promise completion order across services.
+
+All user-buffer validation and copies happen on the caller's CPU. The worker
+never switches to a caller's root or accesses its private stack. Final completion
+publishes status and outputs, clears worker links and borrowed node/table
+pointers, and marks the common header COMPLETE before waking. The worker makes
+no record accesses after completion; unavailable forwarding and startup failures
+follow the same rule. Requests hold no spinlock across a transport wait.
+
+Wakeup returns ownership but keeps the caller's reservation through reply and
+user-buffer copying. The caller consumes scalar results and detaches any owned
+object or captured image before explicitly releasing the HOST request. A later
+synchronous BSP service, such as capability-table growth during child installation
+or launch preparation, starts only after that release; detached outputs retain
+their independent ownership.
 
 Creation exclusively lends the parked caller's capability table to the BSP
 worker. It allocates the wrapper and installs the result handle before sending
@@ -414,7 +428,7 @@ freeing local storage. Copies held elsewhere keep the object alive independently
 
 The profile capability's independent `PROFILE_RIGHT_HOST` collection counts native
 host READ/WRITE work, including lazy OPEN transport under those operations.
-`iobench --host-profile` exposes separate scheduler/worker queues, worker service,
+`iobench --host-profile` exposes separate BSP/worker queues, worker service,
 transport and caller-resumption intervals with native/transport counts. It does
 not collect metadata-only operations, sync, deferred cleanup or remote callers.
 Failed published transport requests have a separate interval ending before reset
@@ -422,8 +436,20 @@ recovery; valid used-ring completion does not imply FUSE success. Disabled
 collection adds no clocks or allocation. See the [ABI](../include/abi/profile.h)
 and [measured attribution limits](io-reliability-attribution.md#host-profiling-and-attribution-limits).
 
-The nested-KVM measurements show strong profiling perturbation; retain matching
-unprofiled controls. Transport elapsed combines guest and host scheduling with
+Transient timing samples travel in the HOST request. Preparation timing starts
+before common reservation; the publication hook records requested bytes and its
+timestamp immediately before the FIFO publication lock. HOST forwarding records
+its timestamp at worker-queue entry, followed by worker service start/end and
+caller resumption. After waiting, the caller merges the sample into its local
+HOST aggregate before consuming the reply; neither executor nor worker accesses
+that aggregate.
+
+The HOST worker skips the deadline clock check for its untimed idle wait; finite
+transport deadlines retain their existing checks and wakeup behavior.
+
+The historical nested-KVM measurements predate common-FIFO HOST forwarding and
+show strong profiling perturbation; retain matching unprofiled controls.
+Transport elapsed combines guest and host scheduling with
 device/daemon/backing service and cannot isolate any one component or CPU time.
 
 ## Init mount and delegation

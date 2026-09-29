@@ -4,7 +4,7 @@ The milestone closed after the HOST publication correction in
 [PR 205](https://git.internal/PyxisOS/pyxis-os/pulls/205). Completed endpoint
 receipts release delivery capacity immediately, and the agreed IPC/HTTP reruns
 passed. Independent FILE and HOST profiling expose request phases and counts.
-The HOST correction removes most of the measured profiler slowdown, while full
+The HOST correction removed most of the measured profiler slowdown, while full
 profiling still changes execution substantially.
 
 The final combined IPC/HTTP/RAM/HOST matrix and additional measurement-resolution
@@ -143,7 +143,10 @@ measurement resolution before fine-grained comparisons.
 `PROFILE_RIGHT_HOST` authorizes independent caller-local HOST BEGIN/SNAPSHOT/END
 collection. Only native READ/WRITE work is counted. Preparation/publication, BSP
 forwarding, worker service start/end and caller resumption separate the initial
-BSP and worker queues. Transport runs from immediately before submission through
+BSP and worker queues. Preparation timing starts before common request reservation;
+the HOST publication hook records requested bytes and its timestamp immediately
+before the common FIFO publication lock. Forwarding is timestamped at HOST
+worker-queue entry. Transport runs from immediately before submission through
 worker-observed used-ring completion. Lazy OPEN transport belongs to its native
 READ/WRITE; metadata-only operations, sync and deferred cleanup are excluded.
 
@@ -151,10 +154,15 @@ READ/WRITE counters distinguish attempts, failures, requested/completed bytes,
 positive short transfers and zero-byte results for nonzero requests. Submission
 and valid completion counts are independent of FUSE success. Failed published
 transport has a separate elapsed sum/maximum ending before reset; rejection
-before submission has no transport event. Counters saturate. Storage follows
-caller → BSP → worker ownership and returns at wakeup; the worker never touches
-it afterward. Disabled collection adds no clocks/allocations. Snapshots expose
-no addresses, names, node IDs or remote-caller activity.
+before submission has no transport event. Counters saturate. Transient samples
+follow caller → executor → HOST worker ownership in the typed request. The HOST
+worker clears links and input loans and publishes common completion before waking;
+it never touches the record afterward. The caller merges the sample into its
+task-local HOST aggregate at resumption; services never access that aggregate.
+The common reservation remains held through reply/user-buffer copying and owned
+output detachment, then ends with explicit release before another synchronous BSP
+service. Disabled collection adds no clocks/allocations. Snapshots expose no
+addresses, names, node IDs or remote-caller activity.
 
 For read, `iobench --host-profile` BEGIN precedes its first clock/OPEN; END follows
 the payload end clock before EOF/close, so END contributes only to complete
@@ -162,8 +170,9 @@ consumption. Write/copy BEGIN/END lie outside transfer clocks and before optiona
 sync. Preparation, warmup and verification remain unprofiled. A successful BEGIN
 receives an END attempt on error. MEMORY, FILE and HOST collections are independent.
 
-The original ten off/on controls verified all 60 passes. Each used 1 MiB, one
-warmup and five samples, prepared destinations and sync off. Raw intervals,
+The measurements below predate common-FIFO HOST forwarding. The original ten
+off/on controls verified all 60 passes. Each used 1 MiB, one warmup and five
+samples, prepared destinations and sync off. Raw intervals,
 counts, clock calibration and profile sum/max pairs remain in
 [HOST samples](io-host-profile-samples.json). The command keys are `hr` (read),
 `hw` (write), `hc` (HOST → RAM), `ac` (archive → HOST) and `ac8` (4088-byte copy).
@@ -207,20 +216,25 @@ artifacts, with unavailable timings omitted; no permanent SDK mode was accepted.
 
 ## HOST publication notification
 
-`task_submit_hostfs()` saves its wait pointer before publishing, releases the
-scheduler queue lock, then invokes the existing BSP reschedule helper before
-sleeping. An AP request published after a BSP queue sweep can wake the BSP;
-CPU 0 sends no self-IPI and services work through its scheduler when blocking.
-The notified/parked handshake preserves early completion and normal parked wake.
-Code review covered both paths without forced artificial interleavings.
-
-This applies to all initial HOST operations, including metadata/errors. Grants,
-request ownership, BSP allocation, worker/transport handling, clock source,
-120 Hz timer, profiler and public ABI retain their contracts. Cleanup queues use
-their existing service paths. See [SMP](smp.md) and
+HOST operations now publish through the common BSP FIFO. Publication detaches an
+idle executor's waiter under the request lock, then wakes it after unlocking;
+a running or already notified executor needs no extra notification. The saved
+caller wait preserves early completion and normal parked wake. On CPU 0, the
+caller parks to let the executor run; there is no self-IPI. The executor forwards
+HOST work to its existing transport worker and reaches a scheduling boundary
+without waiting for transport completion. The HOST worker owns final completion,
+including failures, while the executor can service another request. Cleanup
+queues retain their existing service paths. See [SMP](smp.md) and
 [HOST ownership](virtio-fs.md#native-directory-and-file-objects).
 
-The correction repeated all ten HOST controls on four CPUs and the first six
+The prior publication correction used `task_submit_hostfs()`: it released the
+scheduler queue lock and invoked the BSP reschedule helper before sleeping.
+This allowed AP publication after a scheduler queue sweep to wake the BSP.
+Code review covered early and parked completion without forced artificial
+interleavings. That correction preceded the common executor migration; the
+measurements below describe that earlier implementation.
+
+The prior correction repeated all ten HOST controls on four CPUs and the first six
 on one CPU, with unchanged preparation, sizes and timing boundaries. All 16
 warmups and 80 measured passes verified length, contents and EOF. All 40 profiled
 samples matched the counts above with no failure, short native transfer,

@@ -92,7 +92,6 @@ struct scheduler {
 
 static struct scheduler *schedulers;
 static struct task *completed_head;
-static struct hostfs_request *hostfs_head, *hostfs_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
 static struct task_wait *timed_waits; /* queues_locked, expired by the BSP. */
@@ -309,6 +308,10 @@ void task_wait_wake(struct task_wait *wait)
 static void expire_timed_waits(void)
 {
   lock_queues();
+  if (!timed_waits) {
+    unlock_queues();
+    return;
+  }
   uint64_t now = arch_monotonic_ns();
   struct task_wait **link = &timed_waits;
   while (*link) {
@@ -359,6 +362,9 @@ struct bsp_request *task_bsp_request_acquire(enum bsp_service service)
     break;
   case BSP_SERVICE_FILE_REPLACE:
     request = &task->file_request.request;
+    break;
+  case BSP_SERVICE_HOSTFS:
+    request = &task->hostfs_request.request;
     break;
   case BSP_SERVICE_LAUNCHER:
     request = &task->launcher_request.request;
@@ -422,63 +428,9 @@ struct profile_file_snapshot *task_file_profile(void)
   return &current_user_task()->file_profile;
 }
 
-struct hostfs_request *task_prepare_hostfs(enum hostfs_operation operation)
+struct profile_host_snapshot *task_host_profile(void)
 {
-  struct task *task = local_scheduler()->current_task;
-  bool profiled = (task->host_profile.flags & PROFILE_ACTIVE) &&
-      (operation == HOSTFS_READ || operation == HOSTFS_WRITE);
-  uint64_t started = profiled ? arch_monotonic_ns() : 0;
-  struct task_wait *wait = prepare_user_wait();
-  struct hostfs_request *request = &wait->task->hostfs_request;
-  *request = (struct hostfs_request){.wait = wait, .operation = operation,
-      .profile = {.active = profiled, .started_ns = started}};
-  return request;
-}
-
-static void finish_host_profile(struct task *task);
-
-void task_submit_hostfs(struct hostfs_request *request)
-{
-  struct task *task = local_scheduler()->current_task;
-  KASSERT(request == &task->hostfs_request);
-  struct task_wait *wait = request->wait;
-  bool profiled = request->profile.active;
-  if (profiled) {
-    request->profile.requested_bytes = request->count;
-    request->profile.published_ns = arch_monotonic_ns();
-  }
-  lock_queues();
-  if (hostfs_tail) {
-    hostfs_tail->next = request;
-  } else {
-    hostfs_head = request;
-  }
-  hostfs_tail = request;
-  unlock_queues();
-  /* Publication may miss the BSP's queue sweep; wake it before parking. */
-  notify_remote_cpu(0);
-  task_wait_sleep(wait);
-  if (profiled) {
-    finish_host_profile(task);
-  }
-}
-
-static void service_hostfs_requests(void)
-{
-  lock_queues();
-  struct hostfs_request *request = hostfs_head;
-  hostfs_head = hostfs_tail = NULL;
-  unlock_queues();
-
-  while (request) {
-    struct hostfs_request *next = request->next;
-    if (request->profile.active) {
-      request->profile.forwarded_ns = arch_monotonic_ns();
-    }
-    hostfs_submit(request);
-    /* Submission can complete immediately; never access it after wakeup. */
-    request = next;
-  }
+  return &current_user_task()->host_profile;
 }
 
 struct file_wait *task_prepare_file_wait(void)
@@ -559,53 +511,6 @@ enum call_status task_profile_host_control(uint64_t operation, struct profile_ho
     *reply = task->host_profile;
   }
   return CALL_OK;
-}
-
-static void profile_duration_merge(uint64_t *flags, struct profile_duration *duration,
-    uint64_t total, uint64_t maximum)
-{
-  profile_add(flags, &duration->total_ns, total);
-  if (maximum > duration->maximum_ns) {
-    duration->maximum_ns = maximum;
-  }
-}
-
-static void finish_host_profile(struct task *task)
-{
-  uint64_t resumed = arch_monotonic_ns();
-  struct hostfs_request *request = &task->hostfs_request;
-  struct hostfs_profile *sample = &request->profile;
-  struct profile_host_operation *stats = request->operation == HOSTFS_READ ?
-      &task->host_profile.read : &task->host_profile.write;
-  uint64_t *flags = &task->host_profile.flags;
-  profile_add(flags, &stats->requests, 1);
-  profile_add(flags, &stats->requested_bytes, sample->requested_bytes);
-  if (request->status == CALL_OK) {
-    profile_add(flags, &stats->completed_bytes, request->count);
-    if (request->count && request->count < sample->requested_bytes) {
-      profile_add(flags, &stats->short_transfers, 1);
-    }
-    if (!request->count && sample->requested_bytes && request->operation == HOSTFS_READ) {
-      profile_add(flags, &stats->eof, 1);
-    }
-  } else {
-    profile_add(flags, &stats->failures, 1);
-  }
-  profile_duration_add(flags, &stats->publication, sample->started_ns, sample->published_ns);
-  profile_duration_add(flags, &stats->bsp_queue, sample->published_ns, sample->forwarded_ns);
-  profile_duration_add(flags, &stats->worker_queue, sample->forwarded_ns, sample->service_started_ns);
-  profile_duration_add(flags, &stats->service, sample->service_started_ns, sample->service_ended_ns);
-  profile_duration_add(flags, &stats->resume, sample->service_ended_ns, resumed);
-  profile_duration_add(flags, &stats->total, sample->started_ns, resumed);
-  struct virtio_fs_profile *transport = &sample->transport;
-  profile_add(flags, &stats->submissions, transport->submissions);
-  profile_add(flags, &stats->completions, transport->completions);
-  profile_add(flags, &stats->transport_failures, transport->failures);
-  profile_duration_merge(flags, &stats->transport, transport->completed_ns, transport->completed_max_ns);
-  profile_duration_merge(flags, &stats->transport_failed, transport->failed_ns, transport->failed_max_ns);
-  if (transport->saturated) {
-    *flags |= PROFILE_SATURATED;
-  }
 }
 
 static struct task *dequeue(struct scheduler *scheduler)
@@ -806,6 +711,9 @@ static void reap_completed(void)
 
 static void wake_sleepers(void)
 {
+  if (!sleeping_tasks) {
+    return;
+  }
   uint64_t now = arch_monotonic_ns();
   struct task **link = &sleeping_tasks;
 
@@ -870,7 +778,6 @@ void kernel_task_yield_if_runnable(void)
   for (;;) {
     if (cpu_index == 0) {
       expire_timed_waits();
-      service_hostfs_requests();
       reap_completed();
       object_reap();
       wake_sleepers();
@@ -960,7 +867,7 @@ void task_preempt(bool user_mode)
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
-     (completed_head != NULL || hostfs_head != NULL));
+     completed_head != NULL);
   unlock_queues();
   if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;

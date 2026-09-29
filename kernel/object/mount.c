@@ -5,7 +5,6 @@
 #include <kernel/object/mount.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
-#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 static void destroy_mount(struct kernel_object *object)
@@ -49,15 +48,18 @@ struct syscall_result mount_call(uint64_t rights, uint64_t operation,
   uint64_t directory_rights = open.access == MOUNT_ACCESS_READ_WRITE ? DIRECTORY_RIGHTS :
       DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES;
 
-  struct hostfs_request *request = task_prepare_hostfs(HOSTFS_ROOT);
-  task_submit_hostfs(request);
-  if (request->status != CALL_OK) {
-    return (struct syscall_result){request->status, 0};
+  struct hostfs_request *request = hostfs_request_prepare(HOSTFS_ROOT);
+  hostfs_request_submit_and_wait(request);
+  enum call_status status = request->status;
+  struct kernel_object *root = request->object;
+  request->object = NULL;
+  hostfs_request_release(request);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
   }
 
   /* Keep the returned reference across capability-table growth. The mount
    * authority and the resulting directory have independent lifetimes. */
-  struct kernel_object *root = request->object;
   enum capability_result result;
   for (;;) {
     result = capability_insert(&process_current()->capabilities, root,

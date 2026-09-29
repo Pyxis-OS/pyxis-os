@@ -3,11 +3,11 @@
 
 #include <abi/directory.h>
 #include <abi/syscall.h>
+#include <kernel/service/request.h>
 #include <kernel/virtio/fs.h>
 
 struct kernel_object;
 struct capability_table;
-struct task_wait;
 struct hostfs_node;
 
 enum hostfs_operation {
@@ -34,10 +34,11 @@ struct hostfs_profile {
 
 /* One request per calling task, in shared task metadata. No user addresses or
  * private-stack pointers cross the worker boundary. The live capability keeps
- * node alive until completion; a returned object is one owned reference. */
+ * node alive until completion; a returned object is one owned reference. Keep
+ * the common reservation through result consumption, then explicitly release. */
 struct hostfs_request {
+  struct bsp_request request;
   struct hostfs_request *next;
-  struct task_wait *wait;
   struct hostfs_profile profile;
   enum hostfs_operation operation;
   struct hostfs_node *node;
@@ -65,6 +66,16 @@ struct hostfs_request {
   uint8_t data[VIRTIO_FS_READ_MAX > VIRTIO_FS_WRITE_MAX ? VIRTIO_FS_READ_MAX : VIRTIO_FS_WRITE_MAX];
 };
 
+/* Current user task, IF=0, no held locks. Fill shared staging, submit/wait,
+ * consume or detach owned outputs, then release. Only the caller copies user
+ * memory; there is no external task cancellation in this model. */
+struct hostfs_request *hostfs_request_prepare(enum hostfs_operation operation);
+void hostfs_request_submit_and_wait(struct hostfs_request *request);
+void hostfs_request_release(struct hostfs_request *request);
+
+/* Common publication hook, IF=0, immediately before the FIFO lock. */
+void hostfs_request_published(struct hostfs_request *request);
+
 /* BSP/IF=0 before the worker can run. Submissions wait through bounded INIT.
  * Every worker-creation/initialization failure must complete queued callers. */
 void hostfs_prepare(void);
@@ -77,9 +88,10 @@ void hostfs_start_failed(enum virtio_fs_result result);
 void hostfs_start(struct virtio_fs_session *session);
 bool hostfs_service(void);
 
-/* BSP, IF=0. Queue caller storage or an object's final destruction, never
- * sleep/allocate. Submit wakes even unavailable requests. Retire transfers the
- * native wrapper and node storage to the worker; the reaper must not free them. */
+/* BSP, IF=0. Submit forwards an executor-owned request to the HOST worker,
+ * completing unavailable requests immediately. No request accesses afterward.
+ * Retire transfers the native wrapper and node storage to the worker; the reaper
+ * must not free them. Neither operation sleeps or allocates. */
 void hostfs_submit(struct hostfs_request *request);
 void hostfs_retire(struct hostfs_node *node);
 

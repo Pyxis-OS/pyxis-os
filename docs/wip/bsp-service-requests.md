@@ -2,7 +2,7 @@
 
 Status: in progress, with the BSP executor serving pipe creation, private memory,
 display, capability growth, namespace/endpoint creation, RAMFS/FILE backing
-operations and launch preparation after the completed
+operations, launch preparation and HOST forwarding after the completed
 [read-only filesystem milestone](../filesystem-readonly.md). This document selects
 the boundaries and scheduling policy; individual tasks still require their own
 implementation PRs. It does not authorize concurrent allocation, task migration
@@ -200,7 +200,7 @@ an operation. Remove obsolete paths as their consumers move.
 - [x] **6. Migrate launch preparation.** Preserve capture/group lifetimes and
   batch publication/rollback. Keep launch-local operations direct on BSP, with
   no executor self-waits.
-- [ ] **7. Migrate HOST forwarding.** Preserve HOST worker ownership, staged data,
+- [x] **7. Migrate HOST forwarding.** Preserve HOST worker ownership, staged data,
   profiling and final completion. Forward from the common executor without
   blocking its progress on another caller's request.
 - [ ] **8. Consolidate storage and finish the task boundary.** Provision the reusable
@@ -713,6 +713,111 @@ this task did not inject failures or force an early-completion interleaving.
 No new tests, self-tests or boot/output automation were added. Individual launch
 operations remain non-preemptible; no launch latency or owner-host performance
 claim is made from these interactive checks.
+
+## Task 7 HOST forwarding
+
+HOST callers now reserve a typed `hostfs_request` through the common BSP FIFO.
+The executor marks it FORWARDED and hands it to the existing HOST worker without
+waiting for transport. The worker owns final completion, including unavailable
+forwarding and initialization failure. It clears queue links, input loans and
+the transport profile pointer before marking COMPLETE and waking the caller;
+neither forwarding nor completion touches the record after returning ownership.
+FIFO admission does not impose completion order across services.
+
+Callers retain the reservation through scalar/reply consumption and staged user
+copies. Returned objects and executable captures transfer to independent caller
+ownership before release. Capability growth and launch preparation happen after
+that release. All 13 call sites use explicit release on success and failure.
+The old HOST task APIs, scheduler queue/sweep and preemption check are removed.
+Profiling aggregation moves into HOST code; its persistent task-local snapshot
+and existing phase/counter meanings remain unchanged. No public ABI or dependency
+pin changes; no compiler-container rebuild is needed.
+
+Ordinary GCC 16.2.0 sizes move from 7,376 to 7,392 bytes for `struct task`, and from
+4,904 to 4,920 for `hostfs_request`. The transient profile remains 120 bytes and
+the persistent HOST snapshot 408. The temporary per-task increase, including
+kernel workers, remains for storage consolidation in task 8.
+
+### Slowdown investigation and correction
+
+The first migrated build regressed despite unchanged transfer counts. A fresh
+four-CPU boot with no debugger connection reproduced a 145.284 ms unprofiled
+read median (143.888–146.462 ms), excluding a retained GDB connection as the cause.
+Code inspection found unconditional monotonic-clock reads on every BSP scheduler
+pass, even with no timed waits or kernel sleepers. The added executor scheduling
+path amplified this cost. The clock reads HPET high/low/high through uncached
+MMIO; ordinary guest CLOCK-call calibration was roughly 32–38 microseconds per
+call in this nested environment, including syscall overhead.
+
+The correction skips the clock read when each scheduler deadline list is empty,
+checking timed waits under the existing queue lock and kernel sleepers under
+BSP/IF=0 ownership. HOST's untimed idle wait also skips its redundant deadline
+check. Nonempty expiration, finite transport deadlines, wake ordering and the
+executor's conditional yield remain unchanged. Independent review found no
+locking or wakeup defects.
+
+A direct-parking experiment alone measured read medians of 165.253 ms off and
+190.976 ms on, so it was discarded. With the original yield policy restored,
+the two empty-list guards alone measured 90.118 ms off and 146.220 ms on. The
+final build below also omits the untimed HOST deadline check. These comparisons
+support eliminating unnecessary clock work as the remedy; they do not isolate
+an exact per-read cost or attribute all elapsed time to HPET.
+
+Matched four-CPU controls used baseline main `515b4cb`, initial forwarding, and
+the corrected implementation. Each cell is median milliseconds (minimum–maximum)
+from five samples after one warmup, with 1 MiB, sync off, default read buffer
+4,088 bytes and write/copy buffer 4,080 bytes. Destinations were prepared outside
+the transfer interval. Read reports payload time; write/copy report transfer time.
+Profiling was off then on for each workload, with GDB detached during all controls.
+
+| Workload | Baseline | Initial forwarding | Corrected forwarding |
+| --- | ---: | ---: | ---: |
+| Read, profile off | 88.099 (86.814–88.677) | 148.633 (146.378–153.036) | 87.288 (84.926–89.499) |
+| Read, profile on | 164.220 (157.614–168.897) | 224.834 (220.818–230.078) | 164.230 (159.882–187.305) |
+| Prepared write, off | 87.180 (86.608–91.942) | 132.446 (130.606–137.435) | 86.481 (85.126–88.259) |
+| Prepared write, on | 162.126 (158.666–182.229) | 218.808 (213.359–229.312) | 168.413 (158.678–187.943) |
+| HOST → prepared RAM, off | 91.431 (85.795–98.178) | 145.698 (144.447–146.685) | 88.375 (87.424–91.203) |
+| HOST → prepared RAM, on | 180.528 (161.571–199.594) | 216.831 (215.701–221.765) | 159.819 (156.815–169.097) |
+
+All 108 passes across these three sets verified contents and length. Profiled
+reads counted 257 native READs and 258 transport submissions/completions, including
+lazy OPEN; prepared writes and copies each counted 258 native HOST operations
+and 258 transport submissions/completions. Each transferred 1,048,576 bytes with
+no native/transport failure, short transfer or in-window EOF. Read's verification
+EOF occurs outside HOST collection. Final unprofiled times return to baseline;
+profiled read/write ranges overlap baseline and still show substantial observer
+overhead. These sequential groups neither establish owner-host performance nor
+justify subtracting a constant profiling cost.
+
+Final one-CPU read controls also verified all twelve passes: off median 96.956 ms
+(96.461–97.796), on 172.803 ms (172.313–173.393). No matched one-CPU baseline was
+collected for this task.
+
+### Validation and limits
+
+Kernel/image builds passed without warnings using verified unchanged SDK,
+userspace and ports bundles. `git diff --check` and independent read-only code
+review passed. Interactive validation used nested KVM, fixed QEMU 10.2.2,
+CPU `max`, 256 MiB, matching OVMF, entropy and a private virtiofsd 1.14.0 export
+with default cache policy. No cache eviction was attempted; network and block
+devices were absent. The one- and four-CPU checks exercised HOST creation,
+read/write, enumeration, rename, sync, removal, missing-file failure and HOST
+executable loading. Read-only session creation was denied as expected. The final
+one-CPU HOST executable pipeline returned `1349564844 32768` for the 32 KiB
+fixture, followed by successful rename/sync/removal. A separate four-CPU boot
+without virtio-fs reached the shell, listed RAM storage and returned not-found
+for the absent HOST mount. All QEMU/GDB/daemon processes were stopped afterward.
+
+GDB observed BSP kernel-root/IF=0 forwarding with parked callers on one and four
+CPUs. On one CPU, forwarding returned while the request remained FORWARDED in the
+HOST queue. At caller release, completed records had detached links, cleared input
+loans and consumed owned output; READ retained its reservation through copying.
+These observations do not claim that a second caller was serviced during the
+observed outstanding transport. Early completion, immediate rejection and worker
+initialization failure were reviewed by inspection without forced interleavings
+or injected failure. No new tests, self-tests or boot/output automation were added.
+Individual BSP operations remain non-preemptible; active deadlines and profiling
+still incur HPET cost.
 
 ## Validation and exclusions
 

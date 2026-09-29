@@ -265,17 +265,20 @@ static struct syscall_result read_file(struct file_object *file,
   uintptr_t data_address = reply_address + sizeof(reply);
 
   if (file->backing == FILE_HOST) {
-    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_READ);
+    struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_READ);
     pending->node = file->host;
     pending->offset = request->offset;
     pending->count = request->capacity < VIRTIO_FS_READ_MAX ? request->capacity : VIRTIO_FS_READ_MAX;
-    task_submit_hostfs(pending);
-    if (pending->status != CALL_OK) {
-      return (struct syscall_result){pending->status, 0};
+    hostfs_request_submit_and_wait(pending);
+    enum call_status status = pending->status;
+    if (status != CALL_OK) {
+      hostfs_request_release(pending);
+      return (struct syscall_result){status, 0};
     }
     reply.read = pending->count;
     KASSERT(copy_to_user(data_address, pending->data, pending->count));
     KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    hostfs_request_release(pending);
     return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
   }
 
@@ -320,17 +323,20 @@ static struct syscall_result write_file(struct file_object *file,
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (file->backing == FILE_HOST) {
-    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_WRITE);
+    struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_WRITE);
     pending->node = file->host;
     pending->offset = request->offset;
     pending->count = request->size < VIRTIO_FS_WRITE_MAX ? request->size : VIRTIO_FS_WRITE_MAX;
     KASSERT(copy_from_user(pending->data, data_address, pending->count));
-    task_submit_hostfs(pending);
-    if (pending->status != CALL_OK) {
-      return (struct syscall_result){pending->status, 0};
+    hostfs_request_submit_and_wait(pending);
+    enum call_status status = pending->status;
+    if (status != CALL_OK) {
+      hostfs_request_release(pending);
+      return (struct syscall_result){status, 0};
     }
     reply.written = pending->count;
     KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    hostfs_request_release(pending);
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (file->backing != FILE_RAM) {
@@ -429,10 +435,12 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
     if (file->backing == FILE_HOST) {
-      struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_SYNC);
+      struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_SYNC);
       pending->node = file->host;
-      task_submit_hostfs(pending);
-      return (struct syscall_result){pending->status, 0};
+      hostfs_request_submit_and_wait(pending);
+      enum call_status status = pending->status;
+      hostfs_request_release(pending);
+      return (struct syscall_result){status, 0};
     }
     return (struct syscall_result){file->backing == FILE_RAM ? CALL_OK : CALL_READ_ONLY, 0};
   }
@@ -445,11 +453,13 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
     if (file->backing == FILE_HOST) {
-      struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_RESIZE);
+      struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_RESIZE);
       pending->node = file->host;
       pending->offset = request.size;
-      task_submit_hostfs(pending);
-      return (struct syscall_result){pending->status, 0};
+      hostfs_request_submit_and_wait(pending);
+      enum call_status status = pending->status;
+      hostfs_request_release(pending);
+      return (struct syscall_result){status, 0};
     }
     if (file->backing != FILE_RAM) {
       return (struct syscall_result){CALL_READ_ONLY, 0};
@@ -465,13 +475,18 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   if (file->backing == FILE_HOST) {
-    struct hostfs_request *pending = task_prepare_hostfs(HOSTFS_SIZE);
+    struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_SIZE);
     pending->node = file->host;
-    task_submit_hostfs(pending);
-    if (pending->status != CALL_OK) {
-      return (struct syscall_result){pending->status, 0};
+    hostfs_request_submit_and_wait(pending);
+    enum call_status status = pending->status;
+    if (status != CALL_OK) {
+      hostfs_request_release(pending);
+      return (struct syscall_result){status, 0};
     }
     reply.size = pending->offset;
+    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    hostfs_request_release(pending);
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
   } else {
     file_begin_operation(file);
     reply.size = file->size;
