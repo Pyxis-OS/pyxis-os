@@ -1,11 +1,13 @@
 # Build bundles
 
-The root workflow has separate kernel, SDK, userland and ports jobs, each
-publishing its own tar bundle. Kernel and SDK builds can run independently;
-ports consumes the SDK bundle, then userland consumes both SDK and ports. The
-final image job downloads all four and assembles the ISO without compiling them again.
+The root workflow uses one checkout and build job, publishing separate kernel,
+SDK, userland and ports tar bundles plus the image artifact. One parallel Make
+invocation builds the image and bundles through the existing dependency graph:
+kernel and SDK can build independently, ports follows SDK, and userland follows
+ports. Outputs stay in the same workspace, without intermediate artifact downloads
+or repeated checkouts.
 
-| Job / artifact | Local target | Tar payload |
+| Component / artifact | Local target | Tar payload |
 | --- | --- | --- |
 | kernel / pyxis-kernel | `make bundle-kernel` | `build/caelum.elf` |
 | sdk / pyxis-sdk | `make bundle-sdk` | `build/sdk` |
@@ -15,10 +17,10 @@ final image job downloads all four and assembles the ISO without compiling them 
 Archives are written to `build/bundles/{kernel,sdk,userspace,ports}.tar`.
 Each also contains its `build/bundle-info` record and payload checksum list.
 SDK includes the headers, startup objects and runtime libraries built from the
-pinned userland source; the userland job builds applications, not those libraries.
-The compiler stays in the prebuilt container and is not rebuilt by these jobs.
+pinned userland source; the userland target builds applications, not those libraries.
+The compiler stays in the prebuilt container and is not rebuilt by the workflow.
 The SDK includes the host converter and is intended for the current Linux x86-64
-build host. No compiler-container update is needed for this job split.
+build host. Consolidating the jobs does not change bundle formats or local reuse.
 
 ## Local reuse
 
