@@ -146,12 +146,12 @@ contracts. The [block-storage foundation](persistent-storage.md#agreed-block-sto
 has an agreed queue ownership/lifetime contract and focused task sequence.
 [Configurable split queues](../virtio-queues.md) and the filesystem/entropy
 migration are complete. [Virtio-blk and the internal block interface](../block-storage.md)
-now provide bounded ticketed reads/writes and ordered flushes; GPT discovery
+now provide bounded ticketed reads/writes and ordered flushes.
+[GPT discovery](../gpt.md) publishes one immutable boot-time map with bounded
+validation and read-only degraded-copy handling. Final milestone validation
 remains. Device/transport failure is terminal until reboot. Later shared-core,
-recovery, FUSE and native-persistence milestones remain proposed. The block API,
-capacities and manual debugger exercise are documented; GPT validation bounds and
-degraded-copy handling must be settled before its task. These design notes do
-not authorize subsequent implementation.
+recovery, FUSE and native-persistence milestones remain proposed. These design
+notes do not authorize subsequent implementation.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

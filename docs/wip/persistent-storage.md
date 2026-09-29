@@ -1,8 +1,9 @@
 # Pyxis pool and persistent filesystem
 
 Status: agreed design direction, 2026-09-29, with a selected block-storage
-foundation milestone and a proposed sequence after it. Shared split queues and
-the internal block driver are implemented; GPT and the filesystem remain planned.
+foundation milestone and a proposed sequence after it. Shared split queues,
+the internal block driver and GPT discovery are implemented; final foundation
+validation remains, and the filesystem is still planned.
 These notes do not authorize subsequent implementation. The contract and focused
 task sequence are agreed below; disk formats and enforcement interfaces still
 need specification. Remaining proposals are identified separately.
@@ -384,9 +385,12 @@ that uncertainty and no automatic retries occur. A write/flush error latches
 write failure until reboot while reads remain available on a healthy transport.
 Device/transport failure is terminal until reboot with runtime resources retained.
 
-GPT discovery remains planned and read-only: validate checksums, bounds and
-primary/backup consistency. Ambiguous metadata prevents writable partition use.
-No automatic repair is included.
+[GPT discovery](../gpt.md) now validates the protective MBR, bounded GPT 1.0
+headers and entry arrays, checksums, extents, GUID uniqueness and primary/backup
+agreement. A boot-time BSP task publishes one immutable map. One surviving valid
+copy is degraded and read-only; disagreeing valid copies expose no map. There is
+no automatic repair or raw-block write gate. Trusted kernel clients must preserve
+GPT metadata throughout the boot and check current device state separately.
 
 ### Focused tasks and remaining decisions
 
@@ -399,14 +403,13 @@ No automatic repair is included.
 - [x] Add virtio-blk using the helper and the internal block interface, including
   explicit development-disk selection, geometry and sector checks, bounded
   requests, ordered flush and error reporting.
-- [ ] Add read-only GPT discovery and validation under the agreed ambiguity policy.
+- [x] Add read-only GPT discovery and validation under the agreed ambiguity policy.
 - [ ] Validate with ordinary builds, interactive QEMU boots and debugger inspection,
   including filesystem/entropy regression checks and block read/write/flush use.
 
-The queue and block APIs, capacities, ownership, deadlines and completion statuses
-are documented in their implemented contracts. Before GPT implementation, specify
-validation bounds and degraded-copy handling without reopening unrelated
-filesystem-format decisions.
+The queue, block and GPT interfaces, bounds, ownership, deadlines and failure
+statuses are documented in their implemented contracts. The final milestone
+validation task remains separate from subsequent filesystem-format work.
 
 The [manual block-I/O exercise](../block-storage.md#manual-debugger-exercise)
 uses the ordinary nonblocking API from GDB and an explicitly selected disposable
