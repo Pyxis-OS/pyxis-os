@@ -1,6 +1,6 @@
 # Task state and BSP service requests
 
-Status: agreed next milestone after the completed
+Status: in progress, with request ownership and the BSP executor implemented after the completed
 [read-only filesystem milestone](../filesystem-readonly.md). This document selects
 the boundaries and scheduling policy; individual tasks still require their own
 implementation PRs. It does not authorize concurrent allocation, task migration
@@ -177,7 +177,7 @@ an operation. Remove obsolete paths as their consumers move.
   existing task record, and dispatch can temporarily run from the scheduler, but
   isolate those adapters. Preserve atomic installation and early completion.
   Record fresh structure sizes and existing workload measurements as the baseline.
-- [ ] **2. Introduce the BSP executor and agreed scheduling policy.** Move migrated
+- [x] **2. Introduce the BSP executor and agreed scheduling policy.** Move migrated
   dispatch to a dedicated worker with FIFO, idle notification and conditional
   yield. Establish initialization/failure ordering, single-CPU progress, and the
   prohibition on self-submission. Keep pending-work visibility correct while
@@ -219,8 +219,7 @@ Preparation requires FREE storage and prepares the existing task wait. Submissio
 publishes the record under a separate FIFO queue lock, saving the wait pointer
 before lending the record. The synchronous wrapper only inspects results after
 wait notification. Completion clears queue/wait references and publishes COMPLETE
-before waking; the dispatcher saves the next record before completion and makes
-no further accesses to the completed record. Consumption ends with explicit
+before waking; dispatch makes no further accesses to the completed record. Consumption ends with explicit
 release to FREE. This state is not an asynchronous polling interface.
 
 The pipe record carries only the capability-table loan, reply and status in
@@ -231,14 +230,12 @@ caller retains existing authority and user-buffer validation and copies the
 result locally before releasing the request. Task retirement and prepared-task
 discard assert that the embedded request is FREE.
 
-Two temporary adapters keep this PR bounded. `task_bsp_request_storage` provides
-the typed record embedded in task metadata; both user and kernel task allocations
-still include it. `bsp_requests_service` drains a detached FIFO batch in the
-scheduler's former pipe-service position; `bsp_requests_pending` preserves BSP
-timer/preemption visibility. Neither adds publication notification nor a yield
-between requests. Task 2 replaces scheduler dispatch with the agreed worker;
-task 7 replaces embedded storage. Other subsystem queues and resource waits are
-unchanged. No public ABI or dependency revision changed.
+`task_bsp_request_storage` still provides the typed record embedded in task
+metadata; both user and kernel task allocations include it until task 7. Task 1
+used scheduler-driven detached batches and an explicit pending check; task 2
+removed both dispatch adapters in favor of the executor described below. Other
+subsystem queues and resource waits are unchanged. No public ABI or dependency
+revision changed.
 
 ### Fresh sizes
 
@@ -309,8 +306,87 @@ by inspection; no allocation failure or task fault was injected.
 Ordinary kernel/image builds and `git diff --check` passed. The existing HOST
 profiling local named `started` still produces its pre-existing shadow warning;
 this change adds no compiler warnings. No tests, boot/output automation or CI
-configuration were added. Worker initialization, notification, conditional yield
-and VM/display handoff inspection belong to later tasks.
+configuration were added. These task-1 observations precede the executor change
+below; VM/display handoff inspection remains part of task 3.
+
+## Task 2 executor and validation
+
+Task 2 is implemented by `22be47d` on `kernel/bsp-executor`. Boot calls
+`bsp_requests_init()` immediately after `task_init()`, before publishing user
+tasks. Failure to create the worker panics with the allocation error: it is
+required infrastructure, with no degraded mode or queued work left without an
+executor. APs acquire initialization through the existing scheduler-startup
+publication. The worker starts runnable, so requests arriving before its first
+execution need no special notification.
+
+The executor removes one FIFO head under the request lock and services it with
+IF=0 after unlocking. It completes the operation, enables interrupts, and calls
+`kernel_task_yield_if_runnable()`. That scheduler-owned helper checks the BSP
+ready queue with IF=0 under the scheduler lock and switches only when another
+task is runnable, returning with IF=1. Only the BSP dequeues that ready queue,
+so a positive check remains valid until the switch. Timer/preemption handling
+still services the unmigrated subsystem queues and deadlines. Individual service
+operations remain non-preemptible; no quota, priority or service budget was added.
+
+An empty queue causes the worker to prepare and publish an untimed wait under
+the request lock, then unlock and sleep. The first publisher takes and clears
+that wait pointer under the same lock, then wakes it after unlocking. Subsequent
+publishers see no waiter while the worker is runnable or servicing requests.
+An early notification is remembered without enqueueing a still-running worker;
+a parked worker is enqueued and a remote publisher sends the existing BSP
+reschedule IPI. BSP callers send no self-IPI. The worker always finishes its
+published wait even if a request arrives before sleep: a publisher may already
+hold the detached pointer, so checking the queue again and reusing the wait
+would be unsafe. There are no timed wakes or other notification sources for this
+wait. Request submission allocates nothing and still validates current-user-task
+storage ownership, excluding kernel clients and executor self-submission.
+
+`bsp_requests_service` and `bsp_requests_pending` are removed. Scheduler dispatch
+and preemption now see this service only through the executor's normal ready
+state; old subsystem queues keep their existing visibility. Pipe creation is
+still the only migrated operation. `struct task` remains 7,104 bytes and the pipe
+record remains 56 bytes. The executor adds one task allocation and a 16 KiB stack,
+plus their existing allocator/VM bookkeeping. Kernel-worker request storage
+remains an accepted intermediate cost until task 7.
+
+Ordinary kernel/image builds passed using verified unchanged SDK, userspace and
+ports bundles; only the pre-existing HOST-profile shadow warning was emitted.
+An independent read-only review found no correctness issue. Interactive validation
+used the same one/four-CPU nested-KVM configuration recorded for task 1, with
+normal entropy and background kernel workers. GDB inspection established:
+
+- The initialized executor is a BSP kernel task; service runs under the kernel
+  root with IF=0 and the caller parked in both CPU configurations.
+- On four CPUs, the worker was stopped after publishing its wait but before
+  sleeping. An AP published the next pipe operation, detached the worker waiter,
+  and notified it while it remained unparked. The worker resumed through its wait
+  and serviced the request without a lost wake or duplicate enqueue.
+- With the worker parked, AP publication detached its waiter under the request
+  lock, then after unlocking placed the worker on the BSP ready queue and reached
+  `arch_cpu_reschedule(0)`.
+- The boundary after service entered the conditional-yield helper with IF=1.
+  A four-CPU observation found no other runnable BSP task and selected no switch.
+  A single-CPU completion made the caller runnable, and the helper reached
+  `arch_context_switch` with both queue locks released.
+
+Both configurations completed checksum pipelines over 32 KiB and three-stage
+pipelines with `head -c 32`, including expected upstream EPIPE and child cleanup.
+With GDB detached, each ran `session app://iobench.pxe pipe --buffer 4096`: one
+verified warmup and five verified 1 MiB samples, all with 256 reads, 256 writes,
+zero shorts/errors and successful worker teardown. Elapsed milliseconds were:
+
+| CPUs | Write acceptance median (range) | Consumer acknowledgment median (range) |
+| --- | ---: | ---: |
+| 1 | 2.884 (2.872–3.889) | 3.341 (3.331–4.347) |
+| 4 | 0.730 (0.708–1.703) | 1.074 (1.022–2.590) |
+
+As in task 1, pipe creation is outside these measured intervals; these results
+check regression behavior and make no executor-latency improvement claim. FIFO
+order, notification coalescing across publishers, startup failure unwinding and
+preservation of old pending queues were also reviewed by inspection. No failure
+injection, new tests, boot/output automation or CI changes were introduced. All
+validation QEMU/GDB processes were stopped. The next unchecked task is deferred
+private-memory/display publication; this change does not migrate those services.
 
 ## Validation and exclusions
 
