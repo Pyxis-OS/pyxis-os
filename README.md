@@ -14,7 +14,7 @@ git submodule update --init userspace ports third_party/lwip
 make -j16                 # kernel: build/caelum.elf
 make -j16 image           # kernel, userspace and ports: build/pyxis.iso
 make sdk                  # export build/sdk; see docs/sdk.md
-make fs-tools             # opt-in core archive; requires submodule fs
+make fs-tools             # opt-in formatter/inspector; requires submodule fs
 make run CPUS=4
 make run CPUS=4 VIRTIO_NET=1
 make run ACCEL=tcg        # software emulation when KVM is unavailable

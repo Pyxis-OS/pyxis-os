@@ -153,8 +153,9 @@ PyxisOS/pyxis-fs will own the core and host tools. Its
 [format and tool contract](https://git.internal/PyxisOS/pyxis-fs/src/commit/8c4ffa67595f05eeef97b159d0af0cfb84da1ef5/docs/format.md)
 completes task 1, including inline extent mapping, revised reserve defaults and
 lookup checks for ID acquisition. Task 2 supplies the pinned shared codecs and
-bounded platform boundary through `make fs-tools`; task 3 constructs and reopens
-empty pool images.
+bounded platform boundary. Task 3 adds empty sparse-image construction and
+`info`/`volumes` reopening through `make fs-tools`; task 4 adds general readonly
+traversal, acquisition and explicit GPT image selection.
 Writable recovery, FUSE and native-persistence milestones remain proposed.
 
 | Path | First concrete completion point | Decisions and supporting work |
