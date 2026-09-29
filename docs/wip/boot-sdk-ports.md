@@ -134,6 +134,14 @@ and VM ownership, with FIFO service, prompt worker notification and scheduling
 opportunities between operations. Request completion is separate from waiting;
 public asynchronous I/O and process threads are outside this milestone.
 
+After its closure, the agreed next milestone is [native remote terminal sessions](remote-terminal.md):
+TCP listeners, readiness waits, independent terminals and contained execution
+lifetime lead to a text-based remote shell for agent/developer work. A host client
+supports interactive Kilo and machine-readable command completion; framebuffer
+screenshots remain for graphical work. Authentication, a multiplexer and process
+threads are separate. The milestone records remaining task-local decisions and
+does not start implementation before BSP request closure.
+
 The broader [discussion agenda](storage-and-terminal-agenda.md) covers persistent
 disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
 native terminal sessions leading to a BSP multiplexer and independent navigators.
@@ -190,9 +198,11 @@ implicitly.
 
 ## Agreed boundaries
 
-- Init performs setup and hands off to the shell. Supervision/restart policy
-  waits for the first web-server milestone. Start with a shebang shell script,
-  fail on script errors and use an explicit session launch; `exec` comes later.
+- Init performs setup and hands off to the shell. General service supervision
+  and restart policy remain deferred; remote terminal execution groups have the
+  explicit lifetime contract in their milestone. Start with a shebang shell
+  script, fail on script errors and use an explicit session launch; `exec` comes
+  later.
 - Userspace owns libc, libpyxis, libterm, startup and applications. Pyxis owns
   public ABI headers and elf2pxe, and assembles the SDK, kernel and boot image.
 - Export headers, build runtime libraries, assemble the SDK, then build apps and

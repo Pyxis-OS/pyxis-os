@@ -93,15 +93,17 @@ owns its progress and handles cancellation/failure. Do not design those policies
 implicitly inside the multiplexer. Shells and editors should remain ordinary
 applications alongside navigators.
 
-Candidate progression: terminal sessions, then a minimal multiplexer, then the
-single-panel navigator and its cross-navigator operations. Split that direction
+The agreed first slice is [native remote terminal sessions](remote-terminal.md),
+with a text-based agent/developer client and independent session lifetime.
+The later progression is a minimal multiplexer, then the single-panel navigator
+and its cross-navigator operations. Split that direction
 into bounded milestones before implementation; do not bundle the whole chain.
 
-## End-of-discussion decision
+## Selected next slice
 
-After the storage discussion and bounded Neovim/libuv and LLVM investigations,
-select one next implementation milestone. Native disk storage and the first
-terminal-session slice remain candidates; the toolchain transition or a shared
-prerequisite can be selected explicitly instead. Keep the other tracks parked.
-Starting implementation is optional; unresolved behavior, authority and lifetime
-decisions should be discussed first.
+After closure of the current [BSP request milestone](bsp-service-requests.md),
+continue with [native remote terminal sessions](remote-terminal.md). Its agreed
+contracts and focused task list replace the earlier open choice for this slice.
+Persistent writable storage, the toolchain transition, multiplexer and navigator
+remain parked directions. Discuss each task's remaining behavior, authority and
+lifetime details before implementation.
