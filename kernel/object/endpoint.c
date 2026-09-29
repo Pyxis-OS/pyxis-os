@@ -1,4 +1,5 @@
 #include <abi/endpoint.h>
+#include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -395,7 +396,10 @@ void endpoint_process_exit(struct process *owner)
   }
 }
 
-enum call_status endpoint_create(struct process *owner, struct endpoint_create_reply *reply)
+/* BSP, IF=0, with exclusive ownership of the caller's capability table.
+ * Reserves all delivery storage and installs both handles or neither. */
+static enum call_status endpoint_create(struct process *owner,
+    struct endpoint_create_reply *reply)
 {
   KASSERT(arch_cpu_index() == 0);
   while (capability_free_slots(&owner->capabilities) < 2) {
@@ -443,7 +447,7 @@ static struct endpoint_export *find_export(struct endpoint_state *state, uint64_
   return NULL;
 }
 
-enum call_status endpoint_export_create(struct process *owner,
+static enum call_status endpoint_export_create(struct process *owner,
     const struct endpoint_export_message *request, struct endpoint_export_reply *reply)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -516,6 +520,64 @@ enum call_status endpoint_export_create(struct process *owner,
   return CALL_OK;
 }
 
+void endpoint_create_execute(struct endpoint_create_request *request)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(request->request.state == BSP_REQUEST_SERVICING && request->loan);
+  request->result = endpoint_create(request->loan, &request->reply);
+  request->loan = NULL;
+}
+
+void endpoint_export_execute(struct endpoint_export_request *request)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(request->request.state == BSP_REQUEST_SERVICING && request->loan);
+  request->result = endpoint_export_create(request->loan, &request->input, &request->reply);
+  request->loan = NULL;
+}
+
+static enum call_status create_endpoint(struct endpoint_create_reply *reply)
+{
+  struct process *process = process_current();
+  KASSERT(process);
+  struct endpoint_create_request *request =
+      (struct endpoint_create_request *)bsp_request_prepare(BSP_SERVICE_ENDPOINT_CREATE);
+  request->loan = process;
+  request->reply = (struct endpoint_create_reply){0};
+  request->result = CALL_NO_MEMORY;
+
+  bsp_request_submit_and_wait(&request->request);
+  enum call_status result = request->result;
+  if (result == CALL_OK) {
+    *reply = request->reply;
+  }
+  bsp_request_release(&request->request);
+  return result;
+}
+
+static enum call_status export_endpoint(const struct endpoint_export_message *input,
+    struct endpoint_export_reply *reply)
+{
+  struct process *process = process_current();
+  KASSERT(process);
+  struct endpoint_export_request *request =
+      (struct endpoint_export_request *)bsp_request_prepare(BSP_SERVICE_ENDPOINT_EXPORT);
+  request->loan = process;
+  request->input = *input;
+  request->reply = (struct endpoint_export_reply){0};
+  request->result = CALL_NO_MEMORY;
+
+  bsp_request_submit_and_wait(&request->request);
+  enum call_status result = request->result;
+  if (result == CALL_OK) {
+    *reply = request->reply;
+  }
+  bsp_request_release(&request->request);
+  return result;
+}
+
 static struct syscall_result control_export(struct endpoint *receiver,
     uint64_t operation, uintptr_t address, size_t size)
 {
@@ -572,7 +634,7 @@ static struct syscall_result control_export(struct endpoint *receiver,
 static enum call_status reserve_handles(size_t count)
 {
   while (capability_free_slots(&process_current()->capabilities) < count) {
-    enum capability_result result = task_grow_capabilities();
+    enum capability_result result = capability_request_growth();
     if (result != CAP_OK) {
       return grant_status(result);
     }
@@ -1033,7 +1095,7 @@ struct syscall_result endpoint_service_call(uint64_t rights, uint64_t operation,
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
     struct endpoint_export_reply reply;
-    enum call_status status = task_export_endpoint(&request, &reply);
+    enum call_status status = export_endpoint(&request, &reply);
     if (status != CALL_OK) {
       return (struct syscall_result){status, 0};
     }
@@ -1050,7 +1112,7 @@ struct syscall_result endpoint_service_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   struct endpoint_create_reply reply;
-  enum call_status status = task_create_endpoint(&reply);
+  enum call_status status = create_endpoint(&reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

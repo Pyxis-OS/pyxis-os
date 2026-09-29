@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <abi/handle.h>
+#include <kernel/service/request.h>
 
 struct kernel_object;
 struct capability_entry;
@@ -28,6 +29,19 @@ struct capability_table {
   struct capability_entry *entries;
   size_t capacity;
 };
+
+struct capability_growth_request {
+  struct bsp_request request;
+  struct capability_table *table;
+  enum capability_result result;
+};
+
+/* Current user task, IF=0, no held locks. Lends its table until completion.
+ * Existing entries/references survive growth failure; no entry pointer may be
+ * retained across the call because successful growth replaces their storage. */
+enum capability_result capability_request_growth(void);
+/* BSP executor, IF=0, with exclusive table ownership. */
+void capability_growth_execute(struct capability_growth_request *request);
 
 /* BSP, IF=0, exclusively owning an unsubmitted or caller-lent table.
  * Adds a reference; the caller retains

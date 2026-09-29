@@ -1,6 +1,9 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/object/pipe.h>
+#include <kernel/object/capability.h>
+#include <kernel/object/namespace.h>
+#include <kernel/object/endpoint.h>
 #include <kernel/object/memory.h>
 #include <kernel/object/display.h>
 #include <kernel/panic.h>
@@ -44,6 +47,10 @@ static bool requires_handoff(enum bsp_service service)
 {
   switch (service) {
   case BSP_SERVICE_PIPE_CREATE:
+  case BSP_SERVICE_CAPABILITY_GROW:
+  case BSP_SERVICE_NAMESPACE_CREATE:
+  case BSP_SERVICE_ENDPOINT_CREATE:
+  case BSP_SERVICE_ENDPOINT_EXPORT:
     return false;
   case BSP_SERVICE_MEMORY:
   case BSP_SERVICE_DISPLAY:
@@ -154,6 +161,18 @@ static void request_worker(void *argument)
     switch (request->service) {
     case BSP_SERVICE_PIPE_CREATE:
       pipe_create_execute((struct pipe_create_request *)request);
+      break;
+    case BSP_SERVICE_CAPABILITY_GROW:
+      capability_growth_execute((struct capability_growth_request *)request);
+      break;
+    case BSP_SERVICE_NAMESPACE_CREATE:
+      namespace_create_execute((struct namespace_create_request *)request);
+      break;
+    case BSP_SERVICE_ENDPOINT_CREATE:
+      endpoint_create_execute((struct endpoint_create_request *)request);
+      break;
+    case BSP_SERVICE_ENDPOINT_EXPORT:
+      endpoint_export_execute((struct endpoint_export_request *)request);
       break;
     case BSP_SERVICE_MEMORY:
       memory_request_execute((struct memory_request *)request);

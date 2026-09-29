@@ -51,8 +51,6 @@ enum directory_action { DIRECTORY_ALLOCATE_ENTRY, DIRECTORY_ALLOCATE_NAME, DIREC
 
 struct task {
   struct task *next;
-  struct task *growth_next;
-  enum capability_result growth_result;
   struct task *directory_next;
   struct directory_entry *directory_entry;
   uint64_t directory_kind;
@@ -63,17 +61,12 @@ struct task {
   struct console_wait console_wait;
   struct process_wait process_wait;
   struct pipe_wait pipe_wait;
-  struct task *endpoint_next;
-  struct endpoint_create_reply endpoint_reply;
-  struct endpoint_export_message export_request;
-  struct endpoint_export_reply export_reply;
-  bool endpoint_exporting;
-  enum call_status endpoint_result;
-  struct task *namespace_next;
-  handle_t namespace_handle;
-  enum call_status namespace_result;
   /* Temporary typed storage until the reusable user-request area is provisioned. */
   struct pipe_create_request pipe_request;
+  struct capability_growth_request growth_request;
+  struct namespace_create_request namespace_request;
+  struct endpoint_create_request endpoint_create_request;
+  struct endpoint_export_request endpoint_export_request;
   struct memory_request memory_request;
   struct display_request display_request;
   struct bsp_request *bsp_request; /* Reserved through result consumption. */
@@ -122,13 +115,10 @@ struct scheduler {
 
 static struct scheduler *schedulers;
 static struct task *completed_head;
-static struct task *growth_head, *growth_tail;
 static struct task *directory_head, *directory_tail;
 static struct task *file_head, *file_tail;
 static struct hostfs_request *hostfs_head, *hostfs_tail;
 static struct task *launch_head, *launch_tail;
-static struct task *endpoint_head, *endpoint_tail;
-static struct task *namespace_head, *namespace_tail;
 static atomic_bool started;
 static atomic_bool queues_locked;
 static struct task_wait *timed_waits; /* queues_locked, expired by the BSP. */
@@ -361,75 +351,6 @@ static void expire_timed_waits(void)
   unlock_queues();
 }
 
-enum capability_result task_grow_capabilities(void)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-
-  lock_queues();
-  task->growth_next = NULL;
-  if (growth_tail) {
-    growth_tail->growth_next = task;
-  } else {
-    growth_head = task;
-  }
-  growth_tail = task;
-  unlock_queues();
-
-  /* Do not touch the table after publication. The BSP may finish before
-   * sleep; the wait record preserves that early completion. */
-  task_wait_sleep(wait);
-  return task->growth_result;
-}
-
-static void grow_requested_tables(void)
-{
-  lock_queues();
-  struct task *task = growth_head;
-  growth_head = growth_tail = NULL;
-  unlock_queues();
-
-  while (task) {
-    struct task *next = task->growth_next;
-    task->growth_result = capability_grow(&task->process->capabilities);
-    task_wait_wake(&task->wait_record);
-    /* Waking returns table ownership; the task may immediately exit. */
-    task = next;
-  }
-}
-
-enum call_status task_create_namespace(handle_t *handle)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-  lock_queues();
-  task->namespace_next = NULL;
-  if (namespace_tail) {
-    namespace_tail->namespace_next = task;
-  } else {
-    namespace_head = task;
-  }
-  namespace_tail = task;
-  unlock_queues();
-  task_wait_sleep(wait);
-  *handle = task->namespace_result == CALL_OK ? task->namespace_handle : HANDLE_INVALID;
-  return task->namespace_result;
-}
-
-static void service_namespace_requests(void)
-{
-  lock_queues();
-  struct task *task = namespace_head;
-  namespace_head = namespace_tail = NULL;
-  unlock_queues();
-  while (task) {
-    struct task *next = task->namespace_next;
-    task->namespace_result = namespace_create(task->process, &task->namespace_handle);
-    task_wait_wake(&task->wait_record);
-    task = next;
-  }
-}
-
 static struct task *current_user_task(void)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -446,6 +367,18 @@ struct bsp_request *task_bsp_request_acquire(enum bsp_service service)
   switch (service) {
   case BSP_SERVICE_PIPE_CREATE:
     request = &task->pipe_request.request;
+    break;
+  case BSP_SERVICE_CAPABILITY_GROW:
+    request = &task->growth_request.request;
+    break;
+  case BSP_SERVICE_NAMESPACE_CREATE:
+    request = &task->namespace_request.request;
+    break;
+  case BSP_SERVICE_ENDPOINT_CREATE:
+    request = &task->endpoint_create_request.request;
+    break;
+  case BSP_SERVICE_ENDPOINT_EXPORT:
+    request = &task->endpoint_export_request.request;
     break;
   case BSP_SERVICE_MEMORY:
     request = &task->memory_request.request;
@@ -499,62 +432,6 @@ static void publish_deferred_request(struct task *task)
 struct profile_snapshot *task_memory_profile(void)
 {
   return &current_user_task()->profile;
-}
-
-static void submit_endpoint_request(struct task *task, struct task_wait *wait)
-{
-  lock_queues();
-  task->endpoint_next = NULL;
-  if (endpoint_tail) {
-    endpoint_tail->endpoint_next = task;
-  } else {
-    endpoint_head = task;
-  }
-  endpoint_tail = task;
-  unlock_queues();
-  task_wait_sleep(wait);
-}
-
-enum call_status task_create_endpoint(struct endpoint_create_reply *reply)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-  task->endpoint_exporting = false;
-  submit_endpoint_request(task, wait);
-  if (task->endpoint_result == CALL_OK) {
-    *reply = task->endpoint_reply;
-  }
-  return task->endpoint_result;
-}
-
-enum call_status task_export_endpoint(const struct endpoint_export_message *request,
-    struct endpoint_export_reply *reply)
-{
-  struct task_wait *wait = prepare_user_wait();
-  struct task *task = wait->task;
-  task->endpoint_exporting = true;
-  task->export_request = *request;
-  submit_endpoint_request(task, wait);
-  if (task->endpoint_result == CALL_OK) {
-    *reply = task->export_reply;
-  }
-  return task->endpoint_result;
-}
-
-static void service_endpoint_requests(void)
-{
-  lock_queues();
-  struct task *task = endpoint_head;
-  endpoint_head = endpoint_tail = NULL;
-  unlock_queues();
-  while (task) {
-    struct task *next = task->endpoint_next;
-    task->endpoint_result = task->endpoint_exporting ?
-        endpoint_export_create(task->process, &task->export_request, &task->export_reply) :
-        endpoint_create(task->process, &task->endpoint_reply);
-    task_wait_wake(&task->wait_record);
-    task = next;
-  }
 }
 
 static void queue_directory_request(struct task *task, struct task_wait *wait)
@@ -1270,9 +1147,6 @@ void kernel_task_yield_if_runnable(void)
   for (;;) {
     if (cpu_index == 0) {
       expire_timed_waits();
-      grow_requested_tables();
-      service_namespace_requests();
-      service_endpoint_requests();
       service_directory_requests();
       service_file_requests();
       service_hostfs_requests();
@@ -1366,9 +1240,7 @@ void task_preempt(bool user_mode)
   lock_queues();
   bool schedule_needed = scheduler->ready_head != NULL ||
     (arch_cpu_index() == 0 &&
-     (completed_head != NULL || growth_head != NULL ||
-      endpoint_head != NULL || namespace_head != NULL ||
-      directory_head != NULL ||
+     (completed_head != NULL || directory_head != NULL ||
       file_head != NULL || launch_head != NULL || hostfs_head != NULL));
   unlock_queues();
   if (arch_cpu_index() == 0 && object_reap_pending()) {

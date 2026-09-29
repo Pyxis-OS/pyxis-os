@@ -3,7 +3,7 @@
 
 #include <kernel/mm/types.h>
 #include <abi/syscall.h>
-#include <kernel/object/capability.h>
+#include <abi/handle.h>
 
 struct profile_snapshot;
 struct profile_file_snapshot;
@@ -18,9 +18,6 @@ struct console_wait;
 struct pipe_wait;
 enum bsp_service;
 struct bsp_request;
-struct endpoint_create_reply;
-struct endpoint_export_message;
-struct endpoint_export_reply;
 struct launch_capture;
 struct launch_group;
 struct hostfs_request;
@@ -53,11 +50,6 @@ bool task_deadline_expired(uint64_t deadline);
  * Recheck resource state under the lock; a wake is not a grant of ownership. */
 void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline);
 
-/* Current user task, IF=0, no held locks. Lends its capability table to the
- * BSP and blocks until growth completes. No AP allocation or remote stack
- * access. Existing handles/references survive even when allocation fails. */
-enum capability_result task_grow_capabilities(void);
-
 /* Current user task, IF=0, no held locks. A focused BSP service allocates or
  * discards an unpublished or removed RAM entry. Requests live in task metadata,
  * never on a remote private stack. Allocation returns NULL on exhaustion.
@@ -89,12 +81,6 @@ void task_bsp_request_defer(struct bsp_request *request);
 
 /* Caller-only profile storage adapter; never lend this pointer to a service. */
 struct profile_snapshot *task_memory_profile(void);
-
-/* Current user task lends its table to the BSP for creation/installation. */
-enum call_status task_create_namespace(handle_t *handle);
-enum call_status task_create_endpoint(struct endpoint_create_reply *reply);
-enum call_status task_export_endpoint(const struct endpoint_export_message *request,
-    struct endpoint_export_reply *reply);
 
 /* Current user task, IF=0, no spinlocks held. Lend exclusive file operation
  * ownership to the BSP to replace/release backing; return it after completion. */
