@@ -135,6 +135,11 @@ evidence and header probes; its proposed native event, threading, metadata and
 terminal milestones remain deferred. No Neovim build or runtime compatibility
 is claimed. The LLVM investigation remains separate future work.
 
+The [scheduling and threads direction](scheduling-and-threads.md) connects future
+process threading with independent space identity, task migration and execution
+across CPUs, initially retaining BSP services. Its staged proposals and ownership
+decisions do not start another implementation track.
+
 The [persistent storage design](persistent-storage.md) records the agreed custom
 COW pool, volume guarantees, migration strategy, durability and compatibility
 contracts. The [block-storage foundation](persistent-storage.md#agreed-block-storage-foundation)
