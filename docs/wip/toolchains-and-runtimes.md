@@ -103,7 +103,7 @@ A **hosted Go toolchain** is a later result: run the compiler and go command in
 Pyxis, compile a small program, then examine the wider package/build workflow.
 Process launch, build cache, module acquisition and dependency tooling deserve
 their own scope. Running Go applications and hosting Go development tools are
-both valuable independently of the distant Tailscale idea.
+both valuable independently of the future Tailscale target below.
 
 One very distant illustrative progression is Go runtime, age and small Go
 utilities, fzf and esbuild, gopls, CoreDNS and Caddy, rclone, restic and
@@ -125,14 +125,35 @@ Rust's OS integration automatically, and the selected Clang release need not be
 the LLVM version required by a future pinned rustc. Cross-compiled no_std, std
 support and a hosted Rust toolchain are separate completion points.
 
+## Homelab administration over Tailscale
+
+Agreed future usability target: boot Pyxis, join the owner's tailnet and administer
+existing machines through Tailscale SSH, without changing their server setup.
+Those machines run Tailscale SSH rather than a separate `sshd`. This records a
+target, not an implementation milestone or a change to current priorities.
+
+[Tailscale SSH](https://tailscale.com/docs/features/tailscale-ssh) accepts ordinary
+SSH clients over the tailnet; Tailscale supplies the remote server and applies
+tailnet identity/policy. Pyxis therefore needs tailnet connectivity and an SSH
+client, not its own SSH server for this workflow.
+
+The first complete workflow should retain device identity across reboot, resolve
+and connect to tailnet machines, and provide interactive sessions with working
+control keys, terminal dimensions and escape sequences. Authentication checks
+and disconnects need clear handling. Multiple sessions can later use the proposed
+[terminal multiplexer](storage-and-terminal-agenda.md).
+
+Probe Tailscale's Go runtime, networking, timers, cryptography and persistent
+credential requirements before choosing port tasks. Cross-compiling the client
+is sufficient initially; hosting the Go compiler is not a prerequisite. Upstream
+[userspace networking mode](https://tailscale.com/docs/concepts/userspace-networking)
+offers a SOCKS5/proxy path to investigate for outbound SSH before requiring a
+native TUN interface or full OS routing integration. Its fit with Pyxis and the
+chosen SSH client remains unverified; terminal and client-library gaps also need
+their own bounded investigation.
+
 ## Distant application ideas
 
-- **Wild possible future idea: Tailscale.** Access the owner's tailnet/homelab
-  from Pyxis. This follows a usable Go runtime and a concrete networking/security
-  probe. Upstream [userspace networking mode](https://tailscale.com/docs/concepts/userspace-networking)
-  offers a proxy-oriented investigation without first requiring a TUN interface;
-  full OS routing/interface integration is a separate goal. This is a candidate,
-  not a promise that the existing socket or capability contracts suffice.
 - **Wilder even later idea: Ladybird.** A full graphical browser after substantial
   userspace runtime, graphics and application infrastructure. Probe the selected
   [upstream revision](https://github.com/LadybirdBrowser/ladybird) and its language,
@@ -140,6 +161,6 @@ support and a hosted Rust toolchain are separate completion points.
   Desktop and eventual GPU work may help; do not make accelerated rendering a
   verified prerequisite without investigation. This is deliberately distant.
 
-Neither application drives immediate kernel abstractions. The next useful step
+Neither target drives immediate kernel abstractions. The next useful step
 remains a bounded library/tool consumer, not a speculative compatibility layer
 for the entire future port list.
