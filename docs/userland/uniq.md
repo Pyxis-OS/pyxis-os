@@ -75,8 +75,11 @@ ran through the Remote session's host client in machine mode, reading inputs
 and writing outputs through `host://`. The same upstream revision, unpatched
 and built with host GCC, ran on identical bytes under `LC_ALL=C`.
 
-All 28 cases produced the same exit status, and all 23 output files were
-byte-identical:
+All 28 cases matched in success or failure, and all 23 output files were
+byte-identical. Raw host exit codes were 0 or 1 only, with 1 for exactly the
+five failure cases below. For each guest failure the shell reported `Exited
+with status 1`. Guest successes were `command_complete` status 0 with no shell
+diagnostic, which the shell only produces when every stage exits 0. Cases:
 
 - Plain, `-c`, `-d`, `-u`, `-c -d` and `-d -u` on adjacent and non-adjacent repeats.
 - `-f 1`, `-f 2`, `-s 2`, `-f 1 -s 1` and `-f 9` over space- and tab-separated fields.
