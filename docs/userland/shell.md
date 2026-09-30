@@ -413,6 +413,10 @@ fault does not bring back the original shell or restart the session.
 This is explicit delegation followed by caller exit, not process replacement
 or a terminal ownership protocol. It does not add supervision or `exec`.
 
+In a remote session, root-shell exit causes the server to terminate all remaining
+group members, including a session successor. Remote `session` handoff therefore
+cannot keep a successor running after that shell exits.
+
 ## Startup and child authority
 
 The shell expects named `input`, `output`, `memory` and `launcher` resources,

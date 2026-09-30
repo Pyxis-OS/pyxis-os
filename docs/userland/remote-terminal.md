@@ -230,8 +230,7 @@ The underlying [terminal sessions](terminal-sessions.md),
 [TCP listener/readiness contract](../devices/tcp.md),
 [execution groups](../interfaces/execution-groups.md) and
 [termination ownership matrix](../interfaces/execution-group-termination.md)
-record authority, queue and cleanup boundaries. Shared filesystem roots are not
-session isolation. Four admitted sessions can occupy the service indefinitely;
+record authority, queue and cleanup boundaries. Sessions with the same filesystem grants can access the same files. Four admitted sessions can occupy the service indefinitely;
 there is no idle timeout or per-session CPU/memory quota. Transport record
 capacity, including pending handshakes and TIME_WAIT, can prevent admission even
 below that session count.
@@ -307,3 +306,54 @@ The historical checks above precede combined acceptance. They do not claim
 exhaustive renderer, malformed-frame, failure-unwind or ownership-race coverage.
 Published HOST cleanup remains unbounded. All jobs from those checks were stopped;
 no committed tests, exercise programs or boot/output automation were added.
+
+### Combined acceptance
+
+Combined acceptance started from Pyxis `a2c4ab2` with userland `5cbfbbd`; the
+Kilo fix was rechecked with ports `fc728f7`. It used four CPUs, nested KVM,
+256 MiB, VirtIO NET/RNG and
+a writable virtiofs export, with the default Remote init and loopback forwarding.
+Ordinary image and host-client builds used the existing compiler. Two persistent
+machine clients used separate input FIFOs and JSON captures; an interactive
+client ran alongside them. The local Development shell also completed `ls`
+through physical-key input while remote work continued. A framebuffer capture
+was used only to inspect that local UI; remote commands and reports were read
+as text.
+
+Kilo created `host://hello.c`, searched for and edited its message, saved,
+reopened and quit. Its idle status message cleared without another keypress.
+TCC compiled the saved source to `host://hello.pxe`, which printed the edited
+message and completed successfully. Missing compiler input produced a readable
+diagnostic and status 1. The other session retained its independent `app://share`
+working directory while running a pipeline with redirection and reading back
+its saved output. The shared HOST source and executable were visible on the host.
+
+`iobench read app://share/iobench-small.bin --bytes 32768 --rounds 1` reported a
+verified warmup and sample with 32,768 bytes consumed and no failed pass.
+`allocbench heap --rounds 64 --profile` reported 8,192 allocation attempts and
+releases, zero failures and no backing-allocation requests in its measured
+window. Both returned success and their full reports arrived through machine
+output records. These checks establish usability and report collection, not a
+new performance baseline.
+
+Ctrl+] while interactive Kilo waited for input returned acknowledged group
+termination and complete output draining. Disconnecting a client running a
+foreground Lua CPU loop reclaimed its session. Pausing a host reader during a
+large Lua output stream filled the terminal queue to exactly 65,536 bytes; GDB
+observed a parked, interruptible writer and two group members while another
+client continued completing commands. After disconnecting that reader and
+exiting the remaining shell, GDB showed listener-only readiness, one transport
+record and empty completed-task, object-retirement and TCP-retirement queues.
+
+Page Down on a file shorter than Kilo's viewport exposed a cursor-boundary defect
+in the pinned upstream editor: it could move past the EOF insertion row, and Left
+could then read beyond the row array. The maintained port patch clamps paging to
+EOF and bounds Left's previous-row lookup. A rebuilt image confirmed Page Down
+on an eight-line file stops at the EOF insertion row, Left returns to the last
+line, and editing/saving at EOF succeeds. Empty-file paging, Left, insertion,
+save and quit were checked through the same native client.
+
+The final ports change required a Kilo/ports image rebuild, not a compiler-container
+rebuild. Validation used the actual clients, manual QEMU input and read-only GDB;
+no tests, new exercise programs, fault injection or boot/output automation were
+added. All client, QEMU, debugger and virtiofsd jobs were stopped after validation.
