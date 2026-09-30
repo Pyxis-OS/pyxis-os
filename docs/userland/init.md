@@ -63,6 +63,55 @@ configuration and archive contents retain their timestamps. Supply overrides on
 each invocation; a later build without them restores the packaged defaults.
 Kernel-only builds do not select or package init.
 
+## Native disk configuration and mounting
+
+`MOUNT_DISK` and `MOUNT_PRINCIPAL` are paired deployment inputs. They generate
+`mount.disk=<GPT-GUID>` and `mount.principal=<32-hex-digits>` in the Limine
+command line. The disk GUID uses canonical hyphenated text; the principal is a
+nonzero 128-bit ID. Both absent disables native mount authority. Partial,
+malformed, zero or duplicate configuration fails setup; kernel parsing also
+rejects malformed or duplicate options supplied outside the Make generator.
+The GUID selects a disk but authenticates neither it nor its content.
+
+Prepare a populated GPT image using the
+[native adapter instructions](../devices/filesystem-native-adapter.md#prepare-a-disposable-disk),
+then attach it read-only with configuration matching that image:
+
+```sh
+make run CPUS=4 INIT=/tmp/init-native.sh INIT_CPUS= \
+  VIRTIO_BLK_IMAGE=/absolute/path/to/development.raw VIRTIO_BLK_READONLY=1 \
+  MOUNT_DISK=01234567-89ab-cdef-0123-456789abcdef \
+  MOUNT_PRINCIPAL=00112233445566778899aabbccddeeff
+```
+
+These IDs are examples, not defaults. Do not mutate the image from the host while
+it is open in the guest. A trusted script can mount a selected volume before
+its usual session handoff:
+
+```sh
+#!app://shell.pxe
+mount --partition 1 --volume system --read-only data://
+session app://session.pxe --start-services
+```
+
+Every workload init gets the same configured principal and disk scope. The
+`native_mount` resource is issued when configuration is enabled unless the
+complete inventory establishes hardware absence. Ambiguous or incomplete discovery,
+unsupported hardware and setup failures retain a failing authority. Mount waits
+for the immutable GPT result, verifies the configured disk GUID, then selects a
+one-based partition entry and resolves the volume name within the retained
+filesystem generation. Persistent policy must authorize the configured principal.
+No request or command can supply a different principal.
+
+`--optional` skips only a missing authority, including disabled configuration or
+confirmed hardware absence. Wrong GUID, missing partition/volume, policy denial,
+invalid media and all other failures from present authority stop the script.
+The selected root uses LOOKUP, ENUMERATE and READ_FILES. Ordinary applications
+receive independently retained directory/file grants through handoff; they
+receive neither mount nor raw-block authority. Closing init's mount handle does
+not revoke those roots. `MOUNT_RIGHT_OBSERVE`, directory FILESYSTEM_INFO authority
+and `--no-info` remain task 6 work together with the real information query.
+
 ## Packaged scripts
 
 The userland repository supplies shebang scripts using `app://shell.pxe`:
@@ -162,13 +211,21 @@ network configuration, caller-scoped [memory profiling](../development/allocatio
 [endpoint creation](../interfaces/endpoints.md) through the `service` resource,
 read-only app and writable home roots, an initial `home://` working directory and
 the initial environment. When virtio-fs is present it also receives `host_mount`,
-scoped to that export. The BSP fallback omits the title grant. Workload CPU
-selection chooses which trusted init runs, not an authority ceiling; no workload
+scoped to that export. Paired native disk configuration also supplies
+`native_mount` as described above. The BSP fallback omits the title grant.
+Workload CPU selection chooses which trusted init runs, not an authority ceiling; no workload
 authority is chosen from a hard-coded CPU role.
 
-Mount authority stays with init; the mounted root travels through session
-handoff. Network-configuration authority reaches the session launcher but not
-its interactive shell. Ordinary commands do not inherit launch authority;
+Mount authority stays with init; the selected directory binding list travels
+through session, service and remote-server handoff and ordinary child launch.
+The list contains at most 16 roots, including app/home/HOST. Each launch queries
+and copies the selected grants' actual rights and transport masks; explicit
+read-only attenuation also applies to the working-directory chain. A restricted
+launcher can select fewer roots or rights. It does not recover missing authority
+from a URI label or the capability table. Root/working-directory names and other
+startup data still share the 64 KiB capture bound. Network-configuration authority
+reaches the session launcher but not its interactive shell. Ordinary commands
+do not inherit launch authority;
 `session` delegates it explicitly. The kernel enforces capability rights, while
 the trusted programs choose what to delegate. Neither URI names nor selecting
 a different script creates authority beyond the supplied grants.

@@ -34,7 +34,7 @@ union. Submission itself cannot fail to allocate storage, including required
 cleanup requests.
 
 One synchronous request may occupy the area at a time. Its reservation extends
-through result consumption, including HOST user-buffer copying and transfer of
+through result consumption, including HOST/native user-buffer copying and transfer of
 returned objects or executable captures. A second preparation requires the first
 reservation to be released. Independent launch captures/prepared batches and returned heap
 objects retain their own lifetimes across operations.
@@ -93,7 +93,8 @@ Native filesystem requests also use FORWARDED. Publication reserves one of the
 32 shared native slots and stamps the deadline before entering the executor
 FIFO. The worker derives authority from held views plus captured caller rights,
 detaches input nodes and releases admission before common completion. The
-4,584-byte typed record fits the existing 4,928-byte request allocation. See
+4,592-byte typed record, including the owned CAPTURE staging pointer, fits the
+existing 4,928-byte request allocation. See
 [native object ownership](../devices/filesystem-native-adapter.md#build-and-ownership).
 
 Readiness waits also use FORWARDED. The executor hands their copied interests to
@@ -125,8 +126,13 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 
 Authority checks remain in their owning subsystems; callers validate user buffers
 and copy replies. Services clear loans before completion. Capability growth or
-launch preparation following HOST result consumption begins only after releasing
-the HOST reservation.
+launch preparation following HOST/native result consumption begins only after
+releasing that filesystem request reservation. Native executable capture runs on
+the owning filesystem worker with the original publication deadline and actual
+caller rights. It transfers complete independently owned launch staging on
+success; errors transfer no bytes. The 16 MiB per-image staging limit is separate
+from native wrapper accounting. Launcher discard/preparation frees that staging
+on the BSP, including stop and launch-failure paths.
 
 ## Executor policy
 

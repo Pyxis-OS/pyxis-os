@@ -8,9 +8,15 @@ process exit and disappear on reboot.
 Both use the existing tagged CALL interface. There is no kernel path parser.
 [Native filesystem objects](../devices/filesystem-native-adapter.md) use the same
 protocol with policy-approved views, 255-byte UTF-8 components and stateless
-continuations; they retain backing independently of parent objects. Their mount
-acquisition interface is not exposed yet. The tree internals below describe the
-archive/RAM backends.
+continuations; they retain backing independently of parent objects. Trusted init
+acquires native roots through the [mount protocol](../../include/abi/mount.h),
+using one configured disk/principal authority and exact requested directory
+rights. Roots require LOOKUP; ordinary directory/file grants can then be
+attenuated and delegated independently of mount authority. Native mutations fail
+under the ordinary rights/read-only rules. See
+[init configuration](../userland/init.md#native-disk-configuration-and-mounting).
+Filesystem-information observation is deferred to task 6 with its real query.
+The tree internals below describe the archive/RAM backends.
 
 ## Tree and lifetime
 

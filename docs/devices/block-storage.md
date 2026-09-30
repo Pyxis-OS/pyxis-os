@@ -3,8 +3,10 @@
 Caelum exposes one modern virtio-blk disk through the kernel-only
 [block interface](../../include/kernel/block.h). It supports bounded asynchronous
 reads, writes and flushes. [GPT discovery](gpt.md) publishes an immutable boot-time
-partition map through a separate kernel interface. There is no userspace raw-disk
-capability, filesystem or mount interface yet.
+partition map through a separate kernel interface.
+[Native read-only mounts](filesystem-native-adapter.md)
+expose directory/file capabilities selected by trusted init, while raw-disk
+authority remains kernel-only.
 
 The block-storage foundation milestone is complete. Its implemented contracts
 live here, in [shared VirtIO queues](virtio-queues.md) for filesystem, entropy and
@@ -30,10 +32,21 @@ Writable attachment permits kernel clients to modify the supplied image.
 Trusted raw-block clients must preserve GPT metadata throughout the boot;
 discovery does not gate raw writes or rescan after them.
 
-The guest requires exactly one matching device in a complete PCI inventory. An
-absent or ambiguous device, incomplete inventory, or unsupported configuration
-leaves block I/O unavailable. Writable devices must offer flush support.
-Read-only devices support reads; writes and flushes return `BLOCK_READ_ONLY`.
+The guest requires exactly one modern virtio-blk candidate in a complete PCI
+inventory. A known transitional virtio-blk device is present but unsupported;
+multiple candidates, including a modern/transitional pair, are ambiguous.
+Writable devices must offer flush support. Read-only devices support reads;
+writes and flushes return `BLOCK_READ_ONLY`.
+
+`block_preparation_result()` retains the immutable selection/setup reason:
+ABSENT, READY, UNSUPPORTED, SETUP_FAILED, AMBIGUOUS or INVENTORY_INCOMPLETE.
+Generic allocation, mapping or transport setup failures use SETUP_FAILED rather
+than claiming unsupported hardware. Only a complete inventory with no recognized
+candidate establishes absence; a later `block_get_info()` failure establishes
+neither absence nor the preparation reason. Configured native mount authority
+is omitted only for ABSENT; other failures remain visible to trusted init and
+cannot be suppressed by an optional mount. A READY result describes preparation,
+not a promise that the transport remains operational.
 
 ## Geometry and capacity
 
