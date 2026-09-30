@@ -39,10 +39,10 @@ a newline.
 
 Invalid options, more than two operands and invalid or negative counts print
 upstream usage or `strtonum` diagnostics and exit with status 1. A missing input or
-unopenable output exits with status 1 before any output is written. Read and
-write errors are reported by upstream `fshut` with status 1 after input reaches
-EOF. There is no SIGPIPE: when a downstream reader closes, uniq continues reading
-to EOF, then reports `ferror <stdout>`.
+unopenable output exits with status 1 before any output is written. A read
+error stops input immediately; upstream `fshut` then reports it with status 1.
+Output errors do not stop the input loop. There is no SIGPIPE: when a downstream
+reader closes, uniq continues reading to EOF, then reports `ferror <stdout>`.
 
 ## Port surface
 
@@ -58,8 +58,10 @@ interface or compiler change was needed.
   A 36,009-byte `host://` input took 20.4 s in the validation VM below. Treat
   large inputs as slow until stdio gains input buffering; see
   [unbuffered line input](../technical-debt.md#unbuffered-line-input).
-- Console input has no EOF, so interactive stdin cannot finish; use a file,
-  redirect or pipeline. See [console input completion](../technical-debt.md#console-input-completion).
+- The framebuffer console has no EOF operation, so uniq reading its stdin cannot
+  finish; use a file, redirect or pipeline. Independent terminal sessions,
+  including remote `END_INPUT`, do deliver EOF; Ctrl+D is an ordinary byte. See
+  [console input completion](../technical-debt.md#console-input-completion).
 - There is no locale support; comparison and field splitting use the C locale.
 - GCC reports a may-be-uninitialized warning for `loff` in upstream code. It is a
   false positive by inspection and is retained.
