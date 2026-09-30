@@ -630,12 +630,15 @@ static unsigned dimension(const char *text, unsigned maximum)
 int main(int argc, char **argv)
 {
   bool machine = false;
+  uint32_t options = 0;
   unsigned columns = 0;
   unsigned rows = 0;
   int argument = 1;
   for (; argument < argc && argv[argument][0] == '-'; ++argument) {
     if (!strcmp(argv[argument], "--machine")) {
       machine = true;
+    } else if (!strcmp(argv[argument], "--no-shell-echo")) {
+      options |= REMOTE_OPTION_NO_SHELL_ECHO;
     } else if ((!strcmp(argv[argument], "--columns") || !strcmp(argv[argument], "--rows")) &&
                argument + 1 < argc) {
       bool column = !strcmp(argv[argument], "--columns");
@@ -653,8 +656,10 @@ int main(int argc, char **argv)
       break;
     }
   }
-  if (argc - argument != 2 || !dimension(argv[argument + 1], 65535)) {
-    fprintf(stderr, "usage: pyxis-remote [--machine] [--columns N] [--rows N] HOST PORT\n");
+  if (argc - argument != 2 || !dimension(argv[argument + 1], 65535) ||
+      (options && !machine)) {
+    fprintf(stderr, "usage: pyxis-remote [--machine [--no-shell-echo]] [--columns N] [--rows N] "
+            "HOST PORT\n");
     return 1;
   }
   if (!machine) {
@@ -736,6 +741,7 @@ int main(int argc, char **argv)
   unsigned char hello[REMOTE_HELLO_SIZE];
   remote_encode_u32(hello, columns);
   remote_encode_u32(hello + 4, rows);
+  remote_encode_u32(hello + 8, options);
   queue_frame(&client, REMOTE_HELLO, hello, sizeof(hello));
   int result = run_client(&client);
   disconnect_socket(socket_fd, client.acknowledged);
