@@ -1,9 +1,9 @@
 # Native read-only filesystem mounts
 
-Status: task-1 contract agreed, 2026-09-30. Task 1 is complete; implementation
-starts with the separate core continuation prerequisite. No kernel mount or new
-ABI is implemented. Runtime numbers are agreed starting bounds to validate in
-the adapter task, not measured capacity. Update each task in its delivery PR.
+Status: tasks 1–2 complete, 2026-09-30. The contract is agreed and the shared
+core continuation prerequisite is implemented. Task 3 is the bounded kernel
+adapter integration. No kernel mount or new ABI is implemented. Runtime numbers
+are agreed starting bounds to validate in the adapter task, not measured capacity. Update each task in its delivery PR.
 
 ## Completion point
 
@@ -124,7 +124,7 @@ facilities; it does not expand this storage milestone.
 
 ## Task-1 integration contract
 
-The source review uses Pyxis `79f9889`, pinned pyxis-fs `0c51185` and pinned
+The task-1 source review used Pyxis `79f9889`, pinned pyxis-fs `0c51185` and pinned
 userland `c9ed311`. The integration contract below is agreed, including the READ
 mapping, shared principal, duplicate-pool exclusion, continuation mapping and
 initial runtime bounds. This design task does not start later implementation tasks.
@@ -225,10 +225,12 @@ not gain an invented native-pool query result.
 
 ### Core continuation prerequisite and abandonment
 
-Agreed: add a small validated continuation/seek interface to pyxis-fs before
-native enumeration. Do not reconstruct a listing by skipping every earlier
-entry on each OS call. The prerequisite supplies a policy-view page operation
-with caller-owned continuation input/output and operation-local scratch; it must
+The pinned core now provides
+[`pfs_view_directory_page`](../../fs/docs/core.md#stateless-directory-continuation)
+for validated continuation before native enumeration. Do not reconstruct a
+listing by skipping every earlier entry on each OS call. The API supplies a
+policy-view page operation with caller-owned continuation input/output and
+operation-local scratch; it must
 not require an open cursor or a kernel token registry between calls. Keep format
 parsing and continuation validation in the core. No on-disk format change or
 persistent enumeration index is required.
@@ -239,10 +241,11 @@ by copies of that object and never reused after destruction. `generation` holds
 that identity, not the pool generation. `position` carries the core's opaque
 64-bit continuation value, not an entry ordinal or kernel pointer. Zero means
 start; a nonzero value identifies a resume point after a previously emitted
-entry in the selected immutable directory. The core owns its encoding; a bounded
-leaf/slot locator validated through the directory tree is one implementation
-candidate, not authority to read arbitrary blocks. The prerequisite must establish
-that the chosen encoding fits this mapping before the kernel consumes it.
+entry in the selected immutable directory. The core owns its encoding: one-based
+slot choices along the root-to-leaf path, with the leaf slot in the low byte.
+Eight levels of at most 195 slots fit in 64 bits. Validation follows only rooted
+references, never a caller-supplied block address. The implemented representation
+fits the existing two-word OS mapping without changing the disk format.
 
 The zero pair starts a listing. Zero identity with nonzero continuation is
 invalid; a different nonzero identity returns `DIRECTORY_CHANGED`. Identity
@@ -276,7 +279,9 @@ page validates consulted structures and returned entries, without claiming a
 full-list count reconciliation or uniqueness check across skipped pages. Keep
 child-identity duplicate detection within each returned page. Preserve the
 existing diagnostic cursor's end-to-end count checks and the separate whole-image
-checker; the diagnostic cursor does not establish cross-page uniqueness. Document this distinction in pyxis-fs when adding the API.
+checker; the diagnostic cursor does not establish cross-page uniqueness. The
+[core interface](../../fs/docs/core.md#stateless-directory-continuation) records
+this distinction.
 
 The OS requests one candidate entry with the held LIST right. ENTRY copies a
 whole name/kind and the returned continuation only after success.
@@ -290,9 +295,10 @@ error path.
 Abandoning an OS continuation retains no allocation, cursor registry entry or
 extra volume reference. Closing the directory releases its view after in-flight
 uses finish. Independent enumerations and capability copies have no shared
-position. Stale continuations cannot keep a mount alive or reopen it. Publish
-and review the focused core prerequisite before pinning it for native integration;
-this design PR neither changes that pin nor implements the new interface.
+position. Stale continuations cannot keep a mount alive or reopen it. The core
+prerequisite is published in [pyxis-fs PR #9](https://git.internal/PyxisOS/pyxis-fs/pulls/9)
+at `017996b`; merge it before the parent pin update. No kernel enumeration
+implementation is introduced by this prerequisite.
 
 ### Worker, limits and final release
 
@@ -495,10 +501,14 @@ pool IDs identify shared capacity and must not be summed per binding/volume.
 
 ### Validation and next implementation task
 
-Task 1 changes documentation only. The rights distinction, cursor ownership,
-error collapse and memory accounting above are established by inspection of the
-pinned core; the continuation interface is a new prerequisite, not an existing
-capability. No kernel runtime capacity or timing has been measured. Task 3 must
+Task 1 established the contract by source inspection. Task 2 built the core and
+host tools and validated continuation through interactive GDB, including pages
+of 300/300/4 entries across directory leaves, replay/end, nested views, invalid
+slot paths, denied LIST access, budget refusal and cleanup to zero charged bytes.
+Both committed states of the populated image passed host checking; recursive
+extraction matched the source headers. Exact coverage and unexercised cases are
+recorded in [host validation](../../fs/docs/host-tools.md#directory-continuation-validation).
+No kernel runtime capacity or timing has been measured. Task 3 must
 record peak live core and adapter bytes for representative populated images,
 volume opening, policy acquisition and nested traversal; later object validation
 must include enumeration continuation/replay/end/abandonment, repeated mounts
@@ -509,9 +519,9 @@ inspection. If the initial profile cannot serve those images, revise the bounds
 explicitly with evidence; do not relabel LIMIT as corruption or silently increase
 the allowance.
 
-Task 1 is complete with the contract agreed. No compiler-container rebuild or
-dependency pin change is needed for this design PR. Task 2 publishes the focused
-pyxis-fs continuation prerequisite before the parent updates its gitlink; native
+Tasks 1–2 are complete. The published core dependency must merge before its
+parent pin update. No compiler-container rebuild is needed. Task 3 links that
+core and implements the bounded block/memory adapters; it has not started. Native
 enumeration must not fall back to reconstructing every prefix.
 
 Agreed scope limitations are tracked in [technical debt](../technical-debt.md#native-mount-design-limits).
@@ -523,7 +533,7 @@ Agreed scope limitations are tracked in [technical debt](../technical-debt.md#na
    a concrete rights/lifetime/error mapping and agreed runtime bounds. Record the
    first displayable capacity fields. This is a design PR, not a broad framework
    implementation or a repeat of the filesystem-format design.
-2. [ ] **Add validated core directory continuation.** In pyxis-fs, provide the
+2. [x] **Add validated core directory continuation.** In pyxis-fs, provide the
    bounded policy-view continuation/seek operation described above, with no
    retained enumeration state between calls and no prefix reconstruction.
    Specify the opaque token, view/generation validation, repeat/end/error rules

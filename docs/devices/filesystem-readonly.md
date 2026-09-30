@@ -37,6 +37,15 @@ a selected generation; views and cursors retain their volume. Close refuses with
 be copied. The [core contracts](../../fs/docs/core.md#platform-ownership) specify
 buffer ownership, partial reads, error publication and memory charging.
 
+The core also provides [stateless directory continuation](../../fs/docs/core.md#stateless-directory-continuation)
+through `pfs_view_directory_page`. Each LIST page validates an opaque 64-bit
+slot path from the held directory root and publishes names/kinds only after
+allocation proof. Tokens retain no cursor or volume reference and can be replayed
+or abandoned. This supports the [native mount prerequisite](../wip/native-readonly-filesystem.md)
+without kernel integration or a disk-format change. Stateful diagnostic cursors
+retain full-list count checks; stateless pages do not claim reconciliation of
+skipped entries. Existing ancestry/proof costs remain.
+
 ## Identity, names and namespace bindings
 
 Pool, volume, object and principal IDs are distinct opaque nonzero 128-bit types.
