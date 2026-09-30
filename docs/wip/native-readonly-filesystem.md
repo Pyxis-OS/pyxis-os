@@ -1,9 +1,10 @@
 # Native read-only filesystem mounts
 
-Status: selected next milestone, 2026-09-30. This records agreed scope and
-implementation tasks; no kernel mount or new ABI is implemented by this document.
-Resolve the task-1 contract before starting implementation. Update each checkbox
-in the PR that delivers that task.
+Status: task-1 design review, 2026-09-30. READ bundling, the shared bootstrap
+principal and the authority boundaries below are agreed. The concrete integration
+contract below is proposed for review; enumeration remains an explicit decision.
+No kernel mount or new ABI is implemented. Runtime numbers are starting bounds
+to validate in task 2, not measured capacity. Update each task in its delivery PR.
 
 ## Completion point
 
@@ -35,8 +36,8 @@ recovery and installation remain separate milestones.
 
 ## Agreed selection and authority
 
-Partition, volume and namespace selection belong in init. Illustrative syntax,
-not an implemented command or a frozen parser spelling:
+Partition, volume and namespace selection belong in init. Proposed command
+spelling, not yet implemented:
 
 ```sh
 mount --partition 1 --volume system --read-only data://
@@ -122,26 +123,338 @@ implement arbitrary other disk backends or optional upstream discovery features.
 Local-IP display is a separate future follow-up using existing networking
 facilities; it does not expand this storage milestone.
 
-## Contracts to settle in task 1
+## Task-1 integration contract
 
-These details remain open, rather than implicitly approved implementation choices:
+The source review uses Pyxis `79f9889`, pinned pyxis-fs `0c51185` and pinned
+userland `c9ed311`. The READ mapping and shared-principal policy are agreed;
+the remaining concrete choices in this section are a proposed implementation
+contract for review. They do not authorize starting later tasks.
 
-- How trusted boot configuration supplies the principal and selects the disk
-  authority; explicit behavior when either is absent. Keep deployment values out
-  of hard-coded per-CPU authority rules.
-- The native mount request/rights shape alongside existing HOST mounting; exact
-  rights mapping for root acquisition, lookup, enumeration, metadata and file
-  reads. Define which authority permits filesystem information and its disclosure
-  of shared-pool capacity/accounting.
-- Worker ownership, bounded request/memory limits, cancellation and deadlines;
-  repeated mounts of the same pool/volume, shared instances and final cleanup.
-  Do not import host-checker memory defaults into a 256 MiB kernel unchecked.
-- How selected read-only/degraded state, unsupported formats, media errors and
-  denied access map to existing call errors. Missing optional hardware must be
-  distinguishable from a configured mount failing acquisition or validation.
-- The init command spelling, namespace/session forwarding, binding limits and
-  required versus optional mount behavior. No silent fallback to another disk,
-  partition, volume or principal.
+### Trusted configuration and mount request
+
+Proposed Make inputs `MOUNT_DISK` and `MOUNT_PRINCIPAL` generate Limine options
+`mount.disk=<GPT-GUID>` and `mount.principal=<32-hex-digits>`. The GUID uses
+canonical hyphenated text with explicit conversion to GPT byte order; the
+principal uses the core's nonzero 128-bit ID parser. Both absent disables native
+mount authority. Partial, malformed or duplicate configuration fails boot.
+Values are deployment inputs, never compiled per-CPU role rules.
+
+Every trusted workload init receives the same configured principal and ceiling.
+Each can choose different root grants for its session. Ordinary applications
+receive neither mount authority nor a principal-based acquisition service;
+knowing the shared principal cannot recover rights withheld by a launcher.
+A disk GUID selects the intended disk; it authenticates neither disk nor content.
+Do not choose a first match among duplicates. The current block profile already
+rejects multiple candidate devices; this task does not add multi-device discovery.
+
+Issue a `native_mount` resource only when configured and a candidate block device
+exists. An actually absent device leaves it absent. A present but unusable or
+ambiguous device must retain a failing authority/setup result, rather than look
+absent to `--optional`. Mount processing waits for the immutable GPT result and
+checks the configured disk GUID before partition selection. A wrong GUID, invalid
+GPT or unsupported device is an explicit failure, never fallback to another disk.
+Implementing this distinction requires preserving the block preparation reason;
+`block_get_info()` failure alone is not evidence that hardware is absent.
+
+Keep HOST's `MOUNT_OPEN_ROOT` and access selector. Add a distinct
+`MOUNT_OPEN_VOLUME` operation on the existing mount object/protocol. Its bounded
+request carries a one-based GPT entry number, a counted volume name (1–255 bytes,
+validated by the core) and the exact requested root-rights mask. It contains no
+principal, device selector, namespace label or raw-block address. Capture the
+name before publication; the worker borrows no userspace string. Success returns
+one independently owned directory handle; failure installs none. Calling the
+HOST operation on native authority or vice versa returns `CALL_BAD_OPERATION`.
+
+`MOUNT_RIGHT_OPEN_ROOT` authorizes acquisition. Native authorities also carry a
+separately attenuable `MOUNT_RIGHT_OBSERVE`, needed only when the requested root
+includes filesystem-information authority. Neither right permits raw block I/O.
+Unknown request bits are invalid; known mutation bits are rejected as read-only.
+Root acquisition must include LOOKUP; zero-right or observation-only requests
+are invalid. Narrower grants can be delegated from an acquired root.
+The native command requires `--read-only`; a read-write attempt never opens a
+writable view. The default root grant requests LOOKUP, ENUMERATE, READ_FILES and
+filesystem observation when held; `--no-info` explicitly omits observation.
+The library operation supports exact narrower root masks without inventing a
+second general-purpose command-line rights language.
+
+Select the partition by its GPT entry number, not its packed-array index. Check
+the partition extent and volume name; do not probe other partitions on failure.
+The format assigns no Pyxis GPT type GUID: as with the existing host inspector,
+explicit selection accepts a used entry independently of its type and requires
+a supported Pyxis superblock. Resolve the name through the core's bounded volume
+catalog, open its identity and acquire its root with `pfs_view_acquire`.
+The trusted context uses that volume root, SUBTREE scope, the configured principal
+and the read-only ceiling below. Require the entire requested set; no partial
+success or owner-based bypass.
+
+### Exact rights mapping
+
+| OS grant | Core rights held by the corresponding view |
+| --- | --- |
+| Directory LOOKUP | `PFS_DIR_LOOKUP` |
+| Directory ENUMERATE | `PFS_DIR_LIST` |
+| Directory READ_FILES | `PFS_FILE_READ | PFS_FILE_METADATA` |
+| File READ | `PFS_FILE_READ | PFS_FILE_METADATA` |
+| Directory filesystem observation | Separate kernel observation grant; no extra core object/admin rights |
+
+The bootstrap core ceiling contains only the first three mapped sets; it has no
+mutation, directory-metadata or administrative rights. Root and child directory
+views use SUBTREE scope. Child file views use OBJECT scope and only the requested
+file masks. Every descendant lookup checks the calling OS grant, maps both halves
+of the READ bundle and invokes `pfs_view_lookup` within the held view. It never
+reacquires policy under the bootstrap principal. A persistent file-read grant
+without metadata fails acquisition explicitly with `CALL_DENIED`.
+
+`FILE_READ` uses the held read interface; `FILE_SIZE` uses metadata and returns
+only the byte length. This preserves the OS's existing READ-plus-size contract
+without claiming that the core's two rights are interchangeable. Enumeration
+returns names/kinds only. Directory metadata and policy inspection are not
+required for browsing. Capability copies may share one retained core view, but
+each operation and child-rights request must be checked against the particular
+caller's attenuated OS rights. Sharing the underlying view never restores bits
+removed by delegation.
+
+Add a `DIRECTORY_RIGHT_FILESYSTEM_INFO` bit and a directory information operation,
+not another object type. It can be copied, withheld and explicitly requested on
+child directories only from a parent holding it. It grants no lookup, listing,
+file access or policy inspection. Bootstrap OBSERVE is the authority for this
+additional disclosure of shared-pool information; persistent file grants do not
+implicitly supply it. Acquisition of an ordinary root still goes through policy.
+A native root with only observation may be obtained by attenuating an already
+acquired grant. Other backends retain their existing rights and behavior; they do
+not gain an invented native-pool query result.
+
+### Enumeration proposal and abandonment
+
+Decision pending: prefer temporary reconstruction with the pinned core for this
+milestone, or add a core continuation/seek interface before integration. The
+following specifies the reconstruction option so its cost is reviewable.
+
+Retain no core cursor between OS calls. Each native directory wrapper has a
+nonzero, boot-unique enumeration identity, shared by copies of that object and
+never reused after destruction. The public cursor remains opaque: `generation`
+contains that identity and `position` identifies the next entry in the immutable
+core name order. It is not the pool's generation and contains no kernel pointer.
+The zero pair starts a listing. Zero identity with nonzero position is invalid;
+a different nonzero identity returns `DIRECTORY_CHANGED`. Counter exhaustion
+returns `CALL_LIMIT`, without wrapping. A fresh lookup of the same directory can
+have a different identity; callers restart rather than transplant cursors.
+
+For each call, open a temporary policy-view cursor, skip `position` entries in
+bounded batches and read one candidate. Reject positions above the core record-count bound before scanning. A position
+beyond end is invalid, while position exactly at end repeatedly returns `DIRECTORY_END`. A forged position
+is only an untrusted resume hint: bounds, the operation deadline and the held
+LIST right still apply. ENTRY copies one whole name/kind and advances position.
+BUFFER_TOO_SMALL reports the required NUL-inclusive size without advancing or
+writing a partial name. Any error leaves user output unpublished. Close the
+core cursor on every success, short-buffer, end and error path before completing
+the operation.
+
+Abandoning the OS cursor retains no allocation, cursor registry entry or extra
+volume reference. Closing the directory releases its view after in-flight uses
+finish. Independent enumerations and capability copies have no shared position.
+This choice trades simple ownership for repeated traversal: listing N entries
+can require quadratic enumeration work, in addition to the core's existing
+ancestry/allocation-proof costs. A memory cap does not bound that work. Do not
+hide timeout/limit failures as end-of-directory. If accepted, record this cost
+and the continuation-interface revisit point in technical debt.
+
+### Worker, limits and final release
+
+One dedicated BSP kernel worker serializes all native core calls, including final
+closes. It runs with interrupts enabled; short allocation/free, queue and block
+API sections obey the existing IF=0 rules. No lock spans a wait. The BSP service
+executor forwards typed requests and returns to dispatch; it never sleeps inside
+the core. Extend the explicit service catalog/completion states, following HOST
+forwarding, rather than allowing kernel workers to make nested executor calls.
+
+Use the existing provisioned per-user-task request area. Proposed initial bounds:
+
+| Resource | Initial bound and failure |
+| --- | --- |
+| Admitted native user operations, active plus queued | 32; `CALL_BUSY` on saturation |
+| Shared live core allocation payload across all pools/views | 8 MiB; `CALL_LIMIT` |
+| Native wrapper/adapter payload | 1 MiB and 1,024 live wrappers; `CALL_LIMIT` |
+| Backing reads in flight from this worker | One block ticket |
+| Core callback transfer | At most 16 filesystem blocks, 64 KiB |
+| Operation deadline | One absolute 30-second deadline from publication |
+
+The 32-request and 8 MiB numbers are agreed starting proposals; other numbers
+are proposed integration bounds. Actual allocation failure below a cap is
+`CALL_NO_MEMORY`. Core accounting excludes adapter objects, task/request storage,
+stack, heap overhead and allocator rounding. Charge native persistent objects
+and temporary adapter payload separately; check total kernel cost during task 2.
+Do not substitute the core's 128 MiB default or claim the 8 MiB profile can handle
+every format-valid image. Inspection of `core/pool.c` shows that ordinary
+operations allocate a catalog workspace containing 256 volume/name records,
+256-object ancestry and 64 grants even for one selected volume. Approximate
+x86-64 layout estimates are 215 KiB for this workspace and 5.5 KiB per consulted
+metadata node, retained through proof closure. An otherwise empty 8 MiB budget
+therefore holds only about 1,400 such nodes, fewer after other state/hash-table
+costs. These are source-layout estimates, not measured peaks. Queuing 32 requests
+does not allocate 32 traversal workspaces because execution is serial. Retired wrappers remain charged against both payload and count limits until
+the worker actually frees them; a cleanup backlog cannot bypass the cap.
+Admission storage is already provisioned; final cleanup
+uses embedded retirement links and must not require a free user-request slot.
+
+Share an open pool by authorized device and partition identity/extent, then
+retain its selected pool ID/generation. Share volumes by their retained IDs;
+resolve a requested volume name against that same generation, not a new open.
+Every mount request performs its own policy acquisition and receives its own
+view. Multiple pools/volumes share the global budgets rather than multiplying
+the allowance per mount. No live refresh or idle cache is introduced. A failed
+acquisition releases only the state it acquired and cannot close another root's
+backing. Publishing one root must be atomic with respect to allocation/handle
+installation failures.
+
+Each queued/active operation retains its objects and backing. Published BSP
+requests keep the current uninterruptible loan contract: group stop is observed
+after completion, result cleanup and loan return at the syscall boundary. Do not
+free queued work on caller stop or promise immediate cancellation of an active
+core call. Expired queued work completes as timed out when the worker reaches it;
+it never starts new disk reads. The same deadline covers pending GPT discovery,
+block admission and every backing read. Check it between core calls and inside
+read callbacks; do not reset it for each transfer. It is a cooperative deadline,
+not a hard CPU-time bound, because the core has no preemption/cancellation hook.
+
+Object destruction queues work to this owning worker, including when the ordinary
+BSP reaper runs while it is sleeping inside a read. Preserve deferred execution-
+group cleanup attribution. Release temporary cursors and views before volumes,
+volumes before pools, and pools before reader/memory owners. A BUSY core close
+retains its backing and must not be followed by freeing it. Final release removes
+the shared instance; closing only mount authority does not close live roots.
+Worker infrastructure may remain idle for the boot; it retains no unused pool.
+
+### Partition adapter and operation-local errors
+
+Supply core geometry from the selected extent: `B = floor(extent_bytes / 4096)`.
+Ignore trailing partial filesystem blocks. Check all arithmetic and ranges before
+translating partition-relative blocks to the device's 512-byte or 4 KiB logical
+sectors. Split callbacks at actual device transfer limits, even if that limit is
+smaller than one filesystem block. Do not require a disk-wide 4 KiB-aligned start
+on 512-byte media. No callback may access outside the selected partition.
+
+BLOCK_FULL is an admission wait within the same deadline, with bounded short
+sleeps. After a timed-out `block_wait`, the worker abandons its ticket only after
+that wait returns; the block driver retains unresolved DMA ownership. Require
+successful completion of every requested byte. The reader exposes no write or
+flush callback. Require read-only QEMU attachment and no concurrent host mutation.
+
+The core collapses callback failures to `PFS_IO`. Each top-level native operation
+therefore owns a fresh context containing its absolute deadline and an initially
+empty backing-error field. During that operation, callbacks record the first
+precise backing failure. After the core unwinds, use that cause only when mapping
+that operation's `PFS_IO`; an empty field maps to ordinary `CALL_IO`. Do not replace
+unrelated corruption/limit/denial results with a side error. Clear/unbind the
+context before completing the request, including failed mount preparation and
+cleanup. Reader adapters may borrow this context only during the serial call;
+no last-error field survives in a pool, volume or worker for the next operation.
+
+| Failure source | Public result |
+| --- | --- |
+| Malformed request/selector syntax | `CALL_BAD_REQUEST` |
+| Wrong object kind | `CALL_WRONG_TYPE` |
+| Missing partition, volume or child | `CALL_NOT_FOUND` |
+| Insufficient capability or persistent policy | `CALL_DENIED` |
+| Valid mutation request against the native backend | `CALL_READ_ONLY`, after ordinary authority checks |
+| Core profile/memory cap exhausted | `CALL_LIMIT` |
+| Allocator failure below cap | `CALL_NO_MEMORY` |
+| Admission/shared-state busy | `CALL_BUSY` |
+| Backing wait or operation deadline expired | `CALL_TIMED_OUT` |
+| Unsupported device/GPT/core format or unavailable transport | `CALL_UNAVAILABLE` |
+| Wrong configured disk GUID | `CALL_NOT_FOUND` with disk-selector diagnostic |
+| Absent/invalid/ambiguous GPT or filesystem on a present selected disk | `CALL_IO` |
+| Corrupt metadata, media failure or successful short backing completion | `CALL_IO` |
+
+Retain precise GPT/core/device classifications in bounded kernel diagnostics;
+`CALL_UNAVAILABLE` alone does not distinguish unsupported format from transport
+loss. Optional mounting never suppresses a returned operation error. `PFS_INVALID`
+is BAD_REQUEST only for validated public argument errors; an adapter invariant
+failure must not be mislabeled as user input. Accept healthy or degraded GPT/core
+selection only under their existing rules. Report GPT degradation and filesystem
+degradation separately; unsupported, resource or operational failure is never a
+reason to select an otherwise unexamined fallback generation.
+
+Stage file data in kernel-owned output. The core can report a proved prefix on
+failure, but native errors carry no count/reply: publish data only on success.
+Only successful EOF clamping can produce an EOF short read; do not turn a failed
+backing read into successful partial data. Executable capture uses these same
+rights and failures, retains the file during capture, and follows the existing
+16 MiB external-image staging limit and launch cleanup contract. Capture through
+the native worker and release its request reservation before submitting launch
+preparation to the BSP executor; do not nest a native read inside that executor.
+Executable staging is separately owned launch memory, outside the 1 MiB native
+wrapper cap; its existing launch/batch bounds and failure cleanup still apply.
+There is no new aggregate staging budget across callers, so 8 MiB plus 1 MiB is
+not a total native-workload memory bound. Below those per-capture limits, staging
+can still fail with NO_MEMORY; task-2/combined validation must account for it.
+
+### Bindings, handoff and first information fields
+
+The mount command validates and reserves the destination before acquisition,
+then publishes it only after the complete mount succeeds. A duplicate root or
+conflicting service name fails; it never replaces an existing binding. Store
+`data` as the binding name from `data://`, using existing startup/path name rules.
+The proposed launcher profile supports at most 16 selected roots, including
+app/home/HOST, within the existing 64 KiB startup/launch capture bound. Overflow
+fails explicitly and closes a newly acquired unpublished root; it never drops
+bindings. These are userspace profile limits, not on-disk name/count limits.
+
+`--optional` permits only a missing `native_mount` resource (disabled bootstrap
+configuration or actually absent hardware). A required mount fails in that case.
+Every failure from a present authority stops the script, including wrong GUID,
+partition, volume, principal, policy or validation. Default packaged scripts need
+no disk. HOST command spelling and existing optional behavior stay intact.
+
+Replace hard-coded root-name arrays with an explicit selected directory-binding
+list. Existing root bindings plus successfully mounted roots form the ordinary
+shell/session selection; query and preserve their actual rights and transport
+masks, applying existing explicit read-only attenuation where requested. Forward
+that selected list through trusted session/services/remote-server handoff and
+ordinary child launch. Each launch builds explicit grant entries; it does not
+scan the capability table or inherit every named resource. Mount authorities
+remain excluded. Restricted launchers may select fewer roots or fewer rights;
+working-directory grants must not recover authority omitted from that selection.
+The service namespace remains a separate capability and its existing collision
+rules still apply.
+
+The directory information query requires FILESYSTEM_INFO and returns a bounded
+copied record for its retained mount, without directory traversal or a full
+checker run. First fields are native filesystem type, read-only flag, separate
+GPT/filesystem degraded flags, pool ID, volume ID/name, selected generation and
+pool allocatable bytes `(B - 2) * 4096`. The two superblock slots are excluded;
+capacity includes space needed by shared metadata and reserves, so it is not
+writable volume allowance. Geometry and selected root envelopes establish this
+capacity; they do not establish global usage. Expose no binding name in the
+kernel record: consumers take it from their own selected root bindings.
+
+Used/free bytes, volume charged bytes, guarantee/quota and usage percentage are
+unavailable in this first query, with explicit availability semantics rather than
+zero values. Guarantee/quota and live/retired/free counters exist on disk but are
+merely recorded and locally checked during ordinary opening, not globally
+reconciled. Add them only with their evidence/units made explicit. Fastfetch can
+show type, binding, read-only status and labeled shared-pool capacity; identical
+pool IDs identify shared capacity and must not be summed per binding/volume.
+
+### Validation and review gate
+
+Task 1 changes documentation only. The rights distinction, cursor ownership,
+error collapse and memory accounting above are established by inspection of the
+pinned core; no kernel runtime capacity or timing has been measured. Task 2 must
+record peak live core and adapter bytes for representative populated images,
+volume opening, policy acquisition and nested traversal; later object validation
+must include enumeration, repeated mounts and final cleanup. Use ordinary host
+tools, interactive boots and debugger inspection. If the proposed profile cannot
+serve those images, revise the bounds explicitly with evidence; do not relabel
+LIMIT as corruption or silently increase the allowance.
+
+Before marking task 1 complete, settle the enumeration choice and review the
+proposed configuration, observation, wrapper/binding limits and error mapping.
+No compiler-container rebuild or dependency pin change is needed for this design
+PR. A core continuation choice would add a focused pyxis-fs prerequisite before
+kernel enumeration; publish that dependency before changing the parent gitlink.
+
+Agreed scope limitations are tracked in [technical debt](../technical-debt.md#native-mount-design-limits).
 
 ## Focused PR tasks
 
