@@ -803,15 +803,17 @@ No dirty suffix or clean-tree attestation is currently implemented.
 
 ## Fastfetch first-port boundary
 
-The [agreed first port](wip/fastfetch.md#agreed-first-port-scope) uses explicit
+The [implemented port](userland/fastfetch.md) uses explicit
 native-URI JSON/JSONC configs, one-shot text/JSON output and nine selected modules.
 Automatic config discovery, config/cache writes, dynamic refresh, image logos,
 Lua execution and executable/network helpers are excluded. Existing upstream
 configs may encounter unsupported diagnostics or upstream fallback behavior.
 The port does not impose a new strict option validator. Revisit individual
 features only when a concrete native use case and authority contract exist.
-The standalone native recipe implements this boundary; default-image packaging
-and broader integration acceptance remain pending.
+The normal image packages this port. Narrow terminals retain upstream layout,
+so logo/data lines may wrap; use `--logo none` or shorter formats. Revisit layout
+only with a concrete display requirement, without changing upstream formatting
+as part of routine platform integration.
 
 Uptime exposes duration since HPET initialization. JSON bootTime is null;
 calendar boot-time/age placeholders are unset and render empty, so configurations

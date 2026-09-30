@@ -18,7 +18,7 @@ make run CPUS=4
 ```
 
 The host needs Lua 5.4 (`LUA=lua5.4` selects its executable), Git, GNU Make 4.3+,
-GNU coreutils, CMake 3.20.2 or newer, curl, tar, bzip2 and the Pyxis target toolchain, plus network access to fetch
+GNU coreutils, CMake 3.21 or newer, curl, tar, bzip2 and the Pyxis target toolchain, plus network access to fetch
 upstream source on a port rebuild. See [SDK/repository setup](sdk-and-repositories.md).
 The build container includes Lua; the owner publishes container updates.
 
@@ -185,6 +185,14 @@ GCC remains the compiler for the OS and maintained applications.
 
 See the [edit/build/run walkthrough](edit-build-run.md) and
 [TCC contract and limits](../userland/tcc.md).
+
+## Fastfetch
+
+The image includes `app://fastfetch.pxe` and notices under
+`app://share/licenses/fastfetch`. Run `fastfetch` for native system information
+and the Pyxis ASCII logo, or `fastfetch --json` for structured output. See the
+[usage and limits](../userland/fastfetch.md) and
+[recipe reference](../../ports/fastfetch/README.md).
 
 ## Guest Lua
 
