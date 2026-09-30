@@ -5,11 +5,13 @@
 #include <kernel/object/object.h>
 
 struct hostfs_node;
+struct nativefs_node;
 
 enum directory_backing {
   DIRECTORY_INITRD,
   DIRECTORY_RAM,
   DIRECTORY_HOST,
+  DIRECTORY_NATIVE,
 };
 
 struct directory_entry {
@@ -23,11 +25,13 @@ struct directory_entry {
  * references; children do not retain parents. Removed empty directories stay
  * detached and reject creation through surviving handles. Multi-directory
  * mutations take the mutation lock before any directory locks. Only the
- * unpublished initrd builder bypasses locking. */
+ * unpublished initrd builder bypasses locking. Native directories use only
+ * their worker-owned node, never these in-memory links or the lock. */
 struct directory_object {
   struct kernel_object object;
   enum directory_backing backing;
   struct hostfs_node *host; /* Owned by the deferred host worker destructor. */
+  struct nativefs_node *native; /* Worker owns this wrapper and its core view. */
   atomic_bool locked;
   bool detached;
   struct directory_entry *first, *last;
@@ -39,6 +43,10 @@ struct directory_object {
  * BSP destruction frees names/entries and retires owned children, without
  * recursing through the C stack. Child files manage their own backing lifetime. */
 struct directory_object *directory_create(enum directory_backing backing);
+
+/* BSP worker, IF=0. Initialize embedded storage without allocating. Final
+ * destruction retires the node; it does not free the directory separately. */
+void directory_init_native(struct directory_object *directory, struct nativefs_node *node);
 
 /* Current user task, IF=0, with a live reference and stable private mappings.
  * Lookup retains the child before releasing the lock or waiting for BSP table

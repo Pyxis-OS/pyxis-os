@@ -15,4 +15,6 @@ $(PFS_SOURCES):
 	  echo 'Missing filesystem core source $@: run git submodule update --init fs.' >&2; \
 	  exit 1; }
 
-build/kernel/fs/native.o build/kernel/init.o: CPPFLAGS += -Ifs/include
+build/kernel/fs/native.o build/kernel/init.o build/kernel/service/request.o \
+build/kernel/object/file.o build/kernel/object/directory.o \
+build/kernel/object/launcher.o: CPPFLAGS += -Ifs/include

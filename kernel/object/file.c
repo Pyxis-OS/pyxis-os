@@ -5,6 +5,7 @@
 #include <kernel/object/file.h>
 #include <kernel/initrd.h>
 #include <kernel/fs/hostfs.h>
+#include <kernel/fs/native.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
@@ -16,6 +17,10 @@ static void destroy_file(struct kernel_object *object)
 {
   struct file_object *file = (struct file_object *)object;
   KASSERT(!file->busy && !file->first_waiter);
+  if (file->backing == FILE_NATIVE) {
+    nativefs_retire(file->native);
+    return;
+  }
   if (file->backing == FILE_HOST) {
     hostfs_retire(file->host);
     return;
@@ -64,6 +69,14 @@ struct file_object *file_create_host(struct hostfs_node *host)
   return file;
 }
 
+void file_init_native(struct file_object *file, struct nativefs_node *node)
+{
+  KASSERT(arch_cpu_index() == 0 && file && node);
+  *file = (struct file_object){.backing = FILE_NATIVE, .native = node};
+  atomic_init(&file->locked, false);
+  object_init(&file->object, OBJECT_FILE, destroy_file);
+}
+
 /* IF=0. Lock order is file -> scheduler queues. No allocation or sleep while
  * held; busy reserves the operation while its owner sleeps for BSP service. */
 static void lock_file(struct file_object *file)
@@ -80,7 +93,7 @@ static void unlock_file(struct file_object *file)
 
 bool file_begin_operation(struct file_object *file)
 {
-  KASSERT(file->backing != FILE_HOST);
+  KASSERT(file->backing == FILE_INITRD || file->backing == FILE_RAM);
   lock_file(file);
   if (task_stop_requested()) {
     unlock_file(file);
@@ -134,6 +147,7 @@ bool file_begin_operation(struct file_object *file)
 
 void file_end_operation(struct file_object *file)
 {
+  KASSERT(file->backing == FILE_INITRD || file->backing == FILE_RAM);
   lock_file(file);
   struct task_wait_link *waiter = file->first_waiter;
   if (waiter) {
@@ -279,7 +293,7 @@ static bool reserve_buffer(struct file_object *file, size_t size)
   return capacity != size && replace_buffer(file, size);
 }
 
-static struct syscall_result read_file(struct file_object *file,
+static struct syscall_result read_file(struct file_object *file, uint64_t rights,
     const struct file_read_request *request, uintptr_t reply_address,
     size_t reply_capacity)
 {
@@ -294,6 +308,25 @@ static struct syscall_result read_file(struct file_object *file,
   }
   uintptr_t data_address = reply_address + sizeof(reply);
 
+  if (file->backing == FILE_NATIVE) {
+    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_READ);
+    pending->job.node = file->native;
+    pending->job.rights = rights;
+    pending->job.offset = request->offset;
+    pending->job.count = request->capacity;
+    nativefs_request_submit_and_wait(pending);
+    enum call_status status = pending->job.status;
+    if (status != CALL_OK) {
+      nativefs_request_release(pending);
+      return (struct syscall_result){status, 0};
+    }
+    KASSERT(pending->job.count <= request->capacity);
+    reply.read = pending->job.count;
+    KASSERT(copy_to_user(data_address, pending->job.data, pending->job.count));
+    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    nativefs_request_release(pending);
+    return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
+  }
   if (file->backing == FILE_HOST) {
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_READ);
     pending->node = file->host;
@@ -350,6 +383,9 @@ static struct syscall_result write_file(struct file_object *file,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
+  if (file->backing == FILE_NATIVE) {
+    return (struct syscall_result){CALL_READ_ONLY, 0};
+  }
   if (!request->size) {
     KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
     return (struct syscall_result){CALL_OK, sizeof(reply)};
@@ -422,13 +458,16 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (file->backing == FILE_NATIVE && (rights & ~FILE_RIGHTS)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
   uint64_t required;
   switch (operation) {
   case FILE_READ:
     required = FILE_RIGHT_READ;
     break;
   case FILE_SIZE:
-    required = FILE_RIGHTS;
+    required = file->backing == FILE_NATIVE ? FILE_RIGHT_READ : FILE_RIGHTS;
     break;
   case FILE_WRITE:
   case FILE_RESIZE:
@@ -450,7 +489,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     if (!copy_from_user(&request, request_address, sizeof(request))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    return read_file(file, &request, reply_address, reply_capacity);
+    return read_file(file, rights, &request, reply_address, reply_capacity);
   }
   if (operation == FILE_WRITE) {
     struct file_write_request request;
@@ -509,6 +548,21 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   }
   if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (file->backing == FILE_NATIVE) {
+    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_SIZE);
+    pending->job.node = file->native;
+    pending->job.rights = rights;
+    nativefs_request_submit_and_wait(pending);
+    enum call_status status = pending->job.status;
+    if (status != CALL_OK) {
+      nativefs_request_release(pending);
+      return (struct syscall_result){status, 0};
+    }
+    reply.size = pending->job.offset;
+    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    nativefs_request_release(pending);
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (file->backing == FILE_HOST) {
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_SIZE);
