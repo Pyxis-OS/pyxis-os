@@ -14,6 +14,7 @@
 #include <abi/net_config.h>
 #include <abi/keyboard.h>
 #include <abi/clock.h>
+#include <abi/system_info.h>
 #include <abi/display.h>
 #include <abi/file.h>
 #include <abi/process.h>
@@ -61,6 +62,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_LAUNCHER;
   case OBJECT_DISPLAY:
     return PROTOCOL_DISPLAY;
+  case OBJECT_SYSTEM_INFO:
+    return PROTOCOL_SYSTEM_INFO;
   case OBJECT_CLOCK:
     return PROTOCOL_CLOCK;
   case OBJECT_KEYBOARD:
@@ -197,6 +200,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~NET_CONFIG_RIGHTS);
   case OBJECT_ECHO:
     return !(rights & ~ECHO_RIGHT_SEND);
+  case OBJECT_SYSTEM_INFO:
+    return !(rights & ~SYSTEM_INFO_RIGHT_READ);
   case OBJECT_CLOCK:
     return !(rights & ~CLOCK_RIGHTS);
   case OBJECT_DISPLAY:

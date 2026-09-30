@@ -10,6 +10,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/net/interface.h>
 #include <kernel/object/clock.h>
+#include <kernel/object/system_info.h>
 #include <kernel/panic.h>
 #include <kernel/pci.h>
 #include <kernel/gpt.h>
@@ -43,6 +44,7 @@
   gpt_prepare();
 
   boot_start_cpus();
+  system_info_init();
 
   space_init_all(&boot->framebuffer);
 

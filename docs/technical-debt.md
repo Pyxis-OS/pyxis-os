@@ -785,3 +785,18 @@ do not turn a timeout into permission to free lent process state. Group/member
 allocation has no quota beyond available storage. The remote server bounds
 concurrent sessions at four; that is not a descendant or per-session memory quota.
 Foreground interruption remains separate work.
+
+## System-information observation limits
+
+[System information](interfaces/system-information.md) caches one guest-visible
+BSP CPU brand and the online logical count at boot. It cannot describe a
+heterogeneous machine, hotplug or process CPU allowance; revisit that snapshot
+when CPU lifecycle or scheduling contracts change. Allocator counters exclude
+permanent reservations and expose system-wide usage to every READ holder. Keep
+the explicit **Memory (allocator)** label; a future installed-memory query needs
+its own authoritative source and meaning.
+
+The embedded source commit identifies the running kernel's base checkout, not
+whether its inputs were modified. Revisit dirty-input provenance when release
+or support workflows need that distinction, after agreeing which inputs count.
+No dirty suffix or clean-tree attestation is currently implemented.

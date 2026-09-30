@@ -1,10 +1,9 @@
 # Fastfetch on Pyxis: bounded port investigation
 
-Status: source audit and SDK object-compilation probe, 2026-09-30. No fastfetch
-port, native system-information ABI or guest execution is implemented. The
-native information contract below is agreed for the next implementation task.
-The remaining port scope and tasks are proposals; this document does not start
-their implementation.
+Status: investigation and native system-information prerequisite implemented,
+2026-09-30. No fastfetch port or guest fastfetch execution is implemented.
+The remaining port scope and unchecked tasks are proposals; this document does
+not start their implementation.
 
 ## Proposed result
 
@@ -126,92 +125,76 @@ Fastfetch's root LICENSE is MIT; bundled yyjson carries its own MIT notice in
 its source/header. The eventual recipe must preserve both and inventory any
 other bundled sources actually included.
 
-## Agreed native information contract
+## Implemented native information prerequisite
 
-Expose one reusable, explicitly delegated `system_info` capability with one
-READ right. Three tagged synchronous queries return identity, CPU information
-and allocator memory through the existing call mechanism. Keep time on the
-existing clock capability and dimensions on the relevant console capability.
-This contract is agreed but not implemented; it does not add an ambient syscall.
+The [system-information reference](../interfaces/system-information.md) describes
+the implemented `system_info` READ capability, typed identity/CPU/allocator
+queries, SDK/libpyxis interface, explicit local/remote delegation, BSP ownership
+and errors. Identity includes the running kernel's short source commit SHA;
+CPU reports a cached guest-visible BSP brand and online logical CPU count.
+Memory is labeled **Memory (allocator)**, not installed RAM or available memory.
+Time and dimensions remain on the existing clock and console capabilities.
 
-| Field | Existing source and meaning | Agreed first result |
-| --- | --- | --- |
-| OS/kernel | Launch environment contains `OS_NAME=Pyxis OS`; private `defs.h` names Caelum. No public running-kernel/build query. | Immutable names `Pyxis OS`, `Caelum` and `x86_64`, plus the running kernel's short Git commit SHA, embedded at build time. The SDK manifest or a userspace build revision is not running-kernel identity. No separate release version is needed. |
-| CPU | Private CPUID helpers and `arch_cpu_count()`. Successful SMP boot checks AP online acknowledgements before userspace. | Guest-visible brand plus online logical CPU count after successful boot, under today's no-hotplug contract. Do not confuse that count with physical cores or CPUs available to a pinned process. |
-| Memory | `pmm_get_stats()` reports total/free/allocated frames. Total excludes permanent reservations and is allocator capacity, not installed RAM. | Coherently sampled total/allocated/free bytes, clearly labeled **Memory (allocator)**. Do not call free frames Linux-style available memory or process RSS. |
-| Uptime | Public `clock_now()`, requiring clock READ. | Existing monotonic epoch starts at HPET initialization during boot; earlier boot time is omitted. Do not promise wall-clock elapsed time across VM pauses/suspend. |
-| Terminal dimensions | Public `console_size()`, requiring READ or WRITE. | Columns/rows of the application's console, excluding navigation, with existing fixed-size semantics. Remote terminals report their own dimensions; this is not the physical framebuffer size. |
+The revision identifies the source commit and does not attest to a clean tree.
+Appending `-dirty` only for tracked kernel/build inputs remains an unagreed
+follow-up proposal. No filtering policy has been implemented. See the accepted
+[observation limits](../technical-debt.md#system-information-observation-limits).
 
-Authority, ownership and error behavior:
-
-- **Authority:** one READ right covers these system-wide identity/CPU/memory
-  observations, supplied to trusted init by kernel bootstrap and explicitly
-  delegated through init, sessions and launchers to local and remote shells and
-  their ordinary children. Restricted launches may omit it. Global memory
-  visibility for a holder is an accepted part of this right.
-- **CPU identity:** cache the BSP brand during boot, explicitly identifying it
-  as the sampled guest CPU. Missing brand information does not invalidate an
-  available online logical CPU count. Do not claim a heterogeneous machine
-  inventory, physical-host identity, physical-core count or CPU frequency.
-- **Memory ownership:** every PMM call is BSP-only with interrupts disabled.
-  Sample there through the existing BSP request mechanism; no AP counter reads,
-  new allocator locks or memory mutation. Keep the total/free snapshot internally
-  coherent, with `total_bytes = allocated_bytes + free_bytes`. Immutable identity
-  and CPU replies need no BSP handoff once published. Separate clock/console
-  calls do not form a globally atomic snapshot.
-- **Replies:** bounded typed records, fixed-size NUL-terminated strings,
-  initialized padding and explicit unavailable information. No kernel pointers
-  or physical maps. Follow existing call errors for malformed requests, bad
-  buffers, handles and insufficient rights; missing authority never produces
-  synthetic values. Libpyxis wrappers leave the caller's result unchanged on
-  failure. Exact field layouts and names follow existing ABI conventions during
-  implementation; do not introduce schema versions merely for a new interface.
-- **Presentation:** label allocator accounting in text and explain upstream JSON
-  memory-field semantics in the port documentation. No silently substituted
-  installed-RAM metric; the agreed first text label is **Memory (allocator)**.
-
-The build identifier names the source commit used to build the running kernel,
-not whatever HEAD is present when userspace runs. A proposed follow-up detail,
-not yet agreed, is appending `-dirty` for modified tracked kernel/build inputs
-without treating documentation or unrelated submodule edits as kernel changes.
-Do not silently implement that filtering policy as an accepted requirement.
-If build provenance cannot be established, report it as unavailable rather than
-inventing a revision.
-
-### Next-task handoff
-
-Implement only this information contract: public ABI and SDK export, kernel
-object and BSP memory sampling, libpyxis wrappers, and explicit grant forwarding
-through local and remote launch paths. Deliver focused Pyxis and userland PRs,
-publishing dependency changes before updating the parent pin. Fastfetch recipes,
-libc additions and a permanent diagnostic application remain outside this task.
-
-Validate with an ordinary build and boot, using temporary native calls or
-debugger inspection to check identity/build values, CPU reporting, coherent
-memory counters, local/remote delegation and omitted or insufficient authority.
-No new tests or boot automation. The task remains unchecked until implementation
-and validation are complete; these decisions should let another agent begin
-without reopening the agreed policy.
-
+The next task is the bounded source-closure/libc investigation below. The existing
+compile inventory is only a lower bound: decide which shared helpers survive the
+actual minimal port before adding reusable libc facilities. Fastfetch recipes
+and a permanent diagnostic application were not part of the information task.
 For the later port, a packaged minimal default and existing CLI/JSON formatting
 remain proposed, with explicit native URI config paths if needed. Automatic XDG
 discovery, executable search and cache writes need not be prerequisites.
 
-Relevant invariants are in [SMP](../kernel/smp.md), [memory](../kernel/memory.md),
-[clock ABI](../../include/abi/clock.h), [console ABI](../../include/abi/console.h),
-[PMM interface](../../include/kernel/mm/pmm.h) and
-[terminal sessions](../userland/terminal-sessions.md). The allocation profiler
-measures caller events over an interval; it is not a substitute for a current
-system-memory snapshot.
+### Native information validation
+
+An ordinary SDK, ports, userland and kernel image build passed with the existing
+GCC 16.2.0 compiler and CMake 3.31.8. Userland is pinned to
+`17945c6c7e22580d1308096d599ef7cb3d0be9d9`
+([userland PR #88](https://git.internal/PyxisOS/pyxis-userland/pulls/88)).
+Temporary native calls used the exported SDK; no diagnostic application, test,
+fault injection or boot automation was added to either repository.
+
+Four-CPU interactive validation used nested KVM, QEMU 10.2.2 with the documented
+AHCI fix, CPU `max`, 256 MiB, Fedora OVMF, entropy, virtio-net and a private
+virtiofsd export. Local Development and remote shell children returned
+`Pyxis OS`, `Caelum`, `x86_64`, embedded kernel revision `ba1391996bd8`, online
+count 4 and the guest-visible BSP brand. The three allocator observations around
+a temporary 1 MiB allocation had a constant total of 201,007,104 bytes:
+allocated bytes were 41,422,848, 42,471,424 and 41,422,848 after release, each with
+an exactly complementary free count. GDB independently observed that first reply
+in the executor on CPU 0 with IF=0 before completion.
+
+A one-CPU boot of `0c741adbd66a` used the same configuration without virtio-net.
+It reported online count 1 and the updated embedded revision. Allocator total was
+203,821,056 bytes; allocated bytes were 13,688,832 before, 14,737,408 during and
+13,688,832 after the 1 MiB allocation. All three replies were coherent. This also
+exercised a BSP userspace caller through the same executor path. The rebuild
+reused the verified matching SDK/userland/ports bundles; only the kernel revision
+and documentation had changed. All validation QEMU, debugger and daemon jobs
+were stopped afterward.
+
+All three zero-rights queries returned DENIED and left wrapper outputs unchanged.
+A local session launched a child with only stdout and memory authority: no
+`system_info` binding was present, every query returned BAD_HANDLE and outputs
+remained unchanged. An ordinary child has no launcher authority, so this explicit
+omission exercise used a session successor. Malformed payload, short reply,
+bad user buffer, wrong operation and wrong protocol returned their documented
+errors. Missing CPUID brand and absent Git provenance remain code-inspection
+cases; no CPU inventory, installed-memory value or dirty-tree attestation is
+claimed. These observations are functional checks in a nested VM, not owner-host
+performance measurements.
 
 ## Focused tasks
 
 - [x] **Investigation:** pin upstream, probe against SDK headers, identify native
   information sources and record evidence without claiming a working port.
-- [ ] **Expose native system information:** implement the agreed contract and
-  next-task handoff above, including the running kernel's short commit SHA.
-  Exercise authorized and omitted grants manually before relying on it from
-  fastfetch.
+- [x] **Expose native system information:** implemented the agreed contract,
+  including the running kernel's short commit SHA, SDK/libpyxis wrappers and
+  explicit launch forwarding. Authorized, omitted and insufficient grants were
+  exercised manually as recorded above.
 - [ ] **Bound the port and fill its reusable libc gaps:** select the actual
   minimal source closure in a temporary port build, then make focused userland
   additions for the standard/library functions it still needs. Record any newly
