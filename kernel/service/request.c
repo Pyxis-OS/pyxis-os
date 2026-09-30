@@ -11,6 +11,7 @@
 #include <kernel/object/endpoint.h>
 #include <kernel/object/memory.h>
 #include <kernel/object/display.h>
+#include <kernel/object/system_info.h>
 #include <kernel/panic.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -26,6 +27,8 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_SYSTEM_INFO_MEMORY] = {sizeof(struct system_info_memory_request), alignof(struct system_info_memory_request),
+      offsetof(struct system_info_memory_request, request)},
   [BSP_SERVICE_TERMINAL_CREATE] = {sizeof(struct terminal_create_service_request), alignof(struct terminal_create_service_request),
       offsetof(struct terminal_create_service_request, request)},
   [BSP_SERVICE_PIPE_CREATE] = {sizeof(struct pipe_create_request), alignof(struct pipe_create_request),
@@ -128,6 +131,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_LAUNCHER:
   case BSP_SERVICE_HOSTFS:
   case BSP_SERVICE_READINESS:
+  case BSP_SERVICE_SYSTEM_INFO_MEMORY:
     return false;
   case BSP_SERVICE_MEMORY:
   case BSP_SERVICE_DISPLAY:
@@ -259,6 +263,9 @@ static void service_request(struct bsp_request *request)
     break;
   case BSP_SERVICE_LAUNCHER:
     launcher_request_execute((struct launcher_request *)request);
+    break;
+  case BSP_SERVICE_SYSTEM_INFO_MEMORY:
+    system_info_memory_execute((struct system_info_memory_request *)request);
     break;
   case BSP_SERVICE_MEMORY:
     memory_request_execute((struct memory_request *)request);

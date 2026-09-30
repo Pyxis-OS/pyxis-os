@@ -156,6 +156,15 @@ build/kernel-log-config.h: FORCE
 	@cmp -s $@.tmp $@ || mv $@.tmp $@
 	@rm -f $@.tmp
 
+# Only identity depends on HEAD. Preserve the timestamp for unchanged revisions.
+build/kernel-build-revision.h: scripts/kernel-build-revision.sh FORCE
+	@mkdir -p $(@D)
+	@./scripts/kernel-build-revision.sh > $@.tmp
+	@cmp -s $@.tmp $@ || mv $@.tmp $@
+	@rm -f $@.tmp
+
+build/kernel/object/system_info.o: build/kernel-build-revision.h
+
 build/%.o: %.c build/kernel-log-config.h | check-toolchain
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@

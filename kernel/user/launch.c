@@ -21,6 +21,7 @@
 #include <kernel/object/net_config.h>
 #include <kernel/object/echo.h>
 #include <kernel/object/clock.h>
+#include <kernel/object/system_info.h>
 #include <abi/launcher.h>
 #include <abi/display.h>
 #include <kernel/object/display.h>
@@ -86,6 +87,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
   struct kernel_object *namespace_service = NULL, *terminal_service = NULL;
+  struct kernel_object *system_info = NULL;
   struct file_object *script_file = NULL;
   struct kernel_object *space_control = NULL, *profile = NULL, *pipe = NULL, *service = NULL;
   struct kernel_object *mount = NULL, *echo = NULL, *net_config = NULL, *udp = NULL, *tcp = NULL, *random = NULL;
@@ -114,6 +116,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   memory = memory_create();
   launcher = launcher_create();
   clock = clock_create();
+  system_info = system_info_create();
   echo = echo_create();
   net_config = net_config_create();
   udp = udp_service_create();
@@ -124,13 +127,14 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   service = endpoint_service_create();
   namespace_service = namespace_service_create();
   terminal_service = terminal_service_create();
-  if (!memory || !launcher || !clock || !echo || !net_config || !udp || !tcp || !random || !profile || !pipe || !service || !namespace_service || !terminal_service) {
+  if (!memory || !launcher || !clock || !system_info || !echo || !net_config || !udp || !tcp || !random || !profile || !pipe || !service || !namespace_service || !terminal_service) {
     goto fail;
   }
 
   handle_t input, output, memory_handle, launcher_handle, display_handle, app, home;
   handle_t clock_handle, keyboard_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
   handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
+  handle_t system_info_handle;
   handle_t script_handle = HANDLE_INVALID;
   handle_t standard_input, standard_output, standard_error;
   struct kernel_object *console = &process->space->console->object;
@@ -153,6 +157,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
       capability_install(&process->capabilities, udp, UDP_SERVICE_RIGHT_OPEN, 0, &udp_handle) != CAP_OK ||
       capability_install(&process->capabilities, echo, ECHO_RIGHT_SEND, 0, &echo_handle) != CAP_OK ||
       capability_install(&process->capabilities, clock, CLOCK_RIGHTS, 0, &clock_handle) != CAP_OK ||
+      capability_install(&process->capabilities, system_info, SYSTEM_INFO_RIGHT_READ, 0, &system_info_handle) != CAP_OK ||
       capability_install(&process->capabilities, launcher,
           LAUNCHER_RIGHT_LAUNCH | LAUNCHER_RIGHT_CREATE_GROUP, 0, &launcher_handle) != CAP_OK ||
       capability_install(&process->capabilities, &process->space->display->object,
@@ -217,6 +222,8 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   net_config = NULL;
   object_release(echo);
   echo = NULL;
+  object_release(system_info);
+  system_info = NULL;
   object_release(clock);
   clock = NULL;
   object_release(memory);
@@ -224,13 +231,14 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[20] = {
+  struct process_binding resources[21] = {
     {"input", input},
     {"output", output},
     {"memory", memory_handle},
     {"launcher", launcher_handle},
     {"display", display_handle},
     {"clock", clock_handle},
+    {"system_info", system_info_handle},
     {"echo", echo_handle},
     {"udp", udp_handle},
     {"tcp", tcp_handle},
@@ -243,7 +251,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
     {"namespace_service", namespace_service_handle},
     {"terminal", terminal_service_handle},
   };
-  size_t resource_count = 17;
+  size_t resource_count = 18;
   if (space_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"space", space_handle};
   }
@@ -287,6 +295,9 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   return;
 
 fail:
+  if (system_info) {
+    object_release(system_info);
+  }
   if (terminal_service) {
     object_release(terminal_service);
   }

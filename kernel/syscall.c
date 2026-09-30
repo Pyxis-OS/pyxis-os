@@ -12,6 +12,7 @@
 #include <kernel/object/profile.h>
 #include <kernel/object/pipe.h>
 #include <kernel/object/clock.h>
+#include <kernel/object/system_info.h>
 #include <abi/message.h>
 #include <kernel/object/display.h>
 #include <kernel/object/file.h>
@@ -293,6 +294,12 @@ static struct syscall_result call_object(handle_t handle,
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return echo_call(rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
+  case OBJECT_SYSTEM_INFO:
+    if (header.protocol != PROTOCOL_SYSTEM_INFO) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return system_info_call(rights, header.operation, request_size,
         reply_address, reply_capacity);
   case OBJECT_CLOCK:
     if (header.protocol != PROTOCOL_CLOCK) {

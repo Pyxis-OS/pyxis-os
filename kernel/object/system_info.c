@@ -1,0 +1,109 @@
+#include <arch/cpu.h>
+#include <arch/cpu_info.h>
+#include <arch/smp.h>
+#include <kernel-build-revision.h>
+#include <kernel/memory.h>
+#include <kernel/mm/heap.h>
+#include <kernel/mm/pmm.h>
+#include <kernel/object/system_info.h>
+#include <kernel/panic.h>
+#include <kernel/user_memory.h>
+
+static const struct system_info_identity identity = {
+  .os_name = "Pyxis OS",
+  .kernel_name = "Caelum",
+  .architecture = "x86_64",
+  .build_revision = KERNEL_BUILD_REVISION,
+};
+/* Published through scheduler startup; no CPU hotplug is supported. */
+static struct system_info_cpu cpu;
+
+void
+system_info_init(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  _Static_assert(sizeof(cpu.brand) >= ARCH_CPU_BRAND_BYTES + 1, "CPU brand capacity");
+  arch_cpu_brand(cpu.brand);
+  cpu.online_count = arch_cpu_count();
+  KASSERT(cpu.online_count);
+}
+
+static void
+destroy_system_info(struct kernel_object *object)
+{
+  kfree(object);
+}
+
+struct kernel_object *
+system_info_create(void)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct kernel_object *object = kmalloc(sizeof(*object));
+  if (object) {
+    object_init(object, OBJECT_SYSTEM_INFO, destroy_system_info);
+  }
+  return object;
+}
+
+void
+system_info_memory_execute(struct system_info_memory_request *request)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct pmm_stats stats = pmm_get_stats();
+  /* PMM bounds physical coverage to 64 GiB, so byte conversion cannot overflow. */
+  request->reply = (struct system_info_memory){
+    .total_bytes = stats.total_frames * PAGE_SIZE,
+    .allocated_bytes = stats.allocated_frames * PAGE_SIZE,
+    .free_bytes = stats.free_frames * PAGE_SIZE,
+  };
+}
+
+struct syscall_result
+system_info_call(uint64_t rights, uint64_t operation, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  size_t size;
+  const void *reply;
+  switch (operation) {
+  case SYSTEM_INFO_IDENTITY:
+    size = sizeof(identity);
+    reply = &identity;
+    break;
+  case SYSTEM_INFO_CPU:
+    size = sizeof(cpu);
+    reply = &cpu;
+    break;
+  case SYSTEM_INFO_MEMORY:
+    size = sizeof(struct system_info_memory);
+    reply = NULL;
+    break;
+  default:
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (!(rights & SYSTEM_INFO_RIGHT_READ)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (request_size || reply_capacity < size) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, size, USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+
+  struct system_info_memory memory;
+  if (operation == SYSTEM_INFO_MEMORY) {
+    struct system_info_memory_request *request =
+        (struct system_info_memory_request *)bsp_request_prepare(BSP_SERVICE_SYSTEM_INFO_MEMORY);
+    bsp_request_submit_and_wait(&request->request);
+    memory = request->reply;
+    bsp_request_release(&request->request);
+    reply = &memory;
+  }
+  if (!copy_to_user(reply_address, reply, size)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  return (struct syscall_result){CALL_OK, size};
+}
