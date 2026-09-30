@@ -167,6 +167,15 @@ allocated bytes were 41,422,848, 42,471,424 and 41,422,848 after release, each w
 an exactly complementary free count. GDB independently observed that first reply
 in the executor on CPU 0 with IF=0 before completion.
 
+A one-CPU boot of `0c741adbd66a` used the same configuration without virtio-net.
+It reported online count 1 and the updated embedded revision. Allocator total was
+203,821,056 bytes; allocated bytes were 13,688,832 before, 14,737,408 during and
+13,688,832 after the 1 MiB allocation. All three replies were coherent. This also
+exercised a BSP userspace caller through the same executor path. The rebuild
+reused the verified matching SDK/userland/ports bundles; only the kernel revision
+and documentation had changed. All validation QEMU, debugger and daemon jobs
+were stopped afterward.
+
 All three zero-rights queries returned DENIED and left wrapper outputs unchanged.
 A local session launched a child with only stdout and memory authority: no
 `system_info` binding was present, every query returned BAD_HANDLE and outputs
