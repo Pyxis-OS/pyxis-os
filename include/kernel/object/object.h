@@ -34,6 +34,7 @@ enum object_type {
   OBJECT_ENDPOINT_EXPORT = 26,
   OBJECT_NAMESPACE_SERVICE = 27,
   OBJECT_NAMESPACE = 28,
+  OBJECT_TCP_LISTENER = 30,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.

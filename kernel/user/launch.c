@@ -146,7 +146,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
           KEYBOARD_RIGHT_INPUT, 0, &keyboard_handle) != CAP_OK ||
       capability_install(&process->capabilities, net_config, NET_CONFIG_RIGHTS, 0, &net_config_handle) != CAP_OK ||
       capability_install(&process->capabilities, random, RANDOM_RIGHT_READ, 0, &random_handle) != CAP_OK ||
-      capability_install(&process->capabilities, tcp, TCP_SERVICE_RIGHT_CONNECT, 0, &tcp_handle) != CAP_OK ||
+      capability_install(&process->capabilities, tcp, TCP_SERVICE_RIGHTS, 0, &tcp_handle) != CAP_OK ||
       capability_install(&process->capabilities, udp, UDP_SERVICE_RIGHT_OPEN, 0, &udp_handle) != CAP_OK ||
       capability_install(&process->capabilities, echo, ECHO_RIGHT_SEND, 0, &echo_handle) != CAP_OK ||
       capability_install(&process->capabilities, clock, CLOCK_RIGHTS, 0, &clock_handle) != CAP_OK ||

@@ -8,7 +8,10 @@
 
 #define TCP_CONTROL_LIMIT 8
 
-enum control_operation { CONTROL_CONNECT, CONTROL_INSPECT, CONTROL_ABORT, CONTROL_SHUTDOWN_WRITE };
+enum control_operation {
+  CONTROL_CONNECT, CONTROL_INSPECT, CONTROL_ABORT, CONTROL_SHUTDOWN_WRITE,
+  CONTROL_LISTEN, CONTROL_ACCEPT, CONTROL_LISTENER_INSPECT,
+};
 enum control_state { CONTROL_FREE, CONTROL_QUEUED, CONTROL_ACTIVE, CONTROL_DONE };
 
 struct tcp_control {
@@ -16,10 +19,12 @@ struct tcp_control {
   enum control_operation operation;
   struct capability_table *table;
   struct tcp_stream *stream;
+  struct tcp_stream *listener;
   uint32_t address;
   uint16_t port;
   uint64_t deadline;
   struct tcp_connect_reply reply;
+  struct tcp_listen_reply listen_reply;
   enum call_status status;
   struct task_wait *wait;
 };
@@ -86,23 +91,20 @@ static enum call_status prepare_status(enum net_result result)
   return CALL_IO;
 }
 
-static enum call_status prepare_connect(struct tcp_control *call)
+static enum call_status reserve_handle(struct tcp_control *call, bool listening)
 {
-  if (task_deadline_expired(call->deadline)) {
-    return CALL_TIMED_OUT;
-  }
   struct tcp_stream *stream = caelum_lwip_calloc(1, sizeof(*stream));
   if (!stream) {
     return CALL_NO_MEMORY;
   }
-  object_init(&stream->object, OBJECT_TCP, retire_stream);
+  object_init(&stream->object, listening ? OBJECT_TCP_LISTENER : OBJECT_TCP, retire_stream);
 
   /* The sole task is parked and lends its table exclusively. Reserve the real
    * entry before sending anything; its handle is private until CALL completes.
    * Failed preparation removes it, so there can be no half-open user handle. */
   uint64_t flags = cpu_save_interrupts();
   enum capability_result installed = capability_install(call->table, &stream->object,
-      TCP_RIGHTS, 0, &call->reply.handle);
+      listening ? TCP_LISTENER_RIGHTS : TCP_RIGHTS, 0, &call->reply.handle);
   cpu_restore_interrupts(flags);
   if (installed != CAP_OK) {
     KASSERT(installed == CAP_NO_MEMORY || installed == CAP_LIMIT);
@@ -110,6 +112,19 @@ static enum call_status prepare_connect(struct tcp_control *call)
     return installed == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
   }
   call->stream = stream;
+  return CALL_OK;
+}
+
+static enum call_status prepare_connect(struct tcp_control *call)
+{
+  if (task_deadline_expired(call->deadline)) {
+    return CALL_TIMED_OUT;
+  }
+  enum call_status status = reserve_handle(call, false);
+  if (status != CALL_OK) {
+    return status;
+  }
+  struct tcp_stream *stream = call->stream;
   enum net_result result = net_tcp_prepare(call->address, call->port,
       call->deadline, &stream->connection);
   if (result != NET_OK) {
@@ -119,14 +134,19 @@ static enum call_status prepare_connect(struct tcp_control *call)
   return CALL_OK;
 }
 
-static void finish_connect(struct tcp_control *call, enum call_status status)
+static void finish_created(struct tcp_control *call, enum call_status status)
 {
   struct tcp_stream *stream = call->stream;
   if (!stream) {
     return;
   }
   if (status == CALL_OK) {
-    tcp_connection_inspect(stream->connection, &call->reply.connection);
+    if (call->operation == CONTROL_LISTEN) {
+      call->listen_reply.handle = call->reply.handle;
+      tcp_listener_inspect(stream->connection, &call->listen_reply.listener);
+    } else {
+      tcp_connection_inspect(stream->connection, &call->reply.connection);
+    }
   } else if (stream->connection) {
     /* Synchronous abort precedes the failure reply, even if object retirement
      * is delayed. Neither a PCB nor an ARP/local copy may outlive a failed open. */
@@ -147,8 +167,9 @@ static void finish_connect(struct tcp_control *call, enum call_status status)
 /* ACTIVE grants the worker exclusive access until completion publication. */
 static void complete_control(struct tcp_control *call, enum call_status status)
 {
-  if (call->operation == CONTROL_CONNECT) {
-    finish_connect(call, status);
+  if (call->operation == CONTROL_CONNECT || call->operation == CONTROL_LISTEN ||
+      call->operation == CONTROL_ACCEPT) {
+    finish_created(call, status);
   }
   uint64_t flags = cpu_save_interrupts();
   lock_control();
@@ -173,7 +194,10 @@ static enum call_status exchange_control(struct tcp_control *request)
   for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
     if (pending[i].state == CONTROL_FREE) {
       call = &pending[i];
-      break;
+    } else if (request->operation == CONTROL_ACCEPT &&
+        pending[i].operation == CONTROL_ACCEPT && pending[i].listener == request->listener) {
+      unlock_control();
+      return CALL_BUSY;
     }
   }
   if (!call) {
@@ -193,6 +217,7 @@ static enum call_status exchange_control(struct tcp_control *request)
   enum call_status status = call->status;
   if (status == CALL_OK) {
     request->reply = call->reply;
+    request->listen_reply = call->listen_reply;
   }
   *call = (struct tcp_control){0};
   unlock_control();
@@ -216,6 +241,53 @@ enum call_status net_tcp_connect(struct capability_table *table, uint32_t addres
   enum call_status status = exchange_control(&request);
   if (status == CALL_OK) {
     *reply = request.reply;
+  }
+  return status;
+}
+
+enum call_status net_tcp_listen(struct capability_table *table, uint32_t address,
+    uint16_t port, struct tcp_listen_reply *reply)
+{
+  struct tcp_control request = {
+    .operation = CONTROL_LISTEN, .table = table, .address = address, .port = port,
+  };
+  enum call_status status = exchange_control(&request);
+  if (status == CALL_OK) {
+    *reply = request.listen_reply;
+  }
+  return status;
+}
+
+enum call_status net_tcp_accept(struct kernel_object *object, struct capability_table *table,
+    uint64_t deadline, struct tcp_accept_reply *reply)
+{
+  uint64_t now = arch_monotonic_ns();
+  if (deadline <= now) {
+    return CALL_TIMED_OUT;
+  }
+  if (deadline - now > TCP_ACCEPT_MAX_WAIT_NS) {
+    return CALL_BAD_REQUEST;
+  }
+  struct tcp_control request = {
+    .operation = CONTROL_ACCEPT, .table = table,
+    .listener = (struct tcp_stream *)object, .deadline = deadline,
+  };
+  enum call_status status = exchange_control(&request);
+  if (status == CALL_OK) {
+    *reply = (struct tcp_accept_reply){request.reply.handle, request.reply.connection};
+  }
+  return status;
+}
+
+enum call_status net_tcp_listener_inspect(struct kernel_object *object,
+    struct tcp_listener_info *reply)
+{
+  struct tcp_control request = {
+    .operation = CONTROL_LISTENER_INSPECT, .listener = (struct tcp_stream *)object,
+  };
+  enum call_status status = exchange_control(&request);
+  if (status == CALL_OK) {
+    *reply = request.listen_reply.listener;
   }
   return status;
 }
@@ -264,6 +336,45 @@ bool net_tcp_service(void)
     unlock_control();
     cpu_restore_interrupts(flags);
     if (!start && !active) {
+      continue;
+    }
+    if (call->operation == CONTROL_LISTEN) {
+      enum call_status status = reserve_handle(call, true);
+      if (status == CALL_OK) {
+        status = prepare_status(tcp_listener_prepare(call->address, call->port,
+            &call->stream->connection));
+      }
+      complete_control(call, status);
+      worked = true;
+      continue;
+    }
+    if (call->operation == CONTROL_ACCEPT) {
+      struct tcp_connection *listener = call->listener->connection;
+      enum call_status status = listener->terminal_status;
+      if (task_deadline_expired(call->deadline)) {
+        status = CALL_TIMED_OUT;
+      }
+      if (status == CALL_OK && start) {
+        status = reserve_handle(call, false);
+        worked = true;
+      }
+      if (status == CALL_OK && task_deadline_expired(call->deadline)) {
+        status = CALL_TIMED_OUT;
+      }
+      if (status == CALL_OK) {
+        call->stream->connection = tcp_listener_take(listener);
+        if (!call->stream->connection) {
+          continue;
+        }
+      }
+      complete_control(call, status);
+      worked = true;
+      continue;
+    }
+    if (call->operation == CONTROL_LISTENER_INSPECT) {
+      tcp_listener_inspect(call->listener->connection, &call->listen_reply.listener);
+      complete_control(call, CALL_OK);
+      worked = true;
       continue;
     }
     if (call->operation != CONTROL_CONNECT) {

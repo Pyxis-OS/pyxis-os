@@ -66,6 +66,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_TCP_SERVICE;
   case OBJECT_TCP:
     return PROTOCOL_TCP;
+  case OBJECT_TCP_LISTENER:
+    return PROTOCOL_TCP_LISTENER;
   case OBJECT_SPACE:
     return PROTOCOL_SPACE;
   case OBJECT_PROFILE:
@@ -156,9 +158,11 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_RANDOM:
     return !(rights & ~RANDOM_RIGHT_READ);
   case OBJECT_TCP_SERVICE:
-    return !(rights & ~TCP_SERVICE_RIGHT_CONNECT);
+    return !(rights & ~TCP_SERVICE_RIGHTS);
   case OBJECT_TCP:
     return !(rights & ~TCP_RIGHTS);
+  case OBJECT_TCP_LISTENER:
+    return !(rights & ~TCP_LISTENER_RIGHTS);
   case OBJECT_UDP_SERVICE:
     return !(rights & ~UDP_SERVICE_RIGHT_OPEN);
   case OBJECT_UDP:

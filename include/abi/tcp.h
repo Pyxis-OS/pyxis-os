@@ -6,8 +6,21 @@
 #include <abi/syscall.h>
 
 #define TCP_SERVICE_RIGHT_CONNECT (UINT64_C(1) << 0)
+#define TCP_SERVICE_RIGHT_LISTEN (UINT64_C(1) << 1)
+#define TCP_SERVICE_RIGHTS (TCP_SERVICE_RIGHT_CONNECT | TCP_SERVICE_RIGHT_LISTEN)
 #define TCP_CONNECT UINT64_C(1)
+#define TCP_LISTEN UINT64_C(2)
 #define TCP_CONNECT_MAX_WAIT_NS UINT64_C(30000000000)
+
+#define TCP_LISTENER_RIGHT_INSPECT (UINT64_C(1) << 0)
+#define TCP_LISTENER_RIGHT_ACCEPT (UINT64_C(1) << 1)
+#define TCP_LISTENER_RIGHTS (TCP_LISTENER_RIGHT_INSPECT | TCP_LISTENER_RIGHT_ACCEPT)
+#define TCP_LISTENER_INSPECT UINT64_C(1)
+#define TCP_ACCEPT UINT64_C(2)
+#define TCP_ACCEPT_MAX_WAIT_NS UINT64_C(30000000000)
+#define TCP_LISTENER_LIMIT UINT32_C(4)
+#define TCP_LISTENER_PENDING_LIMIT UINT32_C(4)
+#define TCP_LISTENER_HANDSHAKE_NS UINT64_C(10000000000)
 
 #define TCP_RIGHT_INSPECT (UINT64_C(1) << 0)
 #define TCP_RIGHT_ABORT (UINT64_C(1) << 1)
@@ -57,6 +70,51 @@ struct tcp_connection_info {
 };
 
 struct tcp_connect_reply {
+  handle_t handle;
+  struct tcp_connection_info connection;
+};
+
+/* LISTEN binds exactly the configured local IPv4 address and a nonzero port.
+ * Wildcard/ephemeral binding and address reuse are unsupported. Init creates
+ * the listener and delegates it; CONNECT grants do not authorize LISTEN.
+ * Four listeners globally, each with four combined half-open/ready connections.
+ * All records also consume the shared 32-record transport budget. */
+struct tcp_listen_request {
+  struct message_header header;
+  uint32_t address;
+  uint16_t port;
+  uint16_t reserved;
+};
+
+struct tcp_listener_info {
+  uint32_t local_address;
+  uint16_t local_port;
+  uint16_t reserved;
+  uint32_t pending; /* Includes handshakes and established, unaccepted streams. */
+  uint32_t capacity;
+  uint32_t terminal_status; /* CALL_OK while admitting; latched failure otherwise. */
+  uint32_t reserved2;
+};
+
+struct tcp_listen_reply {
+  handle_t handle;
+  struct tcp_listener_info listener;
+};
+
+/* PROTOCOL_TCP_LISTENER: header-only INSPECT; ACCEPT returns an ordinary owned
+ * stream and its endpoints after handshake. One outstanding accept per shared
+ * listener (otherwise BUSY), including completed replies until collected.
+ * The absolute monotonic deadline is at most 30 seconds ahead. Timeout leaves
+ * the queue untouched; failure publishes no handle and leaves outputs untouched.
+ * Copies share the listener. Final release stops admission and aborts pending
+ * connections, while already accepted streams remain independent. Address loss
+ * invalidates the listener permanently. No idle timeout for ready connections. */
+struct tcp_accept_request {
+  struct message_header header;
+  uint64_t deadline_ns;
+};
+
+struct tcp_accept_reply {
   handle_t handle;
   struct tcp_connection_info connection;
 };
@@ -126,5 +184,10 @@ _Static_assert(sizeof(struct tcp_read_reply) == 8, "TCP read reply");
 _Static_assert(sizeof(struct tcp_connect_request) == 32, "TCP connect request");
 _Static_assert(sizeof(struct tcp_connection_info) == 24, "TCP connection info");
 _Static_assert(sizeof(struct tcp_connect_reply) == 32, "TCP connect reply");
+_Static_assert(sizeof(struct tcp_listen_request) == 24, "TCP listen request");
+_Static_assert(sizeof(struct tcp_listener_info) == 24, "TCP listener info");
+_Static_assert(sizeof(struct tcp_listen_reply) == 32, "TCP listen reply");
+_Static_assert(sizeof(struct tcp_accept_request) == 24, "TCP accept request");
+_Static_assert(sizeof(struct tcp_accept_reply) == 32, "TCP accept reply");
 
 #endif

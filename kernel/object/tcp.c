@@ -20,10 +20,42 @@ struct kernel_object *tcp_service_create(void)
   return object;
 }
 
+static struct syscall_result listen_service(uint64_t rights,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (!(rights & TCP_SERVICE_RIGHT_LISTEN)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct tcp_listen_request request = {0};
+  size_t payload_size = sizeof(request) - sizeof(request.header);
+  if (request_size != payload_size || reply_capacity < sizeof(struct tcp_listen_reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request.address, request_address, payload_size) ||
+      !user_buffer_check(reply_address, sizeof(struct tcp_listen_reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (request.reserved || !request.address || !request.port) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  struct tcp_listen_reply reply;
+  enum call_status status = net_tcp_listen(&process_current()->capabilities,
+      request.address, request.port, &reply);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
 struct syscall_result tcp_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == TCP_LISTEN) {
+    return listen_service(rights, request_address, request_size, reply_address, reply_capacity);
+  }
   if (operation != TCP_CONNECT) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
@@ -52,6 +84,53 @@ struct syscall_result tcp_service_call(uint64_t rights, uint64_t operation,
   /* The sole task keeps its checked mappings and table alive while parked. */
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
+struct syscall_result tcp_listener_call(struct kernel_object *object, uint64_t rights,
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  uint64_t required;
+  size_t reply_size;
+  if (operation == TCP_ACCEPT) {
+    required = TCP_LISTENER_RIGHT_ACCEPT;
+    reply_size = sizeof(struct tcp_accept_reply);
+  } else if (operation == TCP_LISTENER_INSPECT) {
+    required = TCP_LISTENER_RIGHT_INSPECT;
+    reply_size = sizeof(struct tcp_listener_info);
+  } else {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (!(rights & required)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  size_t payload_size = operation == TCP_ACCEPT ?
+      sizeof(struct tcp_accept_request) - sizeof(struct message_header) : 0;
+  if (request_size != payload_size || reply_capacity < reply_size) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, reply_size, USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  enum call_status status;
+  if (operation == TCP_ACCEPT) {
+    uint64_t deadline;
+    if (!copy_from_user(&deadline, request_address, sizeof(deadline))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    struct tcp_accept_reply reply;
+    status = net_tcp_accept(object, &process_current()->capabilities, deadline, &reply);
+    if (status == CALL_OK) {
+      KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    }
+  } else {
+    struct tcp_listener_info reply;
+    status = net_tcp_listener_inspect(object, &reply);
+    if (status == CALL_OK) {
+      KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    }
+  }
+  return (struct syscall_result){status, status == CALL_OK ? reply_size : 0};
 }
 
 static struct syscall_result read_stream(struct kernel_object *object,
