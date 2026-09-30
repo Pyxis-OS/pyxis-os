@@ -306,6 +306,16 @@ but large formatted output requires temporary memory. Revisit bounded streaming
 when real consumers make that cost material. All FILE streams are unbuffered;
 there are no pending writes to flush yet.
 
+## Unbuffered line input
+
+Libc `getline` reads one byte per `fgetc`, so each input byte is a separate
+native read and, for `host://` or native filesystem inputs, possibly a worker
+round trip. Streams have no read-ahead or pushback, so it cannot read past a
+newline without consuming the next line. Line-oriented consumers such as sbase
+uniq are therefore slow on large inputs. Revisit with stdio input buffering as a
+separate libc task, defining its interaction with descriptor sharing, seeking
+and child stream delegation; do not work around it in individual ports.
+
 ## Unexpected native close failures
 
 Libc invalidates a descriptor and its FILE association before one native CLOSE
