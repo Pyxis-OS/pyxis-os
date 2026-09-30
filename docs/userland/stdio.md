@@ -1,6 +1,7 @@
 # File, terminal and pipe I/O
 
-The freestanding C library exposes an unbuffered `FILE` subset in
+The freestanding C library exposes a `FILE` subset, with unbuffered output and
+file/pipe input read-ahead, in
 [`stdio.h`](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/libc/include/stdio.h). It uses native file, directory,
 console and pipe capabilities; there is no kernel descriptor table or POSIX
 syscall layer.
@@ -78,7 +79,9 @@ Read/write check descriptor and access validity first (-1/EBADF), then reject
 counts above SSIZE_MAX (-1/EINVAL). A valid zero-count request returns zero
 without touching the buffer or backend. Nonempty calls perform one backend
 transfer and return the confirmed byte count, including short progress, or -1
-with the translated errno. They do not fill a buffer or retry the remainder.
+with the translated errno. They do not fill a buffer or retry the remainder. A
+read first returns bytes the associated FILE read ahead, without a backend call;
+read itself never reads ahead.
 Successful zero reads report EOF, including independent terminal input;
 nonempty zero writes report EIO. Native denial remains EACCES, unsupported
 operations remain ENOTSUP and pipe writes with no remaining reader report EPIPE.
@@ -157,7 +160,8 @@ Zero capacity is a no-op. A nonempty zero result reports backend EOF through
 an unexpected zero-byte terminal result is EIO. A positive short result does not
 establish EOF. Existing EOF suppresses backend reads until cleared. The helper
 shares backend dispatch and indicator handling with `fread`, whose complete
-element counts and fill-request behavior are unchanged. There is no extra handle or read-ahead.
+element counts and fill-request behavior are unchanged. It returns bytes already
+read ahead first and never reads ahead itself; there is no extra handle.
 
 Private descriptor transfers return one backend result: progress or an error.
 FILE alone updates EOF/error indicators and implements the fread/fwrite loops.
@@ -165,6 +169,32 @@ A FILE's sticky EOF does not suppress a descriptor transfer. Selected access
 mode and native rights remain separate: invalid entries and wrong modes report
 EBADF, while native authority denial remains EACCES and unsupported operations
 remain ENOTSUP. A successful short transfer remains successful progress.
+
+### Input read-ahead
+
+Each descriptor entry owns an optional BUFSIZ read-ahead buffer beside its handle
+and logical position. `fread`, and the `fgetc`/`getc`/`getchar`, `fgets` and
+`getline` input built on it, may fill that buffer with one backend transfer from
+a file or pipe and return the excess on later reads. Requests of at least BUFSIZ
+bytes read directly into the caller's memory. A file fill is capped at the
+representable offsets past the logical position, so speculation never turns a
+valid read into an error such as EOVERFLOW. Consoles are never read ahead:
+their input is shared with the parent shell, and ISO C treats them as
+interactive. `read` and `fread_some` return buffered bytes first, otherwise one
+exact transfer, so mixing them with stdio on one descriptor loses no bytes and
+exact consumers such as head stay exact.
+
+The buffer is allocated on the first buffered read and freed on close. If
+allocation fails, the descriptor stays unbuffered without an error. Only file
+read-ahead is discarded before close, because a file can fetch it again: writes
+on update streams, successful seeks and input `fflush` drop it. Pipe read-ahead
+survives until close. Buffered file bytes can be stale if another descriptor or
+process writes the file; seeking or input `fflush` refetches them.
+
+Read-ahead is private process memory and never accompanies a delegated stream.
+A child given the same pipe sees only bytes not yet fetched; a child given a
+file-backed stream starts at offset 0, as before. Read a stream you will
+delegate only with `read` or `fread_some`.
 
 `fgetc`/`getc`/`getchar`, `fgets`, `fputc`/`putc`/`putchar`, `fputs` and `puts` are
 provided. `fgets` retains a newline and terminates successful input. Capacity one
@@ -185,8 +215,9 @@ returned before EOF, and EOF before any byte returns -1. Null arguments
 (EINVAL), read errors, allocation failure (ENOMEM) and lines beyond SSIZE_MAX
 (EOVERFLOW) return -1 and set errno and the error indicator. After failure the
 caller's pointer and capacity describe its current allocation, which it still
-owns. Each byte is a separate `fgetc` and native read, because there is no
-read-ahead or pushback; see [unbuffered line input](../technical-debt.md#unbuffered-line-input).
+owns. It reads through `fgetc`, so file and pipe input is fetched in blocks,
+while console input remains one native read per byte; see
+[unbuffered line input](../technical-debt.md#unbuffered-line-input).
 There is no `getdelim`.
 
 A successful zero-byte read for a nonempty request sets EOF. Merely reading
@@ -200,9 +231,12 @@ prevent retrying I/O; EOF suppresses reads until cleared or repositioned.
 `fseek` supports SET/CUR/END on files, including past the current end. Subsequent
 writes can create zero-filled gaps through the native file operation. Negative
 resulting positions are rejected. `ftell` fails with EOVERFLOW if the current
-offset cannot fit in long. Terminal and pipe seeks fail with ESPIPE. Update
-streams have no buffered direction state; ordinary C code can still use fseek/fflush at the
-required read/write transitions.
+offset cannot fit in long. Terminal and pipe seeks fail with ESPIPE. `ftell`
+reports the logical position, excluding read-ahead. A seek is validated before
+it drops read-ahead; a failed seek, including ESPIPE, keeps buffered bytes, the
+position and both indicators. A write on an update stream drops read-ahead
+first, so no `fseek` is needed between reading and writing. ISO C requires one;
+omitting it is a Pyxis guarantee, not portable behavior.
 
 ## Standard streams, formatting and exit
 
@@ -245,8 +279,11 @@ when it needs a separately owned reference, but must close that copy itself.
 Named `input`/`output` console grants, plus `keyboard`, remain separate terminal
 resources; libc never uses them to fill a missing standard-stream binding.
 
-All streams are unbuffered. `fflush`, including `fflush(NULL)`, has no pending
-bytes or read-ahead to synchronize and does not clear an earlier error indicator.
+Output is unbuffered, so `fflush` has no pending bytes to write. On an input
+file stream it drops read-ahead so later reads refetch; on a pipe it keeps them.
+ISO C leaves input `fflush` undefined, so this is a Pyxis guarantee.
+`fflush(NULL)` does not touch input, and no flush clears an earlier error
+indicator.
 Normal exit calls it, closes each live descriptor once, then disposes of FILE
 metadata, including invalid associations. Cleanup errors do not replace the
 requested exit status. `_Exit` and fatal faults bypass libc cleanup; the kernel

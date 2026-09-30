@@ -89,7 +89,9 @@ EOF occurs or an error occurs. Earlier confirmed bytes remain consumed after a
 later error; only complete elements contribute to their return count. Pipe seeks
 report ESPIPE.
 
-`fread_some(buffer, capacity, stream)` returns bytes after one backend transfer.
+`fread_some(buffer, capacity, stream)` returns bytes already read ahead by
+`fread`-based input, otherwise bytes after one backend transfer. Buffered input
+may fetch up to BUFSIZ pipe bytes ahead; see [input read-ahead](../userland/stdio.md#input-read-ahead).
 It blocks for initial data/EOF/error but never waits to fill the request after
 positive progress. Cat uses it for all inputs, preserving bulk file copying while
 forwarding terminal and pipe input promptly. A positive short read is not EOF;

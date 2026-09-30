@@ -32,9 +32,12 @@ File positions belong to each libc descriptor. Copying a grant does not create a
 shared position; stdout and stderr targeting the same file can overwrite one
 another.
 Console and pipe streams are sequential. `fread` retains fill-request semantics;
-`fread_some` returns one available backend transfer, with sticky EOF/error
-indicators and no read-ahead. Cat uses it to forward terminal and pipe data
-promptly while retaining bulk file reads.
+`fread_some` returns bytes already read ahead or one available backend transfer,
+with sticky EOF/error indicators, and never reads ahead. Cat uses it to forward
+terminal and pipe data promptly while retaining bulk file reads. Buffered stdio
+input may read ahead on file and pipe streams; those bytes stay in the reading
+process and do not accompany a delegated stream. See
+[input read-ahead](stdio.md#input-read-ahead).
 
 `startup_stream()` returns an immutable borrowed snapshot. It keeps no native
 reference alive. After its owning descriptor closes, the snapshot must not be
