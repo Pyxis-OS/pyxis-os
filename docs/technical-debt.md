@@ -730,8 +730,8 @@ service work and wait sets; no worker-process or thread framework is included.
 
 ## Native mount design limits
 
-The [native read-only mount contract](wip/native-readonly-filesystem.md) is in
-design review; these are agreed integration limits, not implemented behavior.
+The [native read-only mount contract](wip/native-readonly-filesystem.md) is agreed;
+these are integration limits, not implemented behavior.
 The selected core continuation prerequisite must avoid rescanning the returned
 prefix and retain no per-enumeration kernel state. It does not remove existing
 core ancestry scans or allocation-proof costs; measure those during integration
@@ -750,7 +750,7 @@ or admission for each session. Ordinary applications receive no principal-based
 reacquisition service or mount authority. Revisit with the identity broker/session
 admission work, keeping identity separate from held capabilities.
 
-The agreed starting proposals of 32 native requests and 8 MiB of live core payload
+The agreed starting bounds of 32 native requests and 8 MiB of live core payload
 need representative-image measurements during adapter implementation. A valid
 image may exceed the budget and return LIMIT; the cap does not cover all kernel
 allocation overhead or bound CPU/I/O work. Record measured peaks and revise the

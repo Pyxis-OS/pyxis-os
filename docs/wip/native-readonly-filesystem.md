@@ -1,11 +1,9 @@
 # Native read-only filesystem mounts
 
-Status: task-1 design review, 2026-09-30. READ bundling, the shared bootstrap
-principal, duplicate-pool rejection and a core continuation prerequisite are
-agreed. The remaining concrete integration defaults below are proposed for review.
-No kernel mount or new ABI is implemented. Runtime numbers are starting bounds
-to validate in the adapter task, not measured capacity. Update each task in its
-delivery PR.
+Status: task-1 contract agreed, 2026-09-30. Task 1 is complete; implementation
+starts with the separate core continuation prerequisite. No kernel mount or new
+ABI is implemented. Runtime numbers are agreed starting bounds to validate in
+the adapter task, not measured capacity. Update each task in its delivery PR.
 
 ## Completion point
 
@@ -37,7 +35,7 @@ recovery and installation remain separate milestones.
 
 ## Agreed selection and authority
 
-Partition, volume and namespace selection belong in init. Proposed command
+Partition, volume and namespace selection belong in init. Agreed command
 spelling, not yet implemented:
 
 ```sh
@@ -127,14 +125,13 @@ facilities; it does not expand this storage milestone.
 ## Task-1 integration contract
 
 The source review uses Pyxis `79f9889`, pinned pyxis-fs `0c51185` and pinned
-userland `c9ed311`. The READ mapping, shared-principal policy, duplicate-pool
-exclusion and stateless core continuation direction are agreed; the remaining
-concrete choices in this section are a proposed implementation contract for
-review. They do not authorize starting later tasks.
+userland `c9ed311`. The integration contract below is agreed, including the READ
+mapping, shared principal, duplicate-pool exclusion, continuation mapping and
+initial runtime bounds. This design task does not start later implementation tasks.
 
 ### Trusted configuration and mount request
 
-Proposed Make inputs `MOUNT_DISK` and `MOUNT_PRINCIPAL` generate Limine options
+Make inputs `MOUNT_DISK` and `MOUNT_PRINCIPAL` generate Limine options
 `mount.disk=<GPT-GUID>` and `mount.principal=<32-hex-digits>`. The GUID uses
 canonical hyphenated text with explicit conversion to GPT byte order; the
 principal uses the core's nonzero 128-bit ID parser. Both absent disables native
@@ -236,7 +233,7 @@ not require an open cursor or a kernel token registry between calls. Keep format
 parsing and continuation validation in the core. No on-disk format change or
 persistent enumeration index is required.
 
-The proposed OS mapping keeps the existing two-word `directory_cursor`. Each
+The OS mapping keeps the existing two-word `directory_cursor`. Each
 native directory wrapper has a nonzero, boot-unique enumeration identity, shared
 by copies of that object and never reused after destruction. `generation` holds
 that identity, not the pool generation. `position` carries the core's opaque
@@ -306,7 +303,7 @@ executor forwards typed requests and returns to dispatch; it never sleeps inside
 the core. Extend the explicit service catalog/completion states, following HOST
 forwarding, rather than allowing kernel workers to make nested executor calls.
 
-Use the existing provisioned per-user-task request area. Proposed initial bounds:
+Use the existing provisioned per-user-task request area. Agreed initial bounds:
 
 | Resource | Initial bound and failure |
 | --- | --- |
@@ -317,9 +314,9 @@ Use the existing provisioned per-user-task request area. Proposed initial bounds
 | Core callback transfer | At most 16 filesystem blocks, 64 KiB |
 | Operation deadline | One absolute 30-second deadline from publication |
 
-The 32-request and 8 MiB numbers are agreed starting proposals; other numbers
-are proposed integration bounds. Actual allocation failure below a cap is
-`CALL_NO_MEMORY`. Core accounting excludes adapter objects, task/request storage,
+These are agreed starting bounds, subject to explicit revision with integration
+measurements. Actual allocation failure below a cap is `CALL_NO_MEMORY`. Core
+accounting excludes adapter objects, task/request storage,
 stack, heap overhead and allocator rounding. Charge native persistent objects
 and temporary adapter payload separately; check total kernel cost during the
 adapter task.
@@ -455,7 +452,7 @@ The mount command validates and reserves the destination before acquisition,
 then publishes it only after the complete mount succeeds. A duplicate root or
 conflicting service name fails; it never replaces an existing binding. Store
 `data` as the binding name from `data://`, using existing startup/path name rules.
-The proposed launcher profile supports at most 16 selected roots, including
+The launcher profile supports at most 16 selected roots, including
 app/home/HOST, within the existing 64 KiB startup/launch capture bound. Overflow
 fails explicitly and closes a newly acquired unpublished root; it never drops
 bindings. These are userspace profile limits, not on-disk name/count limits.
@@ -496,7 +493,7 @@ reconciled. Add them only with their evidence/units made explicit. Fastfetch can
 show type, binding, read-only status and labeled shared-pool capacity; identical
 pool IDs identify shared capacity and must not be summed per binding/volume.
 
-### Validation and review gate
+### Validation and next implementation task
 
 Task 1 changes documentation only. The rights distinction, cursor ownership,
 error collapse and memory accounting above are established by inspection of the
@@ -508,13 +505,11 @@ must include enumeration continuation/replay/end/abandonment, repeated mounts
 of the same instance, rejection of two cloned partitions on one disk, reservation
 lifetime through final cleanup and successful acquisition after the first
 instance closes. Use ordinary host tools, interactive boots and debugger
-inspection. If the proposed profile cannot
-serve those images, revise the bounds explicitly with evidence; do not relabel
-LIMIT as corruption or silently increase the allowance.
+inspection. If the initial profile cannot serve those images, revise the bounds
+explicitly with evidence; do not relabel LIMIT as corruption or silently increase
+the allowance.
 
-The enumeration direction and duplicate-identity rule are settled. Before marking
-task 1 complete, review the proposed configuration, observation, wrapper/binding
-limits, continuation mapping and error mapping. No compiler-container rebuild or
+Task 1 is complete with the contract agreed. No compiler-container rebuild or
 dependency pin change is needed for this design PR. Task 2 publishes the focused
 pyxis-fs continuation prerequisite before the parent updates its gitlink; native
 enumeration must not fall back to reconstructing every prefix.
@@ -523,7 +518,7 @@ Agreed scope limitations are tracked in [technical debt](../technical-debt.md#na
 
 ## Focused PR tasks
 
-1. [ ] **Settle the native mount contract.** Inspect the pinned core and current
+1. [x] **Settle the native mount contract.** Inspect the pinned core and current
    block, object, init and namespace interfaces. Resolve the questions above with
    a concrete rights/lifetime/error mapping and agreed runtime bounds. Record the
    first displayable capacity fields. This is a design PR, not a broad framework
