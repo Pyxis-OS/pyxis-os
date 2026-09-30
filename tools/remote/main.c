@@ -491,7 +491,7 @@ static int run_client(struct client *client)
     }
     if (client->closing && monotonic_ms() >= client->close_deadline) {
       snprintf(client->diagnostic, sizeof(client->diagnostic), "%s",
-               client->final ? "local close acknowledged; stdout did not drain before deadline" :
+               client->acknowledged ? "local close acknowledged; stdout did not drain before deadline" :
                                "local close not acknowledged before deadline; disconnecting");
       return 1;
     }
