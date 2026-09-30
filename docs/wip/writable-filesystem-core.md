@@ -60,9 +60,9 @@ to read-only instances; neither permits independent opens of changing media.
 Removal leaves retained object handles usable. Storage remains charged while an
 object is unlinked but retained. Persistent orphan bookkeeping must let restart
 reclaim objects whose runtime owners no longer exist, without treating a named
-or otherwise protected object as garbage. The directory behavior below is agreed;
-task 1 still specifies orphan representation and the remaining retained-handle
-rules in detail.
+or otherwise protected object as garbage. The retained-file and directory
+behavior below is agreed; task 1 still specifies persistent orphan representation
+and concrete reference accounting.
 
 Writable opening requires fully understood, validated media. Refuse writable
 access to degraded or unsupported retained states; keep read-only inspection
@@ -70,6 +70,57 @@ available under its existing contract. A full validation pass at writable open
 is acceptable initially. It is not a requirement to scan the entire pool for
 every mutation or reclaim batch. Refusal is not permission to repair or discard
 a damaged state automatically.
+
+## Agreed mutation rights and retained files
+
+Agreed during task 1, 2026-09-30; these are core behavior requirements, not
+implemented interfaces or the later native ABI mapping.
+
+| Operation | Required held authority |
+| --- | --- |
+| Write within the existing file length | `file.write` on that file |
+| Write that extends the file | Both `file.write` and `file.resize` on that file |
+| Explicitly grow or shrink a file | `file.resize` on that file |
+| Create a file or directory | `dir.create` on the parent |
+| Remove a file or empty directory | `dir.remove` on the parent |
+| Rename a regular file within its volume | Source-parent `dir.remove` and destination-parent `dir.create` |
+| Replace an existing destination during rename | Rename authority above, plus destination-parent `dir.replace` |
+
+Directory operations act on component names through already-held parent handles.
+Obtaining those handles through path traversal requires normal lookup authority.
+Removing or replacing an entry does not require read or write rights on the
+affected file. No operation gains authority merely from recorded ownership.
+
+Write authority alone permits overwriting existing bytes, not extending the
+file. Check the requested range against the current committed length before
+the first write transaction: if the request would extend the file and resize
+authority is absent, reject the entire request without modifying its in-range
+prefix. Explicit growth exposes zero-filled space; shrinking requires no write
+permission. Authorized writes still obey bounded transactions, admission and
+the confirmed-progress/failure contract below.
+
+Creation by itself produces an empty object under the parent's creation policy;
+it does not implicitly grant a child handle or read, write or administration
+rights. Creating and returning a child handle additionally requires subtree
+scope, `dir.lookup` on the parent, and every requested child right within that
+parent handle's held authority. Check those requirements and reserve resources
+for the returned handle before publication. Do not create the entry first and
+then discover that the requested child authority cannot be returned. Publication
+and cleanup failures retain the agreed outcome semantics below.
+
+Removing or replacing a regular file preserves existing handles to the old
+identity and their granted read, write and resize rights. Those handles observe
+the object's latest committed state, subject to ordinary quota, admission and
+pool-health checks; storage remains charged while the unlinked file is retained.
+Fresh ordinary acquisition by path or object ID cannot recover the unlinked
+object. Permitted delegation of an existing handle remains possible without
+enlarging its rights. Reusing its former name does not retarget retained handles.
+
+Checkpoint authority remains a task-1 decision. The pinned format defines
+`file.checkpoint` but no corresponding directory right. Do not infer checkpoint
+authority from this mutation table or import the native interface's bundled
+permissions. The subsequent native persistence milestone must explicitly map
+the settled core rights to OS grants.
 
 ## Agreed directory removal and name reuse
 
@@ -211,7 +262,7 @@ write, together with the cleanup failure and resulting pool health. Never
 collapse those facts into zero progress, an uncertain user write, or an
 unqualified healthy success.
 
-Task 1 remains open for the operation-rights table, concrete result/status
+Task 1 remains open for checkpoint authority, concrete result/status
 interfaces, directory-continuation and operation-reference mechanisms, persistent
 orphan representation, bounded allocation/reclamation algorithms and admission
 costs, the recovery validation mechanism, and implementation PR boundaries.
