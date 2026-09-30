@@ -830,6 +830,13 @@ reconcile confirmed progress and uncertain outcomes. Revisit incremental map
 optimization after the admission proof and workload measurements; atomic large
 shrinks would require a separately agreed persistent tail-retention design.
 
+The first writer will drain each bounded batch's retired volume storage before
+admitting another batch, including between chunks of one large operation. A
+batch needing retained-root advancement and separate free-map publication uses
+six flushes in total. This accepts extra synchronous I/O to bound cleanup debt;
+revisit combining batches only after the admission proof and workload measurements
+support an equivalent bound. No latency measurement is claimed.
+
 ## Filesystem host prototype limits
 
 The host-image tools record prototype reserve defaults, but no writable

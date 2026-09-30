@@ -408,12 +408,62 @@ repeated editing keeps it bounded.
 Use synchronous maintenance in this first writer:
 
 - Before admission, reclaim eligible storage when needed to restore workspace.
-- After confirmed mutations, perform maintenance needed to keep accumulated
-  debt within bounds, including retained-slot advancement when required.
+- After each confirmed user or orphan-cleanup batch, drain that batch's retired
+  volume storage before admitting the next batch. This applies between chunks
+  of a large write or shrink as well as between separate calls.
 - On the last release of an orphan, drain its cleanup through bounded
   transactions once handle and operation/I/O references have ended, even if no
   further user write follows.
 - During writable reopening, drain abandoned orphans as already agreed.
+
+Reserve the complete mutation-and-maintenance sequence before admitting a batch.
+After its commit, end operation/I/O references protecting the replaced state,
+advance the older retained root through maintenance, then separately publish
+eligible storage free. Only a later batch may reuse that storage after fresh
+protection checks. Do not admit another user or orphan-cleanup batch while the
+previous batch's retired volume storage remains undrained. This does not require
+deleting live unlinked objects retained by handles; their storage remains live
+and charged until their references end.
+
+Each publication also frees all eligible retired pool metadata, subject to the
+same evidence and reference checks. The two maintenance publications replace
+their own metadata and leave the bounded pool-wide remainder described above.
+A batch needing both publications therefore performs six flushes in total:
+two for its mutation and two for each maintenance publication. This is a
+protocol count, not a latency measurement. Large writes, shrinks and orphan
+cleanup repeat the sequence across batches. The first writer accepts this cost;
+combining batches is a later optimization requiring an equivalent debt bound.
+
+The conditional pool-metadata bound is:
+
+- Bound newly allocated pool metadata and newly retired pool metadata separately
+  by `H` blocks per publication, including map nodes, the pool root and changed
+  catalog paths. At writable opening establish at most `2H` retired pool blocks,
+  of which at most `H` remain protected by the older retained root after runtime
+  pins have ended.
+- With operation/I/O pins ended and all eligible pool retirements freed, at most
+  `H` previously retired blocks remain protected by the older root, plus at most
+  `H` newly retired blocks. Thus the accumulated remainder stays within `2H`.
+- Keep another `H` blocks already reusable for the next publication. The resulting
+  `3H` workspace envelope covers pool-metadata retirement and replacement only,
+  assuming published live replacements are permanent allocations. Persistently
+  workspace-charged live metadata would need additional capacity. Volume-block
+  replacements and retirements, including recovery-funded orphan cleanup, need
+  their own bounded allowance.
+
+This is not yet a numerical reserve minimum. `H` must cover both old sparse maps
+and their replacements; dense rebuilt-map size alone cannot bound old retirement.
+Catalog nodes surviving many generations still count in the separate permanent
+pool-metadata total. Admission must preserve room for permanent metadata growth
+without consuming volume guarantees, and enough allocation-map records to finish
+cleanup. Merely checking that each candidate fits the current record limit can
+strand later cleanup even when free blocks remain. Task 1 must prove those
+requirements across the entire sequence, including bounded planning memory.
+
+Writable opening must establish the starting bounds and available workspace;
+read-only-valid images need not satisfy them. Refuse writable access when the
+bounds cannot be met. Do not presume that normalizing existing retirement debt
+is affordable or silently change persisted reservations to make it fit.
 
 The last close of a large unlinked file may take substantial time: each
 transaction is bounded, but the complete cleanup can require many transactions.
@@ -423,6 +473,13 @@ and maintenance failure are reported independently. The existing pool-health
 rules take precedence: stopped mutation or uncertain publication does not permit
 cleanup writes during close or an automatic retry of failed maintenance. Closing
 still does not substitute for an application-requested checkpoint.
+
+If a drain cannot finish, stop the enclosing multi-batch operation before its
+next batch and preserve confirmed progress. Admission failure alone keeps reads
+available under the existing rules; cleanup I/O failure stops mutation, and
+uncertain publication stops all ordinary access until recovery. Later mutations
+must first satisfy the outstanding drain requirement as well as ordinary
+admission; they cannot accumulate another batch of retirement debt.
 
 Task 1 remains open for concrete result/status interfaces, directory-continuation
 and operation-reference mechanisms, persistent orphan encoding, bounded
