@@ -26,8 +26,8 @@ no application permission to nominate a principal or bypass persistent policy.
 Task 4 will add typed user-request forwarding and policy-approved objects.
 
 Startup creates one BSP kernel task which parks until work arrives. Only that
-worker calls the core or its allocator, with interrupts enabled except around
-short kernel allocator/block/queue sections. It waits normally for GPT and block
+worker performs pool/volume operations or invokes the core allocator, with
+interrupts enabled except around short kernel allocator/block/queue sections. It waits normally for GPT and block
 completion, without holding a lock or sleeping in the BSP executor. There is no
 kernel-worker submission to the synchronous user-request executor.
 
