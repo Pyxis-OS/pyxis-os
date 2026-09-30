@@ -59,8 +59,9 @@ views or permit independent read-only opens of changing media.
 Removal leaves retained object handles usable. Storage remains charged while an
 object is unlinked but retained. Persistent orphan bookkeeping must let restart
 reclaim objects whose runtime owners no longer exist, without treating a named
-or otherwise protected object as garbage. Task 1 specifies directory removal,
-detached-directory operations and retained-handle rules in detail.
+or otherwise protected object as garbage. The directory behavior below is agreed;
+task 1 still specifies orphan representation and the remaining retained-handle
+rules in detail.
 
 Writable opening requires fully understood, validated media. Refuse writable
 access to degraded or unsupported retained states; keep read-only inspection
@@ -68,6 +69,39 @@ available under its existing contract. A full validation pass at writable open
 is acceptable initially. It is not a requirement to scan the entire pool for
 every mutation or reclaim batch. Refusal is not permission to repair or discard
 a damaged state automatically.
+
+## Agreed directory removal and name reuse
+
+Agreed during task 1, 2026-09-30; implementation belongs to task 6.
+
+- Removal requires an empty directory. The volume root cannot be removed.
+  Successful removal detaches the directory from its parent namespace.
+- Retained handles keep the detached directory's identity and granted rights.
+  Metadata and empty listing remain usable when the handle holds the respective
+  rights. Creating or moving entries into the detached directory is rejected;
+  it cannot acquire new children through a retained handle.
+- Creating a directory at the former name creates a new object with a fresh
+  identity under the parent's creation policy. Existing handles never retarget
+  to the new object. Ordinary lookup of that name resolves the new directory.
+- Authority held specifically on the removed directory does not transfer to its
+  replacement. A held parent-subtree capability may derive authority to the new
+  directory through the usual lookup and rights checks.
+- The detached directory remains charged to its volume while retained. After
+  its last handle closes, it becomes eligible for reclamation subject to the
+  retained-root and operation/I/O protections. Recreating the name neither
+  prolongs the old object's lifetime nor couples it to the new object's lifetime.
+
+For example, opening `home://notes` retains directory A. Removing that empty
+directory and creating `home://notes` again produces directory B. The old handle
+still observes empty A and cannot insert children; a new lookup observes B.
+
+This resolves the directory-lifetime policy only. Task 1 remains open for the
+operation-rights table, exact error/progress interfaces, diagnostic-view and
+directory-continuation behavior, persistent orphan representation, bounded
+allocation/reclamation algorithms and admission costs, recovery validation
+mechanism, and implementation PR boundaries. The existing format requires a
+read-required feature and explicit orphan-root semantics before unlinked objects
+can persist; these directory rules do not by themselves define that encoding.
 
 ## Publication, reclamation and admission gates
 
