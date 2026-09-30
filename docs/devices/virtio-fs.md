@@ -75,6 +75,8 @@ session-ready message. Default init selections start shells on CPUs 1 and 2
 when present; Super+Right selects their tabs. Each interactive init mounts the
 same export before session handoff. The development profile on CPU 1 delegates
 read-write grants; the read-only profile on CPU 2 delegates read-only grants.
+The Remote profile on CPU 3 delegates an optional read-write view to its remote
+shell sessions, sharing the same export.
 Both shells start in the shared RAM-backed `home://` directory, so use an
 explicit `host://` path or `cd host://` to reach the export.
 From the shell, try:

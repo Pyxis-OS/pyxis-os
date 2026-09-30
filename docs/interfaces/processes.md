@@ -530,6 +530,14 @@ started after completion. Rights and writable reply storage are checked before
 sleeping. A short reply buffer or extra request payload is rejected. Only the
 resumed observer accesses its own user reply mapping.
 
+`wait_many()` accepts exactly WAIT_COMPLETE for a WAIT-authorized process observer,
+alone or mixed with execution-group, terminal attachment and TCP interests. The
+event reports the same immutable completion boundary as PROCESS_WAIT; it does not
+consume the result or report program success. Retrieve the result with
+`process_wait()` after readiness. Process-only waits require no network device.
+The existing whole-list authority validation, current-readiness-before-timeout
+ordering, polling and cancellation rules apply unchanged.
+
 The execution owner retains one reference to the control object. After exit or
 an ordinary fatal user fault, the scheduler leaves the private root and task
 stack before handing the task to the BSP. The BSP releases the process address
@@ -548,8 +556,10 @@ Wait records live in permanent task metadata, never remote task stacks. The
 completion lock serializes registration and publication, with the lock order
 completion then scheduler queues. Wake-before-sleep is remembered. Publication
 detaches each waiter before waking it, and no lock spans a context switch.
-These rules depend on the existing one-task-per-process contract; external task
-cancellation would need to detach an outstanding wait before teardown.
+These rules depend on the existing one-task-per-process contract. Execution-group
+stop resumes the observer's syscall continuation to detach an outstanding wait
+before teardown. Readiness waits retain the control object only for their call;
+their worker releases every interest before completing a stopped observer.
 
 Client receives a process-control handle from launching server. It finishes its endpoint exchange,
 closes the endpoint so server can exit, then waits and reports the result. A

@@ -34,8 +34,8 @@ into build. Serial uses the launching terminal; exit QEMU with Ctrl-a x.
 
 On a four-CPU boot, the first tab is Caelum's live kernel log. Super+Left/Right
 switches spaces; select CPU 1 for the development shell or CPU 2 for the read-only
-host-access session. Further CPUs run idle init scripts; navigation currently
-shows four tabs. A single-CPU boot shares the BSP's terminal with its shell.
+host-access session. CPU 3 starts the [remote terminal server](docs/userland/remote-terminal.md);
+further CPUs run idle init scripts. Navigation currently shows four tabs. A single-CPU boot shares the BSP's terminal with its shell.
 [Init scripts](docs/userland/init.md) select these sessions and their grants.
 
 The shell starts at `home://`, which is RAM-backed and lost on reboot. `app://`

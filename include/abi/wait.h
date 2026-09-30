@@ -43,11 +43,14 @@ struct wait_interest {
  * WRITABLE/WRITE_CLOSED require INJECT (input capacity/closure). Ordinary
  * interests include their respective closure flag; hangup reports ERROR.
  * Terminal application handles and framebuffer consoles are not wait targets.
- * Execution groups accept only COMPLETE, requiring the group WAIT right.
- * Completion is immutable and reports finished cleanup, not program success.
- * Group/terminal/TCP interests may be mixed; group-only waits need no network.
+ * Process observers and execution groups accept only COMPLETE, requiring their
+ * WAIT right. Completion is immutable and reports finished cleanup, not program
+ * success. PROCESS_WAIT retrieves the observer's immutable result; group
+ * completion additionally observes attributed deferred cleanup.
+ * Process/group/terminal/TCP interests may be mixed; waits without TCP need no
+ * network device.
  * Poll and try operations may park for the BSP worker handoff, never for I/O
- * readiness. Terminal-only waits do not require a network device. */
+ * readiness. */
 
 _Static_assert(sizeof(struct wait_interest) == 16, "wait interest layout");
 

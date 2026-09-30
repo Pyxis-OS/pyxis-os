@@ -59,7 +59,7 @@ sequences or implement a remote wire protocol. The shared behavior is the
 [existing TTY contract](terminal.md#tty-output-controls): LF resets the column,
 tabs preserve cells and clamp, wrapping is delayed, and FRESH_LINE cancels an
 incomplete escape and advances only when required. Parser state survives DATA
-record boundaries. Both framebuffer and future host presentations must honor
+record boundaries. Both framebuffer and host presentations must honor
 these rules; no shared parser framework is introduced here.
 
 ## EOF and hangup
@@ -77,7 +77,7 @@ returns zero only after the final record is consumed.
 HANGUP, including final controlling-grant closure, is permanent and idempotent.
 It discards both queues and wakes blocked application operations with
 ENDPOINT_CLOSED. Accepted output is not a delivery acknowledgment. Neither
-hangup nor EOF terminates processes; execution-group cleanup is later work.
+hangup nor EOF terminates processes; execution groups provide separate supervision.
 
 `term_read_key` reports actual input EOF as TERM_KEY_EOF, even during an incomplete
 escape sequence. The line editor returns TERM_LINE_EOF and discards an unfinished
@@ -104,6 +104,6 @@ terminal-only waits without a NIC. TCP and mixed waits remain in the network
 worker, which exclusively observes lwIP state. Shared per-task request storage
 bounds each wait at sixteen interests without a new global waiter cap.
 
-No remote shell, host client, resize, reconnection, execution supervision or
-new framebuffer routing is provided by this task. See the remaining
-[remote-terminal tasks](../wip/remote-terminal.md#focused-implementation-tasks).
+The [remote server and host client](remote-terminal.md) combine these attachments
+with execution-group supervision. Resize, reconnection and new framebuffer
+routing remain outside that implementation.

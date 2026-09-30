@@ -10,9 +10,10 @@ case "${1:-}" in
     rm -rf "$staging"
     trap 'rm -rf "$staging"' EXIT
     trap 'exit 1' HUP INT TERM
-    mkdir -p "$staging/abi" "$staging/pxe" "$sdk/sysroot/usr" "$sdk/share/pyxis"
+    mkdir -p "$staging/abi" "$staging/pxe" "$staging/remote" "$sdk/sysroot/usr" "$sdk/share/pyxis"
     cp include/abi/*.h "$staging/abi/"
     cp include/pxe/*.h "$staging/pxe/"
+    cp include/remote/*.h "$staging/remote/"
     cp userspace/include/*.h "$staging/"
     cp -R userspace/libc/include/. "$staging/"
     if ! diff -qr "$staging" "$sdk/sysroot/usr/include" >/dev/null 2>&1; then

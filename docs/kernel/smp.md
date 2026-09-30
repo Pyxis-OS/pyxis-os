@@ -3,8 +3,8 @@
 `make run CPUS=4` boots one QEMU socket with four cores and one thread per core.
 `CPUS` defaults to one and also applies to `make debug`. With multiple CPUs,
 CPU 0 (the BSP) services allocation and cleanup. Each other CPU runs its
-selected [init](../userland/init.md); defaults start shells on CPUs 1 and 2, and an idle
-init on further CPUs. Children stay on their parent's CPU. A single-CPU boot
+selected [init](../userland/init.md); defaults start shells on CPUs 1 and 2, the
+remote terminal server on CPU 3, and idle init on further CPUs. Children stay on their parent's CPU. A single-CPU boot
 runs the primary init on the BSP.
 CPU indices are dense, stable for the boot, and distinct from hardware APIC IDs.
 

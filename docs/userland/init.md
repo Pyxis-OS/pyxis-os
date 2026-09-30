@@ -20,7 +20,7 @@ setup policy; the session handoff delegates resources to ordinary applications.
 The generated Limine configuration carries these kernel command-line options:
 
 ```text
-init=app://init-idle init.primary=app://init init.2=app://init-readonly
+init=app://init-idle init.primary=app://init init.2=app://init-readonly init.3=app://init-remote
 ```
 
 `init` supplies the default for workload CPUs. `init.primary` overrides it on
@@ -43,7 +43,7 @@ make image                         # restore the packaged init and selections
 ```
 
 `INIT_DEFAULT` defaults to `app://init-idle`, `INIT_PRIMARY` to `app://init`,
-and `INIT_CPUS` to `2=app://init-readonly`. `INIT_CPUS` is a whitespace-separated
+and `INIT_CPUS` to `2=app://init-readonly 3=app://init-remote`. `INIT_CPUS` is a whitespace-separated
 list of `CPU=URI` entries; an empty value removes numeric overrides. Paths select
 entries already in the boot archive, using letters, digits, `_`, `.`, `/`, `:`,
 `+` and `-`. The kernel supports whitespace-separated options, without quoting
@@ -65,7 +65,7 @@ Kernel-only builds do not select or package init.
 
 ## Packaged scripts
 
-The userland repository supplies four shebang scripts using `app://shell.pxe`:
+The userland repository supplies shebang scripts using `app://shell.pxe`:
 
 - `init/development.sh`, installed as `app://init`, opens the optional host export
   with `mount --optional --read-write host` and hands off with
@@ -78,6 +78,14 @@ The userland repository supplies four shebang scripts using `app://shell.pxe`:
   optional HTTPS provider with read-only trust grants and hands off to the
   interactive shell. A reported HTTPS setup failure leaves HTTPS unpublished
   and permits that handoff. It runs only when session selects `--start-services`.
+- `init/remote.sh`, installed as `app://init-remote`, selects the Remote title,
+  mounts optional HOST read-write, creates the service namespace and hands off
+  through `session app://session.pxe --start-remote-services`.
+- `init/remote-services.sh`, installed as `app://init-remote-services`, starts
+  HTTP/optional HTTPS with the configured environment and hands off through
+  `session app://session.pxe --remote-server 2323`. The trusted launcher waits
+  for network assignment and delegates one listener to the
+  [remote terminal server](remote-terminal.md).
 - `init/idle.sh`, installed as `app://init-idle`, sets its title and exits. No process
   remains; the scheduler uses its ordinary interruptible halt when idle. The
   space and its terminal remain available. This is not a machine shutdown or
@@ -111,7 +119,8 @@ Trusted init also receives a `terminal` service with CREATE authority for
 [independent terminal sessions](terminal-sessions.md). Ordinary session startup
 does not delegate that service or an attachment. Application terminal handles
 use the same named input/output and standard-stream forwarding as framebuffer
-consoles; there is no remote shell startup mode yet.
+consoles. The trusted remote startup path retains creation authority until it
+launches the supervisor; ordinary remote shells receive application handles only.
 
 ## Space titles
 
@@ -174,4 +183,7 @@ for deferred supervision and process replacement.
 Trusted init also holds CREATE_GROUP on its ordinary launcher. The default session
 program attenuates this to LAUNCH when starting the shell. An explicitly authorized
 supervisor can create an [execution group](../interfaces/execution-groups.md) and
-use its bound launcher while remaining outside that group.
+use its bound launcher while remaining outside that group. The trusted shell
+`session` handoff preserves the actual launcher LAUNCH/CREATE_GROUP rights and
+terminal CREATE grant; the remote supervisor then delegates only a group-bound
+LAUNCH grant to each shell.

@@ -4,6 +4,7 @@
 #include <kernel/net/interface.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
+#include <kernel/object/process.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/user/readiness.h>
@@ -74,6 +75,9 @@ bool readiness_service(struct bsp_request **active_list)
         break;
       case OBJECT_EXECUTION_GROUP:
         interest->ready = execution_group_ready((struct execution_group *)interest->object);
+        break;
+      case OBJECT_PROCESS_CONTROL:
+        interest->ready = process_control_ready((struct process_control *)interest->object);
         break;
       case OBJECT_TERMINAL_ATTACHMENT:
         interest->ready = terminal_attachment_ready(interest->object, interest->events);

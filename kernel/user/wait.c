@@ -1,6 +1,7 @@
 #include <arch/clock.h>
 #include <abi/tcp.h>
 #include <abi/execution_group.h>
+#include <abi/process.h>
 #include <abi/terminal.h>
 #include <kernel/object/object.h>
 #include <kernel/process.h>
@@ -41,6 +42,11 @@ static enum call_status interest_authority(const struct kernel_object *object,
     if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) {
       required |= TERMINAL_RIGHT_INJECT;
     }
+  } else if (object->type == OBJECT_PROCESS_CONTROL) {
+    if (events != WAIT_COMPLETE) {
+      return CALL_BAD_REQUEST;
+    }
+    required = PROCESS_RIGHT_WAIT;
   } else if (object->type == OBJECT_EXECUTION_GROUP) {
     if (events != WAIT_COMPLETE) {
       return CALL_BAD_REQUEST;
