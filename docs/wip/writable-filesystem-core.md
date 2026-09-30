@@ -53,9 +53,9 @@ health; task 1 still defines its concrete interface.
 
 Live object handles retain identity and granted authority while observing the
 latest committed state. They do not permanently pin the generation at open.
-Each operation protects the state it uses. Existing immutable diagnostic views
-must have an explicit coexistence policy; do not silently turn them into live
-views or permit independent read-only opens of changing media.
+Each operation protects the state it uses. The enumeration and diagnostic-view
+contract below keeps ordinary operations live and immutable diagnostics exclusive
+to read-only instances; neither permits independent opens of changing media.
 
 Removal leaves retained object handles usable. Storage remains charged while an
 object is unlinked but retained. Persistent orphan bookkeeping must let restart
@@ -99,6 +99,48 @@ still observes empty A and cannot insert children; a new lookup observes B.
 The existing format requires a read-required feature and explicit orphan-root
 semantics before unlinked objects can persist; these directory rules do not by
 themselves define that encoding.
+
+## Agreed live enumeration and diagnostic views
+
+Agreed during task 1, 2026-09-30; this specifies behavior, not implemented APIs.
+Each directory listing page observes one committed state. Continuations retain
+no old generation or storage references between calls. Validate their directory
+binding and freshness before interpreting a position in the current tree.
+
+| Event between listing calls | Continuation behavior |
+| --- | --- |
+| Entry created, removed, renamed or replaced in this directory | Return `CHANGED`; require an explicit restart from the beginning. |
+| File contents change without changing its directory entry | Continue normally. |
+| Another directory or sibling volume changes | Continue normally. |
+| Checkpoint or reclamation leaves this directory's entries unchanged | Continue normally. |
+| This directory is removed | Return `CHANGED` for the old enumeration; restarting through its retained handle lists the empty detached directory. |
+| Publication becomes uncertain | Apply the pool access-stop rule; do not report the failure as `CHANGED`. |
+
+Invalidation is directory-local, not tied to every pool generation. Entry
+replacement invalidates enumeration even when the visible name and kind stay the
+same. A stale continuation returns no entries and does not advance. The caller
+must explicitly restart with the initial continuation; the core and adapters do
+not silently restart and combine pages from different attempts. End-of-directory
+is repeatable only while the directory remains unchanged. A listing over several
+calls is not a snapshot, and continuous modification may cause repeated restarts.
+Ordinary rights and the agreed pool read-availability rules apply to every page.
+
+Existing immutable diagnostic views and cursors remain available only through
+read-only instances. Close the writable instance and all its handles before
+opening the inspector or an immutable diagnostic cursor; close read-only
+instances and their retained views before opening a writer. There are no
+externally retained immutable diagnostic snapshots inside a writable instance.
+Writable-open validation and bounded internal checks run within the writer's
+serialized operations and do not expose retained diagnostic views. This keeps a
+forgotten diagnostic cursor from indefinitely pinning old generations and COW
+workspace. The initial limitation is that full offline inspection interrupts
+writable access; concurrent diagnostic snapshots would require a separately
+agreed retention and admission policy before introduction.
+
+Task 1 still defines the continuation representation, directory-change tracking
+and operation-reference mechanism. The existing immutable tree-position token
+cannot be used against a changing tree without that binding and freshness check.
+These decisions do not themselves change the core or native ABI.
 
 ## Agreed progress, failures and read availability
 
@@ -170,7 +212,7 @@ collapse those facts into zero progress, an uncertain user write, or an
 unqualified healthy success.
 
 Task 1 remains open for the operation-rights table, concrete result/status
-interfaces, diagnostic-view and directory-continuation behavior, persistent
+interfaces, directory-continuation and operation-reference mechanisms, persistent
 orphan representation, bounded allocation/reclamation algorithms and admission
 costs, the recovery validation mechanism, and implementation PR boundaries.
 
@@ -198,8 +240,9 @@ Before implementation, task 1 must establish:
   writable minimums; do not silently resize their persisted reservations.
 - How validated ownership/reachability evidence is maintained across successive
   commits and reconstructed on reopening, without relying on obsolete readers.
-- Live-view identity, orphan representation, directory continuation invalidation,
-  operation references and retained-state advancement when no user write follows.
+- Live-view identity and orphan representation, mechanisms for directory-local
+  continuation invalidation and operation references, and retained-state
+  advancement when no user write follows.
 - Concrete interfaces implementing the agreed progress/failure outcomes and
   pool access states, including cleanup reporting and close/reopen requirements.
 - Compatibility checks for writable access. Preserve supported extension semantics
