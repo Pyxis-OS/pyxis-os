@@ -35,6 +35,8 @@
 #define PROTOCOL_NAMESPACE UINT64_C(28)
 #define PROTOCOL_PROVIDER UINT64_C(29)
 #define PROTOCOL_TCP_LISTENER UINT64_C(30)
+#define PROTOCOL_TERMINAL_SERVICE UINT64_C(31)
+#define PROTOCOL_TERMINAL_ATTACHMENT UINT64_C(32)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

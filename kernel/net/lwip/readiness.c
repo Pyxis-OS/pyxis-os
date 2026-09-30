@@ -1,8 +1,6 @@
-#include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
-#include <kernel/task.h>
-#include <kernel/user/wait.h>
+#include <kernel/user/readiness.h>
 #include "stream.h"
 
 /* Incoming is shared by the two BSP workers under IF=0. Only the network
@@ -11,25 +9,13 @@
 static struct bsp_request *incoming_head, *incoming_tail;
 static struct bsp_request *active;
 
-static void complete_wait(struct readiness_request *request, enum call_status status)
-{
-  uint64_t flags = cpu_save_interrupts();
-  for (size_t i = 0; i < request->count; ++i) {
-    object_release(request->interests[i].object);
-    request->interests[i].object = NULL;
-  }
-  request->status = status;
-  bsp_request_complete(&request->request);
-  cpu_restore_interrupts(flags);
-}
-
 void net_readiness_submit(struct readiness_request *request)
 {
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->request.state == BSP_REQUEST_FORWARDED && !request->request.next);
   if (!net_worker_available()) {
-    complete_wait(request, CALL_UNAVAILABLE);
+    readiness_complete(request, CALL_UNAVAILABLE);
     return;
   }
   if (incoming_tail) {
@@ -41,8 +27,9 @@ void net_readiness_submit(struct readiness_request *request)
   net_worker_notify();
 }
 
-static uint64_t ready_events(struct readiness_interest *interest)
+uint64_t tcp_readiness_events(struct readiness_interest *interest)
 {
+  net_worker_assert_context();
   struct tcp_stream *stream = (struct tcp_stream *)interest->object;
   struct tcp_connection *connection = stream->connection;
   uint64_t events = interest->events;
@@ -88,28 +75,7 @@ bool tcp_readiness_service(void)
   }
   cpu_restore_interrupts(flags);
 
-  bool worked = false;
-  struct bsp_request **link = &active;
-  while (*link) {
-    struct readiness_request *request = (struct readiness_request *)*link;
-    bool ready = false;
-    for (size_t i = 0; i < request->count; ++i) {
-      request->interests[i].ready = ready_events(&request->interests[i]);
-      ready |= request->interests[i].ready != 0;
-    }
-    /* Current readiness wins over an expired deadline, including after worker
-     * queueing delay. Polling is a successful empty observation, not timeout. */
-    bool expired = request->deadline && arch_monotonic_ns() >= request->deadline;
-    if (ready || !request->deadline || expired) {
-      *link = request->request.next;
-      request->request.next = NULL;
-      complete_wait(request, ready || !request->deadline ? CALL_OK : CALL_TIMED_OUT);
-      worked = true;
-    } else {
-      link = &request->request.next;
-    }
-  }
-  return worked;
+  return readiness_service(&active);
 }
 
 bool tcp_readiness_next_deadline(uint64_t *deadline)
@@ -122,15 +88,5 @@ bool tcp_readiness_next_deadline(uint64_t *deadline)
     *deadline = 0;
     return true;
   }
-  uint64_t next = UINT64_MAX;
-  bool found = false;
-  for (struct bsp_request *entry = active; entry; entry = entry->next) {
-    struct readiness_request *request = (struct readiness_request *)entry;
-    if (!found || request->deadline < next) {
-      next = request->deadline;
-      found = true;
-    }
-  }
-  *deadline = next;
-  return found;
+  return readiness_next_deadline(active, deadline);
 }

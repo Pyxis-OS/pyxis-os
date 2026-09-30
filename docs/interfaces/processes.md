@@ -384,6 +384,9 @@ even without a keyboard, and does not acknowledge input loss. Nonempty reads
 return UNAVAILABLE if keyboard initialization failed. INPUT_LOST reports and
 acknowledges discarded input; no data or count reply is written on that result.
 See [keyboard input](../devices/keyboard.md) for mapping and overflow behavior.
+[Independent terminal sessions](../userland/terminal-sessions.md) implement the
+same application protocol with separate queues, input EOF and hangup; they do
+not require keyboard/framebuffer authority.
 
 Readers share a stream and acquire read ownership FIFO. Ownership survives
 sleeping for input; later readers cannot steal a wakeup or overtake the owner.

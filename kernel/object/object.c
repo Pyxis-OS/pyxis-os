@@ -1,4 +1,6 @@
 #include <abi/namespace.h>
+#include <abi/terminal.h>
+#include <kernel/object/terminal.h>
 #include <abi/profile.h>
 #include <abi/pipe.h>
 #include <abi/space.h>
@@ -30,6 +32,12 @@ static atomic_bool retired_locked;
 uint64_t object_protocol(const struct kernel_object *object)
 {
   switch (object->type) {
+  case OBJECT_TERMINAL_SERVICE:
+    return PROTOCOL_TERMINAL_SERVICE;
+  case OBJECT_TERMINAL_ATTACHMENT:
+    return PROTOCOL_TERMINAL_ATTACHMENT;
+  case OBJECT_TERMINAL_INPUT:
+  case OBJECT_TERMINAL_OUTPUT:
   case OBJECT_CONSOLE:
     return PROTOCOL_CONSOLE;
   case OBJECT_FILE:
@@ -104,7 +112,8 @@ bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
     return false;
   }
   return (protocol == PROTOCOL_FILE && object->type == OBJECT_FILE) ||
-      (protocol == PROTOCOL_CONSOLE && object->type == OBJECT_CONSOLE) ||
+      (protocol == PROTOCOL_CONSOLE && (object->type == OBJECT_CONSOLE ||
+          object->type == OBJECT_TERMINAL_INPUT || object->type == OBJECT_TERMINAL_OUTPUT)) ||
       (protocol == PROTOCOL_PIPE && object->type == OBJECT_PIPE);
 }
 
@@ -141,6 +150,14 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~(PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_FILE | PROFILE_RIGHT_HOST));
   case OBJECT_SPACE:
     return !(rights & ~SPACE_RIGHT_SET_TITLE);
+  case OBJECT_TERMINAL_SERVICE:
+    return !(rights & ~TERMINAL_SERVICE_RIGHT_CREATE);
+  case OBJECT_TERMINAL_ATTACHMENT:
+    return !(rights & ~TERMINAL_RIGHTS);
+  case OBJECT_TERMINAL_INPUT:
+    return !(rights & ~CONSOLE_RIGHT_READ);
+  case OBJECT_TERMINAL_OUTPUT:
+    return !(rights & ~CONSOLE_RIGHT_WRITE);
   case OBJECT_CONSOLE:
     return !(rights & ~CONSOLE_RIGHTS);
   case OBJECT_FILE:
@@ -244,6 +261,24 @@ void object_release(struct kernel_object *object)
   retired_objects = object;
   unlock_retired();
   /* The BSP may destroy object immediately after publication. */
+}
+
+bool object_grant_retain(struct kernel_object *object, uint64_t rights)
+{
+  if (!object_retain(object)) {
+    return false;
+  }
+  if (!terminal_authority_retain(object, rights)) {
+    object_release(object);
+    return false;
+  }
+  return true;
+}
+
+void object_grant_release(struct kernel_object *object, uint64_t rights)
+{
+  terminal_authority_release(object, rights);
+  object_release(object);
 }
 
 bool object_reap_pending(void)

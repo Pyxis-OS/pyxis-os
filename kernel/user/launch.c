@@ -1,4 +1,5 @@
 #include <kernel/object/namespace.h>
+#include <kernel/object/terminal.h>
 #include <kernel/object/endpoint.h>
 #include <abi/pipe.h>
 #include <kernel/object/pipe.h>
@@ -84,7 +85,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   KASSERT(arch_cpu_index() == 0);
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
-  struct kernel_object *namespace_service = NULL;
+  struct kernel_object *namespace_service = NULL, *terminal_service = NULL;
   struct file_object *script_file = NULL;
   struct kernel_object *space_control = NULL, *profile = NULL, *pipe = NULL, *service = NULL;
   struct kernel_object *mount = NULL, *echo = NULL, *net_config = NULL, *udp = NULL, *tcp = NULL, *random = NULL;
@@ -122,17 +123,19 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   pipe = pipe_service_create();
   service = endpoint_service_create();
   namespace_service = namespace_service_create();
-  if (!memory || !launcher || !clock || !echo || !net_config || !udp || !tcp || !random || !profile || !pipe || !service || !namespace_service) {
+  terminal_service = terminal_service_create();
+  if (!memory || !launcher || !clock || !echo || !net_config || !udp || !tcp || !random || !profile || !pipe || !service || !namespace_service || !terminal_service) {
     goto fail;
   }
 
   handle_t input, output, memory_handle, launcher_handle, display_handle, app, home;
   handle_t clock_handle, keyboard_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
-  handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle;
+  handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
   handle_t script_handle = HANDLE_INVALID;
   handle_t standard_input, standard_output, standard_error;
   struct kernel_object *console = &process->space->console->object;
-  if (capability_install(&process->capabilities, namespace_service, NAMESPACE_SERVICE_RIGHT_CREATE, 0, &namespace_service_handle) != CAP_OK ||
+  if (capability_install(&process->capabilities, terminal_service, TERMINAL_SERVICE_RIGHT_CREATE, 0, &terminal_service_handle) != CAP_OK ||
+      capability_install(&process->capabilities, namespace_service, NAMESPACE_SERVICE_RIGHT_CREATE, 0, &namespace_service_handle) != CAP_OK ||
       capability_install(&process->capabilities, service, ENDPOINT_SERVICE_RIGHT_CREATE, 0, &service_handle) != CAP_OK ||
       capability_install(&process->capabilities, profile, PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_FILE | PROFILE_RIGHT_HOST, 0, &profile_handle) != CAP_OK ||
       capability_install(&process->capabilities, pipe, PIPE_SERVICE_RIGHT_CREATE, 0, &pipe_handle) != CAP_OK ||
@@ -193,6 +196,8 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
     object_release(&script_file->object);
     script_file = NULL;
   }
+  object_release(terminal_service);
+  terminal_service = NULL;
   object_release(namespace_service);
   namespace_service = NULL;
   object_release(service);
@@ -218,7 +223,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[19] = {
+  struct process_binding resources[20] = {
     {"input", input},
     {"output", output},
     {"memory", memory_handle},
@@ -235,8 +240,9 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
     {"pipe", pipe_handle},
     {"service", service_handle},
     {"namespace_service", namespace_service_handle},
+    {"terminal", terminal_service_handle},
   };
-  size_t resource_count = 16;
+  size_t resource_count = 17;
   if (space_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"space", space_handle};
   }
@@ -280,6 +286,9 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   return;
 
 fail:
+  if (terminal_service) {
+    object_release(terminal_service);
+  }
   if (namespace_service) {
     object_release(namespace_service);
   }

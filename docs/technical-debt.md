@@ -221,16 +221,28 @@ termination operation exists.
 
 ## Console input completion
 
-The console input protocol waits for bytes and provides no EOF operation.
-Consequently EOF-driven consumers such as cksum and tee cannot finish normally with
-terminal-only stdin. For now they require finite file input or a pipe whose
-last writer closes. A zero console transfer is still an error, not fabricated
-EOF, and Ctrl-D is not a libc substitute for a terminal protocol decision.
+Framebuffer console input still provides no EOF operation. EOF-driven consumers
+such as cksum and tee need finite file/pipe input or an
+[independent terminal session](userland/terminal-sessions.md), whose attachment
+can explicitly end input. Libc accepts that session's zero-byte read as EOF.
+Ctrl-D remains an application-interpreted byte and does not close either backend.
 
 Revisit console input completion and its interaction with line editing when
 interactive EOF-driven tools are explicitly in scope. The cksum port preserves
 upstream behavior; neither cksum nor restricted tee adds terminal controls or
 signal handling.
+
+## Initial independent terminal limits
+
+[Terminal sessions](userland/terminal-sessions.md) have fixed dimensions, 4 KiB
+input and 64 KiB output queues, and one attachment. Creation has no per-space
+quota; a trusted creator can allocate multiple bounded sessions until allocation
+fails. Output backpressure has no deadline. A controller that stops draining can
+block application writers; hangup wakes terminal calls but does not stop CPU-bound
+code or operations in other subsystems. Execution supervision, remote admission
+and finite drain policy must arrive in the later remote-terminal tasks before
+claiming whole-session cleanup. Resize, reconnect and host presentation remain
+separate work.
 
 ## Libc compatibility gaps
 
@@ -490,8 +502,8 @@ demand and an explicit authority/accounting policy, not by evicting live records
 
 The echo consumer serves four clients with bounded output and fair service, but
 has no idle-client or output-drain deadline. Four stalled clients can occupy all
-active slots indefinitely. TCP readiness covers listeners and streams only;
-terminal attachment and execution-group readiness belong to the later
+active slots indefinitely. Readiness also supports terminal attachments;
+execution-group readiness belongs to the later
 [remote-terminal tasks](wip/remote-terminal.md#focused-implementation-tasks).
 Revisit stalled-client policy with that server's explicit disconnect/drain
 contract; the echo consumer does not yet supervise terminal sessions.

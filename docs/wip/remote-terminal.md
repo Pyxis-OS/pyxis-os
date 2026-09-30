@@ -1,7 +1,8 @@
 # Native remote terminal sessions
 
-Status: tasks 1–2 (TCP listeners, readiness waits and nonblocking transfers) are
-implemented; the remaining remote-terminal tasks are agreed scope, not implemented. The prerequisite
+Status: tasks 1–3 (TCP listeners, readiness/nonblocking transfers and independent
+terminal sessions) are implemented. The remaining remote-terminal tasks are agreed
+scope, not implemented. The prerequisite
 [BSP request milestone](../kernel/bsp-service-requests.md) is complete.
 Wire layouts and the bounded implementation details listed below still need
 review before their respective tasks; this document does not authorize code.
@@ -123,6 +124,15 @@ Inspect whether existing parser/state logic can be shared without coupling host
 code to framebuffer rendering. Both presentations must agree on supported
 behavior; sharing code is a means, not a new abstraction requirement.
 
+Task 3's implemented contract is recorded in
+[terminal sessions](../userland/terminal-sessions.md): 4 KiB input, 64 KiB output
+including ordered record headers, 4 KiB transfers, fixed dimensions up to 512×256,
+separate creation/application/attachment authority, drain-before-EOF on explicit
+input closure and immediate error/discard on hangup. Ctrl+D retains its existing
+line-editor meaning; actual EOF discards an unfinished line. A temporary manual
+exercise program is authorized for task 3 validation, without committed tests
+or boot/output automation.
+
 ### Readiness and duplex progress
 
 Use readiness waits and nonblocking transfer attempts instead of relay processes.
@@ -243,8 +253,6 @@ drain outcome.
 The direction above is settled. Resolve these remaining details in the associated
 PR proposal rather than inventing them during implementation:
 
-- Terminal queue/frame bounds, dimensions, attachment closure and input-EOF
-  semantics; treatment of terminal reads during session teardown.
 - A per-subsystem termination matrix: retained resources, safe stopping point,
   waiter removal and final completion owner. No partial mechanism may be advertised
   as whole-session termination.
@@ -271,7 +279,7 @@ Do not implement unrelated async, scheduling, authentication or multiplexer work
   and TCP listener/stream support, including closure/error notification and
   race-safe registration. Validate duplex progress and slow-reader behavior while
   preserving existing blocking users.
-- [ ] **3. Independent terminal sessions.** Add application/attachment authority,
+- [x] **3. Independent terminal sessions.** Add application/attachment authority,
   bounded ordered queues, dimensions/controls, attachment readiness and nonblocking
   attachment input/output attempts. Update
   libterm, libc, stream validation and launch forwarding together. Preserve local
@@ -348,14 +356,37 @@ paths. The echo consumer has no idle/output-drain timeout, and four stalled
 clients can occupy all its active slots. No terminal-session API or remote shell
 is introduced by task 2.
 
+Task 3 validation: ordinary kernel, SDK, ports and full-image builds passed with
+the existing compiler and local CMake prerequisite. Interactive one/four-CPU QEMU
+used nested KVM, 256 MiB, VirtIO RNG, optional VirtIO NET, raw OVMF and patched
+QEMU 10.2.2. The authorized temporary manual program exercised ordered records,
+small-buffer preservation, bounded input, graceful EOF, actual key/line EOF versus
+Ctrl+D, direction rights, controlling-grant closure and queued IPC grant delivery
+and discard. Terminal-only poll, timeout and closure readiness passed without a
+NIC. GDB observed a blocked writer at exactly 65,536 queued output bytes. Draining
+allowed 128 KiB to complete; a four-CPU repeat verified every payload byte, and
+the child's libc stdin reported EOF without error. Hangup woke a blocked writer.
+
+On four CPUs, mixed waits woke first for delayed terminal output with TCP idle,
+then for a host TCP connection while terminal input was full. Manual host echo
+passed through loopback-only forwarding. Actual Kilo input EOF produced exit 0
+for a clean buffer and exit 1 with unsaved edits. The ordinary local shell/Kilo
+edit, navigation, save, quit and file readback workflow passed without a NIC;
+Ctrl+D at an empty shell prompt still exited normally. All QEMU/debugger jobs were
+stopped. No exercise source or automation is committed. Allocation-failure
+unwinding and reader-queue handoff races were inspected, without fault injection
+or claims of runtime coverage. Execution-group termination and remote serving
+remain later tasks.
+
 Use ordinary `make -j16` builds, interactive QEMU and debugger inspection. Include
 one- and four-CPU operation with matching networking/init configuration. Inspect
 existing CI for each exact submitted revision and dependent repositories. Publish
 userland/lwIP changes before parent gitlinks; change ports only if a concrete
 integration need remains. No compiler-container rebuild is currently identified.
 
-No tests, fault injection, boot/output automation or new CI are authorized by this
-plan. The machine-readable host client is the requested product interface;
+No committed tests, fault injection, boot/output automation or new CI are
+authorized by this plan. Task 3 has explicit authorization for a temporary manual
+exercise program. The machine-readable host client is the requested product interface;
 validation should demonstrate it through ordinary command tools. Record what was
 actually exercised and distinguish inspected failure paths from runtime results.
 

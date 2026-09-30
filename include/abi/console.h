@@ -24,7 +24,9 @@ struct console_write_request {
   uint64_t length;
 };
 
-/* READ waits for available bytes, without echo, editing or EOF semantics.
+/* READ waits for available bytes, without echo or editing. Independent terminal
+ * sessions return zero after their input queue drains following END_INPUT.
+ * Framebuffer consoles have no input-EOF operation. Hangup is ENDPOINT_CLOSED.
  * Zero capacity succeeds immediately. INPUT_LOST acknowledges discarded input;
  * retry starts a fresh stream. Navigation sequences may span short reads.
  * timeout_ms is 0 for a poll, 1..UINT32_MAX for a bounded wait, or WAIT_FOREVER.

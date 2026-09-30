@@ -58,9 +58,9 @@ returns one event mask per input entry, including zeros for entries that are not
 ready. The complete input is captured and validated before registration; duplicate
 handles or copies are separate observations. Invalid handles return BAD_HANDLE,
 unsupported types/masks or zero masks return BAD_REQUEST, and insufficient rights
-return DENIED. Failure leaves the output array unchanged. Only native TCP streams
-and listeners are supported; terminal attachments and execution-group completion
-join in their own milestone tasks.
+return DENIED. Failure leaves the output array unchanged. Native TCP streams,
+listeners and [terminal attachments](../userland/terminal-sessions.md#readiness-and-ownership)
+can share one wait; execution-group completion remains a later task.
 
 | Interest | Required right | Automatically reported conditions |
 | --- | --- | --- |
@@ -289,7 +289,7 @@ by the host backend, making the host receiver's count especially important.
 
 ## Remaining work
 
-Readiness for object types beyond TCP, asynchronous calls, IPv6, DHCP, richer TCP
+Readiness beyond TCP/terminal attachments, asynchronous calls, IPv6, DHCP, richer TCP
 extensions and per-space network domains remain separate work. HTTP/TLS, Retawq and userspace scheme
 providers are future consumers. Keep the [users/authority checkpoint](../wip/users-and-authority.md)
 ahead of remotely accessible services. Writable virtio-fs is an independent

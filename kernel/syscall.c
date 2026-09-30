@@ -1,4 +1,5 @@
 #include <kernel/object/namespace.h>
+#include <kernel/object/terminal.h>
 #include <kernel/object/udp.h>
 #include <kernel/object/tcp.h>
 #include <kernel/object/random.h>
@@ -171,6 +172,25 @@ static struct syscall_result call_object(handle_t handle,
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return pipe_call((struct pipe_end *)object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_TERMINAL_SERVICE:
+    if (header.protocol != PROTOCOL_TERMINAL_SERVICE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return terminal_service_call(rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_TERMINAL_ATTACHMENT:
+    if (header.protocol != PROTOCOL_TERMINAL_ATTACHMENT) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return terminal_attachment_call(object, rights, header.operation,
+        request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_TERMINAL_INPUT:
+  case OBJECT_TERMINAL_OUTPUT:
+    if (header.protocol != PROTOCOL_CONSOLE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return terminal_application_call(object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
   case OBJECT_CONSOLE:
     if (header.protocol != PROTOCOL_CONSOLE) {

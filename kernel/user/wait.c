@@ -1,5 +1,6 @@
 #include <arch/clock.h>
 #include <abi/tcp.h>
+#include <abi/terminal.h>
 #include <kernel/object/object.h>
 #include <kernel/process.h>
 #include <kernel/panic.h>
@@ -28,6 +29,16 @@ static enum call_status interest_authority(const struct kernel_object *object,
       return CALL_BAD_REQUEST;
     }
     required = TCP_LISTENER_RIGHT_ACCEPT;
+  } else if (object->type == OBJECT_TERMINAL_ATTACHMENT) {
+    if (events & ~(WAIT_READABLE | WAIT_WRITABLE | WAIT_PEER_FIN | WAIT_WRITE_CLOSED)) {
+      return CALL_BAD_REQUEST;
+    }
+    if (events & (WAIT_READABLE | WAIT_PEER_FIN)) {
+      required |= TERMINAL_RIGHT_DRAIN;
+    }
+    if (events & (WAIT_WRITABLE | WAIT_WRITE_CLOSED)) {
+      required |= TERMINAL_RIGHT_INJECT;
+    }
   } else {
     return CALL_BAD_REQUEST;
   }
