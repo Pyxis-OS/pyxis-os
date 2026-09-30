@@ -63,6 +63,7 @@ case "$action" in
       case "$component" in
         kernel)
           source_info lwip third_party/lwip
+          source_info fs fs
           printf 'abi_sha256=%s\n' "$(interface_id include)"
           printf 'log_level=%s\n' "${LOG_LEVEL:-info}"
           printf 'cppflags=%s\ncflags=%s\nldflags=%s\n' "${CPPFLAGS:-}" "${CFLAGS:-}" "${LDFLAGS:-}"

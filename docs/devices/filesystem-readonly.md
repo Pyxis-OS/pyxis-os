@@ -20,8 +20,9 @@ C23 core, Linux host tools and eventual FUSE adapter. Pyxis pins a published
 revision at `fs/`. Initialize that submodule and run `make -j16 fs-tools` to build
 `build/fs-tools/libpyxis-fs.a`, `mkpyxisfs` and `pyxisfs-inspect`. The
 [repository integration](../development/sdk-and-repositories.md#filesystem-repository) records
-the build boundary. Normal kernel, SDK, ports and image targets acquire no
-filesystem dependency; the existing compiler container is sufficient.
+the build boundary. Kernel source builds now link the read-only core through the
+[native kernel adapter](filesystem-native-adapter.md); SDK and ports remain
+independent. The existing compiler container is sufficient.
 
 The core owns encoding, checksums, compatibility, construction, metadata
 traversal, allocation proof, file reads, policy evaluation and diagnostic checking.
@@ -42,7 +43,8 @@ through `pfs_view_directory_page`. Each LIST page validates an opaque 64-bit
 slot path from the held directory root and publishes names/kinds only after
 allocation proof. Tokens retain no cursor or volume reference and can be replayed
 or abandoned. This supports the [native mount prerequisite](../wip/native-readonly-filesystem.md)
-without kernel integration or a disk-format change. Stateful diagnostic cursors
+without a disk-format change. Native OS enumeration remains a later task.
+Stateful diagnostic cursors
 retain full-list count checks; stateless pages do not claim reconciliation of
 skipped entries. Existing ancestry/proof costs remain.
 

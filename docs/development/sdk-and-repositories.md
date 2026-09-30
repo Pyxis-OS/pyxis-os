@@ -12,7 +12,7 @@ normal builds never follow a remote branch or update the pin automatically.
 For an existing checkout:
 
 ```sh
-git submodule update --init userspace ports third_party/lwip
+git submodule update --init userspace ports third_party/lwip fs
 make image
 ```
 
@@ -23,9 +23,9 @@ in Pyxis. A submodule checkout may be detached; create a branch there before
 starting work. Local uncommitted source edits are usable for development;
 the exported SDK manifest records dirty userland inputs.
 
-The filesystem core is opt-in: `git submodule update --init fs` followed by
-`make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs.a`, `mkpyxisfs` and
-`pyxisfs-inspect`. Kernel/SDK/image builds do not require it. See the
+Kernel source builds require the pinned filesystem core. The host tools remain
+opt-in: `make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs.a`, `mkpyxisfs` and
+`pyxisfs-inspect`. SDK builds do not require the filesystem core. See the
 [host-tool guide](../../fs/docs/host-tools.md) for source import, extraction and
 `pyxisfs-inspect check` whole-image consistency inspection.
 
@@ -74,6 +74,11 @@ manifest. CI's shared build job therefore checks out submodules. Local image
 assembly can still use prebuilt bundles without source submodules.
 See [the port boundary](../devices/lwip.md) for worker and packet ownership.
 
+The filesystem build rules remain in Pyxis under `kernel/fs/build.mk`. Normal
+kernel builds compile the pinned read-only core with freestanding kernel flags
+and private filesystem includes, excluding construction, checking and host
+adapters. The kernel bundle records its revision and local state alongside lwIP.
+
 The public ABI remains authoritative in Pyxis. Userland consumes it through the
 SDK, with no kernel-private include paths or copied ABI headers. The shared
 shebang source is exported as `share/pyxis/shebang.c` and compiled into libpyxis.
@@ -105,9 +110,9 @@ lives in that repository, including accepted follow-up decisions. See the
 allocation-proof, traversal, policy, checking and lifetime contracts, and
 [host validation](../../fs/docs/host-tools.md#validation) for measured coverage.
 Pyxis retains the public OS ABI, capabilities
-and namespace integration. Default kernel, SDK, ports and image targets do not
-build the core or acquire a filesystem dependency. CI and the compiler container
-are unchanged.
+and namespace integration. Kernel source builds, including image builds, consume
+the pinned read-only core; SDK and ports targets remain independent. The host
+tools remain opt-in. No compiler-container rebuild is needed.
 
 ## Toolchain and remaining boundaries
 
