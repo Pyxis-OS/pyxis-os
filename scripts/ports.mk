@@ -9,6 +9,12 @@ DOOM_LICENSE := build/ports/doom/stage/share/licenses/doom/LICENSE
 
 TCC_INPUTS := $(wildcard ports/*.lua ports/tcc/*.lua ports/tcc/Makefile ports/tcc/patches/*.patch)
 SDK_INPUTS := $(shell find build/sdk -type f)
+FASTFETCH_INPUTS := $(wildcard ports/fastfetch/*.lua ports/fastfetch/*.cmake \
+  ports/fastfetch/Makefile ports/fastfetch/PORT-NOTICE ports/fastfetch/patches/*.patch) \
+  ports/ports.lua ports/build.lua ports/LICENSE
+FASTFETCH_OUTPUTS := $(addprefix build/ports/fastfetch/stage/,bin/fastfetch.pxe \
+  share/licenses/fastfetch/LICENSE share/licenses/fastfetch/yyjson.h \
+  share/licenses/fastfetch/MPL-2.0 share/licenses/fastfetch/PORT-NOTICE)
 KILO_IMAGE := build/ports/kilo/stage/bin/kilo.pxe
 KILO_LICENSE := build/ports/kilo/stage/share/licenses/kilo/LICENSE
 
@@ -60,7 +66,7 @@ MBEDTLS_OUTPUTS := $(addprefix build/ports/mbedtls/stage/,dev/lib/libmbedtls.a \
 .PHONY: all
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
      $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) \
-     $(CA_CERTIFICATES_OUTPUTS)
+     $(CA_CERTIFICATES_OUTPUTS) $(FASTFETCH_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.
@@ -115,3 +121,7 @@ $(PICOHTTPPARSER_OUTPUTS) &: $(PICOHTTPPARSER_INPUTS) $(SDK_INPUTS) scripts/port
 $(MBEDTLS_OUTPUTS) &: $(MBEDTLS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/mbedtls
 	$(LUA) ports/build.lua mbedtls --sdk $(abspath build/sdk) --work $(abspath build/ports/mbedtls)
+
+$(FASTFETCH_OUTPUTS) &: $(FASTFETCH_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	rm -rf build/ports/fastfetch
+	$(LUA) ports/build.lua fastfetch --sdk $(abspath build/sdk) --work $(abspath build/ports/fastfetch)

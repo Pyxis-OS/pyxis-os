@@ -197,13 +197,10 @@ audit and host hello-world probes. ELF-to-P1F conversion already works for the
 two Linux probe images; native startup, runtime threading/TLS, synchronization
 and VM semantics remain unresolved. No Go target or guest execution is claimed.
 
-The [fastfetch investigation](fastfetch.md) records a pinned SDK compile probe
-and proposes a smaller native information/display port. Existing clocks and
-console dimensions can be reused. The native system-information prerequisite is
-implemented, covering explicit delegation, CPU sampling, coherent allocator
-memory and the running kernel's short commit SHA. The bounded portable-core
-investigation, reusable libc additions and standalone native port are complete.
-The next task is default-image packaging and broader integration acceptance.
+[Fastfetch](../userland/fastfetch.md) is packaged in the normal image. Its native
+information adapters, existing libc prerequisites and local/remote integration
+acceptance are complete. The port preserves upstream formatting and error
+behavior; its implemented reference records observation and display limits.
 
 SDL2/GrafX2 remains a later graphical alternative. A desktop/compositor remains
 a separate [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting
