@@ -319,17 +319,6 @@ The planned [libc input read-ahead](wip/stdio-input-buffering.md) milestone
 addresses files and pipes; console input will remain byte-at-a-time. Do not
 work around it in individual ports.
 
-## fgets final line after an earlier error
-
-Source inspection of userland `3b9ba3f` confirms that `fgets` checks the sticky
-`ferror` indicator when `fgetc` returns EOF. An earlier error that remains set
-can therefore make a later successfully read, unterminated final line return
-NULL instead of the partial line. This was reported during the uniq port; no
-runtime reproduction was performed for this entry. Fix the distinction between
-the current read's EOF/error outcome and a prior sticky error in a focused libc
-change, preserving the error indicator until explicitly cleared. This is task 1
-of [libc input read-ahead](wip/stdio-input-buffering.md).
-
 ## Duplicated port output lists
 
 `scripts/ports.mk` repeats staged output paths already declared in each recipe's

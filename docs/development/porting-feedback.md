@@ -23,8 +23,8 @@ do not change [AGENTS.md](../../AGENTS.md) or authorize implementation.
 - [Unbuffered line input](../technical-debt.md#unbuffered-line-input) has a
   measured cost in uniq. Address it in libc with an explicit descriptor/stream
   contract, rather than changing each line-oriented port.
-- [Sticky-error handling in fgets](../technical-debt.md#fgets-final-line-after-an-earlier-error)
-  needs a focused correctness fix; it was deliberately outside the uniq task.
+- Sticky-error handling in fgets, deliberately outside the uniq task, is fixed
+  by task 1 of [libc input read-ahead](../wip/stdio-input-buffering.md).
 - [Duplicated port output lists](../technical-debt.md#duplicated-port-output-lists)
   can drift when a recipe gains another executable.
 - Setup friction observed during the uniq work, with the actual errors:

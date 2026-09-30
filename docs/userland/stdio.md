@@ -170,6 +170,9 @@ remain ENOTSUP. A successful short transfer remains successful progress.
 provided. `fgets` retains a newline and terminates successful input. Capacity one
 produces an empty string without consuming input; a nonpositive capacity fails.
 After a read error the destination may contain a partial, unterminated prefix.
+Fgets decides EOF from the current call, as getline does: an error indicator left
+by an earlier call does not turn a final unterminated line into NULL, and the
+indicator stays set until cleared.
 Terminal input is raw and blocking: fread waits for the requested bytes or an
 error; fgets stops at newline/capacity. Neither echoes or edits. Interactive line
 editing remains an explicit [libterm](terminal.md) operation. Do not read from
