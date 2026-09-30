@@ -1,11 +1,23 @@
 #include <abi/mount.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
+#include <kernel/fs/native.h>
+#include <kernel/log.h>
+#include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/mount.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/user_memory.h>
+
+enum mount_backend { MOUNT_HOST, MOUNT_NATIVE };
+
+struct mount_object {
+  struct kernel_object object;
+  enum mount_backend backend;
+  struct mount_config config;
+  enum call_status setup_status;
+};
 
 static void destroy_mount(struct kernel_object *object)
 {
@@ -15,48 +27,138 @@ static void destroy_mount(struct kernel_object *object)
 struct kernel_object *mount_create(void)
 {
   KASSERT(arch_cpu_index() == 0);
-  struct kernel_object *object = kmalloc(sizeof(*object));
-  if (object) {
-    object_init(object, OBJECT_MOUNT, destroy_mount);
+  struct mount_object *mount = kmalloc(sizeof(*mount));
+  if (!mount) {
+    return NULL;
   }
-  return object;
+  *mount = (struct mount_object){.backend = MOUNT_HOST};
+  object_init(&mount->object, OBJECT_MOUNT, destroy_mount);
+  return &mount->object;
 }
 
-struct syscall_result mount_call(uint64_t rights, uint64_t operation,
-    uintptr_t request_address, size_t request_size, uintptr_t reply_address,
-    size_t reply_capacity)
+struct kernel_object *mount_create_native(const struct mount_config *config)
 {
-  if (operation != MOUNT_OPEN_ROOT) {
-    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  KASSERT(arch_cpu_index() == 0 && config->enabled);
+  enum block_preparation preparation = block_preparation_result();
+  KASSERT(preparation != BLOCK_DEVICE_ABSENT);
+  struct mount_object *mount = kmalloc(sizeof(*mount));
+  if (!mount) {
+    return NULL;
   }
-  if (!(rights & MOUNT_RIGHT_OPEN_ROOT)) {
-    return (struct syscall_result){CALL_DENIED, 0};
+  *mount = (struct mount_object){
+    .backend = MOUNT_NATIVE,
+    .config = *config,
+    .setup_status = preparation == BLOCK_DEVICE_READY ? CALL_OK :
+        preparation == BLOCK_DEVICE_AMBIGUOUS ? CALL_IO : CALL_UNAVAILABLE,
+  };
+  object_init(&mount->object, OBJECT_MOUNT, destroy_mount);
+  if (mount->setup_status != CALL_OK) {
+    klog("mount: configured native authority has block preparation failure %u\n",
+         (unsigned)preparation);
   }
-  struct mount_open_request open;
-  struct mount_reply reply;
-  if (request_size != sizeof(open) || reply_capacity < sizeof(reply)) {
-    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  return &mount->object;
+}
+
+static enum call_status open_native(struct mount_object *mount,
+    uintptr_t request_address, size_t request_size, struct kernel_object **root,
+    uint64_t *directory_rights)
+{
+  struct mount_volume_request open;
+  if (request_size != sizeof(open)) {
+    return CALL_BAD_REQUEST;
   }
-  if (!copy_from_user(&open, request_address, sizeof(open)) ||
-      !user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
-    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  if (!copy_from_user(&open, request_address, sizeof(open))) {
+    return CALL_BAD_BUFFER;
+  }
+  if (!open.partition || open.partition > UINT32_MAX ||
+      !open.name_length || open.name_length > MOUNT_VOLUME_NAME_MAX ||
+      (open.rights & ~DIRECTORY_RIGHTS) || !(open.rights & DIRECTORY_RIGHT_LOOKUP)) {
+    return CALL_BAD_REQUEST;
+  }
+  if (open.rights & ~NATIVEFS_DIRECTORY_RIGHTS) {
+    return CALL_READ_ONLY;
+  }
+  char name[MOUNT_VOLUME_NAME_MAX + 1];
+  if (!copy_from_user(name, open.name, open.name_length)) {
+    return CALL_BAD_BUFFER;
+  }
+  if (pfs_name_validate((const uint8_t *)name, open.name_length) != PFS_OK) {
+    return CALL_BAD_REQUEST;
+  }
+  name[open.name_length] = '\0';
+  if (mount->setup_status != CALL_OK) {
+    return mount->setup_status;
   }
 
-  if (open.access != MOUNT_ACCESS_READ_ONLY && open.access != MOUNT_ACCESS_READ_WRITE) {
-    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  struct nativefs_request *request = nativefs_request_prepare(NATIVEFS_ROOT);
+  request->job.disk = mount->config.disk;
+  request->job.principal = mount->config.principal;
+  request->job.partition = open.partition;
+  request->job.rights = open.rights;
+  request->job.count = open.name_length;
+  memcpy(request->job.name, name, open.name_length + 1);
+  nativefs_request_submit_and_wait(request);
+  enum call_status status = request->job.status;
+  *root = request->job.object;
+  request->job.object = NULL;
+  nativefs_request_release(request);
+  *directory_rights = open.rights;
+  return status;
+}
+
+static enum call_status open_host(uintptr_t request_address, size_t request_size,
+    struct kernel_object **root, uint64_t *directory_rights)
+{
+  struct mount_open_request open;
+  if (request_size != sizeof(open)) {
+    return CALL_BAD_REQUEST;
   }
-  uint64_t directory_rights = open.access == MOUNT_ACCESS_READ_WRITE ? DIRECTORY_RIGHTS :
+  if (!copy_from_user(&open, request_address, sizeof(open))) {
+    return CALL_BAD_BUFFER;
+  }
+  if (open.access != MOUNT_ACCESS_READ_ONLY && open.access != MOUNT_ACCESS_READ_WRITE) {
+    return CALL_BAD_REQUEST;
+  }
+  *directory_rights = open.access == MOUNT_ACCESS_READ_WRITE ? DIRECTORY_RIGHTS :
       DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES;
 
   struct hostfs_request *request = hostfs_request_prepare(HOSTFS_ROOT);
   hostfs_request_submit_and_wait(request);
   enum call_status status = request->status;
-  struct kernel_object *root = request->object;
+  *root = request->object;
   request->object = NULL;
   hostfs_request_release(request);
+  return status;
+}
+
+struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  struct mount_object *mount = (struct mount_object *)object;
+  if (operation != (mount->backend == MOUNT_HOST ? MOUNT_OPEN_ROOT : MOUNT_OPEN_VOLUME)) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (!(rights & MOUNT_RIGHT_OPEN_ROOT)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct mount_reply reply;
+  if (reply_capacity < sizeof(reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct kernel_object *root = NULL;
+  uint64_t directory_rights = 0;
+  enum call_status status = mount->backend == MOUNT_NATIVE ?
+      open_native(mount, request_address, request_size, &root, &directory_rights) :
+      open_host(request_address, request_size, &root, &directory_rights);
   if (status != CALL_OK) {
+    KASSERT(!root);
     return (struct syscall_result){status, 0};
   }
+  KASSERT(root);
 
   /* Keep the returned reference across capability-table growth. The mount
    * authority and the resulting directory have independent lifetimes. */

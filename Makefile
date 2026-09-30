@@ -21,7 +21,9 @@ INIT ?=
 INIT_DEFAULT ?= app://init-idle
 INIT_PRIMARY ?= app://init
 INIT_CPUS ?= 2=app://init-readonly 3=app://init-remote
-export INIT_DEFAULT INIT_PRIMARY INIT_CPUS
+MOUNT_DISK ?=
+MOUNT_PRINCIPAL ?=
+export INIT_DEFAULT INIT_PRIMARY INIT_CPUS MOUNT_DISK MOUNT_PRINCIPAL
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)

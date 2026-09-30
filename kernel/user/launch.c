@@ -11,6 +11,7 @@
 #include <kernel/object/udp.h>
 #include <abi/mount.h>
 #include <kernel/object/mount.h>
+#include <kernel/block.h>
 #include <kernel/virtio/pci.h>
 #include <kernel/object/keyboard.h>
 #include <kernel/object/space.h>
@@ -81,7 +82,8 @@ static enum initrd_result select_image(const char *name, struct initrd_file *ima
   return initrd_lookup(interpreter + 6, image);
 }
 
-void user_launch_init(size_t cpu_index, const char *image_uri)
+void user_launch_init(size_t cpu_index, const char *image_uri,
+    const struct mount_config *mount_config)
 {
   KASSERT(arch_cpu_index() == 0);
   struct process *process = NULL;
@@ -193,6 +195,16 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
     object_release(mount);
     mount = NULL;
   }
+  handle_t native_mount_handle = HANDLE_INVALID;
+  if (mount_config->enabled && block_preparation_result() != BLOCK_DEVICE_ABSENT) {
+    mount = mount_create_native(mount_config);
+    if (!mount || capability_install(&process->capabilities, mount,
+          MOUNT_RIGHT_OPEN_ROOT, 0, &native_mount_handle) != CAP_OK) {
+      goto fail;
+    }
+    object_release(mount);
+    mount = NULL;
+  }
   if (script.data) {
     script_file = file_create_initrd(&script);
     if (!script_file || capability_install(&process->capabilities, &script_file->object,
@@ -231,7 +243,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[21] = {
+  struct process_binding resources[22] = {
     {"input", input},
     {"output", output},
     {"memory", memory_handle},
@@ -260,6 +272,9 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
   }
   if (mount_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"host_mount", mount_handle};
+  }
+  if (native_mount_handle != HANDLE_INVALID) {
+    resources[resource_count++] = (struct process_binding){"native_mount", native_mount_handle};
   }
   const struct process_binding roots[] = {{"app", app}, {"home", home}};
   const char *arguments[] = {script.data ? interpreter : image_uri, image_uri};

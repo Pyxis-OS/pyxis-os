@@ -245,7 +245,7 @@ static struct syscall_result call_object(handle_t handle,
     if (header.protocol != PROTOCOL_MOUNT) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    return mount_call(rights, header.operation, request_address, request_size,
+    return mount_call(object, rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
   case OBJECT_RANDOM:
     if (header.protocol != PROTOCOL_RANDOM) {

@@ -374,7 +374,7 @@ its resource check. Boot explicitly grants the init interpreter launch authority
 the default init uses `session` to pass it to the configuration launcher, which
 then delegates it to the interactive shell.
 
-## Optional host mount
+## Mounting roots
 
 `mount [--optional] [--read-only | --read-write] host` uses init's scoped
 `host_mount` resource to open the selected export and bind `host://` in this
@@ -383,6 +383,40 @@ but do not establish backend or host writability. It rejects an
 existing binding. Optional mode skips only a missing resource; any actual mount
 failure is an error, which stops a script. Ordinary shells receive the mounted
 root rather than mount authority. See [host setup and lifetime](../devices/virtio-fs.md).
+
+Native volume mounts use a separate init resource:
+
+```text
+mount [--optional] --partition N --volume NAME --read-only NAME://
+mount --partition 1 --volume system --read-only data://
+ls data://
+cat data://share/hello.txt
+data://bin/program.pxe
+```
+
+The `native_mount` authority selects the configured disk and bootstrap principal;
+`--partition` is a positive one-based GPT entry number on that disk. The counted
+volume name is 1–255 UTF-8 bytes and resolves once within the retained generation.
+The binding name is chosen separately, so `data://` need not match the volume
+name. The command requires `--read-only`; it acquires LOOKUP, ENUMERATE and
+READ_FILES. The lower-level mount ABI can request a narrower root with LOOKUP,
+rejects unknown rights and returns READ_ONLY for known mutation rights.
+
+Destination validation, collision checks and binding storage reservation precede
+acquisition. A conflicting root or service name fails without replacing it;
+service collisions are checked again after acquisition, with the unpublished
+root closed on failure. At most 16 roots are selected, including app/home/HOST;
+overflow fails explicitly. Successful roots are added to the shell's explicit
+selection and forwarded to children. Mount authorities are excluded from that
+selection. No unmount, host refresh or hotplug administration is supplied.
+
+`--optional` permits only a missing native authority, from disabled configuration
+or confirmed hardware absence. Failures from present authority remain errors,
+including wrong disk GUID, ambiguous/unusable hardware, invalid GPT/filesystem,
+missing partition/volume and policy denial. See
+[boot configuration](init.md#native-disk-configuration-and-mounting).
+`MOUNT_RIGHT_OBSERVE`, directory FILESYSTEM_INFO authority and `--no-info` remain
+task 6 work with the real information query.
 
 ## Session handoff
 
@@ -394,12 +428,13 @@ script mode reports the script name/line and exits with failure as usual.
 Program lookup and quoting use the ordinary command rules, including shebang
 launch. The `session` word is removed from the child's arguments.
 
-The successor receives copies of the usual terminal, memory, app/home and optional
-host root and
-working-directory grants, current working-path metadata and initial environment,
-plus an explicit `launcher` resource with LAUNCH authority. Other startup
-resources, including the caller's `script` and `host_mount`, are not forwarded. Launching another
-script supplies that target's own READ script grant through `program_launch`.
+The successor receives copies of the usual terminal and memory grants, the
+explicit selected root list and working-directory grants, current working-path
+metadata and initial environment, plus an explicit `launcher` resource with
+LAUNCH authority. Other startup
+resources, including the caller's `script`, `host_mount` and `native_mount`, are
+not forwarded. Launching another script supplies that target's own READ script
+grant through `program_launch`.
 Ordinary foreground commands still receive no launcher.
 
 Successful launch ends script execution immediately: later lines do not run,
@@ -428,13 +463,14 @@ and preserves their actual rights.
 An optional `display` resource supplies DRAW authority for the space. An optional
 `clock` resource supplies READ and SLEEP authority for monotonic time. An optional
 `keyboard` resource supplies INPUT authority for physical-key sessions.
-The optional `host` root retains the access granted by init. Root names do not
-determine permissions.
+Additional selected roots, including optional HOST and native mounts, retain
+the access granted by init. Root names do not determine permissions. The shell
+preserves at most 16 startup roots and fails explicitly if that limit is exceeded.
 
 An initial directory chain is copied from startup, preserving its navigation
-boundary. A supplied chain requires a descriptive working path beginning with
-`app://`, `home://` or `host://` for prompt display. The path is not resolved to
-replace the chain: actual handles remain authoritative, and insufficient grants
+boundary. A supplied chain requires a descriptive working path beginning with a
+`NAME://` scheme for prompt display. The path is not resolved to replace the
+chain: actual handles remain authoritative, and insufficient grants
 fail normally. With no initial chain the shell starts at `home://`. Explicit
 scheme changes use the bound root's actual grant; each descendant lookup retains
 its parent's grant. Crossing a retained ancestor boundary fails as in the native
@@ -447,10 +483,10 @@ Missing streams remain absent; stderr never falls back to stdout or the terminal
 The script interpreter and session handoff preserve these bindings too.
 
 Each foreground child receives explicit copies of terminal output, memory and
-available roots with their actual grants, and the current directory chain
-preserving each
-handle's rights independently. Terminal input and keyboard are withheld for
-file/pipe stdin and downstream pipeline stages as described above. It does not
+the explicitly selected roots with their actual rights and transport masks, and
+the current directory chain preserving each handle's rights independently.
+Terminal input and keyboard are withheld for file/pipe stdin and downstream
+pipeline stages as described above. It does not
 receive the shell's launcher. When available, the [display](../interfaces/graphics.md),
 [clock](../kernel/timekeeping.md), [random](../devices/randomness.md) and [keyboard](../devices/keyboard.md) grants are also forwarded
 to eligible foreground children and session successors; background children omit keyboard input.

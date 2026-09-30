@@ -22,6 +22,7 @@ struct nativefs_request;
 
 enum nativefs_operation {
   NATIVEFS_ROOT, NATIVEFS_LOOKUP, NATIVEFS_ENUMERATE, NATIVEFS_READ, NATIVEFS_SIZE,
+  NATIVEFS_CAPTURE,
 };
 enum nativefs_job_state {
   NATIVEFS_JOB_IDLE, NATIVEFS_JOB_QUEUED, NATIVEFS_JOB_ACTIVE, NATIVEFS_JOB_COMPLETE,
@@ -32,8 +33,10 @@ enum nativefs_job_state {
  * Other operations derive children only from the held node/view and the calling
  * capability's actual rights. Inputs are borrowed until detached completion;
  * successful ROOT/LOOKUP transfers one object reference, failure transfers none.
- * READ/ENUMERATE publish data only on success. Core/backing diagnostics belong
- * to this operation alone. */
+ * CAPTURE transfers owned launch staging (count bytes) on success, none on
+ * failure; its allocation is outside the native wrapper cap. READ/ENUMERATE
+ * publish data only on success. Core/backing diagnostics belong to this
+ * operation alone. */
 struct nativefs_job {
   enum nativefs_job_state state;
   enum nativefs_operation operation;
@@ -51,6 +54,7 @@ struct nativefs_job {
   enum pfs_status core_status;
   enum block_result backing_error;
   struct kernel_object *object;
+  void *captured;
   /* Internal queue/completion ownership. */
   struct nativefs_job *next;
   struct nativefs_request *user_request;

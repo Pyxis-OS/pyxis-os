@@ -5,6 +5,7 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
+#include <kernel/fs/native.h>
 #include <kernel/mm/heap.h>
 #include <kernel/memory.h>
 #include <kernel/object/file.h>
@@ -96,7 +97,7 @@ static void create_execution_group(struct launcher_request *request)
 
 static void discard_capture(struct launch_capture *capture)
 {
-  kfree(capture->host_image);
+  kfree(capture->external_image);
   kfree(capture);
 }
 
@@ -475,16 +476,14 @@ static enum call_status capture_launch_request(const struct launch_request *requ
 {
   *result = NULL;
   struct kernel_object *image;
+  uint64_t image_rights;
   enum capability_result lookup = capability_resolve(&process_current()->capabilities,
-      request->image, FILE_RIGHT_READ, 0, &image, NULL, NULL);
+      request->image, FILE_RIGHT_READ, 0, &image, &image_rights, NULL);
   if (lookup != CAP_OK) {
     return lookup == CAP_BAD_HANDLE ? CALL_BAD_HANDLE : CALL_DENIED;
   }
   if (image->type != OBJECT_FILE) {
     return CALL_WRONG_TYPE;
-  }
-  if (((struct file_object *)image)->backing == FILE_NATIVE) {
-    return CALL_UNAVAILABLE;
   }
 
   struct launch_capture *capture = allocate_launch_capture();
@@ -502,10 +501,24 @@ static enum call_status capture_launch_request(const struct launch_request *requ
     return error;
   }
   capture->image = (struct file_object *)image;
-  if (capture->image->backing == FILE_HOST) {
+  if (capture->image->backing == FILE_NATIVE) {
+    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_CAPTURE);
+    pending->job.node = capture->image->native;
+    pending->job.rights = image_rights;
+    nativefs_request_submit_and_wait(pending);
+    enum call_status status = pending->job.status;
+    capture->external_image = pending->job.captured;
+    capture->external_image_size = pending->job.count;
+    pending->job.captured = NULL;
+    nativefs_request_release(pending);
+    if (status != CALL_OK) {
+      discard_launch_capture(capture);
+      return status;
+    }
+  } else if (capture->image->backing == FILE_HOST) {
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_CAPTURE);
     pending->node = capture->image->host;
-    pending->count = LAUNCH_HOST_IMAGE_MAX_SIZE;
+    pending->count = LAUNCH_EXTERNAL_IMAGE_MAX_SIZE;
     hostfs_request_submit_and_wait(pending);
     if (pending->status != CALL_OK) {
       enum call_status error = pending->status;
@@ -513,8 +526,8 @@ static enum call_status capture_launch_request(const struct launch_request *requ
       discard_launch_capture(capture);
       return error;
     }
-    capture->host_image = pending->captured;
-    capture->host_image_size = pending->count;
+    capture->external_image = pending->captured;
+    capture->external_image_size = pending->count;
     pending->captured = NULL;
     hostfs_request_release(pending);
   } else if (!file_begin_operation(capture->image)) {
@@ -522,7 +535,7 @@ static enum call_status capture_launch_request(const struct launch_request *requ
     return CALL_ENDPOINT_CLOSED;
   }
   if (task_stop_requested()) {
-    if (capture->image->backing != FILE_HOST) {
+    if (capture->image->backing == FILE_INITRD || capture->image->backing == FILE_RAM) {
       file_end_operation(capture->image);
     }
     discard_launch_capture(capture);

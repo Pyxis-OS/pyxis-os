@@ -19,6 +19,16 @@ enum block_result {
   BLOCK_BUSY,
 };
 
+enum block_preparation {
+  BLOCK_DEVICE_ABSENT, BLOCK_DEVICE_READY, BLOCK_DEVICE_UNSUPPORTED,
+  BLOCK_DEVICE_SETUP_FAILED,
+  BLOCK_DEVICE_AMBIGUOUS, BLOCK_INVENTORY_INCOMPLETE,
+};
+
+/* BSP/IF=0 after preparation. Immutable hardware-selection/setup result;
+ * unavailable I/O alone does not establish that hardware was absent. */
+enum block_preparation block_preparation_result(void);
+
 struct block_info {
   uint64_t block_count;
   uint32_t block_size, max_transfer, request_slots;

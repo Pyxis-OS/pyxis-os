@@ -2,11 +2,12 @@
 
 Caelum links the pinned read-only filesystem core and provides policy-approved
 native directory/file objects through one serial BSP worker. This implements
-backing preparation and object support, tasks 3 and 4 of the
+backing preparation, objects and init integration, tasks 3–5 of the
 [native mount milestone](../wip/native-readonly-filesystem.md). Native objects use
-the existing directory/file protocols. Mount acquisition, bootstrap principal
-configuration and native executable capture remain task 5; there is no public
-native mount operation or automatic volume probe yet.
+the existing directory/file protocols. Native executable capture uses the same
+worker. Mount configuration and
+acquisition are described in the task-5 integration below; startup performs no
+automatic volume probe.
 
 ## Build and ownership
 
@@ -31,6 +32,8 @@ COMPLETE. The caller retains every input reference and does not access the recor
 while queued/active. Rejected admission leaves the record unchanged. Successful
 ROOT or LOOKUP transfers one owned `kernel_object` reference in `job.object`;
 failure transfers none. Detach that output before resetting/reusing the record.
+CAPTURE transfers owned launch staging through `job.captured` and its byte
+length through `job.count`; detach that buffer before releasing the request.
 No completion registry is retained. The internal ROOT inputs are embedding
 authority, not an application interface for selecting a principal.
 
@@ -101,8 +104,13 @@ Unknown rights bits return `CALL_BAD_REQUEST`; valid mutations return
 `CALL_READ_ONLY` after ordinary authority and argument checks, including an empty
 WRITE. A normal root grants no mutation bits, so mutation calls through it are
 usually denied by their ordinary rights checks. Existing archive, RAM and HOST
-behavior is unchanged. Launching a native file returns `CALL_UNAVAILABLE` until
-task 5 adds executable capture.
+behavior is unchanged. Executable capture reads metadata and bytes through the
+held file view, under the same caller READ check and absolute job deadline. It
+rejects empty files, limits staging to 16 MiB and requires the full recorded
+length; errors transfer no buffer. Complete staging transfers to the launch
+capture, which frees it on BSP after loading or on failure/stop. Its separately
+owned allocation is outside core/adapter caps, matching HOST capture's bound.
+There is no new aggregate staging cap across simultaneous callers.
 
 Enumeration returns names and kinds, with no child handle or metadata authority.
 It fetches one stateless core page using the opaque continuation in
@@ -155,9 +163,9 @@ One fresh operation context records the first precise backing error. Only
 inherit a device error. The context is unbound before completion. The completed
 job preserves its own core status/backing result for diagnosis. A missing volume
 or partition is NOT_FOUND; absent/invalid filesystem or GPT metadata is IO.
-Unavailable/unsupported transport or format is UNAVAILABLE. These internal
-results do not decide whether future `mount --optional` may ignore missing
-hardware; task 5 must preserve the block preparation reason for that decision.
+Unavailable/unsupported transport or format is UNAVAILABLE. Optional mounting
+only suppresses absence of the authority itself. A configured authority preserves
+present-device preparation failures, which are never treated as optional absence.
 
 ## Prepare a disposable disk
 
@@ -370,3 +378,80 @@ paths were reviewed in source rather than injected. Existing formatter grants do
 not produce a read-without-metadata fixture. Timeout/device/allocator failures,
 maximum directory depth and later generations retain the historical limits
 above. No new tests, probes, boot automation or fault injection were added.
+
+## Task-5 integration
+
+Trusted init receives a `native_mount` capability when both bootstrap selectors
+are configured and block hardware is present. The immutable authority contains
+the configured disk GUID, bootstrap principal and block preparation result;
+applications cannot supply a principal. `MOUNT_OPEN_VOLUME` captures a one-based
+GPT entry number, a 1–255-byte volume name and the exact directory-rights mask.
+The request has no namespace name or raw-device address. It requires mount
+OPEN_ROOT and directory LOOKUP; unknown rights are invalid and mutation rights
+are read-only. The worker validates the selected disk and persistent policy,
+then the handler installs one independently retained root. Mount authority may
+close while that root remains usable. HOST retains its separate OPEN_ROOT
+operation; crossing the two backends returns BAD_OPERATION.
+
+The library and shell validate selectors before optional-absence handling. The
+shell reserves its binding slot/name before acquisition and closes unpublished
+roots on failure. It forwards an explicit selected list of at most 16 roots
+using each handle's actual rights and transport flags. Session and remote shell
+handoffs preserve that list; they do not forward mount resources. Provider
+profiles explicitly attenuate the roots and working directory they select.
+See [init configuration](../userland/init.md) and [shell commands](../userland/shell.md).
+Observation rights, filesystem information and `--no-info` remain task 6.
+
+## Task-5 validation
+
+On 2026-09-30, ordinary kernel, SDK, host-tools, userland and ports builds and
+both default and configured image assembly passed from Pyxis `161d24e` plus
+task 5, using userland `b50fd10` and unchanged filesystem/ports/lwIP pins.
+The initial ports build lacked CMake on PATH; using the existing host CMake 4.4.3
+installation resolved that environment issue. No compiler-container rebuild was
+needed. Subsequent init/configuration-only image assembly used the verified
+kernel/SDK/userland/ports bundles from those builds.
+
+Interactive QEMU used four CPUs (`max`), 256 MiB and nested KVM with the documented
+AHCI fix. A disposable 132 MiB GPT disk had 512-byte sectors and two cloned
+64 MiB pool extents at sectors 2,049 and 133,129. The pool held `system` (fresh
+native cat/date executables and a text file) and `headers` (host Linux headers).
+Before attachment, the existing host checker accepted both retained committed
+states: two volumes, 845 objects and 843 directory entries. This checks structure,
+not payload checksums. Every guest attachment was read-only, without host mutation.
+
+Trusted init mounted system twice and headers once, mounted a disposable HOST
+export and handed the roots through session, remote services, remote server,
+terminal and an ordinary remote shell. The existing remote client exercised:
+
+- `ls data://`, nested header enumeration, native `cat` and relative reads after
+  `cd data://share`, all successful;
+- native `data://bin/cat.pxe` and `data://bin/date.pxe` launches, both exit 0;
+- reading through the repeated `mirror://` mount;
+- denied native mkdir and redirect/overwrite attempts;
+- failure to reacquire a native root in the ordinary shell, which had no mount
+  authority despite retaining delegated directory grants;
+- archive reads, RAM copy/read, and HOST read/write/read-back/sync, all successful.
+
+Separate trusted-init boots used `--optional` with present authority. A second
+partition containing the same pool returned CALL_ALREADY_EXISTS after a successful
+first mount; invalid partition 3 returned CALL_NOT_FOUND; an ungranted configured
+principal returned PFS_DENIED/CALL_DENIED with no object. Each script exited 1.
+GDB observed normal worker completions without injecting calls or changing guest
+state. After failed scripts drained, core/adapter live bytes and admitted requests
+were zero; clone and policy-denial runs also had zero wrappers and no operation
+context. The clone run had no remaining pools or volumes.
+
+With configuration retained but no block device, the same optional script exited
+0. A restored packaged, unconfigured image also reached its normal userspace
+sessions without a disk. The whole-disk SHA-256 remained unchanged after the
+attached runs. The 4,592-byte typed native request still fits the existing
+4,928-byte task request storage.
+
+Wrong GUID, missing volume, malformed/duplicate bootstrap options, root/service
+collision and root-count exhaustion have source-review coverage; this run did
+not induce allocator/device/timeouts, unsupported hardware or duplicate devices.
+Stop-during-capture and error-after-partial-read cleanup were reviewed in source.
+No aggregate staging-memory or owner-host performance measurement is claimed.
+All validation VMs, debugger sessions, remote clients and HOST daemon were stopped.
+No new tests, permanent probes, fault injection or boot automation were added.

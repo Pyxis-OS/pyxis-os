@@ -634,6 +634,17 @@ checks cannot prove that captured contents form a coherent snapshot. Script
 files retain their existing live READ-handle behavior; this capture path applies
 only to binary executables and interpreters.
 
+Native filesystem binaries and interpreters use the same 16 MiB external-image
+staging limit (`LAUNCH_EXTERNAL_IMAGE_MAX_SIZE`). Their worker reads length and
+bytes through the held policy view, requiring the caller's READ grant and both
+core read/metadata rights. It publishes a complete owned copy only on success;
+errors or an unexpected short read publish no staging bytes. The immutable view
+fixes identity and generation, provided the attached image is not modified by
+an external writer. The native request reservation is released before launch
+preparation uses the BSP executor. Staging remains owned by launch capture and
+is freed on every success, failure or stop path, outside the native adapter's
+wrapper budget. This adds no aggregate staging cap across callers.
+
 BSP creates an inactive process and initial stack using the same helper as boot
 setup, installs explicit grants and prepares startup. It installs a WAIT observer
 in the parent's table before task submission; failure after installation closes

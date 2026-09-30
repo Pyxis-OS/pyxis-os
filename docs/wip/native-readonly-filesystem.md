@@ -1,9 +1,9 @@
 # Native read-only filesystem mounts
 
-Status: tasks 1–4 complete, 2026-09-30. The contract, core continuation and
+Status: tasks 1–5 complete, 2026-09-30. The contract, core continuation and
 [bounded kernel adapter](../devices/filesystem-native-adapter.md) are implemented.
-Internal jobs acquire policy-approved directory/file objects; their ordinary
-protocols forward to the worker. No native mount ABI is exposed yet. The
+Trusted init can mount and delegate native roots; directory/file protocols and
+executable capture forward to the worker. Filesystem information is task 6. The
 initial budgets cover the measured inputs, not every valid image. Update each
 task in its delivery PR.
 
@@ -29,16 +29,15 @@ recovery and installation remain separate milestones.
   remain authoritative. Reuse this core, not a second kernel format parser.
 - Existing [filesystem objects](../interfaces/filesystem-mutations.md),
   [init/session handoff](../userland/init.md) and namespace bindings provide the
-  application-facing model. The current mount capability selects the HOST export;
-  it does not yet select a block partition or native volume.
+  application-facing model. Separate HOST and native mount authorities select
+  the HOST export or a configured disk partition and native volume.
 - [BSP requests](../kernel/bsp-service-requests.md) separate request ownership from
   scheduling. The filesystem adapter must also obey [memory](../kernel/memory.md)
   and [SMP](../kernel/smp.md) rules.
 
 ## Agreed selection and authority
 
-Partition, volume and namespace selection belong in init. Agreed command
-spelling, not yet implemented:
+Partition, volume and namespace selection belong in init:
 
 ```sh
 mount --partition 1 --volume system --read-only data://
@@ -50,7 +49,7 @@ once when opening and retain pool/volume identities. A name being reused must no
 retarget an existing mount. Namespace binding names such as `data://` are not
 stored in the filesystem or derived automatically from volume names.
 
-The planned kernel mount path binds a configured bootstrap principal to trusted
+The kernel mount path binds a configured bootstrap principal to trusted
 init's mount authority. Applications cannot nominate a different principal in a request;
 there is no `--principal` argument or authority derived from a volume's owner.
 The core must evaluate persistent grants within the trusted root, scope and
@@ -533,11 +532,17 @@ ordinary `cat` and `ls` running on an AP, and zero live accounting after cleanup
 The combined run peaked at 312,192 core payload bytes and 106,144 adapter bytes.
 The typed 4,584-byte native request fits the existing 4,928-byte task allocation.
 
-Tasks 1–4 are complete. No compiler-container rebuild is needed. Task 5 has not
-started: add the agreed disk-scoped mount authority, bootstrap principal
-configuration, init/session delegation and bounded executable capture. Native
-executables currently return UNAVAILABLE. Preserve absent-versus-unusable block
-preparation reasons for optional mounts; no public placeholder mount API exists.
+Task 5 adds the disk-scoped mount ABI, trusted bootstrap configuration, explicit
+selected-root delegation and bounded native executable capture. Present unusable
+block hardware retains a failing mount authority; optional acquisition suppresses
+only missing authority. [Task-5 validation](../devices/filesystem-native-adapter.md#task-5-validation)
+records ordinary mount/read/launch and failure-path coverage. No compiler-container
+rebuild is needed; rebuild userland against the updated SDK.
+
+Task 6 is next: implement scoped filesystem information with the agreed observation
+rights and `--no-info` command option. Those parts of the task-1 contract remain
+unimplemented until the query is usable; task 5 requests only LOOKUP, ENUMERATE
+and READ_FILES. No observation placeholder right or operation is exposed.
 
 Agreed scope limitations are tracked in [technical debt](../technical-debt.md#native-mount-design-limits).
 
@@ -569,7 +574,7 @@ Agreed scope limitations are tracked in [technical debt](../technical-debt.md#na
    agreed rights mapping and read-only backend errors. Keep existing backends
    working. Share internal mount preparation needed by this and the next task;
    do not publish unusable placeholder APIs.
-5. [ ] **Mount and delegate from init.** Add the agreed mount ABI/library/command
+5. [x] **Mount and delegate from init.** Add the agreed mount ABI/library/command
    support and namespace/session forwarding. Init chooses partition, volume and
    binding through disk-scoped authority. Exercise `ls`, `cat` and launching an
    executable from the disk, plus absent disk, wrong selector, policy denial and

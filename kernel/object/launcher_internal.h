@@ -15,17 +15,17 @@ struct launch_capture {
   struct launch_grant *grants;
   size_t grant_count;
   struct file_object *image;
-  /* Host backing only: owned stable bytes, freed with capture on the BSP. */
-  void *host_image;
-  size_t host_image_size;
+  /* HOST/native backing only: owned stable bytes, freed with capture on the BSP. */
+  void *external_image;
+  size_t external_image_size;
   size_t used;
   enum call_status error;
   _Alignas(uint64_t) unsigned char data[LAUNCH_CAPTURE_MAX_SIZE];
 };
 
 /* BSP, IF=0. Caller lends its table and either an in-memory file operation or
- * owned host bytes. Releases the file operation on every path. Prepares reply
- * handle before submission; failure unwinds child resources. Capture and host
+ * owned external bytes. Releases the file operation on every path. Prepares reply
+ * handle before submission; failure unwinds child resources. Capture and external
  * bytes remain owned by the launch service until it frees both. */
 enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
     size_t cpu_index, struct execution_group *execution_group, handle_t *result);

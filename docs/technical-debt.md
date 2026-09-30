@@ -732,8 +732,10 @@ service work and wait sets; no worker-process or thread framework is included.
 
 The [native read-only mount contract](wip/native-readonly-filesystem.md) is agreed;
 the [kernel adapter](devices/filesystem-native-adapter.md) now implements bounded
-backing preparation and policy-approved directory/file objects. Mount/bootstrap
-configuration remains the next task.
+backing preparation, policy-approved directory/file objects, configured mount
+authority and bounded executable capture. Trusted init mounts and delegates an
+explicit selected root list; filesystem observation and `--no-info` remain task 6
+work with the real query.
 The [implemented core continuation API](../fs/docs/core.md#stateless-directory-continuation)
 avoids rescanning the returned prefix and retains no per-enumeration state. It
 does not remove existing core ancestry scans or allocation-proof costs; measure
@@ -765,9 +767,21 @@ bound CPU/I/O work. The deadline is cooperative. Revisit the profile with larger
 representative workloads; preserve LIMIT versus corruption and record evidence
 before changing caps.
 
-Native requests fit the existing provisioned task request storage. The mount
-task must retain absent-versus-unusable block preparation reasons before
-implementing optional mounts. Kind-preserving lookup currently derives a
+Native requests fit the existing provisioned task request storage. Optional
+mounts now distinguish confirmed absence from ambiguous, unsupported, incomplete
+or failed device setup. Mounted views require read-only guest attachment and no
+concurrent host mutation; no live refresh, hotplug or writable co-mount is supported.
+The userspace selection profile has at most 16 roots within the existing 64 KiB
+startup/capture bound; it is not a filesystem name/count limit. Revisit these
+bounds with a concrete launcher workload, preserving explicit failures.
+
+Executable capture permits one image of up to 16 MiB per caller outside the
+8 MiB core and 1 MiB wrapper caps. There is no aggregate staging budget across
+callers, so those adapter caps are not a total native workload memory bound.
+Allocation can still fail below per-image limits. Revisit aggregate admission
+when concurrent native executable loads require a predictable whole-system bound.
+
+Kind-preserving lookup currently derives a
 zero-right OBJECT view before deriving the final requested view; both use held
 authority, but duplicate traversal/proof work. Revisit with measured lookup costs
 and a concrete core kind-query contract, without exposing diagnostic handles. Busy core closes retain their

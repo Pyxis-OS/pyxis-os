@@ -14,6 +14,7 @@
 #include <kernel/virtio/transport.h>
 
 #define VIRTIO_BLK_DEVICE_ID 2
+#define VIRTIO_BLK_TRANSITIONAL_PCI_ID 0x1001
 #define VIRTIO_BLK_QUEUE 0
 #define VIRTIO_BLK_MSIX_ENTRY 0
 #define VIRTIO_BLK_QUEUE_SIZE 32u
@@ -77,6 +78,8 @@ static struct {
   struct task_wait *worker_wait;
 } disk;
 
+static enum block_preparation preparation = BLOCK_INVENTORY_INCOMPLETE;
+
 static volatile struct virtio_pci_common *common_config(void)
 {
   return virtio_pci_common(&disk.pci);
@@ -86,6 +89,12 @@ static void assert_client_context(void)
 {
   KASSERT(cpu_current() == cpu_bsp());
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+}
+
+enum block_preparation block_preparation_result(void)
+{
+  assert_client_context();
+  return preparation;
 }
 
 /* BSP/IF=0; clients and IRQ entry cannot race the worker's parking handoff. */
@@ -697,12 +706,35 @@ void virtio_blk_start(void)
 
 void virtio_blk_prepare(const struct boot_info *boot)
 {
-  struct pci_device *device = pci_find_unique_device(VIRTIO_VENDOR_ID,
-      VIRTIO_PCI_DEVICE_BASE + VIRTIO_BLK_DEVICE_ID);
-  if (!device) {
-    klog("virtio-blk: no unique device in complete inventory; block I/O unavailable\n");
+  struct pci_device *device;
+  enum pci_selection selection = pci_select_device(VIRTIO_VENDOR_ID,
+      VIRTIO_PCI_DEVICE_BASE + VIRTIO_BLK_DEVICE_ID, &device);
+  struct pci_device *transitional;
+  enum pci_selection legacy = pci_select_device(VIRTIO_VENDOR_ID,
+      VIRTIO_BLK_TRANSITIONAL_PCI_ID, &transitional);
+  if (selection == PCI_SELECTION_INCOMPLETE || legacy == PCI_SELECTION_INCOMPLETE) {
+    preparation = BLOCK_INVENTORY_INCOMPLETE;
+    klog("virtio-blk: incomplete PCI inventory; block I/O unavailable\n");
     return;
   }
+  if (selection == PCI_SELECTION_AMBIGUOUS || legacy == PCI_SELECTION_AMBIGUOUS ||
+      (selection == PCI_SELECTION_UNIQUE && legacy == PCI_SELECTION_UNIQUE)) {
+    preparation = BLOCK_DEVICE_AMBIGUOUS;
+    klog("virtio-blk: multiple candidate devices; block I/O unavailable\n");
+    return;
+  }
+  if (legacy == PCI_SELECTION_UNIQUE) {
+    preparation = BLOCK_DEVICE_UNSUPPORTED;
+    klog("virtio-blk: transitional device unsupported; block I/O unavailable\n");
+    return;
+  }
+  if (selection != PCI_SELECTION_UNIQUE) {
+    KASSERT(selection == PCI_SELECTION_ABSENT);
+    preparation = BLOCK_DEVICE_ABSENT;
+    klog("virtio-blk: no candidate device; block I/O unavailable\n");
+    return;
+  }
+  preparation = BLOCK_DEVICE_SETUP_FAILED;
   disk.pci.name = "virtio-blk";
   if (!virtio_pci_prepare(&disk.pci, device, boot, sizeof(uint64_t), sizeof(uint32_t))) {
     return;
@@ -756,5 +788,6 @@ void virtio_blk_prepare(const struct boot_info *boot)
     return;
   }
   disk.prepared = true;
+  preparation = BLOCK_DEVICE_READY;
   klog("virtio-blk PCI: queue prepared; DMA and delivery disabled until worker start\n");
 }

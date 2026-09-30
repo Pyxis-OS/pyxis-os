@@ -17,4 +17,5 @@ $(PFS_SOURCES):
 
 build/kernel/fs/native.o build/kernel/init.o build/kernel/service/request.o \
 build/kernel/object/file.o build/kernel/object/directory.o \
-build/kernel/object/launcher.o: CPPFLAGS += -Ifs/include
+build/kernel/object/launcher.o build/kernel/object/mount.o \
+build/kernel/user/boot.o build/kernel/user/launch.o build/kernel/syscall.o: CPPFLAGS += -Ifs/include

@@ -1,5 +1,6 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
+#include <abi/launcher.h>
 #include <kernel/fs/native.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
@@ -772,6 +773,49 @@ static enum call_status enumerate_node(struct nativefs_job *job)
   return CALL_OK;
 }
 
+static enum call_status capture_file(struct nativefs_job *job)
+{
+  struct pfs_view_metadata metadata;
+  job->core_status = pfs_view_metadata(job->node->view, &metadata);
+  if (job->core_status != PFS_OK) {
+    return core_result(job->core_status);
+  }
+  if (!metadata.size) {
+    return CALL_BAD_REQUEST;
+  }
+  if (metadata.size > LAUNCH_EXTERNAL_IMAGE_MAX_SIZE) {
+    return CALL_LIMIT;
+  }
+  if (expired()) {
+    return CALL_TIMED_OUT;
+  }
+  size_t size = metadata.size;
+  uint64_t flags = cpu_save_interrupts();
+  void *bytes = kmalloc(size);
+  cpu_restore_interrupts(flags);
+  if (!bytes) {
+    return CALL_NO_MEMORY;
+  }
+
+  /* The retained view fixes object identity and generation. The core validates
+   * the read, while every backing callback uses this job's original deadline. */
+  size_t count = 0;
+  job->core_status = pfs_view_read(job->node->view, 0, bytes, size, &count);
+  enum call_status status = core_result(job->core_status);
+  if (status == CALL_OK && count != size) {
+    status = CALL_IO;
+  }
+  if (status != CALL_OK) {
+    flags = cpu_save_interrupts();
+    kfree(bytes);
+    cpu_restore_interrupts(flags);
+    return status;
+  }
+  job->captured = bytes;
+  job->count = size;
+  return CALL_OK;
+}
+
 static enum call_status perform(struct nativefs_job *job)
 {
   if (expired()) {
@@ -805,11 +849,15 @@ static enum call_status perform(struct nativefs_job *job)
     return job->operation == NATIVEFS_LOOKUP ? lookup_node(job) : enumerate_node(job);
   case NATIVEFS_READ:
   case NATIVEFS_SIZE:
+  case NATIVEFS_CAPTURE:
     if (directory) {
       return CALL_WRONG_TYPE;
     }
     if (!(job->rights & FILE_RIGHT_READ)) {
       return CALL_DENIED;
+    }
+    if (job->operation == NATIVEFS_CAPTURE) {
+      return capture_file(job);
     }
     if (job->operation == NATIVEFS_READ) {
       if (job->count > sizeof(job->data)) {
@@ -904,9 +952,13 @@ static void nativefs_worker(void *argument)
       job->backing_error = context.backing_error;
       operation = NULL;
       flags = cpu_save_interrupts();
-      if (job->status != CALL_OK && job->object) {
-        object_release(job->object);
-        job->object = NULL;
+      if (job->status != CALL_OK) {
+        if (job->object) {
+          object_release(job->object);
+          job->object = NULL;
+        }
+        kfree(job->captured);
+        job->captured = NULL;
       }
       object_cleanup_leave(previous);
       complete_job(job);
@@ -943,8 +995,8 @@ static void enqueue_job(struct nativefs_job *job)
 enum call_status nativefs_submit(struct nativefs_job *job)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  if (!job || job->state != NATIVEFS_JOB_IDLE || job->object || job->next ||
-      job->user_request || job->admitted || (unsigned)job->operation > NATIVEFS_SIZE) {
+  if (!job || job->state != NATIVEFS_JOB_IDLE || job->object || job->captured || job->next ||
+      job->user_request || job->admitted || (unsigned)job->operation > NATIVEFS_CAPTURE) {
     return CALL_BAD_REQUEST;
   }
   if (!available) {
@@ -974,7 +1026,7 @@ void nativefs_request_submit_and_wait(struct nativefs_request *request)
 
 void nativefs_request_release(struct nativefs_request *request)
 {
-  KASSERT(!request->job.node && !request->job.object && !request->job.next &&
+  KASSERT(!request->job.node && !request->job.object && !request->job.captured && !request->job.next &&
       !request->job.user_request && !request->job.admitted);
   bsp_request_release(&request->request);
 }
