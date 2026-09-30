@@ -183,7 +183,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_KEYBOARD:
     return !(rights & ~KEYBOARD_RIGHT_INPUT);
   case OBJECT_MOUNT:
-    return !(rights & ~MOUNT_RIGHT_OPEN_ROOT);
+    return !(rights & ~(MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE));
   case OBJECT_RANDOM:
     return !(rights & ~RANDOM_RIGHT_READ);
   case OBJECT_TCP_SERVICE:

@@ -747,6 +747,27 @@ static struct syscall_result enumerate(struct directory_object *directory, uint6
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
+static struct syscall_result filesystem_info(struct directory_object *directory, uint64_t rights,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (reply_capacity < sizeof(struct directory_filesystem_info)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(struct directory_filesystem_info), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_FILESYSTEM_INFO);
+  pending->job.node = directory->native;
+  pending->job.rights = rights;
+  nativefs_request_submit_and_wait(pending);
+  enum call_status status = pending->job.status;
+  if (status == CALL_OK) {
+    KASSERT(copy_to_user(reply_address, &pending->job.info, sizeof(pending->job.info)));
+  }
+  nativefs_request_release(pending);
+  return (struct syscall_result){status, status == CALL_OK ? sizeof(struct directory_filesystem_info) : 0};
+}
+
 struct syscall_result directory_call(struct directory_object *directory, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
@@ -761,6 +782,12 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     break;
   case DIRECTORY_ENUMERATE:
     required = DIRECTORY_RIGHT_ENUMERATE;
+    break;
+  case DIRECTORY_FILESYSTEM_INFO:
+    if (directory->backing != DIRECTORY_NATIVE) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    required = DIRECTORY_RIGHT_FILESYSTEM_INFO;
     break;
   case DIRECTORY_CREATE:
     required = DIRECTORY_RIGHT_CREATE;
@@ -784,6 +811,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
   }
   if (!copy_from_user(&request, request_address, sizeof(request))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (operation == DIRECTORY_FILESYSTEM_INFO) {
+    return filesystem_info(directory, rights, reply_address, reply_capacity);
   }
   if (operation == DIRECTORY_LOOKUP) {
     return lookup(directory, rights, &request.lookup, reply_address, reply_capacity);
