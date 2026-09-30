@@ -199,8 +199,10 @@ and VM semantics remain unresolved. No Go target or guest execution is claimed.
 
 The [fastfetch investigation](fastfetch.md) records a pinned SDK compile probe
 and proposes a smaller native information/display port. Existing clocks and
-console dimensions can be reused; system-information authority, memory labels
-and a bounded platform/libc adaptation remain to be agreed and implemented.
+console dimensions can be reused. The next native system-information task has
+an agreed contract covering delegation, CPU sampling, allocator memory and the
+running kernel's short commit SHA; implementation and the later platform/libc
+adaptation remain outstanding.
 
 SDL2/GrafX2 remains a later graphical alternative. A desktop/compositor remains
 a separate [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting

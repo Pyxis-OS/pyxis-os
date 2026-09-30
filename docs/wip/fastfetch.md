@@ -2,8 +2,9 @@
 
 Status: source audit and SDK object-compilation probe, 2026-09-30. No fastfetch
 port, native system-information ABI or guest execution is implemented. The
-following scope and tasks are proposals; settle the decisions before starting
-implementation.
+native information contract below is agreed for the next implementation task.
+The remaining port scope and tasks are proposals; this document does not start
+their implementation.
 
 ## Proposed result
 
@@ -125,46 +126,76 @@ Fastfetch's root LICENSE is MIT; bundled yyjson carries its own MIT notice in
 its source/header. The eventual recipe must preserve both and inventory any
 other bundled sources actually included.
 
-## Native information contract proposal
+## Agreed native information contract
 
-Prefer one reusable, explicitly delegated read-only `system_info` capability
-for bounded typed identity, CPU and allocator-memory queries. Keep time on the
+Expose one reusable, explicitly delegated `system_info` capability with one
+READ right. Three tagged synchronous queries return identity, CPU information
+and allocator memory through the existing call mechanism. Keep time on the
 existing clock capability and dimensions on the relevant console capability.
-This is a proposal, not a new ambient syscall or an implemented ABI.
+This contract is agreed but not implemented; it does not add an ambient syscall.
 
-| Field | Existing source and meaning | Proposed first result |
+| Field | Existing source and meaning | Agreed first result |
 | --- | --- | --- |
-| OS/kernel | Launch environment contains `OS_NAME=Pyxis OS`; private `defs.h` names Caelum. No public running-kernel/build query. | Immutable OS/kernel/architecture names. Omit a kernel version/build revision until its provenance contract is agreed; the SDK manifest is not running-kernel identity. |
+| OS/kernel | Launch environment contains `OS_NAME=Pyxis OS`; private `defs.h` names Caelum. No public running-kernel/build query. | Immutable names `Pyxis OS`, `Caelum` and `x86_64`, plus the running kernel's short Git commit SHA, embedded at build time. The SDK manifest or a userspace build revision is not running-kernel identity. No separate release version is needed. |
 | CPU | Private CPUID helpers and `arch_cpu_count()`. Successful SMP boot checks AP online acknowledgements before userspace. | Guest-visible brand plus online logical CPU count after successful boot, under today's no-hotplug contract. Do not confuse that count with physical cores or CPUs available to a pinned process. |
 | Memory | `pmm_get_stats()` reports total/free/allocated frames. Total excludes permanent reservations and is allocator capacity, not installed RAM. | Coherently sampled total/allocated/free bytes, clearly labeled **Memory (allocator)**. Do not call free frames Linux-style available memory or process RSS. |
 | Uptime | Public `clock_now()`, requiring clock READ. | Existing monotonic epoch starts at HPET initialization during boot; earlier boot time is omitted. Do not promise wall-clock elapsed time across VM pauses/suspend. |
 | Terminal dimensions | Public `console_size()`, requiring READ or WRITE. | Columns/rows of the application's console, excluding navigation, with existing fixed-size semantics. Remote terminals report their own dimensions; this is not the physical framebuffer size. |
 
-Implementation constraints and decisions to settle:
+Authority, ownership and error behavior:
 
-- **Authority:** propose one READ right for these system-wide identity/CPU/memory
+- **Authority:** one READ right covers these system-wide identity/CPU/memory
   observations, supplied to trusted init by kernel bootstrap and explicitly
-  delegated through sessions and launchers, including remote sessions.
-  Restricted children may omit it.
-  Confirm that global memory visibility is appropriate; otherwise separate that
-  right before implementing the ABI.
-- **CPU identity:** recommend a boot-cached BSP brand, explicitly identified as
-  the sampled guest CPU with optional absence. Do not claim a heterogeneous
-  machine inventory. Direct userspace CPUID is possible, but is not an online
-  count or physical-host query.
+  delegated through init, sessions and launchers to local and remote shells and
+  their ordinary children. Restricted launches may omit it. Global memory
+  visibility for a holder is an accepted part of this right.
+- **CPU identity:** cache the BSP brand during boot, explicitly identifying it
+  as the sampled guest CPU. Missing brand information does not invalidate an
+  available online logical CPU count. Do not claim a heterogeneous machine
+  inventory, physical-host identity, physical-core count or CPU frequency.
 - **Memory ownership:** every PMM call is BSP-only with interrupts disabled.
   Sample there through the existing BSP request mechanism; no AP counter reads,
   new allocator locks or memory mutation. Keep the total/free snapshot internally
-  coherent. Separate clock/console calls do not form a globally atomic snapshot.
-- **Replies:** bounded values and strings, explicit unavailable/error behavior,
-  no kernel pointers or physical maps. Agree exact request/reply layouts during
-  the ABI task. Do not add schema versions just because this interface is new.
+  coherent, with `total_bytes = allocated_bytes + free_bytes`. Immutable identity
+  and CPU replies need no BSP handoff once published. Separate clock/console
+  calls do not form a globally atomic snapshot.
+- **Replies:** bounded typed records, fixed-size NUL-terminated strings,
+  initialized padding and explicit unavailable information. No kernel pointers
+  or physical maps. Follow existing call errors for malformed requests, bad
+  buffers, handles and insufficient rights; missing authority never produces
+  synthetic values. Libpyxis wrappers leave the caller's result unchanged on
+  failure. Exact field layouts and names follow existing ABI conventions during
+  implementation; do not introduce schema versions merely for a new interface.
 - **Presentation:** label allocator accounting in text and explain upstream JSON
   memory-field semantics in the port documentation. No silently substituted
-  installed-RAM metric. Confirm that this is the desired first display.
-- **Configuration:** recommend a packaged minimal default and existing CLI/JSON
-  formatting, with explicit native URI config paths if needed. Automatic XDG
-  discovery, executable search and cache writes need not be prerequisites.
+  installed-RAM metric; the agreed first text label is **Memory (allocator)**.
+
+The build identifier names the source commit used to build the running kernel,
+not whatever HEAD is present when userspace runs. A proposed follow-up detail,
+not yet agreed, is appending `-dirty` for modified tracked kernel/build inputs
+without treating documentation or unrelated submodule edits as kernel changes.
+Do not silently implement that filtering policy as an accepted requirement.
+If build provenance cannot be established, report it as unavailable rather than
+inventing a revision.
+
+### Next-task handoff
+
+Implement only this information contract: public ABI and SDK export, kernel
+object and BSP memory sampling, libpyxis wrappers, and explicit grant forwarding
+through local and remote launch paths. Deliver focused Pyxis and userland PRs,
+publishing dependency changes before updating the parent pin. Fastfetch recipes,
+libc additions and a permanent diagnostic application remain outside this task.
+
+Validate with an ordinary build and boot, using temporary native calls or
+debugger inspection to check identity/build values, CPU reporting, coherent
+memory counters, local/remote delegation and omitted or insufficient authority.
+No new tests or boot automation. The task remains unchecked until implementation
+and validation are complete; these decisions should let another agent begin
+without reopening the agreed policy.
+
+For the later port, a packaged minimal default and existing CLI/JSON formatting
+remain proposed, with explicit native URI config paths if needed. Automatic XDG
+discovery, executable search and cache writes need not be prerequisites.
 
 Relevant invariants are in [SMP](../kernel/smp.md), [memory](../kernel/memory.md),
 [clock ABI](../../include/abi/clock.h), [console ABI](../../include/abi/console.h),
@@ -173,14 +204,14 @@ Relevant invariants are in [SMP](../kernel/smp.md), [memory](../kernel/memory.md
 measures caller events over an interval; it is not a substitute for a current
 system-memory snapshot.
 
-## Proposed focused tasks
+## Focused tasks
 
 - [x] **Investigation:** pin upstream, probe against SDK headers, identify native
   information sources and record evidence without claiming a working port.
-- [ ] **Agree and expose native system information:** settle rights, delegation,
-  CPU sampling, memory labels and identity fields; add the bounded kernel ABI
-  and libpyxis wrappers, using existing BSP ownership rules. Exercise authorized
-  and omitted grants manually before relying on it from fastfetch.
+- [ ] **Expose native system information:** implement the agreed contract and
+  next-task handoff above, including the running kernel's short commit SHA.
+  Exercise authorized and omitted grants manually before relying on it from
+  fastfetch.
 - [ ] **Bound the port and fill its reusable libc gaps:** select the actual
   minimal source closure in a temporary port build, then make focused userland
   additions for the standard/library functions it still needs. Record any newly
