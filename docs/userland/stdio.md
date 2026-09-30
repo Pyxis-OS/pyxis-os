@@ -176,7 +176,9 @@ Each descriptor entry owns an optional BUFSIZ read-ahead buffer beside its handl
 and logical position. `fread`, and the `fgetc`/`getc`/`getchar`, `fgets` and
 `getline` input built on it, may fill that buffer with one backend transfer from
 a file or pipe and return the excess on later reads. Requests of at least BUFSIZ
-bytes read directly into the caller's memory. Consoles are never read ahead:
+bytes read directly into the caller's memory. A file fill is capped at the
+representable offsets past the logical position, so speculation never turns a
+valid read into an error such as EOVERFLOW. Consoles are never read ahead:
 their input is shared with the parent shell, and ISO C treats them as
 interactive. `read` and `fread_some` return buffered bytes first, otherwise one
 exact transfer, so mixing them with stdio on one descriptor loses no bytes and
