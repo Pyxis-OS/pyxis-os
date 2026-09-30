@@ -10,7 +10,7 @@ For everyday guest use, read the [shell guide](userland/shell.md) or follow the
 | --- | --- | --- |
 | [Kernel](kernel/) | Execution, memory ownership, scheduling and clocks | [SMP ownership](kernel/smp.md) |
 | [Interfaces](interfaces/) | Processes, capabilities, IPC and resource protocols | [System information](interfaces/system-information.md), [processes and capabilities](interfaces/processes.md), [execution groups](interfaces/execution-groups.md) and their [termination ownership](interfaces/execution-group-termination.md) |
-| [Devices](devices/) | Hardware discovery, drivers, networking and storage backends | [Networking](devices/networking.md), [host filesystem](devices/virtio-fs.md) |
+| [Devices](devices/) | Hardware discovery, drivers, networking and storage backends | [Networking](devices/networking.md), [host filesystem](devices/virtio-fs.md), [native read-only mounts](devices/native-readonly-filesystem.md) |
 | [Userland](userland/) | Shell, libraries, configuration, services and port usage | [Terminal behavior](userland/terminal.md), [terminal sessions](userland/terminal-sessions.md), [remote terminals](userland/remote-terminal.md), [libc I/O](userland/stdio.md), [Fastfetch](userland/fastfetch.md), [uniq](userland/uniq.md) |
 | [Development](development/) | Build/SDK integration, debugging and performance reports | [SDK and repositories](development/sdk-and-repositories.md), [GDB](development/gdb.md) |
 
