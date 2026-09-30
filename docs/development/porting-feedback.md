@@ -27,10 +27,19 @@ do not change [AGENTS.md](../../AGENTS.md) or authorize implementation.
   needs a focused correctness fix; it was deliberately outside the uniq task.
 - [Duplicated port output lists](../technical-debt.md#duplicated-port-output-lists)
   can drift when a recipe gains another executable.
-- Reported setup friction, not reproduced for this note: `make run` requiring
-  a compiler for an already-built image, and fj deriving an API URL containing
-  SSH port 2222. Check the supported invocation and actual cause before changing
-  either workflow.
+- Setup friction observed during the uniq work, with the actual errors:
+  - `make run` with a current `build/pyxis.iso` but no target compiler on PATH
+    failed in `check-toolchain` with `Missing x86_64-unknown-pyxis-gcc: add the
+    cross-toolchain to PATH or set CROSS_COMPILE.` (`Makefile:140`). Decide
+    whether running an existing image should require the compiler.
+  - With the remote `ssh://git@git.internal:2222/...`, fj 0.6.0 contacted
+    `https://git.internal:2222/api/v1/user` and failed with `received corrupt
+    message of type InvalidContentType`. The first login was stored under host
+    `git.internal:2222`, and `fj -H git.internal whoami` then reported
+    `unauthorized: token is required`. Logging in with `fj -H git.internal auth
+    login` and passing `-H git.internal` worked. Whether host derivation from an
+    SSH remote with a port is intended fj behavior was not established; document
+    the working invocation before changing any workflow.
 
 ## Remote validation follow-up
 
@@ -52,9 +61,20 @@ Claude reported two nonblocking limitations during sha256sum validation:
 Revisit these as a bounded remote-tool improvement when validating consumers with
 distinct nonzero outcomes, such as grep. Until exact codes are observed separately,
 reports based only on `command_complete` establish matching success/failure, not
-identical numeric exit statuses. Audit the uniq/sha256sum validation wording on
-that basis; this note does not claim their raw exit codes were independently
-captured or invalidate their output comparisons.
+identical numeric exit statuses.
+
+Audit of the uniq and sha256sum validation: rerunning the unpatched host
+references with raw codes gave only 0 and 1, with 1 for exactly the failure cases
+(5 uniq, 6 sha256sum). Every guest failure case shows the shell's `Exited with
+status 1` diagnostic, which carries the child's numeric code, so failures matched
+exactly. Guest successes were observed as `command_complete` status 0 with no
+diagnostic. Userland `3b9ba3f` `shell/launch.c` prints a diagnostic for every
+stage that faults, is terminated or exits nonzero, and takes the command result
+from the last stage, so that combination means every stage exited 0. This is
+source-confirmed; the codes were not captured in a typed event. The [uniq reference](../userland/uniq.md#validation-evidence) now states
+this; the merged sha256sum PR descriptions (ports #31, Pyxis #273) say "exit
+statuses matched" and should be read with the same qualification. Parsing shell
+diagnostics is exactly what a typed exit-code result would replace.
 
 ## Process experiment and open suggestions
 
