@@ -78,10 +78,10 @@ rules; configuration, platform integration and limits are described in
 
 The image includes `app://cksum.pxe`, resolved as `cksum` by the shell. The
 [sbase recipe](../../ports/sbase/README.md) pins the task-1 source revision and
-builds cksum, a restricted tee and uniq with their helpers. Ordered patches narrow
-private util.h, restore the declarations uniq needs, and adapt tee's options and
-descriptor lifetimes; cksum, uniq and helper bodies remain unchanged and use
-conventional libc I/O calls. The full license/contributor list, arg.h notice and
+builds cksum, a restricted tee, uniq and sha256sum with their helpers. Ordered
+patches narrow private util.h, restore the declarations uniq needs, and adapt
+tee's options and descriptor lifetimes; cksum, uniq, sha256sum and helper bodies
+remain unchanged and use conventional libc I/O calls. The full license/contributor list, arg.h notice and
 OpenBSD strtonum notice are packaged at `app://share/licenses/sbase/LICENSE`,
 `app://share/licenses/sbase/arg.h` and `app://share/licenses/sbase/strtonum.c`.
 
@@ -142,6 +142,26 @@ stdout. Line input is [one native read per byte](../technical-debt.md#unbuffered
 so large inputs are slow. See the [uniq reference](../userland/uniq.md) for
 behavior, limits and validation, and the [recipe notes](../../ports/sbase/README.md)
 for the port adaptation.
+
+## SHA-256 digests with sbase sha256sum
+
+The shell resolves `sha256sum` to `app://sha256sum.pxe`:
+
+```text
+sha256sum host://image.raw home://notes.txt
+cat host://input | sha256sum
+sha256sum a b > home://SHA256SUMS
+sha256sum -c home://SHA256SUMS
+```
+
+Output lines contain the lowercase digest, two spaces and the name, with stdin
+and `-` labelled `<stdin>`. Unopenable operands are reported and later operands
+continue with status 1. With `-c`, manifests from operands, `-` or stdin accept
+`digest  name` and `digest *name` lines; listed names resolve against the working
+directory. Each file prints OK or FAILED, and malformed lines, unreadable files
+and mismatches are counted and give status 1. Files are hashed in BUFSIZ reads;
+only manifest lines use [per-byte line input](../technical-debt.md#unbuffered-line-input).
+See the [recipe notes](../../ports/sbase/README.md) for remaining upstream limits.
 
 ## Editing in Pyxis
 
