@@ -213,10 +213,10 @@ information adapters, existing libc prerequisites and local/remote integration
 acceptance are complete. The port preserves upstream formatting and error
 behavior; its implemented reference records observation and display limits.
 
-The [sbase uniq milestone](uniq-port.md) is a small, independent port selected
-to exercise a new development harness: probe the existing pin, add only required
-libc compatibility, package the utility and validate it through the remote shell.
-It does not expand the native filesystem milestone or authorize a full utility suite.
+[Uniq](../userland/uniq.md) is packaged from the existing sbase pin, adding only
+libc `getline` and `isblank`, and was validated through the remote shell against
+the host build of the same upstream revision. It does not authorize a full
+utility suite; unbuffered line input remains [technical debt](../technical-debt.md#unbuffered-line-input).
 
 SDL2/GrafX2 remains a later graphical alternative. A desktop/compositor remains
 a separate [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting

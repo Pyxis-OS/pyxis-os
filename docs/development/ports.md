@@ -136,15 +136,12 @@ cat host://input | uniq -c
 uniq -d -f 1 host://input home://duplicates
 ```
 
-Uniq collapses runs of adjacent identical lines; it does not sort or find
-non-adjacent repeats. It supports upstream `-c`, `-d`, `-u`, `-f N` and `-s N`,
-and `[input [output]]` operands where `-` selects stdin or stdout. Fields are
-separated by ASCII space and tab. A missing input or unopenable output fails
-before any output; read and write errors are reported with status 1 after
-input reaches EOF. Line input is [one native read per byte](../technical-debt.md#unbuffered-line-input),
-so large inputs are slow. Console EOF has the same limit as cksum above. See the
-[recipe notes](../../ports/sbase/README.md) for option details and the
-OpenBSD strtonum notice packaged with the licenses.
+Uniq collapses runs of adjacent identical lines with upstream `-c`, `-d`, `-u`,
+`-f N` and `-s N`, and `[input [output]]` operands where `-` selects stdin or
+stdout. Line input is [one native read per byte](../technical-debt.md#unbuffered-line-input),
+so large inputs are slow. See the [uniq reference](../userland/uniq.md) for
+behavior, limits and validation, and the [recipe notes](../../ports/sbase/README.md)
+for the port adaptation.
 
 ## Editing in Pyxis
 
