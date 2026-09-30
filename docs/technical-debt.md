@@ -820,6 +820,16 @@ ordinary clients must close all core children before the last backing put.
 Actual device failures, deadlines and cap exhaustion remain source-reviewed
 adapter paths. No fault injection or physical-hardware validation was performed.
 
+## Planned writable-filesystem costs
+
+The [writable-core milestone](wip/writable-filesystem-core.md) agrees a bounded
+whole-allocation-map fallback and partial large shrinks; neither is implemented.
+The fallback can make small mutations expensive on fragmented pools. Large
+shrinks may stop or crash at an intermediate committed length, so callers must
+reconcile confirmed progress and uncertain outcomes. Revisit incremental map
+optimization after the admission proof and workload measurements; atomic large
+shrinks would require a separately agreed persistent tail-retention design.
+
 ## Filesystem host prototype limits
 
 The host-image tools record prototype reserve defaults, but no writable
