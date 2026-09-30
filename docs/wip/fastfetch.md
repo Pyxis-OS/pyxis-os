@@ -27,14 +27,15 @@ and the ASCII logo; they do not configure the OS or grant authority. A typical
 invocation is `fastfetch --config home://fastfetch.jsonc`. Retain bundled yyjson;
 Pyxis session Lua configuration stays separate. Automatic config discovery,
 cache/config writes, dynamic refresh, image logos, Lua execution and
-executable/network helpers are excluded, with explicit unsupported errors for
-requests to use them. Audit those entry points during the native port.
+executable/network helpers are excluded. Retain upstream diagnostics and fallback
+behavior rather than introducing a port-wide option validation framework.
 
 Uptime means duration since HPET initialization, as exposed by the existing
 monotonic clock. JSON keeps the numeric `uptime` and reports `bootTime: null`.
 Duration formatting remains available; calendar placeholders `boot-time`,
 `years`, `days-of-year` and `years-fraction`, including their positional forms,
-must report unsupported errors. No boot timestamp or calendar age is inferred.
+are unset and render empty through the upstream formatter. No boot timestamp or
+calendar age is inferred.
 
 ## Initial compilation inventory (historical)
 
@@ -268,16 +269,11 @@ threading or POSIX process facilities were added. The
 describes allocating formatting. Source headers and musl's provenance record
 carry the other library contracts. There is no separate libm or compiler rebuild.
 
-Upstream allocation handling needs attention in the native port:
-`ffStrbufInitVF` only asserts that `vasprintf` succeeded, so a release build can
-use a null buffer/negative length on failure; other allocations also assume
-success. Correct libc error returns do not make Fastfetch graceful under OOM.
-The subsequent native port implements the agreed deliberate-failure policy:
-allocation failure prints a diagnostic and exits nonzero, with possible partial
-stdout. Process-local malloc/calloc/realloc link wrappers cover the retained
-allocation paths. Upstream containers are retained; the existing negative formatting-result
-checks handle vasprintf/vsnprintf conversion failures separately. This does not
-change shared libc behavior.
+The port preserves upstream allocation and assertion behavior. In particular,
+release builds disable assertions and do not promise graceful allocation failure.
+The earlier proposed process-local allocation wrappers and strict formatting
+policy were dropped by explicit agreement during port review. Standard libc
+error returns remain unchanged.
 
 ### Prerequisite validation
 
@@ -318,74 +314,44 @@ All validation processes were stopped afterward.
 
 ## Implemented standalone native port
 
-Ports is pinned to `8aa098a90e44d8d98b619a0dec80e9ca26b8c57f`
-([ports PR #26](https://git.internal/PyxisOS/pyxis-ports/pulls/26)). The
-[recipe reference](../../ports/fastfetch/README.md) is authoritative for build
-commands, module/format mappings, error behavior, licenses and validation.
-Its ordered patch compiles 43 translation units, supplies the native adapters
-and produces `stage/bin/fastfetch.pxe`. There are no remaining undefined platform
-symbols, fake Unix operations, host-libc links or compiler-container changes.
+[Ports PR #26](https://git.internal/PyxisOS/pyxis-ports/pulls/26) contains the
+standalone recipe at `e7a1d92035278fde33c9a6efd3b1935a6d25e9f0`. The
+[recipe reference](../../ports/fastfetch/README.md) records build commands,
+observations, supported features, licenses and validation. Three ordered patches
+separate SDK build integration, native adapters and the owner's ASCII logo.
 
-The project owner supplied the compass-rose ASCII logo at
-`/shared/pyxis-logo/logo`. The recipe embeds its bytes unchanged, with cyan logo
-and key colors. PNG/SVG variants are not part of the port. Upstream-derived
-changes and bundled yyjson retain MIT terms; original native adapter/build
-material and the project logo carry MPL-2.0. The staged notices preserve both.
+The port was reconstructed from pinned upstream after review. Shared formatting,
+string/list containers, dispatch, diagnostics and yyjson are unchanged. Upstream
+initialization is retained with narrow guards for unavailable locale/signals and
+buffering controls. Native adapters use existing SDK authority; the kernel and
+libc need no further changes. The selected source set links statically and
+converts to P1F without unresolved platform symbols or a compiler-container rebuild.
 
-The agreed error policy is implemented: allocation failure terminates with a
-stderr diagnostic; failed selected modules continue and yield an aggregate
-nonzero status; unknown optional observations remain JSON null. Requesting an
-unavailable format field produces an error rather than an invented value,
-including evaluated named/positional forms. Conditions treat unavailable values
-as unset; skipped branches retain upstream behavior and are not evaluated.
-`showErrors` controls module/format diagnostic visibility without clearing the
-aggregate failure status; JSON module error objects are retained. Fatal errors
-and output failures can leave partial stdout.
+Native query errors use upstream module diagnostics; optional observations use
+empty/unset format values and JSON null. Module errors retain upstream exit-status
+behavior rather than an aggregate failure policy. There are no allocation
+wrappers, assertion replacements or separate format validators. Native timing
+failure reports an error instead of inventing a timestamp. The six data modules
+run by default; Colors, Break and Separator remain explicitly selectable.
 
-Default terminal output selects the six data modules plus Break and Colors.
-Default JSON and pipe-mode text select just the data modules. Colors/Break/
-Separator remain available as text helpers; explicit JSON requests return
-unsupported-module errors. Colors requires terminal output. Actual stdout
-binding forces plain mode for files/pipes, omitting logo/swatches and suppressing
-cursor alignment; requested timing uses plain lines. The separately delegated
-output-console grant still supplies dimensions when stdout is redirected.
+The owner-supplied compass rose at `/shared/pyxis-logo/logo` is embedded byte for
+byte. MIT covers upstream and adaptations of existing files, including unchanged
+yyjson; original native/build/logo material is MPL-2.0. The recipe stages notices.
 
-The complete standalone fetch/patch/configure/build/stage workflow passed with
-GCC 16.2.0, CMake 3.31.8 and a freshly built SDK (Pyxis `cfb7f0d`, userland
-`c9ed311`). An ordinary `make -j16 image` also passed. The development image
-contains the existing applications; fastfetch was launched explicitly from a
-private HOST export, not silently packaged into the default image.
+The complete reconstructed fetch/apply/build/stage recipe and ordinary Pyxis image
+build passed with GCC 16.2.0, CMake 3.31.8 and SDK userland `c9ed311`. Interactive
+four-CPU nested KVM used the documented fixed QEMU, 256 MiB, Fedora OVMF,
+virtio-net and a private virtio-fs export. The remote shell ran native text/logo,
+JSON and explicit JSONC configurations; unknown format fields were empty and
+conditionals omitted unknown frequency. Redirected JSON parsed on the host with
+no escape bytes and still reported the delegated 100x30 console. A cat pipeline
+showed plain upstream ASCII output. These are functional checks, not performance
+measurements. Missing-grant paths were reviewed in code; no OOM injection or new
+tests were added. Earlier guest results for the superseded patch do not establish
+behavior of this reconstruction.
 
-Interactive validation used four-CPU nested KVM, QEMU 10.2.2 with the documented
-AHCI fix, CPU `max`, 256 MiB, Fedora OVMF, entropy, virtio-net and virtiofsd.
-Local text displayed the complete logo with 160x48 dimensions; remote text used
-100x30. Both reported the guest BSP brand and four online CPUs, kernel revision
-`cfb7f0ddfcc1`, allocator memory and monotonic uptime. JSON preserved null fields,
-including bootTime, and explicit JSONC formatting worked. Redirected JSON and
-text (including timing, right-logo and key-width options) contained zero escape
-bytes. Evaluated named/positional unavailable fields failed while later modules
-still printed. Command logos failed even with JSON output; an unknown module yielded a JSON error and did not prevent
-the next module from running, including with timing enabled.
-
-GDB observed the native CPU adapter return its brand and count at CPL3. A
-separate disposable local launcher delegated only memory and stdout/stderr:
-all six data modules returned JSON errors for the omitted system_info, clock
-and named output grants, and the child exited with status 1. Allocation
-exhaustion was inspected in code, not injected. No tests, self-tests, CI changes
-or boot automation were added. These are functional nested-VM observations,
-not owner-host performance measurements. Validation jobs were stopped afterward.
-
-The four-point review follow-up removes the format prevalidation pass, restores
-`showErrors`, drops redundant allocation helpers/container rewrites and preserves
-upstream I/O/time headers behind Pyxis branches. The standalone recipe was
-rebuilt; the guest observations above are from the initial port, not a new guest
-run of this reduction.
-
-The recipe is registered for standalone builds. Default build/staging/install
-selection is deliberately the next task, together with narrow-console,
-pipeline, repeated-run and broader acceptance checks. Completing that task
-should close this WIP into the implemented port reference without retaining
-these historical probe inventories.
+Default build/staging/install selection and broader local/narrow-console acceptance
+remain the next task. Complete that task before closing this milestone.
 
 ## Focused tasks
 
@@ -401,7 +367,7 @@ these historical probe inventories.
   remain deliberately unresolved; ordinary application file reads are unchanged.
 - [x] **Native fastfetch port:** pinned recipe/patch with native adapters, the
   owner-supplied ASCII logo and one-shot text/JSON output. Normal SDK static
-  link/startup, P1F conversion, explicit unsupported errors and retained licenses
+  link/startup, P1F conversion, native observations and retained licenses
   were validated as recorded above.
 - [ ] **Integration and validation:** package it, publish dependency PRs before
   updating pins, and boot normally. Check local and remote terminal output,
