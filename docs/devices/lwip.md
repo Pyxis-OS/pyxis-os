@@ -13,10 +13,11 @@ git submodule update --init third_party/lwip
 make image
 ```
 
-The packet bridge and native outbound CONNECT capability are live. Init receives
-`tcp` authority, explicitly delegated through session and shell to foreground and
-background children. Streams expose INSPECT, READ, WRITE, SHUTDOWN_WRITE and ABORT.
-The [tcp and ttcp utilities](tcp.md) consume this interface. No listener is exposed.
+The packet bridge and native CONNECT/LISTEN capabilities are live. Init receives
+both rights; normal session and shell launches delegate CONNECT to foreground and
+background children. Servers can instead receive an init-created listener with
+INSPECT/ACCEPT rights. Streams expose INSPECT, READ, WRITE, SHUTDOWN_WRITE and ABORT.
+The [tcp and ttcp utilities](tcp.md) consume these interfaces.
 Traffic to closed ports still receives lwIP's normal reset response.
 
 ## Worker and memory ownership
@@ -110,7 +111,7 @@ active and TIME_WAIT tuples. With at most 32 records, 33 distinct candidates are
 sufficient. CONNECT uses this internal API; callers cannot choose an ISN or source address
 through the public interface.
 
-The 32-record admission limit includes prepared, closing and TIME_WAIT records,
+The 32-record admission limit includes listeners, pending, closing and TIME_WAIT records,
 and terminal records still retained by an owner. Exhaustion does not evict any
 connection. The configured receive window and send payload budget are each
 16 KiB. Payload is allocated as needed, not eagerly reserved at preparation.
@@ -140,8 +141,8 @@ its admission slot, including across link/address changes. No other deadline
 shortens it. Address removal, failed routing or an unavailable interface aborts
 affected live connections. Queued packet copies are canceled when the PCB dies.
 
-Native [tcp and ttcp utilities](tcp.md) exercise these operations. Listening and
-a POSIX sockets layer remain outside this implementation.
+Native [tcp and ttcp utilities](tcp.md) exercise these operations. A POSIX sockets
+layer remains outside this implementation.
 
 ## Native active open
 
@@ -162,8 +163,8 @@ Missing route, refusal, timeout and allocation/queue exhaustion remain distinct.
 requires ACK on a SYN-SENT reset, not just a matching numeric ACK field.
 
 The facade validates request size, rights, reserved fields and writable reply
-storage before submitting work. Eight shared slots cover CONNECT, INSPECT, ABORT
-and SHUTDOWN_WRITE, including completed replies until callers resume. Slots
+storage before submitting work. Eight shared slots cover CONNECT, LISTEN, ACCEPT,
+INSPECT, ABORT and SHUTDOWN_WRITE, including completed replies until callers resume. Slots
 contain copied arguments and stable wait metadata, never user or syscall-stack
 buffers. A parked
 CONNECT caller lends its kernel-owned capability table exclusively to the worker.
@@ -188,6 +189,36 @@ ABORT requires its separate right, affects all copies and is idempotent. A local
 abort records ENDPOINT_CLOSED unless an earlier terminal error was already latched.
 It frees queued transport data and makes a best-effort reset; local completion does
 not wait for the peer. Shared-state operations serialize on the sole worker.
+
+## Native passive open
+
+LISTEN reserves a listener object/handle before binding the configured NIC address
+and nonzero port. Four listener records share the global 32-record budget. The
+pinned lwIP listen conversion transfers extension arguments to the smaller PCB
+and clears the old PCB's extensions before freeing it; the record then points to
+the returned listener. Listener service never accesses full-stream PCB fields.
+
+The backlog is enabled with four slots. lwIP charges SYN_RCVD connections at SYN
+admission. Each new PCB gets its own generation and record from the allocation
+hook. The passive-open extension restores the child's callback argument, which
+lwIP overwrites with the listener's argument, then records its internal listener
+owner and ten-second handshake deadline. SYN retransmissions do not restart it.
+No published stream or caller table is needed during passive setup.
+
+lwIP releases its backlog charge immediately before the successful accept
+callback. That callback uses `tcp_backlog_delayed` to retain the slot, marks the
+child established and appends it to the listener's ready queue. Native ACCEPT
+reserves its own stream object and caller handle, rechecks the deadline, then
+removes one ready child and calls `tcp_backlog_accepted`. Publication transfers
+the child from listener ownership to independent stream ownership. The eight
+control slots cover LISTEN/ACCEPT as well as existing CONNECT and stream controls.
+
+Child PCB destruction removes its listener accounting and ready-queue link while
+canceling only that child's packet generation. Final listener release aborts
+unaccepted children before calling `tcp_close` on the listener. Accepted streams
+have no internal listener owner and survive that close. Exact-address listeners
+are closed before lwIP's address setter could retarget them. Reclamation remains
+worker-deferred; pending calls borrow no userspace data buffers.
 
 ## Native receive stream
 

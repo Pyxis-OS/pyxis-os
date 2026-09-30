@@ -1,9 +1,22 @@
 # Native remote terminal sessions
 
-Status: agreed milestone scope, not implemented. The prerequisite
+Status: task 1 (TCP listeners and accepted streams) is implemented; the remaining
+remote-terminal tasks are agreed scope, not implemented. The prerequisite
 [BSP request milestone](../kernel/bsp-service-requests.md) is complete.
 Wire layouts and the bounded implementation details listed below still need
 review before their respective tasks; this document does not authorize code.
+
+Task 1 implements the agreed [listener contract](../devices/tcp.md#listening-and-admission): trusted init holds
+LISTEN authority, binds an exact configured local IPv4 address/nonzero port, and
+delegates the resulting listener. CONNECT grants remain separate. There are at
+most four listeners, each allowing four pending connections combined across
+half-open and established-but-unaccepted states. Listener records also consume
+the existing 32-record transport budget. Handshakes expire after ten seconds;
+full admission leaves new SYNs unanswered. INSPECT and blocking ACCEPT have
+separate rights, with one outstanding ACCEPT per listener and the existing
+absolute-deadline convention capped at 30 seconds. Final listener release aborts
+pending connections while accepted streams remain independent. A changed local
+address invalidates its listener; wildcard/ephemeral binding and reuse are absent.
 
 ## Completion target
 
@@ -204,8 +217,6 @@ drain outcome.
 The direction above is settled. Resolve these remaining details in the associated
 PR proposal rather than inventing them during implementation:
 
-- Listener and half-open/accepted backlog limits, handshake duration, address/port
-  validation and accounting against the existing 32 transport records.
 - Wait registration/ownership, interest limits, deadline behavior, readiness flags,
   object closure and invalid-handle results; nonblocking operation spelling.
 - Terminal queue/frame bounds, dimensions, attachment closure and input-EOF
@@ -226,7 +237,7 @@ Each task is intended for a focused PR, with dependent repository PRs where need
 Split tasks further when reviewability requires it, especially termination.
 Do not implement unrelated async, scheduling, authentication or multiplexer work.
 
-- [ ] **1. TCP listeners and accepted streams.** Define the bounded admission
+- [x] **1. TCP listeners and accepted streams.** Define the bounded admission
   contract; implement native listen/accept authority and libpyxis helpers under
   existing network-worker ownership. Preserve outbound TCP and accepted-stream
   lifetime. Audit lwIP listen conversion, passive-open callback installation,
@@ -270,6 +281,27 @@ Do not implement unrelated async, scheduling, authentication or multiplexer work
   of WIP, carrying accepted limitations into technical debt.
 
 ## Validation and exclusions
+
+Task 1 validation: ordinary `make -j16` and full `make -j16 image` builds passed
+with the existing compiler. The host needed a temporary local CMake installation
+for the existing Mbed TLS recipe; no compiler-container change was needed.
+Interactive QEMU used one/four CPUs, nested KVM, 256 MiB RAM, VirtIO NET/RNG,
+raw OVMF and the documented patched QEMU 10.2.2. Host forwarding bound only to
+127.0.0.1. On one CPU, text and a byte-for-byte 64 KiB transfer passed; the last
+accepted stream continued after listener destruction, new admission failed, and
+GDB observed zero listener/transport records after peer EOF. On four CPUs, GDB
+observed four established pending children and matching native/lwIP backlog
+counts, with one accepted child and one listener occupying six global records.
+Extra admission did not grow those counts. Listener closure reclaimed queued
+children while the last accepted stream continued echoing. The independent local
+shell completed an outbound TCP exchange and received DENIED when requesting
+LISTEN; its closed outbound transport retained an unowned TIME_WAIT record.
+All validation processes were stopped.
+
+Handshake expiry, address invalidation, shared ACCEPT exclusion and allocation/
+handle-failure unwinding were reviewed in code, without fault injection or a
+claim of runtime coverage. Readiness waits, whole-session cleanup and a remote
+shell are not implemented by task 1.
 
 Use ordinary `make -j16` builds, interactive QEMU and debugger inspection. Include
 one- and four-CPU operation with matching networking/init configuration. Inspect

@@ -99,6 +99,14 @@ network setup. Boot does not order init execution or wait for one init's setup
 before running another; select a single network-setup owner. Other sessions may
 start before networking is configured. Super+Left/Right switches the active tab.
 
+An explicitly selected init script can instead hand off with
+`session app://session.pxe --configure-network --tcp-server ADDRESS PORT`,
+optionally adding `--tcp-count COUNT`. The trusted launcher creates an exact
+bound listener and starts the [sequential TCP echo consumer](../devices/tcp.md#sequential-echo-server)
+with only that listener, memory, clock and output streams. Bootstrap init has
+separate TCP LISTEN authority; ordinary session startup delegates only CONNECT.
+This opt-in handoff replaces that init's shell and does not expose a remote shell.
+
 ## Space titles
 
 `title "Development"` sets the caller's tab label. Packaged init scripts set

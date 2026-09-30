@@ -107,9 +107,8 @@
 - Read/search only relevant files and summarize build output. Avoid repeatedly
   reading whole documents, polling excessively or rerunning checks after a pass
   without a new change or unresolved concern. Keep progress updates concise.
-- Delegate bounded independent work when useful: prefer gpt-6-sol at high effort
-  for implementation/review, and gpt-6-luna at high effort for simple checks,
-  monitoring or small documentation tasks. The primary agent owns design,
+- Delegate bounded independent work when useful: use gpt-6.1-sol at high effort
+  for all delegated tasks. The primary agent owns design,
   integration and review. Give explicit scope; avoid overlapping edits and use
   isolated worktrees for parallel code work. Delegation is optional, not ceremony.
 
