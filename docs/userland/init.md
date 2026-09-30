@@ -107,6 +107,12 @@ with only that listener, memory, clock and output streams. Bootstrap init has
 separate TCP LISTEN authority; ordinary session startup delegates only CONNECT.
 This opt-in handoff replaces that init's shell and does not expose a remote shell.
 
+Trusted init also receives a `terminal` service with CREATE authority for
+[independent terminal sessions](terminal-sessions.md). Ordinary session startup
+does not delegate that service or an attachment. Application terminal handles
+use the same named input/output and standard-stream forwarding as framebuffer
+consoles; there is no remote shell startup mode yet.
+
 ## Space titles
 
 `title "Development"` sets the caller's tab label. Packaged init scripts set

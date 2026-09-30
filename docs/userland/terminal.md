@@ -1,5 +1,8 @@
 # Terminal input and editing
 
+Application terminal calls serve both framebuffer consoles and
+[independent terminal sessions](terminal-sessions.md).
+
 [`libterm`](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/term.h) builds terminal behavior on libpyxis's
 console calls. A `struct terminal` borrows explicit input and output handles;
 it neither allocates nor closes them. The named startup `input`/`output` console
@@ -16,7 +19,9 @@ length. Ctrl+C cancels this line locally, moves to a fresh line and returns
 `TERM_LINE_CANCELLED`; it is not a signal and does not terminate the process.
 Ctrl+D on an empty line returns `TERM_LINE_EOF`; on a nonempty line it is
 ignored. This is an editor result, not closure of the console input object.
-The shell exits successfully on EOF; Lua also accepts it at a continuation
+Actual terminal input EOF also returns TERM_LINE_EOF, discarding any unfinished
+line. The key decoder reports TERM_KEY_EOF even during an incomplete escape
+sequence; hangup remains ENDPOINT_CLOSED. The shell exits successfully on EOF; Lua also accepts it at a continuation
 prompt, discarding the unfinished chunk and exiting.
 
 Editing supports insertion, Backspace, Delete, Left/Right, Home/End and Enter.

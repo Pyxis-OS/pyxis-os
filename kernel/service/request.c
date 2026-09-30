@@ -1,6 +1,7 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/object/pipe.h>
+#include <kernel/object/terminal.h>
 #include <kernel/fs/ramfs.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/object/file.h>
@@ -25,6 +26,8 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_TERMINAL_CREATE] = {sizeof(struct terminal_create_service_request), alignof(struct terminal_create_service_request),
+      offsetof(struct terminal_create_service_request, request)},
   [BSP_SERVICE_PIPE_CREATE] = {sizeof(struct pipe_create_request), alignof(struct pipe_create_request),
       offsetof(struct pipe_create_request, request)},
   [BSP_SERVICE_MEMORY] = {sizeof(struct memory_request), alignof(struct memory_request),
@@ -113,6 +116,7 @@ struct bsp_request *bsp_request_prepare(enum bsp_service service)
 static bool requires_handoff(enum bsp_service service)
 {
   switch (service) {
+  case BSP_SERVICE_TERMINAL_CREATE:
   case BSP_SERVICE_PIPE_CREATE:
   case BSP_SERVICE_CAPABILITY_GROW:
   case BSP_SERVICE_NAMESPACE_CREATE:
@@ -216,7 +220,7 @@ static void service_request(struct bsp_request *request)
   switch (request->service) {
   case BSP_SERVICE_READINESS:
     request->state = BSP_REQUEST_FORWARDED;
-    net_readiness_submit((struct readiness_request *)request);
+    readiness_submit((struct readiness_request *)request);
     return;
   case BSP_SERVICE_HOSTFS:
     request->state = BSP_REQUEST_FORWARDED;
@@ -224,6 +228,9 @@ static void service_request(struct bsp_request *request)
     /* Forwarding can complete immediately. The worker owns final completion;
      * even inspecting the request after this transfer would race its caller. */
     return;
+  case BSP_SERVICE_TERMINAL_CREATE:
+    terminal_create_execute((struct terminal_create_service_request *)request);
+    break;
   case BSP_SERVICE_PIPE_CREATE:
     pipe_create_execute((struct pipe_create_request *)request);
     break;
@@ -314,5 +321,6 @@ void bsp_requests_init(void)
   if (result != MM_OK) {
     panic("cannot create BSP request executor (error %u)", (unsigned)result);
   }
+  readiness_init();
   initialized = true;
 }

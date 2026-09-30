@@ -38,8 +38,12 @@ struct wait_interest {
  * Unknown types/interests or zero masks are BAD_REQUEST; stale handles are
  * BAD_HANDLE and insufficient rights are DENIED. Validate the entire list
  * before registration. Repeated handles/copies are separate observations.
+ * Terminal attachment READABLE/PEER_FIN require DRAIN (output records/EOF);
+ * WRITABLE/WRITE_CLOSED require INJECT (input capacity/closure). Ordinary
+ * interests include their respective closure flag; hangup reports ERROR.
+ * Terminal application handles and framebuffer consoles are not wait targets.
  * Poll and try operations may park for the BSP worker handoff, never for I/O
- * readiness. Only TCP listeners/streams are supported in this task. */
+ * readiness. Terminal-only waits do not require a network device. */
 
 _Static_assert(sizeof(struct wait_interest) == 16, "wait interest layout");
 

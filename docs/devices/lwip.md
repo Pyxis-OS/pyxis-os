@@ -323,11 +323,13 @@ and graceful-lifecycle work.
 
 The [readiness ABI](tcp.md#readiness-and-transfer-attempts) observes lwIP state
 only in the network worker. The BSP service worker forwards each caller's typed
-request through an incoming queue; the network worker owns its active wait list,
+TCP/mixed request through an incoming queue; the network worker owns its active wait list,
 retained objects and state recheck. Completion unlinks the request and drops all
 retained objects before waking its caller. The existing per-process BSP request
 allocation fits sixteen interests without a new allocation or global waiter cap.
 Wait deadlines join the worker's existing earliest-deadline calculation.
+Terminal-only waits use the independent BSP readiness worker; mixed waits observe
+terminal queues under their lock and receive notifications after terminal mutations.
 
 Ordinary readiness suppresses a direction already claimed by another operation;
 terminal flags remain observable. Callers notify the worker when they release

@@ -35,6 +35,10 @@ enum object_type {
   OBJECT_NAMESPACE_SERVICE = 27,
   OBJECT_NAMESPACE = 28,
   OBJECT_TCP_LISTENER = 30,
+  OBJECT_TERMINAL_SERVICE = 31,
+  OBJECT_TERMINAL_INPUT = 32,
+  OBJECT_TERMINAL_OUTPUT = 33,
+  OBJECT_TERMINAL_ATTACHMENT = 34,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.
@@ -75,6 +79,12 @@ bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
  * except receipts, which release logical ownership without freeing storage. */
 bool object_retain(struct kernel_object *object);
 void object_release(struct kernel_object *object);
+
+/* Capability entries and in-flight capability transfers own authority as well
+ * as storage. Observation and operation references use retain/release above.
+ * IF=0; release may synchronously close a logical endpoint and wake waiters. */
+bool object_grant_retain(struct kernel_object *object, uint64_t rights);
+void object_grant_release(struct kernel_object *object, uint64_t rights);
 
 /* Scheduler helpers, IF=0. Reaping is BSP-only; callbacks run outside the lock.
  * Pending work must also bring a busy BSP user task back to its scheduler. */

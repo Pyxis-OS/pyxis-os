@@ -34,7 +34,7 @@ struct terminal_session {
 };
 
 /* IF=0; session -> scheduler locks. Only bounded copies of kernel buffers
- * while held: no allocation, user access, notification or context switch. */
+ * while held: no allocation, user access, readiness notification or context switch. */
 static void lock_session(struct terminal_session *session)
 {
   while (atomic_exchange_explicit(&session->locked, true, memory_order_acquire)) {

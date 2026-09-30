@@ -98,7 +98,8 @@ Multiple operands are processed in order, continuing after missing/unreadable in
 with an aggregate nonzero exit status. Detected output errors also fail.
 
 Results require EOF. Use a finite file redirect or pipeline for stdin; the
-console has no EOF operation, so terminal-only input cannot finish normally.
+framebuffer console has no EOF operation. Independent terminal attachments can
+explicitly end input after queued bytes drain.
 See the [accepted terminal limit](../technical-debt.md#console-input-completion).
 
 ## Copying streams with sbase tee

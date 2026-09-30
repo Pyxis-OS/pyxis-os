@@ -94,7 +94,7 @@ enum capability_result capability_insert(struct capability_table *table,
   if (index == table->capacity) {
     return CAP_FULL;
   }
-  if (!object_retain(object)) {
+  if (!object_grant_retain(object, rights)) {
     return CAP_LIMIT;
   }
 
@@ -156,9 +156,9 @@ enum capability_result capability_insert_batch(struct capability_table *table,
 
   size_t retained = 0;
   for (; retained < count; ++retained) {
-    if (!object_retain(objects[retained])) {
+    if (!object_grant_retain(objects[retained], rights[retained])) {
       for (size_t i = 0; i < retained; ++i) {
-        object_release(objects[i]);
+        object_grant_release(objects[i], rights[i]);
       }
       return CAP_LIMIT;
     }
@@ -249,13 +249,14 @@ enum capability_result capability_close(struct capability_table *table,
   }
 
   struct kernel_object *object = entry->object;
+  uint64_t rights = entry->rights;
   entry->object = NULL;
   entry->rights = 0;
   entry->transport = 0;
   /* Unsigned wrap gives zero, which install skips rather than resurrecting
    * any handle previously issued for this slot. */
   ++entry->generation;
-  object_release(object);
+  object_grant_release(object, rights);
   return CAP_OK;
 }
 
@@ -286,7 +287,7 @@ void capability_table_destroy(struct capability_table *table)
   KASSERT(arch_cpu_index() == 0);
   for (size_t i = 0; i < table->capacity; ++i) {
     if (table->entries[i].object) {
-      object_release(table->entries[i].object);
+      object_grant_release(table->entries[i].object, table->entries[i].rights);
     }
   }
   kfree(table->entries);

@@ -79,7 +79,7 @@ counts above SSIZE_MAX (-1/EINVAL). A valid zero-count request returns zero
 without touching the buffer or backend. Nonempty calls perform one backend
 transfer and return the confirmed byte count, including short progress, or -1
 with the translated errno. They do not fill a buffer or retry the remainder.
-File and pipe zero reads report EOF; unexpected console zero progress and
+Successful zero reads report EOF, including independent terminal input;
 nonempty zero writes report EIO. Native denial remains EACCES, unsupported
 operations remain ENOTSUP and pipe writes with no remaining reader report EPIPE.
 
@@ -175,9 +175,10 @@ error; fgets stops at newline/capacity. Neither echoes or edits. Interactive lin
 editing remains an explicit [libterm](terminal.md) operation. Do not read from
 stdin while a foreground child or another reader owns that input stream.
 
-A successful zero-byte file or pipe read for a nonempty request sets EOF. Merely
-reading exactly to the end does not set it until a later read attempts more. Terminal input has no
-EOF convention; input loss sets EIO and the error indicator. `feof` and `ferror`
+A successful zero-byte read for a nonempty request sets EOF. Merely reading
+exactly to the end does not set it until a later read attempts more. Independent
+terminal sessions drain input before EOF; framebuffer consoles have no EOF
+operation. Input loss sets EIO and the error indicator. `feof` and `ferror`
 remain set until cleared: `clearerr` clears both, successful `fseek` clears EOF,
 and `rewind` clears both. Indicators do not reset errno. An error does not itself
 prevent retrying I/O; EOF suppresses reads until cleared or repositioned.

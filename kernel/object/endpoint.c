@@ -94,10 +94,10 @@ static enum call_status grant_status(enum capability_result result)
   }
 }
 
-static void release_grants(struct kernel_object **grants, size_t count)
+static void release_grants(struct kernel_object **grants, const uint64_t *rights, size_t count)
 {
   for (size_t i = 0; i < count; ++i) {
-    object_release(grants[i]);
+    object_grant_release(grants[i], rights[i]);
     grants[i] = NULL;
   }
 }
@@ -222,7 +222,7 @@ static void cancel_delivery(struct endpoint_state *state,
       state->tail = previous;
     }
     record->next = NULL;
-    release_grants(record->request_grants, record->request_count);
+    release_grants(record->request_grants, record->request_rights, record->request_count);
     record->request_count = 0;
   } else {
     record->cancel_pending = true;
@@ -312,7 +312,7 @@ static void close_endpoint(struct endpoint_state *state)
     }
     bool queued = record->state == DELIVERY_QUEUED;
     if (queued) {
-      release_grants(record->request_grants, record->request_count);
+      release_grants(record->request_grants, record->request_rights, record->request_count);
       record->request_count = 0;
     }
     record->next = NULL;
@@ -651,15 +651,15 @@ static enum call_status capture_grants(const struct endpoint_message *message,
         message->grants[i].handle, message->grants[i].rights,
         message->grants[i].transport, &object, NULL, NULL);
     if (result != CAP_OK) {
-      release_grants(objects, i);
+      release_grants(objects, rights, i);
       return grant_status(result);
     }
     if (object->type == OBJECT_ENDPOINT_RECEIPT || object->type == OBJECT_ENDPOINT_RECEIVER) {
-      release_grants(objects, i);
+      release_grants(objects, rights, i);
       return CALL_DENIED;
     }
-    if (!object_retain(object)) {
-      release_grants(objects, i);
+    if (!object_grant_retain(object, message->grants[i].rights)) {
+      release_grants(objects, rights, i);
       return CALL_LIMIT;
     }
     objects[i] = object;
@@ -739,7 +739,7 @@ static enum call_status admit_message(struct endpoint *endpoint,
   }
   unlock_endpoint(state);
   if (status != CALL_OK) {
-    release_grants(grants, message->grant_count);
+    release_grants(grants, rights, message->grant_count);
     return status;
   }
   /* The reserved slot is private until publication. Owner exit leaves filling
@@ -753,13 +753,13 @@ static enum call_status admit_message(struct endpoint *endpoint,
     record->state = DELIVERY_FREE;
     status = expired ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
     unlock_endpoint(state);
-    release_grants(grants, message->grant_count);
+    release_grants(grants, rights, message->grant_count);
     return status;
   }
   if (target && !object_retain(&target->client)) {
     record->state = DELIVERY_FREE;
     unlock_endpoint(state);
-    release_grants(grants, message->grant_count);
+    release_grants(grants, rights, message->grant_count);
     return CALL_LIMIT;
   }
   record->target = target;
@@ -890,7 +890,7 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
       }
     }
   }
-  release_grants(record->reply_grants, record->reply_count);
+  release_grants(record->reply_grants, record->reply_rights, record->reply_count);
   record->reply_count = 0;
   unlock_endpoint(state);
   struct syscall_result result = write_packet(reply_address, &output, record->reply, status);
@@ -996,7 +996,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
     for (size_t i = 0; i < count; ++i) {
       output.grants[i] = (struct endpoint_grant){handles[i + 1], rights[i + 1], transport[i + 1]};
     }
-    release_grants(record->request_grants, count);
+    release_grants(record->request_grants, record->request_rights, count);
     record->request_count = 0;
     object_release(&record->receipt);
     unlock_endpoint(state);
@@ -1029,7 +1029,7 @@ static struct syscall_result reply_endpoint(struct endpoint_delivery_record *rec
   if (record->state != DELIVERY_RECEIVED || state->closed) {
     status = record->status == CALL_TIMED_OUT ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
     unlock_endpoint(state);
-    release_grants(grants, message.grant_count);
+    release_grants(grants, rights, message.grant_count);
     return (struct syscall_result){status, 0};
   }
   unlock_endpoint(state);
@@ -1043,7 +1043,7 @@ static struct syscall_result reply_endpoint(struct endpoint_delivery_record *rec
   if (record->state != DELIVERY_RECEIVED || state->closed) {
     status = record->status == CALL_TIMED_OUT ? CALL_TIMED_OUT : CALL_ENDPOINT_CLOSED;
     unlock_endpoint(state);
-    release_grants(grants, message.grant_count);
+    release_grants(grants, rights, message.grant_count);
     return (struct syscall_result){status, 0};
   }
   record->reply_size = message.size;
