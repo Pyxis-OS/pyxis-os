@@ -1,6 +1,6 @@
 # Libc input read-ahead
 
-Status: planned; the contract below is agreed. Implementation has not started.
+Status: task 1 complete; the contract below is agreed.
 
 ## Completion point
 
@@ -8,8 +8,7 @@ Buffered stdio reads from files and pipes fetch input in blocks instead of one
 native read per byte, while ordinary application I/O behavior is preserved.
 The recorded [unbuffered line input](../technical-debt.md#unbuffered-line-input)
 workload (uniq, 36,009 bytes over virtio-fs, 20.4 s) is rerun under comparable
-conditions. The [fgets sticky-error bug](../technical-debt.md#fgets-final-line-after-an-earlier-error)
-is fixed in the same milestone.
+conditions. The fgets sticky-error bug is fixed in the same milestone (task 1).
 
 This is input only. Output buffering, `setvbuf`/`setbuf`, `ungetc`, threads,
 new kernel APIs and unrelated libc expansion are outside scope. Libc targets
@@ -122,8 +121,14 @@ successfully read final line into NULL (C11 7.21.7.2, C23 7.23.7.2).
 
 ## Focused tasks
 
-1. [ ] **Fix fgets sticky-error handling.** A focused libc change, its stdio
-   documentation and the technical-debt entry.
+1. [x] **Fix fgets sticky-error handling.** A focused libc change, its stdio
+   documentation and the technical-debt entry. Validated in QEMU/KVM with four
+   CPUs through the remote terminal, using an uncommitted program compiled by
+   guest TCC: after an `fread` element-count overflow set only the error
+   indicator, the previous libc returned `first\n` then NULL for `first\nlast`;
+   the fixed libc also returned `last`, keeping the indicator set. Terminated
+   lines and an empty file were unchanged. A read error during the call still
+   returns NULL by source inspection; no consumer injects one.
 2. [ ] **Add descriptor read-ahead and integrate stdio.** Entry buffer and backend
    policy; separate buffered and exact read paths; discard on write, seek and
    close; input `fflush`; the direct `fread` path. Document the contract beside
