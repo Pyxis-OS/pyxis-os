@@ -61,8 +61,8 @@ Removal leaves retained object handles usable. Storage remains charged while an
 object is unlinked but retained. Persistent orphan bookkeeping must let restart
 reclaim objects whose runtime owners no longer exist, without treating a named
 or otherwise protected object as garbage. The retained-file and directory
-behavior below is agreed; task 1 still specifies persistent orphan representation
-and concrete reference accounting.
+behavior and orphan-index lifecycle below are agreed; task 1 still specifies the
+on-disk encoding, concrete reference accounting and workspace bounds.
 
 Writable opening requires fully understood, validated media. Refuse writable
 access to degraded or unsupported retained states; keep read-only inspection
@@ -180,6 +180,55 @@ The existing format requires a read-required feature and explicit orphan-root
 semantics before unlinked objects can persist; these directory rules do not by
 themselves define that encoding.
 
+## Agreed persistent orphan lifecycle
+
+Agreed during task 1, 2026-09-30; implementation belongs to task 6. Use a
+per-volume orphan index keyed by object ID. Entries retain objects in the
+volume's existing object index; this is accounting and recovery metadata, not
+a hidden directory that applications can traverse.
+
+Unlink removes the naming entry, clears the object's parent association and
+records the orphan in one transaction. Rename/replacement does the same for
+the displaced destination while atomically publishing the source's new name.
+Always record the orphan, including when no runtime handle remains: deleting
+a large file must not require freeing all its extents before the bounded
+namespace transaction can complete.
+
+Retained handles keep the object alive with their agreed rights, and its storage
+remains charged to the volume. After the last handle and operation/I/O reference
+ends, cleanup removes the object's remaining data mappings and grants through
+bounded transactions. Keep the orphan entry and object record until final
+removal can publish them together. Every intermediate committed state must be
+valid and resumable; failure follows the agreed publication and pool-health
+rules. Removed blocks become retired and follow ordinary retained-root
+reclamation. Deleting the orphan record does not itself make those blocks
+reusable or end protection by an older retained state.
+
+Validation must establish separately for each retained committed state:
+
+- Every non-root object is either named exactly once with the matching parent,
+  or present exactly once in the orphan index with no naming entry or parent
+  association. It cannot be both named and orphaned in that state.
+- Every orphan entry identifies an existing object in the same volume.
+- Orphan directories are empty, and the volume root is never an orphan.
+- An unreachable object without an orphan entry is corruption, not permission
+  to delete it.
+
+Writable reopening first validates both retained states, then drains abandoned
+orphans from the selected state in bounded transactions before exposing the
+writable instance. Old runtime handles do not survive the quiesced close/reopen
+boundary; retained on-disk states still protect storage under the usual rules.
+An interruption resumes from the last committed state. Insufficient recovery
+workspace causes refusal, not unsafe deletion, and degraded or unsupported
+retained states do not authorize cleanup. Read-only inspection reports orphans
+without cleaning them up.
+
+Opening may take substantial time after many removals or a large abandoned file.
+This first writer completes abandoned-orphan cleanup before applications gain
+access, avoiding concurrent startup cleanup. Exact record encoding, per-batch
+work bounds and admission costs remain task-1 work; this agreement does not
+claim that existing reserve defaults suffice or change the orphan-format gate.
+
 ## Agreed live enumeration and diagnostic views
 
 Agreed during task 1, 2026-09-30; this specifies behavior, not implemented APIs.
@@ -293,7 +342,7 @@ unqualified healthy success.
 
 Task 1 remains open for concrete result/status interfaces,
 directory-continuation and operation-reference mechanisms, persistent
-orphan representation, bounded allocation/reclamation algorithms and admission
+orphan encoding, bounded allocation/reclamation algorithms and admission
 costs, the recovery validation mechanism, and implementation PR boundaries.
 
 ## Publication, reclamation and admission gates
@@ -320,7 +369,7 @@ Before implementation, task 1 must establish:
   writable minimums; do not silently resize their persisted reservations.
 - How validated ownership/reachability evidence is maintained across successive
   commits and reconstructed on reopening, without relying on obsolete readers.
-- Live-view identity and orphan representation, mechanisms for directory-local
+- Live-view identity and orphan encoding, mechanisms for directory-local
   continuation invalidation and operation references, and retained-state
   advancement when no user write follows.
 - Concrete interfaces implementing the agreed progress/failure outcomes and
