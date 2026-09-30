@@ -13,9 +13,9 @@
 #define LAUNCH_BATCH_MAX 8
 #define LAUNCH_NO_STAGE UINT64_MAX
 #define LAUNCH_CAPTURE_MAX_SIZE STARTUP_MAX_SIZE
-/* Host executables are copied before loading; this bounds staging bytes, not
- * the child's mapped memory. RAM and archive images do not need that copy. */
-#define LAUNCH_HOST_IMAGE_MAX_SIZE (UINT64_C(16) * 1024 * 1024)
+/* HOST and native filesystem executables are copied before loading; this bounds
+ * staging bytes, not the child's mapped memory. RAM/archive need no copy. */
+#define LAUNCH_EXTERNAL_IMAGE_MAX_SIZE (UINT64_C(16) * 1024 * 1024)
 
 /* CREATE_GROUP sends only a message_header and requires CREATE_GROUP on an
  * unbound launcher. The ungrouped caller remains outside the new group. Both
@@ -60,7 +60,9 @@ struct launch_request {
   /* READ file grant; not implicitly passed to the child. Host capture accepts
    * positive short reads, rejects early EOF/observed size changes with IO, and
    * never retries a failed capture. Do not modify the file in place while it
-   * loads: even equal before/after sizes cannot establish a host snapshot. */
+   * loads: even equal before/after sizes cannot establish a host snapshot.
+   * Native filesystem capture reads the held immutable view, requires its
+   * READ-plus-metadata bundle and publishes no bytes on a core/backing error. */
   handle_t image;
   uint64_t grants, grant_count;
   uint64_t resources, resource_count;

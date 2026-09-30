@@ -110,18 +110,19 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
   group->execution_group = execution_group;
   struct process *child;
   uintptr_t entry;
-  bool host = capture->image->backing == FILE_HOST;
-  const void *bytes = host ? capture->host_image : capture->image->data;
-  size_t size = host ? capture->host_image_size : capture->image->size;
+  bool external = capture->image->backing == FILE_HOST ||
+      capture->image->backing == FILE_NATIVE;
+  const void *bytes = external ? capture->external_image : capture->image->data;
+  size_t size = external ? capture->external_image_size : capture->image->size;
   enum call_status status = execution_group_check(execution_group, parent->space, cpu_index);
   if (status != CALL_OK) {
-    if (!host) {
+    if (!external) {
       file_end_operation(capture->image);
     }
     return status;
   }
   enum mm_result loaded = user_process_load(parent->space, bytes, size, &child, &entry);
-  if (!host) {
+  if (!external) {
     file_end_operation(capture->image);
   }
   if (loaded != MM_OK) {
