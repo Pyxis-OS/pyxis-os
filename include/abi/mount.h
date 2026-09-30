@@ -31,8 +31,8 @@ struct mount_message {
 /* Native authority selects one configured disk and principal. Partition is a
  * one-based GPT entry; name is counted UTF-8, captured before work is queued.
  * Rights are exact DIRECTORY rights, including LOOKUP. FILESYSTEM_INFO also
- * requires OBSERVE on the mount authority; it adds no core policy rights. Mutation rights fail
- * READ_ONLY; unknown bits fail BAD_REQUEST. Success owns an independent root.
+ * requires OBSERVE on the mount authority; it adds no core policy rights.
+ * Mutation rights fail READ_ONLY; unknown bits fail BAD_REQUEST. Success owns an independent root.
  * No principal, device, binding name or raw-block address is caller supplied. */
 struct mount_volume_request {
   uint64_t partition;

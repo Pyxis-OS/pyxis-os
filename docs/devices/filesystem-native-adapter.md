@@ -2,7 +2,7 @@
 
 Caelum links the pinned read-only filesystem core and provides policy-approved
 native directory/file objects through one serial BSP worker. This implements
-backing preparation, objects and init integration, tasks 3–5 of the
+backing preparation, objects, init integration and scoped observation, tasks 3–6 of the
 [native mount milestone](../wip/native-readonly-filesystem.md). Native objects use
 the existing directory/file protocols. Native executable capture uses the same
 worker. Mount configuration and
@@ -127,6 +127,23 @@ BUFFER_TOO_SMALL reports the required size while preserving the input cursor
 and name buffer. END copies no name and is repeatable. Failures publish no name
 or reply. READ failures likewise publish no bytes or count, even if the core
 proved a prefix before failing.
+
+## Retained filesystem observation
+
+Native mount authority grants OPEN_ROOT and OBSERVE independently. Requesting a
+root with FILESYSTEM_INFO requires both; the new directory bit maps to no core
+policy right. It is retained in node rights and checked against each caller's
+actual grant for queries and descendant lookup. A copy attenuated to observation
+alone can still query its backing without traversal.
+
+The worker returns retained pool/volume identity, selected generation and volume
+name, read-only status, independent GPT/filesystem degraded flags and checked
+`(B - 2) * 4096` pool capacity. The information reply shares the job's existing
+read buffer storage. Querying adds no per-handle cache, view, allocation or disk
+read, and does not consult recorded usage/guarantee/quota counters. Pool/volume
+retention and ordinary request ownership keep the metadata alive through reply
+consumption. Availability and shared-capacity semantics are specified in the
+[directory ABI reference](../interfaces/directories.md#scoped-filesystem-information).
 
 ## I/O, budgets and errors
 
@@ -400,7 +417,8 @@ using each handle's actual rights and transport flags. Session and remote shell
 handoffs preserve that list; they do not forward mount resources. Provider
 profiles explicitly attenuate the roots and working directory they select.
 See [init configuration](../userland/init.md) and [shell commands](../userland/shell.md).
-Observation rights, filesystem information and `--no-info` remain task 6.
+The [directory observation contract](../interfaces/directories.md#scoped-filesystem-information)
+adds independently attenuable filesystem information; `--no-info` omits it.
 
 ## Task-5 validation
 
@@ -455,3 +473,53 @@ Stop-during-capture and error-after-partial-read cleanup were reviewed in source
 No aggregate staging-memory or owner-host performance measurement is claimed.
 All validation VMs, debugger sessions, remote clients and HOST daemon were stopped.
 No new tests, permanent probes, fault injection or boot automation were added.
+
+## Task-6 validation
+
+On 2026-09-30, kernel, SDK, ports, userland and default/configured image builds
+passed from Pyxis `b997ce3` plus task 6 and userland `63f6052`. Other dependency
+pins were unchanged. The native job/request remain 4,560/4,592 bytes, within the
+existing 4,928-byte task allocation. No compiler-container rebuild was needed.
+
+Interactive QEMU/GDB used TCG, 256 MiB, two CPUs for local calls and four for the
+remote handoff, with the documented AHCI fix and read-only 512-byte-sector
+virtio-blk. The disposable task-5 disk was copied unchanged; its retained pool
+and volume IDs, generation and geometry were checked with the existing pinned
+host inspector before boot.
+
+At a stopped shell command in its real user context, GDB called the shell's
+already-linked malloc, libpyxis operations and free. These executed ordinary
+capability resolution, syscall dispatch, AP/BSP forwarding, worker completion,
+reply copying and wrapper validation. No diagnostic application, private mapping
+patch or live capability-table edit was introduced. Actual mounted handles were
+used rather than supplied kernel rights masks.
+
+Both `system` and `headers` returned READ_ONLY, generation 1, distinct matching
+volume IDs/names, the same pool ID and 67,100,672 allocatable bytes: the 64 MiB pool
+minus two 4 KiB superblock slots. Both degraded flags were clear. Repeated queries
+succeeded. The `--no-info` mount returned DENIED and left the previous caller
+record unchanged; archive/RAM queries returned BAD_OPERATION.
+
+An observation-only root copy queried successfully but could not look up a child.
+An explicitly observation-only child derived from a LOOKUP+INFO parent queried
+successfully, including after closing its acquired parent handle. Attempting to
+request observation on a child through the no-info parent returned DENIED.
+A mount handle attenuated to OPEN_ROOT could acquire a LOOKUP-only root, but
+requesting LOOKUP+INFO returned DENIED. Querying that LOOKUP-only root was denied.
+All manually obtained handles and user buffers were released. Normal native
+reads and header listing then completed with exit 0; final core/adapter live
+bytes, wrappers, admitted requests, pool/volume lists and operation context were
+zero/empty after the script exited.
+
+The four-CPU run carried `data://` and `private://` through trusted init, session,
+remote services, remote server and terminal to the ordinary remote shell. That
+shell held no mount resource; its data query succeeded and private query was
+denied. Both content reads succeeded. Default image assembly and an unconfigured
+four-CPU nested-KVM boot without a disk remained usable. The disk SHA-256 was unchanged after guest
+shutdown; all validation processes were stopped.
+
+Degraded GPT/filesystem flag combinations, malformed provider replies, reply
+buffer errors and resource-exhaustion paths were reviewed in source rather than
+injected. No HOST transport was attached in this task; its unchanged grant mask
+and unsupported query path were source-reviewed. No physical hardware or timing
+claim is made. Fastfetch integration and display validation remain task 7.

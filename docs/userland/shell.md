@@ -387,7 +387,7 @@ root rather than mount authority. See [host setup and lifetime](../devices/virti
 Native volume mounts use a separate init resource:
 
 ```text
-mount [--optional] --partition N --volume NAME --read-only NAME://
+mount [--optional] [--no-info] --partition N --volume NAME --read-only NAME://
 mount --partition 1 --volume system --read-only data://
 ls data://
 cat data://share/hello.txt
@@ -399,7 +399,9 @@ The `native_mount` authority selects the configured disk and bootstrap principal
 volume name is 1–255 UTF-8 bytes and resolves once within the retained generation.
 The binding name is chosen separately, so `data://` need not match the volume
 name. The command requires `--read-only`; it acquires LOOKUP, ENUMERATE and
-READ_FILES. The lower-level mount ABI can request a narrower root with LOOKUP,
+READ_FILES, plus FILESYSTEM_INFO when its mount authority holds OBSERVE.
+`--no-info` explicitly withholds that observation grant. The lower-level mount ABI
+can request a narrower root with LOOKUP,
 rejects unknown rights and returns READ_ONLY for known mutation rights.
 
 Destination validation, collision checks and binding storage reservation precede
@@ -415,8 +417,9 @@ or confirmed hardware absence. Failures from present authority remain errors,
 including wrong disk GUID, ambiguous/unusable hardware, invalid GPT/filesystem,
 missing partition/volume and policy denial. See
 [boot configuration](init.md#native-disk-configuration-and-mounting).
-`MOUNT_RIGHT_OBSERVE`, directory FILESYSTEM_INFO authority and `--no-info` remain
-task 6 work with the real information query.
+Observation grants permit the [scoped information query](../interfaces/directories.md#scoped-filesystem-information)
+without granting content access. Read-only session forwarding preserves observation
+when held; it cannot restore an omitted grant.
 
 ## Session handoff
 

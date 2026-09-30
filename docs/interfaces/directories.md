@@ -15,8 +15,47 @@ rights. Roots require LOOKUP; ordinary directory/file grants can then be
 attenuated and delegated independently of mount authority. Native mutations fail
 under the ordinary rights/read-only rules. See
 [init configuration](../userland/init.md#native-disk-configuration-and-mounting).
-Filesystem-information observation is deferred to task 6 with its real query.
 The tree internals below describe the archive/RAM backends.
+
+## Scoped filesystem information
+
+`DIRECTORY_FILESYSTEM_INFO` accepts a complete zeroed directory message and
+returns a copied 320-byte `directory_filesystem_info` record. Native directories
+require only `DIRECTORY_RIGHT_FILESYSTEM_INFO`; no LOOKUP, ENUMERATE or READ_FILES
+is implied or required. Other backends return BAD_OPERATION and retain their
+existing grants. The `directory_filesystem_info()` library wrapper publishes a
+record only after a successful, well-formed reply.
+
+Observation is a separate kernel grant. Acquiring it on a native root requires
+`MOUNT_RIGHT_OBSERVE` in addition to OPEN_ROOT; ordinary acquisition still checks
+persistent policy for the requested core rights. Copies may attenuate a retained
+root to observation alone. Directory lookup may explicitly request observation
+only when its parent grant holds it, without adding any core object/admin right.
+A child never reacquires the bootstrap principal's authority. `DIRECTORY_RIGHTS`
+is the complete recognized mask; `DIRECTORY_CONTENT_RIGHTS` is the existing six
+content-operation bits, used for non-native grants.
+
+| Field | Meaning and evidence |
+| --- | --- |
+| `type` | `FILESYSTEM_TYPE_PYXIS` |
+| `flags` | READ_ONLY, plus independent GPT_DEGRADED and filesystem DEGRADED opening flags |
+| `pool_id`, `volume_id` | Opaque 16-byte identities from retained selected metadata |
+| `generation` | Selected pool generation retained by the view |
+| `pool_allocatable_bytes` | `(pool blocks - 2) * 4096`; verified geometry excluding the two superblock slots |
+| `volume_name` | Retained filesystem volume name, NUL-terminated and zero-padded |
+
+All listed fields are available on success. Capacity includes shared metadata
+and reserves; it is neither per-volume capacity nor writable allowance. Multiple
+bindings or volumes with the same pool ID share this capacity and must not be
+summed. Namespace binding names come from the caller's own selected roots, not
+this record. The immutable retained state requires the attached image to remain
+unchanged externally.
+
+Used/free bytes, volume charged bytes, guarantees, quotas and percentages are
+unavailable and have no fields in this record; absence never means zero. Ordinary
+opening validates geometry and selected root envelopes, not global allocation
+accounting. The query copies retained metadata on the filesystem worker, without
+traversal, a whole-image check, new views or block I/O. Failure publishes no reply.
 
 ## Tree and lifetime
 

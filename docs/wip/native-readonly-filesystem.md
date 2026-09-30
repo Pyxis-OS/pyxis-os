@@ -1,9 +1,10 @@
 # Native read-only filesystem mounts
 
-Status: tasks 1–5 complete, 2026-09-30. The contract, core continuation and
+Status: tasks 1–6 complete, 2026-09-30. The contract, core continuation and
 [bounded kernel adapter](../devices/filesystem-native-adapter.md) are implemented.
 Trusted init can mount and delegate native roots; directory/file protocols and
-executable capture forward to the worker. Filesystem information is task 6. The
+executable capture forward to the worker. Scoped filesystem information exposes
+retained identity and shared-pool capacity; Fastfetch integration is task 7. The
 initial budgets cover the measured inputs, not every valid image. Update each
 task in its delivery PR.
 
@@ -539,10 +540,17 @@ only missing authority. [Task-5 validation](../devices/filesystem-native-adapter
 records ordinary mount/read/launch and failure-path coverage. No compiler-container
 rebuild is needed; rebuild userland against the updated SDK.
 
-Task 6 is next: implement scoped filesystem information with the agreed observation
-rights and `--no-info` command option. Those parts of the task-1 contract remain
-unimplemented until the query is usable; task 5 requests only LOOKUP, ENUMERATE
-and READ_FILES. No observation placeholder right or operation is exposed.
+Task 6 implements scoped filesystem information and its library wrapper, separate
+mount OBSERVE and directory FILESYSTEM_INFO rights, and `--no-info`. The bounded
+record copies retained identity, generation, independent GPT/filesystem health
+flags, volume name and shared-pool capacity without traversal or disk reads.
+Unavailable usage/quota/percentage fields are absent, never reported as zero.
+[Query validation](../devices/filesystem-native-adapter.md#task-6-validation)
+records ordinary user syscalls, attenuation, parent-close lifetime, remote
+forwarding and final cleanup. The native request remains 4,592 bytes.
+
+Task 7 is next: adapt Fastfetch Disk to explicitly selected bindings and these
+scoped observations, preserving unavailable-value and shared-capacity semantics.
 
 Agreed scope limitations are tracked in [technical debt](../technical-debt.md#native-mount-design-limits).
 
@@ -579,7 +587,7 @@ Agreed scope limitations are tracked in [technical debt](../technical-debt.md#na
    binding through disk-scoped authority. Exercise `ls`, `cat` and launching an
    executable from the disk, plus absent disk, wrong selector, policy denial and
    rejected writes. Default boot needs no development disk.
-6. [ ] **Expose scoped filesystem information.** Implement the settled bounded
+6. [x] **Expose scoped filesystem information.** Implement the settled bounded
    query and library interface. Document field units, shared-pool meaning,
    verification status, unavailable fields and observation authority. Read queries
    must not trigger a full consistency scan or acquire additional authority.

@@ -734,8 +734,10 @@ The [native read-only mount contract](wip/native-readonly-filesystem.md) is agre
 the [kernel adapter](devices/filesystem-native-adapter.md) now implements bounded
 backing preparation, policy-approved directory/file objects, configured mount
 authority and bounded executable capture. Trusted init mounts and delegates an
-explicit selected root list; filesystem observation and `--no-info` remain task 6
-work with the real query.
+explicit selected root list. A separately attenuable observation grant exposes
+retained identity and shared-pool capacity; `--no-info` omits it. Global usage,
+charged bytes and quota/guarantee observations remain unavailable until their
+evidence and disclosure contracts are established.
 The [implemented core continuation API](../fs/docs/core.md#stateless-directory-continuation)
 avoids rescanning the returned prefix and retains no per-enumeration state. It
 does not remove existing core ancestry scans or allocation-proof costs; measure
