@@ -9,7 +9,8 @@
  * on the same CPU and private root before touching user memory. Exit instead
  * abandons the task stack and never returns here; its status is arg1's signed
  * low 32 bits.
- * CALL/CLOSE return status/reply bytes in RAX/RDX. CLOSE has no reply bytes.
+ * CALL/CLOSE/COPY/HANDLE_INFO/WAIT_MANY return status/reply bytes in RAX/RDX.
+ * CLOSE has no reply bytes.
  * Log output and unknown calls preserve RDX by returning arg3 in the second word.
  * Unknown numbers return -1 in RAX. */
 struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,

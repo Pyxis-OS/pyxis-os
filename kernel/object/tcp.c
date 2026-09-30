@@ -92,7 +92,7 @@ struct syscall_result tcp_listener_call(struct kernel_object *object, uint64_t r
 {
   uint64_t required;
   size_t reply_size;
-  if (operation == TCP_ACCEPT) {
+  if (operation == TCP_ACCEPT || operation == TCP_TRY_ACCEPT) {
     required = TCP_LISTENER_RIGHT_ACCEPT;
     reply_size = sizeof(struct tcp_accept_reply);
   } else if (operation == TCP_LISTENER_INSPECT) {
@@ -113,13 +113,14 @@ struct syscall_result tcp_listener_call(struct kernel_object *object, uint64_t r
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   enum call_status status;
-  if (operation == TCP_ACCEPT) {
-    uint64_t deadline;
-    if (!copy_from_user(&deadline, request_address, sizeof(deadline))) {
+  if (operation == TCP_ACCEPT || operation == TCP_TRY_ACCEPT) {
+    uint64_t deadline = 0;
+    if (operation == TCP_ACCEPT && !copy_from_user(&deadline, request_address, sizeof(deadline))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
     struct tcp_accept_reply reply;
-    status = net_tcp_accept(object, &process_current()->capabilities, deadline, &reply);
+    status = net_tcp_accept(object, &process_current()->capabilities, deadline,
+        operation == TCP_TRY_ACCEPT, &reply);
     if (status == CALL_OK) {
       KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
     }
@@ -133,12 +134,13 @@ struct syscall_result tcp_listener_call(struct kernel_object *object, uint64_t r
   return (struct syscall_result){status, status == CALL_OK ? reply_size : 0};
 }
 
-static struct syscall_result read_stream(struct kernel_object *object,
+static struct syscall_result read_stream(struct kernel_object *object, bool nonblocking,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
   struct tcp_read_request request = {0};
-  size_t payload_size = sizeof(request) - sizeof(request.header);
+  size_t payload_size = (nonblocking ? sizeof(struct tcp_try_read_request) : sizeof(request)) -
+      sizeof(request.header);
   if (request_size != payload_size || reply_capacity < sizeof(struct tcp_read_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
@@ -158,7 +160,8 @@ static struct syscall_result read_stream(struct kernel_object *object,
 
   uint8_t data[TCP_READ_MAX_BYTES];
   struct tcp_read_reply reply;
-  enum call_status status = net_tcp_read(object, capacity, request.deadline_ns, data, &reply);
+  enum call_status status = net_tcp_read(object, capacity, request.deadline_ns,
+      nonblocking, data, &reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -167,12 +170,13 @@ static struct syscall_result read_stream(struct kernel_object *object,
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
-static struct syscall_result write_stream(struct kernel_object *object,
+static struct syscall_result write_stream(struct kernel_object *object, bool nonblocking,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
   struct tcp_write_request request = {0};
-  size_t payload_size = sizeof(request) - sizeof(request.header);
+  size_t payload_size = (nonblocking ? sizeof(struct tcp_try_write_request) : sizeof(request)) -
+      sizeof(request.header);
   if (request_size != payload_size || reply_capacity < sizeof(struct tcp_write_reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
@@ -187,7 +191,8 @@ static struct syscall_result write_stream(struct kernel_object *object,
   }
 
   struct tcp_write_reply reply;
-  enum call_status status = net_tcp_write(object, data, length, request.deadline_ns, &reply);
+  enum call_status status = net_tcp_write(object, data, length, request.deadline_ns,
+      nonblocking, &reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -204,19 +209,23 @@ struct syscall_result tcp_call(struct kernel_object *object, uint64_t rights,
   switch (operation) {
   case TCP_INSPECT: required = TCP_RIGHT_INSPECT; break;
   case TCP_ABORT: required = TCP_RIGHT_ABORT; break;
-  case TCP_READ: required = TCP_RIGHT_READ; break;
-  case TCP_WRITE: required = TCP_RIGHT_WRITE; break;
+  case TCP_READ:
+  case TCP_TRY_READ: required = TCP_RIGHT_READ; break;
+  case TCP_WRITE:
+  case TCP_TRY_WRITE: required = TCP_RIGHT_WRITE; break;
   case TCP_SHUTDOWN_WRITE: required = TCP_RIGHT_SHUTDOWN_WRITE; break;
   default: return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  if (operation == TCP_READ) {
-    return read_stream(object, request_address, request_size, reply_address, reply_capacity);
+  if (operation == TCP_READ || operation == TCP_TRY_READ) {
+    return read_stream(object, operation == TCP_TRY_READ,
+        request_address, request_size, reply_address, reply_capacity);
   }
-  if (operation == TCP_WRITE) {
-    return write_stream(object, request_address, request_size, reply_address, reply_capacity);
+  if (operation == TCP_WRITE || operation == TCP_TRY_WRITE) {
+    return write_stream(object, operation == TCP_TRY_WRITE,
+        request_address, request_size, reply_address, reply_capacity);
   }
   size_t reply_size = operation == TCP_INSPECT ? sizeof(struct tcp_connection_info) : 0;
   if (request_size || reply_capacity < reply_size) {

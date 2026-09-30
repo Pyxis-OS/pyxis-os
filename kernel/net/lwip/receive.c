@@ -15,6 +15,7 @@ struct tcp_read {
   struct tcp_stream *stream; /* Owned until the worker returns receive credit. */
   struct task_wait *wait;
   uint64_t deadline;
+  bool nonblocking;
   size_t capacity, length;
   enum call_status status;
   uint8_t data[TCP_READ_MAX_BYTES];
@@ -112,15 +113,15 @@ static void return_receive_credit(struct tcp_connection *connection, size_t leng
 }
 
 enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
-    uint64_t deadline, void *data, struct tcp_read_reply *reply)
+    uint64_t deadline, bool nonblocking, void *data, struct tcp_read_reply *reply)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(capacity <= TCP_READ_MAX_BYTES);
   uint64_t now = arch_monotonic_ns();
-  if (deadline <= now) {
+  if (!nonblocking && deadline <= now) {
     return CALL_TIMED_OUT;
   }
-  if (deadline - now > TCP_READ_MAX_WAIT_NS) {
+  if (!nonblocking && deadline - now > TCP_READ_MAX_WAIT_NS) {
     return CALL_BAD_REQUEST;
   }
   if (!capacity) {
@@ -152,6 +153,7 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
   call->stream = stream;
   call->capacity = capacity;
   call->deadline = deadline;
+  call->nonblocking = nonblocking;
   call->wait = wait;
   call->state = READ_QUEUED;
   unlock_reads();
@@ -169,8 +171,17 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
     reply->length = call->length;
   }
   lock_reads();
-  call->state = READ_CONSUMED;
+  if (status == CALL_OK) {
+    call->state = READ_CONSUMED;
+  } else {
+    /* No bytes/credit were transferred. A failed try leaves no pending read
+     * or retained operation reference for a later worker pass to reclaim. */
+    *call = (struct tcp_read){0};
+  }
   unlock_reads();
+  if (status != CALL_OK) {
+    object_release(object);
+  }
   net_worker_notify();
   return status;
 }
@@ -221,14 +232,18 @@ bool tcp_reads_service(void)
     }
     struct tcp_connection *connection = call->stream->connection;
     enum call_status status = connection->terminal_status;
-    if (status == CALL_OK && task_deadline_expired(call->deadline)) {
+    if (status == CALL_OK && !call->nonblocking && task_deadline_expired(call->deadline)) {
       status = CALL_TIMED_OUT;
     }
     if (status == CALL_OK) {
       if (!connection->receive_length && !connection->peer_fin) {
-        continue;
+        if (!call->nonblocking) {
+          continue;
+        }
+        status = CALL_WOULD_BLOCK;
+      } else {
+        call->length = read_ordered(connection, call->data, call->capacity);
       }
-      call->length = read_ordered(connection, call->data, call->capacity);
     }
     complete_read(call, status);
     worked = true;
@@ -258,4 +273,22 @@ bool tcp_reads_next_deadline(uint64_t *deadline)
   cpu_restore_interrupts(flags);
   *deadline = next;
   return found;
+}
+
+bool tcp_read_available(struct tcp_stream *stream)
+{
+  uint64_t flags = cpu_save_interrupts();
+  lock_reads();
+  bool available = true;
+  for (size_t i = 0; i < TCP_READ_LIMIT; ++i) {
+    struct tcp_read *call = &reads[i];
+    if (call->stream == stream && call->state != READ_FREE &&
+        call->state != READ_CONSUMED && call->state != READ_RECLAIMING) {
+      available = false;
+      break;
+    }
+  }
+  unlock_reads();
+  cpu_restore_interrupts(flags);
+  return available;
 }

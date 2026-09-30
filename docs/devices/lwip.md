@@ -235,8 +235,10 @@ The facade checks both output ranges and rejects overlap before submitting work.
 Failures leave data and count unchanged. Sixteen static read slots hold up to
 4 KiB each, plus call metadata; this fixed storage is separate from `lwip_memory`.
 One outstanding read per shared stream includes completed-but-uncollected replies;
-other readers get BUSY. Slot exhaustion returns QUEUE_FULL. Slots own an extra
+other readers get BUSY. Slot exhaustion returns QUEUE_FULL. Successful slots own an extra
 object reference until the worker has returned credit and reclaimed the slot.
+A failed read has no receive credit; its caller clears the slot and releases the
+extra reference before returning, including on WOULD_BLOCK.
 The sole caller task's existing grant and mappings remain live while it parks.
 
 lwIP validates sequence space and trims duplicates/overlaps. The receive callback
@@ -316,6 +318,26 @@ size further. This ceiling is not path-MTU discovery or a guarantee for every
 route. No window scaling, timestamps, SACK, fragmentation or new ICMP error/PMTU
 handling is added. Throughput tuning belongs after the initial interoperability
 and graceful-lifecycle work.
+
+## Readiness and nonblocking attempts
+
+The [readiness ABI](tcp.md#readiness-and-transfer-attempts) observes lwIP state
+only in the network worker. The BSP service worker forwards each caller's typed
+request through an incoming queue; the network worker owns its active wait list,
+retained objects and state recheck. Completion unlinks the request and drops all
+retained objects before waking its caller. The existing per-process BSP request
+allocation fits sixteen interests without a new allocation or global waiter cap.
+Wait deadlines join the worker's existing earliest-deadline calculation.
+
+Ordinary readiness suppresses a direction already claimed by another operation;
+terminal flags remain observable. Callers notify the worker when they release
+completed operation slots, so a wait cannot miss a direction becoming usable.
+The result still reserves nothing: a competing holder can consume readiness
+before a transfer attempt. Deadline-free TRY_ACCEPT/READ/WRITE reuse the bounded
+operation slots but return WOULD_BLOCK instead of waiting for an absent pending
+connection, input or send capacity. That result leaves no operation slot,
+provisional accept resources or wait registration behind. Successful reads keep
+the existing receive-credit handoff after collection.
 
 ## Write shutdown and teardown
 

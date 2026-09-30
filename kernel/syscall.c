@@ -27,6 +27,7 @@
 #include <kernel/task.h>
 #include <kernel/user.h>
 #include <kernel/user_memory.h>
+#include <kernel/user/wait.h>
 
 static struct syscall_result close_handle(handle_t handle)
 {
@@ -339,6 +340,8 @@ struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t 
     return handle_info(arg1, arg2);
   case SYSCALL_COPY:
     return copy_handle(arg1, arg2, arg3, arg4, arg5);
+  case SYSCALL_WAIT_MANY:
+    return user_wait_many(arg1, arg2, arg3, arg4);
   case SYSCALL_LOG_PUTCHAR: {
     bool locked = log_begin();
     log_putc((char)arg1);

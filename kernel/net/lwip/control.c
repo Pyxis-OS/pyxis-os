@@ -23,6 +23,7 @@ struct tcp_control {
   uint32_t address;
   uint16_t port;
   uint64_t deadline;
+  bool nonblocking;
   struct tcp_connect_reply reply;
   struct tcp_listen_reply listen_reply;
   enum call_status status;
@@ -221,6 +222,7 @@ static enum call_status exchange_control(struct tcp_control *request)
   }
   *call = (struct tcp_control){0};
   unlock_control();
+  net_worker_notify(); /* Direction ownership became available to readiness waits. */
   return status;
 }
 
@@ -259,18 +261,18 @@ enum call_status net_tcp_listen(struct capability_table *table, uint32_t address
 }
 
 enum call_status net_tcp_accept(struct kernel_object *object, struct capability_table *table,
-    uint64_t deadline, struct tcp_accept_reply *reply)
+    uint64_t deadline, bool nonblocking, struct tcp_accept_reply *reply)
 {
   uint64_t now = arch_monotonic_ns();
-  if (deadline <= now) {
+  if (!nonblocking && deadline <= now) {
     return CALL_TIMED_OUT;
   }
-  if (deadline - now > TCP_ACCEPT_MAX_WAIT_NS) {
+  if (!nonblocking && deadline - now > TCP_ACCEPT_MAX_WAIT_NS) {
     return CALL_BAD_REQUEST;
   }
   struct tcp_control request = {
     .operation = CONTROL_ACCEPT, .table = table,
-    .listener = (struct tcp_stream *)object, .deadline = deadline,
+    .listener = (struct tcp_stream *)object, .deadline = deadline, .nonblocking = nonblocking,
   };
   enum call_status status = exchange_control(&request);
   if (status == CALL_OK) {
@@ -351,19 +353,24 @@ bool net_tcp_service(void)
     if (call->operation == CONTROL_ACCEPT) {
       struct tcp_connection *listener = call->listener->connection;
       enum call_status status = listener->terminal_status;
-      if (task_deadline_expired(call->deadline)) {
+      if (!call->nonblocking && task_deadline_expired(call->deadline)) {
         status = CALL_TIMED_OUT;
+      }
+      if (status == CALL_OK && call->nonblocking && !listener->ready_head) {
+        /* No provisional stream or handle exists when a try cannot accept. */
+        status = CALL_WOULD_BLOCK;
       }
       if (status == CALL_OK && start) {
         status = reserve_handle(call, false);
         worked = true;
       }
-      if (status == CALL_OK && task_deadline_expired(call->deadline)) {
+      if (status == CALL_OK && !call->nonblocking && task_deadline_expired(call->deadline)) {
         status = CALL_TIMED_OUT;
       }
       if (status == CALL_OK) {
         call->stream->connection = tcp_listener_take(listener);
         if (!call->stream->connection) {
+          KASSERT(!call->nonblocking);
           continue;
         }
       }
@@ -415,6 +422,9 @@ bool net_tcp_service(void)
   if (tcp_writes_service()) {
     worked = true;
   }
+  if (tcp_readiness_service()) {
+    worked = true;
+  }
   return worked;
 }
 
@@ -453,6 +463,30 @@ bool net_tcp_next_deadline(uint64_t *deadline)
     }
     found = true;
   }
+  uint64_t readiness_deadline;
+  if (tcp_readiness_next_deadline(&readiness_deadline)) {
+    if (readiness_deadline < next) {
+      next = readiness_deadline;
+    }
+    found = true;
+  }
   *deadline = next;
   return found;
+}
+
+bool tcp_accept_available(struct tcp_stream *stream)
+{
+  uint64_t flags = cpu_save_interrupts();
+  lock_control();
+  bool available = true;
+  for (size_t i = 0; i < TCP_CONTROL_LIMIT; ++i) {
+    if (pending[i].state != CONTROL_FREE && pending[i].operation == CONTROL_ACCEPT &&
+        pending[i].listener == stream) {
+      available = false;
+      break;
+    }
+  }
+  unlock_control();
+  cpu_restore_interrupts(flags);
+  return available;
 }

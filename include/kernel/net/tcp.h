@@ -32,17 +32,17 @@ enum call_status net_tcp_connect(struct capability_table *table, uint32_t addres
 enum call_status net_tcp_listen(struct capability_table *table, uint32_t address,
     uint16_t port, struct tcp_listen_reply *reply);
 enum call_status net_tcp_accept(struct kernel_object *object, struct capability_table *table,
-    uint64_t deadline, struct tcp_accept_reply *reply);
+    uint64_t deadline, bool nonblocking, struct tcp_accept_reply *reply);
 enum call_status net_tcp_listener_inspect(struct kernel_object *object,
     struct tcp_listener_info *reply);
 enum call_status net_tcp_inspect(struct kernel_object *object, struct tcp_connection_info *reply);
 enum call_status net_tcp_abort(struct kernel_object *object);
 enum call_status net_tcp_shutdown_write(struct kernel_object *object);
 enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
-    uint64_t deadline, void *data, struct tcp_read_reply *reply);
+    uint64_t deadline, bool nonblocking, void *data, struct tcp_read_reply *reply);
 
 enum call_status net_tcp_write(struct kernel_object *object, const void *data,
-    size_t length, uint64_t deadline, struct tcp_write_reply *reply);
+    size_t length, uint64_t deadline, bool nonblocking, struct tcp_write_reply *reply);
 
 /* Sole network worker, IF=1, after packet/timer processing. */
 bool net_tcp_service(void);

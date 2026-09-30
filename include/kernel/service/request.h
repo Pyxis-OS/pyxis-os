@@ -15,6 +15,7 @@ enum bsp_service {
   BSP_SERVICE_FILE_REPLACE,
   BSP_SERVICE_LAUNCHER,
   BSP_SERVICE_HOSTFS,
+  BSP_SERVICE_READINESS,
   BSP_SERVICE_COUNT,
 };
 
@@ -32,7 +33,7 @@ enum bsp_request_state {
  * FREE/PREPARED and completed results after waiting; the BSP owns published
  * requests. DEFERRED belongs to the caller until its scheduler establishes the
  * parked handoff. Queue publication and wait notification synchronize loans.
- * FORWARDED belongs to the HOST worker until final completion.
+ * FORWARDED belongs to the HOST or network worker until final completion.
  * COMPLETE is read after notification, never polled as an asynchronous result. */
 struct bsp_request {
   struct bsp_request *next;
@@ -56,7 +57,7 @@ struct bsp_request *bsp_request_prepare(enum bsp_service service);
 void bsp_request_submit_and_wait(struct bsp_request *request);
 void bsp_request_release(struct bsp_request *request);
 
-/* BSP, IF=0. Executor finishes SERVICING; HOST completion paths finish FORWARDED.
+/* BSP, IF=0. Executor finishes SERVICING; worker completion paths finish FORWARDED.
  * Detach all subsystem/worker references and publish results first. Notification
  * transfers ownership immediately; no request accesses may follow this call. */
 void bsp_request_complete(struct bsp_request *request);

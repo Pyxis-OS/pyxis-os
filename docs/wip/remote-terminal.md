@@ -1,7 +1,7 @@
 # Native remote terminal sessions
 
-Status: task 1 (TCP listeners and accepted streams) is implemented; the remaining
-remote-terminal tasks are agreed scope, not implemented. The prerequisite
+Status: tasks 1–2 (TCP listeners, readiness waits and nonblocking transfers) are
+implemented; the remaining remote-terminal tasks are agreed scope, not implemented. The prerequisite
 [BSP request milestone](../kernel/bsp-service-requests.md) is complete.
 Wire layouts and the bounded implementation details listed below still need
 review before their respective tasks; this document does not authorize code.
@@ -131,7 +131,8 @@ capacity or execution-group completion. Listener acceptance also needs readiness
 so waiting for a new connection cannot stop existing sessions.
 
 Readiness is a notification to try, not a reservation. A transfer attempt returns
-actual progress, EOF, an error or WOULD_BLOCK without parking. Registration and
+actual progress, EOF, an error or WOULD_BLOCK without waiting for I/O readiness.
+The BSP worker handoff may park a caller, including for polling. Registration and
 state recheck must prevent lost wakeups; closure/error conditions must wake an
 interested waiter. Short transfers advance only the accepted prefix. Bounded
 buffers and fair servicing prevent one slow connection from blocking every other
@@ -142,6 +143,31 @@ execution-group completion. Retain ordinary blocking interfaces. No callbacks,
 retained userspace buffer pointers, submitted background I/O, process threads or
 full asynchronous I/O framework belong to this milestone. It provides a useful
 foundation for later [libuv work](neovim-libuv.md), not a libuv port.
+
+Task 2 implements the agreed contract: a stateless `wait_many` syscall
+observes 1–16 interests per call with one active wait per process. It retains
+objects only through that call, validates the whole list before registration,
+returns level-triggered results in input order and removes every registration
+before return. Current readiness wins over an expired absolute deadline; zero
+polls successfully with possibly empty results. Future deadlines are capped at
+30 seconds. Invalid handles, unsupported interests and insufficient authority
+fail without partial registration. Separate try-accept/read/write operations
+have no deadline and leave no pending operation on WOULD_BLOCK. Stale readiness
+followed by WOULD_BLOCK is ordinary contention; callers return to waiting.
+
+READ authority permits readable data and peer-FIN observation; ordinary read
+interest automatically includes FIN. FIN may coexist with buffered data, which
+must drain before a successful zero-byte read reports EOF. WRITE authority
+permits writable capacity and local write closure; FIN alone does not close
+writing. ACCEPT authority permits accept-ready and listener closure. Relevant
+terminal errors wake all these interests without requiring INSPECT. No extra
+read/write authority is conferred by waiting.
+
+The four-client echo consumer uses bounded per-client output and a rotating
+service budget. It watches writable capacity only with pending output, suspends
+reads while its buffer is full, and can retain a FIN-only READ-authorized interest
+until FIN is observed. Removing that interest after observation avoids repeated
+terminal-condition wakeups while waiting for output capacity.
 
 ### Execution lifetime and disconnect
 
@@ -217,8 +243,6 @@ drain outcome.
 The direction above is settled. Resolve these remaining details in the associated
 PR proposal rather than inventing them during implementation:
 
-- Wait registration/ownership, interest limits, deadline behavior, readiness flags,
-  object closure and invalid-handle results; nonblocking operation spelling.
 - Terminal queue/frame bounds, dimensions, attachment closure and input-EOF
   semantics; treatment of terminal reads during session teardown.
 - A per-subsystem termination matrix: retained resources, safe stopping point,
@@ -243,7 +267,7 @@ Do not implement unrelated async, scheduling, authentication or multiplexer work
   lifetime. Audit lwIP listen conversion, passive-open callback installation,
   generation identity and queued-packet cancellation. Validate native host/guest
   serving before introducing a shell server.
-- [ ] **2. Readiness waits and nonblocking TCP.** Establish the small wait contract
+- [x] **2. Readiness waits and nonblocking TCP.** Establish the small wait contract
   and TCP listener/stream support, including closure/error notification and
   race-safe registration. Validate duplex progress and slow-reader behavior while
   preserving existing blocking users.
@@ -302,6 +326,27 @@ Handshake expiry, address invalidation, shared ACCEPT exclusion and allocation/
 handle-failure unwinding were reviewed in code, without fault injection or a
 claim of runtime coverage. Readiness waits, whole-session cleanup and a remote
 shell are not implemented by task 1.
+
+Task 2 validation: kernel and full image builds passed with the existing compiler
+and the same local CMake prerequisite. Interactive one/four-CPU QEMU used nested
+KVM, 256 MiB, VirtIO NET/RNG, raw OVMF and patched QEMU 10.2.2, with host-loopback
+forwarding. One CPU echoed text beside an idle client and a byte-for-byte 64 KiB
+half-closed transfer. GDB observed idle read-only interests, then no remaining
+waits, listeners or transport records after finite admission completed. On four
+CPUs, four accepted clients coexisted. A stalled reader reached zero send capacity
+and a zero peer window; GDB observed its writable/FIN-only interest while other
+clients continued echoing. Resuming that reader drained all 4,789,053 bytes
+byte-for-byte through EOF. The separate local shell completed an outbound blocking
+TCP exchange. Finishing the echo clients removed active/incoming waits and the
+listener; the only transport record left belonged to that unowned outbound
+connection after orderly shutdown. All validation processes were stopped.
+
+Authority failures, poll/expired-deadline precedence, stale observations, terminal
+error wakeups, busy-direction notifications and failed-try cleanup were reviewed
+in code; no claim of runtime coverage or injected failures is made for those
+paths. The echo consumer has no idle/output-drain timeout, and four stalled
+clients can occupy all its active slots. No terminal-session API or remote shell
+is introduced by task 2.
 
 Use ordinary `make -j16` builds, interactive QEMU and debugger inspection. Include
 one- and four-CPU operation with matching networking/init configuration. Inspect

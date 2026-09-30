@@ -15,6 +15,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/service/request.h>
 #include <kernel/task.h>
+#include <kernel/user/wait.h>
 #include <stdatomic.h>
 
 struct request_layout {
@@ -46,6 +47,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct launcher_request, request)},
   [BSP_SERVICE_HOSTFS] = {sizeof(struct hostfs_request), alignof(struct hostfs_request),
       offsetof(struct hostfs_request, request)},
+  [BSP_SERVICE_READINESS] = {sizeof(struct readiness_request), alignof(struct readiness_request),
+      offsetof(struct readiness_request, request)},
 };
 
 static size_t storage_size, storage_alignment;
@@ -119,6 +122,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_FILE_REPLACE:
   case BSP_SERVICE_LAUNCHER:
   case BSP_SERVICE_HOSTFS:
+  case BSP_SERVICE_READINESS:
     return false;
   case BSP_SERVICE_MEMORY:
   case BSP_SERVICE_DISPLAY:
@@ -196,7 +200,8 @@ void bsp_request_complete(struct bsp_request *request)
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->state == BSP_REQUEST_SERVICING ||
-      (request->service == BSP_SERVICE_HOSTFS && request->state == BSP_REQUEST_FORWARDED));
+      ((request->service == BSP_SERVICE_HOSTFS || request->service == BSP_SERVICE_READINESS) &&
+       request->state == BSP_REQUEST_FORWARDED));
   KASSERT(!request->next && request->wait);
   struct task_wait *wait = request->wait;
   request->wait = NULL;
@@ -209,6 +214,10 @@ void bsp_request_complete(struct bsp_request *request)
 static void service_request(struct bsp_request *request)
 {
   switch (request->service) {
+  case BSP_SERVICE_READINESS:
+    request->state = BSP_REQUEST_FORWARDED;
+    net_readiness_submit((struct readiness_request *)request);
+    return;
   case BSP_SERVICE_HOSTFS:
     request->state = BSP_REQUEST_FORWARDED;
     hostfs_submit((struct hostfs_request *)request);

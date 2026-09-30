@@ -102,7 +102,7 @@ start before networking is configured. Super+Left/Right switches the active tab.
 An explicitly selected init script can instead hand off with
 `session app://session.pxe --configure-network --tcp-server ADDRESS PORT`,
 optionally adding `--tcp-count COUNT`. The trusted launcher creates an exact
-bound listener and starts the [sequential TCP echo consumer](../devices/tcp.md#sequential-echo-server)
+bound listener and starts the [concurrent TCP echo consumer](../devices/tcp.md#concurrent-echo-server)
 with only that listener, memory, clock and output streams. Bootstrap init has
 separate TCP LISTEN authority; ordinary session startup delegates only CONNECT.
 This opt-in handoff replaces that init's shell and does not expose a remote shell.

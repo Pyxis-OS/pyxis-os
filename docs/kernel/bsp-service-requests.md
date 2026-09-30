@@ -2,8 +2,8 @@
 
 Caelum separates task execution from BSP-owned subsystem operations through a
 closed service catalog and one FIFO executor. Allocation, VM mutation and final
-object destruction remain BSP-owned. The public capability ABI and synchronous
-call behavior are unchanged.
+object destruction remain BSP-owned. The request mechanism stays internal to the
+kernel; each service defines its own public operation contract.
 
 ## Ownership boundaries
 
@@ -14,6 +14,7 @@ call behavior are unchanged.
 | Subsystem | Typed inputs/results, authority checks, resource loans, actual operation and rollback |
 | BSP executor | Nonblocking operations under the existing allocation and VM contracts |
 | HOST worker | Blocking filesystem transport and final completion of forwarded requests |
+| Network worker | TCP readiness observation and final completion of forwarded waits |
 
 The catalog and dispatch are explicit. Adding a service changes its subsystem
 and the catalog rather than adding scheduler payloads, service sweeps or pending
@@ -86,6 +87,13 @@ before common completion; unavailable forwarding and startup failure obey the
 same ownership rule. FIFO admission does not promise completion order across
 services. See [HOST ownership](../devices/virtio-fs.md#native-directory-and-file-objects).
 
+Readiness waits also use FORWARDED. The executor hands their copied interests to
+the network worker, which checks current TCP state before deadlines and detaches
+all registrations/object references before completion. The typed wait record fits
+inside the existing request area; it adds no per-task allocation or global waiter
+slot pool. A poll can still require this worker handoff. It never waits for an I/O
+condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts).
+
 ## Service catalog
 
 | Service | Submission and retained contract |
@@ -100,6 +108,7 @@ services. See [HOST ownership](../devices/virtio-fs.md#native-directory-and-file
 | Private memory | Deferred; inactive process loan for allocation/release |
 | Display acquire/present/release | Deferred; inactive process and display loans for every operation |
 | HOST forwarding | Ordinary admission; existing HOST worker owns transport and final completion |
+| Readiness wait | Ordinary admission; network worker owns TCP observations, transient object references and final completion |
 
 Authority checks remain in their owning subsystems; callers validate user buffers
 and copy replies. Services clear loans before completion. Capability growth or
