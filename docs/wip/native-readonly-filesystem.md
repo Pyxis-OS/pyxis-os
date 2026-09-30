@@ -1,10 +1,10 @@
 # Native read-only filesystem mounts
 
-Status: tasks 1–6 complete, 2026-09-30. The contract, core continuation and
+Status: tasks 1–7 complete, 2026-09-30. The contract, core continuation and
 [bounded kernel adapter](../devices/filesystem-native-adapter.md) are implemented.
 Trusted init can mount and delegate native roots; directory/file protocols and
 executable capture forward to the worker. Scoped filesystem information exposes
-retained identity and shared-pool capacity; Fastfetch integration is task 7. The
+retained identity and shared-pool capacity; Fastfetch consumes selected roots. The
 initial budgets cover the measured inputs, not every valid image. Update each
 task in its delivery PR.
 
@@ -549,8 +549,14 @@ Unavailable usage/quota/percentage fields are absent, never reported as zero.
 records ordinary user syscalls, attenuation, parent-close lifetime, remote
 forwarding and final cleanup. The native request remains 4,592 bytes.
 
-Task 7 is next: adapt Fastfetch Disk to explicitly selected bindings and these
-scoped observations, preserving unavailable-value and shared-capacity semantics.
+Task 7 adds Fastfetch Disk for explicitly selected native bindings with observation
+authority. Shared capacity, identity and health have separate native fields; usage,
+volume totals, timestamps and percentages remain unavailable. Existing delegation
+needed no changes. [Consumer validation](../userland/fastfetch.md#native-disk-validation)
+records local/remote display, text/JSON redirection, formatting, repeated bindings
+and absent disk/observation authority.
+
+Task 8 remains: validate the combined workflow and close the milestone.
 
 Agreed scope limitations are tracked in [technical debt](../technical-debt.md#native-mount-design-limits).
 
@@ -591,7 +597,7 @@ Agreed scope limitations are tracked in [technical debt](../technical-debt.md#na
    query and library interface. Document field units, shared-pool meaning,
    verification status, unavailable fields and observation authority. Read queries
    must not trigger a full consistency scan or acquire additional authority.
-7. [ ] **Adapt Fastfetch Disk.** Add the minimal native adapter, explicit resource
+7. [x] **Adapt Fastfetch Disk.** Add the minimal native adapter, explicit resource
    forwarding if needed, recipe/pin changes and normal image integration. Exercise
    local/remote display, redirected text/JSON and absent disk/query authority.
    Preserve unavailable-value and upstream error behavior; do not broaden the port.

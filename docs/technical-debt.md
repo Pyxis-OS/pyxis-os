@@ -878,7 +878,7 @@ No dirty suffix or clean-tree attestation is currently implemented.
 ## Fastfetch first-port boundary
 
 The [implemented port](userland/fastfetch.md) uses explicit
-native-URI JSON/JSONC configs, one-shot text/JSON output and nine selected modules.
+native-URI JSON/JSONC configs, one-shot text/JSON output and ten selected modules.
 Automatic config discovery, config/cache writes, dynamic refresh, image logos,
 Lua execution and executable/network helpers are excluded. Existing upstream
 configs may encounter unsupported diagnostics or upstream fallback behavior.
@@ -888,6 +888,16 @@ The normal image packages this port. Narrow terminals retain upstream layout,
 so logo/data lines may wrap; use `--logo none` or shorter formats. Revisit layout
 only with a concrete display requirement, without changing upstream formatting
 as part of routine platform integration.
+
+Disk reports only explicitly selected native roots with observation authority.
+Shared-pool capacity is separately labeled; usage, volume totals, quotas,
+guarantees and percentages remain unavailable until the filesystem observation
+contract establishes their meaning and evidence. Repeated bindings/volumes can
+share a pool ID and capacity, so consumers must not sum those rows. Revisit richer
+Disk values with a concrete verified core accounting interface, not inferred
+used/free arithmetic. Folder/glob filters remain unsupported on Pyxis; their
+Unix path grammar is not a capability-binding selector. Add selection only with
+a concrete caller need and an explicit native binding contract.
 
 Uptime exposes duration since HPET initialization. JSON bootTime is null;
 calendar boot-time/age placeholders are unset and render empty, so configurations
