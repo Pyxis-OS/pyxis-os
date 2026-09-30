@@ -508,7 +508,8 @@ static enum call_status enqueue_output(struct terminal_session *session,
         /* Number assignment and the whole record share this queue insertion. */
         const struct terminal_command_complete *completion = bytes;
         struct terminal_command_complete payload = {
-          .command = session->completed_commands + 1, .status = completion->status,
+          .command = session->completed_commands + 1,
+          .kind = completion->kind, .status = completion->status,
         };
         ring_copy_in(session->output_data, TERMINAL_OUTPUT_CAPACITY, tail, &payload, sizeof(payload));
         session->completed_commands = payload.command;
@@ -625,6 +626,24 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
   return (struct syscall_result){status, 0};
 }
 
+static bool valid_completion(uint64_t kind, int64_t status)
+{
+  switch (kind) {
+  case TERMINAL_COMPLETION_EXITED:
+    return status >= INT32_MIN && status <= INT32_MAX;
+  case TERMINAL_COMPLETION_BUILTIN:
+    return status == 0 || status == 1;
+  case TERMINAL_COMPLETION_FAULTED:
+  case TERMINAL_COMPLETION_TERMINATED:
+  case TERMINAL_COMPLETION_LAUNCH_FAILED:
+  case TERMINAL_COMPLETION_REJECTED:
+  case TERMINAL_COMPLETION_LAUNCHED:
+    return status == 0;
+  default:
+    return false;
+  }
+}
+
 struct syscall_result terminal_events_call(struct kernel_object *object,
     uint64_t rights, uint64_t operation, uintptr_t request_address,
     size_t request_size)
@@ -636,16 +655,17 @@ struct syscall_result terminal_events_call(struct kernel_object *object,
     return (struct syscall_result){CALL_DENIED, 0};
   }
   struct terminal_command_complete_request request = {0};
-  if (request_size != sizeof(request.status)) {
+  size_t payload_size = sizeof(request) - sizeof(request.header);
+  if (request_size != payload_size) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (!copy_from_user(&request.status, request_address, sizeof(request.status))) {
+  if (!copy_from_user(&request.kind, request_address, payload_size)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (request.status > 1) {
+  if (!valid_completion(request.kind, request.status)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  struct terminal_command_complete completion = {.status = request.status};
+  struct terminal_command_complete completion = {.kind = request.kind, .status = request.status};
   struct terminal_session *session = ((struct terminal_end *)object)->session;
   size_t written;
   enum call_status status = enqueue_output(session, TERMINAL_RECORD_COMMAND_COMPLETE,

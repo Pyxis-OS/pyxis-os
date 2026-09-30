@@ -76,9 +76,11 @@ For command tools without a controlling terminal, use the
 [persistent machine-client workflow](../userland/remote-terminal.md#persistent-use-through-command-tools).
 Wait for each typed completion event before sending the next shell command;
 while Kilo or another foreground reader runs, input belongs to that program.
-Completion status 0 means success and 1 means failure. Keep compiler diagnostics
-and check completion before executing an output file that may predate a failed
-build. Program output is base64 JSON data, separate from completion events.
+A completion's `kind` distinguishes `exited` with the exact `exit_status`,
+launch failure, builtin status and rejected input. Keep compiler diagnostics and
+check for `exited` with status 0 before executing an output file that may
+predate a failed build. `--no-shell-echo` removes the shell's prompt and input
+redraws from captured output. Program output is base64 JSON data, separate from completion events.
 
 Existing benchmarks can report through that same connection, for example:
 

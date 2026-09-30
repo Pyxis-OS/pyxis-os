@@ -43,28 +43,27 @@ do not change [AGENTS.md](../../AGENTS.md) or authorize implementation.
 
 ## Remote validation follow-up
 
-Claude reported two nonblocking limitations during sha256sum validation:
+Claude reported two nonblocking limitations during sha256sum validation. Both
+are now implemented, as recorded in the
+[remote contract](../userland/remote-terminal.md#client-modes):
 
-- Machine-mode output includes the shell's input echo and per-character line
-  redraws, requiring cleanup before comparing program output. Consider an
-  explicit session option that suppresses shell input echo/redraws at the source.
-  Do not strip arbitrary terminal sequences from application output: those bytes
-  may be legitimate output. The option's scope and negotiation remain to be
-  designed; machine mode currently preserves the terminal byte stream.
-- `command_complete` reports shell success/failure, not the child's numeric
-  exit code, as the [remote contract](../userland/remote-terminal.md#client-modes)
-  already documents. A future completion result should distinguish normal exit
-  with its exact code, launch failure, and fault/termination. Preserve the shell's
-  pipeline-status policy and the distinction between background launch completion
-  and child exit; individual pipeline-stage results need not be added together.
+- Implemented: `pyxis-remote --machine --no-shell-echo` negotiates quiet
+  root-shell input in HELLO. Captured output then contains program output and
+  shell diagnostics without the prompt, echo or line redraws. Application bytes
+  are not filtered. Measured sessions showed quiet output as a byte-exact suffix
+  of the default output.
+- Implemented: `command_complete` carries a kind. `exited` reports the exact
+  signed exit code of the last pipeline stage. `faulted`, `terminated`,
+  `launch_failed`, `builtin` (0/1), `rejected` and `launched` distinguish the
+  other outcomes. Background completion still describes launch, not later exit,
+  and individual pipeline-stage results are still not reported.
 
-Revisit these as a bounded remote-tool improvement when validating consumers with
-distinct nonzero outcomes, such as grep. Until exact codes are observed separately,
-reports based only on `command_complete` establish matching success/failure, not
-identical numeric exit statuses.
+Still open and outside that contract: per-stage pipeline results,
+background-exit notification and quiet input for interactive clients. Revisit
+them only when a consumer needs them.
 
-Audit of the uniq and sha256sum validation: rerunning the unpatched host
-references with raw codes gave only 0 and 1, with 1 for exactly the failure cases
+Audit of the uniq and sha256sum validation, which predates typed completion:
+rerunning the unpatched host references with raw codes gave only 0 and 1, with 1 for exactly the failure cases
 (5 uniq, 6 sha256sum). Every guest failure case shows the shell's `Exited with
 status 1` diagnostic, which carries the child's numeric code, so failures matched
 exactly. Guest successes were observed as `command_complete` status 0 with no
@@ -74,7 +73,7 @@ from the last stage, so that combination means every stage exited 0. This is
 source-confirmed; the codes were not captured in a typed event. The [uniq reference](../userland/uniq.md#validation-evidence) now states
 this; the merged sha256sum PR descriptions (ports #31, Pyxis #273) say "exit
 statuses matched" and should be read with the same qualification. Parsing shell
-diagnostics is exactly what a typed exit-code result would replace.
+diagnostics is what the typed exit-code result now replaces.
 
 ## Process experiment and open suggestions
 

@@ -82,22 +82,45 @@ Program output cannot forge an event. Session FINAL describes shell outcome,
 group cleanup and output draining. Transport EOF without FINAL is not successful
 completion.
 
-A completion event has this shape:
+`--no-shell-echo`, accepted only with `--machine`, asks the server to start the
+root shell with its quiet line editor. The shell then writes no prompt, input
+echo, per-character redraw, cursor or style control, submission newline,
+overflow color or `^C`. Editing keys, Ctrl+C cancellation, EOF and the line
+limit, including its prompt-derived geometry, are unchanged. Application output
+and controls, shell diagnostics and the foreground launcher's FRESH_LINE are
+not filtered or altered. Commands and session successors started by the shell
+do not inherit the option. Without it, machine and interactive sessions keep the
+full line-editor presentation.
+
+Completion events have a `kind`; only `exited` and `builtin` carry a value:
 
 ```json
-{"type":"command_complete","command":1,"status":0}
+{"type":"command_complete","command":1,"kind":"exited","exit_status":2}
+{"type":"command_complete","command":2,"kind":"launch_failed"}
+{"type":"command_complete","command":3,"kind":"builtin","status":1}
+{"type":"command_complete","command":4,"kind":"launched"}
 ```
 
+| Kind | Meaning |
+| --- | --- |
+| `exited` | Last foreground stage exited; `exit_status` is its exact signed 32-bit code |
+| `faulted`, `terminated` | Last foreground stage faulted or was terminated |
+| `launch_failed` | External command preparation or launch failed, such as a missing image or redirect |
+| `builtin` | Builtin succeeded (`status` 0) or failed (1), including invalid builtin arguments |
+| `rejected` | Parse error, command-form error or submitted line-limit rejection |
+| `launched` | Background external command launched; its later exit is not reported |
+
 The kernel assigns consecutive command numbers starting at 1 per terminal.
-Status is the shell's success (0) or failure (1), not the child's numeric exit
-code. Foreground commands wait for cleanup; pipelines wait for all stages and
-use the last stage's result. Background commands report launch outcome only.
-Syntax/launch errors and submitted overlong lines report failure. Empty or
+Foreground commands wait for cleanup; pipelines wait for all stages and report
+the last stage. `session` and `service` remain builtin transactions even when
+they launch processes. Existing diagnostics precede the completion. Empty or
 space/tab-only lines below the line limit, cancelled/lost input and EOF with an
 unfinished line emit nothing. Line-limit rejection takes precedence over blank
-input. Explicit `exit` emits success before FINAL. Fatal wait, cleanup or
-terminal errors, including failed event emission, end the shell unsuccessfully
-without inventing or retrying a completion.
+input. Explicit `exit` and a successful `session` handoff emit builtin success
+before FINAL. Fatal wait, cleanup or terminal errors, including failed event
+emission, end the shell unsuccessfully without inventing or retrying a
+completion. The richer kind is reporting only; shell control flow and script
+policy still use success or failure.
 
 Events follow output already accepted by the terminal. Background output may
 follow them; they do not mean every descendant is silent. Interactive clients
@@ -135,8 +158,9 @@ tail -n 20 SESSION_DIR/events.jsonl
 Wait for its `command_complete` before submitting the next shell command;
 foreground programs may read stdin themselves. Track the last consumed line or
 file offset to collect output incrementally; a trailing partial JSON line is not
-a record yet. Decode only `output.base64` as base64. The session stays open across
-commands, including commands with status 1. After the final command:
+a record yet. Decode only `output.base64` as base64. Add `--no-shell-echo` after
+`--machine` when captured output should contain only program output and shell
+diagnostics. The session stays open across commands, including failed ones. After the final command:
 
 ```sh
 printf 'exit\n' >SESSION_DIR/input
@@ -157,7 +181,7 @@ coalesced frames and short writes are ordinary TCP behavior.
 
 | Direction / type | Payload |
 | --- | --- |
-| Client HELLO (1) | Two u32: columns 1–512, rows 1–256 |
+| Client HELLO (1) | Three u32: columns 1–512, rows 1–256, options (bit 0 NO_SHELL_ECHO) |
 | Client INPUT (2) | 1–4096 input bytes |
 | Client END_INPUT (3) | Empty; preserve queued input, then EOF |
 | Client CLOSE (4) | Empty; terminate the session group |
@@ -167,12 +191,15 @@ coalesced frames and short writes are ordinary TCP behavior.
 | Server TAB_WIDTH (19) | One u64, 1–32 |
 | Server ERROR (20) | One u32 error code |
 | Server FINAL (21) | Four u32: cause, process reason, signed exit-status bits, drain outcome |
-| Server COMMAND_COMPLETE (22) | One u64 command number, then one u32 status (0 or 1); exactly 12 bytes |
+| Server COMMAND_COMPLETE (22) | u64 command number, u32 kind, u32 status; exactly 16 bytes |
 
 HELLO must arrive within ten seconds, precede other client frames and appear
-once. INPUT after END_INPUT, malformed lengths and unknown types are rejected.
+once. Unknown option bits or any other HELLO size are rejected as a bad frame. INPUT after END_INPUT, malformed lengths and unknown types are rejected.
 COMMAND_COMPLETE follows READY and precedes FINAL in terminal output order.
-The client rejects skipped/repeated numbers, overflow and status values above 1.
+Kinds are exited (1), faulted (2), terminated (3), launch failed (4), builtin
+(5), rejected (6) and launched (7). Status carries signed exit-code bits for
+exited, 0 or 1 for builtin and must be zero otherwise. The client rejects
+skipped/repeated numbers, overflow, unknown kinds and invalid status values.
 END_INPUT is idempotent. READY precedes terminal records and FINAL. Errors may
 reject admission before READY or precede an admitted session's FINAL. Error codes
 are bad frame (1), launch failure (2), resource failure (3), internal failure (4)
@@ -358,3 +385,59 @@ The final ports change required a Kilo/ports image rebuild, not a compiler-conta
 rebuild. Validation used the actual clients, manual QEMU input and read-only GDB;
 no tests, new exercise programs, fault injection or boot/output automation were
 added. All client, QEMU, debugger and virtiofsd jobs were stopped after validation.
+
+### Quiet input and typed completion
+
+These checks used userland `f635ec9` with the Pyxis ABI, wire and client
+changes from the same PR. After rebasing onto userland libc read-ahead as
+`c99301f`, a rebuilt image repeated the core checks: TCC build, a `-9 | 42`
+pipeline reporting 42, builtin failure, launch failure, Lua color output and
+`exit` before FINAL. Quiet output again matched a byte-exact suffix of default
+output for all seven commands. The build was an ordinary `make -j16 image` with the
+existing compiler, and no compiler-container rebuild was needed. Interactive
+QEMU 10.2.2 ran under nested KVM with four CPUs, 256 MiB, VirtIO NET/RNG, the
+default Remote init and `TCP_FORWARD=12323:2323`. GDB was attached through
+`make debug`. These are nested-VM observations.
+
+A quiet and a default persistent machine session received the same commands
+through FIFOs. The quiet session wrote no output for its prompt, typed input,
+Backspace/Left/End editing, a Ctrl+C-cancelled line or a blank line. Neither
+cancellation nor blank input produced a completion in either mode. For every
+compared command, the quiet output records were a byte-exact suffix of the
+default session's output. In the default session they were preceded only by
+line-editor presentation ending in the submission newline. This held for the
+`\x1b[31m`, tab, `\r` and `\x1b[2K` bytes from Lua and for an unterminated,
+styled line followed by the launcher's FRESH_LINE. Completion kinds and values
+matched between the sessions.
+
+A TCC-built helper returned its argument, and exact codes 2, -3, 2147483647 and
+-2147483648 were reported as `exited`. Pipelines `3 | 5` and `7 | 0` reported
+5 and 0 after both stage diagnostics. A null-store program reported `faulted`
+alone and as the last pipeline stage. `cd nowhere`, `exit now`, a failed
+`session` launch and a denied `service start` reported builtin status 1.
+Successful `cd` reported builtin status 0. An unfinished quote, a builtin in a
+pipeline and an 1100-byte line reported `rejected`. A missing image, a missing
+input redirect and a missing background image reported `launch_failed`. A
+background Lua loop reported `launched`, and its output arrived after that
+completion. At 20x2, both modes accepted a 30-byte line and rejected 31 bytes,
+matching the limit derived from the 9-byte prompt. EOF after an unfinished line
+emitted nothing. `exit` and a `session app://shell.pxe` handoff each reported
+builtin success before FINAL.
+
+HELLO with option bit 1, option bit 31 or the former 8-byte payload each
+received ERROR bad frame. The interactive client still rendered prompts,
+editing and diagnostics, and Ctrl+] closed it with acknowledged termination.
+The local Development shell still showed its prompt, echo and `ls` output.
+A GDB breakpoint on `terminal_events_call` showed 16-byte requests with
+kind/status 1/2147483647 for a pipeline's last stage and 4/0 for a launch
+failure.
+
+`terminated` completions, fatal wait/cleanup/emission paths and the outcome of
+allocation failures during launch preparation were reviewed in source, not
+exercised. Remote commands receive no launcher, so a child shell could not be
+started to observe non-inheritance at runtime. The option is carried only as
+the root shell's own argument. The shell passes each command's own argument
+list, and the successor's in the `session` case, so non-inheritance is
+confirmed by source review. The FIFO clients, a small host script that compared
+decoded captures, QEMU and GDB were stopped afterwards. No tests, exercise
+programs or boot/output automation were committed.

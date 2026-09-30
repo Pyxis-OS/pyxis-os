@@ -31,7 +31,13 @@ fallback, Caelum logs and shell output share a TTY and can disrupt line editing.
 ## Commands and quoting
 
 The shell uses libterm's line editor and waits for the complete foreground
-command or pipeline. The prompt shows the working path, for example
+command or pipeline. An interactive shell launched with `--no-echo` uses the
+quiet editor instead: no prompt, input echo, redraw, cursor or style control,
+submission newline or `^C` is written, while editing, cancellation, EOF and the
+prompt-derived line limit are unchanged. Application output and shell
+diagnostics are unaffected, and the option is never passed to children or
+session successors. Other interactive-shell arguments are rejected; the remote
+server selects `--no-echo` for machine clients that request it. The prompt shows the working path, for example
 `home://notes> `. Long paths show an ellipsis and their tail, keeping at least half the first row for
 input; control and non-ASCII bytes display as `?`. Whitespace separates
 arguments. Single and double quotes preserve whitespace and allow empty
@@ -67,10 +73,18 @@ not accumulate into the shell's exit status; unrecoverable terminal, wait or
 cleanup failures terminate it with failure.
 
 With an optional `terminal_events` grant, the interactive root shell reports one
-ordered completion for each nonblank submitted line. Status is success (0) or
-failure (1), including syntax/launch errors and submitted line-limit rejection.
-Foreground work reports after the existing waits, using the last pipeline stage;
-background work reports launch outcome. `exit` reports success before leaving.
+ordered, typed completion for each nonblank submitted line. Foreground external
+work reports after the existing waits: the last pipeline stage's exact exit code,
+fault or termination. External preparation or launch failure, including a
+missing image or unopenable redirect, reports launch failure. A successful
+background command reports launch, not its later exit. Recognized builtins,
+including invalid builtin arguments, report builtin success (0) or failure (1);
+`session` and `service` remain builtin transactions even though they launch
+processes, and `exit` or a successful `session` handoff reports success before
+the shell leaves. Parse errors, command-form errors such as a builtin in a
+pipeline or with redirection, and submitted line-limit rejection report
+rejection. Diagnostics are written before the completion. This outcome is
+reporting only: script stopping, `exit` and fatal handling are unchanged.
 Blank lines below the line limit, cancellation, lost input and EOF without
 submission emit nothing; submitted line-limit rejection takes precedence.
 Fatal command handling emits nothing; failed event emission ends the shell with

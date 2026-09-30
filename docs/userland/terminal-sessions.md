@@ -58,10 +58,21 @@ operation; helper outputs remain unchanged on failure.
 | DATA | 1–4096 bytes of native terminal output |
 | FRESH_LINE | None |
 | TAB_WIDTH | One uint64_t, 1–32 columns |
-| COMMAND_COMPLETE | Two uint64_t: consecutive command number and status 0/1 |
+| COMMAND_COMPLETE | uint64_t command number, uint64_t kind and int64_t status |
 
-`terminal_command_complete(events, status)` accepts only success (0) or failure
-(1). It queues a whole record after previously accepted output, waiting
+`terminal_command_complete(events, kind, status)` accepts these kinds:
+
+| Kind | Status |
+| --- | --- |
+| EXITED (1) | Exact signed 32-bit exit code of the last waited stage |
+| FAULTED (2), TERMINATED (3) | Zero |
+| LAUNCH_FAILED (4) | Zero; external command preparation or launch failed |
+| BUILTIN (5) | 0 for success or 1 for failure |
+| REJECTED (6) | Zero; syntax, command-form or submitted line-limit rejection |
+| LAUNCHED (7) | Zero; successful background launch, not later process exit |
+
+The kernel and libpyxis reject other kinds and out-of-range status with
+BAD_REQUEST. Drained records must satisfy the same rules. The call queues a whole record after previously accepted output, waiting
 interruptibly for space in the same bounded output queue. Hangup or execution
 group stopping fails ENDPOINT_CLOSED. The kernel assigns numbers starting at 1
 under the queue lock only when insertion succeeds; failed emits consume no
