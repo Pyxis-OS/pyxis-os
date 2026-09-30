@@ -40,6 +40,7 @@ enum object_type {
   OBJECT_TERMINAL_OUTPUT = 33,
   OBJECT_TERMINAL_ATTACHMENT = 34,
   OBJECT_EXECUTION_GROUP = 35,
+  OBJECT_TERMINAL_EVENTS = 36,
 };
 
 struct execution_group;

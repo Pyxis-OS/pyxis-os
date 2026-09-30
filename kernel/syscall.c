@@ -192,6 +192,12 @@ static struct syscall_result call_object(handle_t handle,
     }
     return terminal_attachment_call(object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_TERMINAL_EVENTS:
+    if (header.protocol != PROTOCOL_TERMINAL_EVENTS) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return terminal_events_call(object, rights, header.operation,
+        request_address, request_size);
   case OBJECT_TERMINAL_INPUT:
   case OBJECT_TERMINAL_OUTPUT:
     if (header.protocol != PROTOCOL_CONSOLE) {

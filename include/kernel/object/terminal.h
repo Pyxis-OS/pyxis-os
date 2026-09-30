@@ -16,7 +16,7 @@ struct terminal_create_service_request {
   enum call_status result;
 };
 
-/* BSP, IF=0. Install all three capabilities atomically or release the session. */
+/* BSP, IF=0. Install all four capabilities atomically or release the session. */
 void terminal_create_execute(struct terminal_create_service_request *request);
 struct kernel_object *terminal_service_create(void);
 
@@ -39,5 +39,8 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
 struct syscall_result terminal_attachment_call(struct kernel_object *object,
     uint64_t rights, uint64_t operation, uintptr_t request_address,
     size_t request_size, uintptr_t reply_address, size_t reply_capacity);
+struct syscall_result terminal_events_call(struct kernel_object *object,
+    uint64_t rights, uint64_t operation, uintptr_t request_address,
+    size_t request_size);
 
 #endif

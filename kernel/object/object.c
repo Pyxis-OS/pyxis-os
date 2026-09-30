@@ -41,6 +41,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_TERMINAL_SERVICE;
   case OBJECT_TERMINAL_ATTACHMENT:
     return PROTOCOL_TERMINAL_ATTACHMENT;
+  case OBJECT_TERMINAL_EVENTS:
+    return PROTOCOL_TERMINAL_EVENTS;
   case OBJECT_TERMINAL_INPUT:
   case OBJECT_TERMINAL_OUTPUT:
   case OBJECT_CONSOLE:
@@ -159,6 +161,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~TERMINAL_SERVICE_RIGHT_CREATE);
   case OBJECT_TERMINAL_ATTACHMENT:
     return !(rights & ~TERMINAL_RIGHTS);
+  case OBJECT_TERMINAL_EVENTS:
+    return !(rights & ~TERMINAL_EVENTS_RIGHT_EMIT);
   case OBJECT_TERMINAL_INPUT:
     return !(rights & ~CONSOLE_RIGHT_READ);
   case OBJECT_TERMINAL_OUTPUT:
