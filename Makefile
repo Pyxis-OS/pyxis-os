@@ -61,9 +61,6 @@ OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM
 include kernel/net/lwip/build.mk
 include kernel/fs/build.mk
 
-build/kernel/object/mount.o build/kernel/user/boot.o build/kernel/user/launch.o \
-build/kernel/syscall.o: CPPFLAGS += -Ifs/include
-
 .PHONY: all kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools fs-tools sdk sdk-headers userspace ports initrd image run debug clean check-toolchain FORCE
 all: kernel
 
