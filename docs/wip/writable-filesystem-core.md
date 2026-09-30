@@ -340,10 +340,61 @@ write, together with the cleanup failure and resulting pool health. Never
 collapse those facts into zero progress, an uncertain user write, or an
 unqualified healthy success.
 
-Task 1 remains open for concrete result/status interfaces,
-directory-continuation and operation-reference mechanisms, persistent
-orphan encoding, bounded allocation/reclamation algorithms and admission
-costs, the recovery validation mechanism, and implementation PR boundaries.
+## Agreed synchronous maintenance and stopping condition
+
+Agreed during task 1, 2026-09-30; implementation and numerical proofs remain
+open. Reclamation must progress without another application write. Internal
+maintenance commits may advance the older retained slot while preserving the
+current namespace and file contents.
+
+| Step | Effect |
+| --- | --- |
+| Commit a user mutation | Replaced blocks become retired; the older root can still protect them. |
+| Publish a maintenance generation | Advance the older slot without requiring another user mutation. |
+| Publish a reclamation batch | Mark eligible retired ranges free after checking both retained roots and operation/I/O references. |
+| Allocate in a later transaction | Reuse those ranges only after durable free-map publication and a fresh protection check. |
+
+Maintenance obeys the ordinary COW accounting and two-flush publication protocol.
+Its replacement allocation-map nodes and pool root come from storage already
+proven reusable; it cannot allocate from ranges it is freeing in that same
+publication. Its own replaced metadata is retired and protected normally.
+
+Cleanup does not try to reach zero retired blocks, because replacing cleanup
+metadata can itself retire more metadata. Complete maintenance once eligible
+user-data and orphan cleanup is drained and the remaining retired maintenance
+metadata fits a strictly bounded pool-wide remainder, fully charged to workspace.
+That bound covers the accumulated remainder across successive maintenance cycles;
+it is not another allowance added after each write. Ineligible storage remains
+protected and accounted for, rather than being hidden in the maintenance
+remainder. The allocator design must derive the numerical bound and prove that
+repeated editing keeps it bounded.
+
+Use synchronous maintenance in this first writer:
+
+- Before admission, reclaim eligible storage when needed to restore workspace.
+- After confirmed mutations, perform maintenance needed to keep accumulated
+  debt within bounds, including retained-slot advancement when required.
+- On the last release of an orphan, drain its cleanup through bounded
+  transactions once handle and operation/I/O references have ended, even if no
+  further user write follows.
+- During writable reopening, drain abandoned orphans as already agreed.
+
+The last close of a large unlinked file may take substantial time: each
+transaction is bounded, but the complete cleanup can require many transactions.
+Closure releases the runtime reference even if cleanup fails; persistent orphan
+state and committed cleanup progress remain recoverable. Confirmed user progress
+and maintenance failure are reported independently. The existing pool-health
+rules take precedence: stopped mutation or uncertain publication does not permit
+cleanup writes during close or an automatic retry of failed maintenance. Closing
+still does not substitute for an application-requested checkpoint.
+
+Task 1 remains open for concrete result/status interfaces, directory-continuation
+and operation-reference mechanisms, persistent orphan encoding, bounded
+allocation/reclamation algorithms and admission costs, the recovery validation
+mechanism, and implementation PR boundaries. Numerical admission proofs must
+cover the complete maintenance cycle, its own allocation-map/root replacements
+and the bounded remainder; existing percentage reserves establish none of these
+cost bounds.
 
 ## Publication, reclamation and admission gates
 
@@ -370,8 +421,8 @@ Before implementation, task 1 must establish:
 - How validated ownership/reachability evidence is maintained across successive
   commits and reconstructed on reopening, without relying on obsolete readers.
 - Live-view identity and orphan encoding, mechanisms for directory-local
-  continuation invalidation and operation references, and retained-state
-  advancement when no user write follows.
+  continuation invalidation and operation references, and bounded implementation
+  of the agreed synchronous maintenance and retained-state advancement policy.
 - Concrete interfaces implementing the agreed progress/failure outcomes and
   pool access states, including cleanup reporting and close/reopen requirements.
 - Compatibility checks for writable access. Preserve supported extension semantics
