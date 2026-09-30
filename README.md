@@ -3,6 +3,11 @@
 Caelum is the freestanding GNU C23 x86_64 kernel of Pyxis OS. Development targets
 QEMU booted through OVMF/UEFI and Limine, with a native userspace and capability ABI.
 
+![Pyxis running Doom in QEMU alongside a remote terminal with fastfetch and an HTTPS pipeline](docs/images/pyxis-doom-remote-terminal.png)
+
+Doom in the Development space, alongside a remote shell showing native filesystem
+information and piping an HTTPS response into `sha256sum`.
+
 Requires GNU Make, a host C compiler, the [Pyxis GCC/binutils toolchain](toolchain/README.md),
 QEMU, GNU cpio, xorriso, host Lua 5.4, and a matching raw OVMF code/variables pair.
 Userspace, ports, lwIP and the filesystem core are [pinned submodules](docs/development/sdk-and-repositories.md).
