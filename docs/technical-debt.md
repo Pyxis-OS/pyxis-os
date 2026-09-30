@@ -728,6 +728,34 @@ unlimited IPC waits, and queued work can compound that delay. Cancellation canno
 interrupt a blocking network operation instantly. Revisit with asynchronous
 service work and wait sets; no worker-process or thread framework is included.
 
+## Native mount design limits
+
+The [native read-only mount contract](wip/native-readonly-filesystem.md) is agreed;
+these are integration limits, not implemented behavior.
+The selected core continuation prerequisite must avoid rescanning the returned
+prefix and retain no per-enumeration kernel state. It does not remove existing
+core ancestry scans or allocation-proof costs; measure those during integration
+and revisit only when they limit representative listings. Stateless page success
+must not be presented as global directory-count reconciliation.
+
+The OS READ grant continues to bundle file bytes and length, so native acquisition
+and descendant lookup must hold both core read and metadata rights. A persistent
+read-only grant lacking metadata cannot become an OS READ grant. Revisit when
+there is a concrete consumer for separately delegable OS file metadata; do not
+weaken core policy to accommodate the existing ABI.
+
+Trusted init scripts share one configured bootstrap principal in this milestone.
+They can delegate different subsets, but this is not independent authentication
+or admission for each session. Ordinary applications receive no principal-based
+reacquisition service or mount authority. Revisit with the identity broker/session
+admission work, keeping identity separate from held capabilities.
+
+The agreed starting bounds of 32 native requests and 8 MiB of live core payload
+need representative-image measurements during adapter implementation. A valid
+image may exceed the budget and return LIMIT; the cap does not cover all kernel
+allocation overhead or bound CPU/I/O work. Record measured peaks and revise the
+profile explicitly before claiming supported workload coverage.
+
 ## Filesystem host prototype limits
 
 The host-image tools record prototype reserve defaults, but no writable
