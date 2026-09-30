@@ -29,3 +29,6 @@ belong in [technical debt](technical-debt.md).
 Follow [AGENTS.md](../AGENTS.md) for the collaboration workflow. When a milestone
 finishes, turn its WIP document into a reference in the appropriate subject folder
 and update its links; Git retains the completed planning history.
+
+[Small-port workflow feedback](development/porting-feedback.md) records the uniq
+handoff lessons and the bounded experiment with lighter port planning.
