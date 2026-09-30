@@ -74,6 +74,7 @@ suffix or input-filtering policy is implemented. Documentation and dependency
 commits can change HEAD without changing kernel behavior. SDK or userland
 revisions are not substituted for the running kernel's revision.
 
-Fastfetch integration, libc additions and a permanent diagnostic command remain
-separate tasks in [the port milestone](../wip/fastfetch.md). This interface needs
-an updated SDK and userland build, not a compiler-container rebuild.
+The [standalone Fastfetch port](../../ports/fastfetch/README.md) consumes this
+interface. Default-image integration remains in [the port milestone](../wip/fastfetch.md);
+no permanent diagnostic command was added. This interface needs an updated SDK
+and userland build, not a compiler-container rebuild.

@@ -202,8 +202,8 @@ and proposes a smaller native information/display port. Existing clocks and
 console dimensions can be reused. The native system-information prerequisite is
 implemented, covering explicit delegation, CPU sampling, coherent allocator
 memory and the running kernel's short commit SHA. The bounded portable-core
-investigation and reusable libc additions are also complete. The next task is
-the native platform port; packaging and end-to-end validation follow it.
+investigation, reusable libc additions and standalone native port are complete.
+The next task is default-image packaging and broader integration acceptance.
 
 SDL2/GrafX2 remains a later graphical alternative. A desktop/compositor remains
 a separate [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting
