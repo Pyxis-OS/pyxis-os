@@ -1,9 +1,11 @@
 # Native read-only filesystem mounts
 
-Status: tasks 1–2 complete, 2026-09-30. The contract is agreed and the shared
-core continuation prerequisite is implemented. Task 3 is the bounded kernel
-adapter integration. No kernel mount or new ABI is implemented. Runtime numbers
-are agreed starting bounds to validate in the adapter task, not measured capacity. Update each task in its delivery PR.
+Status: tasks 1–3 complete, 2026-09-30. The contract, core continuation and
+[bounded kernel adapter](../devices/filesystem-native-adapter.md) are implemented.
+Internal jobs can prepare selected pool/volume backing; no native capability or
+mount ABI is exposed. Task 4 adds policy-approved directory/file objects. The
+initial budgets cover the measured inputs, not every valid image. Update each
+task in its delivery PR.
 
 ## Completion point
 
@@ -48,8 +50,8 @@ once when opening and retain pool/volume identities. A name being reused must no
 retarget an existing mount. Namespace binding names such as `data://` are not
 stored in the filesystem or derived automatically from volume names.
 
-The kernel binds a configured bootstrap principal to trusted init's mount
-authority. Applications cannot nominate a different principal in a request;
+The planned kernel mount path binds a configured bootstrap principal to trusted
+init's mount authority. Applications cannot nominate a different principal in a request;
 there is no `--principal` argument or authority derived from a volume's owner.
 The core must evaluate persistent grants within the trusted root, scope and
 rights ceiling before returning a root view. Knowing principal/object IDs is
@@ -297,8 +299,8 @@ extra volume reference. Closing the directory releases its view after in-flight
 uses finish. Independent enumerations and capability copies have no shared
 position. Stale continuations cannot keep a mount alive or reopen it. The core
 prerequisite is published in [pyxis-fs PR #9](https://git.internal/PyxisOS/pyxis-fs/pulls/9)
-at `017996b`; merge it before the parent pin update. No kernel enumeration
-implementation is introduced by this prerequisite.
+at `017996b`; both dependency and parent pin update are merged. No kernel
+enumeration implementation is introduced by this prerequisite.
 
 ### Worker, limits and final release
 
@@ -508,21 +510,22 @@ slot paths, denied LIST access, budget refusal and cleanup to zero charged bytes
 Both committed states of the populated image passed host checking; recursive
 extraction matched the source headers. Exact coverage and unexercised cases are
 recorded in [host validation](../../fs/docs/host-tools.md#directory-continuation-validation).
-No kernel runtime capacity or timing has been measured. Task 3 must
-record peak live core and adapter bytes for representative populated images,
-volume opening, policy acquisition and nested traversal; later object validation
-must include enumeration continuation/replay/end/abandonment, repeated mounts
-of the same instance, rejection of two cloned partitions on one disk, reservation
-lifetime through final cleanup and successful acquisition after the first
-instance closes. Use ordinary host tools, interactive boots and debugger
-inspection. If the initial profile cannot serve those images, revise the bounds
-explicitly with evidence; do not relabel LIMIT as corruption or silently increase
-the allowance.
+Task 3 linked that pin with kernel flags and implemented partition-bounded reads,
+shared budgets, asynchronous internal jobs and serial BSP opening/final release.
+[Adapter validation](../devices/filesystem-native-adapter.md#validation) records
+512-byte and 4 KiB guest opening, shared instances, cloned-partition rejection,
+reservation through final cleanup, later clone acceptance, queue saturation and
+zero final live allocation. Guest opening peaked at 255,336 core payload bytes
+and 105,808 adapter bytes. Host policy acquisition on the same image peaked at
+315,816 core bytes; this does not claim guest policy/lookup validation.
 
-Tasks 1–2 are complete. The published core dependency must merge before its
-parent pin update. No compiler-container rebuild is needed. Task 3 links that
-core and implements the bounded block/memory adapters; it has not started. Native
-enumeration must not fall back to reconstructing every prefix.
+Tasks 1–3 are complete. No compiler-container rebuild is needed. Task 4 has not
+started: add typed BSP user-request forwarding, policy-approved root/child views,
+read-only file/directory wrappers and their lifetime/rights enforcement. The
+internal job record opens backing only and is not an authority grant or a public
+asynchronous API. Later validation must cover guest acquisition, enumeration
+continuation/replay/end/abandonment and cleanup with retained object references.
+Native enumeration must not fall back to reconstructing every prefix.
 
 Agreed scope limitations are tracked in [technical debt](../technical-debt.md#native-mount-design-limits).
 
@@ -542,7 +545,7 @@ Agreed scope limitations are tracked in [technical debt](../technical-debt.md#na
    ordinary builds and manual host-tool/debugger inspection of multi-page
    enumeration. Publish a focused dependency PR before updating the parent pin;
    this prerequisite does not implement kernel objects or change the disk format.
-3. [ ] **Link the core and implement bounded block/memory adapters.** Integrate the
+3. [x] **Link the core and implement bounded block/memory adapters.** Integrate the
    pinned freestanding library into Caelum with kernel-appropriate flags; add
    partition-bounded reads, memory accounting and the agreed BSP worker ownership.
    Document manual preparation of a disposable GPT disk using existing host tools.

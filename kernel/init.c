@@ -14,6 +14,7 @@
 #include <kernel/panic.h>
 #include <kernel/pci.h>
 #include <kernel/gpt.h>
+#include <kernel/fs/native.h>
 #include <kernel/virtio/blk.h>
 #include <kernel/virtio/pci.h>
 #include <kernel/virtio/net.h>
@@ -55,6 +56,7 @@
   virtio_rng_start();
   virtio_blk_start();
   gpt_start();
+  nativefs_start();
 
   enum mm_result result = net_init();
   if (result != MM_OK) {
