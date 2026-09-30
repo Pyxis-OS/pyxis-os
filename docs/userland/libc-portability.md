@@ -1,5 +1,13 @@
 # Libc portability over the native ABI
 
+Libc targets ISO C: standard headers and functions should follow the ISO C
+contract, and gaps are recorded rather than approximated. The descriptor layer
+(`open`, `read`, `write`, `close`) is a bounded portability surface for ported
+software, not Unix emulation. The kernel, libpyxis and native interfaces remain
+capability-based and deliberately non-Unix; libc adapts them rather than
+reshaping them. Behavior that ISO C leaves undefined may be given a documented
+Pyxis guarantee, which is not portable behavior.
+
 The descriptor portability milestone is complete: libc provides process-local
 open/read/write/close over native file, console and pipe capabilities, shared
 with existing stdio. The image packages upstream sbase cksum and a restricted

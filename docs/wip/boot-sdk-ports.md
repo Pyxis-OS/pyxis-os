@@ -123,6 +123,10 @@ settles bounded publication/reclamation, live handles, admission and the scoped
 host failure-validation mechanism. FUSE and installation remain separate. These
 plans do not start implementation or displace explicitly assigned libc/remote work.
 
+The assigned libc track is [libc input read-ahead](stdio-input-buffering.md):
+block reads for buffered stdio on files and pipes, the fgets sticky-error fix,
+and remeasurement of the recorded uniq workload. It is input only.
+
 The [I/O reliability and attribution report](../development/io-reliability-attribution.md)
 closes the performance milestone. The former IPC/HTTP failures are resolved,
 and HOST publication now notifies the BSP. Profiling perturbation and remaining
