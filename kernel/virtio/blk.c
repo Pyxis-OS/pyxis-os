@@ -734,7 +734,7 @@ void virtio_blk_prepare(const struct boot_info *boot)
     klog("virtio-blk: no candidate device; block I/O unavailable\n");
     return;
   }
-  preparation = BLOCK_DEVICE_UNSUPPORTED;
+  preparation = BLOCK_DEVICE_SETUP_FAILED;
   disk.pci.name = "virtio-blk";
   if (!virtio_pci_prepare(&disk.pci, device, boot, sizeof(uint64_t), sizeof(uint32_t))) {
     return;
