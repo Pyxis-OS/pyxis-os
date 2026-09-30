@@ -478,8 +478,9 @@ No new tests, permanent probes, fault injection or boot automation were added.
 
 On 2026-09-30, kernel, SDK, ports, userland and default/configured image builds
 passed from Pyxis `b997ce3` plus task 6 and userland `63f6052`. Other dependency
-pins were unchanged. The native job/request remain 4,560/4,592 bytes, within the
-existing 4,928-byte task allocation. No compiler-container rebuild was needed.
+pins were unchanged for those runs. The native job/request remain 4,560/4,592
+bytes, within the existing 4,928-byte task allocation. No compiler-container
+rebuild was needed.
 
 Interactive QEMU/GDB used TCG, 256 MiB, two CPUs for local calls and four for the
 remote handoff, with the documented AHCI fix and read-only 512-byte-sector
@@ -523,3 +524,9 @@ buffer errors and resource-exhaustion paths were reviewed in source rather than
 injected. No HOST transport was attached in this task; its unchanged grant mask
 and unsupported query path were source-reviewed. No physical hardware or timing
 claim is made. Fastfetch integration and display validation remain task 7.
+
+Before delivery, main's independently merged uniq integration (`6c6ef84`) was
+merged into this branch. The userland pin `3b9ba3f` includes both observation and
+main's getline/isblank work; main's ports pin `e70862a` is preserved. The combined
+kernel/SDK/ports/userland/image rebuild and four-CPU nested-KVM default boot
+passed. The observation implementation and ABI were unchanged by that merge.
