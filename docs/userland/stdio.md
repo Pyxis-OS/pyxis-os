@@ -176,13 +176,16 @@ Each descriptor entry owns an optional BUFSIZ read-ahead buffer beside its handl
 and logical position. `fread`, and the `fgetc`/`getc`/`getchar`, `fgets` and
 `getline` input built on it, may fill that buffer with one backend transfer from
 a file or pipe and return the excess on later reads. Requests of at least BUFSIZ
-bytes read directly into the caller's memory. A file fill is capped at the
-representable offsets past the logical position, so speculation never turns a
-valid read into an error such as EOVERFLOW. Consoles are never read ahead:
-their input is shared with the parent shell, and ISO C treats them as
-interactive. `read` and `fread_some` return buffered bytes first, otherwise one
-exact transfer, so mixing them with stdio on one descriptor loses no bytes and
-exact consumers such as head stay exact.
+bytes read directly into the caller's memory. A file fill stays below LONG_MAX,
+the stdio position range, which also keeps it inside `host://`'s signed offset
+range. At or past that boundary, or when the request itself does not fit below
+it, the read is exact, so speculation never turns a valid read into an error
+such as EOVERFLOW. A fill happens only while the buffer is empty: EOF or a
+backend error reaches the request that caused it, after every buffered byte.
+Consoles are never read ahead: their input is shared with the parent shell, and
+ISO C treats them as interactive. `read` and `fread_some` return buffered bytes
+first, otherwise one exact transfer, so mixing them with stdio on one descriptor
+loses no bytes and exact consumers such as head stay exact.
 
 The buffer is allocated on the first buffered read and freed on close. If
 allocation fails, the descriptor stays unbuffered without an error. Only file
@@ -195,6 +198,37 @@ Read-ahead is private process memory and never accompanies a delegated stream.
 A child given the same pipe sees only bytes not yet fetched; a child given a
 file-backed stream starts at offset 0, as before. Read a stream you will
 delegate only with `read` or `fread_some`.
+
+#### Read-ahead validation
+
+Measured with QEMU 10.2.2 on q35 with KVM, four CPUs, 256 MiB, virtio-fs
+(virtiofsd 1.14.0) and virtio-net, inside the development VM, through the
+remote terminal's machine client. The final image used userland `f24e9d9`;
+the debugger check used the preceding pin `c99301f`, which differs only in the
+file fill cap. Probe programs were uncommitted.
+
+- Uniq: `uniq -c` on the 36,009-byte `host://` input from the
+  [uniq validation](uniq.md#validation-evidence), which took 20.4 s without
+  read-ahead, took 0.04 s in each of five runs, measured from host submission
+  to the completion event. Output was byte-identical to host `LC_ALL=C uniq -c`,
+  as was the output through `cat | uniq -c` and `uniq -c <`.
+- A debugger stop around `fseek(stdin, 0, SEEK_SET)` on a pipe, with 3,999 of
+  4,000 fetched bytes buffered, showed a -1/ESPIPE result. The entry's
+  position, buffer offsets and all 4,000 buffer bytes, and both FILE
+  indicators, were unchanged. Later reads returned every byte.
+- Offset limits: from LONG_MAX - 8193 through UINT64_MAX, `fgetc` on an empty
+  file reported the same result as a one-byte `fread_some`, on `host://` and
+  `home://`. That is EOF up to the backend's limit (below LONG_MAX on
+  `host://`, below UINT64_MAX on `home://`) and EOVERFLOW past it. Before the
+  LONG_MAX cap, `fgetc` at LONG_MAX - 1 on `host://` failed with EOVERFLOW.
+- Head printed exact lines from pipes, and its producer reported EPIPE. A
+  guest-TCC program reading one line from console stdin, and `head -n 1`, left
+  the typed-ahead next shell command intact.
+- Sha256sum `-c` with manifests from a file, a redirect and a pipe, and stdin
+  hashing, matched the host. Update streams followed the contract above:
+  `w+` write/seek/read, `r+` write after read-ahead without `fseek`, refetch
+  after `fseek` and input `fflush`, and `a+` append. TCC compile/run, a
+  Bucharest `date`, and Kilo open/edit/save on `host://` also worked.
 
 `fgetc`/`getc`/`getchar`, `fgets`, `fputc`/`putc`/`putchar`, `fputs` and `puts` are
 provided. `fgets` retains a newline and terminates successful input. Capacity one
@@ -217,7 +251,7 @@ returned before EOF, and EOF before any byte returns -1. Null arguments
 caller's pointer and capacity describe its current allocation, which it still
 owns. It reads through `fgetc`, so file and pipe input is fetched in blocks,
 while console input remains one native read per byte; see
-[unbuffered line input](../technical-debt.md#unbuffered-line-input).
+[console line input](../technical-debt.md#console-line-input).
 There is no `getdelim`.
 
 A successful zero-byte read for a nonempty request sets EOF. Merely reading

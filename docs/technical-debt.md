@@ -303,21 +303,27 @@ Formatted stream output currently stages the full result using snprintf, with
 heap allocation and a second formatting pass when the small stack buffer is
 insufficient. This avoids a second formatter or a generic output callback layer,
 but large formatted output requires temporary memory. Revisit bounded streaming
-when real consumers make that cost material. All FILE streams are unbuffered;
+when real consumers make that cost material. All FILE output is unbuffered;
 there are no pending writes to flush yet.
 
-## Unbuffered line input
+## Console line input
 
-Libc `getline` reads one byte per `fgetc`, so each input byte is a separate
-native read and, for `host://` or native filesystem inputs, possibly a worker
-round trip. Streams have no read-ahead or pushback, so it cannot read past a
-newline without consuming the next line. Line-oriented consumers such as sbase
-uniq are therefore slow on large inputs. The [uniq validation](userland/uniq.md#validation-evidence)
-recorded 20.4 seconds for 36,009 bytes over virtio-fs in nested KVM; this is a
-workload observation, not a measured universal per-syscall cost.
-The planned [libc input read-ahead](wip/stdio-input-buffering.md) milestone
-addresses files and pipes; console input will remain byte-at-a-time. Do not
-work around it in individual ports.
+Consoles are never read ahead: their input is shared with the parent shell, and
+ISO C treats them as interactive. Line input from console-backed stdin through
+`fgetc`, `fgets` or `getline` therefore remains one native read per byte,
+including a large paste into such a program. File and pipe input is fetched in
+BUFSIZ blocks by [input read-ahead](userland/stdio.md#input-read-ahead).
+Revisit only with a terminal input design that can return unread console bytes
+to their next owner; do not work around it in individual ports.
+
+## Input read-ahead limits
+
+Buffered file bytes are a private copy. If another descriptor or process
+writes the same file, a stream can return stale bytes until `fseek`, `rewind`
+or input `fflush` refetches them. `setvbuf`, `setbuf` and `ungetc` remain
+absent, so programs cannot size or disable the buffer or push back input.
+Revisit together with output buffering in a later stdio completeness task. See
+[input read-ahead](userland/stdio.md#input-read-ahead).
 
 ## Duplicated port output lists
 
@@ -600,8 +606,8 @@ policy is provided. See [shell pipelines](userland/shell.md#foreground-pipelines
 ## Exact line limits in head
 
 Head's line mode reads one byte per backend call so it never consumes past the
-requested newline. With unbuffered stdio this increases syscall overhead for long
-lines. Byte mode retains bounded bulk reads. Revisit buffering or a native
+requested newline. Stdio read-ahead cannot serve this exact path, so long lines
+still cost one backend call per byte. Byte mode retains bounded bulk reads. Revisit buffering or a native
 bounded-delimiter read only when a concrete consumer needs both throughput and
 exact stream consumption; do not silently discard read-ahead. Multi-file output
 headers and additional head options are outside the current consumer scope.

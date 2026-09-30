@@ -54,10 +54,11 @@ interface or compiler change was needed.
 
 ## Limits
 
-- Line input is `getline` over unbuffered streams: one native read per byte.
-  A 36,009-byte `host://` input took 20.4 s in the validation VM below. Treat
-  large inputs as slow until stdio gains input buffering; see
-  [unbuffered line input](../technical-debt.md#unbuffered-line-input).
+- Line input is `getline` over [stdio read-ahead](stdio.md#input-read-ahead),
+  which fetches file and pipe input in blocks. The 36,009-byte `host://` input
+  that took 20.4 s in the validation VM below before read-ahead took 0.04 s
+  afterwards. Console stdin remains one native read per byte; see
+  [console line input](../technical-debt.md#console-line-input).
 - The framebuffer console has no EOF operation, so uniq reading its stdin cannot
   finish; use a file, redirect or pipeline. Independent terminal sessions,
   including remote `END_INPUT`, do deliver EOF; Ctrl+D is an ordinary byte. See
