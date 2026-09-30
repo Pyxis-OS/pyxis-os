@@ -6,14 +6,27 @@
 #include <abi/startup.h>
 
 #define LAUNCHER_RIGHT_LAUNCH (UINT64_C(1) << 0)
+#define LAUNCHER_RIGHT_CREATE_GROUP (UINT64_C(1) << 1)
 #define LAUNCHER_LAUNCH UINT64_C(1)
 #define LAUNCHER_LAUNCH_BATCH UINT64_C(2)
+#define LAUNCHER_CREATE_GROUP UINT64_C(3)
 #define LAUNCH_BATCH_MAX 8
 #define LAUNCH_NO_STAGE UINT64_MAX
 #define LAUNCH_CAPTURE_MAX_SIZE STARTUP_MAX_SIZE
 /* Host executables are copied before loading; this bounds staging bytes, not
  * the child's mapped memory. RAM and archive images do not need that copy. */
 #define LAUNCH_HOST_IMAGE_MAX_SIZE (UINT64_C(16) * 1024 * 1024)
+
+/* CREATE_GROUP sends only a message_header and requires CREATE_GROUP on an
+ * unbound launcher. The ungrouped caller remains outside the new group. Both
+ * handles are returned atomically: CONTROL supervision and a LAUNCH-only
+ * launcher bound to the group, caller's space and assigned CPU. Copies retain
+ * that binding. A member can receive only launchers bound to its own group;
+ * membership is permanent and inherited by every child. */
+struct execution_group_create_reply {
+  handle_t supervision;
+  handle_t launcher;
+};
 
 struct launch_grant {
   handle_t source;
@@ -90,6 +103,7 @@ struct launch_batch_reply {
  * handle or runnable child, and preserves source grants. A successful child
  * belongs to the caller's space and runs on the caller's assigned CPU. */
 _Static_assert(sizeof(struct launch_grant) == 24, "launch grant layout");
+_Static_assert(sizeof(struct execution_group_create_reply) == 16, "group creation reply layout");
 _Static_assert(sizeof(struct launch_binding) == 16, "launch binding layout");
 _Static_assert(sizeof(struct launch_stream) == 16, "launch stream layout");
 _Static_assert(sizeof(struct launch_request) == 168, "launch request layout");

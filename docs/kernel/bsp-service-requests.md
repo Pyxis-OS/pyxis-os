@@ -35,7 +35,7 @@ cleanup requests.
 One synchronous request may occupy the area at a time. Its reservation extends
 through result consumption, including HOST user-buffer copying and transfer of
 returned objects or executable captures. A second preparation requires the first
-reservation to be released. Independent launch captures/groups and returned heap
+reservation to be released. Independent launch captures/prepared batches and returned heap
 objects retain their own lifetimes across operations.
 
 Kernel workers allocate neither user-request nor profiling storage. Failed task
@@ -107,7 +107,7 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 | Endpoint creation/export | Ordinary; table/process loans and retained capability references |
 | RAM directory allocation/discard | Ordinary; returned unpublished entries or transferred detached entries |
 | RAM FILE replacement | Ordinary; caller retains logical busy ownership and performs user copies |
-| Launch preparation/publication | Ordinary; independent capture/group ownership and unpublished-child rollback |
+| Group creation / launch preparation and publication | Ordinary; atomic supervision/launcher installation, independent capture/batch ownership, sealed admission and unpublished-child rollback |
 | Private memory | Deferred; inactive process loan for allocation/release |
 | Display acquire/present/release | Deferred; inactive process and display loans for every operation |
 | HOST forwarding | Ordinary admission; existing HOST worker owns transport and final completion |

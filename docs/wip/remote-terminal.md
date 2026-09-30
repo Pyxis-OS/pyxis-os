@@ -1,7 +1,7 @@
 # Native remote terminal sessions
 
-Status: tasks 1–3 (TCP listeners, readiness/nonblocking transfers and independent
-terminal sessions) are implemented. The remaining remote-terminal tasks are agreed
+Status: tasks 1–4 (TCP listeners, readiness/nonblocking transfers, independent
+terminal sessions and execution-group launch containment) are implemented. The remaining remote-terminal tasks are agreed
 scope, not implemented. The prerequisite
 [BSP request milestone](../kernel/bsp-service-requests.md) is complete.
 Wire layouts and the bounded implementation details listed below still need
@@ -217,6 +217,19 @@ running foreground command or terminate the entire session. Foreground-group
 interruption remains separate work. The host client provides a distinct local
 escape to disconnect deliberately.
 
+Task 4's implemented contract uses CREATE_GROUP on the ordinary launcher to return a
+CONTROL supervision handle and a group-bound LAUNCH-only launcher. The creator
+stays outside; membership follows all descendants and cannot be changed through
+launcher replacement. Members cannot receive unbound/foreign-group launchers.
+SEAL and final CONTROL-grant closure permanently close admission; batch publication
+and enrollment serialize with sealing. Task 4 leaves existing members running and
+exposes no terminate or group-completion operation. Explicit CONTROL delegation can
+prolong supervision, including beyond creator exit. Natural shell-exit policy stays
+with the later server. See [execution groups](../interfaces/execution-groups.md) and
+the [task-5 termination ownership matrix](execution-group-termination.md).
+A temporary manual exercise program is authorized for task 4, without committed
+tests or boot/output automation.
+
 ### Wire protocol, host client and command completion
 
 Use bounded typed frames for initial dimensions, input, ordered output/control,
@@ -253,9 +266,10 @@ drain outcome.
 The direction above is settled. Resolve these remaining details in the associated
 PR proposal rather than inventing them during implementation:
 
-- A per-subsystem termination matrix: retained resources, safe stopping point,
-  waiter removal and final completion owner. No partial mechanism may be advertised
-  as whole-session termination.
+- The [termination ownership matrix](execution-group-termination.md) identifies
+  retained resources, safe stopping points and completion owners. Resolve the
+  cancellation/result-disposal mechanism and deferred-cleanup completion boundary.
+  No partial mechanism may be advertised as whole-session termination.
 - Exact frame encoding and machine-client representation, stdin-EOF handling,
   local escape, natural shell-exit policy for remaining descendants, and bounded
   output draining when a peer stops reading. Finite draining must not be confused
@@ -284,7 +298,7 @@ Do not implement unrelated async, scheduling, authentication or multiplexer work
   attachment input/output attempts. Update
   libterm, libc, stream validation and launch forwarding together. Preserve local
   shell/Kilo operation; define the shared presentation behavior for the host client.
-- [ ] **4. Execution groups and launch containment.** Define supervision ownership,
+- [x] **4. Execution groups and launch containment.** Define supervision ownership,
   membership and no-new-launch ordering; enroll descendants, including batch,
   background and service launches. Preserve ordinary observer semantics. Establish
   the termination matrix before implementing cleanup; membership alone does not
@@ -378,6 +392,33 @@ unwinding and reader-queue handoff races were inspected, without fault injection
 or claims of runtime coverage. Execution-group termination and remote serving
 remain later tasks.
 
+Task 4 validation: ordinary kernel, SDK and full-image builds passed with the
+existing compiler and local CMake prerequisite. Interactive one/four-CPU QEMU used
+nested KVM, 256 MiB, VirtIO RNG, no NIC, raw OVMF and patched QEMU 10.2.2. The
+ordinary four-CPU shell completed a pipeline, redirected file readback and background
+launch. The authorized temporary manual program covered creation/SEAL rights,
+reply preservation, descendants and batches, rejection of unbound/foreign launcher
+grants, and valid IPC delivery after rejected SEND admission. An ungrouped helper
+used a delegated bound launcher; GDB confirmed its children/grandchildren joined the
+group while the helper remained ungrouped.
+
+Explicit sealing and final CONTROL closure rejected later single/batch launches
+while existing delayed members exited normally. Zero-right supervision copies and
+bound launchers did not keep supervision alive. Queued CONTROL grants retained
+admission through sender closure and delivery; final discard/closure sealed it.
+Closing a process WAIT observer did not stop its child. GDB observed published
+membership and final destruction with zero members/controllers. On four CPUs, an
+invalid second-stage grant unwound the first prepared child. A concurrent timed
+sealer also won after one stage was prepared: the batch returned ENDPOINT_CLOSED
+at stage 1 with all handles zero, no member published, and the group was reclaimed.
+After validation, completed-task and retired-object queues were empty. All QEMU/
+debugger jobs were stopped; no exercise source or automation is committed.
+
+Final publication/seal lock ordering, cross-placement denial, reply-grant rejection
+and allocation-failure unwinding were inspected in code. Those paths are not claimed
+as injected or individually observed runtime cases. Sealing still does not terminate
+execution or expose group completion; task 5 starts from the ownership matrix.
+
 Use ordinary `make -j16` builds, interactive QEMU and debugger inspection. Include
 one- and four-CPU operation with matching networking/init configuration. Inspect
 existing CI for each exact submitted revision and dependent repositories. Publish
@@ -385,8 +426,8 @@ userland/lwIP changes before parent gitlinks; change ports only if a concrete
 integration need remains. No compiler-container rebuild is currently identified.
 
 No committed tests, fault injection, boot/output automation or new CI are
-authorized by this plan. Task 3 has explicit authorization for a temporary manual
-exercise program. The machine-readable host client is the requested product interface;
+authorized by this plan. Tasks 3–4 have explicit authorization for temporary manual
+exercise programs. The machine-readable host client is the requested product interface;
 validation should demonstrate it through ordinary command tools. Record what was
 actually exercised and distinguish inspected failure paths from runtime results.
 

@@ -7,6 +7,7 @@
 
 struct kernel_object;
 struct capability_entry;
+struct execution_group;
 
 #define CAPABILITY_BATCH_MAX 5
 
@@ -28,6 +29,9 @@ enum capability_result {
 struct capability_table {
   struct capability_entry *entries;
   size_t capacity;
+  /* Immutable admission policy, borrowed from the owning process's group.
+   * Set before its first grant; NULL for ordinary ungrouped processes. */
+  struct execution_group *execution_group;
 };
 
 struct capability_growth_request {

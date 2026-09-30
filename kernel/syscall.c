@@ -1,5 +1,6 @@
 #include <kernel/object/namespace.h>
 #include <kernel/object/terminal.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/object/udp.h>
 #include <kernel/object/tcp.h>
 #include <kernel/object/random.h>
@@ -179,6 +180,12 @@ static struct syscall_result call_object(handle_t handle,
     }
     return terminal_service_call(rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_EXECUTION_GROUP:
+    if (header.protocol != PROTOCOL_EXECUTION_GROUP) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return execution_group_call((struct execution_group *)object, rights,
+        header.operation, request_size);
   case OBJECT_TERMINAL_ATTACHMENT:
     if (header.protocol != PROTOCOL_TERMINAL_ATTACHMENT) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -309,7 +316,7 @@ static struct syscall_result call_object(handle_t handle,
     if (header.protocol != PROTOCOL_LAUNCHER) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
-    return launcher_call(rights, header.operation, request_address, request_size,
+    return launcher_call(object, rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
   case OBJECT_NAMESPACE_SERVICE:
     if (header.protocol != PROTOCOL_NAMESPACE_SERVICE) {

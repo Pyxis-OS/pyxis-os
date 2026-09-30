@@ -1,7 +1,7 @@
 # Processes, capabilities and the first userspace ABI
 
 Status: console, initrd/RAM file, directory, private-memory, process-completion,
-caller-scoped launcher and [mapped display](graphics.md) capabilities are implemented.
+caller-scoped/group-bound launchers and [mapped display](graphics.md) capabilities are implemented.
 The broader process and resource model remains a working draft alongside the
 [spaces draft](../wip/spaces.md). Startup delivery, console and file CALL operations,
 and handle close are implemented, including the complete userspace example.
@@ -557,7 +557,7 @@ request or closure.
 ## Implemented userspace launch
 
 A launcher capability authorizes LAUNCH in the caller's space on its assigned
-CPU. It is a stateless caller-scoped service, like private-memory allocation;
+CPU. The ordinary launcher is a caller-scoped service, like private-memory allocation;
 there is no target-space or CPU argument. Holding a launcher does not grant
 implicit access to files or other resources. A launcher can itself be delegated
 through an explicit grant, authorizing the recipient to launch in its own space.
@@ -658,7 +658,7 @@ work.
 ## Batch launch
 
 `LAUNCHER_LAUNCH_BATCH` accepts an array of one through eight ordinary launch
-requests under the same caller-scoped LAUNCH authority. It prepares every image,
+requests under the same LAUNCH authority (ordinary or group-bound). It prepares every image,
 child grant table, startup region, kernel task stack and WAIT observer before
 publishing any child. Each request retains the existing image and startup limits;
 there is no implicit inheritance or new target-space/CPU selection.
@@ -666,8 +666,10 @@ there is no implicit inheritance or new target-space/CPU selection.
 The full reply range is validated before side effects. The kernel installs all
 observers and prepares their ordered result array before publication. Caller
 mappings remain stable throughout the operation, so delivery of that prepared
-result cannot introduce an error after children become runnable. Publication
-contains no allocation, validation or other fallible work. It makes every child
+result cannot introduce an error after children become runnable. For an [execution group](execution-groups.md), publication rechecks admission under
+the group lock: sealing can reject the entire prepared batch with ENDPOINT_CLOSED.
+After admission succeeds, publication contains no allocation, validation or other
+fallible work. It makes every child
 runnable, not simultaneous: a child may already have finished before return.
 Single-child launching shares the same preparation and publication machinery.
 
@@ -702,7 +704,8 @@ Temporary interpreter grants, arrays and strings are released on every path;
 appending the script grant preserves dedicated standard-stream indices. Mutable
 images retain the existing per-image capture limits, not a cross-image snapshot.
 
-After success, each child has its ordinary independent lifetime. Observers only
+After success, each child has its ordinary process lifetime and retains any
+[execution-group membership](execution-groups.md). Observers only
 wait; their closure, launcher exit or a sibling fault does not terminate another
 child. Normal exit and faults reclaim that child's resources and pipe ends.
 The caller must close its own unused pipe copies before waiting for EOF-dependent
@@ -736,3 +739,11 @@ in the spaces draft remain separate from the current transport.
 
 Only an explicitly selected worklist task is an implementation assignment.
 The later ideas here call for no placeholder APIs or object-manager framework.
+
+## Execution-group launch containment
+
+[Execution groups](execution-groups.md) add separately authorized creation, bound
+launchers, inherited membership and sealed admission. The ordinary local launcher
+remains caller-scoped. Membership survives observer/launcher closure; supervision
+closure currently seals new launches without terminating existing members. Group
+termination and completion require the separate [cleanup work](../wip/execution-group-termination.md).

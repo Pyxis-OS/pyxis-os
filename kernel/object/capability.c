@@ -4,6 +4,7 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/object.h>
+#include <kernel/object/launcher.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 
@@ -84,6 +85,10 @@ enum capability_result capability_insert(struct capability_table *table,
       !object_authority_valid(object, rights, transport)) {
     return CAP_INVALID;
   }
+  if (table->execution_group && object->type == OBJECT_LAUNCHER &&
+      launcher_execution_group(object) != table->execution_group) {
+    return CAP_DENIED;
+  }
 
   size_t index;
   for (index = 0; index < table->capacity; ++index) {
@@ -140,6 +145,10 @@ enum capability_result capability_insert_batch(struct capability_table *table,
   for (size_t i = 0; i < count; ++i) {
     if (!objects[i] || !object_authority_valid(objects[i], rights[i], transport[i])) {
       return CAP_INVALID;
+    }
+    if (table->execution_group && objects[i]->type == OBJECT_LAUNCHER &&
+        launcher_execution_group(objects[i]) != table->execution_group) {
+      return CAP_DENIED;
     }
   }
 

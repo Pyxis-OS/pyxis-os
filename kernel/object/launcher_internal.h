@@ -28,14 +28,15 @@ struct launch_capture {
  * handle before submission; failure unwinds child resources. Capture and host
  * bytes remain owned by the launch service until it frees both. */
 enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
-    size_t cpu_index, handle_t *result);
+    size_t cpu_index, struct execution_group *execution_group, handle_t *result);
 
 /* BSP service internals. A group owns prepared processes and task stacks until
  * publication; abort removes provisional observers and all child grants. */
-struct launch_group *launcher_group_create(void);
-enum call_status launcher_group_prepare(struct launch_group *group,
-    struct launch_capture *capture, struct process *parent, size_t cpu_index);
-void launcher_group_publish(struct launch_group *group, handle_t *children);
-void launcher_group_discard(struct launch_group *group);
+struct launch_preparation *launcher_batch_create(void);
+enum call_status launcher_batch_prepare(struct launch_preparation *group,
+    struct launch_capture *capture, struct process *parent, size_t cpu_index,
+    struct execution_group *execution_group);
+enum call_status launcher_batch_publish(struct launch_preparation *group, handle_t *children);
+void launcher_batch_discard(struct launch_preparation *group);
 
 #endif

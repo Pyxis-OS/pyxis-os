@@ -4,6 +4,8 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/endpoint.h>
+#include <kernel/object/execution_group.h>
+#include <kernel/object/launcher.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/task.h>
@@ -56,6 +58,7 @@ struct endpoint_delivery_record {
 
 struct endpoint_state {
   struct kernel_object storage;
+  struct execution_group *execution_group; /* Immutable receiver policy, owned storage. */
   atomic_bool locked;
   struct endpoint caller, receiver;
   struct endpoint_delivery_record deliveries[ENDPOINT_DELIVERIES_MAX];
@@ -125,6 +128,9 @@ static void destroy_endpoint_storage(struct kernel_object *object)
 {
   struct endpoint_state *state = (struct endpoint_state *)object;
   KASSERT(!state->storage_references);
+  if (state->execution_group) {
+    object_release(&state->execution_group->object);
+  }
   kfree(state);
 }
 
@@ -413,6 +419,11 @@ static enum call_status endpoint_create(struct process *owner,
     return CALL_NO_MEMORY;
   }
   memset(state, 0, sizeof(*state));
+  if (owner->execution_group && !object_retain(&owner->execution_group->object)) {
+    kfree(state);
+    return CALL_LIMIT;
+  }
+  state->execution_group = owner->execution_group;
   object_init(&state->storage, OBJECT_ENDPOINT, destroy_endpoint_storage);
   atomic_init(&state->locked, false);
   state->storage_references = 2;
@@ -726,6 +737,17 @@ static enum call_status admit_message(struct endpoint *endpoint,
   } else if (state->closed || (target && target->withdrawn)) {
     status = CALL_ENDPOINT_CLOSED;
   } else {
+    /* Reject before admission: an incompatible SEND at the FIFO head must not
+     * leave the receiver permanently unable to collect later valid messages. */
+    for (size_t i = 0; i < message->grant_count; ++i) {
+      if (state->execution_group && grants[i]->type == OBJECT_LAUNCHER &&
+          launcher_execution_group(grants[i]) != state->execution_group) {
+        status = CALL_DENIED;
+        break;
+      }
+    }
+  }
+  if (status == CALL_OK) {
     for (size_t i = 0; i < ENDPOINT_DELIVERIES_MAX; ++i) {
       if (state->deliveries[i].state == DELIVERY_FREE) {
         record = &state->deliveries[i];

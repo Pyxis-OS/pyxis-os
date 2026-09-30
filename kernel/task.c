@@ -9,6 +9,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/object/object.h>
 #include <kernel/object/process.h>
+#include <kernel/object/execution_group.h>
 #include <abi/launcher.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -529,11 +530,14 @@ static void reap_completed(void)
   while (task) {
     struct task *next = task->next;
     struct process_control *control = NULL;
+    struct execution_group *execution_group = NULL;
     struct process_result result = {0};
     if (task->kind == TASK_USER) {
       /* Transfer the execution owner's reference before freeing the process. */
       control = task->process->control;
       task->process->control = NULL;
+      execution_group = task->process->execution_group;
+      task->process->execution_group = NULL;
       result.kind = task->faulted ? PROCESS_FAULTED : PROCESS_EXITED;
       result.exit_status = task->faulted ? 0 : task->exit_status;
       KASSERT(process_destroy(task->process) == MM_OK);
@@ -547,6 +551,9 @@ static void reap_completed(void)
       }
     }
     free_task(task);
+    if (execution_group) {
+      execution_group_member_complete(execution_group);
+    }
     if (control) {
       process_control_complete(control, result);
       object_release(&control->object);
