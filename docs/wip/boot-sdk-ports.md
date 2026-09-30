@@ -115,10 +115,10 @@ for the persistent development loop or as a replacement for the boot archive.
 The selected next milestone is [native read-only filesystem mounts](native-readonly-filesystem.md):
 init-selected GPT partition and volume, policy-approved directory/file capabilities,
 ordinary reads and executable loading, followed by scoped capacity information
-and Fastfetch Disk. Task 1 is complete: the native mount contract and initial
-runtime bounds are agreed. Task 2 is the separate core continuation prerequisite,
-which precedes native enumeration and retains no per-enumeration kernel state.
-Implementation has not started.
+and Fastfetch Disk. Tasks 1–2 are complete: the native mount contract is agreed
+and the core provides validated stateless directory continuation. Task 3 is the
+bounded kernel block/memory adapter integration; kernel implementation has not
+started.
 Writable recovery and FUSE stay separate.
 
 The [I/O reliability and attribution report](../development/io-reliability-attribution.md)

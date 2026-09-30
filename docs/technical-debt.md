@@ -731,12 +731,15 @@ service work and wait sets; no worker-process or thread framework is included.
 ## Native mount design limits
 
 The [native read-only mount contract](wip/native-readonly-filesystem.md) is agreed;
-these are integration limits, not implemented behavior.
-The selected core continuation prerequisite must avoid rescanning the returned
-prefix and retain no per-enumeration kernel state. It does not remove existing
-core ancestry scans or allocation-proof costs; measure those during integration
-and revisit only when they limit representative listings. Stateless page success
-must not be presented as global directory-count reconciliation.
+the native OS integration limits below are not implemented behavior.
+The [implemented core continuation API](../fs/docs/core.md#stateless-directory-continuation)
+avoids rescanning the returned prefix and retains no per-enumeration state. It
+does not remove existing core ancestry scans or allocation-proof costs; measure
+those during kernel integration and revisit when they limit representative
+listings. Stateless page success must not be presented as global directory-count
+reconciliation. Host validation covers one- and two-level directory trees; maximum
+depth, later generations and actual media/allocator failures retain code-review
+coverage only.
 
 The OS READ grant continues to bundle file bytes and length, so native acquisition
 and descendant lookup must hold both core read and metadata rights. A persistent
