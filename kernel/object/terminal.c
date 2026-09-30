@@ -618,12 +618,12 @@ static struct syscall_result attachment_transfer(struct terminal_session *sessio
   }
   enum call_status status = CALL_OK;
   lock_session(session);
-  if (session->hung_up) {
+  if (inject && !length) {
+    /* A validated no-op does not probe session liveness. */
+  } else if (session->hung_up) {
     status = CALL_ENDPOINT_CLOSED;
   } else if (inject) {
-    if (!length) {
-      /* Validated no-op, including after graceful input closure. */
-    } else if (session->input_closed) {
+    if (session->input_closed) {
       status = CALL_ENDPOINT_CLOSED;
     } else if (session->input_count == TERMINAL_INPUT_CAPACITY) {
       status = CALL_WOULD_BLOCK;
