@@ -6,6 +6,8 @@
 
 #define MOUNT_RIGHT_OPEN_ROOT (UINT64_C(1) << 0)
 #define MOUNT_OPEN_ROOT UINT64_C(1)
+#define MOUNT_OPEN_VOLUME UINT64_C(2)
+#define MOUNT_VOLUME_NAME_MAX 255u
 
 #define MOUNT_ACCESS_READ_ONLY UINT64_C(0)
 #define MOUNT_ACCESS_READ_WRITE UINT64_C(1)
@@ -25,12 +27,31 @@ struct mount_message {
   struct mount_open_request body;
 };
 
+/* Native authority selects one configured disk and principal. Partition is a
+ * one-based GPT entry; name is counted UTF-8, captured before work is queued.
+ * Rights are exact DIRECTORY rights, including LOOKUP. Mutation rights fail
+ * READ_ONLY; unknown bits fail BAD_REQUEST. Success owns an independent root.
+ * No principal, device, binding name or raw-block address is caller supplied. */
+struct mount_volume_request {
+  uint64_t partition;
+  uint64_t name;
+  uint64_t name_length;
+  uint64_t rights;
+};
+
+struct mount_volume_message {
+  struct message_header header;
+  struct mount_volume_request body;
+};
+
 struct mount_reply {
   handle_t root;
 };
 
 _Static_assert(sizeof(struct mount_open_request) == 8, "mount request layout");
 _Static_assert(sizeof(struct mount_message) == 24, "mount message layout");
+_Static_assert(sizeof(struct mount_volume_request) == 32, "mount volume request layout");
+_Static_assert(sizeof(struct mount_volume_message) == 48, "mount volume message layout");
 _Static_assert(sizeof(struct mount_reply) == 8, "mount reply layout");
 
 #endif
