@@ -235,8 +235,17 @@ quota; a trusted creator can allocate multiple bounded sessions until allocation
 fails. Output backpressure has no deadline. A controller that stops draining can
 block application writers; hangup wakes terminal calls but does not stop CPU-bound
 code or operations in other subsystems. Execution groups provide separate supervision;
-remote admission and finite drain policy remain for the later server. Resize,
-reconnect and host presentation remain separate work.
+the [remote server](userland/remote-terminal.md) bounds admission at four and
+abandons closing output after five seconds. Cleanup can still wait indefinitely
+for published HOST work, retaining its admission slot. Four idle or blocked
+sessions can exhaust the server; there is no idle timeout, authentication,
+restart or reconnection. The interactive host renderer uses one `?` cell for
+non-ASCII bytes; machine mode preserves the original data. A full client input
+queue delays reading Ctrl+] behind a paste; once read, its close acknowledgment
+is bounded at five seconds. Host SIGINT/SIGTERM forces disconnect even under
+backpressure. Revisit admission
+policy, authentication and presentation breadth with a concrete non-development
+deployment or text consumer. Resize and reconnect remain separate work.
 
 ## Libc compatibility gaps
 
@@ -497,10 +506,10 @@ demand and an explicit authority/accounting policy, not by evicting live records
 The echo consumer serves four clients with bounded output and fair service, but
 has no idle-client or output-drain deadline. Four stalled clients can occupy all
 active slots indefinitely. Readiness also supports terminal attachments and
-execution-group completion. The [remote server](wip/remote-terminal.md#focused-implementation-tasks)
-remains to be implemented.
-Revisit stalled-client policy with that server's explicit disconnect/drain
-contract; the echo consumer does not yet supervise terminal sessions.
+execution-group and process completion. The [remote server](userland/remote-terminal.md)
+adds its own session supervision and closing-output deadline; the echo consumer
+retains its simpler semantics. Revisit echo-client expiration only if a concrete
+consumer needs it.
 
 ## UDP ICMP errors and ephemeral selection
 

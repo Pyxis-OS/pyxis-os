@@ -1,11 +1,10 @@
 # Native remote terminal sessions
 
-Status: tasks 1–4 (TCP listeners, readiness/nonblocking transfers, independent
-terminal sessions and execution-group launch containment) are implemented. The remaining remote-terminal tasks are agreed
-scope, not implemented. The prerequisite
-[BSP request milestone](../kernel/bsp-service-requests.md) is complete.
-Wire layouts and the bounded implementation details listed below still need
-review before their respective tasks; this document does not authorize code.
+Status: tasks 1–6 are implemented: listeners/readiness, independent terminal
+sessions, execution-group containment/termination, and the remote server/client.
+The [implemented remote interface](../userland/remote-terminal.md) records startup,
+authority, framing, shutdown and client usage. Tasks 7–8 remain agreed scope.
+The prerequisite [BSP request milestone](../kernel/bsp-service-requests.md) is complete.
 
 Task 1 implements the agreed [listener contract](../devices/tcp.md#listening-and-admission): trusted init holds
 LISTEN authority, binds an exact configured local IPv4 address/nonzero port, and
@@ -70,7 +69,8 @@ behavior automatically.
 
 ### Admission and authority
 
-The service is opt-in through a development init script. Listen/bind authority
+The default CPU 3 Remote init starts the service; networking and host forwarding
+remain explicit. Listen/bind authority
 is explicit and separate from outbound CONNECT; grant a configured guest address
 and port. Initial QEMU forwarding binds only to host `127.0.0.1`. There is no guest
 authentication in this milestone: local host processes able to reach that port
@@ -224,7 +224,7 @@ natural drain; TERMINATE and final CONTROL closure also request safe stopping.
 WAIT and WAIT_COMPLETE report immutable cleanup completion, including admitted
 launches and attributed deferred releases. PROCESS_TERMINATED is distinct from exit
 and fault. Explicit CONTROL delegation prolongs supervision; WAIT-only copies do not.
-Natural shell-exit policy stays with the later server. See
+Natural shell exit causes the remote server to terminate remaining descendants. See
 [execution groups](../interfaces/execution-groups.md) and the
 [termination ownership matrix](execution-group-termination.md).
 Temporary manual exercise programs are authorized for tasks 4–5, without committed
@@ -261,21 +261,16 @@ from a prompt, silence or connection closure. Session completion remains distinc
 from command completion and reflects execution cleanup and the defined output
 drain outcome.
 
-## Task-local decisions before implementation
+## Remaining task-local decisions
 
-The direction above is settled. Resolve these remaining details in the associated
-PR proposal rather than inventing them during implementation:
-
-- The [termination ownership matrix](execution-group-termination.md) identifies
-  retained resources, safe stopping points and completion owners. Resolve the
-  cancellation/result-disposal mechanism and deferred-cleanup completion boundary.
-  No partial mechanism may be advertised as whole-session termination.
-- Exact frame encoding and machine-client representation, stdin-EOF handling,
-  local escape, natural shell-exit policy for remaining descendants, and bounded
-  output draining when a peer stops reading. Finite draining must not be confused
-  with a guarantee of bounded kernel cleanup.
-- Concrete init grants, startup configuration and names. Resource names are not
-  authority; preserve containment when launch capabilities are copied/delegated.
+Task 6 implements eight-byte type/length framing, NDJSON/base64 machine output,
+END_INPUT distinct from transport disconnect, Ctrl+] local close, termination of
+remaining descendants on root-shell exit, and five-second closing output expiry.
+Cleanup still has no finite deadline. CPU 3 runs Remote with optional read-write
+HOST; Development remains the single default network configuration owner.
+The [interface reference](../userland/remote-terminal.md) is authoritative for
+these implemented details. Task 7 still needs the concrete shell-only event API
+and command-completion frame layout before implementation.
 
 ## Focused implementation tasks
 
@@ -308,7 +303,7 @@ Do not implement unrelated async, scheduling, authentication or multiplexer work
   supervisor-close cleanup and group-completion readiness. Verify descendants,
   CPU loops, blocked I/O, failed launches and server-owner death before claiming
   complete session termination.
-- [ ] **6. Remote server and host client.** Add the opt-in userspace server,
+- [x] **6. Remote server and host client.** Add the default CPU 3 userspace server,
   restricted init grants, four-session admission, framed single-loop forwarding
   and explicit disconnect handling. Add the native host client with terminal
   adaptation, interactive/machine modes and host-loopback QEMU TCP forwarding.
@@ -457,6 +452,46 @@ as individually observed runtime cases. Published HOST work may delay completion
 indefinitely; external capability ownership and independent TCP maintenance remain
 outside the cleanup boundary. QEMU and debugger jobs were stopped after validation.
 
+Task 6 validation on 2026-09-30: ordinary kernel, SDK, userland/full-image and
+native host-client builds passed with the existing compiler and local CMake
+prerequisite. QEMU 10.2.2 with the AHCI fix, matching Fedora raw OVMF, CPU `max`,
+256 MiB, nested KVM and VirtIO RNG ran one and four CPUs; network runs enabled
+VirtIO NET with loopback-only TCP forwarding. Four-CPU validation used a temporary
+writable virtiofs export; one CPU used an explicit trusted network-configuring
+init and no HOST device.
+
+Native machine sessions produced READY, ordered data/control records and clean
+FINAL after shell exit or protocol input EOF. Four concurrent shells ran commands;
+GDB observed twelve idle read/process-completion interests, no writable interest
+and no listener admission while full. HOST file creation/readback was checked from
+both guest and host. Natural shell exit stopped a background Lua CPU loop; host
+client termination stopped a foreground CPU loop and blocked terminal-input child.
+After all clients left, GDB observed only the listener in the server wait set and
+an empty completed-task queue. A stopped host reader produced pending-output TCP
+writable interest with terminal draining disabled; another session still completed.
+The local Development framebuffer shell also ran `ls` successfully.
+
+Interactive native-client use opened Kilo on HOST, entered text, normalized Enter
+and SS3 navigation/Home, saved and quit; host readback contained the expected
+edited text. Ctrl+] returned acknowledged group termination. The one-CPU client
+also completed ordinary input-EOF work. A CPU loop with 6000 queued input bytes
+exposed FIN stuck behind send backlog on local-close timeout. The corrected client
+uses abortive close without validated FINAL; repeating that case expired the
+five-second acknowledgment deadline and GDB observed the loop/session reclaimed,
+one remaining transport record (the listener), listener-only readiness and an
+empty completed queue. This is nested-VM behavior, not a latency benchmark.
+
+Malformed frame/authority/allocation-failure paths, the server's closing-output
+deadline and host presentation edge semantics were inspected in code; no fault
+injection or exhaustive renderer/runtime coverage is claimed. Task 8 retains the
+broader combined acceptance work. A restored default four-CPU image without
+NET/HOST showed the Remote tab reporting network unavailable and preserved local
+startup. All QEMU, client, virtiofsd and debugger jobs were stopped. No tests,
+temporary exercise program or
+boot/output automation was added; validation used the actual client and ordinary
+manual QEMU/GDB controls. Published HOST cleanup remains unbounded and command
+completion events remain task 7.
+
 Use ordinary `make -j16` builds, interactive QEMU and debugger inspection. Include
 one- and four-CPU operation with matching networking/init configuration. Inspect
 existing CI for each exact submitted revision and dependent repositories. Publish
@@ -472,5 +507,5 @@ actually exercised and distinguish inspected failure paths from runtime results.
 Exclude SSH/Telnet compatibility, custom authentication/TLS, OIDC, resize,
 reattachment, remote graphics, multiplexer/navigation, Neovim, Unicode expansion,
 foreground Ctrl+C cancellation, task migration and process threads. Those remain
-separate milestones. This document records agreed design, not an implemented
-remote-access facility or completed runtime validation.
+separate milestones. Tasks 7–8 remain design and planned validation; completed slices and their
+measured checks are recorded above.
