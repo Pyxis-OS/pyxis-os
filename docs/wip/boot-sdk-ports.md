@@ -192,6 +192,11 @@ prerequisites and then Clang running inside Pyxis are separate milestones to
 scope. Go cross compilation, hosted Go, Rust, Tailscale and Ladybird remain
 future directions with their own decisions.
 
+The [initial Go runtime investigation](go-runtime.md) records a pinned source
+audit and host hello-world probes. ELF-to-P1F conversion already works for the
+two Linux probe images; native startup, runtime threading/TLS, synchronization
+and VM semantics remain unresolved. No Go target or guest execution is claimed.
+
 SDL2/GrafX2 remains a later graphical alternative. A desktop/compositor remains
 a separate [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting
 [design checkpoint](users-and-authority.md), not something a port should define

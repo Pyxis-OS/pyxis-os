@@ -86,6 +86,12 @@ separate from ordinary SDK changes.
 
 ## Go cross compiler, then hosted Go toolchain
 
+The [initial Go runtime investigation](go-runtime.md) pins Go 1.26.7 and records
+host compile/conversion probes plus the native contract gaps. No Go executable
+has run on Pyxis. The key prerequisites are shared-process threads/TLS and
+parking, plus private-memory reservation/backing; LLVM is not required for the
+cgo-disabled first slice. Its proposed steps are not an implementation milestone.
+
 The first Go result would be a host-running toolchain targeting Pyxis plus enough
 native runtime support to execute selected Go programs. A target name or binary
 conversion alone is insufficient. Investigate memory/GC requirements, execution
