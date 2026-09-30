@@ -14,7 +14,8 @@
 #define NATIVEFS_ADAPTER_BYTES (1024u * 1024u)
 #define NATIVEFS_WRAPPER_LIMIT 1024u
 #define NATIVEFS_TIMEOUT_MS 30000u
-#define NATIVEFS_DIRECTORY_RIGHTS (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES)
+#define NATIVEFS_DIRECTORY_RIGHTS (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | \
+                                   DIRECTORY_RIGHT_READ_FILES | DIRECTORY_RIGHT_FILESYSTEM_INFO)
 
 struct nativefs_node;
 struct kernel_object;
@@ -22,7 +23,7 @@ struct nativefs_request;
 
 enum nativefs_operation {
   NATIVEFS_ROOT, NATIVEFS_LOOKUP, NATIVEFS_ENUMERATE, NATIVEFS_READ, NATIVEFS_SIZE,
-  NATIVEFS_CAPTURE,
+  NATIVEFS_CAPTURE, NATIVEFS_FILESYSTEM_INFO,
 };
 enum nativefs_job_state {
   NATIVEFS_JOB_IDLE, NATIVEFS_JOB_QUEUED, NATIVEFS_JOB_ACTIVE, NATIVEFS_JOB_COMPLETE,
@@ -34,8 +35,9 @@ enum nativefs_job_state {
  * capability's actual rights. Inputs are borrowed until detached completion;
  * successful ROOT/LOOKUP transfers one object reference, failure transfers none.
  * CAPTURE transfers owned launch staging (count bytes) on success, none on
- * failure; its allocation is outside the native wrapper cap. READ/ENUMERATE
- * publish data only on success. Core/backing diagnostics belong to this
+ * failure; its allocation is outside the native wrapper cap. FILESYSTEM_INFO
+ * copies retained metadata without core calls. READ/ENUMERATE publish data
+ * only on success. Core/backing diagnostics belong to this
  * operation alone. */
 struct nativefs_job {
   enum nativefs_job_state state;
@@ -49,7 +51,10 @@ struct nativefs_job {
   char name[PFS_NAME_MAX + 1];
   struct directory_cursor cursor;
   struct directory_enumerate_reply entry;
-  uint8_t data[FILE_READ_MAX_BYTES];
+  union {
+    uint8_t data[FILE_READ_MAX_BYTES];
+    struct directory_filesystem_info info;
+  };
   enum call_status status;
   enum pfs_status core_status;
   enum block_result backing_error;

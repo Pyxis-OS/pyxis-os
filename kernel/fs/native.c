@@ -20,6 +20,7 @@ struct nativefs_pool {
   struct pfs_pool core;
   struct pfs_pool_diagnostic diagnostic;
   size_t volumes;
+  bool gpt_degraded;
 };
 
 struct nativefs_volume {
@@ -270,7 +271,7 @@ static enum call_status core_result(enum pfs_status status)
 }
 
 static enum call_status select_partition(const struct nativefs_job *job,
-    const struct gpt_partition **partition, struct block_info *device)
+    const struct gpt_partition **partition, struct block_info *device, bool *gpt_degraded)
 {
   const struct gpt_snapshot *snapshot;
   for (;;) {
@@ -326,6 +327,7 @@ static enum call_status select_partition(const struct nativefs_job *job,
       (*partition)->block_count > device->block_count - (*partition)->first_block) {
     return CALL_IO;
   }
+  *gpt_degraded = snapshot->status == GPT_DEGRADED;
   return CALL_OK;
 }
 
@@ -349,7 +351,7 @@ static bool close_pool(struct nativefs_pool *pool)
 }
 
 static enum call_status open_pool(const struct gpt_partition *partition,
-    const struct block_info *device, struct nativefs_pool **out,
+    const struct block_info *device, bool gpt_degraded, struct nativefs_pool **out,
     enum pfs_status *core_status)
 {
   for (struct nativefs_pool *pool = pools; pool; pool = pool->next) {
@@ -367,6 +369,7 @@ static enum call_status open_pool(const struct gpt_partition *partition,
   }
   pool->partition = *partition;
   pool->device = *device;
+  pool->gpt_degraded = gpt_degraded;
   struct pfs_geometry geometry = {
     .block_count = partition->block_count / (PFS_BLOCK_SIZE / device->block_size),
     .max_transfer_blocks = PFS_IO_BLOCKS_MAX,
@@ -401,12 +404,13 @@ static enum call_status open_volume(struct nativefs_job *job, struct nativefs_vo
 {
   const struct gpt_partition *partition;
   struct block_info device;
-  enum call_status result = select_partition(job, &partition, &device);
+  bool gpt_degraded;
+  enum call_status result = select_partition(job, &partition, &device, &gpt_degraded);
   if (result != CALL_OK) {
     return result;
   }
   struct nativefs_pool *pool = NULL;
-  result = open_pool(partition, &device, &pool, &job->core_status);
+  result = open_pool(partition, &device, gpt_degraded, &pool, &job->core_status);
   if (result != CALL_OK) {
     return result;
   }
@@ -555,6 +559,7 @@ static struct kernel_object *node_object(struct nativefs_node *node)
 
 static struct pfs_rights directory_rights(uint64_t rights)
 {
+  /* Filesystem observation delegates no persistent object rights. */
   return (struct pfs_rights){
     .file = rights & DIRECTORY_RIGHT_READ_FILES ? PFS_FILE_READ | PFS_FILE_METADATA : 0,
     .directory = ((rights & DIRECTORY_RIGHT_LOOKUP) ? PFS_DIR_LOOKUP : 0) |
@@ -816,6 +821,32 @@ static enum call_status capture_file(struct nativefs_job *job)
   return CALL_OK;
 }
 
+static enum call_status filesystem_info(struct nativefs_job *job)
+{
+  const struct nativefs_volume *volume = job->node->volume;
+  const struct nativefs_pool *pool = volume->pool;
+  const struct pfs_superblock *superblock =
+      &pool->diagnostic.candidate[pool->diagnostic.selected].superblock;
+  if (superblock->block_count < 2 ||
+      superblock->block_count - 2 > UINT64_MAX / PFS_BLOCK_SIZE ||
+      volume->record.name.length > FILESYSTEM_VOLUME_NAME_MAX) {
+    return CALL_IO;
+  }
+
+  job->info = (struct directory_filesystem_info){
+    .type = FILESYSTEM_TYPE_PYXIS,
+    .flags = FILESYSTEM_FLAG_READ_ONLY |
+        (pool->gpt_degraded ? FILESYSTEM_FLAG_GPT_DEGRADED : 0) |
+        (pool->diagnostic.degraded ? FILESYSTEM_FLAG_DEGRADED : 0),
+    .generation = superblock->header.birth,
+    .pool_allocatable_bytes = (superblock->block_count - 2) * PFS_BLOCK_SIZE,
+  };
+  memcpy(job->info.pool_id, superblock->header.pool.bytes, sizeof(job->info.pool_id));
+  memcpy(job->info.volume_id, volume->record.id.bytes, sizeof(job->info.volume_id));
+  memcpy(job->info.volume_name, volume->record.name.bytes, volume->record.name.length);
+  return CALL_OK;
+}
+
 static enum call_status perform(struct nativefs_job *job)
 {
   if (expired()) {
@@ -837,6 +868,14 @@ static enum call_status perform(struct nativefs_job *job)
     return CALL_DENIED;
   }
   switch (job->operation) {
+  case NATIVEFS_FILESYSTEM_INFO:
+    if (!directory) {
+      return CALL_WRONG_TYPE;
+    }
+    if (!(job->rights & DIRECTORY_RIGHT_FILESYSTEM_INFO)) {
+      return CALL_DENIED;
+    }
+    return filesystem_info(job);
   case NATIVEFS_LOOKUP:
   case NATIVEFS_ENUMERATE:
     if (!directory) {
@@ -996,7 +1035,7 @@ enum call_status nativefs_submit(struct nativefs_job *job)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!job || job->state != NATIVEFS_JOB_IDLE || job->object || job->captured || job->next ||
-      job->user_request || job->admitted || (unsigned)job->operation > NATIVEFS_CAPTURE) {
+      job->user_request || job->admitted || (unsigned)job->operation > NATIVEFS_FILESYSTEM_INFO) {
     return CALL_BAD_REQUEST;
   }
   if (!available) {

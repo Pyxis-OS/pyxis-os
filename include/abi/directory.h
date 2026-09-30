@@ -11,9 +11,11 @@
 #define DIRECTORY_RIGHT_CREATE (UINT64_C(1) << 3)
 #define DIRECTORY_RIGHT_WRITE_FILES (UINT64_C(1) << 4)
 #define DIRECTORY_RIGHT_REMOVE (UINT64_C(1) << 5)
-#define DIRECTORY_RIGHTS (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | \
+#define DIRECTORY_RIGHT_FILESYSTEM_INFO (UINT64_C(1) << 6)
+#define DIRECTORY_CONTENT_RIGHTS (DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | \
                           DIRECTORY_RIGHT_READ_FILES | DIRECTORY_RIGHT_CREATE | \
                           DIRECTORY_RIGHT_WRITE_FILES | DIRECTORY_RIGHT_REMOVE)
+#define DIRECTORY_RIGHTS (DIRECTORY_CONTENT_RIGHTS | DIRECTORY_RIGHT_FILESYSTEM_INFO)
 
 #define DIRECTORY_LOOKUP UINT64_C(1)
 #define DIRECTORY_ENUMERATE UINT64_C(2)
@@ -21,6 +23,7 @@
 #define DIRECTORY_REMOVE UINT64_C(4)
 #define DIRECTORY_RENAME UINT64_C(5)
 #define DIRECTORY_SYNC UINT64_C(6)
+#define DIRECTORY_FILESYSTEM_INFO UINT64_C(7)
 
 #define DIRECTORY_RENAME_NO_REPLACE UINT64_C(0)
 #define DIRECTORY_RENAME_REPLACE UINT64_C(1)
@@ -118,6 +121,36 @@ struct directory_enumerate_reply {
   uint64_t kind;
   uint64_t name_size; /* Includes NUL. Zero for END/CHANGED. */
 };
+
+#define FILESYSTEM_TYPE_PYXIS UINT64_C(1)
+#define FILESYSTEM_FLAG_READ_ONLY (UINT64_C(1) << 0)
+#define FILESYSTEM_FLAG_GPT_DEGRADED (UINT64_C(1) << 1)
+#define FILESYSTEM_FLAG_DEGRADED (UINT64_C(1) << 2)
+#define FILESYSTEM_VOLUME_NAME_MAX 255u
+
+/* FILESYSTEM_INFO uses a complete zeroed directory_message (body ignored).
+ * Requires only FILESYSTEM_INFO on a native directory; other backends return
+ * BAD_OPERATION. No traversal, new authority or whole-image check occurs.
+ * All fields below are available on success. IDs are opaque bytes in filesystem
+ * order; name is NUL-terminated with zero padding. No namespace binding is given.
+ * Allocatable bytes are (pool blocks - 2) * 4096, excluding superblock slots but
+ * INCLUDING shared metadata/reserves. This is shared pool capacity, never a
+ * volume's writable allowance. Identity, generation and capacity describe the
+ * retained selected state; degraded flags distinguish GPT and filesystem opening.
+ * Used/free bytes, charged bytes, guarantees, quotas and percentages are NOT
+ * available: this record has no such fields. Their absence never means zero.
+ * Opening validates geometry/root envelopes, not global allocation accounting. */
+struct directory_filesystem_info {
+  uint64_t type;
+  uint64_t flags;
+  uint8_t pool_id[16];
+  uint8_t volume_id[16];
+  uint64_t generation;
+  uint64_t pool_allocatable_bytes;
+  char volume_name[FILESYSTEM_VOLUME_NAME_MAX + 1];
+};
+
+_Static_assert(sizeof(struct directory_filesystem_info) == 320, "filesystem info layout");
 
 /* ENTRY copies a whole NUL-terminated name and advances the cursor. A short
  * buffer reports the required name_size without touching the name or advancing.

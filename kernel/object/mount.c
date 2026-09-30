@@ -59,7 +59,7 @@ struct kernel_object *mount_create_native(const struct mount_config *config)
   return &mount->object;
 }
 
-static enum call_status open_native(struct mount_object *mount,
+static enum call_status open_native(struct mount_object *mount, uint64_t rights,
     uintptr_t request_address, size_t request_size, struct kernel_object **root,
     uint64_t *directory_rights)
 {
@@ -77,6 +77,9 @@ static enum call_status open_native(struct mount_object *mount,
   }
   if (open.rights & ~NATIVEFS_DIRECTORY_RIGHTS) {
     return CALL_READ_ONLY;
+  }
+  if ((open.rights & DIRECTORY_RIGHT_FILESYSTEM_INFO) && !(rights & MOUNT_RIGHT_OBSERVE)) {
+    return CALL_DENIED;
   }
   char name[MOUNT_VOLUME_NAME_MAX + 1];
   if (!copy_from_user(name, open.name, open.name_length)) {
@@ -119,7 +122,7 @@ static enum call_status open_host(uintptr_t request_address, size_t request_size
   if (open.access != MOUNT_ACCESS_READ_ONLY && open.access != MOUNT_ACCESS_READ_WRITE) {
     return CALL_BAD_REQUEST;
   }
-  *directory_rights = open.access == MOUNT_ACCESS_READ_WRITE ? DIRECTORY_RIGHTS :
+  *directory_rights = open.access == MOUNT_ACCESS_READ_WRITE ? DIRECTORY_CONTENT_RIGHTS :
       DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE | DIRECTORY_RIGHT_READ_FILES;
 
   struct hostfs_request *request = hostfs_request_prepare(HOSTFS_ROOT);
@@ -152,7 +155,7 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
   struct kernel_object *root = NULL;
   uint64_t directory_rights = 0;
   enum call_status status = mount->backend == MOUNT_NATIVE ?
-      open_native(mount, request_address, request_size, &root, &directory_rights) :
+      open_native(mount, rights, request_address, request_size, &root, &directory_rights) :
       open_host(request_address, request_size, &root, &directory_rights);
   if (status != CALL_OK) {
     KASSERT(!root);

@@ -106,11 +106,14 @@ No request or command can supply a different principal.
 `--optional` skips only a missing authority, including disabled configuration or
 confirmed hardware absence. Wrong GUID, missing partition/volume, policy denial,
 invalid media and all other failures from present authority stop the script.
-The selected root uses LOOKUP, ENUMERATE and READ_FILES. Ordinary applications
+The selected root uses LOOKUP, ENUMERATE and READ_FILES, plus filesystem
+observation when the mount authority holds OBSERVE. `--no-info` omits observation.
+Ordinary applications
 receive independently retained directory/file grants through handoff; they
 receive neither mount nor raw-block authority. Closing init's mount handle does
-not revoke those roots. `MOUNT_RIGHT_OBSERVE`, directory FILESYSTEM_INFO authority
-and `--no-info` remain task 6 work together with the real information query.
+not revoke those roots. Observation can be independently withheld or attenuated;
+it discloses [retained identity and shared-pool capacity](../interfaces/directories.md#scoped-filesystem-information),
+not usage or a writable allowance.
 
 ## Packaged scripts
 
