@@ -32,13 +32,37 @@ do not change [AGENTS.md](../../AGENTS.md) or authorize implementation.
   SSH port 2222. Check the supported invocation and actual cause before changing
   either workflow.
 
+## Remote validation follow-up
+
+Claude reported two nonblocking limitations during sha256sum validation:
+
+- Machine-mode output includes the shell's input echo and per-character line
+  redraws, requiring cleanup before comparing program output. Consider an
+  explicit session option that suppresses shell input echo/redraws at the source.
+  Do not strip arbitrary terminal sequences from application output: those bytes
+  may be legitimate output. The option's scope and negotiation remain to be
+  designed; machine mode currently preserves the terminal byte stream.
+- `command_complete` reports shell success/failure, not the child's numeric
+  exit code, as the [remote contract](../userland/remote-terminal.md#client-modes)
+  already documents. A future completion result should distinguish normal exit
+  with its exact code, launch failure, and fault/termination. Preserve the shell's
+  pipeline-status policy and the distinction between background launch completion
+  and child exit; individual pipeline-stage results need not be added together.
+
+Revisit these as a bounded remote-tool improvement when validating consumers with
+distinct nonzero outcomes, such as grep. Until exact codes are observed separately,
+reports based only on `command_complete` establish matching success/failure, not
+identical numeric exit statuses. Audit the uniq/sha256sum validation wording on
+that basis; this note does not claim their raw exit codes were independently
+captured or invalidate their output comparisons.
+
 ## Process experiment and open suggestions
 
-The agreed next experiment is a small sbase sha256sum port without a separate
-milestone or probe PR. Record scope/probe findings and validation in the delivery
-PRs, retain dependency merge order, and stop for decisions that expand scope.
-Focused commits and review still apply. Assess the result before making this a
-general workflow rule.
+The sbase sha256sum experiment used no separate milestone or probe PR: scope,
+probe findings and validation accompanied the delivery PRs (ports #31 and
+Pyxis #273). Dependency merge order, focused commits, review and discussion of
+scope-expanding decisions still applied. Both PRs are now merged; assess the
+result before making this a general workflow rule.
 
 Other suggestions remain open: make model-specific delegation guidance usable
 by other harnesses; reduce repeated contract prose; and discuss whether narrowly
