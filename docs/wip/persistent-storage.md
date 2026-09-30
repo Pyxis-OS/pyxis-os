@@ -3,7 +3,8 @@
 Status: agreed design direction, 2026-09-29. The
 [block-storage foundation](../devices/block-storage.md) and
 [initial format and read-only core](../devices/filesystem-readonly.md) are complete.
-Writable recovery, FUSE and native mounts remain proposals.
+Native read-only mounts are the [selected next milestone](native-readonly-filesystem.md).
+Writable recovery, FUSE and writable native persistence remain proposals.
 These notes do not authorize subsequent implementation. Agreed design choices
 and remaining proposals are identified separately; disk formats, enforcement
 interfaces and focused task plans for later writable/integration work still need
@@ -282,8 +283,11 @@ This envelope does not settle the remaining format/interface choices.
 ## Proposed milestone sequence
 
 The [block-storage foundation](../devices/block-storage.md) is complete. The initial
-format/read-only milestone is complete. Later breakdown and ordering remain
-proposals; each needs focused PR tasks before work starts. Planning agreement does not authorize implementation.
+format/read-only milestone is complete. The [native read-only mount milestone](native-readonly-filesystem.md)
+now comes before writable core work: it connects the existing reader to Caelum,
+init and ordinary applications, with Fastfetch as a final information consumer.
+The longer-term writable sequence below remains proposed. Planning agreement
+does not authorize implementation.
 
 1. **Block storage foundation — complete.** Caelum discovers an explicitly
    selected development image, validates GPT and provides bounded asynchronous

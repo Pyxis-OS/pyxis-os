@@ -110,7 +110,13 @@ An opt-in [host-backed development overlay](host-development-overlay.md)
 remains postponed: programs can already run from `host://`, so it is not needed
 for the persistent development loop or as a replacement for the boot archive.
 
-## Closed HTTPS milestone and later candidates
+## Current focus and later candidates
+
+The selected next milestone is [native read-only filesystem mounts](native-readonly-filesystem.md):
+init-selected GPT partition and volume, policy-approved directory/file capabilities,
+ordinary reads and executable loading, followed by scoped capacity information
+and Fastfetch Disk. Task 1 settles the remaining native contract before code.
+Writable recovery and FUSE stay separate.
 
 The [I/O reliability and attribution report](../development/io-reliability-attribution.md)
 closes the performance milestone. The former IPC/HTTP failures are resolved,
@@ -169,8 +175,9 @@ PyxisOS/pyxis-fs owns the pinned freestanding core and Linux host tools built by
 bounded acquisition and check both retained states. The
 [format contract](../../fs/docs/format.md), [core interfaces](../../fs/docs/core.md)
 and [measured host validation](../../fs/docs/host-tools.md#validation) are durable
-references. Writable recovery, FUSE and native-persistence milestones remain
-proposed; BSP request separation is selected before continuing those tracks.
+references. The [native read-only mount milestone](native-readonly-filesystem.md) is selected
+next. Writable recovery, FUSE and writable native persistence remain separate.
+BSP request separation is complete.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
@@ -178,7 +185,7 @@ proposed; BSP request separation is selected before continuing those tracks.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../devices/block-storage.md) and [initial format and read-only core](../devices/filesystem-readonly.md), including populated image tools and whole-image checking, are complete. | Writable recovery, FUSE and native mounts remain proposals with separate policy and implementation gates. |
+| Native disk storage | The [block-storage foundation](../devices/block-storage.md) and [initial format and read-only core](../devices/filesystem-readonly.md), including populated image tools and whole-image checking, are complete. | Read-only native mounts are the [selected milestone](native-readonly-filesystem.md); writable recovery and FUSE remain separate. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The
