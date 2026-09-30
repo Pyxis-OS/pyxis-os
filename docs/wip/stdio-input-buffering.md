@@ -149,6 +149,9 @@ successfully read final line into NULL (C11 7.21.7.2, C23 7.23.7.2).
    - Debugger check: with read-ahead buffered on a pipe-backed stream, a failed
      `fseek` returns ESPIPE and leaves the buffered bytes, logical position and
      indicators unchanged, and later reads return those bytes.
+   - Offset limit: after `fseek(LONG_MAX, SEEK_SET)` and `fseek(LONG_MAX,
+     SEEK_CUR)` on an empty file, `fgetc` reports EOF rather than EOVERFLOW
+     (review finding on task 2, fixed by capping file fills).
    - Cat, the `hello` `w+`/seek path, TCC compile/run, timezone loading, and
      Kilo open/edit/save.
    - A child reading console stdin, then the shell's next command, without lost
