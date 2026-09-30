@@ -44,6 +44,7 @@ struct client {
   int64_t close_deadline;
   bool rejected;
   bool final;
+  bool acknowledged;
   int result;
   char diagnostic[256];
   struct byte_buffer outgoing;
@@ -113,6 +114,21 @@ static int nonblocking(int fd)
     return -1;
   }
   return flags;
+}
+
+static void disconnect_socket(int fd, bool acknowledged)
+{
+  if (!acknowledged) {
+    /* FIN can remain behind unacknowledged INPUT when the guest stops reading.
+     * RST must bypass that backlog so disconnection ends the execution group. */
+    struct linger abortive = {.l_onoff = 1, .l_linger = 0};
+    if (setsockopt(fd, SOL_SOCKET, SO_LINGER, &abortive, sizeof(abortive)) < 0) {
+      int failure = errno;
+      restore_terminal();
+      fprintf(stderr, "pyxis-remote: abortive disconnect: %s\n", strerror(failure));
+    }
+  }
+  close(fd);
 }
 
 static int connect_host(const char *host, const char *port)
@@ -350,6 +366,7 @@ static int present_frame(struct client *client)
                  cause_name, reason_name, exit_status, drain_name);
       }
       client->final = true;
+      client->acknowledged = true;
       client->result = !client->rejected && cause == REMOTE_CAUSE_SHELL_EXIT &&
                        reason == REMOTE_PROCESS_EXITED && !exit_status &&
                        drain == REMOTE_DRAIN_COMPLETE ? 0 :
@@ -638,14 +655,14 @@ int main(int argc, char **argv)
   if (!machine) {
     if (tcgetattr(STDIN_FILENO, &saved_termios) < 0) {
       perror("pyxis-remote: terminal attributes");
-      close(socket_fd);
+      disconnect_socket(socket_fd, false);
       return 1;
     }
     struct termios raw = saved_termios;
     cfmakeraw(&raw);
     if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) < 0) {
       perror("pyxis-remote: raw terminal");
-      close(socket_fd);
+      disconnect_socket(socket_fd, false);
       return 1;
     }
     terminal_raw = true;
@@ -661,7 +678,7 @@ int main(int argc, char **argv)
     restore_terminal();
     errno = failure;
     perror("pyxis-remote: nonblocking standard streams");
-    close(socket_fd);
+    disconnect_socket(socket_fd, false);
     return 1;
   }
   unsigned char outgoing[BUFFER_CAPACITY];
@@ -683,7 +700,7 @@ int main(int argc, char **argv)
   remote_encode_u32(hello + 4, rows);
   queue_frame(&client, REMOTE_HELLO, hello, sizeof(hello));
   int result = run_client(&client);
-  close(socket_fd);
+  disconnect_socket(socket_fd, client.acknowledged);
   restore_terminal();
   if (client.diagnostic[0]) {
     fprintf(stderr, "pyxis-remote: %s\n", client.diagnostic);
