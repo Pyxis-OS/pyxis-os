@@ -27,7 +27,8 @@ stubs. Existing ports are not retroactively rewritten by this milestone.
 ## Ownership and stdio integration
 
 Userland's private `libc/descriptor.c` stores the native handle, backend kind,
-selected access mode, append policy and cursor directly in each entry. The
+selected access mode, append policy, cursor and any
+[input read-ahead](stdio.md#input-read-ahead) directly in each entry. The
 lowest free slot is reserved for an open, including closed or absent standard
 slots. Descriptors 0–2 use static startup storage; later growth uses the heap.
 Allocation failure reports ENOMEM and descriptor-number exhaustion EMFILE.
@@ -48,7 +49,8 @@ append use this same ownership/cursor machinery.
 
 Backend operations report one transfer or an error. FILE alone owns sticky
 EOF/error indicators and the fread/fwrite loops. Descriptor reads remain usable
-after a FILE observes EOF and never fill a short request through repeated reads.
+after a FILE observes EOF and never fill a short request through repeated reads;
+they return bytes a FILE read ahead before any backend transfer.
 Supported operations, selected mode and granted native rights remain separate;
 an adapter preserves authority and reports denied or unsupported operations.
 

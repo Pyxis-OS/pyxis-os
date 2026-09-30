@@ -1,6 +1,6 @@
 # Libc input read-ahead
 
-Status: task 1 complete; the contract below is agreed.
+Status: tasks 1 and 2 complete; validation and closure (task 3) remain.
 
 ## Completion point
 
@@ -129,12 +129,16 @@ successfully read final line into NULL (C11 7.21.7.2, C23 7.23.7.2).
    the fixed libc also returned `last`, keeping the indicator set. Terminated
    lines and an empty file were unchanged. A read error during the call still
    returns NULL by source inspection; no consumer injects one.
-2. [ ] **Add descriptor read-ahead and integrate stdio.** Entry buffer and backend
+2. [x] **Add descriptor read-ahead and integrate stdio.** Entry buffer and backend
    policy; separate buffered and exact read paths; discard on write, seek and
    close; input `fflush`; the direct `fread` path. Document the contract beside
    `descriptor.h` and `stdio.h`, and update [stdio](../userland/stdio.md),
    [libc portability](../userland/libc-portability.md) and
-   [pipes](../interfaces/pipes.md).
+   [pipes](../interfaces/pipes.md). Smoke check in QEMU/KVM with four CPUs through
+   the remote terminal: the uniq 36,009-byte `host://` workload finished in
+   0.35 s with output identical to the host build; a uniq pipeline, sha256sum
+   `-c` from a file and a pipe, head on a pipe and the fgets case still worked.
+   Formal validation is task 3.
 3. [ ] **Validate and close the milestone.** Build the ordinary image and use the
    remote terminal, recording QEMU CPU count and accelerator:
    - Rerun the uniq 36,009-byte `host://` workload and compare with 20.4 s; uniq
