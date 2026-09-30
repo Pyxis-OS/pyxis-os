@@ -15,6 +15,7 @@ struct config_call {
   struct net_config_reply reply;
   enum call_status status;
   struct task_wait *wait;
+  bool cancelled;
 };
 
 static struct config_call pending[CONFIG_PENDING_LIMIT];
@@ -57,11 +58,22 @@ enum call_status net_config_exchange(uint64_t operation,
   };
   unlock_pending();
   net_worker_notify();
-  task_wait_sleep(wait);
+  task_wait_sleep_interruptible(wait);
 
   lock_pending();
-  KASSERT(call->state == CONFIG_DONE && !call->wait);
-  enum call_status status = call->status;
+  while (call->state != CONFIG_DONE) {
+    KASSERT(call->wait == wait);
+    call->wait = NULL;
+    call->cancelled = true;
+    wait = task_wait_prepare();
+    call->wait = wait;
+    unlock_pending();
+    net_worker_notify();
+    task_wait_sleep(wait);
+    lock_pending();
+  }
+  KASSERT(!call->wait);
+  enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : call->status;
   if (status == CALL_OK && operation == NET_CONFIG_QUERY) {
     *reply = call->reply;
   }
@@ -105,13 +117,14 @@ bool net_config_service(void)
       cpu_restore_interrupts(flags);
       continue;
     }
+    bool cancelled = call->cancelled;
     call->state = CONFIG_RUNNING;
     unlock_pending();
     cpu_restore_interrupts(flags);
 
     /* RUNNING keeps the caller parked. Only this worker touches its payload;
      * no request lock spans ARP cleanup or another protocol's completion. */
-    enum call_status status = configure(call);
+    enum call_status status = cancelled ? CALL_ENDPOINT_CLOSED : configure(call);
 
     flags = cpu_save_interrupts();
     lock_pending();

@@ -4,7 +4,9 @@
 #include <kernel/user/wait.h>
 
 /* Owning BSP worker, IF=1. TCP interests require network-worker context.
- * Service unlinks before completion and never accesses completed storage. */
+ * Service unlinks before completion and never accesses completed storage. A
+ * stopped observer completes ENDPOINT_CLOSED through its saved request wait;
+ * its caller remains parked until every retained interest is released. */
 bool readiness_service(struct bsp_request **active);
 bool readiness_next_deadline(struct bsp_request *active, uint64_t *deadline);
 /* BSP, IF=0; no queue or subsystem retains the request when completed. */

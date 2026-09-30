@@ -4,6 +4,7 @@
 #include <kernel/object/object.h>
 #include <kernel/process.h>
 #include <kernel/panic.h>
+#include <kernel/task.h>
 #include <kernel/user_memory.h>
 #include <kernel/user/wait.h>
 
@@ -95,7 +96,7 @@ struct syscall_result user_wait_many(uintptr_t interests, uint64_t count,
     request->interests[i] = (struct readiness_interest){objects[i], input[i].events, 0};
   }
   bsp_request_submit_and_wait(&request->request);
-  status = request->status;
+  status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : request->status;
   if (status == CALL_OK) {
     uint64_t events[WAIT_MAX_INTERESTS];
     for (size_t i = 0; i < count; ++i) {

@@ -14,6 +14,7 @@ struct tcp_write_call {
   enum write_state state;
   struct tcp_stream *stream; /* The parked caller retains its grant. */
   struct task_wait *wait;
+  bool cancelled;
   uint64_t deadline;
   bool nonblocking;
   size_t length, accepted;
@@ -87,11 +88,22 @@ enum call_status net_tcp_write(struct kernel_object *object, const void *data,
   call->state = WRITE_QUEUED;
   unlock_writes();
   net_worker_notify();
-  task_wait_sleep(wait);
+  task_wait_sleep_interruptible(wait);
 
   lock_writes();
-  KASSERT(call->state == WRITE_DONE && !call->wait);
-  enum call_status status = call->status;
+  while (call->state != WRITE_DONE) {
+    KASSERT(call->wait == wait);
+    call->wait = NULL;
+    call->cancelled = true;
+    wait = task_wait_prepare();
+    call->wait = wait;
+    unlock_writes();
+    net_worker_notify();
+    task_wait_sleep(wait);
+    lock_writes();
+  }
+  KASSERT(!call->wait);
+  enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : call->status;
   if (status == CALL_OK) {
     reply->length = call->accepted;
   }
@@ -172,6 +184,7 @@ bool tcp_writes_service(void)
     lock_writes();
     struct tcp_write_call *call = &writes[i];
     enum write_state state = call->state;
+    bool cancelled = call->cancelled;
     if (state == WRITE_QUEUED) {
       call->state = WRITE_ACTIVE;
     }
@@ -181,8 +194,8 @@ bool tcp_writes_service(void)
     if (state != WRITE_QUEUED && state != WRITE_ACTIVE) {
       continue;
     }
-    enum call_status status;
-    bool complete = queue_write(call, &status);
+    enum call_status status = CALL_ENDPOINT_CLOSED;
+    bool complete = cancelled || queue_write(call, &status);
     if (!complete && call->nonblocking) {
       status = CALL_WOULD_BLOCK;
       complete = true;

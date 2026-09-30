@@ -1,6 +1,7 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/memory.h>
+#include <kernel/net/arp.h>
 #include <kernel/net/echo.h>
 #include <kernel/net/icmp.h>
 #include <kernel/panic.h>
@@ -10,7 +11,7 @@
 
 #define ECHO_PENDING_LIMIT 16
 
-enum echo_state { ECHO_FREE, ECHO_QUEUED, ECHO_SENDING, ECHO_WAITING, ECHO_SENT, ECHO_DONE };
+enum echo_state { ECHO_FREE, ECHO_QUEUED, ECHO_SENDING, ECHO_WAITING, ECHO_SENT, ECHO_FINISHED, ECHO_DONE };
 
 struct pending_echo {
   enum echo_state state;
@@ -18,6 +19,7 @@ struct pending_echo {
   bool external;
   uint64_t token, deadline, started;
   struct task_wait *wait;
+  bool cancelled;
   enum call_status status;
   struct echo_reply reply;
 };
@@ -52,6 +54,10 @@ static void echo_payload(uint8_t payload[ECHO_PAYLOAD_BYTES], uint64_t token)
 static void complete_echo(struct pending_echo *request, enum call_status status)
 {
   request->status = status;
+  if (request->state == ECHO_SENDING) {
+    request->state = ECHO_FINISHED;
+    return;
+  }
   request->state = ECHO_DONE;
   struct task_wait *wait = request->wait;
   request->wait = NULL;
@@ -92,11 +98,22 @@ enum call_status net_echo_exchange(uint32_t destination, uint64_t deadline,
   };
   unlock_pending();
   net_worker_notify();
-  task_wait_sleep(wait);
+  task_wait_sleep_interruptible(wait);
 
   lock_pending();
-  KASSERT(request->state == ECHO_DONE && !request->wait);
-  enum call_status status = request->status;
+  while (request->state != ECHO_DONE) {
+    KASSERT(request->wait == wait);
+    request->wait = NULL;
+    request->cancelled = true;
+    wait = task_wait_prepare();
+    request->wait = wait;
+    unlock_pending();
+    net_worker_notify();
+    task_wait_sleep(wait);
+    lock_pending();
+  }
+  KASSERT(!request->wait);
+  enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : request->status;
   if (status == CALL_OK) {
     *reply = request->reply;
   }
@@ -184,8 +201,16 @@ bool net_echo_service(void)
     uint64_t flags = cpu_save_interrupts();
     lock_pending();
     struct pending_echo *request = &pending[i];
-    if (echo_active(request) && task_deadline_expired(request->deadline)) {
-      complete_echo(request, CALL_TIMED_OUT);
+    if (echo_active(request) &&
+        (request->cancelled || task_deadline_expired(request->deadline))) {
+      enum call_status status = request->cancelled ? CALL_ENDPOINT_CLOSED : CALL_TIMED_OUT;
+      uint64_t token = request->token;
+      unlock_pending();
+      cpu_restore_interrupts(flags);
+      net_arp_cancel((struct ipv4_completion){IPV4_NOTIFY_ECHO, token});
+      flags = cpu_save_interrupts();
+      lock_pending();
+      complete_echo(request, status);
       worked = true;
     }
     if (request->state != ECHO_QUEUED) {
@@ -214,8 +239,11 @@ bool net_echo_service(void)
 
     flags = cpu_save_interrupts();
     lock_pending();
-    if (sent != NET_OK) {
-      complete_echo(request, echo_send_status(sent));
+    if (request->state == ECHO_FINISHED || sent != NET_OK) {
+      enum call_status status = request->state == ECHO_FINISHED ?
+          request->status : echo_send_status(sent);
+      request->state = ECHO_WAITING;
+      complete_echo(request, status);
     } else if (request->state == ECHO_SENDING) {
       /* ARP owns the packet until it can copy it into NIC storage. Immediate
        * transmission has already moved the request to SENT. */

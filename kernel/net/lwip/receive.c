@@ -1,6 +1,7 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/memory.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/task.h>
 #include <caelum_hooks.h>
 #include <stdatomic.h>
@@ -14,6 +15,8 @@ struct tcp_read {
   enum read_state state;
   struct tcp_stream *stream; /* Owned until the worker returns receive credit. */
   struct task_wait *wait;
+  bool cancelled;
+  struct execution_group *cleanup_group; /* Covers the retained operation reference. */
   uint64_t deadline;
   bool nonblocking;
   size_t capacity, length;
@@ -151,6 +154,7 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
   }
   struct task_wait *wait = task_wait_prepare();
   call->stream = stream;
+  call->cleanup_group = object_cleanup_defer();
   call->capacity = capacity;
   call->deadline = deadline;
   call->nonblocking = nonblocking;
@@ -158,21 +162,38 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
   call->state = READ_QUEUED;
   unlock_reads();
   net_worker_notify();
-  task_wait_sleep(wait);
+  task_wait_sleep_interruptible(wait);
 
-  /* DONE is immutable until this caller collects it. Copy outside the lock;
-   * successful bytes have already left the stream even if an abort follows. */
   lock_reads();
-  KASSERT(call->state == READ_DONE && !call->wait);
+  while (call->state != READ_DONE) {
+    KASSERT(call->wait == wait);
+    call->wait = NULL;
+    call->cancelled = true;
+    wait = task_wait_prepare();
+    call->wait = wait;
+    unlock_reads();
+    net_worker_notify();
+    task_wait_sleep(wait);
+    lock_reads();
+  }
+  KASSERT(!call->wait);
   enum call_status status = call->status;
+  bool stopped = task_stop_requested();
+  struct execution_group *group = call->cleanup_group;
   unlock_reads();
-  if (status == CALL_OK) {
+  /* DONE keeps completed bytes immutable until collection, including after
+   * an abort. Stopping discards bytes but still returns their receive credit. */
+  if (status == CALL_OK && !stopped) {
     memcpy(data, call->data, call->length);
     reply->length = call->length;
   }
   lock_reads();
   if (status == CALL_OK) {
     call->state = READ_CONSUMED;
+    if (stopped) {
+      wait = task_wait_prepare();
+      call->wait = wait;
+    }
   } else {
     /* No bytes/credit were transferred. A failed try leaves no pending read
      * or retained operation reference for a later worker pass to reclaim. */
@@ -180,10 +201,18 @@ enum call_status net_tcp_read(struct kernel_object *object, size_t capacity,
   }
   unlock_reads();
   if (status != CALL_OK) {
+    struct execution_group *previous = object_cleanup_enter(group);
     object_release(object);
+    object_cleanup_leave(previous);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
   }
   net_worker_notify();
-  return status;
+  if (stopped && status == CALL_OK) {
+    task_wait_sleep(wait);
+  }
+  return stopped ? CALL_ENDPOINT_CLOSED : status;
 }
 
 static void complete_read(struct tcp_read *call, enum call_status status)
@@ -208,6 +237,7 @@ bool tcp_reads_service(void)
     lock_reads();
     struct tcp_read *call = &reads[i];
     enum read_state state = call->state;
+    bool cancelled = call->cancelled;
     if (state == READ_CONSUMED) {
       call->state = READ_RECLAIMING;
     } else if (state == READ_QUEUED) {
@@ -219,9 +249,19 @@ bool tcp_reads_service(void)
     if (state == READ_CONSUMED) {
       return_receive_credit(call->stream->connection, call->length);
       flags = cpu_save_interrupts();
+      struct execution_group *group = call->cleanup_group;
+      struct execution_group *previous = object_cleanup_enter(group);
       object_release(&call->stream->object);
+      object_cleanup_leave(previous);
+      if (group) {
+        execution_group_cleanup_end(group);
+      }
       lock_reads();
+      struct task_wait *wait = call->wait;
       *call = (struct tcp_read){0};
+      if (wait) {
+        task_wait_wake(wait);
+      }
       unlock_reads();
       cpu_restore_interrupts(flags);
       worked = true;
@@ -231,7 +271,7 @@ bool tcp_reads_service(void)
       continue;
     }
     struct tcp_connection *connection = call->stream->connection;
-    enum call_status status = connection->terminal_status;
+    enum call_status status = cancelled ? CALL_ENDPOINT_CLOSED : connection->terminal_status;
     if (status == CALL_OK && !call->nonblocking && task_deadline_expired(call->deadline)) {
       status = CALL_TIMED_OUT;
     }
