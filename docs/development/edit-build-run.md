@@ -53,11 +53,17 @@ and [terminal behavior](../userland/terminal.md) for details.
 
 ## Use a remote terminal
 
-Boot four CPUs with networking and loopback forwarding, then connect with the
-native client:
+From the repository root, build the native host client and boot four CPUs with
+networking and loopback forwarding:
 
 ```sh
+make -C tools remote
 make run CPUS=4 VIRTIO_NET=1 TCP_FORWARD=2323:2323
+```
+
+Leave QEMU running. In another host terminal, connect from the repository root:
+
+```sh
 build/tools/pyxis-remote 127.0.0.1 2323
 ```
 
