@@ -116,11 +116,40 @@ Fresh ordinary acquisition by path or object ID cannot recover the unlinked
 object. Permitted delegation of an existing handle remains possible without
 enlarging its rights. Reusing its former name does not retarget retained handles.
 
-Checkpoint authority remains a task-1 decision. The pinned format defines
-`file.checkpoint` but no corresponding directory right. Do not infer checkpoint
-authority from this mutation table or import the native interface's bundled
-permissions. The subsequent native persistence milestone must explicitly map
-the settled core rights to OS grants.
+## Agreed checkpoint authority
+
+Agreed during task 1, 2026-09-30; the directory right and checkpoint operations
+are not implemented yet. Require `file.checkpoint` through a file handle and an
+explicit `dir.checkpoint` through a directory handle. Both request a checkpoint
+of the containing volume, covering accepted changes before its ordering point;
+pool-wide publication may include sibling-volume changes. This confers no access
+to other objects or their contents.
+
+Checkpoint rights grant no read, lookup, write, resize or namespace-mutation
+authority, and those rights do not implicitly grant checkpoint authority. A held
+directory handle needs neither subtree scope nor lookup rights to request its
+checkpoint. Retained unlinked files and detached directories can still request
+one when their handles hold the respective right. Ordinary pool-health rules
+apply: checkpointing fails while mutation is stopped and cannot clear an
+uncertain outcome. A read-only inspection instance does not provide the writable
+checkpoint operation.
+
+Adding `dir.checkpoint` does not widen existing grants. Existing images may still
+authorize checkpoints through their `file.checkpoint` grants; the absent
+directory bit grants nothing. New formatter-created root grants may explicitly
+include the new directory right. Do not silently rewrite old grants on open.
+
+The authoritative [unknown-rights rule](../../fs/docs/format.md#rights-and-trusted-acquisition)
+requires rejection of unsupported grant bits, not a read-required feature for
+every new independent allow right. Add no feature declaration or structure-version
+bump solely for `dir.checkpoint`. Existing decoders reject an encountered unknown
+grant bit as `CORRUPT`; opening alone does not inspect every grant. The corrected
+rule makes no compatibility promise to those older implementations. It does not
+change the separate orphan-format requirement below.
+
+The subsequent native persistence milestone must explicitly map the settled
+core rights to OS grants rather than import the current native interface's
+bundled permissions.
 
 ## Agreed directory removal and name reuse
 
@@ -262,8 +291,8 @@ write, together with the cleanup failure and resulting pool health. Never
 collapse those facts into zero progress, an uncertain user write, or an
 unqualified healthy success.
 
-Task 1 remains open for checkpoint authority, concrete result/status
-interfaces, directory-continuation and operation-reference mechanisms, persistent
+Task 1 remains open for concrete result/status interfaces,
+directory-continuation and operation-reference mechanisms, persistent
 orphan representation, bounded allocation/reclamation algorithms and admission
 costs, the recovery validation mechanism, and implementation PR boundaries.
 
