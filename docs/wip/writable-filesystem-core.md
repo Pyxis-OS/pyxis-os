@@ -47,8 +47,9 @@ an uncertain publication as successful.
 
 Publication remains pool-wide and serialized. A volume checkpoint covers all
 accepted changes in that volume before its ordering point; sibling-volume
-changes may be included. Close is not a substitute for checkpointing. Task 1
-defines the exact progress/error interface, including uncertain outcomes.
+changes may be included. Close is not a substitute for checkpointing. The
+progress and failure contract below separates operation outcomes from pool
+health; task 1 still defines its concrete interface.
 
 Live object handles retain identity and granted authority while observing the
 latest committed state. They do not permanently pin the generation at open.
@@ -95,13 +96,83 @@ For example, opening `home://notes` retains directory A. Removing that empty
 directory and creating `home://notes` again produces directory B. The old handle
 still observes empty A and cannot insert children; a new lookup observes B.
 
-This resolves the directory-lifetime policy only. Task 1 remains open for the
-operation-rights table, exact error/progress interfaces, diagnostic-view and
-directory-continuation behavior, persistent orphan representation, bounded
-allocation/reclamation algorithms and admission costs, recovery validation
-mechanism, and implementation PR boundaries. The existing format requires a
-read-required feature and explicit orphan-root semantics before unlinked objects
-can persist; these directory rules do not by themselves define that encoding.
+The existing format requires a read-required feature and explicit orphan-root
+semantics before unlinked objects can persist; these directory rules do not by
+themselves define that encoding.
+
+## Agreed progress, failures and read availability
+
+Agreed during task 1, 2026-09-30; this specifies behavior, not implemented APIs.
+An operation result preserves three independent facts:
+
+- Confirmed progress: for a write, the contiguous byte prefix whose transactions
+  completed both required flushes. No byte in an uncertain transaction contributes
+  to that count. Namespace operations report whether their transaction committed.
+- Operation completion: complete, stopped with a known failure, or outcome
+  unknown for the transaction being published. Preserve the failure cause.
+- Pool health and any maintenance failure: whether ordinary access and mutation
+  remain available. Cleanup failure cannot erase confirmed progress or turn an
+  already confirmed user transaction into an uncertain one.
+
+A large write stops at its first failed or uncertain transaction. Earlier
+transactions remain confirmed; later transactions are not attempted. An unknown
+outcome may include additional committed bytes beyond the confirmed prefix.
+Even zero confirmed bytes does not establish that nothing changed. The core and
+adapters must not automatically retry an uncertain mutation, including just the
+unconfirmed suffix; recovery and reconciliation must establish what happened
+before the caller decides its next operation.
+
+The publication uncertainty window starts when the older superblock-slot write
+is attempted and ends only when the following flush succeeds. A failed or short
+slot write, or failure of that final flush, is uncertain. Failure of replacement
+writes or their first flush, before any slot write is attempted, cannot publish
+that candidate. It may leave unreachable bytes in previously free storage.
+
+| Failure point | Operation outcome | Pool access afterward |
+| --- | --- | --- |
+| Ordinary permission, quota, workspace or memory admission failure | Current transaction not committed; retain any earlier confirmed prefix | Reads and later mutations remain available. |
+| Replacement write or first flush fails before slot publication | Current transaction not committed; retain any earlier confirmed prefix | Stop mutation until recovery. Reads, metadata, listing and lookup may use the last confirmed state while its integrity remains established. |
+| Slot write or final flush has an uncertain outcome | Current transaction unknown; retain any earlier confirmed prefix | Stop all ordinary access until recovery, including reads, metadata, listing, lookup, new acquisition and derivation through existing handles. |
+| Cleanup after a confirmed user commit fails before its own slot publication | User commit remains confirmed; report cleanup failure separately | A cleanup write/flush failure stops mutation until recovery. Reads may use the last confirmed state, including the confirmed user commit, while its integrity remains established. |
+| Cleanup's own slot publication becomes uncertain | User commit remains confirmed; cleanup outcome is unknown | Stop all ordinary access until recovery, even if cleanup was intended to change only allocation bookkeeping. |
+
+Deferring cleanup because a bounded batch cannot be admitted is not itself an
+I/O failure or uncertain publication. Keep its storage charged and protected;
+reads remain available and later mutations still require full admission. The
+reclamation design must separately prove how cleanup eventually makes progress.
+
+These access restrictions are pool-wide, including sibling volumes. In the
+readable but mutation-stopped state, ordinary rights still apply, no read uses
+the unpublished candidate, and no operation advances retained roots or frees or
+reuses blocks. A checkpoint fails while mutation is stopped; it cannot clear the
+failure or promise renewed storage health. Reads can still fail with their own
+I/O or validation errors. If integrity of the confirmed state is no longer
+established, stop ordinary access rather than serving an unproved state or
+switching generations under existing handles.
+
+After uncertain publication, even cached object data is unavailable through
+ordinary operations. In-memory outcome/health reporting and handle closure remain
+available. Closing releases runtime resources without performing recovery writes
+or retrying failed cleanup; persistent orphan bookkeeping must survive that
+release. Recovery requires quiescing outstanding I/O, closing the instance and
+reopening through validation. No independent inspector may open changing media.
+Reopening may refuse writable access to degraded or unsupported retained states;
+read-only inspection keeps its existing contract. Neither close nor reopen
+silently repairs a damaged slot or discards a retained state.
+
+For example, if a write commits its first chunk and the second chunk's final
+flush fails, report the first chunk's bytes, an unknown outcome for the second,
+and unavailable pool access. Recovery may find only the first chunk committed,
+or both the first and second. If the entire write instead commits and a later
+reclaim publication fails, report the full confirmed byte count and completed
+write, together with the cleanup failure and resulting pool health. Never
+collapse those facts into zero progress, an uncertain user write, or an
+unqualified healthy success.
+
+Task 1 remains open for the operation-rights table, concrete result/status
+interfaces, diagnostic-view and directory-continuation behavior, persistent
+orphan representation, bounded allocation/reclamation algorithms and admission
+costs, the recovery validation mechanism, and implementation PR boundaries.
 
 ## Publication, reclamation and admission gates
 
@@ -129,8 +200,8 @@ Before implementation, task 1 must establish:
   commits and reconstructed on reopening, without relying on obsolete readers.
 - Live-view identity, orphan representation, directory continuation invalidation,
   operation references and retained-state advancement when no user write follows.
-- Failure outcomes before publication, during uncertain publication and during
-  cleanup, including what remains readable and what requires close/reopen.
+- Concrete interfaces implementing the agreed progress/failure outcomes and
+  pool access states, including cleanup reporting and close/reopen requirements.
 - Compatibility checks for writable access. Preserve supported extension semantics
   and bytes or refuse writes. Change format versions only for an actual
   incompatibility; do not bump them simply because a writer now exists.
