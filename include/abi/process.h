@@ -13,7 +13,9 @@
 /* WAIT sends only a message_header. Completion is immutable and repeatable,
  * and becomes visible after execution resources have been reclaimed. Status
  * is the sign-extended 32-bit exit code for EXITED, zero for FAULTED/TERMINATED. Fault
- * details remain in the kernel log. Closing a handle does not stop execution. */
+ * details remain in the kernel log. Closing a handle does not stop execution.
+ * WAIT-authorized observers also accept WAIT_COMPLETE through WAIT_MANY. The
+ * readiness event does not consume the result; WAIT retrieves it immediately. */
 struct process_result {
   uint64_t kind;
   int64_t exit_status;

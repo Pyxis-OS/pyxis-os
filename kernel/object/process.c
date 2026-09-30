@@ -1,8 +1,11 @@
+#include <abi/wait.h>
+#include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/process.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include <kernel/user/wait.h>
 #include <kernel/user_memory.h>
 
 /* IF=0; lock order is completion -> scheduler queues. No allocation, user
@@ -60,6 +63,17 @@ void process_control_complete(struct process_control *control, struct process_re
     task_wait_wake(wait);
   }
   unlock_control(control);
+  readiness_notify();
+}
+
+uint64_t process_control_ready(struct process_control *control)
+{
+  uint64_t flags = cpu_save_interrupts();
+  lock_control(control);
+  bool complete = control->complete;
+  unlock_control(control);
+  cpu_restore_interrupts(flags);
+  return complete ? WAIT_COMPLETE : 0;
 }
 
 struct syscall_result process_control_call(struct process_control *control,

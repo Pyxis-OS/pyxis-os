@@ -23,6 +23,9 @@ struct process_control *process_control_create(void);
  * resources are reclaimed. Detaches and wakes every waiter. */
 void process_control_complete(struct process_control *control, struct process_result result);
 
+/* Retained control object; masks interrupts while sampling completion. */
+uint64_t process_control_ready(struct process_control *control);
+
 /* Current process, IF=0, with a live handle reference and checked protocol.
  * WAIT may sleep; one task per process keeps its handle and mappings stable. */
 struct syscall_result process_control_call(struct process_control *control,

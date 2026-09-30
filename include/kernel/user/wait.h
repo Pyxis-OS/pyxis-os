@@ -31,7 +31,7 @@ void readiness_init(void);
 /* Common BSP executor, IF=0. Transfers a FORWARDED request to the independent
  * readiness worker, or the network worker when any interest needs TCP state. */
 void readiness_submit(struct readiness_request *request);
-/* Any CPU, IF=0, after publishing terminal state and releasing its lock. A
+/* Any CPU, IF=0, after publishing readiness state and releasing its lock. A
  * notification is remembered across observation and worker wait publication. */
 void readiness_notify(void);
 
