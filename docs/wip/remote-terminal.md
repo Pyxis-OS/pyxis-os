@@ -217,17 +217,17 @@ running foreground command or terminate the entire session. Foreground-group
 interruption remains separate work. The host client provides a distinct local
 escape to disconnect deliberately.
 
-Task 4's implemented contract uses CREATE_GROUP on the ordinary launcher to return a
-CONTROL supervision handle and a group-bound LAUNCH-only launcher. The creator
-stays outside; membership follows all descendants and cannot be changed through
-launcher replacement. Members cannot receive unbound/foreign-group launchers.
-SEAL and final CONTROL-grant closure permanently close admission; batch publication
-and enrollment serialize with sealing. Task 4 leaves existing members running and
-exposes no terminate or group-completion operation. Explicit CONTROL delegation can
-prolong supervision, including beyond creator exit. Natural shell-exit policy stays
-with the later server. See [execution groups](../interfaces/execution-groups.md) and
-the [task-5 termination ownership matrix](execution-group-termination.md).
-A temporary manual exercise program is authorized for task 4, without committed
+Tasks 4–5 implement CREATE_GROUP returning CONTROL|WAIT supervision and a bound
+LAUNCH-only launcher. The creator stays outside; descendants cannot replace their
+membership with an unbound or foreign launcher. SEAL closes admission while allowing
+natural drain; TERMINATE and final CONTROL closure also request safe stopping.
+WAIT and WAIT_COMPLETE report immutable cleanup completion, including admitted
+launches and attributed deferred releases. PROCESS_TERMINATED is distinct from exit
+and fault. Explicit CONTROL delegation prolongs supervision; WAIT-only copies do not.
+Natural shell-exit policy stays with the later server. See
+[execution groups](../interfaces/execution-groups.md) and the
+[termination ownership matrix](execution-group-termination.md).
+Temporary manual exercise programs are authorized for tasks 4–5, without committed
 tests or boot/output automation.
 
 ### Wire protocol, host client and command completion
@@ -303,7 +303,7 @@ Do not implement unrelated async, scheduling, authentication or multiplexer work
   background and service launches. Preserve ordinary observer semantics. Establish
   the termination matrix before implementing cleanup; membership alone does not
   enable a remotely exposed server.
-- [ ] **5. Safe termination and group completion.** Implement safe stopping,
+- [x] **5. Safe termination and group completion.** Implement safe stopping,
   blocked-operation detachment and ownership return across the matrix. Add final
   supervisor-close cleanup and group-completion readiness. Verify descendants,
   CPU loops, blocked I/O, failed launches and server-owner death before claiming
@@ -416,8 +416,46 @@ debugger jobs were stopped; no exercise source or automation is committed.
 
 Final publication/seal lock ordering, cross-placement denial, reply-grant rejection
 and allocation-failure unwinding were inspected in code. Those paths are not claimed
-as injected or individually observed runtime cases. Sealing still does not terminate
-execution or expose group completion; task 5 starts from the ownership matrix.
+as injected or individually observed runtime cases. That task-4 revision exposed
+sealing only; task 5 adds stopping and completion using the ownership matrix.
+
+Task 5 validation on 2026-09-30 used ordinary kernel, SDK and image builds, plus
+an uncommitted interactive native exercise. QEMU 10.2.2 with the local AHCI fix,
+matching Fedora OVMF, CPU `max`, 256 MiB and nested KVM ran one and four CPUs.
+Four-CPU local checks ran without a NIC; network checks used virtio-net, assigned
+10.0.2.15/24 and the guest's own configured address for TCP connections. No
+external network peer, HOST mount, committed tests or boot/output automation was used.
+
+Four-CPU checks observed CPU loops, clock sleep, endpoint RECEIVE, queued and
+delivered CALL, three competing pipe/terminal readers, full 64 KiB pipe/terminal
+writers, terminal wait_many and group WAIT all stopping with TERMINATED/0. Outside
+pipe/terminal owners remained usable; delivered CALL cancellation preserved the
+outside provider's receipt. Final CONTROL closure left WAIT-only observation usable.
+Sole supervisor exit/fault stopped members while preserving its EXITED/FAULTED result.
+A three-member spinning batch and a member waiting on its spinning descendant both
+completed shutdown. A bad second-stage image left every returned child handle zero
+and allowed sealed completion. Empty-open polling, sealed/repeated WAIT, mixed
+group/terminal readiness, WAIT/CONTROL rights rejection, repeated TERMINATE and
+post-stop launch rejection produced their specified results.
+
+Network checks covered blocked ACCEPT, TCP READ, TCP WRITE to an unread peer,
+externally retained UDP receive and a member's solely owned UDP endpoint. GDB
+confirmed CONTROL_ACTIVE/ACCEPT, READ_ACTIVE and WRITE_ACTIVE before stopping;
+RNG_ACTIVE with a waiting syscall was observed at the stop request. Completed groups
+left outside peers usable. GDB also observed zero members with complete=false and
+two deferred cleanup tokens still pending, confirming that member reclamation alone
+did not publish completion. At the end, completed-task/object-retirement queues,
+readiness active requests and TCP/RNG operation slots were empty/free; the UDP
+receive slots were likewise free after the UDP checks. One-CPU checks covered CPU
+loops, clock sleep, terminal wait_many and blocked TCP READ with group completion.
+
+The remaining ownership-matrix paths were reviewed in code, including file busy
+handoff, launch capture/preparation stop races, BSP provisional-object failures,
+HOST loans/retirement, display pixels, keyboard ownership, ARP-token cancellation
+and receive-credit reclamation. Those specific races/failure paths are not claimed
+as individually observed runtime cases. Published HOST work may delay completion
+indefinitely; external capability ownership and independent TCP maintenance remain
+outside the cleanup boundary. QEMU and debugger jobs were stopped after validation.
 
 Use ordinary `make -j16` builds, interactive QEMU and debugger inspection. Include
 one- and four-CPU operation with matching networking/init configuration. Inspect

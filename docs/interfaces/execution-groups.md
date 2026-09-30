@@ -1,16 +1,15 @@
 # Execution groups and launch containment
 
 Execution groups bind descendants to one supervision lifetime independently of
-terminal sessions, process observers and spaces. Creation, membership and sealed
-launch admission are implemented. Stopping members and group-completion waits
-remain [task 5](../wip/execution-group-termination.md).
+terminal sessions, process observers and spaces. Creation, membership, sealed
+launch admission, safe termination and cleanup completion are implemented.
 
 ## Creation and launch authority
 
 Trusted init receives CREATE_GROUP in addition to LAUNCH on its ordinary launcher.
 The default session program delegates only LAUNCH to the local shell. A caller
 with CREATE_GROUP can use `launcher_create_group()` to obtain two handles
-atomically: a CONTROL-authorized supervision handle and a LAUNCH-only launcher
+atomically: a CONTROL|WAIT-authorized supervision handle and a LAUNCH-only launcher
 bound to the new group. Failure installs neither handle. The creator stays outside
 the group, and an empty group remains open while supervision exists.
 
@@ -36,33 +35,57 @@ supervision nor group-creation authority is implicitly passed to children. Expli
 CONTROL delegation is permitted and prolongs supervision until that grant closes,
 even if the creator exits. This is authority deliberately given to its recipient.
 
-## Sealing and lifetime
+## Sealing, termination and completion
 
 `execution_group_seal()` requires CONTROL. It permanently and idempotently closes
-launch admission. Existing members continue executing, exiting and faulting
-normally. There is no terminate operation or group wait/readiness interface in
-this task, and sealing does not imply cleanup completion.
+launch admission while existing members may finish naturally.
+`execution_group_terminate()` requires CONTROL, seals admission and requests that
+all members stop. Its success acknowledges the request; it does not wait for cleanup.
+The final CONTROL grant closing requests the same termination, including on its
+owner's exit or fault. Explicit CONTROL delegation can prolong supervision.
 
-The last CONTROL-authorized grant also seals the group. Capability entries and
-queued IPC transfers count as controlling grants; zero-right handles, bound
-launchers, prepared children and internal references retain storage only. Delivery
-moves authority without a gap. Discarding the last queued controlling grant seals
-admission. Acquiring another reference cannot reopen a sealed group.
+Capability entries and queued IPC transfers count as controlling grants. Delivery
+moves authority without a gap. WAIT-only grants, zero-right handles, bound launchers,
+prepared children and internal references retain storage only. Discarding the last
+queued controlling grant terminates the group. Neither operation can reopen admission.
+A shell without CONTROL can exit without sealing its group or stopping descendants;
+the later server defines that policy.
 
-A process owns group storage from preparation through reclamation. Only published
-children contribute to the member count. Preparation failure releases its reference
-without becoming a member. Normal retirement removes membership after private VM,
-capabilities, kernel stack and task metadata are reclaimed. Existing process WAIT
-handles retain their non-owning, immutable completion semantics. Natural shell exit
-does not seal the group or stop descendants; the later server defines that policy.
+`execution_group_wait()` requires WAIT and uses a header-only request with no reply
+payload. Completion is immutable and repeatable: admission is sealed, every published
+member is reclaimed, every admitted launch preparation is disposed, and deferred
+cleanup caused by their resource releases has finished. An open empty group is not
+complete. `wait_many()` accepts WAIT_COMPLETE for a WAIT-authorized group, alone or
+mixed with terminal attachment and TCP interests. Completion reports cleanup, not
+aggregate program success. Keep a WAIT-only copy when dropping the final CONTROL
+handle and then observing shutdown.
 
-No fixed group/member quota is introduced. Storage is reclaimed after the final
-member, launcher, supervision/observation grant, endpoint-policy reference and
-temporary reference is released. Endpoints retain the immutable receiver policy
-even if an outside caller/export/receipt outlives the receiver process; this keeps
-only group storage alive, never controlling supervision.
-A zero member count is internal accounting, not proof that all asynchronously
-retired resource objects have completed destruction.
+Running userspace stops at an assigned-CPU scheduler safe point. A blocked syscall
+resumes its kernel continuation to detach registrations and return ownership before
+retirement; it cannot return to userspace. Timers and subsystem links are detached
+separately. Network and entropy slots are cancelled through their owning worker and
+collected before task teardown. Published BSP/HOST loans finish their handoff;
+already-completed external effects are not rolled back. No live kernel stack is
+forcibly freed. The [ownership matrix](../wip/execution-group-termination.md) records
+these subsystem boundaries.
+
+A terminated process observer returns PROCESS_TERMINATED with zero exit_status.
+Previously committed exits and faults retain their original result. Process WAIT
+still observes process/task reclamation; only group completion additionally waits
+for attributed deferred object callbacks, transitive releases, HOST and network
+wrapper destruction, retained display pixels and internal TCP read references.
+Each pending cleanup owns group storage, and transfers attribution before releasing
+its own token. Objects legitimately retained by outside capability owners do not
+hold completion open. Independent transport maintenance, including TCP TIME_WAIT
+after native wrapper retirement, is outside that boundary.
+
+There is no fixed cleanup deadline: an in-flight HOST operation may delay completion
+indefinitely. No group/member quota is introduced. Group storage is reclaimed after
+the final member, launcher, observation/supervision grant, endpoint-policy reference,
+launch reservation and cleanup token is released. An outside endpoint reference can
+retain the immutable receiver policy after receiver exit without retaining CONTROL.
+Nested groups, foreground Ctrl+C targeting, migration and space teardown remain out
+of scope.
 
 ## Launch publication and ownership
 
@@ -71,7 +94,9 @@ request service. A batch's temporary preparation object is separate from its
 execution group. It owns prepared children and provisional process observers until
 publication or discard.
 
-Admission is checked during preparation and again at publication. A group lock
+A launch reservation counts admission before image capture and survives every
+preparation request until staging is published or discarded. Admission is checked
+during preparation and again at publication. A group lock
 serializes sealing with the complete batch's enrollment and scheduler enqueue.
 Publication performs no allocation or other fallible work after admission succeeds.
 Either all stages become group members and runnable first, or sealing wins and
@@ -87,5 +112,5 @@ launcher during synchronous launch; prepared children each retain group storage.
 No child process or task is accessed after scheduler publication transfers ownership.
 
 The public layouts are [launcher.h](../../include/abi/launcher.h) and
-[execution_group.h](../../include/abi/execution_group.h). The termination audit
-records the remaining [safe-stop and cleanup obligations](../wip/execution-group-termination.md).
+[execution_group.h](../../include/abi/execution_group.h). The [ownership matrix](../wip/execution-group-termination.md) records safe-stop
+and cleanup paths.

@@ -188,6 +188,11 @@ This saves 600 bytes per user task and 6,336 per kernel worker across the whole
 milestone. User storage uses three allocations instead of one. The largest
 request is HOST, requiring 8-byte alignment against the heap's 16-byte guarantee.
 
+Group termination subsequently adds stop/cleanup tracking: task metadata is now
+784 bytes, the request header grows the largest record to 4,928 bytes, and combined
+user metadata/request/profiles total 6,528 bytes. The table above records the
+historical storage-consolidation measurement.
+
 Interactive combined checks used one and four CPUs in nested KVM, fixed QEMU
 10.2.2, CPU `max`, 256 MiB, matching Fedora OVMF, entropy and a private virtiofsd
 1.14.0 export with default cache policy. No network/block devices or cache

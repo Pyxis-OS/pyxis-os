@@ -68,7 +68,8 @@ struct hostfs_request {
 
 /* Current user task, IF=0, no held locks. Fill shared staging, submit/wait,
  * consume or detach owned outputs, then release. Only the caller copies user
- * memory; there is no external task cancellation in this model. */
+ * memory. Group stop preserves this uninterruptible handoff through result
+ * collection and release before the caller can retire. */
 struct hostfs_request *hostfs_request_prepare(enum hostfs_operation operation);
 void hostfs_request_submit_and_wait(struct hostfs_request *request);
 void hostfs_request_release(struct hostfs_request *request);

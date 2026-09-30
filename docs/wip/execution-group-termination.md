@@ -1,27 +1,25 @@
 # Execution-group termination ownership matrix
 
-Task 4 audit for [remote terminals](remote-terminal.md). This is a task-5 design
-input, not implemented cancellation. Group sealing currently prevents new launches;
-existing members continue. No operation claims successful termination or group
-cleanup completion.
+Implemented task-5 ownership paths for [remote terminals](remote-terminal.md).
+The public contract is in [execution groups](../interfaces/execution-groups.md).
 
-## Required stopping boundary
+## Stopping boundary
 
-A stop request must prevent further userspace execution when the assigned scheduler
-reaches a safe stopping point. It must not destroy a running kernel stack, a task
-wait record still referenced by a subsystem, or process state lent to a worker.
-Published operations must return ownership; their completed results also need disposal
-when the original caller will never resume. Shared kernel workers remain alive.
+A stop request prevents further userspace execution at the assigned scheduler's
+safe point. Running/runnable user state retires locally; an interrupted syscall
+continues solely to detach waits, return loans and dispose owned results. Its stack
+stays alive through that unwind. Stop wakeups leave subsystem registration removal
+to the continuation, under the resource lock. Shared workers remain alive.
 
-The current scheduler has no cancellation disposition describing the active subsystem
-and outstanding loans/results. `free_task()` requires the task's wait, resource link,
-timer membership and BSP reservation to be clear. Waking a task and setting an exit
-flag does not establish those invariants. The implementation must choose explicit
-subsystem cleanup paths before enabling termination.
+Published BSP/HOST requests retain their uninterruptible handoff. Their request
+header borrows cleanup attribution from the caller, whose membership cannot end
+before result collection. Worker context attributes provisional-object failure
+cleanup before waking that caller. Deferred object/worker cleanup owns a pending
+group token; callbacks transfer attribution to transitive releases before ending it.
 
 ## Ownership matrix
 
-Each row describes current retention and the cleanup task 5 must supply. Function
+Each row describes retained ownership and the implemented stopping action. Function
 names identify the relevant ownership transitions; line numbers are intentionally
 omitted because those implementations will change.
 
@@ -36,7 +34,7 @@ omitted because those implementations will change.
 | RAM/initrd file operation | FIFO link or exclusive busy ownership; wake can transfer ownership directly. Remove waiter or return already-acquired ownership with `file_end_operation`. Do not clear busy/free backing during a published replacement loan. | File owner then BSP replacement executor: [file.c](../../kernel/object/file.c). |
 | Endpoint CALL | Delivery retains caller state/waiter, request/reply grants, receipt and export. Cancel queued/delivered states distinctly, end caller ownership, release discarded results; provider-owned receipt may legitimately survive. | Endpoint lock/state transitions: [endpoint.c](../../kernel/object/endpoint.c), `cancel_delivery`, `free_delivery`, `release_receipt`. |
 | Endpoint RECEIVE / provider exit | Receiver waiter and process-owned endpoint list; receipts/grants in capability table. Detach receiver wait before existing endpoint-close and receipt-abandonment paths. Do not recall grants delivered outside the group. | BSP `endpoint_process_exit`, `close_endpoint`, `receive_endpoint`: [endpoint.c](../../kernel/object/endpoint.c). |
-| TCP control/connect/listen/accept | Shared slot, borrowed stream/listener or capability table; DONE awaits caller collection. Return borrowed ownership, dispose abandoned created handles, release accept direction and reclaim slot without user continuation. | Network worker: [control.c](../../kernel/net/lwip/control.c), `exchange_control`, `complete_control`, `finish_created`. |
+| TCP control/connect/listen/accept | Shared slot, borrowed stream/listener or capability table; DONE awaits caller collection. Return borrowed ownership, dispose abandoned created handles, release accept direction and reclaim slot without returning to userspace. | Network worker: [control.c](../../kernel/net/lwip/control.c), `exchange_control`, `complete_control`, `finish_created`. |
 | TCP read/write | Shared operation slot and direction exclusion; read additionally retains stream and receive-credit accounting through CONSUMED/RECLAIMING. Remove waiter, dispose successful abandoned read results/credit and release slot only after worker use ends. | Network worker plus current caller collection: [receive.c](../../kernel/net/lwip/receive.c), [send.c](../../kernel/net/lwip/send.c). |
 | UDP control/send/receive | OPEN lends table; I/O borrows endpoint and retains token, waiter and DONE slot. Cancel queued ARP packet by token; return table/endpoint ownership and reclaim direction/slot. Submitted packet/DMA storage follows transport lifetime. | Network worker: [udp.c](../../kernel/net/udp.c), [udp_io.c](../../kernel/net/udp_io.c), `net_udp_service`, `net_udp_stop_io`. |
 | Echo / network configuration | Shared copied/scalar request slots persist through DONE. Echo can own queued ARP work; RUNNING configuration mutates shared state. Cancel token-owned echo work; let configuration finish its handoff and reclaim slots. | Network worker: [echo.c](../../kernel/net/echo.c), [config.c](../../kernel/net/config.c). |
@@ -46,17 +44,28 @@ omitted because those implementations will change.
 | Keyboard / display | Raw keyboard owner can retain reader wait; release currently requires no reader. DISPLAY lends process/VM to BSP; presenter can independently retain frame backing. Detach keyboard wait, finish display loan, then release ownership/mappings without freeing retained pixels. | Keyboard lock and BSP exit cleanup: [keyboard.c](../../kernel/object/keyboard.c), [display.c](../../kernel/object/display.c). |
 | Random / entropy | Shared RNG slot/waiter can be entropy worker's current request; DONE reclaimed only by caller. Detach request attribution and reclaim slot independently of pending DMA storage. Deadline expiry is an existing detachment precedent. | Entropy worker: [rng.c](../../kernel/virtio/rng.c), `complete_call`, `expire_calls`, `finish_chunk`. |
 
-## Completion decision before task 5
+## Completion accounting
 
-Existing process completion follows process/private-VM and task-stack reclamation,
-but may precede deferred object destruction. TCP/UDP destruction can transfer to the
-network worker, HOST wrappers to `hostfs_retire`, and presentation can retain frame
-backing. Therefore member count zero alone is insufficient to define the future
-group-completion contract. Task 5 must identify which group-owned deferred cleanups
-completion awaits and how they report finishing, while excluding objects legitimately
-retained by outside capability owners. No bounded cleanup deadline is promised.
+Member retirement follows process/private-VM, capability, kernel-stack and task
+reclamation. Before metadata is freed, the BSP removes its stop-request list link
+under the group lock; the member count stays positive throughout cleanup. Admitted
+launch reservations also survive unpublished child and capture disposal.
 
-Resolve that completion boundary and the cancellation/result-disposal mechanism
-before implementing stop operations. Ordinary process observers keep their current
-semantics. Foreground Ctrl+C cancellation, nested groups, migration and space teardown
-are outside this milestone.
+Final object release carries the active group context into the BSP retirement queue.
+Callbacks retain attribution through child releases. TCP/UDP wrappers and HOST nodes
+transfer a pending token to their actual destruction worker; presentation retains one
+until its last pixel-backing reference is released. TCP internal read references and
+provisional creation carry operation tokens as well. The successful read token ends
+after receive credit, stream reference and operation slot are returned.
+
+Completion is published only once sealing and zero members, launches and pending
+cleanup coincide. Group storage retirement itself is excluded to avoid a self-cycle.
+Capabilities legitimately held outside the group, and independent TCP TIME_WAIT
+maintenance after native-wrapper release, are excluded. A stalled published HOST loan
+can delay completion indefinitely; no bounded cleanup deadline is promised. Ordinary
+process observers retain their earlier reclamation boundary.
+
+Foreground Ctrl+C cancellation, nested groups, migration and space teardown are
+outside this milestone. Runtime evidence and unexercised paths are recorded in the
+[remote-terminal validation notes](remote-terminal.md); this matrix records ownership
+review, not a claim that every race has been measured.

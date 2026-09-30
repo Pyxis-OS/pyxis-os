@@ -203,21 +203,16 @@ on screen. History, Unicode widths and larger-line viewports are not implemented
 
 ## Process termination and Ctrl-C
 
-There is no operation to kill another process. Process handles permit waiting
-for completion; closing one does not stop execution. A process must exit itself
-or fault, so a hung or indefinitely blocked program cannot be terminated by its
-launcher. Ctrl-C cannot currently interrupt or terminate foreground work.
+Process handles remain non-owning WAIT observers; closing one does not stop
+execution. [Execution-group CONTROL](interfaces/execution-groups.md) now permits
+whole-group termination, including blocked-operation unwind. Local foreground
+commands and pipelines do not yet have separate interruption groups, so Ctrl-C
+cannot interrupt their execution.
 
-Revisit this when adding native process termination and interactive cancellation.
-Include Ctrl-C support in that work, with explicit termination authority and
-foreground targeting for commands and pipelines. Define safe teardown of running
-and blocked tasks, outstanding IPC and other waits, resource reclamation, and
-the completion result visible to waiters. Native termination need not require a
-general POSIX signal implementation.
-
-[Endpoint call expiry](interfaces/endpoints.md) releases its caller, not the provider
-process. Integrate externally terminated callers with IPC cancellation when the
-termination operation exists.
+Revisit interactive cancellation with explicit foreground targeting and authority.
+The group stop paths provide safe ownership return, including IPC caller cancellation,
+but terminal Ctrl-C routing and the shell's command/pipeline policy remain to be
+implemented. Native cancellation need not require general POSIX signals.
 
 ## Console input completion
 
@@ -239,10 +234,9 @@ input and 64 KiB output queues, and one attachment. Creation has no per-space
 quota; a trusted creator can allocate multiple bounded sessions until allocation
 fails. Output backpressure has no deadline. A controller that stops draining can
 block application writers; hangup wakes terminal calls but does not stop CPU-bound
-code or operations in other subsystems. Execution supervision, remote admission
-and finite drain policy must arrive in the later remote-terminal tasks before
-claiming whole-session cleanup. Resize, reconnect and host presentation remain
-separate work.
+code or operations in other subsystems. Execution groups provide separate supervision;
+remote admission and finite drain policy remain for the later server. Resize,
+reconnect and host presentation remain separate work.
 
 ## Libc compatibility gaps
 
@@ -467,7 +461,7 @@ drivers' reclamation with a real teardown and SMP invalidation contract.
 ## Host filesystem request storage and enumeration
 
 The [native virtio-fs backend](devices/virtio-fs.md#native-directory-and-file-objects)
-uses the largest record in each user task's reusable 4,920-byte request allocation,
+uses the largest record in each user task's reusable 4,928-byte request allocation,
 including a 4 KiB read/write buffer. A separate 816-byte persistent profile
 allocation is also eager. Kernel workers allocate neither area. This avoids
 allocating on APs or exposing private stacks to the worker, but every user task
@@ -502,9 +496,9 @@ demand and an explicit authority/accounting policy, not by evicting live records
 
 The echo consumer serves four clients with bounded output and fair service, but
 has no idle-client or output-drain deadline. Four stalled clients can occupy all
-active slots indefinitely. Readiness also supports terminal attachments;
-execution-group readiness belongs to the later
-[remote-terminal tasks](wip/remote-terminal.md#focused-implementation-tasks).
+active slots indefinitely. Readiness also supports terminal attachments and
+execution-group completion. The [remote server](wip/remote-terminal.md#focused-implementation-tasks)
+remains to be implemented.
 Revisit stalled-client policy with that server's explicit disconnect/drain
 contract; the echo consumer does not yet supervise terminal sessions.
 
@@ -547,15 +541,17 @@ readers compete for bytes and copied writers may interleave transfers, without
 a guaranteed atomic write size or strict fairness. Creation uses normal kernel
 allocation limits; there is no separate per-process pipe-memory quota. A holder
 of unused endpoint copies can delay EOF or EPIPE indefinitely. There are no
-nonblocking operations, deadlines, wait sets or cancellation. Revisit these
+nonblocking operations, deadlines, wait sets or direct cancellation operations.
+Group termination detaches blocked readers/writers safely. Revisit these
 limits when a concrete multi-producer or multiplexed consumer needs them.
 [Shell streams](userland/shell-streams.md) documents the implemented launch ownership.
 
 ## Batch launch after publication
 
 Batch launch protects preparation: all one through eight children are prepared
-before any can execute, and failure starts none. It does not cancel a running
-child when a sibling faults, an observer closes or the launcher exits. A child
+before any can execute, and failure starts none. Ordinary ungrouped batches do
+not cancel a running child when a sibling faults, an observer closes or the
+launcher exits. Group supervision separately stops members on final CONTROL loss. A child
 waiting on terminal input or doing unrelated work may therefore keep running
 indefinitely after a peer finishes. Filesystem creations/truncations before
 launch remain visible after preparation failure. Revisit scoped cancellation or
@@ -587,8 +583,8 @@ but the provider must receive and finish the retained work.
 
 Revisit with asynchronous service scheduling and explicit cancellation/wait APIs.
 Preserve delivery/outcome reporting and receipt ownership; cancellation must not
-silently revoke attachments already delivered. Integrate process termination
-when its authority and teardown contract exist.
+silently revoke attachments already delivered. Group termination now cancels its
+callers and detaches receivers while preserving outside provider receipts.
 
 ## Endpoint throughput limited by deferred receipt reclamation
 
@@ -763,11 +759,14 @@ released storage, so it cannot authorize reclamation by itself.
 
 ## Execution-group shutdown
 
-Execution groups implement permanent membership and sealed admission. Final CONTROL
-closure currently seals admission but leaves existing members running; there is no
-termination operation or group-completion wait. A caller must not treat sealing or
-an internal zero member count as whole-session cleanup. Deferred network/HOST object
-retirement and externally retained capabilities make that completion boundary more
-than task counting. Resolve the [ownership matrix](wip/execution-group-termination.md)
-in remote-terminal task 5 before exposing a session server. Group/member allocation
-has no quota beyond available storage; the later server must enforce admission policy.
+[Execution groups](interfaces/execution-groups.md) now support termination and cleanup
+completion. Published BSP/HOST loans still finish before their caller retires, so a
+stalled host operation can delay completion indefinitely. Killing members cannot
+roll back completed external effects or recall capabilities delegated outside the
+group. Completion excludes legitimately external owners and independent protocol
+maintenance after native ownership ends.
+
+Revisit bounded HOST cancellation when transport ownership can be revoked safely;
+do not turn a timeout into permission to free lent process state. Group/member
+allocation has no quota beyond available storage. The remote server must enforce
+its admission policy before exposure. Foreground interruption remains separate work.
