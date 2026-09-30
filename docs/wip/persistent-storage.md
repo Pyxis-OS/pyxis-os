@@ -4,7 +4,9 @@ Status: agreed design direction, 2026-09-29. The
 [block-storage foundation](../devices/block-storage.md) and
 [initial format and read-only core](../devices/filesystem-readonly.md) are complete.
 [Native read-only mounts](../devices/native-readonly-filesystem.md) are also complete.
-Writable recovery, FUSE and writable native persistence remain proposals.
+The [writable core](writable-filesystem-core.md) and subsequent
+[native persistence](native-persistent-volumes.md) now have agreed milestone scopes;
+their detailed implementation gates remain open. FUSE remains a later proposal.
 These notes do not authorize subsequent implementation. Agreed design choices
 and remaining proposals are identified separately; disk formats, enforcement
 interfaces and focused task plans for later writable/integration work still need
@@ -280,14 +282,14 @@ This envelope does not settle the remaining format/interface choices.
   agree the initial local-principal/bootstrap policy and enforcement subset;
   do not silently substitute a single-user bypass for the agreed authority model.
 
-## Proposed milestone sequence
+## Storage milestone sequence
 
 The [block-storage foundation](../devices/block-storage.md) is complete. The initial
 format/read-only milestone is complete. The [native read-only mount milestone](../devices/native-readonly-filesystem.md)
 is also complete: it connects the existing reader to Caelum,
 init and ordinary applications, with Fastfetch as a final information consumer.
-The longer-term writable sequence below remains proposed. Planning agreement
-does not authorize implementation.
+The two writable milestone scopes below are agreed; FUSE and later extensions
+remain proposals. Planning agreement does not authorize implementation.
 
 1. **Block storage foundation — complete.** Caelum discovers an explicitly
    selected development image, validates GPT and provides bounded asynchronous
@@ -303,21 +305,23 @@ does not authorize implementation.
    read-only mounts were delivered separately. The agreed publication/reclamation
    envelope preserves future constraints without claiming implemented
    crash recovery.
-3. **Writable core and recovery.** Add bounded COW transactions, volume allocation,
-   guarantees/quotas/reserves, file/directory mutations, checkpointing and recovery.
-   Implement the storage-side policy checks selected in the preceding milestone.
-   Host tools exercise persistence across normal close/reopen using the shared
-   core. Bootable kernel integration and FUSE are not prerequisites. Any automated
-   tests or fault-injection work require separate explicit authorization.
-4. **Linux FUSE adapter and ownership policy.** Mount images on Linux for ordinary
+3. **[Writable core and recovery](writable-filesystem-core.md).** Add bounded COW
+   mutations of existing volumes, enforced guarantees/quotas/reserves, publication,
+   reclamation and orphan recovery. Commit each bounded mutation initially; live
+   handles retain identity without indefinitely pinning their opening generation.
+   Writable opening requires fully understood, validated, non-degraded media.
+   Host commands exercise the shared core. Bounded host crash/failure validation
+   is explicitly authorized for this milestone; its mechanism and coverage must
+   be agreed in task 1. This does not authorize general test infrastructure.
+4. **[Native persistent volumes](native-persistent-volumes.md).** Connect the
+   shared writer to Caelum's existing worker, mount authority and file/directory
+   protocols. Demonstrate editing, syncing, rebooting and reopening source and
+   executables, including enforced restricted access. Keep the bootloader/kernel/
+   initrd on the existing boot path; no installer or NVMe yet.
+5. **Linux FUSE adapter and ownership policy — later proposal.** Mount images on Linux for ordinary
    file operations through the shared core. Adapt the selected principal/policy
    contract through explicit host identity mapping, exclusive attachment and
    sync/error behavior. This does not introduce OIDC or a complete account UI.
-5. **Native persistent volumes.** Connect the shared core to Caelum's block I/O,
-   allocation and capability contracts; mount a volume through trusted init and
-   delegate bounded roots. Demonstrate editing, syncing, rebooting and reopening
-   a document or source file, including enforced restricted access. Keep the
-   bootloader/kernel/initrd on the existing boot path; no installer or NVMe yet.
 
 Later milestones can add native NVMe, real format conversion when needed and an
 installation/update workflow. The completed foundation required neither final
