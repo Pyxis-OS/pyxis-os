@@ -3,8 +3,9 @@
 The host-only filesystem milestone is complete. The MPL-2.0 shared core builds
 new populated pool images, reopens them, traverses directories, reads and extracts
 files, evaluates bounded read/list acquisition and checks structural consistency.
-There is no Caelum mount, FUSE adapter, existing-pool mutation, writable COW
-transaction, recovery, repair, converter or installer.
+Caelum now integrates it through [native read-only mounts](native-readonly-filesystem.md).
+There is no FUSE adapter, existing-pool mutation, writable COW transaction, recovery,
+repair, converter or installer.
 
 The filesystem repository owns the authoritative [format contract](../../fs/docs/format.md),
 [core interfaces and lifetimes](../../fs/docs/core.md), and
@@ -42,8 +43,8 @@ The core also provides [stateless directory continuation](../../fs/docs/core.md#
 through `pfs_view_directory_page`. Each LIST page validates an opaque 64-bit
 slot path from the held directory root and publishes names/kinds only after
 allocation proof. Tokens retain no cursor or volume reference and can be replayed
-or abandoned. This supports the [native mount prerequisite](../wip/native-readonly-filesystem.md)
-without a disk-format change. Native OS enumeration remains a later task.
+or abandoned. This powers [native mount enumeration](native-readonly-filesystem.md#rights-identity-and-lifetime)
+without a disk-format change.
 Stateful diagnostic cursors
 retain full-list count checks; stateless pages do not claim reconciliation of
 skipped entries. Existing ancestry/proof costs remain.
@@ -66,10 +67,10 @@ names to same-volume objects; directories have one parent except the root and
 cannot cycle. Only regular files and directories are supported, with no symlinks,
 hard links or special objects. Importing host hard links creates independent files.
 
-Schemes such as `home://` belong to namespace bindings, not disk fields. A future
-mount must retain identity across renames and cannot retarget itself when a name
-is recreated. Bounded core paths are relative to a selected root and provide no
-parent traversal. The namespace layer must preserve that boundary.
+Schemes such as `home://` belong to namespace bindings, not disk fields. Native
+mounts retain identity and cannot retarget themselves when a name is recreated;
+future rename support must preserve that contract. Bounded core paths are
+relative to a selected root and provide no parent traversal. The namespace layer must preserve that boundary.
 
 ## Ownership and acquisition policy
 

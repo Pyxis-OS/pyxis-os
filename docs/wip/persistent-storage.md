@@ -3,7 +3,7 @@
 Status: agreed design direction, 2026-09-29. The
 [block-storage foundation](../devices/block-storage.md) and
 [initial format and read-only core](../devices/filesystem-readonly.md) are complete.
-Native read-only mounts are the [selected next milestone](native-readonly-filesystem.md).
+[Native read-only mounts](../devices/native-readonly-filesystem.md) are also complete.
 Writable recovery, FUSE and writable native persistence remain proposals.
 These notes do not authorize subsequent implementation. Agreed design choices
 and remaining proposals are identified separately; disk formats, enforcement
@@ -283,8 +283,8 @@ This envelope does not settle the remaining format/interface choices.
 ## Proposed milestone sequence
 
 The [block-storage foundation](../devices/block-storage.md) is complete. The initial
-format/read-only milestone is complete. The [native read-only mount milestone](native-readonly-filesystem.md)
-now comes before writable core work: it connects the existing reader to Caelum,
+format/read-only milestone is complete. The [native read-only mount milestone](../devices/native-readonly-filesystem.md)
+is also complete: it connects the existing reader to Caelum,
 init and ordinary applications, with Fastfetch as a final information consumer.
 The longer-term writable sequence below remains proposed. Planning agreement
 does not authorize implementation.
@@ -298,9 +298,10 @@ does not authorize implementation.
 2. **Initial format and read-only core — complete.** The
    [implemented contracts](../devices/filesystem-readonly.md) cover shared-core host
    formatting, traversal, bounded policy acquisition, extraction and whole-image
-   inspection. New populated images round-trip through the reader; there is no
-   existing-pool mutation, kernel mount or FUSE adapter. The agreed publication/
-   reclamation envelope preserves future constraints without claiming implemented
+   inspection. New populated images round-trip through the reader. That host
+   milestone added no existing-pool mutation, kernel mount or FUSE adapter; native
+   read-only mounts were delivered separately. The agreed publication/reclamation
+   envelope preserves future constraints without claiming implemented
    crash recovery.
 3. **Writable core and recovery.** Add bounded COW transactions, volume allocation,
    guarantees/quotas/reserves, file/directory mutations, checkpointing and recovery.

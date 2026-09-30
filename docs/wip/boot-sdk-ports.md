@@ -112,15 +112,12 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Current focus and later candidates
 
-The selected next milestone is [native read-only filesystem mounts](native-readonly-filesystem.md):
-init-selected GPT partition and volume, policy-approved directory/file capabilities,
-ordinary reads and executable loading, followed by scoped capacity information
-and Fastfetch Disk. Tasks 1–7 are complete: the contract, core continuation,
-bounded [kernel adapter](../devices/filesystem-native-adapter.md), policy-approved
-objects, init mounting/delegation, executable loading and scoped filesystem
-information and the Fastfetch Disk consumer are implemented. Task 8 validates
-the combined workflow and closes the milestone.
-Writable recovery and FUSE stay separate.
+The [native read-only filesystem milestone](../devices/native-readonly-filesystem.md)
+is complete: init-selected GPT partition/volume mounting, policy-approved objects,
+explicit root delegation, ordinary reads and executable loading, scoped filesystem
+information and Fastfetch Disk. Combined validation covers source-content reads,
+retained rights, repeated operations, final cleanup and unchanged media. Writable
+recovery, FUSE and installation remain separate; no next track is selected here.
 
 The [I/O reliability and attribution report](../development/io-reliability-attribution.md)
 closes the performance milestone. The former IPC/HTTP failures are resolved,
@@ -179,8 +176,8 @@ PyxisOS/pyxis-fs owns the pinned freestanding core and Linux host tools built by
 bounded acquisition and check both retained states. The
 [format contract](../../fs/docs/format.md), [core interfaces](../../fs/docs/core.md)
 and [measured host validation](../../fs/docs/host-tools.md#validation) are durable
-references. The [native read-only mount milestone](native-readonly-filesystem.md) is selected
-next. Writable recovery, FUSE and writable native persistence remain separate.
+references. The [native read-only mount milestone](../devices/native-readonly-filesystem.md) is also
+complete. Writable recovery, FUSE and writable native persistence remain separate.
 BSP request separation is complete.
 
 | Path | First concrete completion point | Decisions and supporting work |
@@ -189,7 +186,7 @@ BSP request separation is complete.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../devices/block-storage.md) and [initial format and read-only core](../devices/filesystem-readonly.md), including populated image tools and whole-image checking, are complete. | Read-only native mounts are the [selected milestone](native-readonly-filesystem.md); writable recovery and FUSE remain separate. |
+| Native disk storage | The [block-storage foundation](../devices/block-storage.md) and [initial format and read-only core](../devices/filesystem-readonly.md), including populated image tools and whole-image checking, are complete. | [Read-only native mounts](../devices/native-readonly-filesystem.md) are complete; writable recovery and FUSE remain separate. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The

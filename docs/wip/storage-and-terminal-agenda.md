@@ -13,12 +13,14 @@ discussion and explicitly agreed choices; other mechanisms remain proposals.
 Writable `host://` already provides host-backed persistence. The
 [block-storage foundation](../devices/block-storage.md) is complete. The
 [initial format and read-only core](../devices/filesystem-readonly.md) is complete;
-writable recovery, native mounts and installation remain proposed. Use the existing
+[native read-only mounts](../devices/native-readonly-filesystem.md) are also complete.
+Writable recovery and installation remain proposed. Use the existing
 [filesystem direction](vfs.md) and
 [storage notes](later-os-directions.md#persistent-storage-and-installation).
 
 - The first milestone delivered kernel-internal block I/O and GPT discovery.
-  Mounting a filesystem, installation and system updates remain separate work.
+  Native read-only mounting followed; installation and system updates remain
+  separate work.
 - The storage discussion selected a custom COW pool/filesystem with a shared
   core for Caelum and Linux FUSE. The
   [format contract](../../fs/docs/format.md) now defines the initial disk layouts
@@ -27,8 +29,8 @@ writable recovery, native mounts and installation remain proposed. Use the exist
   flush and durability boundaries, and expected behavior after interrupted writes.
 - The [users and authority checkpoint](users-and-authority.md) supplies the
   implemented ownership/grant model. Resolve writable bootstrap admission and
-  native integration before introducing shared-home assumptions. Native authority
-  rules should drive the design; Unix IDs and permission bits are not defaults.
+  writable native integration before introducing shared-home assumptions. Native
+  authority rules should drive the design; Unix IDs and permission bits are not defaults.
 
 Use the working draft to scope a later milestone and its policy decisions before
 implementation.

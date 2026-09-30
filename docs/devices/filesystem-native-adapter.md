@@ -2,8 +2,8 @@
 
 Caelum links the pinned read-only filesystem core and provides policy-approved
 native directory/file objects through one serial BSP worker. This implements
-backing preparation, objects, init integration and scoped observation, tasks 3–6 of the
-[native mount milestone](../wip/native-readonly-filesystem.md). Native objects use
+backing preparation, objects, init integration and scoped observation for
+[native read-only mounts](native-readonly-filesystem.md). Native objects use
 the existing directory/file protocols. Native executable capture uses the same
 worker. Mount configuration and
 acquisition are described in the task-5 integration below; startup performs no
@@ -337,7 +337,8 @@ Timeout/device failures, actual allocator exhaustion, adapter-cap exhaustion,
 BUSY-close recovery, sub-4-KiB device transfer limits and later filesystem
 generations have source-review coverage only. No fault injection, new tests,
 permanent probes, physical hardware or owner-host performance measurements were
-used. Native mount configuration and executable capture remain task 5.
+used. Native mount configuration and executable capture were subsequently implemented
+and validated below.
 
 ## Task 4 validation
 
@@ -523,7 +524,8 @@ Degraded GPT/filesystem flag combinations, malformed provider replies, reply
 buffer errors and resource-exhaustion paths were reviewed in source rather than
 injected. No HOST transport was attached in this task; its unchanged grant mask
 and unsupported query path were source-reviewed. No physical hardware or timing
-claim is made. Fastfetch integration and display validation remain task 7.
+claim is made. [Fastfetch integration and display validation](../userland/fastfetch.md#native-disk-validation)
+were subsequently completed.
 
 Before delivery, main's independently merged uniq integration (`6c6ef84`) was
 merged into this branch. The userland pin `3b9ba3f` includes both observation and

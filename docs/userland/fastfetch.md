@@ -189,4 +189,5 @@ All QEMU, debugger, remote-client and virtiofsd processes were stopped.
 Degraded-health rendering, grant/query failure cleanup and allocation failure
 were reviewed in source rather than induced at runtime. Repeated execution is
 a functional check, not a leak/performance measurement. These observations are
-from nested KVM; combined lifecycle/workflow validation remains task 8.
+from nested KVM. The later [combined workflow validation](../devices/native-readonly-filesystem.md#combined-workflow-validation)
+closes the native mount milestone.

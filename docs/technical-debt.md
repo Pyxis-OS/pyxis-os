@@ -740,8 +740,8 @@ service work and wait sets; no worker-process or thread framework is included.
 
 ## Native mount design limits
 
-The [native read-only mount contract](wip/native-readonly-filesystem.md) is agreed;
-the [kernel adapter](devices/filesystem-native-adapter.md) now implements bounded
+The [native read-only mount milestone](devices/native-readonly-filesystem.md) is complete;
+the [kernel adapter](devices/filesystem-native-adapter.md) implements bounded
 backing preparation, policy-approved directory/file objects, configured mount
 authority and bounded executable capture. Trusted init mounts and delegates an
 explicit selected root list. A separately attenuable observation grant exposes
@@ -751,7 +751,7 @@ evidence and disclosure contracts are established.
 The [implemented core continuation API](../fs/docs/core.md#stateless-directory-continuation)
 avoids rescanning the returned prefix and retains no per-enumeration state. It
 does not remove existing core ancestry scans or allocation-proof costs; measure
-those during kernel integration and revisit when they limit representative
+those on concrete workloads and revisit when they limit representative
 listings. Stateless page success must not be presented as global directory-count
 reconciliation. Host validation covers one- and two-level directory trees; maximum
 depth, later generations and actual media/allocator failures retain code-review
@@ -770,8 +770,8 @@ reacquisition service or mount authority. Revisit with the identity broker/sessi
 admission work, keeping identity separate from held capabilities.
 
 The kernel adapter enforces 32 admitted jobs across internal submissions and user
-requests, 8 MiB of shared core payload and 1 MiB/1,024 wrappers for adapter storage. The measured guest
-object workflow peaks at 312,192 core bytes and 106,144 adapter bytes; host nested
+requests, 8 MiB of shared core payload and 1 MiB/1,024 wrappers for adapter storage. The final combined guest
+workflow peaks at 323,872 core bytes and 106,808 adapter bytes; host nested
 policy acquisition peaks at 315,816 core bytes. These inputs fit the initial profile,
 but a valid image may still exceed it and return LIMIT. Caps exclude stack,
 caller job storage, heap overhead/rounding and mapped-pool slack, and do not
