@@ -123,9 +123,11 @@ settles bounded publication/reclamation, live handles, admission and the scoped
 host failure-validation mechanism. FUSE and installation remain separate. These
 plans do not start implementation or displace explicitly assigned libc/remote work.
 
-The assigned libc track is [libc input read-ahead](stdio-input-buffering.md):
-block reads for buffered stdio on files and pipes, the fgets sticky-error fix,
-and remeasurement of the recorded uniq workload. It is input only.
+The [libc input read-ahead milestone](../userland/stdio.md#input-read-ahead) is
+complete: buffered stdio fetches file and pipe input in BUFSIZ blocks while
+consoles stay exact, fgets no longer mistakes an earlier error for a failed
+final line, and the recorded uniq workload fell from 20.4 s to 0.04 s. Output
+buffering, `setvbuf` and `ungetc` remain outside it.
 
 The [I/O reliability and attribution report](../development/io-reliability-attribution.md)
 closes the performance milestone. The former IPC/HTTP failures are resolved,
@@ -224,7 +226,8 @@ behavior; its implemented reference records observation and display limits.
 [Uniq](../userland/uniq.md) is packaged from the existing sbase pin, adding only
 libc `getline` and `isblank`, and was validated through the remote shell against
 the host build of the same upstream revision. It does not authorize a full
-utility suite; unbuffered line input remains [technical debt](../technical-debt.md#unbuffered-line-input).
+utility suite. Its large-input cost was removed by libc input read-ahead;
+[console line input](../technical-debt.md#console-line-input) remains per byte.
 
 SDL2/GrafX2 remains a later graphical alternative. A desktop/compositor remains
 a separate [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting

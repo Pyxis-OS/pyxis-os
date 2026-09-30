@@ -138,10 +138,11 @@ uniq -d -f 1 host://input home://duplicates
 
 Uniq collapses runs of adjacent identical lines with upstream `-c`, `-d`, `-u`,
 `-f N` and `-s N`, and `[input [output]]` operands where `-` selects stdin or
-stdout. Line input is [one native read per byte](../technical-debt.md#unbuffered-line-input),
-so large inputs are slow. See the [uniq reference](../userland/uniq.md) for
-behavior, limits and validation, and the [recipe notes](../../ports/sbase/README.md)
-for the port adaptation.
+stdout. File and pipe input is fetched in blocks by
+[stdio read-ahead](../userland/stdio.md#input-read-ahead); console stdin remains
+[one native read per byte](../technical-debt.md#console-line-input). See the
+[uniq reference](../userland/uniq.md) for behavior, limits and validation, and the
+[recipe notes](../../ports/sbase/README.md) for the port adaptation.
 
 ## SHA-256 digests with sbase sha256sum
 
@@ -160,7 +161,7 @@ continue with status 1. With `-c`, manifests from operands, `-` or stdin accept
 `digest  name` and `digest *name` lines; listed names resolve against the working
 directory. Each file prints OK or FAILED, and malformed lines, unreadable files
 and mismatches are counted and give status 1. Files are hashed in BUFSIZ reads;
-only manifest lines use [per-byte line input](../technical-debt.md#unbuffered-line-input).
+manifest lines use line input through [stdio read-ahead](../userland/stdio.md#input-read-ahead).
 See the [recipe notes](../../ports/sbase/README.md) for remaining upstream limits.
 
 ## Editing in Pyxis
