@@ -809,9 +809,10 @@ Automatic config discovery, config/cache writes, dynamic refresh, image logos,
 Lua execution and executable/network helpers are excluded. Existing upstream
 configs that request them must receive unsupported errors. Revisit individual
 features only when a concrete native use case and authority contract exist.
-The port itself is not yet implemented.
+The standalone native recipe implements this boundary; default-image packaging
+and broader integration acceptance remain pending.
 
-Uptime exposes duration since HPET initialization. JSON bootTime is to be null;
+Uptime exposes duration since HPET initialization. JSON bootTime is null;
 calendar boot-time/age placeholders are unsupported, so upstream calendar formats
 will need editing. Revisit this only if Pyxis gains an authoritative boot epoch
 and agrees its meaning across wall-clock changes; do not infer one by subtracting

@@ -1,17 +1,16 @@
-# Fastfetch on Pyxis: bounded port investigation
+# Fastfetch on Pyxis: native port
 
-Status: investigation, native system information and bounded libc prerequisites
-implemented, 2026-09-30. The first-port behavior below is agreed. No fastfetch
-executable or guest fastfetch execution is implemented; the remaining port and
-integration tasks are not started.
+Status: standalone native recipe implemented and exercised in the guest,
+2026-09-30. Default-image packaging and broader integration acceptance remain
+the next task; the milestone is not yet complete.
 
 ## Agreed first-port scope
 
 Run upstream fastfetch with the Pyxis ASCII logo, OS/kernel identity, guest CPU
 brand and online count, allocator memory, uptime, terminal dimensions and ANSI
 colors. Keep upstream formatting and JSON output. This is a substantially
-smaller platform port than [Go's runtime](go-runtime.md), but it is not currently
-a configure-and-build port.
+smaller platform port than [Go's runtime](go-runtime.md). The standalone recipe
+now builds through the normal SDK startup, static link and P1F conversion.
 
 Start single-threaded, without external graphics/hardware libraries, image
 logos, scripting, network modules or process enumeration. Do not fabricate
@@ -273,8 +272,10 @@ Upstream allocation handling needs attention in the native port:
 `ffStrbufInitVF` only asserts that `vasprintf` succeeded, so a release build can
 use a null buffer/negative length on failure; other allocations also assume
 success. Correct libc error returns do not make Fastfetch graceful under OOM.
-Choose explicit propagation or deliberate process failure during that task;
-neither policy is implemented or silently selected by this probe.
+The subsequent native port implements the agreed deliberate-failure policy:
+allocation failure prints a diagnostic and exits nonzero, with possible partial
+stdout. Explicit core checks and process-local link wrappers cover the retained
+allocation paths; this does not change shared libc behavior.
 
 ### Prerequisite validation
 
@@ -313,6 +314,69 @@ application or boot automation were added. These are functional nested-VM
 observations, not owner-host performance results or fastfetch execution.
 All validation processes were stopped afterward.
 
+## Implemented standalone native port
+
+Ports is pinned to `06f74e78cf9e58389813c78e8e5a63a64284ec16`
+([ports PR #26](https://git.internal/PyxisOS/pyxis-ports/pulls/26)). The
+[recipe reference](../../ports/fastfetch/README.md) is authoritative for build
+commands, module/format mappings, error behavior, licenses and validation.
+Its ordered patch compiles 43 translation units, supplies the native adapters
+and produces `stage/bin/fastfetch.pxe`. There are no remaining undefined platform
+symbols, fake Unix operations, host-libc links or compiler-container changes.
+
+The project owner supplied the compass-rose ASCII logo at
+`/shared/pyxis-logo/logo`. The recipe embeds its bytes unchanged, with cyan logo
+and key colors. PNG/SVG variants are not part of the port. Upstream-derived
+changes and bundled yyjson retain MIT terms; original native adapter/build
+material and the project logo carry MPL-2.0. The staged notices preserve both.
+
+The agreed error policy is implemented: allocation failure terminates with a
+stderr diagnostic; failed selected modules continue and yield an aggregate
+nonzero status; unknown optional observations remain JSON null. Requesting an
+unavailable format field produces an error rather than an invented value,
+including named/positional forms and explicit references inside inactive
+conditionals. Fatal errors and output failures can leave partial stdout.
+
+Default terminal output selects the six data modules plus Break and Colors.
+Default JSON and pipe-mode text select just the data modules. Colors/Break/
+Separator remain available as text helpers; explicit JSON requests return
+unsupported-module errors. Colors requires terminal output. Actual stdout
+binding forces plain mode for files/pipes, omitting logo/swatches and suppressing
+cursor alignment; requested timing uses plain lines. The separately delegated
+output-console grant still supplies dimensions when stdout is redirected.
+
+The complete standalone fetch/patch/configure/build/stage workflow passed with
+GCC 16.2.0, CMake 3.31.8 and a freshly built SDK (Pyxis `cfb7f0d`, userland
+`c9ed311`). An ordinary `make -j16 image` also passed. The development image
+contains the existing applications; fastfetch was launched explicitly from a
+private HOST export, not silently packaged into the default image.
+
+Interactive validation used four-CPU nested KVM, QEMU 10.2.2 with the documented
+AHCI fix, CPU `max`, 256 MiB, Fedora OVMF, entropy, virtio-net and virtiofsd.
+Local text displayed the complete logo with 160x48 dimensions; remote text used
+100x30. Both reported the guest BSP brand and four online CPUs, kernel revision
+`cfb7f0ddfcc1`, allocator memory and monotonic uptime. JSON preserved null fields,
+including bootTime, and explicit JSONC formatting worked. Redirected JSON and
+text (including timing, right-logo and key-width options) contained zero escape
+bytes. Named/positional unavailable fields and a reference inside an inactive
+conditional failed while later modules still printed. Command logos failed
+even with JSON output; an unknown module yielded a JSON error and did not prevent
+the next module from running, including with timing enabled.
+
+GDB observed the native CPU adapter return its brand and count at CPL3. A
+separate disposable local launcher delegated only memory and stdout/stderr:
+all six data modules returned JSON errors for the omitted system_info, clock
+and named output grants, and the child exited with status 1. Allocation
+exhaustion was inspected in code, not injected. No tests, self-tests, CI changes
+or boot automation were added. These are functional nested-VM observations,
+not owner-host performance measurements. Validation jobs were stopped afterward.
+
+The recipe is registered for standalone builds. Default build/staging/install
+selection is deliberately the next task, together with narrow-console,
+pipeline, repeated-run and broader acceptance checks. Completing that task
+should close this WIP into the implemented port reference without retaining
+these historical probe inventories.
+
 ## Focused tasks
 
 - [x] **Investigation:** pin upstream, probe against SDK headers, identify native
@@ -325,10 +389,10 @@ All validation processes were stopped afterward.
   core in a temporary build, added its reusable libc functions and recorded the
   agreed config/uptime boundaries and validation above. Native platform functions
   remain deliberately unresolved; ordinary application file reads are unchanged.
-- [ ] **Native fastfetch port:** pinned ports recipe and patches, Pyxis platform
-  and detector backends, existing ASCII logo, one-shot text and JSON output.
-  Exclude unsupported facilities explicitly. Build with the SDK's normal static
-  link/startup and ELF-to-P1F conversion; preserve licenses and patch provenance.
+- [x] **Native fastfetch port:** pinned recipe/patch with native adapters, the
+  owner-supplied ASCII logo and one-shot text/JSON output. Normal SDK static
+  link/startup, P1F conversion, explicit unsupported errors and retained licenses
+  were validated as recorded above.
 - [ ] **Integration and validation:** package it, publish dependency PRs before
   updating pins, and boot normally. Check local and remote terminal output,
   narrow dimensions, stdout redirection/pipelines, JSON, unavailable grants and
