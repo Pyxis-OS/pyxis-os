@@ -45,6 +45,7 @@ struct client {
   bool rejected;
   bool final;
   bool acknowledged;
+  uint64_t last_command;
   int result;
   char diagnostic[256];
   struct byte_buffer outgoing;
@@ -258,6 +259,7 @@ static int frame_header(struct client *client)
     case REMOTE_FRESH_LINE: valid = !length; break;
     case REMOTE_TAB_WIDTH: valid = length == REMOTE_TAB_WIDTH_SIZE; break;
     case REMOTE_FINAL: valid = length == REMOTE_FINAL_SIZE; break;
+    case REMOTE_COMMAND_COMPLETE: valid = length == REMOTE_COMMAND_COMPLETE_SIZE; break;
     }
   }
   if (!valid) {
@@ -314,6 +316,20 @@ static int present_frame(struct client *client)
       client->screen.tab_width = (unsigned)width;
       if (client->machine) {
         snprintf(text, sizeof(text), "{\"type\":\"tab_width\",\"columns\":%" PRIu64 "}\n", width);
+        output_text(client, text);
+      }
+      break;
+    }
+    case REMOTE_COMMAND_COMPLETE: {
+      uint64_t command = remote_decode_u64(payload);
+      uint32_t status = remote_decode_u32(payload + 8);
+      if (client->last_command == UINT64_MAX || command != client->last_command + 1 || status > 1) {
+        return -1;
+      }
+      client->last_command = command;
+      if (client->machine) {
+        snprintf(text, sizeof(text), "{\"type\":\"command_complete\",\"command\":%" PRIu64
+                 ",\"status\":%u}\n", command, status);
         output_text(client, text);
       }
       break;
