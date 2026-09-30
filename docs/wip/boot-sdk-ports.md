@@ -116,8 +116,12 @@ The [native read-only filesystem milestone](../devices/native-readonly-filesyste
 is complete: init-selected GPT partition/volume mounting, policy-approved objects,
 explicit root delegation, ordinary reads and executable loading, scoped filesystem
 information and Fastfetch Disk. Combined validation covers source-content reads,
-retained rights, repeated operations, final cleanup and unchanged media. Writable
-recovery, FUSE and installation remain separate; no next track is selected here.
+retained rights, repeated operations, final cleanup and unchanged media.
+The agreed storage continuation is [writable core and recovery](writable-filesystem-core.md),
+then [native persistent volumes](native-persistent-volumes.md). The first task
+settles bounded publication/reclamation, live handles, admission and the scoped
+host failure-validation mechanism. FUSE and installation remain separate. These
+plans do not start implementation or displace explicitly assigned libc/remote work.
 
 The [I/O reliability and attribution report](../development/io-reliability-attribution.md)
 closes the performance milestone. The former IPC/HTTP failures are resolved,
@@ -133,7 +137,8 @@ limits live in the subsystem docs, with the
 beside the local development loop. SSH/libssh remains deferred. The
 [block-storage foundation](../devices/block-storage.md) is also complete. The
 [initial filesystem format and read-only core](../devices/filesystem-readonly.md) is
-complete; later writable recovery, FUSE and native integration remain proposals.
+complete; writable core/native integration scopes are linked above, while FUSE
+remains a later proposal.
 
 The [task state and BSP service requests milestone](../kernel/bsp-service-requests.md)
 is complete. Subsystem requests are separate from scheduling while retaining
@@ -177,7 +182,9 @@ bounded acquisition and check both retained states. The
 [format contract](../../fs/docs/format.md), [core interfaces](../../fs/docs/core.md)
 and [measured host validation](../../fs/docs/host-tools.md#validation) are durable
 references. The [native read-only mount milestone](../devices/native-readonly-filesystem.md) is also
-complete. Writable recovery, FUSE and writable native persistence remain separate.
+complete. The [writable core](writable-filesystem-core.md) and
+[native persistence](native-persistent-volumes.md) follow as separate milestones;
+FUSE is not a prerequisite.
 BSP request separation is complete.
 
 | Path | First concrete completion point | Decisions and supporting work |
@@ -186,7 +193,7 @@ BSP request separation is complete.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../devices/block-storage.md) and [initial format and read-only core](../devices/filesystem-readonly.md), including populated image tools and whole-image checking, are complete. | [Read-only native mounts](../devices/native-readonly-filesystem.md) are complete; writable recovery and FUSE remain separate. |
+| Native disk storage | The [block-storage foundation](../devices/block-storage.md), [read-only core](../devices/filesystem-readonly.md) and [native mounts](../devices/native-readonly-filesystem.md) are complete. | [Writable core/recovery](writable-filesystem-core.md), then [native persistence](native-persistent-volumes.md); FUSE remains later. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The
