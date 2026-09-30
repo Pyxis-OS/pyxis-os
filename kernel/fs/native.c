@@ -5,6 +5,8 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/object.h>
+#include <kernel/object/directory.h>
+#include <kernel/object/file.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
@@ -28,7 +30,19 @@ struct nativefs_volume {
   struct execution_group *cleanup_group;
 };
 
-struct nativefs_operation {
+struct nativefs_node {
+  struct nativefs_node *next;
+  struct nativefs_volume *volume;
+  struct pfs_view *view;
+  struct execution_group *cleanup_group;
+  uint64_t identity, rights, kind;
+  union {
+    struct directory_object directory;
+    struct file_object file;
+  } wrapper;
+};
+
+struct nativefs_context {
   uint64_t deadline;
   enum block_result backing_error;
 };
@@ -42,13 +56,16 @@ struct core_allocation_header {
  * no lock or allocator section spans a wait. The operation pointer is borrowed
  * only during one job and is cleared before returning ownership. */
 static struct pfs_memory core_memory;
-static struct nativefs_operation *operation;
+static struct nativefs_context *operation;
 static struct nativefs_pool *pools;
 static struct nativefs_volume *volumes, *retired;
 static struct nativefs_job *first_job, *last_job;
+static struct nativefs_node *retired_nodes;
+static uint64_t next_identity;
 static struct task_wait *worker_wait;
 static bool available;
-static size_t admitted, wrapper_count, adapter_used, adapter_peak;
+static atomic_size_t admitted;
+static size_t wrapper_count, adapter_used, adapter_peak;
 static size_t core_peak, core_heap_used, core_heap_peak;
 
 static void nativefs_worker(void *argument);
@@ -379,7 +396,7 @@ static enum call_status open_pool(const struct gpt_partition *partition,
   return CALL_OK;
 }
 
-static enum call_status open_volume(struct nativefs_job *job)
+static enum call_status open_volume(struct nativefs_job *job, struct nativefs_volume **out)
 {
   const struct gpt_partition *partition;
   struct block_info device;
@@ -405,8 +422,8 @@ static enum call_status open_volume(struct nativefs_job *job)
   if (result == CALL_OK) {
     result = CALL_NOT_FOUND;
     for (size_t i = 0; i < count; ++i) {
-      if (catalog[i].name.length == job->name.length &&
-          !memcmp(catalog[i].name.bytes, job->name.bytes, job->name.length)) {
+      if (catalog[i].name.length == job->count &&
+          !memcmp(catalog[i].name.bytes, job->name, job->count)) {
         selected = &catalog[i];
         result = CALL_OK;
         break;
@@ -423,7 +440,7 @@ static enum call_status open_volume(struct nativefs_job *job)
           result = CALL_LIMIT;
         } else {
           ++volume->references;
-          job->volume = volume;
+          *out = volume;
         }
         cpu_restore_interrupts(flags);
         goto catalog_done;
@@ -442,7 +459,7 @@ static enum call_status open_volume(struct nativefs_job *job)
         volume->next = volumes;
         volumes = volume;
         ++pool->volumes;
-        job->volume = volume;
+        *out = volume;
       } else {
         adapter_free(volume, sizeof(*volume), true);
       }
@@ -466,7 +483,7 @@ static void wake_worker(void)
   }
 }
 
-void nativefs_volume_put(struct nativefs_volume *volume)
+static void nativefs_volume_put(struct nativefs_volume *volume)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(volume && volume->references);
@@ -529,12 +546,319 @@ static struct nativefs_volume *retire_volumes(struct nativefs_volume *list)
   return busy;
 }
 
+static struct kernel_object *node_object(struct nativefs_node *node)
+{
+  return node->kind == DIRECTORY_KIND_DIRECTORY ?
+      &node->wrapper.directory.object : &node->wrapper.file.object;
+}
+
+static struct pfs_rights directory_rights(uint64_t rights)
+{
+  return (struct pfs_rights){
+    .file = rights & DIRECTORY_RIGHT_READ_FILES ? PFS_FILE_READ | PFS_FILE_METADATA : 0,
+    .directory = ((rights & DIRECTORY_RIGHT_LOOKUP) ? PFS_DIR_LOOKUP : 0) |
+        ((rights & DIRECTORY_RIGHT_ENUMERATE) ? PFS_DIR_LIST : 0),
+  };
+}
+
+/* Transfer one view and one backing reference only on success. The wrapper is
+ * part of this charged allocation, including throughout deferred retirement. */
+static enum call_status create_node(struct nativefs_volume *volume,
+    struct pfs_view *view, uint64_t kind, uint64_t rights, struct kernel_object **out)
+{
+  if (kind == DIRECTORY_KIND_DIRECTORY && next_identity == UINT64_MAX) {
+    return CALL_LIMIT;
+  }
+  struct nativefs_node *node;
+  enum call_status status = adapter_allocate(sizeof(*node), true, (void **)&node);
+  if (status != CALL_OK) {
+    return status;
+  }
+  node->volume = volume;
+  node->view = view;
+  node->kind = kind;
+  node->rights = rights;
+  uint64_t flags = cpu_save_interrupts();
+  if (kind == DIRECTORY_KIND_DIRECTORY) {
+    node->identity = ++next_identity;
+    directory_init_native(&node->wrapper.directory, node);
+  } else {
+    file_init_native(&node->wrapper.file, node);
+  }
+  cpu_restore_interrupts(flags);
+  *out = node_object(node);
+  return CALL_OK;
+}
+
+void nativefs_retire(struct nativefs_node *node)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  node->cleanup_group = object_cleanup_defer();
+  node->next = retired_nodes;
+  retired_nodes = node;
+  wake_worker();
+}
+
+static void destroy_nodes(struct nativefs_node *list)
+{
+  while (list) {
+    struct nativefs_node *node = list;
+    list = node->next;
+    uint64_t flags = cpu_save_interrupts();
+    struct execution_group *group = node->cleanup_group;
+    struct execution_group *previous = object_cleanup_enter(group);
+    cpu_restore_interrupts(flags);
+    /* Views have no independently retained child handles. Each derived view
+     * retains the volume directly, so closing this view cannot be BUSY. */
+    KASSERT(pfs_view_close(&node->view) == PFS_OK);
+    flags = cpu_save_interrupts();
+    nativefs_volume_put(node->volume);
+    cpu_restore_interrupts(flags);
+    adapter_free(node, sizeof(*node), true);
+    flags = cpu_save_interrupts();
+    object_cleanup_leave(previous);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
+    cpu_restore_interrupts(flags);
+  }
+}
+
+static enum call_status acquire_root(struct nativefs_job *job)
+{
+  struct pfs_principal_id zero = {0};
+  if (!job->partition || job->count > PFS_NAME_MAX ||
+      pfs_name_validate((const uint8_t *)job->name, job->count) != PFS_OK ||
+      !memcmp(&job->principal, &zero, sizeof(zero)) ||
+      (job->rights & ~DIRECTORY_RIGHTS) || !(job->rights & DIRECTORY_RIGHT_LOOKUP)) {
+    return CALL_BAD_REQUEST;
+  }
+  if (job->rights & ~NATIVEFS_DIRECTORY_RIGHTS) {
+    return CALL_READ_ONLY;
+  }
+  struct nativefs_volume *volume = NULL;
+  enum call_status status = open_volume(job, &volume);
+  if (status != CALL_OK) {
+    return status;
+  }
+  struct pfs_trusted_context context = {
+    .principal = job->principal,
+    .root = volume->record.root_object,
+    .scope = PFS_SCOPE_SUBTREE,
+    .ceiling = directory_rights(NATIVEFS_DIRECTORY_RIGHTS),
+  };
+  struct pfs_rights requested = directory_rights(job->rights);
+  struct pfs_view *view = NULL;
+  job->core_status = expired() ? PFS_IO : pfs_view_acquire(&volume->core,
+      &context, &context.root, PFS_SCOPE_SUBTREE, &requested, &view);
+  status = core_result(job->core_status);
+  if (status == CALL_OK) {
+    status = create_node(volume, view, DIRECTORY_KIND_DIRECTORY, job->rights, &job->object);
+  }
+  if (status != CALL_OK) {
+    KASSERT(pfs_view_close(&view) == PFS_OK);
+    uint64_t flags = cpu_save_interrupts();
+    nativefs_volume_put(volume);
+    cpu_restore_interrupts(flags);
+  }
+  return status;
+}
+
+static enum call_status lookup_node(struct nativefs_job *job)
+{
+  if (job->kind != DIRECTORY_KIND_DIRECTORY && job->kind != DIRECTORY_KIND_FILE) {
+    return CALL_BAD_REQUEST;
+  }
+  uint64_t all = job->kind == DIRECTORY_KIND_DIRECTORY ? DIRECTORY_RIGHTS : FILE_RIGHTS;
+  if (job->child_rights & ~all) {
+    return CALL_BAD_REQUEST;
+  }
+  uint64_t allowed = job->kind == DIRECTORY_KIND_DIRECTORY ? job->rights :
+      ((job->rights & DIRECTORY_RIGHT_READ_FILES) ? FILE_RIGHT_READ : 0);
+  if (job->child_rights & ~allowed) {
+    return CALL_DENIED;
+  }
+  if (job->count > PFS_NAME_MAX) {
+    return CALL_LIMIT;
+  }
+  if (pfs_name_validate((const uint8_t *)job->name, job->count) != PFS_OK) {
+    return CALL_BAD_REQUEST;
+  }
+  struct pfs_view *view = NULL;
+  struct pfs_view_identity identity;
+  struct pfs_rights requested = job->kind == DIRECTORY_KIND_DIRECTORY ?
+      directory_rights(job->child_rights) : (struct pfs_rights){
+        .file = job->child_rights & FILE_RIGHT_READ ? PFS_FILE_READ | PFS_FILE_METADATA : 0,
+      };
+  enum pfs_grant_scope scope = job->kind == DIRECTORY_KIND_DIRECTORY ?
+      PFS_SCOPE_SUBTREE : PFS_SCOPE_OBJECT;
+  /* The core reports scope/kind mismatch as INVALID or DENIED. Resolve kind
+   * with a zero-right OBJECT view inside the held lookup authority first, so
+   * scope/kind errors become WRONG_TYPE before requesting the final rights. */
+  const struct pfs_rights none = {0};
+  job->core_status = pfs_view_lookup(job->node->view, (const uint8_t *)job->name,
+      job->count, PFS_SCOPE_OBJECT, &none, &view, &identity);
+  if (job->core_status != PFS_OK) {
+    return core_result(job->core_status);
+  }
+  KASSERT(pfs_view_close(&view) == PFS_OK);
+  if (identity.kind != (job->kind == DIRECTORY_KIND_DIRECTORY ?
+      PFS_OBJECT_DIRECTORY : PFS_OBJECT_FILE)) {
+    return CALL_WRONG_TYPE;
+  }
+  job->core_status = expired() ? PFS_IO : pfs_view_lookup(job->node->view,
+      (const uint8_t *)job->name, job->count, scope, &requested, &view, &identity);
+  if (job->core_status != PFS_OK) {
+    return core_result(job->core_status);
+  }
+  struct nativefs_volume *volume = job->node->volume;
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(volume->references);
+  bool retained = volume->references != SIZE_MAX;
+  if (retained) {
+    ++volume->references;
+  }
+  cpu_restore_interrupts(flags);
+  enum call_status status = retained ?
+      create_node(volume, view, job->kind, job->child_rights, &job->object) : CALL_LIMIT;
+  if (status != CALL_OK) {
+    KASSERT(pfs_view_close(&view) == PFS_OK);
+    if (retained) {
+      flags = cpu_save_interrupts();
+      nativefs_volume_put(volume);
+      cpu_restore_interrupts(flags);
+    }
+  }
+  return status;
+}
+
+static enum call_status enumerate_node(struct nativefs_job *job)
+{
+  struct directory_enumerate_reply entry = {.cursor = job->cursor};
+  if (!job->cursor.generation && job->cursor.position) {
+    return CALL_BAD_REQUEST;
+  }
+  if (job->cursor.generation && job->cursor.generation != job->node->identity) {
+    entry.outcome = DIRECTORY_CHANGED;
+  } else {
+    struct pfs_view_entry candidate;
+    size_t count = 0;
+    bool done = false;
+    uint64_t next = 0;
+    job->core_status = pfs_view_directory_page(job->node->view, job->cursor.position,
+        &candidate, 1, &count, &done, &next);
+    if (job->core_status != PFS_OK) {
+      return job->core_status == PFS_INVALID ? CALL_BAD_REQUEST : core_result(job->core_status);
+    }
+    if (!count) {
+      KASSERT(done);
+      entry.outcome = DIRECTORY_END;
+      entry.cursor = (struct directory_cursor){job->node->identity, next};
+    } else {
+      entry.kind = candidate.kind == PFS_OBJECT_DIRECTORY ?
+          DIRECTORY_KIND_DIRECTORY : DIRECTORY_KIND_FILE;
+      entry.name_size = candidate.name.length + 1;
+      if (job->count < entry.name_size) {
+        entry.outcome = DIRECTORY_BUFFER_TOO_SMALL;
+      } else {
+        entry.outcome = DIRECTORY_ENTRY;
+        entry.cursor = (struct directory_cursor){job->node->identity, next};
+        memcpy(job->name, candidate.name.bytes, candidate.name.length);
+        job->name[candidate.name.length] = '\0';
+      }
+    }
+  }
+  job->entry = entry;
+  return CALL_OK;
+}
+
+static enum call_status perform(struct nativefs_job *job)
+{
+  if (expired()) {
+    return CALL_TIMED_OUT;
+  }
+  if (job->operation == NATIVEFS_ROOT) {
+    return acquire_root(job);
+  }
+  if (!job->node) {
+    return CALL_BAD_REQUEST;
+  }
+  struct nativefs_node *node = job->node;
+  bool directory = node->kind == DIRECTORY_KIND_DIRECTORY;
+  uint64_t all = directory ? DIRECTORY_RIGHTS : FILE_RIGHTS;
+  if (job->rights & ~all) {
+    return CALL_BAD_REQUEST;
+  }
+  if (job->rights & ~node->rights) {
+    return CALL_DENIED;
+  }
+  switch (job->operation) {
+  case NATIVEFS_LOOKUP:
+  case NATIVEFS_ENUMERATE:
+    if (!directory) {
+      return CALL_WRONG_TYPE;
+    }
+    if (!(job->rights & (job->operation == NATIVEFS_LOOKUP ?
+        DIRECTORY_RIGHT_LOOKUP : DIRECTORY_RIGHT_ENUMERATE))) {
+      return CALL_DENIED;
+    }
+    return job->operation == NATIVEFS_LOOKUP ? lookup_node(job) : enumerate_node(job);
+  case NATIVEFS_READ:
+  case NATIVEFS_SIZE:
+    if (directory) {
+      return CALL_WRONG_TYPE;
+    }
+    if (!(job->rights & FILE_RIGHT_READ)) {
+      return CALL_DENIED;
+    }
+    if (job->operation == NATIVEFS_READ) {
+      if (job->count > sizeof(job->data)) {
+        return CALL_BAD_REQUEST;
+      }
+      size_t count = 0;
+      job->core_status = pfs_view_read(node->view, job->offset, job->data, job->count, &count);
+      if (job->core_status == PFS_OK) {
+        job->count = count;
+      }
+    } else {
+      struct pfs_view_metadata metadata;
+      job->core_status = pfs_view_metadata(node->view, &metadata);
+      if (job->core_status == PFS_OK) {
+        job->offset = metadata.size;
+      }
+    }
+    return core_result(job->core_status);
+  default: return CALL_BAD_OPERATION;
+  }
+}
+
+/* Detach loans/context/queue state before returning the record. User requests
+ * are consumed only after notification; kernel jobs are BSP-only observations. */
+static void complete_job(struct nativefs_job *job)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct nativefs_request *request = job->user_request;
+  job->user_request = NULL;
+  job->node = NULL;
+  job->next = NULL;
+  if (job->admitted) {
+    KASSERT(atomic_fetch_sub_explicit(&admitted, 1, memory_order_relaxed));
+    job->admitted = false;
+  }
+  job->state = NATIVEFS_JOB_COMPLETE;
+  if (request) {
+    bsp_request_complete(&request->request);
+  }
+}
+
 static void nativefs_worker(void *argument)
 {
   (void)argument;
   struct nativefs_volume *busy = NULL;
   for (;;) {
     uint64_t flags = cpu_save_interrupts();
+    struct nativefs_node *nodes = retired_nodes;
+    retired_nodes = NULL;
     struct nativefs_volume *cleanup = retired;
     retired = NULL;
     struct nativefs_job *job = first_job;
@@ -546,7 +870,7 @@ static void nativefs_worker(void *argument)
       job->next = NULL;
       job->state = NATIVEFS_JOB_ACTIVE;
     }
-    if (!cleanup && !job) {
+    if (!nodes && !cleanup && !job) {
       KASSERT(!worker_wait);
       struct task_wait *wait = task_wait_prepare();
       worker_wait = wait;
@@ -555,8 +879,7 @@ static void nativefs_worker(void *argument)
       continue;
     }
     cpu_restore_interrupts(flags);
-    /* BUSY retains all ownership; retry only on subsequent real work, never
-     * spin waiting for an incorrectly retained core view to disappear. */
+    destroy_nodes(nodes);
     while (cleanup) {
       struct nativefs_volume *next = cleanup->retired_next;
       cleanup->retired_next = busy;
@@ -565,48 +888,49 @@ static void nativefs_worker(void *argument)
     }
     busy = retire_volumes(busy);
     if (job) {
-      struct nativefs_operation context = {.deadline = job->deadline};
+      flags = cpu_save_interrupts();
+      struct execution_group *previous = object_cleanup_enter(job->user_request ?
+          job->user_request->request.cleanup_group : NULL);
+      cpu_restore_interrupts(flags);
+      struct nativefs_context context = {.deadline = job->deadline};
       KASSERT(!operation);
       operation = &context;
       job->core_status = PFS_OK;
-      job->status = open_volume(job);
+      job->status = perform(job);
       if (job->status == CALL_OK && expired()) {
-        flags = cpu_save_interrupts();
-        nativefs_volume_put(job->volume);
-        cpu_restore_interrupts(flags);
-        job->volume = NULL;
         job->status = CALL_TIMED_OUT;
         job->core_status = PFS_IO;
       }
       job->backing_error = context.backing_error;
       operation = NULL;
       flags = cpu_save_interrupts();
-      KASSERT(admitted);
-      --admitted;
-      job->state = NATIVEFS_JOB_COMPLETE;
+      if (job->status != CALL_OK && job->object) {
+        object_release(job->object);
+        job->object = NULL;
+      }
+      object_cleanup_leave(previous);
+      complete_job(job);
       cpu_restore_interrupts(flags);
-      /* No job access after ownership return. */
     }
     kernel_task_yield_if_runnable();
   }
 }
 
-enum call_status nativefs_submit(struct nativefs_job *job)
+static bool reserve_job(void)
 {
-  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  if (!job || job->state != NATIVEFS_JOB_IDLE || job->volume || job->next ||
-      !job->partition || pfs_name_validate(job->name.bytes, job->name.length) != PFS_OK) {
-    return CALL_BAD_REQUEST;
+  size_t count = atomic_load_explicit(&admitted, memory_order_relaxed);
+  while (count < NATIVEFS_REQUEST_LIMIT) {
+    if (atomic_compare_exchange_weak_explicit(&admitted, &count, count + 1,
+        memory_order_relaxed, memory_order_relaxed)) {
+      return true;
+    }
   }
-  if (!available) {
-    return CALL_UNAVAILABLE;
-  }
-  if (admitted == NATIVEFS_REQUEST_LIMIT) {
-    return CALL_BUSY;
-  }
-  job->deadline = task_deadline_after_ms(NATIVEFS_TIMEOUT_MS);
+  return false;
+}
+
+static void enqueue_job(struct nativefs_job *job)
+{
   job->state = NATIVEFS_JOB_QUEUED;
-  ++admitted;
   if (last_job) {
     last_job->next = job;
   } else {
@@ -614,7 +938,64 @@ enum call_status nativefs_submit(struct nativefs_job *job)
   }
   last_job = job;
   wake_worker();
+}
+
+enum call_status nativefs_submit(struct nativefs_job *job)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!job || job->state != NATIVEFS_JOB_IDLE || job->object || job->next ||
+      job->user_request || job->admitted || (unsigned)job->operation > NATIVEFS_SIZE) {
+    return CALL_BAD_REQUEST;
+  }
+  if (!available) {
+    return CALL_UNAVAILABLE;
+  }
+  if (!reserve_job()) {
+    return CALL_BUSY;
+  }
+  job->admitted = true;
+  job->deadline = task_deadline_after_ms(NATIVEFS_TIMEOUT_MS);
+  enqueue_job(job);
   return CALL_OK;
+}
+
+struct nativefs_request *nativefs_request_prepare(enum nativefs_operation operation_code)
+{
+  struct nativefs_request *request = (void *)bsp_request_prepare(BSP_SERVICE_NATIVEFS);
+  request->job.operation = operation_code;
+  request->job.user_request = request;
+  return request;
+}
+
+void nativefs_request_submit_and_wait(struct nativefs_request *request)
+{
+  bsp_request_submit_and_wait(&request->request);
+}
+
+void nativefs_request_release(struct nativefs_request *request)
+{
+  KASSERT(!request->job.node && !request->job.object && !request->job.next &&
+      !request->job.user_request && !request->job.admitted);
+  bsp_request_release(&request->request);
+}
+
+void nativefs_request_published(struct nativefs_request *request)
+{
+  KASSERT(request->request.state == BSP_REQUEST_PREPARED);
+  request->job.deadline = task_deadline_after_ms(NATIVEFS_TIMEOUT_MS);
+  request->job.admitted = reserve_job();
+}
+
+void nativefs_forward(struct nativefs_request *request)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(request->request.state == BSP_REQUEST_FORWARDED);
+  if (!request->job.admitted || !available) {
+    request->job.status = available ? CALL_BUSY : CALL_UNAVAILABLE;
+    complete_job(&request->job);
+    return;
+  }
+  enqueue_job(&request->job);
 }
 
 void nativefs_start(void)

@@ -3,6 +3,7 @@
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/fs/hostfs.h>
+#include <kernel/fs/native.h>
 #include <kernel/fs/ramfs.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/directory.h>
@@ -31,6 +32,10 @@ static void unlock_mutation(void)
 static void destroy_directory(struct kernel_object *object)
 {
   struct directory_object *directory = (struct directory_object *)object;
+  if (directory->backing == DIRECTORY_NATIVE) {
+    nativefs_retire(directory->native);
+    return;
+  }
   if (directory->backing == DIRECTORY_HOST) {
     hostfs_retire(directory->host);
     return;
@@ -59,9 +64,18 @@ struct directory_object *directory_create(enum directory_backing backing)
   return directory;
 }
 
+void directory_init_native(struct directory_object *directory, struct nativefs_node *node)
+{
+  KASSERT(arch_cpu_index() == 0 && directory && node);
+  *directory = (struct directory_object){.backing = DIRECTORY_NATIVE, .native = node};
+  atomic_init(&directory->locked, false);
+  object_init(&directory->object, OBJECT_DIRECTORY, destroy_directory);
+}
+
 /* IF=0. Never allocate, sleep or acquire scheduler locks while held. */
 static void lock_directory(struct directory_object *directory)
 {
+  KASSERT(directory->backing != DIRECTORY_NATIVE);
   while (atomic_exchange_explicit(&directory->locked, true, memory_order_acquire)) {
     __asm__ volatile("pause");
   }
@@ -183,13 +197,22 @@ static struct directory_entry *find_user_entry(struct directory_object *director
   return NULL;
 }
 
-static enum call_status check_child_request(uint64_t rights,
+static enum call_status check_child_request(struct directory_object *directory, uint64_t rights,
     const struct directory_child_request *request, uintptr_t reply_address,
     size_t reply_capacity)
 {
   if (reply_capacity < sizeof(struct directory_child_reply) ||
       (request->kind != DIRECTORY_KIND_FILE && request->kind != DIRECTORY_KIND_DIRECTORY)) {
     return CALL_BAD_REQUEST;
+  }
+  if (directory->backing == DIRECTORY_NATIVE) {
+    uint64_t mask = request->kind == DIRECTORY_KIND_FILE ? FILE_RIGHTS : DIRECTORY_RIGHTS;
+    if (request->rights & ~mask) {
+      return CALL_BAD_REQUEST;
+    }
+    if (request->name_length > PFS_NAME_MAX) {
+      return CALL_LIMIT;
+    }
   }
   if (!user_buffer_check(reply_address, sizeof(struct directory_child_reply), USER_BUFFER_WRITE)) {
     return CALL_BAD_BUFFER;
@@ -233,13 +256,27 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     const struct directory_child_request *request, uintptr_t reply_address,
     size_t reply_capacity)
 {
-  enum call_status status = check_child_request(rights, request, reply_address, reply_capacity);
+  enum call_status status = check_child_request(directory, rights, request,
+      reply_address, reply_capacity);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
 
   struct kernel_object *object = NULL;
-  if (directory->backing == DIRECTORY_HOST) {
+  if (directory->backing == DIRECTORY_NATIVE) {
+    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_LOOKUP);
+    pending->job.node = directory->native;
+    pending->job.rights = rights;
+    pending->job.child_rights = request->rights;
+    pending->job.kind = request->kind;
+    pending->job.count = request->name_length;
+    KASSERT(copy_from_user(pending->job.name, request->name, request->name_length));
+    nativefs_request_submit_and_wait(pending);
+    status = pending->job.status;
+    object = pending->job.object;
+    pending->job.object = NULL;
+    nativefs_request_release(pending);
+  } else if (directory->backing == DIRECTORY_HOST) {
     if (request->name_length > VIRTIO_FS_NAME_MAX) {
       return (struct syscall_result){CALL_LIMIT, 0};
     }
@@ -268,6 +305,9 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     unlock_directory(directory);
   }
   if (status != CALL_OK) {
+    if (object) {
+      object_release(object);
+    }
     return (struct syscall_result){status, 0};
   }
 
@@ -297,7 +337,8 @@ static struct syscall_result create_child(struct directory_object *directory, ui
     const struct directory_child_request *request, uintptr_t reply_address,
     size_t reply_capacity)
 {
-  enum call_status status = check_child_request(rights, request, reply_address, reply_capacity);
+  enum call_status status = check_child_request(directory, rights, request,
+      reply_address, reply_capacity);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -386,6 +427,9 @@ static struct syscall_result remove_child(struct directory_object *directory,
   if (request->kind != DIRECTORY_KIND_ANY && request->kind != DIRECTORY_KIND_FILE &&
       request->kind != DIRECTORY_KIND_DIRECTORY) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (directory->backing == DIRECTORY_NATIVE && request->name_length > PFS_NAME_MAX) {
+    return (struct syscall_result){CALL_LIMIT, 0};
   }
   enum call_status status = check_name(request->name, request->name_length);
   if (status != CALL_OK) {
@@ -501,12 +545,27 @@ static struct syscall_result rename_child(struct directory_object *source,
     return (struct syscall_result){CALL_WRONG_TYPE, 0};
   }
   struct directory_object *destination = (struct directory_object *)object;
+  if (destination->backing == DIRECTORY_NATIVE && (destination_rights & ~DIRECTORY_RIGHTS)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  bool native = source->backing == DIRECTORY_NATIVE || destination->backing == DIRECTORY_NATIVE;
+  if (native && (request->source_length > PFS_NAME_MAX ||
+      request->destination_length > PFS_NAME_MAX)) {
+    return (struct syscall_result){CALL_LIMIT, 0};
+  }
   enum call_status status = check_name(request->source_name, request->source_length);
   if (status == CALL_OK) {
     status = check_name(request->destination_name, request->destination_length);
   }
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
+  }
+  if (native) {
+    if (request->policy == DIRECTORY_RENAME_REPLACE &&
+        !(destination_rights & DIRECTORY_RIGHT_REMOVE)) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    return (struct syscall_result){CALL_READ_ONLY, 0};
   }
   if (source->backing == DIRECTORY_HOST || destination->backing == DIRECTORY_HOST) {
     if (source->backing != DIRECTORY_HOST || destination->backing != DIRECTORY_HOST) {
@@ -591,7 +650,7 @@ static struct syscall_result rename_child(struct directory_object *source,
   return (struct syscall_result){status, 0};
 }
 
-static struct syscall_result enumerate(struct directory_object *directory,
+static struct syscall_result enumerate(struct directory_object *directory, uint64_t rights,
     const struct directory_enumerate_request *request, uintptr_t reply_address,
     size_t reply_capacity)
 {
@@ -606,6 +665,27 @@ static struct syscall_result enumerate(struct directory_object *directory,
   if (request->capacity && request->name < reply_address + sizeof(reply) &&
       reply_address < request->name + request->capacity) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (directory->backing == DIRECTORY_NATIVE) {
+    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_ENUMERATE);
+    pending->job.node = directory->native;
+    pending->job.rights = rights;
+    pending->job.cursor = request->cursor;
+    pending->job.count = request->capacity;
+    nativefs_request_submit_and_wait(pending);
+    enum call_status status = pending->job.status;
+    if (status != CALL_OK) {
+      nativefs_request_release(pending);
+      return (struct syscall_result){status, 0};
+    }
+    if (pending->job.entry.outcome == DIRECTORY_ENTRY) {
+      KASSERT(pending->job.entry.name_size <= sizeof(pending->job.name) &&
+          pending->job.entry.name_size <= request->capacity);
+      KASSERT(copy_to_user(request->name, pending->job.name, pending->job.entry.name_size));
+    }
+    KASSERT(copy_to_user(reply_address, &pending->job.entry, sizeof(pending->job.entry)));
+    nativefs_request_release(pending);
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (directory->backing == DIRECTORY_HOST) {
     struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_ENUMERATE);
@@ -671,6 +751,9 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (directory->backing == DIRECTORY_NATIVE && (rights & ~DIRECTORY_RIGHTS)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
   uint64_t required;
   switch (operation) {
   case DIRECTORY_LOOKUP:
@@ -725,5 +808,5 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     }
     return (struct syscall_result){directory->backing == DIRECTORY_RAM ? CALL_OK : CALL_READ_ONLY, 0};
   }
-  return enumerate(directory, &request.enumerate, reply_address, reply_capacity);
+  return enumerate(directory, rights, &request.enumerate, reply_address, reply_capacity);
 }

@@ -1,9 +1,9 @@
 # Native read-only filesystem mounts
 
-Status: tasks 1–3 complete, 2026-09-30. The contract, core continuation and
+Status: tasks 1–4 complete, 2026-09-30. The contract, core continuation and
 [bounded kernel adapter](../devices/filesystem-native-adapter.md) are implemented.
-Internal jobs can prepare selected pool/volume backing; no native capability or
-mount ABI is exposed. Task 4 adds policy-approved directory/file objects. The
+Internal jobs acquire policy-approved directory/file objects; their ordinary
+protocols forward to the worker. No native mount ABI is exposed yet. The
 initial budgets cover the measured inputs, not every valid image. Update each
 task in its delivery PR.
 
@@ -519,13 +519,25 @@ zero final live allocation. Guest opening peaked at 255,336 core payload bytes
 and 105,808 adapter bytes. Host policy acquisition on the same image peaked at
 315,816 core bytes; this does not claim guest policy/lookup validation.
 
-Tasks 1–3 are complete. No compiler-container rebuild is needed. Task 4 has not
-started: add typed BSP user-request forwarding, policy-approved root/child views,
-read-only file/directory wrappers and their lifetime/rights enforcement. The
-internal job record opens backing only and is not an authority grant or a public
-asynchronous API. Later validation must cover guest acquisition, enumeration
-continuation/replay/end/abandonment and cleanup with retained object references.
-Native enumeration must not fall back to reconstructing every prefix.
+Task 4 adds policy-approved root and child views, directory/file wrappers and
+ordinary BSP request forwarding. READ acquisition and lookup require both core
+read and metadata rights. Every operation checks the actual caller's attenuated
+grant; descendants use held views rather than reacquiring bootstrap authority.
+Enumeration uses stateless continuation and a wrapper identity, retaining no
+per-cursor state. Final object retirement closes views on the worker before
+releasing their backing references.
+
+[Object validation](../devices/filesystem-native-adapter.md#task-4-validation)
+records interactive guest lookup/read/size, continuation and denial checks,
+ordinary `cat` and `ls` running on an AP, and zero live accounting after cleanup.
+The combined run peaked at 312,192 core payload bytes and 106,144 adapter bytes.
+The typed 4,584-byte native request fits the existing 4,928-byte task allocation.
+
+Tasks 1–4 are complete. No compiler-container rebuild is needed. Task 5 has not
+started: add the agreed disk-scoped mount authority, bootstrap principal
+configuration, init/session delegation and bounded executable capture. Native
+executables currently return UNAVAILABLE. Preserve absent-versus-unusable block
+preparation reasons for optional mounts; no public placeholder mount API exists.
 
 Agreed scope limitations are tracked in [technical debt](../technical-debt.md#native-mount-design-limits).
 
@@ -551,7 +563,7 @@ Agreed scope limitations are tracked in [technical debt](../technical-debt.md#na
    Document manual preparation of a disposable GPT disk using existing host tools.
    Verify opening the selected pool/volume through normal boot and debugger
    inspection without a permanent diagnostic application or automatic probe.
-4. [ ] **Provide read-only directory/file objects.** Implement policy-approved
+4. [x] **Provide read-only directory/file objects.** Implement policy-approved
    acquisition, enumeration, lookup, length and offset reads through shared-core
    views, including retained object lifetimes and failure cleanup. Enforce the
    agreed rights mapping and read-only backend errors. Keep existing backends

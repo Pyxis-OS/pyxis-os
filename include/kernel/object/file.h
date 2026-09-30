@@ -8,20 +8,24 @@
 
 struct initrd_file;
 struct hostfs_node;
+struct nativefs_node;
 
 enum file_backing {
   FILE_INITRD,
   FILE_RAM,
   FILE_HOST,
+  FILE_NATIVE,
 };
 
 /* The short spinlock protects busy and its FIFO. An operation owns busy across
  * BSP allocation waits; all access to data/size/capacity requires that ownership.
- * No shared seek position. Initrd bytes remain owned by the archive. */
+ * No shared seek position. Initrd bytes remain owned by the archive. Native
+ * files use only the worker-owned node, never busy or in-memory data. */
 struct file_object {
   struct kernel_object object;
   enum file_backing backing;
   struct hostfs_node *host; /* Owned by the deferred host worker destructor. */
+  struct nativefs_node *native; /* Worker owns this wrapper and its core view. */
   const void *data;
   size_t size, capacity;
   atomic_bool locked;
@@ -41,7 +45,11 @@ struct file_object *file_create_ram(void);
 /* BSP, IF=0. Worker supplies stable host state; no in-memory file data. */
 struct file_object *file_create_host(struct hostfs_node *host);
 
-/* IF=0, with an owned/borrowed live reference. Begin runs on a user task and
+/* BSP worker, IF=0. Initialize embedded storage without allocating or supplying
+ * in-memory data. Final destruction retires the complete node. */
+void file_init_native(struct file_object *file, struct nativefs_node *node);
+
+/* Initrd/RAM only, IF=0, with an owned/borrowed live reference. Begin runs on a user task and
  * may sleep; end can run on BSP after a loan. Ownership keeps data/size stable
  * without a held spinlock, including while loading an executable. Begin
  * returns false after a stop request, with no queued link or busy ownership. */

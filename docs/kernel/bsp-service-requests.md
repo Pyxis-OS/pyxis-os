@@ -14,6 +14,7 @@ kernel; each service defines its own public operation contract.
 | Subsystem | Typed inputs/results, authority checks, resource loans, actual operation and rollback |
 | BSP executor | Nonblocking operations under the existing allocation and VM contracts |
 | HOST worker | Blocking filesystem transport and final completion of forwarded requests |
+| Native filesystem worker | Policy/view operations, block waits and final completion of forwarded requests |
 | Network worker | TCP/mixed readiness observation and final completion of forwarded waits |
 | Readiness worker | Terminal-only waits, independent of network-device availability |
 
@@ -88,6 +89,13 @@ before common completion; unavailable forwarding and startup failure obey the
 same ownership rule. FIFO admission does not promise completion order across
 services. See [HOST ownership](../devices/virtio-fs.md#native-directory-and-file-objects).
 
+Native filesystem requests also use FORWARDED. Publication reserves one of the
+32 shared native slots and stamps the deadline before entering the executor
+FIFO. The worker derives authority from held views plus captured caller rights,
+detaches input nodes and releases admission before common completion. The
+4,584-byte typed record fits the existing 4,928-byte request allocation. See
+[native object ownership](../devices/filesystem-native-adapter.md#build-and-ownership).
+
 Readiness waits also use FORWARDED. The executor hands their copied interests to
 the appropriate worker: TCP/mixed waits use the network worker, while terminal-only
 waits use a dedicated BSP readiness worker. Both check current readiness before
@@ -112,6 +120,7 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 | Private memory | Deferred; inactive process loan for allocation/release |
 | Display acquire/present/release | Deferred; inactive process and display loans for every operation |
 | HOST forwarding | Ordinary admission; existing HOST worker owns transport and final completion |
+| Native filesystem forwarding | Ordinary admission; bounded native worker owns core views/I/O and final completion |
 | Readiness wait | Ordinary admission; selected worker owns observations, transient object references and final completion |
 
 Authority checks remain in their owning subsystems; callers validate user buffers

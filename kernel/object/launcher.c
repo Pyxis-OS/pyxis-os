@@ -483,6 +483,9 @@ static enum call_status capture_launch_request(const struct launch_request *requ
   if (image->type != OBJECT_FILE) {
     return CALL_WRONG_TYPE;
   }
+  if (((struct file_object *)image)->backing == FILE_NATIVE) {
+    return CALL_UNAVAILABLE;
+  }
 
   struct launch_capture *capture = allocate_launch_capture();
   if (!capture) {
