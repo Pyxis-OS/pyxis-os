@@ -315,9 +315,9 @@ newline without consuming the next line. Line-oriented consumers such as sbase
 uniq are therefore slow on large inputs. The [uniq validation](userland/uniq.md#validation-evidence)
 recorded 20.4 seconds for 36,009 bytes over virtio-fs in nested KVM; this is a
 workload observation, not a measured universal per-syscall cost.
-Revisit with stdio input buffering as a
-separate libc task, defining its interaction with descriptor sharing, seeking
-and child stream delegation; do not work around it in individual ports.
+The planned [libc input read-ahead](wip/stdio-input-buffering.md) milestone
+addresses files and pipes; console input will remain byte-at-a-time. Do not
+work around it in individual ports.
 
 ## fgets final line after an earlier error
 
@@ -327,7 +327,8 @@ can therefore make a later successfully read, unterminated final line return
 NULL instead of the partial line. This was reported during the uniq port; no
 runtime reproduction was performed for this entry. Fix the distinction between
 the current read's EOF/error outcome and a prior sticky error in a focused libc
-change, preserving the error indicator until explicitly cleared.
+change, preserving the error indicator until explicitly cleared. This is task 1
+of [libc input read-ahead](wip/stdio-input-buffering.md).
 
 ## Duplicated port output lists
 
