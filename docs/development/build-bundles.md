@@ -68,6 +68,10 @@ and local change hashes, selected builder image, and relevant compiler/flag
 provenance. These checks establish matching inputs, not a cryptographic trust
 boundary or proof that arbitrary kernel implementation changes preserve behavior.
 
+Kernel source builds require the pinned lwIP and filesystem submodules. Their
+revisions, local state and change hashes are recorded in the kernel bundle;
+`make fs-tools` remains an opt-in host build outside these bundles.
+
 Normal source builds still use their existing dependencies. A TCC source/patch
 change requires rebuilding TCC; CI reuse avoids repeating an already completed
 build locally. There is no implicit network access or upstream checkout update
