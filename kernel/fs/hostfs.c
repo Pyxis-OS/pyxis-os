@@ -8,6 +8,7 @@
 #include <kernel/object/capability.h>
 #include <kernel/object/directory.h>
 #include <kernel/object/file.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/service/profile.h>
 #include <kernel/task.h>
@@ -16,6 +17,7 @@
 struct hostfs_node {
   struct hostfs_node *next;
   struct kernel_object *object;
+  struct execution_group *cleanup_group;
   struct virtio_fs_node node;
   struct virtio_fs_open opened, writer;
   uint64_t cursor_identity;
@@ -237,6 +239,7 @@ void hostfs_submit(struct hostfs_request *request)
 void hostfs_retire(struct hostfs_node *node)
 {
   KASSERT(arch_cpu_index() == 0 && session);
+  node->cleanup_group = object_cleanup_defer();
   node->next = NULL;
   if (last_retired) {
     last_retired->next = node;
@@ -654,7 +657,17 @@ bool hostfs_service(void)
   cpu_restore_interrupts(flags);
 
   if (retired) {
+    flags = cpu_save_interrupts();
+    struct execution_group *group = retired->cleanup_group;
+    struct execution_group *previous = object_cleanup_enter(group);
+    cpu_restore_interrupts(flags);
     destroy_node(retired);
+    flags = cpu_save_interrupts();
+    object_cleanup_leave(previous);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
+    cpu_restore_interrupts(flags);
     return true;
   }
   if (!request) {

@@ -3,6 +3,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/net/udp.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <stdatomic.h>
@@ -61,6 +62,7 @@ static void assert_worker_context(void)
 static void retire_endpoint(struct kernel_object *object)
 {
   struct udp_endpoint *endpoint = (struct udp_endpoint *)object;
+  endpoint->cleanup_group = object_cleanup_defer();
   lock_control();
   endpoint->retired_next = retired;
   retired = endpoint;
@@ -81,6 +83,10 @@ static bool reap_endpoints(void)
   while (list) {
     struct udp_endpoint *endpoint = list;
     list = endpoint->retired_next;
+    flags = cpu_save_interrupts();
+    struct execution_group *group = endpoint->cleanup_group;
+    struct execution_group *previous = object_cleanup_enter(group);
+    cpu_restore_interrupts(flags);
     struct udp_endpoint **link = &endpoints;
     while (*link && *link != endpoint) {
       link = &(*link)->next;
@@ -92,6 +98,10 @@ static bool reap_endpoints(void)
     net_udp_discard_received(endpoint);
     flags = cpu_save_interrupts();
     kfree(endpoint);
+    object_cleanup_leave(previous);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
     cpu_restore_interrupts(flags);
   }
   return worked;

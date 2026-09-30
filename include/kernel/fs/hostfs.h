@@ -91,7 +91,8 @@ bool hostfs_service(void);
 /* BSP, IF=0. Submit forwards an executor-owned request to the HOST worker,
  * completing unavailable requests immediately. No request accesses afterward.
  * Retire transfers the native wrapper and node storage to the worker; the reaper
- * must not free them. Neither operation sleeps or allocates. */
+ * must not free them. Retirement carries pending group cleanup through CLOSE,
+ * node put and local storage reclamation. Neither operation sleeps or allocates. */
 void hostfs_submit(struct hostfs_request *request);
 void hostfs_retire(struct hostfs_node *node);
 

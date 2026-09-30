@@ -6,6 +6,7 @@
 struct tcp_stream {
   struct kernel_object object;
   struct tcp_stream *retired_next;
+  struct execution_group *cleanup_group; /* Worker retirement's pending token. */
   struct tcp_connection *connection; /* Sole external transport owner. */
 };
 

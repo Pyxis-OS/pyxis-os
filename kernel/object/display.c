@@ -3,6 +3,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/display.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
@@ -31,8 +32,12 @@ void display_frame_release(struct display_frame *frame)
 {
   KASSERT(arch_cpu_index() == 0 && frame->references);
   if (--frame->references == 0) {
+    struct execution_group *group = frame->cleanup_group;
     KASSERT(vm_free(vm_kernel_space(), frame->fb.address, frame->fb.size) == MM_OK);
     kfree(frame);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
   }
 }
 
@@ -118,6 +123,15 @@ static enum call_status acquire_display(struct display_object *display,
 static void release_display(struct display_object *display)
 {
   struct display_frame *frame = display->frame;
+  if (frame->references > 1) {
+    struct execution_group *group = display->owner->execution_group;
+    if (group) {
+      execution_group_cleanup_begin(group);
+      frame->cleanup_group = group;
+    } else {
+      frame->cleanup_group = object_cleanup_defer();
+    }
+  }
   size_t size = (frame->fb.size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
   unmap_pixels(display->owner, display->user_address, size);
   KASSERT(vm_release(display->owner->address_space, display->user_address, size) == MM_OK);
@@ -127,7 +141,7 @@ static void release_display(struct display_object *display)
   display->frame = NULL;
   display->user_address = 0;
   /* A preempted presenter may still read this frame. It owns its own reference
-   * and will release the backing after finishing, without borrowing owner. */
+   * and will release the backing and pending cleanup after finishing. */
   display_frame_release(frame);
 }
 

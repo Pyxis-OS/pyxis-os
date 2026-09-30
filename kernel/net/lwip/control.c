@@ -1,6 +1,7 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/net/tcp.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/task.h>
 #include <caelum_hooks.h>
 #include <stdatomic.h>
@@ -50,6 +51,7 @@ static void unlock_control(void)
 static void retire_stream(struct kernel_object *object)
 {
   struct tcp_stream *stream = (struct tcp_stream *)object;
+  stream->cleanup_group = object_cleanup_defer();
   lock_control();
   stream->retired_next = retired;
   retired = stream;
@@ -70,10 +72,20 @@ static bool reap_streams(void)
   while (list) {
     struct tcp_stream *stream = list;
     list = stream->retired_next;
+    flags = cpu_save_interrupts();
+    struct execution_group *group = stream->cleanup_group;
+    struct execution_group *previous = object_cleanup_enter(group);
+    cpu_restore_interrupts(flags);
     if (stream->connection) {
       net_tcp_release(stream->connection);
     }
     caelum_lwip_free(stream);
+    flags = cpu_save_interrupts();
+    object_cleanup_leave(previous);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
+    cpu_restore_interrupts(flags);
   }
   return worked;
 }

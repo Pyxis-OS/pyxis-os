@@ -42,6 +42,8 @@ enum object_type {
   OBJECT_EXECUTION_GROUP = 35,
 };
 
+struct execution_group;
+
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.
  * The reference count and retirement link coordinate lifetime across CPUs. Payload access has
  * its own synchronization rules; reference ownership alone does not lock it. */
@@ -49,6 +51,7 @@ struct kernel_object {
   enum object_type type; /* Immutable after initialization. */
   atomic_size_t references;
   struct kernel_object *retired_next;
+  struct execution_group *cleanup_group; /* Retirement's pending storage token. */
   void (*destroy)(struct kernel_object *);
 };
 
@@ -80,6 +83,17 @@ bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
  * except receipts, which release logical ownership without freeing storage. */
 bool object_retain(struct kernel_object *object);
 void object_release(struct kernel_object *object);
+
+/* IF=0. Borrowed cleanup context follows the current task across worker sleeps;
+ * scheduler cleanup has a separate context. Enter/leave must be paired. Last
+ * object release inherits this context or the executing user's group. */
+struct execution_group *object_cleanup_enter(struct execution_group *group);
+void object_cleanup_leave(struct execution_group *previous);
+/* IF=0. Acquire pending storage for the active context or executing user's
+ * group before lending an internal reference or transferring destruction to a
+ * worker. NULL means ungrouped cleanup. The worker enters this context around
+ * release/destruction and ends the token after returning that ownership. */
+struct execution_group *object_cleanup_defer(void);
 
 /* Capability entries and in-flight capability transfers own authority as well
  * as storage. Observation and operation references use retain/release above.
