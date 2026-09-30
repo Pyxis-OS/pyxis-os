@@ -312,9 +312,31 @@ Libc `getline` reads one byte per `fgetc`, so each input byte is a separate
 native read and, for `host://` or native filesystem inputs, possibly a worker
 round trip. Streams have no read-ahead or pushback, so it cannot read past a
 newline without consuming the next line. Line-oriented consumers such as sbase
-uniq are therefore slow on large inputs. Revisit with stdio input buffering as a
+uniq are therefore slow on large inputs. The [uniq validation](userland/uniq.md#validation-evidence)
+recorded 20.4 seconds for 36,009 bytes over virtio-fs in nested KVM; this is a
+workload observation, not a measured universal per-syscall cost.
+Revisit with stdio input buffering as a
 separate libc task, defining its interaction with descriptor sharing, seeking
 and child stream delegation; do not work around it in individual ports.
+
+## fgets final line after an earlier error
+
+Source inspection of userland `3b9ba3f` confirms that `fgets` checks the sticky
+`ferror` indicator when `fgetc` returns EOF. An earlier error that remains set
+can therefore make a later successfully read, unterminated final line return
+NULL instead of the partial line. This was reported during the uniq port; no
+runtime reproduction was performed for this entry. Fix the distinction between
+the current read's EOF/error outcome and a prior sticky error in a focused libc
+change, preserving the error indicator until explicitly cleared.
+
+## Duplicated port output lists
+
+`scripts/ports.mk` repeats staged output paths already declared in each recipe's
+`metadata.lua`, including the sbase executables and notices. Adding an output
+requires coordinated edits; drift can leave Make unaware of a missing staged
+file. Revisit the build integration to derive output dependencies from one
+authoritative list without growing a new build framework. Until then, review
+both lists when updating a recipe's outputs.
 
 ## Unexpected native close failures
 
