@@ -49,7 +49,8 @@ moves authority without a gap. WAIT-only grants, zero-right handles, bound launc
 prepared children and internal references retain storage only. Discarding the last
 queued controlling grant terminates the group. Neither operation can reopen admission.
 A shell without CONTROL can exit without sealing its group or stopping descendants;
-the later server defines that policy.
+the [remote server](../userland/remote-terminal.md) terminates remaining descendants
+when its root shell exits.
 
 `execution_group_wait()` requires WAIT and uses a header-only request with no reply
 payload. Completion is immutable and repeatable: admission is sealed, every published
@@ -66,7 +67,7 @@ retirement; it cannot return to userspace. Timers and subsystem links are detach
 separately. Network and entropy slots are cancelled through their owning worker and
 collected before task teardown. Published BSP/HOST loans finish their handoff;
 already-completed external effects are not rolled back. No live kernel stack is
-forcibly freed. The [ownership matrix](../wip/execution-group-termination.md) records
+forcibly freed. The [ownership matrix](execution-group-termination.md) records
 these subsystem boundaries.
 
 A terminated process observer returns PROCESS_TERMINATED with zero exit_status.
@@ -112,5 +113,5 @@ launcher during synchronous launch; prepared children each retain group storage.
 No child process or task is accessed after scheduler publication transfers ownership.
 
 The public layouts are [launcher.h](../../include/abi/launcher.h) and
-[execution_group.h](../../include/abi/execution_group.h). The [ownership matrix](../wip/execution-group-termination.md) records safe-stop
+[execution_group.h](../../include/abi/execution_group.h). The [ownership matrix](execution-group-termination.md) records safe-stop
 and cleanup paths.

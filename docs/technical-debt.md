@@ -239,7 +239,12 @@ the [remote server](userland/remote-terminal.md) bounds admission at four and
 abandons closing output after five seconds. Cleanup can still wait indefinitely
 for published HOST work, retaining its admission slot. Four idle or blocked
 sessions can exhaust the server; there is no idle timeout, authentication,
-restart or reconnection. The interactive host renderer uses one `?` cell for
+encryption, restart or reconnection. Host-loopback forwarding limits the QEMU
+host entry point, but every process able to reach it receives the configured
+shell privileges. Sessions share granted filesystem roots, space and CPU; there
+are no separate principals, private files or per-session execution quotas.
+Address changes invalidate the listener and are not automatically rebound.
+The interactive host renderer uses one `?` cell for
 non-ASCII bytes; machine mode preserves the original data. A full client input
 queue delays reading Ctrl+] behind a paste; once read, its close acknowledgment
 is bounded at five seconds. Host SIGINT/SIGTERM forces disconnect even under
@@ -777,5 +782,6 @@ maintenance after native ownership ends.
 
 Revisit bounded HOST cancellation when transport ownership can be revoked safely;
 do not turn a timeout into permission to free lent process state. Group/member
-allocation has no quota beyond available storage. The remote server must enforce
-its admission policy before exposure. Foreground interruption remains separate work.
+allocation has no quota beyond available storage. The remote server bounds
+concurrent sessions at four; that is not a descendant or per-session memory quota.
+Foreground interruption remains separate work.

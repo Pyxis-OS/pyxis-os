@@ -51,6 +51,49 @@ remain unsupported. GCC continues to build maintained OS/userland sources.
 See [TCC's contract and limits](../userland/tcc.md), [Kilo controls](ports.md#editing-in-pyxis)
 and [terminal behavior](../userland/terminal.md) for details.
 
+## Use a remote terminal
+
+From the repository root, build the native host client and boot four CPUs with
+networking and loopback forwarding:
+
+```sh
+make -C tools remote
+make run CPUS=4 VIRTIO_NET=1 TCP_FORWARD=2323:2323
+```
+
+Leave QEMU running. In another host terminal, connect from the repository root:
+
+```sh
+build/tools/pyxis-remote 127.0.0.1 2323
+```
+
+The same Kilo, TCC and execution commands above work in the remote shell.
+An optional HOST export is writable from the default Remote space, subject to
+host permissions. Remote and local sessions share the actual filesystem roots;
+choose distinct output names when working concurrently.
+
+For command tools without a controlling terminal, use the
+[persistent machine-client workflow](../userland/remote-terminal.md#persistent-use-through-command-tools).
+Wait for each typed completion event before sending the next shell command;
+while Kilo or another foreground reader runs, input belongs to that program.
+Completion status 0 means success and 1 means failure. Keep compiler diagnostics
+and check completion before executing an output file that may predate a failed
+build. Program output is base64 JSON data, separate from completion events.
+
+Existing benchmarks can report through that same connection, for example:
+
+```text
+iobench read app://share/iobench-small.bin --bytes 32768 --rounds 1
+allocbench heap --rounds 64 --profile
+```
+
+These examples exercise report collection; one sample is not a performance
+baseline. See [I/O measurements](io-ipc-baselines.md) and
+[allocation profiling](allocation-profiling.md) for measurement contracts.
+Tools requiring a delegated launcher, such as the pipe/IPC coordinators, still
+need their documented local setup. A remote `session` handoff exits the root
+shell and causes the server to terminate its remaining group.
+
 ## Fetch source over HTTPS
 
 A controlled HTTPS endpoint can supply source through the same file interface.

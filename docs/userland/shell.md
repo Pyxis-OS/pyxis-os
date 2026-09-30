@@ -199,9 +199,11 @@ file operands; repeated `-` continues the same stream without closing or rewindi
 it. Use `./-` for a file literally named `-`. Cat uses `fread_some` for every input:
 terminal and pipe data is copied as it becomes available, without waiting to fill
 its transfer buffer. File operands and file-backed stdin keep bulk reads and
-normal EOF. Terminal input remains raw and blocking, without a Ctrl+D EOF convention.
-Ctrl+C cancels shell editing, not a running cat. No options or terminal line
-discipline are added.
+normal EOF. Terminal input remains raw and blocking. Remote machine-client stdin
+EOF sends END_INPUT, which drains queued terminal bytes before EOF; the local
+framebuffer console has no input EOF operation. Ctrl+D is an input byte rather
+than a stream closure. Ctrl+C cancels shell editing, not a running cat. No options
+or terminal line discipline are added.
 
 ## Bounded input with head
 
@@ -243,8 +245,9 @@ head -c 0 home://copy.txt
 Closing the reader early discards unread pipe bytes and makes further upstream
 writes fail with EPIPE. The shell reports earlier-stage failures while retaining
 the last stage's result. There are no multiple-file headers or additional head
-options. Terminal input still has no EOF convention: line mode needs its requested
-newlines or an input error, and byte mode needs its requested bytes or an error.
+options. Remote terminal END_INPUT can end either mode before its requested limit;
+local framebuffer input needs the requested newlines/bytes or an input error.
+Ctrl+D does not close either input stream.
 
 ## Foreground pipelines
 
@@ -303,9 +306,11 @@ the next line. Wait, cleanup and diagnostic I/O errors remain fatal to the shell
 An unknown launch outcome is also fatal because terminal input cannot safely
 resume.
 
-There is no cancellation, job control or terminal EOF convention. Ctrl+C cannot
-interrupt a running pipeline. A child that waits on terminal input or ignores
-its pipe can keep the shell waiting even after its peers finish.
+There is no foreground cancellation or job control. Ctrl+C cannot interrupt a
+running pipeline. Remote terminal END_INPUT supplies EOF after queued input;
+local framebuffer input has no EOF operation. A child that waits on live terminal
+input or ignores its pipe can keep the shell waiting even after its peers finish.
+Disconnecting a remote session terminates its entire execution group.
 
 ## Background commands
 
@@ -332,7 +337,8 @@ There is no job table, completion notification, exit-status collection, `jobs`,
 shell's current input line. Use programs with their own bounded exit policy.
 Background launch also works in scripts: launch failure stops the script, while
 successful launch lets it continue regardless of the child's eventual result.
-Children may outlive the shell; leaving it does not stop them.
+Ungrouped local children may outlive the shell. The remote server terminates all
+remaining session descendants when its root shell exits or the client disconnects.
 
 Successful launch does not guarantee application readiness. For a UDP server,
 wait for its listening message before sending traffic. Nothing starts in the
@@ -406,6 +412,10 @@ fault does not bring back the original shell or restart the session.
 
 This is explicit delegation followed by caller exit, not process replacement
 or a terminal ownership protocol. It does not add supervision or `exec`.
+
+In a remote session, root-shell exit causes the server to terminate all remaining
+group members, including a session successor. Remote `session` handoff therefore
+cannot keep a successor running after that shell exits.
 
 ## Startup and child authority
 

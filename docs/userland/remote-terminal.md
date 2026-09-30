@@ -206,3 +206,154 @@ independent acknowledgment of host display or storage. Disconnect discards
 presentation queues, never fabricates completion and never leaves detached
 session execution. Final server supervision-handle closure also terminates its
 groups if the server exits or faults.
+
+## Consumers and limits
+
+The client supports persistent command use, pipelines/redirection, guest TCC,
+benchmark output capture and interactive Kilo through the same application
+terminal contract as local framebuffer use. See the [shell guide](shell.md),
+[edit/build/run walkthrough](../development/edit-build-run.md),
+[allocation benchmark](../development/allocation-profiling.md) and
+[I/O benchmark reference](../development/io-ipc-baselines.md) for command usage.
+Machine output remains typed and incremental; graphical work still uses the
+framebuffer.
+
+Ordinary remote commands receive no launcher or pipe-creation service.
+`ipcbench` and `iobench pipe` require the `session` handoff to obtain those grants.
+That handoff replaces the root shell; its exit causes remote group termination,
+so these successor workloads are not a persistent remote-shell benchmark path.
+Run those launch-dependent benchmarks from the local Development session.
+Ordinary `allocbench` and non-pipe `iobench` modes use the configured remote grants.
+This limitation does not grant an ordinary child supervision or launch authority.
+
+The underlying [terminal sessions](terminal-sessions.md),
+[TCP listener/readiness contract](../devices/tcp.md),
+[execution groups](../interfaces/execution-groups.md) and
+[termination ownership matrix](../interfaces/execution-group-termination.md)
+record authority, queue and cleanup boundaries. Sessions with the same filesystem grants can access the same files. Four admitted sessions can occupy the service indefinitely;
+there is no idle timeout or per-session CPU/memory quota. Transport record
+capacity, including pending handshakes and TIME_WAIT, can prevent admission even
+below that session count.
+
+SSH/Telnet compatibility, authentication/TLS, resize, reattachment, remote graphics,
+a multiplexer/navigator, foreground interruption, task migration and process
+threads remain separate work. Current costs and revisit points are recorded in
+[technical debt](../technical-debt.md#initial-independent-terminal-limits) and
+[execution-group shutdown](../technical-debt.md#execution-group-shutdown).
+
+## Validation evidence
+
+The implementation slices were validated with ordinary kernel, SDK, ports,
+userland/image and native-client builds using the existing compiler. The ports
+recipe needed a temporary local CMake installation; no compiler-container rebuild
+was needed. Interactive QEMU used the patched 10.2.2 with its local AHCI fix,
+matching raw OVMF, CPU `max`, 256 MiB and nested KVM. Checks included one- and
+four-CPU boots, VirtIO RNG and optional NET/HOST. Network forwarding bound only
+to host loopback; one-CPU remote use selected a trusted network-configuring init.
+These are nested-VM observations, not owner-host performance measurements.
+
+Listener/readiness checks exercised bounded admission, continued use of accepted
+streams after listener destruction, independent local outbound TCP, short transfers,
+peer-FIN draining and a stalled reader while other clients progressed. Resuming
+that reader delivered all 4,789,053 bytes unchanged. GDB inspected bounded native
+and lwIP backlog counts, advisory interests and eventual transport/wait release.
+Handshake expiry, address invalidation and allocation/handle-failure paths were
+reviewed in code rather than individually runtime-exercised.
+
+Temporary uncommitted native exercises covered terminal ordering/backpressure,
+rights, EOF versus Ctrl+D, controlling-grant closure and queued IPC authority.
+A blocked terminal writer filled exactly 65,536 bytes; later draining delivered
+128 KiB unchanged. Terminal-only waits worked without a NIC, mixed TCP/terminal
+waits progressed, and Kilo exited successfully on clean input EOF and failed with
+unsaved edits. Local shell/Kilo editing, navigation, save, quit and readback passed.
+
+Execution-group exercises covered membership, batch publication/sealing,
+launcher-policy rejection, observer independence, final supervisor exit/fault,
+CPU loops, clock/IPC/pipe/terminal waits and full writers. Network checks stopped
+blocked ACCEPT, TCP READ/WRITE, UDP receive and an observed waiting RNG request.
+Externally retained peers and a delivered IPC receipt remained usable. GDB observed
+zero members while deferred tokens still held completion open, then empty completed
+and retirement queues with free readiness/TCP/RNG/UDP request slots. File handoff,
+launch preparation stop races, BSP provisional failure, HOST loans, display pixels,
+keyboard ownership, ARP cancellation and receive-credit reclamation were inspected;
+those specific races were not each measured or fault-injected.
+
+The actual host client produced READY, ordered records and FINAL for shell exit
+and END_INPUT; four concurrent shells remained independent. HOST creation/readback
+was checked from guest and host. Root-shell exit stopped a background Lua loop;
+client disconnection stopped foreground spinning and terminal-blocked work. A
+stalled host reader left writable readiness pending while another session completed.
+Kilo edited/saved a HOST file and normalized Enter and SS3 navigation/Home. Ctrl+]
+received acknowledged termination. A loop with 6000 queued input bytes exercised
+the client's five-second close timeout and corrected abortive-close path; GDB
+observed reclamation and listener-only readiness afterward. The independent local
+framebuffer shell remained usable; boots without NET/HOST reported network
+unavailable on Remote while preserving local startup.
+
+Persistent machine-client use through a FIFO exercised twelve numbered commands:
+success, syntax/launch/builtin failures, last-stage pipeline status, Lua failure,
+background launch, JSON-like program text, later success, line-limit rejection and
+exit. Diagnostics preceded completion, background output could follow it, and
+printed JSON stayed base64 output. Blank/cancelled/unfinished lines emitted no
+completion; submitted input completed before END_INPUT. New sessions restarted
+numbering at 1, interactive mode consumed events silently and restored the host
+terminal, and GDB found listener-only readiness and an empty completed-task queue
+after closure. Event authority/captured lifetime, allocation unwind, queue-full
+cancellation, uncertain responses and sequence exhaustion were reviewed in code,
+without separate injected runtime checks.
+
+The historical checks above precede combined acceptance. They do not claim
+exhaustive renderer, malformed-frame, failure-unwind or ownership-race coverage.
+Published HOST cleanup remains unbounded. All jobs from those checks were stopped;
+no committed tests, exercise programs or boot/output automation were added.
+
+### Combined acceptance
+
+Combined acceptance started from Pyxis `a2c4ab2` with userland `5cbfbbd`; the
+Kilo fix was rechecked with ports `fc728f7`. It used four CPUs, nested KVM,
+256 MiB, VirtIO NET/RNG and
+a writable virtiofs export, with the default Remote init and loopback forwarding.
+Ordinary image and host-client builds used the existing compiler. Two persistent
+machine clients used separate input FIFOs and JSON captures; an interactive
+client ran alongside them. The local Development shell also completed `ls`
+through physical-key input while remote work continued. A framebuffer capture
+was used only to inspect that local UI; remote commands and reports were read
+as text.
+
+Kilo created `host://hello.c`, searched for and edited its message, saved,
+reopened and quit. Its idle status message cleared without another keypress.
+TCC compiled the saved source to `host://hello.pxe`, which printed the edited
+message and completed successfully. Missing compiler input produced a readable
+diagnostic and status 1. The other session retained its independent `app://share`
+working directory while running a pipeline with redirection and reading back
+its saved output. The shared HOST source and executable were visible on the host.
+
+`iobench read app://share/iobench-small.bin --bytes 32768 --rounds 1` reported a
+verified warmup and sample with 32,768 bytes consumed and no failed pass.
+`allocbench heap --rounds 64 --profile` reported 8,192 allocation attempts and
+releases, zero failures and no backing-allocation requests in its measured
+window. Both returned success and their full reports arrived through machine
+output records. These checks establish usability and report collection, not a
+new performance baseline.
+
+Ctrl+] while interactive Kilo waited for input returned acknowledged group
+termination and complete output draining. Disconnecting a client running a
+foreground Lua CPU loop reclaimed its session. Pausing a host reader during a
+large Lua output stream filled the terminal queue to exactly 65,536 bytes; GDB
+observed a parked, interruptible writer and two group members while another
+client continued completing commands. After disconnecting that reader and
+exiting the remaining shell, GDB showed listener-only readiness, one transport
+record and empty completed-task, object-retirement and TCP-retirement queues.
+
+Page Down on a file shorter than Kilo's viewport exposed a cursor-boundary defect
+in the pinned upstream editor: it could move past the EOF insertion row, and Left
+could then read beyond the row array. The maintained port patch clamps paging to
+EOF and bounds Left's previous-row lookup. A rebuilt image confirmed Page Down
+on an eight-line file stops at the EOF insertion row, Left returns to the last
+line, and editing/saving at EOF succeeds. Empty-file paging, Left, insertion,
+save and quit were checked through the same native client.
+
+The final ports change required a Kilo/ports image rebuild, not a compiler-container
+rebuild. Validation used the actual clients, manual QEMU input and read-only GDB;
+no tests, new exercise programs, fault injection or boot/output automation were
+added. All client, QEMU, debugger and virtiofsd jobs were stopped after validation.

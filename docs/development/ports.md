@@ -145,13 +145,18 @@ and local patches, and [terminal behavior](../userland/terminal.md) for shared f
 
 The current editor is ASCII, uses fixed terminal dimensions, accepts LF/CRLF
 and saves LF with a final newline per row. Saves truncate before writing:
-failures can leave partial files. Status messages persist until replaced;
-no userspace clock is assumed. Allocation failure reports an error and exits,
-losing unsaved edits. `home://` remains volatile across reboot, while `app://`
-is read-only. Processes receive a fixed 1 MiB stack with a reserved, unmapped
-guard page below it and no automatic growth.
+failures can leave partial files. Ordinary status messages expire after five
+seconds using the inherited monotonic clock, including while idle; an active
+search prompt remains visible until the search ends. Actual terminal input EOF
+exits cleanly for an unchanged buffer and reports failure if unsaved edits are
+lost. Allocation failure reports an error and exits, losing unsaved edits.
+`home://` remains volatile across reboot, while `app://` is read-only. An optional
+`host://` mount persists files in its host export, subject to host permissions and
+the [virtiofs setup](../devices/virtio-fs.md). Processes receive a fixed 1 MiB
+stack with a reserved, unmapped guard page below it and no automatic growth.
 
-Persistent storage, atomic replacement and timekeeping remain separate work.
+The same editor runs through the [remote host client](../userland/remote-terminal.md).
+Native writable disk storage and atomic replacement remain separate work.
 The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and TCC;
 [guest Lua](../userland/lua.md) is independent of the host recipe runner.
 

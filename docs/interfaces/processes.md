@@ -757,5 +757,7 @@ The later ideas here call for no placeholder APIs or object-manager framework.
 [Execution groups](execution-groups.md) add separately authorized creation, bound
 launchers, inherited membership and sealed admission. The ordinary local launcher
 remains caller-scoped. Membership survives observer/launcher closure; supervision
-closure currently seals new launches without terminating existing members. Group
-termination and completion require the separate [cleanup work](../wip/execution-group-termination.md).
+closure seals admission and requests safe termination of remaining members. Group
+completion additionally waits for attributed deferred cleanup. The
+[ownership matrix](execution-group-termination.md) records the stopping and
+reclamation boundaries.

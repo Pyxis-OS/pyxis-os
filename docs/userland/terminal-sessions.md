@@ -37,7 +37,8 @@ or discarded, so sender closure cannot invalidate a pending transfer.
 
 Each session has 4 KiB of input and 64 KiB of output storage, including record
 headers. Transfers accept at most 4 KiB of bytes per call. These are per-session
-bounds, not a system-wide quota or the later server's admission policy.
+bounds, not a system-wide quota. The remote server separately limits admission
+to four concurrent sessions.
 
 Application reads retain the console timeout convention and return available
 short input. Empty live input blocks, subject to that timeout. Application
@@ -115,9 +116,9 @@ hangup. Output closure can coexist with queued records, which must be drained
 before zero-byte EOF. Application handles and framebuffer consoles are not
 readiness targets.
 
-Readiness remains advisory, with task 2's deadline/poll precedence and removal
-of all registrations/references before return. Queue mutations notify waiters;
-terminal state is observed under its own lock. A BSP readiness worker handles
+Readiness remains advisory, with the [wait_many contract](../devices/tcp.md#readiness-and-transfer-attempts)
+for deadline/poll precedence and removal of all registrations/references before
+return. Queue mutations notify waiters; terminal state is observed under its own lock. A BSP readiness worker handles
 terminal-only waits without a NIC. TCP and mixed waits remain in the network
 worker, which exclusively observes lwIP state. Shared per-task request storage
 bounds each wait at sixteen interests without a new global waiter cap.
