@@ -68,10 +68,16 @@ A program that delegates its stdin must not have read it through buffered stdio;
 `read()` and `fread_some` never read ahead. No current launcher reads its stdin
 through FILE. This is a native delegation rule, not Unix inheritance.
 
-**Position and state.**
+**Position and state.** Read-ahead is discarded before close only where it can
+be refetched: a file keeps its logical position, so dropping its buffer loses no
+input. Pipe read-ahead is never discarded except by close.
 
-- `fseek` discards buffered bytes, then seeks; `SEEK_CUR` is relative to the
-  logical position and EOF is cleared, as today. `ftell` reports the logical
+- `fseek` first validates the request and computes its destination: the entry
+  must be a file, the origin valid and the result in range, with `SEEK_CUR`
+  relative to the logical position and `SEEK_END` using the current file size.
+  Only on success does it discard buffered bytes, set the new position and clear
+  EOF. A failed seek, including ESPIPE on a pipe, leaves buffered bytes, the
+  logical position and both indicators unchanged. `ftell` reports the logical
   position.
 - A write through the entry of an update stream (`r+`, `w+`, `a+`) first
   discards buffered bytes, then writes at the logical position or at the end for
@@ -131,6 +137,9 @@ successfully read final line into NULL (C11 7.21.7.2, C23 7.23.7.2).
    - sha256sum `-c` with manifests from a file, stdin and a pipe; stdin hashing
      through `read()`.
    - Head line mode on a pipe remains exact, and its producer still receives EPIPE.
+   - Debugger check: with read-ahead buffered on a pipe-backed stream, a failed
+     `fseek` returns ESPIPE and leaves the buffered bytes, logical position and
+     indicators unchanged, and later reads return those bytes.
    - Cat, the `hello` `w+`/seek path, TCC compile/run, timezone loading, and
      Kilo open/edit/save.
    - A child reading console stdin, then the shell's next command, without lost
