@@ -78,11 +78,12 @@ rules; configuration, platform integration and limits are described in
 
 The image includes `app://cksum.pxe`, resolved as `cksum` by the shell. The
 [sbase recipe](../../ports/sbase/README.md) pins the task-1 source revision and
-builds cksum and a restricted tee with their helpers. Ordered patches narrow
-private util.h and adapt tee's options and descriptor lifetimes; cksum and helper
-bodies remain unchanged and use conventional libc I/O calls.
-The full license/contributor list and arg.h notice are packaged at
-`app://share/licenses/sbase/LICENSE` and `app://share/licenses/sbase/arg.h`.
+builds cksum, a restricted tee and uniq with their helpers. Ordered patches narrow
+private util.h, restore the declarations uniq needs, and adapt tee's options and
+descriptor lifetimes; cksum, uniq and helper bodies remain unchanged and use
+conventional libc I/O calls. The full license/contributor list, arg.h notice and
+OpenBSD strtonum notice are packaged at `app://share/licenses/sbase/LICENSE`,
+`app://share/licenses/sbase/arg.h` and `app://share/licenses/sbase/strtonum.c`.
 
 ```text
 cksum host://hello.c
@@ -124,6 +125,26 @@ stdout still allows named copies but reports failure. Output may be partial on
 error, and naming the input as an output can destroy its contents. Console EOF
 has the same limit as cksum above. See the [recipe notes](../../ports/sbase/README.md)
 for the exact upstream adaptations.
+
+## Adjacent duplicates with sbase uniq
+
+The shell resolves `uniq` to `app://uniq.pxe`:
+
+```text
+uniq host://input
+cat host://input | uniq -c
+uniq -d -f 1 host://input home://duplicates
+```
+
+Uniq collapses runs of adjacent identical lines; it does not sort or find
+non-adjacent repeats. It supports upstream `-c`, `-d`, `-u`, `-f N` and `-s N`,
+and `[input [output]]` operands where `-` selects stdin or stdout. Fields are
+separated by ASCII space and tab. A missing input or unopenable output fails
+before any output; read and write errors are reported with status 1 after
+input reaches EOF. Line input is [one native read per byte](../technical-debt.md#unbuffered-line-input),
+so large inputs are slow. Console EOF has the same limit as cksum above. See the
+[recipe notes](../../ports/sbase/README.md) for option details and the
+OpenBSD strtonum notice packaged with the licenses.
 
 ## Editing in Pyxis
 

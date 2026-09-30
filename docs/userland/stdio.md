@@ -175,6 +175,17 @@ error; fgets stops at newline/capacity. Neither echoes or edits. Interactive lin
 editing remains an explicit [libterm](terminal.md) operation. Do not read from
 stdin while a foreground child or another reader owns that input stream.
 
+`getline` reads through the next newline into a caller-owned buffer, growing it
+with realloc from 128 bytes by doubling. Its count includes the newline and
+excludes the added NUL; embedded NULs are data. A final unterminated line is
+returned before EOF, and EOF before any byte returns -1. Null arguments
+(EINVAL), read errors, allocation failure (ENOMEM) and lines beyond SSIZE_MAX
+(EOVERFLOW) return -1 and set errno and the error indicator. After failure the
+caller's pointer and capacity describe its current allocation, which it still
+owns. Each byte is a separate `fgetc` and native read, because there is no
+read-ahead or pushback; see [unbuffered line input](../technical-debt.md#unbuffered-line-input).
+There is no `getdelim`.
+
 A successful zero-byte read for a nonempty request sets EOF. Merely reading
 exactly to the end does not set it until a later read attempts more. Independent
 terminal sessions drain input before EOF; framebuffer consoles have no EOF

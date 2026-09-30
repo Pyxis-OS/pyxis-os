@@ -1,9 +1,9 @@
 # A small native port: sbase uniq
 
-Status: task 1 complete; the compatibility scope below is agreed. This is a
+Status: tasks 1 and 2 complete; guest validation (task 3) remains. This is a
 bounded consumer milestone for trying a new development harness, not an
-assignment to build or change the harness itself. Implementation has not
-started. It is independent of the native filesystem mount milestone.
+assignment to build or change the harness itself. It is independent of the
+native filesystem mount milestone.
 
 ## Completion point
 
@@ -71,6 +71,9 @@ Agreed changes:
 - **Recipe patch 0003** restores the upstream `compat.h` include and `strtonum`
   declaration block in the narrowed private `util.h`, unchanged from upstream.
   The Makefile adds uniq's object list, and `uniq.pxe` is staged with cksum/tee.
+  `libutil/strtonum.c` carries an OpenBSD ISC notice not covered by sbase's
+  LICENSE, so task 2 stages that file beside `arg.h` and records the recipe
+  license as MIT AND ISC.
 - **Libc `isblank`** returns true for ASCII space and tab. As with the other
   classification functions, EOF, non-ASCII bytes and other negative arguments
   return zero; the negative-argument result is a Pyxis extension, not a
@@ -111,7 +114,7 @@ retained, like cksum's signedness warning.
    allocation, numeric parsing and stream cleanup. Propose the smallest required
    changes and discuss unresolved semantics or meaningful scope expansion before
    implementing. Do not treat a compile-only probe as a working guest port.
-2. [ ] **Implement the compatibility surface and package the port.** Add only
+2. [x] **Implement the compatibility surface and package the port.** Add only
    agreed reusable libc prerequisites, if any, in userland. Extend the existing
    ports recipe and install selection with `uniq.pxe`, preserving licenses and
    upstream behavior. Publish dependency PRs before updating Pyxis pins; document
