@@ -5,8 +5,12 @@ from the boot initrd, and initially empty `home`, backed by RAM. The shell recei
 both roots and explicitly passes grants to its children. RAM contents survive
 process exit and disappear on reboot.
 
-Both use the existing tagged CALL interface. There is no userspace filesystem
-server, mount table, block device or kernel path parser.
+Both use the existing tagged CALL interface. There is no kernel path parser.
+[Native filesystem objects](../devices/filesystem-native-adapter.md) use the same
+protocol with policy-approved views, 255-byte UTF-8 components and stateless
+continuations; they retain backing independently of parent objects. Their mount
+acquisition interface is not exposed yet. The tree internals below describe the
+archive/RAM backends.
 
 ## Tree and lifetime
 

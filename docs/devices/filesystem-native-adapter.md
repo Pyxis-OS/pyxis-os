@@ -1,10 +1,12 @@
 # Native filesystem kernel adapter
 
-Caelum links the pinned read-only filesystem core and provides an internal,
-serial BSP worker for GPT-selected pool/volume preparation. This completes task 3
-of the [native mount milestone](../wip/native-readonly-filesystem.md). There is no
-native directory/file capability, mount syscall, bootstrap principal configuration
-or automatic volume probe yet. Opening backing state confers no object authority.
+Caelum links the pinned read-only filesystem core and provides policy-approved
+native directory/file objects through one serial BSP worker. This implements
+backing preparation and object support, tasks 3 and 4 of the
+[native mount milestone](../wip/native-readonly-filesystem.md). Native objects use
+the existing directory/file protocols. Mount acquisition, bootstrap principal
+configuration and native executable capture remain task 5; there is no public
+native mount operation or automatic volume probe yet.
 
 ## Build and ownership
 
@@ -15,21 +17,39 @@ remain host operations. Kernel bundle provenance includes the filesystem pin and
 local changes. No compiler-container rebuild is needed.
 
 The [internal interface](../../include/kernel/fs/native.h) accepts a caller-owned
-`nativefs_job` containing the GPT disk GUID in on-disk byte order, one-based GPT
-entry number and counted volume name. Submission is BSP/IF=0 and lends the entire
-record until detached completion. The caller must use shared kernel storage and
-must not access it while queued/active. Rejected admission leaves it unchanged.
-A successful job transfers one retained volume reference to the caller. Completed
-records can be consumed/reset/reused; no completion or job registry is retained.
-This internal asynchronous interface is separate from `bsp_request` and grants
-no application permission to nominate a principal or bypass persistent policy.
-Task 4 will add typed user-request forwarding and policy-approved objects.
+`nativefs_job` in shared kernel storage. A `NATIVEFS_ROOT` job supplies the GPT disk
+GUID in on-disk byte order, one-based GPT entry number, counted volume name,
+trusted nonzero principal and exact requested root rights. Root rights must
+include LOOKUP; unknown bits are invalid and known mutation bits are read-only.
+The worker opens the selected backing and acquires a SUBTREE view under persistent
+policy, with a ceiling containing only lookup, listing and file read plus metadata.
+It requires the complete requested mask. Knowledge of principal or object IDs
+confers no authority, and ownership does not bypass policy.
+
+Trusted asynchronous submission is BSP/IF=0 and lends the entire record until
+COMPLETE. The caller retains every input reference and does not access the record
+while queued/active. Rejected admission leaves the record unchanged. Successful
+ROOT or LOOKUP transfers one owned `kernel_object` reference in `job.object`;
+failure transfers none. Detach that output before resetting/reusing the record.
+No completion registry is retained. The internal ROOT inputs are embedding
+authority, not an application interface for selecting a principal.
+
+Ordinary directory/file calls use a typed `nativefs_request` in the user task's
+provisioned BSP request storage. The handler captures input and checks user
+buffers, then submits an ordinary BSP service request and waits. The executor
+forwards ownership to the filesystem worker without running core calls or
+sleeping for I/O itself. A live capability keeps the input node alive during the
+uninterruptible wait. Only shared kernel storage crosses to the worker: no user
+pointer, capability-table entry or AP stack loan. Completion clears the node,
+request and queue loans before waking the task. The handler consumes successful
+outputs and releases request storage; lookup releases it before capability-table
+growth and child installation.
 
 Startup creates one BSP kernel task which parks until work arrives. Only that
-worker performs pool/volume operations or invokes the core allocator, with
-interrupts enabled except around short kernel allocator/block/queue sections. It waits normally for GPT and block
-completion, without holding a lock or sleeping in the BSP executor. There is no
-kernel-worker submission to the synchronous user-request executor.
+worker performs pool/volume/view operations or invokes the core allocator, with
+interrupts enabled except around short allocator, block and queue sections. It
+waits normally for GPT and block completion without holding a lock. Kernel jobs
+submit directly to its queue, never to the synchronous user-request executor.
 
 The worker reuses the same pool for the single device's same GPT entry/extent
 and shares volumes by retained ID. New extents reserve their selected pool ID
@@ -38,13 +58,67 @@ before volume publication. A clone on another partition returns
 close, so a later open of the clone can succeed after the first instance drains.
 A failed preparation releases only its own state; there is no idle pool cache.
 
-`nativefs_volume_put` drops a reference on BSP/IF=0. Final release queues embedded
-retirement storage and carries execution-group cleanup attribution to the worker.
-Retired storage remains charged until actually freed. Close order is volume,
-pool, adapter; a busy core close retains storage, identity and pending cleanup.
-It is retried on subsequent real work rather than polled. Clients must release
-all core children before their last backing reference. The current internal job
-opens no views; task 4 must extend this invariant to object/view lifetimes.
+Each native node embeds its directory or file wrapper, owns one core view and
+retains one adapter volume reference. Children retain the volume directly rather
+than retaining a parent. Native files have no in-memory data or busy ownership;
+native directories have no in-memory entry list. Final object destruction on
+BSP/IF=0 transfers the node through `nativefs_retire`, without allocating or
+freeing the embedded wrapper separately. The worker closes the view, drops the
+volume reference and frees the node. Final volume retirement then closes the
+volume and pool. Retirement carries execution-group cleanup attribution and
+remains charged until storage is actually freed. A busy backing close retains
+storage, pool identity and pending cleanup; subsequent real work retries it.
+
+## Rights and ordinary calls
+
+Capability copies may share a retained view with a wider ceiling. Every request
+still carries the particular caller's exact OS rights; the worker checks them
+against the node's acquired rights and the operation's requirements. Child rights
+must be contained in that caller's attenuated grant. Lookup never reacquires
+policy under the bootstrap principal, so sharing a view cannot restore withheld
+bits.
+
+| OS grant | Core rights in the corresponding view |
+| --- | --- |
+| Directory LOOKUP | `PFS_DIR_LOOKUP` |
+| Directory ENUMERATE | `PFS_DIR_LIST` |
+| Directory READ_FILES | `PFS_FILE_READ | PFS_FILE_METADATA` |
+| File READ | `PFS_FILE_READ | PFS_FILE_METADATA` |
+
+Root and child directories use SUBTREE scope; files use OBJECT scope. Lookup
+first derives and closes a zero-right OBJECT view to check the child's kind,
+then derives the final view with exactly the requested rights and scope. Both
+passes use held lookup authority. This turns a kind mismatch into
+`CALL_WRONG_TYPE` without requesting inappropriate rights or a fresh policy grant.
+Native component names are limited to 255 bytes and validated by the core,
+including UTF-8; longer lookup names return `CALL_LIMIT`.
+
+FILE_READ uses held read authority; FILE_SIZE uses the metadata half of the READ
+bundle and returns only byte length. Both require the calling capability's READ
+bit. A persistent grant that allows read but withholds metadata cannot acquire
+this complete bundle and returns `CALL_DENIED`. READ remains bounded by `FILE_READ_MAX_BYTES` and uses explicit offsets.
+Unknown rights bits return `CALL_BAD_REQUEST`; valid mutations return
+`CALL_READ_ONLY` after ordinary authority and argument checks, including an empty
+WRITE. A normal root grants no mutation bits, so mutation calls through it are
+usually denied by their ordinary rights checks. Existing archive, RAM and HOST
+behavior is unchanged. Launching a native file returns `CALL_UNAVAILABLE` until
+task 5 adds executable capture.
+
+Enumeration returns names and kinds, with no child handle or metadata authority.
+It fetches one stateless core page using the opaque continuation in
+`cursor.position`. `cursor.generation` is a nonzero, monotonically assigned
+wrapper identity; the zero pair starts. Zero identity with nonzero position is
+invalid, and a different nonzero identity returns DIRECTORY_CHANGED. Counter
+exhaustion returns `CALL_LIMIT` without wrapping. Fresh lookup of the same
+directory may create a different identity; copies of one wrapper share it.
+Continuation interpretation remains bound to the held immutable core view.
+
+Cursors retain no server-side state and may be replayed or forked independently.
+ENTRY copies a complete NUL-terminated name and advances the cursor.
+BUFFER_TOO_SMALL reports the required size while preserving the input cursor
+and name buffer. END copies no name and is repeatable. Failures publish no name
+or reply. READ failures likewise publish no bytes or count, even if the core
+proved a prefix before failing.
 
 ## I/O, budgets and errors
 
@@ -56,20 +130,25 @@ at most 16 filesystem blocks and splits at the actual device transfer limit,
 including limits smaller than a filesystem block. One ticket is outstanding at a
 time, and each collected read must supply every requested byte.
 
-Admission allows 32 active/queued jobs. The shared core payload cap is 8 MiB;
-adapter payload is capped at 1 MiB with at most 1,024 live pool/volume wrappers.
-Temporary catalog storage is charged to the adapter cap. Future native objects
-must share these budgets rather than receive independent allowances. The core's
-own accounting distinguishes cap exhaustion (`CALL_LIMIT`) from an allocator
-refusal below the cap (`CALL_NO_MEMORY`). Alignment headers/padding are measured
-separately from core payload; TLSF rounding, task stacks and caller job storage
-are outside these payload caps.
+Admission allows 32 active/queued jobs, shared by kernel submissions and ordinary
+user requests. User admission and its deadline begin at BSP request publication,
+including time in the executor FIFO. The shared core payload cap is 8 MiB;
+adapter payload is capped at 1 MiB with at most 1,024 live pool, volume and node
+wrappers combined. Embedded directory/file storage and temporary catalog storage
+are charged to the adapter cap; nodes receive no separate allowance. Deferred
+retirements retain their charges until freed. The core's own accounting
+distinguishes cap exhaustion (`CALL_LIMIT`) from allocator refusal below the cap
+(`CALL_NO_MEMORY`). Alignment headers/padding are measured separately from core
+payload; TLSF rounding, task stacks and caller-owned job or provisioned user
+request storage remain outside these payload caps.
 
-Every submission receives one absolute 30-second deadline. GPT readiness, block
-admission retry, completion waits and successive core calls use that same deadline.
-Block saturation sleeps in bounded one-millisecond intervals; a timed-out waiter
-abandons its ticket after returning, leaving unresolved DMA with the driver.
-The deadline is cooperative, not a hard bound on core computation.
+Every admitted operation receives one absolute 30-second deadline. GPT readiness,
+block admission retry, completion waits and successive core calls use that same
+deadline. Block saturation sleeps in bounded one-millisecond intervals; a timed-out
+waiter abandons its ticket after returning, leaving unresolved DMA with the driver.
+The deadline is cooperative, not a hard bound on core computation. If the deadline
+expires after producing an object, the worker drops that reference before
+publishing the timeout; no failed call installs a child handle.
 
 One fresh operation context records the first precise backing error. Only
 `PFS_IO` consults it when mapping the result; corruption, denial and LIMIT cannot
@@ -121,35 +200,64 @@ Follow [GDB ownership](../development/gdb.md) and the
 [block debugger rules](block-storage.md#manual-debugger-exercise), using TCG for
 injected nonblocking calls. Break at `vm_get_stats` before scheduling, select BSP
 and enable scheduler locking for calls. Allocate a job, check allocation success,
-then fill it explicitly:
+then fill it explicitly. The principal matches the disposable image's owner;
+this debugger injection is trusted embedding authority:
 
 ```gdb
 set $job = (struct nativefs_job *)kmalloc(sizeof(struct nativefs_job))
 set *$job = {0}
+set $job->operation = NATIVEFS_ROOT
 set $job->disk.bytes = {0x78,0x56,0x34,0x12,0x34,0x12,0x67,0x45,0x89,0xab,1,0x23,0x45,0x67,0x89,0xab}
 set $job->partition = 1
-set $job->name.length = 7
-set $job->name.bytes = "headers"
+set $job->principal.bytes = {0x0a,0x32,0xef,0xc0,0x79,0xed,0x4c,0x7b,0xab,0x58,0xe2,0x24,0xcf,0x11,0x93,0x15}
+set $job->rights = 7
+set $job->count = 7
+set $job->name = "headers"
 p nativefs_submit($job)
 ```
 
-After CALL_OK, disable scheduler locking and resume normal execution. Set a
-hardware breakpoint at the worker's yield after completion (locate it with
-`list nativefs_worker`). At that stop, the job must be COMPLETE before inspecting
-its result. `volume`, its core/record and pool diagnostics identify the retained
-volume and selected generation. `core_peak`, `core_heap_peak`, `adapter_peak`,
-`core_memory.used`, `adapter_used` and `wrapper_count` expose budget accounting.
-`operation` must be NULL after completion. These are debugger observations, not
-an application information interface.
+The rights value 7 requests LOOKUP, ENUMERATE and READ_FILES. After CALL_OK,
+disable scheduler locking and resume normal execution. Set a hardware breakpoint
+at the worker's yield after completion (locate it with `list nativefs_worker`).
+At that stop, require `job.state == NATIVEFS_JOB_COMPLETE` and inspect `job.status`
+before consuming outputs. Success returns `job.object`, an owned root directory,
+whose native node holds the view and volume. The volume's core/record and pool
+diagnostics identify the selected generation. `core_peak`, `core_heap_peak`,
+`adapter_peak`, `core_memory.used`, `adapter_used` and `wrapper_count` expose budget
+accounting. `operation` must be NULL after completion. These are debugger
+observations, not an application information interface.
 
-At a safe stopped BSP boundary, save/disable IF and enable scheduler locking
-before calling `nativefs_volume_put($job->volume)`. Clear the consumed output and
-free the completed job with `kfree`. Restore IF and debugger scheduling, then
-resume so the worker actually retires the backing. Observe zero live accounting
-at its next yield. Do not inject `block_wait`, pool opens or other sleeping core
+Further nonblocking jobs can use a retained root node for LOOKUP or ENUMERATE and
+a retained file node for READ or SIZE. Save each owned output and its node, detach
+`job.object`, then reset the complete job, choose its operation and supply the
+actual calling rights; LOOKUP also supplies the exact child rights,
+kind and counted component name. ENUMERATE uses `cursor` and `count` as name
+capacity. READ uses `offset` and `count` as read capacity; on success `count` is
+the returned byte count. SIZE returns byte length in `offset`. Retain input objects
+until completion; the worker clears `job.node` rather than releasing the caller's
+reference. Every successful lookup output needs a separate release.
+
+For the root-only example, at a safe stopped BSP boundary with IF=0 and scheduler
+locking enabled, detach and release the owned object, then free the completed job:
+
+```gdb
+set $root = $job->object
+set $job->object = 0
+call object_release($root)
+call kfree($job)
+```
+
+Restore IF and debugger scheduling, then resume so ordinary object reaping and
+the worker can drain deferred nodes and backing state. Observe zero live
+accounting after that cleanup completes. Release all retained children as well.
+Do not inject `block_wait`, pool opens, view operations or other sleeping core
 calls from GDB. No permanent diagnostic application or automatic probe is used.
 
-## Validation
+## Historical task 3 validation
+
+These results describe the merged backing-adapter implementation before native
+object support. The measured job size and retained allocations below belong to
+that revision; they are not measurements of the current object implementation.
 
 On 2026-09-30, ordinary kernel and host builds passed with GCC 16.2.0 target and
 GCC 16.2.1 host compilers. Image assembly used verified SDK/userland/ports bundles
@@ -204,5 +312,61 @@ Timeout/device failures, actual allocator exhaustion, adapter-cap exhaustion,
 BUSY-close recovery, sub-4-KiB device transfer limits and later filesystem
 generations have source-review coverage only. No fault injection, new tests,
 permanent probes, physical hardware or owner-host performance measurements were
-used. Guest policy/view lookup and enumeration remain task 4 validation; native
-mount configuration and delegation remain task 5.
+used. Native mount configuration and executable capture remain task 5.
+
+## Task 4 validation
+
+On 2026-09-30, `make -j16` and image assembly passed for task 4 based on merged
+Pyxis `0a5d895`, with the same dependency pins and verified SDK/userland/ports
+bundles described above. No public ABI or dependency pin changed. Interactive
+QEMU used four CPUs (`max`), 256 MiB, TCG, the documented AHCI fix, entropy and
+read-only virtio-blk with 512-byte sectors and the same sector-2049 partition.
+Normal archive-backed init/session programs also ran; HOST transport was not
+attached or re-exercised in this run.
+
+Manual asynchronous jobs acquired the root and `can/error.h`, checked its
+7,087-byte size and initial bytes against the source, and read the file after
+closing its parent directory. Enumeration resumed at the next entry, preserved
+its cursor on a short name buffer, returned repeatable END, rejected an invalid
+continuation with BAD_REQUEST and returned CHANGED for another wrapper's
+identity. Abandoning enumeration retained no cursor object. A child lookup from
+a grant lacking READ_FILES returned DENIED with no object; a root acquisition
+under an ungranted principal returned PFS_DENIED/CALL_DENIED with no object.
+
+To exercise the ordinary request path before the mount interface exists, GDB
+loaded the existing initrd `cat.pxe` and `ls.pxe` into exclusively owned,
+unsubmitted processes using the normal kernel loader/startup helpers. Each
+received a native root binding through `capability_install`, a memory service
+and separate console output/error handles, then ran normally on CPU 1. GDB did
+not patch private mappings or a live capability table. `cat disk://can/error.h`
+completed reads of 4,088, 2,999 and zero bytes at offsets 0, 4,088 and 7,087 and
+exited 0. `ls disk://can` enumerated eight names through END and exited 0.
+Debugger inspection confirmed the captured child rights and detached completion
+records. These applications ran from the archive; native executable loading is
+still task 5.
+
+| Measured requested storage in the combined object run | Bytes |
+| --- | ---: |
+| Core payload peak | 312,192 |
+| Core peak including allocation headers/padding | 312,744 |
+| Adapter payload peak | 106,144 |
+| One embedded directory/file node | 168 |
+| Internal caller-owned job | 4,552 |
+| Typed user request | 4,584 |
+| Existing per-user-task request allocation (unchanged) | 4,928 |
+| Live core/adapter payload and wrappers after final retirement | 0 |
+
+Final retirement also left zero admitted jobs and no bound operation context.
+The whole-disk SHA-256 was unchanged after both VMs stopped. The peak accounting
+qualifications above still apply; this is not a total heap or timing measurement.
+An initial nested GDB expression hit `arch_cpu_at`'s index assertion during manual
+process setup; that VM was discarded. The successful run evaluated the space
+selection separately and used ordinary scheduling for filesystem work. Debugger
+setup errors are not filesystem validation passes. All VMs/debuggers were stopped.
+
+The missing-metadata persistent-grant case, error-after-partial-read publication,
+known mutation backend errors, stop-during-request and failure/limit cleanup
+paths were reviewed in source rather than injected. Existing formatter grants do
+not produce a read-without-metadata fixture. Timeout/device/allocator failures,
+maximum directory depth and later generations retain the historical limits
+above. No new tests, probes, boot automation or fault injection were added.

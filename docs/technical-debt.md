@@ -732,8 +732,8 @@ service work and wait sets; no worker-process or thread framework is included.
 
 The [native read-only mount contract](wip/native-readonly-filesystem.md) is agreed;
 the [kernel adapter](devices/filesystem-native-adapter.md) now implements bounded
-backing preparation. The authority/object limits below remain agreed future
-behavior until native capabilities are integrated.
+backing preparation and policy-approved directory/file objects. Mount/bootstrap
+configuration remains the next task.
 The [implemented core continuation API](../fs/docs/core.md#stateless-directory-continuation)
 avoids rescanning the returned prefix and retains no per-enumeration state. It
 does not remove existing core ancestry scans or allocation-proof costs; measure
@@ -755,20 +755,22 @@ or admission for each session. Ordinary applications receive no principal-based
 reacquisition service or mount authority. Revisit with the identity broker/session
 admission work, keeping identity separate from held capabilities.
 
-The kernel adapter enforces 32 admitted internal jobs, 8 MiB of shared core
-payload and 1 MiB/1,024 wrappers for adapter storage. The measured populated
-opening peak is 255,336 core bytes and 105,808 adapter bytes; host nested policy
-acquisition peaks at 315,816 core bytes. These inputs fit the initial profile,
+The kernel adapter enforces 32 admitted jobs across internal submissions and user
+requests, 8 MiB of shared core payload and 1 MiB/1,024 wrappers for adapter storage. The measured guest
+object workflow peaks at 312,192 core bytes and 106,144 adapter bytes; host nested
+policy acquisition peaks at 315,816 core bytes. These inputs fit the initial profile,
 but a valid image may still exceed it and return LIMIT. Caps exclude stack,
 caller job storage, heap overhead/rounding and mapped-pool slack, and do not
-bound CPU/I/O work. The deadline is cooperative. Revisit the profile with guest
-object operations and larger representative workloads; preserve LIMIT versus
-corruption and record evidence before changing caps.
+bound CPU/I/O work. The deadline is cooperative. Revisit the profile with larger
+representative workloads; preserve LIMIT versus corruption and record evidence
+before changing caps.
 
-Task 3's internal jobs expose backing only. The native object task must add
-policy acquisition and BSP user-request forwarding using provisioned request
-storage; the mount task must retain absent-versus-unusable block preparation
-reasons before implementing optional mounts. Busy core closes retain their
+Native requests fit the existing provisioned task request storage. The mount
+task must retain absent-versus-unusable block preparation reasons before
+implementing optional mounts. Kind-preserving lookup currently derives a
+zero-right OBJECT view before deriving the final requested view; both use held
+authority, but duplicate traversal/proof work. Revisit with measured lookup costs
+and a concrete core kind-query contract, without exposing diagnostic handles. Busy core closes retain their
 identity, charged storage and deferred group cleanup until a later worker retry;
 ordinary clients must close all core children before the last backing put.
 Actual device failures, deadlines and cap exhaustion remain source-reviewed
