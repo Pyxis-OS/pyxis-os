@@ -872,6 +872,9 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   if (status == CALL_OK) {
     status = reserve_handles(ENDPOINT_GRANTS_MAX);
   }
+  if (task_stop_requested()) {
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   if (status != CALL_OK) {
     return write_packet(reply_address, &output, NULL, status);
   }
@@ -881,14 +884,24 @@ static struct syscall_result call_endpoint(struct endpoint *endpoint,
   if (status != CALL_OK) {
     return write_packet(reply_address, &output, NULL, status);
   }
-  if (message.deadline_ns) {
-    task_wait_sleep_until(wait, message.deadline_ns);
-  } else {
-    task_wait_sleep(wait);
-  }
+  bool resumed = message.deadline_ns ?
+      task_wait_sleep_until_interruptible(wait, message.deadline_ns) :
+      task_wait_sleep_interruptible(wait);
 
   struct endpoint_state *state = endpoint->state;
   lock_endpoint(state);
+  if (!resumed || task_stop_requested()) {
+    if (record->state != DELIVERY_COMPLETE) {
+      cancel_delivery(state, record, CALL_ENDPOINT_CLOSED);
+    }
+    KASSERT(!record->wait);
+    release_grants(record->reply_grants, record->reply_rights, record->reply_count);
+    record->reply_count = 0;
+    record->caller_active = false;
+    free_delivery(record);
+    unlock_endpoint(state);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   if (record->state != DELIVERY_COMPLETE) {
     KASSERT(deadline_expired(record->deadline_ns));
     /* Timed sleep can return with the wait pointer still published. */
@@ -929,7 +942,7 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
   for (;;) {
     struct task_wait *wait = task_wait_prepare();
     lock_endpoint(state);
-    if (state->closed) {
+    if (task_stop_requested() || state->closed) {
       unlock_endpoint(state);
       return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
     }
@@ -972,7 +985,16 @@ static struct syscall_result receive_endpoint(struct endpoint *endpoint, uintptr
       KASSERT(!state->waiting_receiver);
       state->waiting_receiver = wait;
       unlock_endpoint(state);
-      task_wait_sleep(wait);
+      bool resumed = task_wait_sleep_interruptible(wait);
+      lock_endpoint(state);
+      if (state->waiting_receiver == wait) {
+        state->waiting_receiver = NULL;
+      }
+      bool stopped = !resumed || task_stop_requested();
+      unlock_endpoint(state);
+      if (stopped) {
+        return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+      }
       continue;
     }
     size_t count = record->request_count;

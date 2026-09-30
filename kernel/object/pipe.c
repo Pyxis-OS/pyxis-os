@@ -42,9 +42,25 @@ static void wake_all(struct task_wait_link **queue)
     struct task_wait_link *next = record->next;
     struct task_wait *wait = record->wait;
     record->next = NULL;
+    record->wait = NULL;
     task_wait_wake(wait);
     record = next;
   }
+}
+
+/* Called under the pipe lock after interruptible sleep. */
+static void detach_waiter(struct task_wait_link **queue, struct task_wait_link *record)
+{
+  if (!record->wait) {
+    return;
+  }
+  while (*queue != record) {
+    KASSERT(*queue);
+    queue = &(*queue)->next;
+  }
+  *queue = record->next;
+  record->next = NULL;
+  record->wait = NULL;
 }
 
 static void destroy_pipe_end(struct kernel_object *object)
@@ -209,28 +225,42 @@ static void copy_ring_in(struct pipe_pair *pair, const uint8_t *source, size_t l
   pair->count += length;
 }
 
-static size_t read_pipe(struct pipe_pair *pair, uint8_t *data, size_t capacity)
+static enum call_status read_pipe(struct pipe_pair *pair, uint8_t *data,
+    size_t capacity, size_t *read)
 {
+  *read = 0;
   if (!capacity) {
-    return 0;
+    return CALL_OK;
   }
   for (;;) {
     struct task_wait_link *record = task_wait_link_prepare();
     lock_pipe(pair);
+    if (task_stop_requested()) {
+      unlock_pipe(pair);
+      return CALL_ENDPOINT_CLOSED;
+    }
     if (pair->count || pair->writer_closed) {
       size_t length = pair->count < capacity ? pair->count : capacity;
       copy_ring_out(pair, data, length);
       if (length) {
         wake_all(&pair->writers);
       }
+      *read = length;
       unlock_pipe(pair);
-      return length;
+      return CALL_OK;
     }
     record->next = pair->readers;
     pair->readers = record;
+    struct task_wait *wait = record->wait;
     unlock_pipe(pair);
-    task_wait_sleep(record->wait);
-    /* Waker detached this task-owned record before resumption. */
+    bool resumed = task_wait_sleep_interruptible(wait);
+    lock_pipe(pair);
+    detach_waiter(&pair->readers, record);
+    bool stopped = !resumed || task_stop_requested();
+    unlock_pipe(pair);
+    if (stopped) {
+      return CALL_ENDPOINT_CLOSED;
+    }
   }
 }
 
@@ -244,7 +274,7 @@ static enum call_status write_pipe(struct pipe_pair *pair, const uint8_t *data,
   for (;;) {
     struct task_wait_link *record = task_wait_link_prepare();
     lock_pipe(pair);
-    if (pair->reader_closed) {
+    if (task_stop_requested() || pair->reader_closed) {
       unlock_pipe(pair);
       return CALL_ENDPOINT_CLOSED;
     }
@@ -258,8 +288,16 @@ static enum call_status write_pipe(struct pipe_pair *pair, const uint8_t *data,
     }
     record->next = pair->writers;
     pair->writers = record;
+    struct task_wait *wait = record->wait;
     unlock_pipe(pair);
-    task_wait_sleep(record->wait);
+    bool resumed = task_wait_sleep_interruptible(wait);
+    lock_pipe(pair);
+    detach_waiter(&pair->writers, record);
+    bool stopped = !resumed || task_stop_requested();
+    unlock_pipe(pair);
+    if (stopped) {
+      return CALL_ENDPOINT_CLOSED;
+    }
   }
 }
 
@@ -286,7 +324,11 @@ static struct syscall_result pipe_read_call(struct pipe_pair *pair,
   }
 
   uint8_t data[PIPE_READ_MAX_BYTES];
-  struct pipe_read_reply reply = {.length = read_pipe(pair, data, capacity)};
+  struct pipe_read_reply reply;
+  enum call_status status = read_pipe(pair, data, capacity, &reply.length);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
   KASSERT(copy_to_user(request.buffer, data, reply.length));
   KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
   return (struct syscall_result){CALL_OK, sizeof(reply)};

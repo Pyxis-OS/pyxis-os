@@ -43,7 +43,8 @@ struct process_control *process_control_create(void)
 void process_control_complete(struct process_control *control, struct process_result result)
 {
   KASSERT(arch_cpu_index() == 0);
-  KASSERT(result.kind == PROCESS_EXITED || result.kind == PROCESS_FAULTED);
+  KASSERT(result.kind == PROCESS_EXITED || result.kind == PROCESS_FAULTED ||
+      result.kind == PROCESS_TERMINATED);
   lock_control(control);
   KASSERT(!control->complete);
   control->result = result;
@@ -53,8 +54,10 @@ void process_control_complete(struct process_control *control, struct process_re
     struct task_wait_link *waiter = control->waiters;
     control->waiters = waiter->next;
     waiter->next = NULL;
+    struct task_wait *wait = waiter->wait;
+    waiter->wait = NULL;
     /* Never access a detached record after wake: its task can immediately run. */
-    task_wait_wake(waiter->wait);
+    task_wait_wake(wait);
   }
   unlock_control(control);
 }
@@ -79,12 +82,31 @@ struct syscall_result process_control_call(struct process_control *control,
 
   struct task_wait_link *waiter = task_wait_link_prepare();
   lock_control(control);
+  if (task_stop_requested()) {
+    unlock_control(control);
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   if (!control->complete) {
     waiter->next = control->waiters;
     control->waiters = waiter;
+    struct task_wait *wait = waiter->wait;
     unlock_control(control);
-    task_wait_sleep(waiter->wait);
+    bool resumed = task_wait_sleep_interruptible(wait);
     lock_control(control);
+    if (waiter->wait) {
+      struct task_wait_link **link = &control->waiters;
+      while (*link != waiter) {
+        KASSERT(*link);
+        link = &(*link)->next;
+      }
+      *link = waiter->next;
+      waiter->next = NULL;
+      waiter->wait = NULL;
+    }
+    if (!resumed || task_stop_requested()) {
+      unlock_control(control);
+      return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+    }
   }
   KASSERT(control->complete);
   reply = control->result;

@@ -78,14 +78,18 @@ static void unlock_file(struct file_object *file)
   atomic_store_explicit(&file->locked, false, memory_order_release);
 }
 
-void file_begin_operation(struct file_object *file)
+bool file_begin_operation(struct file_object *file)
 {
   KASSERT(file->backing != FILE_HOST);
   lock_file(file);
+  if (task_stop_requested()) {
+    unlock_file(file);
+    return false;
+  }
   if (!file->busy) {
     file->busy = true;
     unlock_file(file);
-    return;
+    return true;
   }
 
   struct task_wait_link *waiter = task_wait_link_prepare();
@@ -97,9 +101,35 @@ void file_begin_operation(struct file_object *file)
   }
   file->last_waiter = waiter;
   unlock_file(file);
-  task_wait_sleep(wait);
-  /* The previous owner handed busy directly to us before waking. Our handle
-   * retains the file throughout the wait, including while lending it to BSP. */
+  bool resumed = task_wait_sleep_interruptible(wait);
+  lock_file(file);
+  bool acquired = waiter->wait == NULL;
+  if (!acquired) {
+    struct task_wait_link **link = &file->first_waiter;
+    struct task_wait_link *previous = NULL;
+    while (*link != waiter) {
+      KASSERT(*link);
+      previous = *link;
+      link = &(*link)->next;
+    }
+    *link = waiter->next;
+    if (file->last_waiter == waiter) {
+      file->last_waiter = previous;
+    }
+    waiter->next = NULL;
+    waiter->wait = NULL;
+  }
+  bool stopped = !resumed || task_stop_requested();
+  unlock_file(file);
+  if (stopped) {
+    if (acquired) {
+      file_end_operation(file);
+    }
+    return false;
+  }
+  /* The previous owner handed busy directly to us before waking. */
+  KASSERT(acquired);
+  return true;
 }
 
 void file_end_operation(struct file_object *file)
@@ -282,7 +312,9 @@ static struct syscall_result read_file(struct file_object *file,
     return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
   }
 
-  file_begin_operation(file);
+  if (!file_begin_operation(file)) {
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   size_t count = 0;
   if (request->offset < file->size) {
     count = file->size - request->offset;
@@ -343,7 +375,9 @@ static struct syscall_result write_file(struct file_object *file,
     return (struct syscall_result){CALL_READ_ONLY, 0};
   }
 
-  file_begin_operation(file);
+  if (!file_begin_operation(file)) {
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   size_t end = request->offset + request->size;
   if (!reserve_buffer(file, end)) {
     file_end_operation(file);
@@ -367,7 +401,9 @@ static struct syscall_result write_file(struct file_object *file,
 
 static struct syscall_result resize_file(struct file_object *file, size_t size)
 {
-  file_begin_operation(file);
+  if (!file_begin_operation(file)) {
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   if (!size && file->capacity) {
     KASSERT(replace_buffer(file, 0));
   } else if (!reserve_buffer(file, size)) {
@@ -488,7 +524,9 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     hostfs_request_release(pending);
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   } else {
-    file_begin_operation(file);
+    if (!file_begin_operation(file)) {
+      return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+    }
     reply.size = file->size;
     file_end_operation(file);
   }
