@@ -800,3 +800,19 @@ The embedded source commit identifies the running kernel's base checkout, not
 whether its inputs were modified. Revisit dirty-input provenance when release
 or support workflows need that distinction, after agreeing which inputs count.
 No dirty suffix or clean-tree attestation is currently implemented.
+
+## Fastfetch first-port boundary
+
+The [agreed first port](wip/fastfetch.md#agreed-first-port-scope) uses explicit
+native-URI JSON/JSONC configs, one-shot text/JSON output and nine selected modules.
+Automatic config discovery, config/cache writes, dynamic refresh, image logos,
+Lua execution and executable/network helpers are excluded. Existing upstream
+configs that request them must receive unsupported errors. Revisit individual
+features only when a concrete native use case and authority contract exist.
+The port itself is not yet implemented.
+
+Uptime exposes duration since HPET initialization. JSON bootTime is to be null;
+calendar boot-time/age placeholders are unsupported, so upstream calendar formats
+will need editing. Revisit this only if Pyxis gains an authoritative boot epoch
+and agrees its meaning across wall-clock changes; do not infer one by subtracting
+monotonic duration from the current wall clock.

@@ -1,11 +1,11 @@
 # Fastfetch on Pyxis: bounded port investigation
 
-Status: investigation and native system-information prerequisite implemented,
-2026-09-30. No fastfetch port or guest fastfetch execution is implemented.
-The remaining port scope and unchecked tasks are proposals; this document does
-not start their implementation.
+Status: investigation, native system information and bounded libc prerequisites
+implemented, 2026-09-30. The first-port behavior below is agreed. No fastfetch
+executable or guest fastfetch execution is implemented; the remaining port and
+integration tasks are not started.
 
-## Proposed result
+## Agreed first-port scope
 
 Run upstream fastfetch with the Pyxis ASCII logo, OS/kernel identity, guest CPU
 brand and online count, allocator memory, uptime, terminal dimensions and ANSI
@@ -20,7 +20,24 @@ Missing authority or information must remain unavailable. The selected modules
 should work through local and remote terminals, and redirected output must use
 stdout without reading terminal input or contaminating machine-readable output.
 
-## Pinned evidence and probe limits
+The selected modules are `os`, `kernel`, `cpu`, `memory`, `uptime`, `terminalsize`,
+`colors`, `break` and `separator`. Preserve upstream text/JSON formatting and CLI
+overrides, with explicit native-URI JSON/JSONC config reads through ordinary
+libc file I/O. These configs select module order, keys, formats, colors, spacing
+and the ASCII logo; they do not configure the OS or grant authority. A typical
+invocation is `fastfetch --config home://fastfetch.jsonc`. Retain bundled yyjson;
+Pyxis session Lua configuration stays separate. Automatic config discovery,
+cache/config writes, dynamic refresh, image logos, Lua execution and
+executable/network helpers are excluded, with explicit unsupported errors for
+requests to use them. Audit those entry points during the native port.
+
+Uptime means duration since HPET initialization, as exposed by the existing
+monotonic clock. JSON keeps the numeric `uptime` and reports `bootTime: null`.
+Duration formatting remains available; calendar placeholders `boot-time`,
+`years`, `days-of-year` and `years-fraction`, including their positional forms,
+must report unsupported errors. No boot timestamp or calendar age is inferred.
+
+## Initial compilation inventory (historical)
 
 - Pyxis source: `a1957b3` on main; userland:
   `5cbfbbd5189c2159e6059f4281bceb43af5d77e8`.
@@ -95,13 +112,14 @@ error. Then apply only the diagnostic bypass above and configure with:
 ```
 
 Also pass OFF for every `ENABLE_*` option declared in the pinned CMake file,
-and ON for each `FF_MODULE_DISABLE_<UPPERCASE_NAME>` except the nine names above.
+and ON for each `MODULE_DISABLE_<UPPERCASE_NAME>` except the nine names above.
+These CMake options define the corresponding `FF_MODULE_DISABLE_*` C macros.
 Execute each generated `compile_commands.json` command in its recorded working
 directory, retaining separate diagnostics; remove any `-flto*` flags to obtain
 machine-code objects rather than LTO intermediates. Do not link this deliberately
 backend-less source selection or interpret configuration success as a port.
 
-## What the errors mean
+## What the initial errors meant
 
 | Area | Evidence | Proposed treatment |
 | --- | --- | --- |
@@ -140,13 +158,9 @@ Appending `-dirty` only for tracked kernel/build inputs remains an unagreed
 follow-up proposal. No filtering policy has been implemented. See the accepted
 [observation limits](../technical-debt.md#system-information-observation-limits).
 
-The next task is the bounded source-closure/libc investigation below. The existing
-compile inventory is only a lower bound: decide which shared helpers survive the
-actual minimal port before adding reusable libc facilities. Fastfetch recipes
-and a permanent diagnostic application were not part of the information task.
-For the later port, a packaged minimal default and existing CLI/JSON formatting
-remain proposed, with explicit native URI config paths if needed. Automatic XDG
-discovery, executable search and cache writes need not be prerequisites.
+The bounded source-closure investigation below supersedes the initial missing-
+function inventory. Fastfetch recipes and a permanent diagnostic application
+were not part of either prerequisite task.
 
 ### Native information validation
 
@@ -187,6 +201,118 @@ cases; no CPU inventory, installed-memory value or dirty-tree attestation is
 claimed. These observations are functional checks in a nested VM, not owner-host
 performance measurements.
 
+## Bounded source closure and libc prerequisites
+
+This second probe uses the same upstream pin, Pyxis `a36315bfe06bb5d6dddfa1ca9ffa97731b81c16d`
+and published userland `c9ed311f8ab368528b71200a49ea4254b9f46ca8`
+([userland PR #89](https://git.internal/PyxisOS/pyxis-userland/pulls/89)). The SDK
+was freshly built with that userland revision and GCC 16.2.0. Its manifest
+correctly marks the parent modified because of the pending gitlink update.
+
+A disposable clone selected **34 translation units** for the portable core:
+
+- `src/fastfetch.c`; `src/modules/modules.c`; `src/detection/version/version.c`.
+- `common/impl/{commandoption,duration,format,frequency,jsonconfig,lua,option,parsing,percent,printing,size,temps,FFlist,FFstrbuf,strutil,memrchr}.c`.
+- `options/{general,logo,display}.c`; `logo/{logo,builtin}.c`.
+- The nine selected `modules/<name>/<name>.c` frontends.
+- Unchanged `3rdparty/yyjson/yyjson.c`.
+
+Paths in the last four bullets are relative to `src/`. The Lua wrapper compiles
+with Lua disabled; it adds no interpreter. The existing upstream `memrchr`
+fallback is retained rather than adding another libc export. Generated headers
+come from the original pinned CMake selection, with all optional features off.
+
+Scratch edits add the missing direct `strings.h` includes and replace Unix
+I/O/time header implementations with declarations of Fastfetch's own native
+boundary functions. Common Unix initialization and detectors are omitted.
+Automatic discovery, generation/writes, repeated refresh/sleep and executable
+logo paths are removed or replaced by fatal unsupported branches. The one-shot
+normal exit explicitly destroys Fastfetch state instead of requiring `atexit`;
+process teardown reclaims memory on fatal paths. The uptime frontend removes
+calendar helpers, uses JSON null and retains unavailable named/positional slots
+with explicit errors when evaluated. These are dependency-probe edits, not
+shipped or runtime-validated port behavior.
+
+All 34 units compile against target-only SDK headers. With LTO removed and
+`-ffunction-sections -fdata-sections`, a relocatable link using
+`ld -r --gc-sections -u main` follows the reachable core. Comparing its undefined
+symbols with the built libc archive leaves only this native integration boundary:
+
+```text
+instance
+ffInitInstance ffDestroyInstance ffStart ffFinish ffListFeatures
+ffDetectOS ffDetectCPU ffDetectMemory ffDetectUptime ffDetectTerminalSize
+ffIsTerminal ffTimeGetTick ffPathExists ffPathExpandEnv
+ffAppendFDBuffer ffAppendFileBuffer ffWriteFDBuffer
+```
+
+These symbols are deliberately unresolved; no successful platform stubs, fake
+Unix services or host libc were linked. This establishes the portable core's
+library needs, not a complete executable link or the final adapter source list.
+The native port must implement the boundary, replace Unix path assumptions,
+select its packaged defaults and validate unsupported-option handling. Its
+adapters can still expose further concrete dependencies.
+
+The retained code needs `strcasestr`, `vasprintf`, `round` and `isascii`.
+Userland adds those and the small paired `asprintf` wrapper:
+
+| Interface | Implemented contract |
+| --- | --- |
+| `strcasestr` | First matching substring with ASCII-only case folding; empty needle returns the input; bytes outside ASCII are unchanged; no allocation or errno changes. |
+| `isascii` | Accepts any int, true exactly for 0 through 127. |
+| `asprintf` / `vasprintf` | Owned malloc storage including an empty result; character count excludes NUL; failure returns -1, sets errno and leaves the output NULL. Uses existing format/count limits, preserves the input argument list, and frees an unpublished second-pass failure. |
+| `round` | Unmodified musl 1.2.5 implementation from the existing pin; nearest integral double, ties away from zero independently of rounding mode. Preserves signed zero, infinities and quiet NaNs; leaves errno unchanged and may raise FP inexact. Existing no-fenv/signaling-NaN limits remain. |
+
+No `sscanf`, `sprintf`, calendar conversion, directory traversal, locale, signal,
+threading or POSIX process facilities were added. The
+[stdio contract](../userland/stdio.md#standard-streams-formatting-and-exit)
+describes allocating formatting. Source headers and musl's provenance record
+carry the other library contracts. There is no separate libm or compiler rebuild.
+
+Upstream allocation handling needs attention in the native port:
+`ffStrbufInitVF` only asserts that `vasprintf` succeeded, so a release build can
+use a null buffer/negative length on failure; other allocations also assume
+success. Correct libc error returns do not make Fastfetch graceful under OOM.
+Choose explicit propagation or deliberate process failure during that task;
+neither policy is implemented or silently selected by this probe.
+
+### Prerequisite validation
+
+The ordinary `make -j16 image` build passed, including the matching SDK, existing
+ports, userland and kernel image. The musl `round.c` import matches its pinned
+upstream source byte for byte, and archive inspection finds all five exports.
+
+A disposable native observation program linked unchanged bundled yyjson with
+the SDK's normal startup/static libraries and converted through ELF-to-P1F.
+An interactive four-CPU boot used nested KVM, QEMU 10.2.2 with the documented
+AHCI fix, CPU `max`, 256 MiB, Fedora OVMF, entropy, virtio-net and a private
+virtiofsd export. Through the remote shell it observed:
+
+- Correct ordinary, empty and 300-character allocating-format results, including
+  ownership and NUL termination; two `vasprintf` calls reused one va_list and
+  both produced `shared:123`.
+- Unsupported `%n` returned -1/EINVAL with NULL output and an untouched count;
+  a result exceeding INT_MAX returned -1/EOVERFLOW with NULL output.
+- Case-insensitive first match, empty needle, absent match and unchanged high
+  bytes; `isascii` on -1, 0, 127 and 128 yielded `0, 1, 1, 0`.
+- Halfway rounding away from zero; preserved signed zeros, infinities and a
+  quiet-NaN payload; subnormals rounded to signed zero; errno stayed unchanged.
+  Both `round(2.5)` and `round(-2.5)` returned 3 and -3 under all four SSE rounding
+  modes, restoring the original mode afterward.
+- `yyjson_read_file` read `host://config.jsonc` with comments and a trailing comma,
+  found the nine selected module entries and serialized them through stdout.
+  Malformed JSON and an absent URI returned parser/read errors. Ordinary libc
+  file reads were unchanged.
+
+GDB stopped in the actual userspace allocating-format observation, inspected
+its owned `shared:123` result at CPL3, and stopped in the imported `round`
+implementation called by that program. The guest command completed with status
+zero. Allocation exhaustion and second-pass failure unwinding were reviewed in
+code, not fault-injected. No tests, self-tests, CI changes, permanent diagnostic
+application or boot automation were added. These are functional nested-VM
+observations, not owner-host performance results or fastfetch execution.
+All validation processes were stopped afterward.
+
 ## Focused tasks
 
 - [x] **Investigation:** pin upstream, probe against SDK headers, identify native
@@ -195,11 +321,10 @@ performance measurements.
   including the running kernel's short commit SHA, SDK/libpyxis wrappers and
   explicit launch forwarding. Authorized, omitted and insufficient grants were
   exercised manually as recorded above.
-- [ ] **Bound the port and fill its reusable libc gaps:** select the actual
-  minimal source closure in a temporary port build, then make focused userland
-  additions for the standard/library functions it still needs. Record any newly
-  exposed contract decisions before implementing them. No fake Unix services or
-  changes to how ordinary application file reads work.
+- [x] **Bound the port and fill its reusable libc gaps:** selected the portable
+  core in a temporary build, added its reusable libc functions and recorded the
+  agreed config/uptime boundaries and validation above. Native platform functions
+  remain deliberately unresolved; ordinary application file reads are unchanged.
 - [ ] **Native fastfetch port:** pinned ports recipe and patches, Pyxis platform
   and detector backends, existing ASCII logo, one-shot text and JSON output.
   Exclude unsupported facilities explicitly. Build with the SDK's normal static

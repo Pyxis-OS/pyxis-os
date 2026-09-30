@@ -262,6 +262,15 @@ approximately 8 KiB stack workspace, honors the active FP rounding mode, and
 does not allocate. Large padding on a bounded destination is counted without
 iterating through discarded bytes. Kernel formatting remains integer-only.
 
+`asprintf` and `vasprintf` use the same formatter and INT_MAX result-count limit.
+Success returns the character count excluding NUL and transfers malloc-owned,
+NUL-terminated storage to the caller, including for an empty result; release it
+with `free`. Failure returns -1, sets errno and leaves the output pointer NULL.
+Unsupported conversions such as `%n` return EINVAL, oversized results EOVERFLOW,
+and allocation failure ENOMEM. `vasprintf` copies and preserves the supplied
+va_list. If the second formatting pass fails, the unpublished buffer is freed
+and its error preserved; a length mismatch returns EINVAL.
+
 Output is staged completely before writing: a
 small stack buffer handles short results, with heap storage for larger ones.
 Formatting/allocation failures produce no output; output errors can leave a
