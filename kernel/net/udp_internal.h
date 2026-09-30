@@ -18,6 +18,7 @@ struct udp_endpoint {
   struct kernel_object object;
   struct udp_endpoint *next;
   struct udp_endpoint *retired_next;
+  struct execution_group *cleanup_group; /* Worker retirement's pending token. */
   struct udp_endpoint_info local;
   struct udp_datagram received[UDP_RECEIVE_QUEUE_LIMIT];
   size_t receive_head, receive_count;

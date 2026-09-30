@@ -12,6 +12,7 @@
 #define WAIT_WRITE_CLOSED (UINT64_C(1) << 4)
 #define WAIT_CLOSED (UINT64_C(1) << 5)
 #define WAIT_ERROR (UINT64_C(1) << 6) /* Output only; automatic for every interest. */
+#define WAIT_COMPLETE (UINT64_C(1) << 7)
 
 struct wait_interest {
   handle_t handle;
@@ -42,6 +43,9 @@ struct wait_interest {
  * WRITABLE/WRITE_CLOSED require INJECT (input capacity/closure). Ordinary
  * interests include their respective closure flag; hangup reports ERROR.
  * Terminal application handles and framebuffer consoles are not wait targets.
+ * Execution groups accept only COMPLETE, requiring the group WAIT right.
+ * Completion is immutable and reports finished cleanup, not program success.
+ * Group/terminal/TCP interests may be mixed; group-only waits need no network.
  * Poll and try operations may park for the BSP worker handoff, never for I/O
  * readiness. Terminal-only waits do not require a network device. */
 

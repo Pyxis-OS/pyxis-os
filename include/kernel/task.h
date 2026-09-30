@@ -7,6 +7,36 @@ struct task_profile;
 struct task_wait;
 struct task_wait_link;
 struct bsp_request;
+struct task;
+struct execution_group;
+struct execution_group_member;
+
+/* Current user task only; false for workers and before scheduler setup. A stop
+ * request is permanent. Interruptible sleeps resume kernel cleanup, never
+ * directly destroy a task or detach its resource registration. False means
+ * stop was requested; the caller must detach under its resource lock before
+ * reusing the wait or returning. Published loans use uninterruptible sleeps. */
+bool task_stop_requested(void);
+bool task_wait_stop_requested(const struct task_wait *wait);
+bool task_wait_sleep_interruptible(struct task_wait *wait);
+bool task_wait_sleep_until_interruptible(struct task_wait *wait, uint64_t deadline);
+
+/* IF=0, group lock protects task lifetime. Marks and wakes an interruptible
+ * wait, then notifies the assigned CPU. Does not inspect remote process state. */
+void task_request_stop(struct task *task);
+/* Inactive task before publication; group owns the link while enrolled. */
+struct execution_group_member *task_group_member(struct task *task);
+
+/* Explicit borrowed cleanup context, scoped by object retirement/reaping.
+ * Getter falls back to the current user's group. Setter returns the previous
+ * explicit context. Separate per-task and scheduler contexts survive switches. */
+struct execution_group *task_cleanup_group(void);
+struct execution_group *task_cleanup_set_group(struct execution_group *group);
+
+/* Syscall boundaries, IF=0. Marked tasks retire only after their kernel
+ * continuation has returned all loans, registrations and owned temporaries. */
+void task_syscall_enter(void);
+void task_syscall_leave(void);
 
 /* Current user task or BSP kernel task, in task context with IF=0. Prepare its
  * wait record before publishing it under the resource lock, after checking the

@@ -23,6 +23,7 @@ struct udp_io {
   struct udp_receive_reply reply;
   enum call_status status;
   struct task_wait *wait;
+  bool cancelled;
 };
 
 /* Separate bounded copies let AP callers sleep without lending private memory.
@@ -113,11 +114,22 @@ enum call_status net_udp_send(struct kernel_object *object, uint32_t address,
   memcpy(call->data, data, length);
   unlock_io();
   net_worker_notify();
-  task_wait_sleep(wait);
+  task_wait_sleep_interruptible(wait);
 
   lock_io();
-  KASSERT(call->state == IO_DONE && !call->wait);
-  status = call->status;
+  while (call->state != IO_DONE) {
+    KASSERT(call->wait == wait);
+    call->wait = NULL;
+    call->cancelled = true;
+    wait = task_wait_prepare();
+    call->wait = wait;
+    unlock_io();
+    net_worker_notify();
+    task_wait_sleep(wait);
+    lock_io();
+  }
+  KASSERT(!call->wait);
+  status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : call->status;
   *call = (struct udp_io){0};
   unlock_io();
   return status;
@@ -145,11 +157,22 @@ enum call_status net_udp_receive(struct kernel_object *object, size_t capacity,
   };
   unlock_io();
   net_worker_notify();
-  task_wait_sleep(wait);
+  task_wait_sleep_interruptible(wait);
 
   lock_io();
-  KASSERT(call->state == IO_DONE && !call->wait);
-  status = call->status;
+  while (call->state != IO_DONE) {
+    KASSERT(call->wait == wait);
+    call->wait = NULL;
+    call->cancelled = true;
+    wait = task_wait_prepare();
+    call->wait = wait;
+    unlock_io();
+    net_worker_notify();
+    task_wait_sleep(wait);
+    lock_io();
+  }
+  KASSERT(!call->wait);
+  status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : call->status;
   if (status == CALL_OK) {
     *reply = call->reply;
     memcpy(data, call->data, reply->length);
@@ -285,12 +308,13 @@ static bool service_receives(void)
       cpu_restore_interrupts(flags);
       continue;
     }
+    bool cancelled = call->cancelled;
     call->state = IO_RUNNING;
     unlock_io();
     cpu_restore_interrupts(flags);
 
     struct udp_endpoint *endpoint = call->endpoint;
-    enum call_status status = endpoint_status(endpoint);
+    enum call_status status = cancelled ? CALL_ENDPOINT_CLOSED : endpoint_status(endpoint);
     if (status == CALL_OK && task_deadline_expired(call->deadline)) {
       status = CALL_TIMED_OUT;
     }
@@ -331,10 +355,11 @@ bool net_udp_service_io(void)
     lock_io();
     struct udp_io *call = &sends[i];
     bool active = call->state == IO_QUEUED || call->state == IO_WAITING;
-    if (active && task_deadline_expired(call->deadline)) {
+    if (active && (call->cancelled || task_deadline_expired(call->deadline))) {
+      enum call_status status = call->cancelled ? CALL_ENDPOINT_CLOSED : CALL_TIMED_OUT;
       unlock_io();
       cpu_restore_interrupts(flags);
-      cancel_send(call, CALL_TIMED_OUT);
+      cancel_send(call, status);
       worked = true;
       continue;
     }
@@ -343,11 +368,12 @@ bool net_udp_service_io(void)
       cpu_restore_interrupts(flags);
       continue;
     }
+    bool cancelled = call->cancelled;
     call->state = IO_RUNNING;
     unlock_io();
     cpu_restore_interrupts(flags);
 
-    enum call_status status = endpoint_status(call->endpoint);
+    enum call_status status = cancelled ? CALL_ENDPOINT_CLOSED : endpoint_status(call->endpoint);
     if (status == CALL_OK) {
       status = send_status(net_udp_send_packet(call->endpoint, call->address,
           call->port, call->data, call->length, call->deadline, call->token));

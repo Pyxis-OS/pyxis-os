@@ -222,6 +222,10 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
   }
 
   while (!keyboard->count) {
+    if (task_stop_requested()) {
+      unlock_keyboard(keyboard);
+      return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+    }
     if (flags & KEYBOARD_READ_POLL) {
       unlock_keyboard(keyboard);
       return (struct syscall_result){CALL_TIMED_OUT, 0};
@@ -230,9 +234,16 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
     KASSERT(!keyboard->reader);
     keyboard->reader = wait;
     unlock_keyboard(keyboard);
-    task_wait_sleep(wait);
+    bool resumed = task_wait_sleep_interruptible(wait);
     lock_keyboard(keyboard);
+    if (keyboard->reader == wait) {
+      keyboard->reader = NULL;
+    }
     KASSERT(!keyboard->reader && keyboard->owner == process);
+    if (!resumed || task_stop_requested()) {
+      unlock_keyboard(keyboard);
+      return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+    }
   }
   reply = keyboard->events[keyboard->head];
   keyboard->head = (keyboard->head + 1) % KEYBOARD_EVENT_CAPACITY;

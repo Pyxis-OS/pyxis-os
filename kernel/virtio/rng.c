@@ -33,6 +33,7 @@ struct rng_call {
   uint8_t bytes[RANDOM_MAX_BYTES];
   enum call_status status;
   struct task_wait *wait;
+  bool cancelled;
 };
 
 static struct {
@@ -255,11 +256,22 @@ enum call_status virtio_rng_read(void *bytes, size_t length, uint64_t deadline)
   };
   notify_worker();
   unlock_rng();
-  task_wait_sleep(wait);
+  task_wait_sleep_interruptible(wait);
 
   lock_rng();
-  KASSERT(call->state == RNG_DONE && !call->wait);
-  enum call_status status = call->status;
+  while (call->state != RNG_DONE) {
+    KASSERT(call->wait == wait);
+    call->wait = NULL;
+    call->cancelled = true;
+    wait = task_wait_prepare();
+    call->wait = wait;
+    notify_worker();
+    unlock_rng();
+    task_wait_sleep(wait);
+    lock_rng();
+  }
+  KASSERT(!call->wait);
+  enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : call->status;
   if (status == CALL_OK) {
     memcpy(bytes, call->bytes, length);
   }
@@ -314,13 +326,13 @@ static bool expire_calls(void)
   for (size_t i = 0; i < RNG_CALL_LIMIT; ++i) {
     struct rng_call *call = &calls[i];
     if ((call->state == RNG_QUEUED || call->state == RNG_ACTIVE) &&
-        task_deadline_expired(call->deadline)) {
+        (call->cancelled || task_deadline_expired(call->deadline))) {
       if (entropy.current == call) {
         /* The DMA buffer is separate. A late completion will be discarded,
          * never attributed to a caller that reuses this slot. */
         entropy.current = NULL;
       }
-      complete_call(call, CALL_TIMED_OUT);
+      complete_call(call, call->cancelled ? CALL_ENDPOINT_CLOSED : CALL_TIMED_OUT);
       worked = true;
     }
   }

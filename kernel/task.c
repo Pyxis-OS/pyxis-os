@@ -31,6 +31,7 @@ struct task_wait {
   struct task *task;
   bool notified;
   bool timed;
+  bool interruptible;
   uint64_t deadline;
   struct task_wait *timeout_next;
 };
@@ -49,7 +50,10 @@ struct task {
   uintptr_t entry, user_stack;
   struct arch_user_state cpu;
   size_t cpu_index;
-  bool exited, faulted;
+  bool exited, faulted, terminated, in_syscall;
+  atomic_bool stop_requested;
+  struct execution_group_member group_member;
+  struct execution_group *cleanup_group;
   int exit_status;
   void (*kernel_entry)(void *);
   void *argument;
@@ -63,6 +67,7 @@ struct scheduler {
   struct task *ready_head, *ready_tail;
   struct task *current_task;
   uintptr_t stack;
+  struct execution_group *cleanup_group;
 };
 
 static struct scheduler *schedulers;
@@ -97,6 +102,79 @@ struct process *process_current(void)
 {
   struct task *task = local_scheduler()->current_task;
   return task && task->kind == TASK_USER ? task->process : NULL;
+}
+
+bool task_stop_requested(void)
+{
+  struct task *task = schedulers ? local_scheduler()->current_task : NULL;
+  return task && task->kind == TASK_USER &&
+      atomic_load_explicit(&task->stop_requested, memory_order_acquire);
+}
+
+bool task_wait_stop_requested(const struct task_wait *wait)
+{
+  return atomic_load_explicit(&wait->task->stop_requested, memory_order_acquire);
+}
+
+struct execution_group_member *task_group_member(struct task *task)
+{
+  KASSERT(task->kind == TASK_USER);
+  return &task->group_member;
+}
+
+struct execution_group *task_cleanup_group(void)
+{
+  if (!schedulers) {
+    return NULL;
+  }
+  struct scheduler *scheduler = local_scheduler();
+  struct task *task = scheduler->current_task;
+  if (!task) {
+    return scheduler->cleanup_group;
+  }
+  if (task->cleanup_group) {
+    return task->cleanup_group;
+  }
+  return task->kind == TASK_USER ? task->process->execution_group : NULL;
+}
+
+struct execution_group *task_cleanup_set_group(struct execution_group *group)
+{
+  KASSERT(schedulers || !group);
+  if (!schedulers) {
+    return NULL;
+  }
+  struct scheduler *scheduler = local_scheduler();
+  struct task *task = scheduler->current_task;
+  struct execution_group **slot = task ? &task->cleanup_group : &scheduler->cleanup_group;
+  struct execution_group *previous = *slot;
+  *slot = group;
+  return previous;
+}
+
+[[noreturn]] static void terminate_task(void)
+{
+  struct task *task = local_scheduler()->current_task;
+  KASSERT(task && task->kind == TASK_USER);
+  KASSERT(!task->bsp_request && !task->deferred_request && !task->wait);
+  task->terminated = true;
+  user_exit(0);
+}
+
+void task_syscall_enter(void)
+{
+  if (task_stop_requested()) {
+    terminate_task();
+  }
+  local_scheduler()->current_task->in_syscall = true;
+}
+
+void task_syscall_leave(void)
+{
+  if (task_stop_requested()) {
+    terminate_task();
+  }
+  local_scheduler()->current_task->in_syscall = false;
 }
 
 bool kernel_task_is_current(void (*entry)(void *))
@@ -180,7 +258,7 @@ bool task_deadline_expired(uint64_t deadline)
   return arch_monotonic_ns() >= deadline;
 }
 
-static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline)
+static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline, bool interruptible)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct scheduler *scheduler = local_scheduler();
@@ -189,7 +267,9 @@ static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline)
   KASSERT(task->kind == TASK_USER || arch_cpu_index() == 0);
 
   lock_queues();
-  if (wait->notified || (timed && task_deadline_expired(deadline))) {
+  wait->interruptible = interruptible;
+  if (wait->notified || (interruptible && task_stop_requested()) ||
+      (timed && task_deadline_expired(deadline))) {
     unlock_queues();
     return;
   }
@@ -211,12 +291,24 @@ static void sleep_wait(struct task_wait *wait, bool timed, uint64_t deadline)
 
 void task_wait_sleep(struct task_wait *wait)
 {
-  sleep_wait(wait, false, 0);
+  sleep_wait(wait, false, 0, false);
 }
 
 void task_wait_sleep_until(struct task_wait *wait, uint64_t deadline)
 {
-  sleep_wait(wait, true, deadline);
+  sleep_wait(wait, true, deadline, false);
+}
+
+bool task_wait_sleep_interruptible(struct task_wait *wait)
+{
+  sleep_wait(wait, false, 0, true);
+  return !task_stop_requested();
+}
+
+bool task_wait_sleep_until_interruptible(struct task_wait *wait, uint64_t deadline)
+{
+  sleep_wait(wait, true, deadline, true);
+  return !task_stop_requested();
 }
 
 static void wake_wait_locked(struct task_wait *wait)
@@ -233,20 +325,41 @@ static void wake_wait_locked(struct task_wait *wait)
    * before its stack has been saved could run it on two contexts at once. */
 }
 
+static void remove_timeout_locked(struct task_wait *wait)
+{
+  if (!wait->timed) {
+    return;
+  }
+  struct task_wait **link = &timed_waits;
+  while (*link != wait) {
+    KASSERT(*link);
+    link = &(*link)->timeout_next;
+  }
+  *link = wait->timeout_next;
+  wait->timeout_next = NULL;
+  wait->timed = false;
+}
+
+void task_request_stop(struct task *task)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  lock_queues();
+  atomic_store_explicit(&task->stop_requested, true, memory_order_release);
+  if (task->wait && task->wait->interruptible) {
+    struct task_wait *wait = task->wait;
+    remove_timeout_locked(wait);
+    wake_wait_locked(wait);
+  }
+  size_t cpu_index = task->cpu_index;
+  unlock_queues();
+  notify_remote_cpu(cpu_index);
+}
+
 void task_wait_wake(struct task_wait *wait)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   lock_queues();
-  if (wait->timed) {
-    struct task_wait **link = &timed_waits;
-    while (*link != wait) {
-      KASSERT(*link);
-      link = &(*link)->timeout_next;
-    }
-    *link = wait->timeout_next;
-    wait->timeout_next = NULL;
-    wait->timed = false;
-  }
+  remove_timeout_locked(wait);
   bool parked = wait->task->parked;
   size_t cpu_index = wait->task->cpu_index;
   wake_wait_locked(wait);
@@ -378,6 +491,8 @@ static enum mm_result allocate_task(struct task **result)
     return MM_NO_MEMORY;
   }
   memset(task, 0, sizeof(*task));
+  atomic_init(&task->stop_requested, false);
+  task->group_member.task = task;
 
   enum mm_result status = vm_alloc(vm_kernel_space(), TASK_STACK_SIZE,
                                     PAGE_SIZE, PAGE_WRITE, &task->kernel_stack);
@@ -538,12 +653,20 @@ static void reap_completed(void)
       task->process->control = NULL;
       execution_group = task->process->execution_group;
       task->process->execution_group = NULL;
-      result.kind = task->faulted ? PROCESS_FAULTED : PROCESS_EXITED;
-      result.exit_status = task->faulted ? 0 : task->exit_status;
+      if (execution_group) {
+        execution_group_member_detach(execution_group, &task->group_member);
+      }
+      result.kind = task->faulted ? PROCESS_FAULTED :
+          task->terminated ? PROCESS_TERMINATED : PROCESS_EXITED;
+      result.exit_status = result.kind == PROCESS_EXITED ? task->exit_status : 0;
+      struct execution_group *previous = object_cleanup_enter(execution_group);
       KASSERT(process_destroy(task->process) == MM_OK);
+      object_cleanup_leave(previous);
     }
     if (task->kind == TASK_USER) {
-      if (task->faulted) {
+      if (task->terminated) {
+        klog("userspace: CPU %zu terminated task released\n", task->cpu_index);
+      } else if (task->faulted) {
         klog("userspace: CPU %zu faulted task released\n", task->cpu_index);
       } else {
         klog("userspace: CPU %zu exited with status %d; address space released\n",
@@ -551,12 +674,14 @@ static void reap_completed(void)
       }
     }
     free_task(task);
-    if (execution_group) {
-      execution_group_member_complete(execution_group);
-    }
     if (control) {
       process_control_complete(control, result);
+      struct execution_group *previous = object_cleanup_enter(execution_group);
       object_release(&control->object);
+      object_cleanup_leave(previous);
+    }
+    if (execution_group) {
+      execution_group_member_complete(execution_group);
     }
     task = next;
   }
@@ -653,6 +778,13 @@ void kernel_task_yield_if_runnable(void)
       idle_reported = false;
     }
 
+    if (task->kind == TASK_USER && !task->in_syscall && task_stop_requested()) {
+      task->terminated = task->exited = true;
+      scheduler->current_task = NULL;
+      complete_task(task);
+      continue;
+    }
+
     /* Reload CR3 before touching a newly published task stack. This also
      * discards translations from a previous use of its kernel virtual range. */
     struct vm_space *address_space = task->kind == TASK_USER ?
@@ -712,6 +844,9 @@ void task_preempt(bool user_mode)
     return;
   }
 
+  if (task->kind == TASK_USER && user_mode && task_stop_requested()) {
+    terminate_task();
+  }
   if (arch_cpu_index() == 0) {
     expire_timed_waits();
     wake_sleepers();

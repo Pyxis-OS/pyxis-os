@@ -312,11 +312,13 @@ static void ring_copy_in(uint8_t *ring, size_t capacity, size_t head,
   memcpy(ring, (const uint8_t *)source + first, length - first);
 }
 
+static void end_read(struct terminal_session *session);
+
 static enum call_status begin_read(struct terminal_session *session,
     bool timed, uint64_t deadline)
 {
   lock_session(session);
-  if (session->hung_up) {
+  if (session->hung_up || task_stop_requested()) {
     unlock_session(session);
     return CALL_ENDPOINT_CLOSED;
   }
@@ -338,11 +340,8 @@ static enum call_status begin_read(struct terminal_session *session,
   }
   session->last_reader = reader;
   unlock_session(session);
-  if (timed) {
-    task_wait_sleep_until(wait, deadline);
-  } else {
-    task_wait_sleep(wait);
-  }
+  bool resumed = timed ? task_wait_sleep_until_interruptible(wait, deadline) :
+      task_wait_sleep_interruptible(wait);
   lock_session(session);
   bool acquired = reader->wait == NULL;
   if (session->hung_up) {
@@ -369,7 +368,14 @@ static enum call_status begin_read(struct terminal_session *session,
     reader->next = NULL;
     reader->wait = NULL;
   }
+  bool stopped = !resumed || task_stop_requested();
   unlock_session(session);
+  if (stopped) {
+    if (acquired) {
+      end_read(session);
+    }
+    return CALL_ENDPOINT_CLOSED;
+  }
   return acquired ? CALL_OK : CALL_TIMED_OUT;
 }
 
@@ -425,14 +431,16 @@ static struct syscall_result application_read(struct terminal_session *session,
       struct task_wait *wait = task_wait_prepare();
       session->input_wait = wait;
       unlock_session(session);
-      if (timed) {
-        task_wait_sleep_until(wait, deadline);
-      } else {
-        task_wait_sleep(wait);
-      }
+      bool resumed = timed ? task_wait_sleep_until_interruptible(wait, deadline) :
+          task_wait_sleep_interruptible(wait);
       lock_session(session);
       if (session->input_wait == wait) {
         session->input_wait = NULL;
+      }
+      if (!resumed || task_stop_requested()) {
+        unlock_session(session);
+        end_read(session);
+        return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
       }
     }
     if (session->hung_up) {
@@ -461,7 +469,7 @@ static enum call_status enqueue_output(struct terminal_session *session,
   for (;;) {
     struct task_wait_link *writer = task_wait_link_prepare();
     lock_session(session);
-    if (session->hung_up || session->output_closed) {
+    if (task_stop_requested() || session->hung_up || session->output_closed) {
       unlock_session(session);
       return CALL_ENDPOINT_CLOSED;
     }
@@ -488,7 +496,23 @@ static enum call_status enqueue_output(struct terminal_session *session,
     session->writers = writer;
     struct task_wait *wait = writer->wait;
     unlock_session(session);
-    task_wait_sleep(wait);
+    bool resumed = task_wait_sleep_interruptible(wait);
+    lock_session(session);
+    if (writer->wait) {
+      struct task_wait_link **link = &session->writers;
+      while (*link != writer) {
+        KASSERT(*link);
+        link = &(*link)->next;
+      }
+      *link = writer->next;
+      writer->next = NULL;
+      writer->wait = NULL;
+    }
+    bool stopped = !resumed || task_stop_requested();
+    unlock_session(session);
+    if (stopped) {
+      return CALL_ENDPOINT_CLOSED;
+    }
   }
 }
 

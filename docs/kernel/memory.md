@@ -76,7 +76,9 @@ reuse the area.
 The same path handles BSP userspace. Publication wakes the executor through the
 ordinary ready queue; there is no memory-specific scheduler sweep. No remote
 stack access, shared user mappings or TLB shootdown is introduced. This depends on the current
-single-task process model, pinned tasks and absence of process cancellation.
+single-task process model and pinned tasks. Group termination preserves this
+uninterruptible loan: the syscall continuation collects the result and releases
+the reservation before its task can retire.
 
 ## Native use
 

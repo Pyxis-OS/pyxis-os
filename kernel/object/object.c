@@ -26,6 +26,7 @@
 #include <kernel/object/object.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/panic.h>
+#include <kernel/task.h>
 #include <stdint.h>
 
 static struct kernel_object *retired_objects;
@@ -200,7 +201,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~(LAUNCHER_RIGHT_LAUNCH |
         (launcher_execution_group(object) ? 0 : LAUNCHER_RIGHT_CREATE_GROUP)));
   case OBJECT_EXECUTION_GROUP:
-    return !(rights & ~EXECUTION_GROUP_RIGHT_CONTROL);
+    return !(rights & ~(EXECUTION_GROUP_RIGHT_CONTROL | EXECUTION_GROUP_RIGHT_WAIT));
   case OBJECT_ENDPOINT_SERVICE:
     return !(rights & ~ENDPOINT_SERVICE_RIGHT_CREATE);
   case OBJECT_ENDPOINT_RECEIPT:
@@ -229,6 +230,7 @@ void object_init(struct kernel_object *object, enum object_type type,
   object->type = type;
   atomic_init(&object->references, 1);
   object->retired_next = NULL;
+  object->cleanup_group = NULL;
   object->destroy = destroy;
 }
 
@@ -247,6 +249,25 @@ bool object_retain(struct kernel_object *object)
   }
 }
 
+struct execution_group *object_cleanup_enter(struct execution_group *group)
+{
+  return task_cleanup_set_group(group);
+}
+
+void object_cleanup_leave(struct execution_group *previous)
+{
+  task_cleanup_set_group(previous);
+}
+
+struct execution_group *object_cleanup_defer(void)
+{
+  struct execution_group *group = task_cleanup_group();
+  if (group) {
+    execution_group_cleanup_begin(group);
+  }
+  return group;
+}
+
 void object_release(struct kernel_object *object)
 {
   size_t previous = atomic_fetch_sub_explicit(&object->references, 1,
@@ -259,6 +280,11 @@ void object_release(struct kernel_object *object)
   if (object->type == OBJECT_ENDPOINT_RECEIPT) {
     endpoint_receipt_release(object);
     return;
+  }
+
+  /* Group storage itself must not keep its own completion pending. */
+  if (object->type != OBJECT_EXECUTION_GROUP) {
+    object->cleanup_group = object_cleanup_defer();
   }
 
   /* The last owner lends the object's own link to the queue. Even an AP can
@@ -312,7 +338,13 @@ void object_reap(void)
 
   while (object) {
     struct kernel_object *next = object->retired_next;
+    struct execution_group *group = object->cleanup_group;
+    struct execution_group *previous = object_cleanup_enter(group);
     object->destroy(object);
+    object_cleanup_leave(previous);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
     object = next;
   }
 }

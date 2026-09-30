@@ -3,6 +3,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/net/udp.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <stdatomic.h>
@@ -25,6 +26,7 @@ struct udp_control {
   struct udp_open_reply reply;
   enum call_status status;
   struct task_wait *wait;
+  bool cancelled;
 };
 
 /* The worker owns the live list and all binding state. Control publication and
@@ -61,6 +63,7 @@ static void assert_worker_context(void)
 static void retire_endpoint(struct kernel_object *object)
 {
   struct udp_endpoint *endpoint = (struct udp_endpoint *)object;
+  endpoint->cleanup_group = object_cleanup_defer();
   lock_control();
   endpoint->retired_next = retired;
   retired = endpoint;
@@ -81,6 +84,10 @@ static bool reap_endpoints(void)
   while (list) {
     struct udp_endpoint *endpoint = list;
     list = endpoint->retired_next;
+    flags = cpu_save_interrupts();
+    struct execution_group *group = endpoint->cleanup_group;
+    struct execution_group *previous = object_cleanup_enter(group);
+    cpu_restore_interrupts(flags);
     struct udp_endpoint **link = &endpoints;
     while (*link && *link != endpoint) {
       link = &(*link)->next;
@@ -92,6 +99,10 @@ static bool reap_endpoints(void)
     net_udp_discard_received(endpoint);
     flags = cpu_save_interrupts();
     kfree(endpoint);
+    object_cleanup_leave(previous);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
     cpu_restore_interrupts(flags);
   }
   return worked;
@@ -220,16 +231,33 @@ static enum call_status exchange_control(struct udp_control *request)
   call->wait = wait;
   unlock_control();
   net_worker_notify();
-  task_wait_sleep(wait);
+  task_wait_sleep_interruptible(wait);
 
   lock_control();
-  KASSERT(call->state == CONTROL_DONE && !call->wait);
-  enum call_status status = call->status;
+  while (call->state != CONTROL_DONE) {
+    KASSERT(call->wait == wait);
+    call->wait = NULL;
+    call->cancelled = true;
+    wait = task_wait_prepare();
+    call->wait = wait;
+    unlock_control();
+    net_worker_notify();
+    task_wait_sleep(wait);
+    lock_control();
+  }
+  KASSERT(!call->wait);
+  bool discard_created = task_stop_requested() && call->status == CALL_OK &&
+      (request->operation == CONTROL_OPEN || request->operation == CONTROL_OPEN_ROUTE);
+  uint64_t created_handle = call->reply.handle;
+  enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : call->status;
   if (status == CALL_OK) {
     request->reply = call->reply;
   }
   *call = (struct udp_control){0};
   unlock_control();
+  if (discard_created) {
+    KASSERT(capability_close(request->table, created_handle) == CAP_OK);
+  }
   return status;
 }
 
@@ -292,13 +320,14 @@ bool net_udp_service(void)
       cpu_restore_interrupts(flags);
       continue;
     }
+    bool cancelled = call->cancelled;
     call->state = CONTROL_RUNNING;
     unlock_control();
     cpu_restore_interrupts(flags);
 
     /* The parked caller lends its table (OPEN) or keeps its endpoint grant.
      * RUNNING grants this worker exclusive access to the captured payload. */
-    enum call_status status = apply_control(call);
+    enum call_status status = cancelled ? CALL_ENDPOINT_CLOSED : apply_control(call);
 
     flags = cpu_save_interrupts();
     lock_control();

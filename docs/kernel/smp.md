@@ -82,12 +82,11 @@ transfer. The blocked caller lends its capability table to BSP preparation;
 cross-CPU requests and results live in the shared request allocation, never remote
 stack pointers.
 
-Task metadata occupies 752 bytes. Each user task eagerly owns one 4,920-byte
+Task metadata occupies 784 bytes. Each user task eagerly owns one 4,928-byte
 request allocation, sized for the explicit service catalog's largest typed
 record, HOST, with an 8-byte alignment requirement, and a separate zeroed
-816-byte profiling allocation. Their combined size is 6,488 bytes, down from
-7,392 bytes before storage consolidation, excluding heap overhead and the
-unchanged 16 KiB kernel stack. Kernel workers use only the 752-byte task metadata
+816-byte profiling allocation. Their combined size is 6,528 bytes, excluding heap overhead and the
+unchanged 16 KiB kernel stack. Kernel workers use only the 784-byte task metadata
 and allocate neither user area. Preparation failure, prepared-task discard and
 retirement release each owned allocation exactly once on the BSP with IF=0.
 
@@ -163,6 +162,14 @@ to the permanent scheduler stack.
 This prevents lost wakeups or resuming a stack still in use. The resource lock
 may nest the queue lock; the reverse order is forbidden. Neither is held across
 a context switch.
+
+Execution-group stop requests mark task metadata under the group and scheduler
+locks, remove timed membership for an interruptible wait, and notify the assigned
+CPU. They leave subsystem registration detachment to the resumed continuation.
+The scheduler retires marked runnable userspace at its next safe point. Syscall
+continuations stay runnable until their own unwind returns all loans; their final
+syscall boundary prevents user return. Published BSP/HOST requests remain
+uninterruptible. See [execution groups](../interfaces/execution-groups.md).
 
 Parking a user task saves user CPU state just like timer preemption. Resume
 restores the same CPU, process root and private entry stack, with interrupts
@@ -390,6 +397,7 @@ and submission calls. Never call them on an AP. Once a task completes, its
 pointer may already have been freed by the BSP.
 
 Execution-group sealing serializes with batch enrollment/publication under a group
-lock before the scheduler queue lock. Group membership is removed by BSP reaping
-after process and task storage reclamation. This accounting does not provide
-termination or group-completion readiness; see [execution groups](../interfaces/execution-groups.md).
+lock before the scheduler queue lock. BSP reaping detaches the stop-request list
+link before freeing task metadata; its member count stays positive until process
+and task reclamation finish. Group completion additionally waits for admitted
+launches and attributed deferred cleanup. See [execution groups](../interfaces/execution-groups.md).

@@ -519,8 +519,10 @@ syscalls remain unchanged and do not yet use these helpers.
 A process-control capability exposes WAIT through a tagged native CALL. Its
 [protocol](../../include/abi/process.h) has one right, WAIT, and a header-only request.
 The [libpyxis wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/process.h) preserves native errors and
-returns either EXITED with a signed exit status or FAULTED. Fault results carry
-no exit status; detailed architecture diagnostics remain in the kernel log.
+returns EXITED with a signed exit status, FAULTED, or TERMINATED after an execution
+group stop. Fault and termination results carry zero exit_status; architecture fault
+diagnostics remain in the kernel log. Group completion additionally observes deferred
+cleanup; see [execution groups](execution-groups.md).
 
 WAIT blocks until completion. The result is immutable and is not consumed:
 multiple observers and repeated waits receive the same result, including waits

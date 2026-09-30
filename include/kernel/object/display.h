@@ -30,6 +30,7 @@ void display_request_execute(struct display_request *request);
 struct display_frame {
   struct framebuffer fb;
   size_t references;
+  struct execution_group *cleanup_group; /* Session release awaiting the presenter. */
 };
 
 struct display_object {

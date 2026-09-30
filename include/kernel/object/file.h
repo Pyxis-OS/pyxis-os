@@ -43,8 +43,9 @@ struct file_object *file_create_host(struct hostfs_node *host);
 
 /* IF=0, with an owned/borrowed live reference. Begin runs on a user task and
  * may sleep; end can run on BSP after a loan. Ownership keeps data/size stable
- * without a held spinlock, including while loading an executable. */
-void file_begin_operation(struct file_object *file);
+ * without a held spinlock, including while loading an executable. Begin
+ * returns false after a stop request, with no queued link or busy ownership. */
+bool file_begin_operation(struct file_object *file);
 void file_end_operation(struct file_object *file);
 
 struct file_buffer_profile {

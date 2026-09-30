@@ -3,6 +3,7 @@
 #include <arch/smp.h>
 #include <kernel/net/interface.h>
 #include <kernel/object/terminal.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/user/readiness.h>
@@ -46,10 +47,12 @@ void readiness_complete(struct readiness_request *request, enum call_status stat
 {
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct execution_group *previous = object_cleanup_enter(request->request.cleanup_group);
   for (size_t i = 0; i < request->count; ++i) {
     object_release(request->interests[i].object);
     request->interests[i].object = NULL;
   }
+  object_cleanup_leave(previous);
   request->status = status;
   bsp_request_complete(&request->request);
 }
@@ -60,13 +63,17 @@ bool readiness_service(struct bsp_request **active_list)
   struct bsp_request **link = active_list;
   while (*link) {
     struct readiness_request *request = (struct readiness_request *)*link;
+    bool stopped = task_wait_stop_requested(request->request.wait);
     bool ready = false;
-    for (size_t i = 0; i < request->count; ++i) {
+    for (size_t i = 0; !stopped && i < request->count; ++i) {
       struct readiness_interest *interest = &request->interests[i];
       switch (interest->object->type) {
       case OBJECT_TCP:
       case OBJECT_TCP_LISTENER:
         interest->ready = tcp_readiness_events(interest);
+        break;
+      case OBJECT_EXECUTION_GROUP:
+        interest->ready = execution_group_ready((struct execution_group *)interest->object);
         break;
       case OBJECT_TERMINAL_ATTACHMENT:
         interest->ready = terminal_attachment_ready(interest->object, interest->events);
@@ -79,11 +86,12 @@ bool readiness_service(struct bsp_request **active_list)
     /* Current readiness wins over an expired deadline, including after worker
      * queueing delay. Polling is a successful empty observation, not timeout. */
     bool expired = request->deadline && arch_monotonic_ns() >= request->deadline;
-    if (ready || !request->deadline || expired) {
+    if (stopped || ready || !request->deadline || expired) {
       *link = request->request.next;
       request->request.next = NULL;
       uint64_t flags = cpu_save_interrupts();
-      readiness_complete(request, ready || !request->deadline ? CALL_OK : CALL_TIMED_OUT);
+      readiness_complete(request, stopped ? CALL_ENDPOINT_CLOSED :
+          ready || !request->deadline ? CALL_OK : CALL_TIMED_OUT);
       cpu_restore_interrupts(flags);
       worked = true;
     } else {

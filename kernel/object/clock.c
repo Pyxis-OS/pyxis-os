@@ -101,6 +101,8 @@ struct syscall_result clock_call(uint64_t rights, uint64_t operation,
   }
 
   struct task_wait *wait = task_wait_prepare();
-  task_wait_sleep_until(wait, deadline);
+  if (!task_wait_sleep_until_interruptible(wait, deadline)) {
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   return (struct syscall_result){CALL_OK, 0};
 }

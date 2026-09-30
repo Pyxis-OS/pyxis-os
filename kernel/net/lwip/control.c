@@ -1,6 +1,7 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <kernel/net/tcp.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/task.h>
 #include <caelum_hooks.h>
 #include <stdatomic.h>
@@ -28,6 +29,8 @@ struct tcp_control {
   struct tcp_listen_reply listen_reply;
   enum call_status status;
   struct task_wait *wait;
+  bool cancelled;
+  struct execution_group *cleanup_group; /* Attributes failed provisional objects. */
 };
 
 static struct tcp_control pending[TCP_CONTROL_LIMIT];
@@ -50,6 +53,7 @@ static void unlock_control(void)
 static void retire_stream(struct kernel_object *object)
 {
   struct tcp_stream *stream = (struct tcp_stream *)object;
+  stream->cleanup_group = object_cleanup_defer();
   lock_control();
   stream->retired_next = retired;
   retired = stream;
@@ -70,10 +74,20 @@ static bool reap_streams(void)
   while (list) {
     struct tcp_stream *stream = list;
     list = stream->retired_next;
+    flags = cpu_save_interrupts();
+    struct execution_group *group = stream->cleanup_group;
+    struct execution_group *previous = object_cleanup_enter(group);
+    cpu_restore_interrupts(flags);
     if (stream->connection) {
       net_tcp_release(stream->connection);
     }
     caelum_lwip_free(stream);
+    flags = cpu_save_interrupts();
+    object_cleanup_leave(previous);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
+    cpu_restore_interrupts(flags);
   }
   return worked;
 }
@@ -170,7 +184,17 @@ static void complete_control(struct tcp_control *call, enum call_status status)
 {
   if (call->operation == CONTROL_CONNECT || call->operation == CONTROL_LISTEN ||
       call->operation == CONTROL_ACCEPT) {
+    uint64_t flags = cpu_save_interrupts();
+    struct execution_group *group = call->cleanup_group;
+    struct execution_group *previous = object_cleanup_enter(group);
+    cpu_restore_interrupts(flags);
     finish_created(call, status);
+    flags = cpu_save_interrupts();
+    object_cleanup_leave(previous);
+    if (group) {
+      execution_group_cleanup_end(group);
+    }
+    cpu_restore_interrupts(flags);
   }
   uint64_t flags = cpu_save_interrupts();
   lock_control();
@@ -209,19 +233,43 @@ static enum call_status exchange_control(struct tcp_control *request)
   *call = *request;
   call->state = CONTROL_QUEUED;
   call->wait = wait;
+  if (call->operation == CONTROL_CONNECT || call->operation == CONTROL_LISTEN ||
+      call->operation == CONTROL_ACCEPT) {
+    call->cleanup_group = object_cleanup_defer();
+  }
   unlock_control();
   net_worker_notify();
-  task_wait_sleep(wait);
+  task_wait_sleep_interruptible(wait);
 
   lock_control();
-  KASSERT(call->state == CONTROL_DONE && !call->wait);
-  enum call_status status = call->status;
+  /* A stop wake does not return the loan. Detach before renewing the wait and
+   * let the worker cancel or finish before collecting the slot. */
+  while (call->state != CONTROL_DONE) {
+    KASSERT(call->wait == wait);
+    call->wait = NULL;
+    call->cancelled = true;
+    wait = task_wait_prepare();
+    call->wait = wait;
+    unlock_control();
+    net_worker_notify();
+    task_wait_sleep(wait);
+    lock_control();
+  }
+  KASSERT(!call->wait);
+  bool discard_created = task_stop_requested() && call->status == CALL_OK &&
+      (request->operation == CONTROL_CONNECT || request->operation == CONTROL_LISTEN ||
+       request->operation == CONTROL_ACCEPT);
+  uint64_t created_handle = call->reply.handle;
+  enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : call->status;
   if (status == CALL_OK) {
     request->reply = call->reply;
     request->listen_reply = call->listen_reply;
   }
   *call = (struct tcp_control){0};
   unlock_control();
+  if (discard_created) {
+    KASSERT(capability_close(request->table, created_handle) == CAP_OK);
+  }
   net_worker_notify(); /* Direction ownership became available to readiness waits. */
   return status;
 }
@@ -332,12 +380,18 @@ bool net_tcp_service(void)
     struct tcp_control *call = &pending[i];
     bool start = call->state == CONTROL_QUEUED;
     bool active = call->state == CONTROL_ACTIVE;
+    bool cancelled = call->cancelled;
     if (start) {
       call->state = CONTROL_ACTIVE;
     }
     unlock_control();
     cpu_restore_interrupts(flags);
     if (!start && !active) {
+      continue;
+    }
+    if (cancelled) {
+      complete_control(call, CALL_ENDPOINT_CLOSED);
+      worked = true;
       continue;
     }
     if (call->operation == CONTROL_LISTEN) {
