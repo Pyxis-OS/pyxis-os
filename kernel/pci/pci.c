@@ -252,20 +252,22 @@ struct pci_device *pci_find_device(uint16_t vendor, uint16_t device)
   return first;
 }
 
-struct pci_device *pci_find_unique_device(uint16_t vendor, uint16_t device)
+enum pci_selection pci_select_device(uint16_t vendor, uint16_t device,
+    struct pci_device **selected)
 {
+  *selected = NULL;
   if (!inventory_complete) {
-    return NULL;
+    return PCI_SELECTION_INCOMPLETE;
   }
-
   struct pci_device *match = NULL;
   for (struct pci_device *entry = devices; entry; entry = entry->next) {
     if (entry->vendor_id == vendor && entry->device_id == device) {
       if (match) {
-        return NULL;
+        return PCI_SELECTION_AMBIGUOUS;
       }
       match = entry;
     }
   }
-  return match;
+  *selected = match;
+  return match ? PCI_SELECTION_UNIQUE : PCI_SELECTION_ABSENT;
 }

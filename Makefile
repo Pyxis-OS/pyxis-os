@@ -21,7 +21,9 @@ INIT ?=
 INIT_DEFAULT ?= app://init-idle
 INIT_PRIMARY ?= app://init
 INIT_CPUS ?= 2=app://init-readonly 3=app://init-remote
-export INIT_DEFAULT INIT_PRIMARY INIT_CPUS
+MOUNT_DISK ?=
+MOUNT_PRINCIPAL ?=
+export INIT_DEFAULT INIT_PRIMARY INIT_CPUS MOUNT_DISK MOUNT_PRINCIPAL
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
@@ -58,6 +60,9 @@ OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM
 .DEFAULT_GOAL := all
 include kernel/net/lwip/build.mk
 include kernel/fs/build.mk
+
+build/kernel/object/mount.o build/kernel/user/boot.o build/kernel/user/launch.o \
+build/kernel/syscall.o: CPPFLAGS += -Ifs/include
 
 .PHONY: all kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools fs-tools sdk sdk-headers userspace ports initrd image run debug clean check-toolchain FORCE
 all: kernel

@@ -4,6 +4,7 @@
 #include <kernel/mm/types.h>
 
 struct process;
+struct mount_config;
 struct space;
 
 #define USER_INITIAL_STACK_BASE UINT64_C(0x800000)
@@ -24,6 +25,7 @@ void user_launch_initial(const char *command_line);
 
 /* Boot startup only: load one archive image/script with full bootstrap grants.
  * App and RAM home roots are shared between initial processes. Fatal on failure. */
-void user_launch_init(size_t cpu_index, const char *image_uri);
+void user_launch_init(size_t cpu_index, const char *image_uri,
+    const struct mount_config *mount_config);
 
 #endif

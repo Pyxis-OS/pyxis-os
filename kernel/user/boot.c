@@ -2,6 +2,7 @@
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/object/mount.h>
 #include <kernel/panic.h>
 #include <kernel/string.h>
 #include <kernel/user/launch.h>
@@ -27,6 +28,53 @@ static size_t parse_cpu(const char *text)
   return index;
 }
 
+static unsigned hex_digit(char value)
+{
+  if (value >= '0' && value <= '9') {
+    return value - '0';
+  }
+  if (value >= 'a' && value <= 'f') {
+    return value - 'a' + 10;
+  }
+  if (value >= 'A' && value <= 'F') {
+    return value - 'A' + 10;
+  }
+  panic("invalid mount disk GUID hex digit");
+}
+
+static struct gpt_guid parse_disk_guid(const char *text)
+{
+  if (strlen(text) != 36 || text[8] != '-' || text[13] != '-' ||
+      text[18] != '-' || text[23] != '-') {
+    panic("mount.disk must be a canonical GPT GUID");
+  }
+  uint8_t canonical[16];
+  unsigned index = 0;
+  for (size_t offset = 0; offset < 36;) {
+    if (offset == 8 || offset == 13 || offset == 18 || offset == 23) {
+      ++offset;
+      continue;
+    }
+    canonical[index++] = hex_digit(text[offset]) * 16 + hex_digit(text[offset + 1]);
+    offset += 2;
+  }
+  struct gpt_guid disk;
+  /* The first three textual fields use little-endian GPT encoding. */
+  for (unsigned i = 0; i < 4; ++i) {
+    disk.bytes[i] = canonical[3 - i];
+  }
+  for (unsigned i = 0; i < 2; ++i) {
+    disk.bytes[4 + i] = canonical[5 - i];
+    disk.bytes[6 + i] = canonical[7 - i];
+  }
+  memcpy(disk.bytes + 8, canonical + 8, 8);
+  struct gpt_guid zero = {0};
+  if (!memcmp(&disk, &zero, sizeof(disk))) {
+    panic("mount.disk must be nonzero");
+  }
+  return disk;
+}
+
 void user_launch_initial(const char *command_line)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -40,6 +88,7 @@ void user_launch_initial(const char *command_line)
   }
   memset(images, 0, count * sizeof(*images));
   const char *default_image = NULL, *primary_image = NULL;
+  const char *mount_disk = NULL, *mount_principal = NULL;
 
   char *cursor = options;
   while (*cursor) {
@@ -64,6 +113,20 @@ void user_launch_initial(const char *command_line)
       panic("kernel option needs a value: %s", key);
     }
     *image++ = '\0';
+    if (same_text(key, "mount.disk")) {
+      if (mount_disk) {
+        panic("duplicate mount disk configuration");
+      }
+      mount_disk = image;
+      continue;
+    }
+    if (same_text(key, "mount.principal")) {
+      if (mount_principal) {
+        panic("duplicate mount principal configuration");
+      }
+      mount_principal = image;
+      continue;
+    }
     if (strlen(image) <= 6 || memcmp(image, "app://", 6)) {
       panic("init must name an app:// archive entry: %s", image);
     }
@@ -99,6 +162,19 @@ void user_launch_initial(const char *command_line)
     panic("kernel command line must select a default init");
   }
 
+  struct mount_config mount = {0};
+  if (!!mount_disk != !!mount_principal) {
+    panic("mount.disk and mount.principal must be supplied together");
+  }
+  if (mount_disk) {
+    mount.disk = parse_disk_guid(mount_disk);
+    if (pfs_principal_id_parse(mount_principal, strlen(mount_principal),
+          &mount.principal) != PFS_OK) {
+      panic("mount.principal must be a nonzero 128-bit ID");
+    }
+    mount.enabled = true;
+  }
+
   /* Numeric overrides win over the primary selection regardless of option
    * order. Every workload CPU gets an init; an idle script can simply exit. */
   for (size_t index = primary; index < count; ++index) {
@@ -106,7 +182,7 @@ void user_launch_initial(const char *command_line)
     if (!image && index == primary) {
       image = primary_image;
     }
-    user_launch_init(index, image ? image : default_image);
+    user_launch_init(index, image ? image : default_image, &mount);
   }
   kfree(images);
   kfree(options);
