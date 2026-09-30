@@ -1,14 +1,55 @@
-# Outbound TCP streams
+# TCP listeners and streams
 
-Caelum provides outbound IPv4 TCP through native stream capabilities. The pinned
+Caelum provides IPv4 TCP through native listener and stream capabilities. The pinned
 [lwIP integration](lwip.md) runs in the existing BSP network worker; Caelum keeps
 route/address authority, UDP, ICMP, ARP and NIC ownership. DNS and application
-protocols remain in userspace. There is no POSIX socket layer or listening API.
+protocols remain in userspace. There is no POSIX socket layer.
 
 Init delegates the `tcp` service through session and shell launch. Applications
 use `include/abi/tcp.h` through the SDK and libpyxis's `tcp.h`; helpers borrow
 explicit handles. The boot archive includes the `tcp` request/response utility
 and the transmit-only `ttcp` tool.
+
+## Listening and admission
+
+Trusted init receives separate CONNECT and LISTEN rights on its `tcp` service.
+Normal session startup delegates only CONNECT to the interactive shell and its
+children. An explicit init handoff can create a bound listener and delegate that
+object, without giving the server authority to bind another endpoint.
+
+LISTEN requires the exact configured NIC IPv4 address and a nonzero port, both
+host-order. Wildcard, loopback and ephemeral listening addresses/ports, and
+address reuse are unsupported. Invalid address/port requests return BAD_REQUEST;
+an occupied bind or exhausted transport/listener budget returns QUEUE_FULL.
+Missing TCP identity returns UNAVAILABLE; allocation can return NO_MEMORY. Handle
+reservation precedes bind, and a failed call publishes no handle.
+
+Listeners have independently restrictable INSPECT and ACCEPT rights. INSPECT
+reports the bound endpoint, pending count, capacity and terminal status. ACCEPT
+waits for a completed handshake and returns an ordinary TCP stream with the same
+rights and behavior as CONNECT. Completed handshakes are accepted in arrival order.
+One ACCEPT may be outstanding per shared listener, including an uncollected reply;
+another returns BUSY. Its absolute monotonic deadline is at most 30 seconds ahead.
+Timeout leaves the listener usable and does not remove a connection from its queue.
+The caller's stream object and handle slot are reserved before waiting.
+
+There are at most four listeners, each with four pending connections combined
+across SYN handshakes and established-but-unaccepted streams. Each listener and
+each child also occupies one of the 32 global transport records. New SYNs receive
+no answer when admission is full; peers can retry normally. A handshake expires
+ten seconds after admission; retransmissions do not extend it. Ready connections
+have no idle timeout, and their data shares the existing bounded receive window.
+Accepting releases the pending slot but retains the global transport record.
+Accepted, closing and TIME_WAIT connections can therefore exhaust admission even
+when a listener has pending capacity. No transport record is evicted.
+
+Copies share a listener. Final release stops admission and aborts all unaccepted
+connections; already accepted streams remain independent. Calls retain their
+object while pending. Losing the configured address permanently invalidates its
+listeners and wakes ACCEPT with UNAVAILABLE; INSPECT remains available. Restoring
+an address does not revive the listener. Link changes alone do not retarget it.
+READ, WRITE and ACCEPT are blocking in this task; readiness and nonblocking
+operations belong to the next remote-terminal task.
 
 ## Capability contract
 
@@ -60,11 +101,12 @@ can cancel them without confusing a reused tuple or slot.
 
 | Resource | Current limit |
 | --- | --- |
-| Transport records | 32 globally, including setup, closing and TIME_WAIT |
+| Transport records | 32 globally, including listeners, setup, closing and TIME_WAIT |
+| Listeners / pending connections | Four listeners; four combined half-open/ready connections each |
 | Payload storage | 16 KiB receive window and 16 KiB send budget per connection; allocated as needed |
 | Out-of-order receive | Shares the receive window; at most 16 pbufs |
 | READ/WRITE extent | At most 4 KiB per call; helpers validate returned counts |
-| Pending calls | Eight CONNECT/control, sixteen READ and sixteen WRITE slots, including completed replies |
+| Pending calls | Eight shared CONNECT/LISTEN/ACCEPT/control, sixteen READ and sixteen WRITE slots, including completed replies |
 | Caller deadlines | At most 30 seconds ahead of monotonic time |
 | Unacknowledged progress | 120 seconds without ACK progress, including deferred FIN |
 | Orphan graceful teardown | At most 60 seconds; fully closed FIN_WAIT_2 can expire at lwIP's 20-second limit |
@@ -102,6 +144,44 @@ time out. There is no stdin pump or total-runtime limit. Response EOF is not an
 application-level acknowledgment of the request. HTTP request files are raw
 bytes to this utility; it contains no HTTP or TLS parser. See
 [host request examples](networking.md#tcp-requestresponse-utility).
+
+## Sequential echo server
+
+An opt-in trusted init can create a listener and hand it to the existing `tcp`
+utility. Save this native init script as `/tmp/tcp-init.sh`:
+
+```text
+#!app://shell.pxe
+session app://session.pxe --configure-network --tcp-server 10.0.2.15 5001 --tcp-count 3
+```
+
+Build/boot with `make run INIT=/tmp/tcp-init.sh CPUS=4 VIRTIO_NET=1`, using the
+[usual firmware/emulator overrides](../development/qemu.md) where required. This
+replaces the primary shell with the echo server; the default CPU 2 shell remains
+available. On a one-CPU boot the server uses the BSP's space.
+
+TCP forwarding is not yet a launcher option. Enter QEMU's monitor with Ctrl-a c
+and add forwarding explicitly:
+
+```text
+hostfwd_add pyxis_net tcp:127.0.0.1:15001-10.0.2.15:5001
+```
+
+Return to serial with Ctrl-a c. From the host, use a TCP client that half-closes
+its writing side after stdin EOF and continues reading, for example
+`printf 'hello\n' | socat - TCP:127.0.0.1:15001`. Each connection echoes bytes
+until peer EOF, then shuts down writing and closes. The server retries idle
+ACCEPT/READ deadlines; writes use the utility's ten-second deadline and any other
+connection error stops this simple consumer. It is sequential, so a client that
+stays open prevents the next client from being served.
+
+`--tcp-count 3` launches `tcp --serve 3`: stop admitting when the third stream is
+accepted, finish that independent stream, then exit. Excess pending connections
+are aborted when admission stops. Omit the count to keep serving. The child
+receives only the bound listener, memory, a readable clock and stdout/stderr;
+it receives no LISTEN service, launcher or filesystem roots. The ordinary
+interactive session cannot invoke this handoff successfully because its TCP
+authority is CONNECT-only. No remote command execution is introduced here.
 
 ## Transmit-only ttcp
 
@@ -156,8 +236,7 @@ by the host backend, making the host receiver's count especially important.
 
 ## Remaining work
 
-Listening/accept and successful guest-to-guest services, asynchronous calls and
-multi-object waits, IPv6, DHCP, richer TCP extensions and per-space network
+Asynchronous calls and multi-object waits, IPv6, DHCP, richer TCP extensions and per-space network
 domains remain separate milestones. HTTP/TLS, Retawq and userspace scheme
 providers are future consumers. Keep the [users/authority checkpoint](../wip/users-and-authority.md)
 ahead of remotely accessible services. Writable virtio-fs is an independent

@@ -52,6 +52,7 @@ static void destroy_pcb(u8_t id, void *data)
   KASSERT(id == connection_arg);
   struct tcp_connection *connection = data;
   net_ipv4_cancel_tcp(connection->generation);
+  tcp_listener_detach(connection);
   connection->pcb = NULL;
   /* tcp_err may still be called with this record after this hook returns.
    * Reclamation happens only after returning to the worker, never here. */
@@ -59,6 +60,7 @@ static void destroy_pcb(u8_t id, void *data)
 
 static const struct tcp_ext_arg_callbacks connection_callbacks = {
   .destroy = destroy_pcb,
+  .passive_open = tcp_listener_passive_open,
 };
 
 void tcp_connections_init(void)
@@ -92,11 +94,28 @@ err_t caelum_lwip_pcb_allocated(struct tcp_pcb *pcb)
   return ERR_OK;
 }
 
-uint64_t tcp_connection_generation(const struct tcp_pcb *pcb)
+enum net_result tcp_connection_allocation_status(void)
+{
+  net_worker_assert_context();
+  if (!tcp_identity_ready()) {
+    return NET_UNAVAILABLE;
+  }
+  if (connection_count == NET_TCP_CONNECTION_LIMIT) {
+    return NET_QUEUE_FULL;
+  }
+  return NET_OK;
+}
+
+struct tcp_connection *tcp_connection_from_pcb(const struct tcp_pcb *pcb)
 {
   struct tcp_connection *connection = tcp_ext_arg_get(pcb, connection_arg);
   KASSERT(connection && connection->pcb == pcb);
-  return connection->generation;
+  return connection;
+}
+
+uint64_t tcp_connection_generation(const struct tcp_pcb *pcb)
+{
+  return tcp_connection_from_pcb(pcb)->generation;
 }
 
 static void abort_connection(struct tcp_connection *connection, err_t reason)
@@ -191,11 +210,9 @@ enum net_result net_tcp_prepare(uint32_t destination, uint16_t port, uint64_t de
   if (!port || deadline - now > NET_TCP_MAX_WAIT_NS) {
     return NET_INVALID;
   }
-  if (!tcp_identity_ready()) {
-    return NET_UNAVAILABLE;
-  }
-  if (connection_count == NET_TCP_CONNECTION_LIMIT) {
-    return NET_QUEUE_FULL;
+  enum net_result admission = tcp_connection_allocation_status();
+  if (admission != NET_OK) {
+    return admission;
   }
   struct ipv4_route route;
   enum net_result result = net_ipv4_route(0, destination, &route);
@@ -241,6 +258,10 @@ void net_tcp_release(struct tcp_connection *connection)
   net_worker_assert_context();
   KASSERT(connection && connection->owned);
   connection->owned = false;
+  if (connection->listening) {
+    tcp_listener_close(connection, CALL_ENDPOINT_CLOSED);
+    return;
+  }
   struct tcp_pcb *pcb = connection->pcb;
   bool unread = connection->receive_length || (pcb && (pcb->refused_data || pcb->ooseq));
   /* Read slots retain the object until collected and credited, so final release
@@ -270,6 +291,14 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
   if (!pcb) {
     return;
   }
+  if (connection->listening) {
+    /* Never let lwIP retarget an exact-address listener on address changes.
+     * LISTEN is a smaller PCB and has no stream routing or progress fields. */
+    if (connection->local != net_ipv4_address()) {
+      tcp_listener_close(connection, CALL_UNAVAILABLE);
+    }
+    return;
+  }
   if (pcb->state == TIME_WAIT) {
     /* TIME_WAIT keeps its tuple and admission slot even after an address/link
      * change. Only lwIP's 2*MSL expiry retires it; never the orphan deadline. */
@@ -278,7 +307,7 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
     connection->orphan_deadline = 0;
     return;
   }
-  if (!connection->owned && !connection->orphan_deadline) {
+  if (!connection->owned && !connection->listener && !connection->orphan_deadline) {
     abort_connection(connection, ERR_ABRT);
     return;
   }
@@ -296,7 +325,7 @@ static void service_connection(struct tcp_connection *connection, uint64_t now)
     abort_connection(connection, ERR_TIMEOUT);
     return;
   }
-  if (pcb->state != CLOSED && pcb->state != SYN_SENT) {
+  if (pcb->state != CLOSED && pcb->state != SYN_SENT && pcb->state != SYN_RCVD) {
     connection->setup_deadline = 0;
   }
   if (pcb->unacked || pcb->unsent || (pcb->flags & TF_CLOSEPEND)) {
@@ -324,11 +353,25 @@ void tcp_connections_service(void)
     if (!connection->pcb && !connection->owned) {
       *link = connection->next;
       --connection_count;
+      if (connection->listening) {
+        tcp_listener_record_freed();
+      }
       caelum_lwip_free(connection);
     } else {
       link = &connection->next;
     }
   }
+}
+
+void tcp_connection_abort_pending(struct tcp_connection *listener)
+{
+  net_worker_assert_context();
+  for (struct tcp_connection *connection = connections; connection; connection = connection->next) {
+    if (connection->listener == listener) {
+      tcp_connection_abort(connection, CALL_ENDPOINT_CLOSED);
+    }
+  }
+  KASSERT(!listener->pending_count && !listener->ready_head && !listener->ready_tail);
 }
 
 bool tcp_connections_next_deadline(uint64_t *deadline)

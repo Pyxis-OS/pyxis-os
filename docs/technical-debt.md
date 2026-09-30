@@ -478,6 +478,21 @@ consistency. Revisit the per-capture limit only with a bounded staging and
 concurrency design that preserves this lifetime contract.
 
 
+## Initial TCP listener limits
+
+Native [TCP listeners](devices/tcp.md#listening-and-admission) bind only the exact
+configured NIC IPv4 address, with no wildcard, loopback listener, ephemeral bind
+or reuse. Four listeners and their pending/accepted connections share 32 global
+transport records; TIME_WAIT can block later admission even below the per-listener
+backlog limit. These development bounds provide no per-space quota or protection
+against exhausting the global budget. Revisit them with concrete concurrent-server
+demand and an explicit authority/accounting policy, not by evicting live records.
+
+The initial echo consumer serves one connection at a time. An idle client prevents
+others from being served, and write failure stops the consumer. The next
+[remote-terminal task](wip/remote-terminal.md#focused-implementation-tasks) adds
+readiness/nonblocking operations before a multi-session server is introduced.
+
 ## UDP ICMP errors and ephemeral selection
 
 The first [UDP implementation](devices/networking.md#udp-datagrams-and-deadlines) silently

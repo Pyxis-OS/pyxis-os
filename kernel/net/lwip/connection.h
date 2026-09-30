@@ -20,12 +20,30 @@ struct tcp_connection {
   enum call_status terminal_status;
   uint8_t *receive_data;
   size_t receive_head, receive_length;
+  bool listening;
+  struct tcp_connection *listener; /* Internal owner until ACCEPT or failure. */
+  struct tcp_connection *ready_next;
+  struct tcp_connection *ready_head, *ready_tail;
+  size_t pending_count;
 };
 
 void tcp_connections_init(void);
 void tcp_connections_service(void);
 bool tcp_connections_next_deadline(uint64_t *deadline);
 uint64_t tcp_connection_generation(const struct tcp_pcb *pcb);
+struct tcp_connection *tcp_connection_from_pcb(const struct tcp_pcb *pcb);
+enum net_result tcp_connection_allocation_status(void);
+void tcp_connection_abort_pending(struct tcp_connection *listener);
+
+enum net_result tcp_listener_prepare(uint32_t address, uint16_t port,
+    struct tcp_connection **output);
+void tcp_listener_close(struct tcp_connection *listener, enum call_status status);
+void tcp_listener_inspect(struct tcp_connection *listener, struct tcp_listener_info *info);
+struct tcp_connection *tcp_listener_take(struct tcp_connection *listener);
+void tcp_listener_detach(struct tcp_connection *connection);
+void tcp_listener_record_freed(void);
+err_t tcp_listener_passive_open(u8_t id, struct tcp_pcb_listen *listener,
+    struct tcp_pcb *pcb);
 
 /* Worker-only. Receive may abort on allocation failure; its callback must then
  * return ERR_ABRT. Starting a connection does not publish a handle. */

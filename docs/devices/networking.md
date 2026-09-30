@@ -499,7 +499,7 @@ does not identify a guest-stack failure.
 
 The initial networking milestone is complete. DHCP needs UDP, broadcast support,
 lease deadlines and delegated configuration authority. [DNS](../userland/dns.md) is complete;
-[outbound TCP](tcp.md) is available through native stream capabilities.
+[TCP listeners and streams](tcp.md) are available through native capabilities.
 IPv6, richer routing, network
 isolation and website hosting remain separate scopes in
 [later directions](../wip/later-os-directions.md#networking-and-applications).
@@ -788,10 +788,12 @@ Each connect/read/write has a fresh ten-second deadline. Failures report to
 stderr, abort/close the stream and exit unsuccessfully. The request uses a 4 KiB
 transfer buffer with no fixed file-size limit, but all sending precedes reading.
 A protocol requiring concurrent progress in both directions can stall and time
-out. There is no stdin pump, listener or total-runtime limit. Normal completion
+out. This request/response mode has no stdin pump or total-runtime limit. Normal completion
 means response EOF, not proof that a remote application processed the request.
 See [outbound TCP](tcp.md) for transport limits and the transmit-only
 [`ttcp` utility](tcp.md#transmit-only-ttcp).
+Trusted init can separately delegate a bound listener to the
+[sequential `tcp --serve` consumer](tcp.md#sequential-echo-server).
 
 ## Further networking work
 
@@ -799,8 +801,8 @@ Wildcard/connected UDP, broadcast/multicast, fragmentation, IPv6, asynchronous
 send and waiting on multiple objects remain outside this implementation. DHCP
 needs unconfigured-address and broadcast handling as well as configuration
 authority and lease deadlines; explicit-address unicast UDP alone is insufficient.
-DNS queries, hostname ping and [outbound TCP](tcp.md) are implemented.
-Listening and application protocols remain future work.
+DNS queries, hostname ping and [native TCP listeners/streams](tcp.md) are implemented.
+Readiness and remote-terminal application protocols remain future work.
 ICMP errors and generic UDP ephemeral-port selection are
 tracked in [technical debt](../technical-debt.md#udp-icmp-errors-and-ephemeral-selection).
 Keep the [users/authority checkpoint](../wip/users-and-authority.md) ahead of broader
