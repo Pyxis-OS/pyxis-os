@@ -42,8 +42,10 @@ Each admitted bounded mutation is committed before successful acknowledgement.
 This stronger initial behavior fits the existing public promise that ordinary
 write success need not imply durability; applications should still explicitly
 sync when durability matters. Large writes may span transactions and report
-committed partial progress. Do not promise whole-write atomicity or acknowledge
-an uncertain publication as successful.
+committed partial progress. Large shrinks likewise publish successive bounded
+steps and report the last confirmed length, as specified below. Do not promise
+whole-write or whole-shrink atomicity or acknowledge an uncertain publication
+as successful.
 
 Publication remains pool-wide and serialized. A volume checkpoint covers all
 accepted changes in that volume before its ordering point; sibling-volume
@@ -115,6 +117,39 @@ pool-health checks; storage remains charged while the unlinked file is retained.
 Fresh ordinary acquisition by path or object ID cannot recover the unlinked
 object. Permitted delegation of an existing handle remains possible without
 enlarging its rights. Reusing its former name does not retarget retained handles.
+
+## Agreed partial large shrinks
+
+Agreed during task 1, 2026-09-30; this is a behavior contract, not an implemented
+resize API. Shrink a large file through successive bounded transactions from
+the tail toward the requested length. Each transaction publishes a valid shorter
+file and retires only the storage covered by its admission bound. Bound both
+metadata edits and physical blocks retired: one extent can describe far more
+data than a transaction can charge to workspace. Sparse ranges need no data
+retirement, but still obey the metadata and publication bounds.
+
+A successful resize reaches exactly the requested length. If a later step fails,
+return the last confirmed committed length, operation outcome and pool health
+independently. Earlier shrink steps remain committed; there is no rollback to
+the original length. Stop at the first failed or uncertain step. An uncertain
+publication may have committed a further reduction beyond the confirmed length;
+it is not automatically retryable, and ordinary access stops until recovery.
+Post-commit maintenance failure preserves the confirmed length and follows the
+existing cleanup/read-availability rules. A crash can leave any committed
+intermediate length. A shrink that fits one admitted transaction has one
+publication boundary.
+
+Every intermediate state must satisfy the existing file-range contract: extent
+mappings fit the published length rounded up to blocks. Do not publish the final
+short length while leaving out-of-range mappings attached for later cleanup.
+Bytes discarded from a retained partial block must not reappear on later growth;
+growth remains zero-filled. Retained handles observe the latest committed length
+under the existing live-handle contract.
+
+This agreement introduces no persistent detached-tail representation for atomic
+large shrinks. The orphan index remains bookkeeping for unlinked objects, not
+for a named file's discarded tail. Concrete result fields, batch limits and
+admission costs remain task-1 work.
 
 ## Agreed checkpoint authority
 
@@ -278,7 +313,8 @@ An operation result preserves three independent facts:
 
 - Confirmed progress: for a write, the contiguous byte prefix whose transactions
   completed both required flushes. No byte in an uncertain transaction contributes
-  to that count. Namespace operations report whether their transaction committed.
+  to that count. For a shrink, the last confirmed committed length, excluding any
+  uncertain step. Namespace operations report whether their transaction committed.
 - Operation completion: complete, stopped with a known failure, or outcome
   unknown for the transaction being published. Preserve the failure cause.
 - Pool health and any maintenance failure: whether ordinary access and mutation
@@ -301,9 +337,9 @@ that candidate. It may leave unreachable bytes in previously free storage.
 
 | Failure point | Operation outcome | Pool access afterward |
 | --- | --- | --- |
-| Ordinary permission, quota, workspace or memory admission failure | Current transaction not committed; retain any earlier confirmed prefix | Reads and later mutations remain available. |
-| Replacement write or first flush fails before slot publication | Current transaction not committed; retain any earlier confirmed prefix | Stop mutation until recovery. Reads, metadata, listing and lookup may use the last confirmed state while its integrity remains established. |
-| Slot write or final flush has an uncertain outcome | Current transaction unknown; retain any earlier confirmed prefix | Stop all ordinary access until recovery, including reads, metadata, listing, lookup, new acquisition and derivation through existing handles. |
+| Ordinary permission, quota, workspace or memory admission failure | Current transaction not committed; retain any earlier confirmed progress | Reads and later mutations remain available. |
+| Replacement write or first flush fails before slot publication | Current transaction not committed; retain any earlier confirmed progress | Stop mutation until recovery. Reads, metadata, listing and lookup may use the last confirmed state while its integrity remains established. |
+| Slot write or final flush has an uncertain outcome | Current transaction unknown; retain any earlier confirmed progress | Stop all ordinary access until recovery, including reads, metadata, listing, lookup, new acquisition and derivation through existing handles. |
 | Cleanup after a confirmed user commit fails before its own slot publication | User commit remains confirmed; report cleanup failure separately | A cleanup write/flush failure stops mutation until recovery. Reads may use the last confirmed state, including the confirmed user commit, while its integrity remains established. |
 | Cleanup's own slot publication becomes uncertain | User commit remains confirmed; cleanup outcome is unknown | Stop all ordinary access until recovery, even if cleanup was intended to change only allocation bookkeeping. |
 
@@ -395,6 +431,65 @@ mechanism, and implementation PR boundaries. Numerical admission proofs must
 cover the complete maintenance cycle, its own allocation-map/root replacements
 and the bounded remainder; existing percentage reserves establish none of these
 cost bounds.
+
+## Agreed whole-map fallback
+
+Agreed during task 1, 2026-09-30; the allocator is not implemented. Provide a
+bounded whole-allocation-map rebuild when incremental map edits cannot close
+within their admitted bound. A tree-depth bound alone does not bound allocator
+self-accounting: retiring one old map node changes the leaf describing that
+block, whose replacement can require another leaf to change. Valid physical
+layouts can extend this dependency through every map leaf. Contiguous allocation
+of new nodes does not eliminate the dependency through old nodes.
+
+The fallback constructs a complete candidate map from bounded, validated
+allocation intervals. It does not rewrite file data or require a whole-filesystem
+scan for each transaction. Allocate its replacement map nodes, changed catalog
+path and pool root from storage already proven reusable. Include every new
+allocation and old retirement in the candidate; allocate nothing from storage
+being freed in that same publication. Plan the map shape before allocating its
+nodes, so accounting for those nodes cannot cause unbounded iterative growth.
+All allocated nodes must be reachable; unused live padding is not permitted.
+
+The following construction establishes a finite per-publication envelope for
+a maintenance rebuild with at most one fixed-size volume-catalog update:
+
+- Form a canonical base map after recording old map/root/catalog-path retirements
+  and eligible frees, but before allocating replacement pool metadata. Let `R`
+  be its record count and `C <= 8` the replacement catalog-path block count.
+  The base has no live pool allocation born in the candidate generation.
+- The existing 4 KiB layout fits 46 allocation records per leaf and 65 numeric
+  child references per internal node. Choose
+  `S = ceil(23 * (R + 2*C + 4) / 21)` and `L = ceil(S / 46)` leaves.
+  Let `F(S)` count those leaves and their internal levels, with each next level
+  using `ceil(previous / 65)` nodes, stopping at one root. Redistribute children
+  as needed to avoid a single-child internal node.
+- Allocate exactly `N = F(S) + C + 1` blocks, including the new pool root.
+  Even arbitrarily fragmented placement adds at most `2*N` map records.
+  Candidate-generation births prevent new pool allocations from merging across
+  old non-free boundaries, so the final count is between `R` and `R + 2*N`.
+  Since `F(S) <= 2*L - 1 <= ceil(S / 23)`, the chosen `S` bounds that final
+  count. Also `L <= R`, so records can fill every planned leaf without empty
+  nodes; underfilled nonempty leaves are valid in the current format.
+
+For example, `R = 4096` and `C = 8` give `S = 4508`, 98 leaves, three internal
+nodes and `N = 110` replacement blocks: 440 KiB of new pool metadata. This is
+layout arithmetic, not a measured implementation cost or a total reserve minimum.
+It excludes new volume metadata/data, accumulated retired storage and the
+additional publications needed for retained-root advancement and safe reuse.
+
+Admission must check record/depth limits, bounded planning memory, permanent
+pool-metadata growth and available workspace before publication. The complete
+proof must also cover old sparsely populated maps, operation-specific edits,
+opening requirements, the accumulated maintenance remainder and progress when
+ordinary workspace is exhausted. Do not infer those bounds from a dense rebuilt
+map or claim that the formatter's current reserve defaults suffice. No format
+change follows merely from using this fallback.
+
+Whole-map rebuilding may be expensive for a fragmented pool. The accepted
+tradeoff is a finite, accounted fallback; there is no claim about its frequency
+or latency. Revisit incremental optimization after correctness and admission
+bounds are established and measured workloads show the need.
 
 ## Publication, reclamation and admission gates
 
