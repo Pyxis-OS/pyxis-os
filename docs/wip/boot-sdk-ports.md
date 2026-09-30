@@ -115,10 +115,11 @@ for the persistent development loop or as a replacement for the boot archive.
 The selected next milestone is [native read-only filesystem mounts](native-readonly-filesystem.md):
 init-selected GPT partition and volume, policy-approved directory/file capabilities,
 ordinary reads and executable loading, followed by scoped capacity information
-and Fastfetch Disk. Tasks 1–6 are complete: the contract, core continuation,
+and Fastfetch Disk. Tasks 1–7 are complete: the contract, core continuation,
 bounded [kernel adapter](../devices/filesystem-native-adapter.md), policy-approved
 objects, init mounting/delegation, executable loading and scoped filesystem
-information are implemented. Task 7 adds the Fastfetch Disk consumer.
+information and the Fastfetch Disk consumer are implemented. Task 8 validates
+the combined workflow and closes the milestone.
 Writable recovery and FUSE stay separate.
 
 The [I/O reliability and attribution report](../development/io-reliability-attribution.md)
