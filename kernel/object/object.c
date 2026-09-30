@@ -201,7 +201,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~(LAUNCHER_RIGHT_LAUNCH |
         (launcher_execution_group(object) ? 0 : LAUNCHER_RIGHT_CREATE_GROUP)));
   case OBJECT_EXECUTION_GROUP:
-    return !(rights & ~EXECUTION_GROUP_RIGHT_CONTROL);
+    return !(rights & ~(EXECUTION_GROUP_RIGHT_CONTROL | EXECUTION_GROUP_RIGHT_WAIT));
   case OBJECT_ENDPOINT_SERVICE:
     return !(rights & ~ENDPOINT_SERVICE_RIGHT_CREATE);
   case OBJECT_ENDPOINT_RECEIPT:

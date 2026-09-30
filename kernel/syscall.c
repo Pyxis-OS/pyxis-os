@@ -353,7 +353,7 @@ static struct syscall_result call_object(handle_t handle,
   }
 }
 
-struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
+static struct syscall_result dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
                          uint64_t arg3, uint64_t arg4, uint64_t arg5,
                          uint64_t arg6)
 {
@@ -380,4 +380,13 @@ struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t 
   default:
     return (struct syscall_result){UINT64_MAX, arg3};
   }
+}
+
+struct syscall_result syscall_dispatch(uint64_t number, uint64_t arg1, uint64_t arg2,
+    uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6)
+{
+  task_syscall_enter();
+  struct syscall_result result = dispatch(number, arg1, arg2, arg3, arg4, arg5, arg6);
+  task_syscall_leave();
+  return result;
 }

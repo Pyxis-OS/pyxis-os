@@ -107,6 +107,7 @@ struct bsp_request *bsp_request_prepare(enum bsp_service service)
   memset(request, 0, layout->size);
   *request = (struct bsp_request){
     .wait = task_wait_prepare(),
+    .cleanup_group = task_cleanup_group(),
     .service = service,
     .state = BSP_REQUEST_PREPARED,
   };
@@ -209,6 +210,7 @@ void bsp_request_complete(struct bsp_request *request)
   KASSERT(!request->next && request->wait);
   struct task_wait *wait = request->wait;
   request->wait = NULL;
+  request->cleanup_group = NULL;
   request->state = BSP_REQUEST_COMPLETE;
   /* Results and completion precede notification. The caller may consume,
    * reuse or retire storage as soon as wake publishes it; no accesses follow. */
@@ -217,12 +219,15 @@ void bsp_request_complete(struct bsp_request *request)
 
 static void service_request(struct bsp_request *request)
 {
+  struct execution_group *previous = object_cleanup_enter(request->cleanup_group);
   switch (request->service) {
   case BSP_SERVICE_READINESS:
+    object_cleanup_leave(previous);
     request->state = BSP_REQUEST_FORWARDED;
     readiness_submit((struct readiness_request *)request);
     return;
   case BSP_SERVICE_HOSTFS:
+    object_cleanup_leave(previous);
     request->state = BSP_REQUEST_FORWARDED;
     hostfs_submit((struct hostfs_request *)request);
     /* Forwarding can complete immediately. The worker owns final completion;
@@ -264,6 +269,7 @@ static void service_request(struct bsp_request *request)
   default:
     KASSERT(false);
   }
+  object_cleanup_leave(previous);
   bsp_request_complete(request);
 }
 

@@ -678,12 +678,16 @@ bool hostfs_service(void)
     request->profile.service_started_ns = arch_monotonic_ns();
     session->profile = &request->profile.transport;
   }
+  flags = cpu_save_interrupts();
+  struct execution_group *previous = object_cleanup_enter(request->request.cleanup_group);
+  cpu_restore_interrupts(flags);
   request->status = perform(request);
   session->profile = NULL;
   flags = cpu_save_interrupts();
   if (request->profile.active) {
     request->profile.service_ended_ns = arch_monotonic_ns();
   }
+  object_cleanup_leave(previous);
   complete_request(request);
   /* Completion returns the record and any resulting object to the caller. */
   cpu_restore_interrupts(flags);

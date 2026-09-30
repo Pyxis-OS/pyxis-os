@@ -12,6 +12,7 @@
 #include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 #include "launcher_internal.h"
@@ -69,7 +70,8 @@ static void create_execution_group(struct launcher_request *request)
   struct kernel_object *launcher = create_launcher(group);
   if (launcher) {
     struct kernel_object *objects[] = {&group->object, launcher};
-    const uint64_t rights[] = {EXECUTION_GROUP_RIGHT_CONTROL, LAUNCHER_RIGHT_LAUNCH};
+    const uint64_t rights[] = {EXECUTION_GROUP_RIGHT_CONTROL | EXECUTION_GROUP_RIGHT_WAIT,
+        LAUNCHER_RIGHT_LAUNCH};
     const uint64_t transport[] = {0, 0};
     handle_t handles[2];
     enum capability_result result;
@@ -103,6 +105,8 @@ void launcher_request_execute(struct launcher_request *request)
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->request.state == BSP_REQUEST_SERVICING);
+  struct execution_group *previous = object_cleanup_enter(request->execution_group ?
+      request->execution_group : request->request.cleanup_group);
   switch (request->action) {
   case LAUNCH_CREATE_EXECUTION_GROUP:
     create_execution_group(request);
@@ -149,6 +153,7 @@ void launcher_request_execute(struct launcher_request *request)
   default:
     KASSERT(false);
   }
+  object_cleanup_leave(previous);
   request->capture = NULL;
   request->group = NULL;
   request->parent = NULL;
@@ -483,6 +488,10 @@ static enum call_status capture_launch_request(const struct launch_request *requ
   if (!capture) {
     return CALL_NO_MEMORY;
   }
+  if (task_stop_requested()) {
+    discard_launch_capture(capture);
+    return CALL_ENDPOINT_CLOSED;
+  }
   capture_startup(capture, request);
   if (capture->error != CALL_OK) {
     enum call_status error = capture->error;
@@ -505,8 +514,16 @@ static enum call_status capture_launch_request(const struct launch_request *requ
     capture->host_image_size = pending->count;
     pending->captured = NULL;
     hostfs_request_release(pending);
-  } else {
-    file_begin_operation(capture->image);
+  } else if (!file_begin_operation(capture->image)) {
+    discard_launch_capture(capture);
+    return CALL_ENDPOINT_CLOSED;
+  }
+  if (task_stop_requested()) {
+    if (capture->image->backing != FILE_HOST) {
+      file_end_operation(capture->image);
+    }
+    discard_launch_capture(capture);
+    return CALL_ENDPOINT_CLOSED;
   }
 
   *result = capture;
@@ -647,8 +664,13 @@ struct syscall_result launcher_call(struct kernel_object *object, uint64_t right
   if (group && (group->space != parent->space || group->cpu_index != arch_cpu_index())) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  if (operation == LAUNCHER_LAUNCH_BATCH) {
-    return launch_batch(group, request_address, request_size, reply_address, reply_capacity);
+  enum call_status status = execution_group_launch_begin(group, parent->space, arch_cpu_index());
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
   }
-  return launch_one(group, request_address, request_size, reply_address, reply_capacity);
+  struct syscall_result result = operation == LAUNCHER_LAUNCH_BATCH ?
+      launch_batch(group, request_address, request_size, reply_address, reply_capacity) :
+      launch_one(group, request_address, request_size, reply_address, reply_capacity);
+  execution_group_launch_end(group);
+  return result;
 }

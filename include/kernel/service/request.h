@@ -2,6 +2,7 @@
 #define KERNEL_SERVICE_REQUEST_H
 
 struct task_wait;
+struct execution_group;
 
 enum bsp_service {
   BSP_SERVICE_PIPE_CREATE,
@@ -39,6 +40,8 @@ enum bsp_request_state {
 struct bsp_request {
   struct bsp_request *next;
   struct task_wait *wait;
+  /* Borrowed while the uninterruptible caller still owns its member reference. */
+  struct execution_group *cleanup_group;
   enum bsp_service service;
   enum bsp_request_state state;
 };

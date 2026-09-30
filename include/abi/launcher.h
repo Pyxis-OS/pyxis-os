@@ -19,7 +19,7 @@
 
 /* CREATE_GROUP sends only a message_header and requires CREATE_GROUP on an
  * unbound launcher. The ungrouped caller remains outside the new group. Both
- * handles are returned atomically: CONTROL supervision and a LAUNCH-only
+ * handles are returned atomically: CONTROL|WAIT supervision and a LAUNCH-only
  * launcher bound to the group, caller's space and assigned CPU. Copies retain
  * that binding. A member can receive only launchers bound to its own group;
  * membership is permanent and inherited by every child. */

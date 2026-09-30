@@ -3,6 +3,7 @@
 #include <arch/smp.h>
 #include <kernel/net/interface.h>
 #include <kernel/object/terminal.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/user/readiness.h>
@@ -46,10 +47,12 @@ void readiness_complete(struct readiness_request *request, enum call_status stat
 {
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  struct execution_group *previous = object_cleanup_enter(request->request.cleanup_group);
   for (size_t i = 0; i < request->count; ++i) {
     object_release(request->interests[i].object);
     request->interests[i].object = NULL;
   }
+  object_cleanup_leave(previous);
   request->status = status;
   bsp_request_complete(&request->request);
 }
@@ -68,6 +71,9 @@ bool readiness_service(struct bsp_request **active_list)
       case OBJECT_TCP:
       case OBJECT_TCP_LISTENER:
         interest->ready = tcp_readiness_events(interest);
+        break;
+      case OBJECT_EXECUTION_GROUP:
+        interest->ready = execution_group_ready((struct execution_group *)interest->object);
         break;
       case OBJECT_TERMINAL_ATTACHMENT:
         interest->ready = terminal_attachment_ready(interest->object, interest->events);

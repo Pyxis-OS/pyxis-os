@@ -253,9 +253,6 @@ bool tcp_reads_service(void)
       struct execution_group *previous = object_cleanup_enter(group);
       object_release(&call->stream->object);
       object_cleanup_leave(previous);
-      if (group) {
-        execution_group_cleanup_end(group);
-      }
       lock_reads();
       struct task_wait *wait = call->wait;
       *call = (struct tcp_read){0};
@@ -263,6 +260,9 @@ bool tcp_reads_service(void)
         task_wait_wake(wait);
       }
       unlock_reads();
+      if (group) {
+        execution_group_cleanup_end(group);
+      }
       cpu_restore_interrupts(flags);
       worked = true;
       continue;

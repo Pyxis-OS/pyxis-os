@@ -77,6 +77,7 @@ static enum call_status install_grants(struct launch_capture *capture,
 
 static void launcher_batch_abort(struct launch_preparation *group)
 {
+  struct execution_group *previous = object_cleanup_enter(group->execution_group);
   for (size_t i = group->count; i > 0; --i) {
     struct launch_prepared *stage = &group->stages[i - 1];
     KASSERT(capability_close(&group->parent->capabilities, stage->observer) == CAP_OK);
@@ -84,6 +85,7 @@ static void launcher_batch_abort(struct launch_preparation *group)
     KASSERT(process_destroy(stage->process) == MM_OK);
   }
   group->count = 0;
+  object_cleanup_leave(previous);
 }
 
 struct launch_preparation *launcher_batch_create(void)

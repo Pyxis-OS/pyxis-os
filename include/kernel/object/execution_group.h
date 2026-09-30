@@ -7,18 +7,30 @@
 
 struct space;
 struct task;
+struct task_wait_link;
 
-/* Immutable placement. Lock protects admission, controlling grants and live
- * member count. A process owns one storage reference from preparation through
- * final task reclamation; only published members contribute to members. */
+struct execution_group_member {
+  struct execution_group_member *next;
+  struct task *task;
+};
+
+/* Immutable placement. Lock protects admission, controlling grants, member links
+ * and completion counters. A process owns one storage reference from preparation
+ * through final reclamation; only published members contribute to members. */
 struct execution_group {
   struct kernel_object object;
   struct space *space;
   size_t cpu_index;
   atomic_bool locked;
   bool sealed;
+  bool stopping;
+  bool complete;
   size_t controllers;
   size_t members;
+  size_t launches;
+  size_t cleanup_pending;
+  struct execution_group_member *first_member;
+  struct task_wait_link *waiters;
 };
 
 /* BSP, IF=0. Returns one storage reference, no controlling authority. */
@@ -37,6 +49,17 @@ enum call_status execution_group_publish(struct execution_group *group,
 /* BSP, IF=0, after process, kernel stack and task storage have been reclaimed.
  * Removes one published member and consumes its storage reference. */
 void execution_group_member_complete(struct execution_group *group);
+
+/* Admitted preparation owns storage until all staging has been disposed. */
+enum call_status execution_group_launch_begin(struct execution_group *group,
+    struct space *space, size_t cpu_index);
+void execution_group_launch_end(struct execution_group *group);
+void execution_group_member_detach(struct execution_group *group,
+    struct execution_group_member *member);
+/* Each pending cleanup owns one storage reference; callbacks may transfer it. */
+void execution_group_cleanup_begin(struct execution_group *group);
+void execution_group_cleanup_end(struct execution_group *group);
+uint64_t execution_group_ready(struct execution_group *group);
 
 bool execution_group_authority_retain(struct kernel_object *object, uint64_t rights);
 void execution_group_authority_release(struct kernel_object *object, uint64_t rights);
