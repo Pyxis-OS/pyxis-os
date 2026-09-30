@@ -9,15 +9,17 @@ struct vm_space;
 struct private_allocation;
 struct process_control;
 struct endpoint;
+struct execution_group;
 
 /* One user task per process. Owns address_space, private allocation records,
- * capabilities and a process-control reference. space is borrowed from the initialized set and must outlive
+ * capabilities, a process-control reference and optional execution-group storage. space is borrowed from the initialized set and must outlive
  * the process. */
 struct process {
   struct space *space;
   struct vm_space *address_space;
   struct capability_table capabilities;
   struct process_control *control; /* Owned reference; reaper takes it before destruction. */
+  struct execution_group *execution_group; /* Owned storage; reaper completes published membership. */
   struct endpoint *endpoints; /* BSP-owned weak list of receiving endpoints. */
   struct private_allocation *allocations; /* Private-memory service regions only. */
   uintptr_t startup_address; /* Read-only record in address_space; zero until prepared. */
@@ -42,7 +44,9 @@ enum mm_result process_create(struct space *space, struct vm_space *address_spac
  * the remaining resources stay intact. In-flight presentation may retain only pixel backing.
  * Object references are released for BSP reaping; the owning space survives.
  * Releases any remaining control reference without publishing completion; the task reaper takes that reference first and
- * publishes only after also reclaiming the task stack and metadata. */
+ * publishes only after also reclaiming the task stack and metadata. Published
+ * execution-group membership is likewise transferred to the reaper first;
+ * destruction of an unpublished process only releases its group storage. */
 enum mm_result process_destroy(struct process *process);
 
 #endif

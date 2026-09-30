@@ -153,7 +153,8 @@ void user_launch_init(size_t cpu_index, const char *image_uri)
       capability_install(&process->capabilities, udp, UDP_SERVICE_RIGHT_OPEN, 0, &udp_handle) != CAP_OK ||
       capability_install(&process->capabilities, echo, ECHO_RIGHT_SEND, 0, &echo_handle) != CAP_OK ||
       capability_install(&process->capabilities, clock, CLOCK_RIGHTS, 0, &clock_handle) != CAP_OK ||
-      capability_install(&process->capabilities, launcher, LAUNCHER_RIGHT_LAUNCH, 0, &launcher_handle) != CAP_OK ||
+      capability_install(&process->capabilities, launcher,
+          LAUNCHER_RIGHT_LAUNCH | LAUNCHER_RIGHT_CREATE_GROUP, 0, &launcher_handle) != CAP_OK ||
       capability_install(&process->capabilities, &process->space->display->object,
           DISPLAY_RIGHT_DRAW, 0, &display_handle) != CAP_OK) {
     goto fail;

@@ -9,25 +9,87 @@
 #include <kernel/memory.h>
 #include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/user_memory.h>
 
 #include "launcher_internal.h"
 
+struct launcher {
+  struct kernel_object object;
+  struct execution_group *execution_group; /* Owned storage, no supervision. */
+};
+
+struct execution_group *launcher_execution_group(const struct kernel_object *object)
+{
+  KASSERT(object->type == OBJECT_LAUNCHER);
+  return ((const struct launcher *)object)->execution_group;
+}
+
 static void destroy_launcher(struct kernel_object *object)
 {
+  struct execution_group *group = launcher_execution_group(object);
+  if (group) {
+    object_release(&group->object);
+  }
   kfree(object);
+}
+
+static struct kernel_object *create_launcher(struct execution_group *group)
+{
+  KASSERT(arch_cpu_index() == 0);
+  struct launcher *launcher = kmalloc(sizeof(*launcher));
+  if (!launcher) {
+    return NULL;
+  }
+  if (group && !object_retain(&group->object)) {
+    kfree(launcher);
+    return NULL;
+  }
+  launcher->execution_group = group;
+  object_init(&launcher->object, OBJECT_LAUNCHER, destroy_launcher);
+  return &launcher->object;
 }
 
 struct kernel_object *launcher_create(void)
 {
-  KASSERT(arch_cpu_index() == 0);
-  struct kernel_object *object = kmalloc(sizeof(*object));
-  if (object) {
-    object_init(object, OBJECT_LAUNCHER, destroy_launcher);
+  return create_launcher(NULL);
+}
+
+static void create_execution_group(struct launcher_request *request)
+{
+  struct process *parent = request->parent;
+  KASSERT(parent && !parent->execution_group);
+  request->result = CALL_NO_MEMORY;
+  struct execution_group *group = execution_group_create(parent->space, request->cpu_index);
+  if (!group) {
+    return;
   }
-  return object;
+  struct kernel_object *launcher = create_launcher(group);
+  if (launcher) {
+    struct kernel_object *objects[] = {&group->object, launcher};
+    const uint64_t rights[] = {EXECUTION_GROUP_RIGHT_CONTROL, LAUNCHER_RIGHT_LAUNCH};
+    const uint64_t transport[] = {0, 0};
+    handle_t handles[2];
+    enum capability_result result;
+    while ((result = capability_insert_batch(&parent->capabilities, objects,
+        rights, transport, 2, handles)) == CAP_FULL) {
+      result = capability_grow(&parent->capabilities);
+      if (result != CAP_OK) {
+        break;
+      }
+    }
+    if (result == CAP_OK) {
+      request->execution_reply = (struct execution_group_create_reply){handles[0], handles[1]};
+      request->result = CALL_OK;
+    } else {
+      KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
+      request->result = result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
+    }
+    object_release(launcher);
+  }
+  object_release(&group->object);
 }
 
 static void discard_capture(struct launch_capture *capture)
@@ -42,6 +104,9 @@ void launcher_request_execute(struct launcher_request *request)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->request.state == BSP_REQUEST_SERVICING);
   switch (request->action) {
+  case LAUNCH_CREATE_EXECUTION_GROUP:
+    create_execution_group(request);
+    break;
   case LAUNCH_ALLOCATE:
     request->capture_result = kmalloc(sizeof(*request->capture_result));
     if (request->capture_result) {
@@ -50,8 +115,8 @@ void launcher_request_execute(struct launcher_request *request)
       request->result = CALL_NO_MEMORY;
     }
     break;
-  case LAUNCH_GROUP_CREATE:
-    request->group_result = launcher_group_create();
+  case LAUNCH_BATCH_CREATE:
+    request->group_result = launcher_batch_create();
     if (!request->group_result) {
       request->result = CALL_NO_MEMORY;
     }
@@ -59,27 +124,27 @@ void launcher_request_execute(struct launcher_request *request)
   case LAUNCH_START:
     KASSERT(request->capture && request->parent && !request->group);
     request->result = launcher_start(request->capture, request->parent,
-        request->cpu_index, &request->child);
+        request->cpu_index, request->execution_group, &request->child);
     discard_capture(request->capture);
     break;
-  case LAUNCH_GROUP_PREPARE:
+  case LAUNCH_BATCH_PREPARE:
     KASSERT(request->capture && request->group && request->parent);
-    request->result = launcher_group_prepare(request->group, request->capture,
-        request->parent, request->cpu_index);
+    request->result = launcher_batch_prepare(request->group, request->capture,
+        request->parent, request->cpu_index, request->execution_group);
     discard_capture(request->capture);
     break;
   case LAUNCH_DISCARD:
     KASSERT(request->capture && !request->group && !request->parent);
     discard_capture(request->capture);
     break;
-  case LAUNCH_GROUP_PUBLISH:
+  case LAUNCH_BATCH_PUBLISH:
     KASSERT(request->group && !request->capture && !request->parent);
-    launcher_group_publish(request->group, request->children);
-    launcher_group_discard(request->group);
+    request->result = launcher_batch_publish(request->group, request->children);
+    launcher_batch_discard(request->group);
     break;
-  case LAUNCH_GROUP_DISCARD:
+  case LAUNCH_BATCH_DISCARD:
     KASSERT(request->group && !request->capture && !request->parent);
-    launcher_group_discard(request->group);
+    launcher_batch_discard(request->group);
     break;
   default:
     KASSERT(false);
@@ -87,10 +152,12 @@ void launcher_request_execute(struct launcher_request *request)
   request->capture = NULL;
   request->group = NULL;
   request->parent = NULL;
+  request->execution_group = NULL;
 }
 
 static struct launcher_request *request_launch_service(enum launcher_action action,
-    struct launch_capture *capture, struct launch_group *group)
+    struct launch_capture *capture, struct launch_preparation *group,
+    struct execution_group *execution_group)
 {
   struct launcher_request *request =
       (struct launcher_request *)bsp_request_prepare(BSP_SERVICE_LAUNCHER);
@@ -99,10 +166,12 @@ static struct launcher_request *request_launch_service(enum launcher_action acti
     .action = action,
     .capture = capture,
     .group = group,
+    .execution_group = execution_group,
     .result = CALL_OK,
     .child = HANDLE_INVALID,
   };
-  if (action == LAUNCH_START || action == LAUNCH_GROUP_PREPARE) {
+  if (action == LAUNCH_START || action == LAUNCH_BATCH_PREPARE ||
+      action == LAUNCH_CREATE_EXECUTION_GROUP) {
     request->parent = process_current();
     KASSERT(request->parent);
     request->cpu_index = arch_cpu_index();
@@ -113,7 +182,7 @@ static struct launcher_request *request_launch_service(enum launcher_action acti
 
 static struct launch_capture *allocate_launch_capture(void)
 {
-  struct launcher_request *request = request_launch_service(LAUNCH_ALLOCATE, NULL, NULL);
+  struct launcher_request *request = request_launch_service(LAUNCH_ALLOCATE, NULL, NULL, NULL);
   struct launch_capture *capture = request->capture_result;
   request->capture_result = NULL;
   bsp_request_release(&request->request);
@@ -122,47 +191,50 @@ static struct launch_capture *allocate_launch_capture(void)
 
 static void discard_launch_capture(struct launch_capture *capture)
 {
-  struct launcher_request *request = request_launch_service(LAUNCH_DISCARD, capture, NULL);
+  struct launcher_request *request = request_launch_service(LAUNCH_DISCARD, capture, NULL, NULL);
   bsp_request_release(&request->request);
 }
 
-static enum call_status launch_process(struct launch_capture *capture, handle_t *child)
+static enum call_status launch_process(struct launch_capture *capture,
+    struct execution_group *execution_group, handle_t *child)
 {
-  struct launcher_request *request = request_launch_service(LAUNCH_START, capture, NULL);
+  struct launcher_request *request = request_launch_service(LAUNCH_START, capture, NULL, execution_group);
   *child = request->child;
   enum call_status result = request->result;
   bsp_request_release(&request->request);
   return result;
 }
 
-static struct launch_group *create_launch_group(void)
+static struct launch_preparation *create_launch_batch(void)
 {
-  struct launcher_request *request = request_launch_service(LAUNCH_GROUP_CREATE, NULL, NULL);
-  struct launch_group *group = request->group_result;
+  struct launcher_request *request = request_launch_service(LAUNCH_BATCH_CREATE, NULL, NULL, NULL);
+  struct launch_preparation *group = request->group_result;
   request->group_result = NULL;
   bsp_request_release(&request->request);
   return group;
 }
 
-static enum call_status prepare_launch_group(struct launch_group *group,
-    struct launch_capture *capture)
+static enum call_status prepare_launch_batch(struct launch_preparation *group,
+    struct launch_capture *capture, struct execution_group *execution_group)
 {
-  struct launcher_request *request = request_launch_service(LAUNCH_GROUP_PREPARE, capture, group);
+  struct launcher_request *request = request_launch_service(LAUNCH_BATCH_PREPARE, capture, group, execution_group);
   enum call_status result = request->result;
   bsp_request_release(&request->request);
   return result;
 }
 
-static void publish_launch_group(struct launch_group *group, handle_t *children)
+static enum call_status publish_launch_batch(struct launch_preparation *group, handle_t *children)
 {
-  struct launcher_request *request = request_launch_service(LAUNCH_GROUP_PUBLISH, NULL, group);
+  struct launcher_request *request = request_launch_service(LAUNCH_BATCH_PUBLISH, NULL, group, NULL);
   memcpy(children, request->children, sizeof(request->children));
+  enum call_status status = request->result;
   bsp_request_release(&request->request);
+  return status;
 }
 
-static void discard_launch_group(struct launch_group *group)
+static void discard_launch_batch(struct launch_preparation *group)
 {
-  struct launcher_request *request = request_launch_service(LAUNCH_GROUP_DISCARD, NULL, group);
+  struct launcher_request *request = request_launch_service(LAUNCH_BATCH_DISCARD, NULL, group, NULL);
   bsp_request_release(&request->request);
 }
 
@@ -441,7 +513,8 @@ static enum call_status capture_launch_request(const struct launch_request *requ
   return CALL_OK;
 }
 
-static struct syscall_result launch_one(uintptr_t request_address, size_t request_size,
+static struct syscall_result launch_one(struct execution_group *execution_group,
+    uintptr_t request_address, size_t request_size,
                                         uintptr_t reply_address, size_t reply_capacity)
 {
   struct launch_request request;
@@ -463,7 +536,7 @@ static struct syscall_result launch_one(uintptr_t request_address, size_t reques
    * borrows the table and stable image, releases any file operation before
    * child submission, and frees staging before waking this caller. */
   handle_t child;
-  status = launch_process(capture, &child);
+  status = launch_process(capture, execution_group, &child);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -478,7 +551,8 @@ static struct syscall_result batch_reply(uintptr_t address,
   return (struct syscall_result){status, sizeof(*reply)};
 }
 
-static struct syscall_result launch_batch(uintptr_t request_address, size_t request_size,
+static struct syscall_result launch_batch(struct execution_group *execution_group,
+    uintptr_t request_address, size_t request_size,
                                           uintptr_t reply_address, size_t reply_capacity)
 {
   if (reply_capacity < sizeof(struct launch_batch_reply) ||
@@ -504,7 +578,7 @@ static struct syscall_result launch_batch(uintptr_t request_address, size_t requ
     return batch_reply(reply_address, &reply, CALL_BAD_BUFFER);
   }
 
-  struct launch_group *group = create_launch_group();
+  struct launch_preparation *group = create_launch_batch();
   if (!group) {
     return batch_reply(reply_address, &reply, CALL_NO_MEMORY);
   }
@@ -515,31 +589,66 @@ static struct syscall_result launch_batch(uintptr_t request_address, size_t requ
     if (status == CALL_OK) {
       /* The BSP releases this stage's image operation before the next stage
        * acquires one, including repeated reads of the same file object. */
-      status = prepare_launch_group(group, capture);
+      status = prepare_launch_batch(group, capture, execution_group);
     }
     if (status != CALL_OK) {
       reply.failed_index = i;
-      discard_launch_group(group);
+      discard_launch_batch(group);
       return batch_reply(reply_address, &reply, status);
     }
   }
 
-  publish_launch_group(group, reply.children);
-  return batch_reply(reply_address, &reply, CALL_OK);
+  enum call_status status = publish_launch_batch(group, reply.children);
+  return batch_reply(reply_address, &reply, status);
 }
 
-struct syscall_result launcher_call(uint64_t rights, uint64_t operation,
-    uintptr_t request_address, size_t request_size,
+static struct syscall_result create_group(size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (request_size || reply_capacity < sizeof(struct execution_group_create_reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(struct execution_group_create_reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  struct launcher_request *request = request_launch_service(
+      LAUNCH_CREATE_EXECUTION_GROUP, NULL, NULL, NULL);
+  enum call_status status = request->result;
+  struct execution_group_create_reply reply = request->execution_reply;
+  bsp_request_release(&request->request);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
+}
+
+struct syscall_result launcher_call(struct kernel_object *object, uint64_t rights,
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  struct process *parent = process_current();
+  struct execution_group *group = launcher_execution_group(object);
+  if (operation == LAUNCHER_CREATE_GROUP) {
+    if (!(rights & LAUNCHER_RIGHT_CREATE_GROUP) || group || parent->execution_group) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    return create_group(request_size, reply_address, reply_capacity);
+  }
   if (operation != LAUNCHER_LAUNCH && operation != LAUNCHER_LAUNCH_BATCH) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
-  if (!(rights & LAUNCHER_RIGHT_LAUNCH)) {
+  if (!(rights & LAUNCHER_RIGHT_LAUNCH) ||
+      (parent->execution_group && parent->execution_group != group)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  /* Placement cannot change while capture sleeps. Sealing can: the BSP checks
+   * again at preparation and under the group lock at final publication. */
+  if (group && (group->space != parent->space || group->cpu_index != arch_cpu_index())) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   if (operation == LAUNCHER_LAUNCH_BATCH) {
-    return launch_batch(request_address, request_size, reply_address, reply_capacity);
+    return launch_batch(group, request_address, request_size, reply_address, reply_capacity);
   }
-  return launch_one(request_address, request_size, reply_address, reply_capacity);
+  return launch_one(group, request_address, request_size, reply_address, reply_capacity);
 }

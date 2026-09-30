@@ -39,6 +39,7 @@ enum object_type {
   OBJECT_TERMINAL_INPUT = 32,
   OBJECT_TERMINAL_OUTPUT = 33,
   OBJECT_TERMINAL_ATTACHMENT = 34,
+  OBJECT_EXECUTION_GROUP = 35,
 };
 
 /* Embed in a resource whose lifetime is shared by kernel owners and handles.

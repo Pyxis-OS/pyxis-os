@@ -170,3 +170,8 @@ a prompt. Init and session are not restarted. Their space, terminal contents
 and shared namespace roots survive exit. Selecting a native shell directly
 bypasses mounting/configuration for recovery. See [later lifecycle work](../wip/later-os-directions.md#execution-lifecycle)
 for deferred supervision and process replacement.
+
+Trusted init also holds CREATE_GROUP on its ordinary launcher. The default session
+program attenuates this to LAUNCH when starting the shell. An explicitly authorized
+supervisor can create an [execution group](../interfaces/execution-groups.md) and
+use its bound launcher while remaining outside that group.

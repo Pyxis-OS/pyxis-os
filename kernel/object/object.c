@@ -1,6 +1,8 @@
 #include <abi/namespace.h>
 #include <abi/terminal.h>
 #include <kernel/object/terminal.h>
+#include <kernel/object/execution_group.h>
+#include <kernel/object/launcher.h>
 #include <abi/profile.h>
 #include <abi/pipe.h>
 #include <abi/space.h>
@@ -32,6 +34,8 @@ static atomic_bool retired_locked;
 uint64_t object_protocol(const struct kernel_object *object)
 {
   switch (object->type) {
+  case OBJECT_EXECUTION_GROUP:
+    return PROTOCOL_EXECUTION_GROUP;
   case OBJECT_TERMINAL_SERVICE:
     return PROTOCOL_TERMINAL_SERVICE;
   case OBJECT_TERMINAL_ATTACHMENT:
@@ -193,7 +197,10 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_DISPLAY:
     return !(rights & ~DISPLAY_RIGHT_DRAW);
   case OBJECT_LAUNCHER:
-    return !(rights & ~LAUNCHER_RIGHT_LAUNCH);
+    return !(rights & ~(LAUNCHER_RIGHT_LAUNCH |
+        (launcher_execution_group(object) ? 0 : LAUNCHER_RIGHT_CREATE_GROUP)));
+  case OBJECT_EXECUTION_GROUP:
+    return !(rights & ~EXECUTION_GROUP_RIGHT_CONTROL);
   case OBJECT_ENDPOINT_SERVICE:
     return !(rights & ~ENDPOINT_SERVICE_RIGHT_CREATE);
   case OBJECT_ENDPOINT_RECEIPT:
@@ -268,7 +275,9 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
   if (!object_retain(object)) {
     return false;
   }
-  if (!terminal_authority_retain(object, rights)) {
+  bool retained = object->type == OBJECT_EXECUTION_GROUP ?
+      execution_group_authority_retain(object, rights) : terminal_authority_retain(object, rights);
+  if (!retained) {
     object_release(object);
     return false;
   }
@@ -277,7 +286,11 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
 
 void object_grant_release(struct kernel_object *object, uint64_t rights)
 {
-  terminal_authority_release(object, rights);
+  if (object->type == OBJECT_EXECUTION_GROUP) {
+    execution_group_authority_release(object, rights);
+  } else {
+    terminal_authority_release(object, rights);
+  }
   object_release(object);
 }
 

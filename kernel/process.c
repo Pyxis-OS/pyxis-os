@@ -6,6 +6,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/object/process.h>
+#include <kernel/object/execution_group.h>
 #include <kernel/object/display.h>
 #include <kernel/process.h>
 
@@ -52,6 +53,10 @@ enum mm_result process_destroy(struct process *process)
   capability_table_destroy(&process->capabilities);
   if (process->control) {
     object_release(&process->control->object);
+  }
+  if (process->execution_group) {
+    /* Unpublished preparation. The reaper takes published membership first. */
+    object_release(&process->execution_group->object);
   }
   kfree(process);
   return MM_OK;

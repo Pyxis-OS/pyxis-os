@@ -760,3 +760,14 @@ allocation claims without reading payloads; file-data checksums remain deferred.
 Extraction and host comparison establish content equality only for the exercised
 inputs. The offline checker cannot prove runtime readers or outstanding I/O have
 released storage, so it cannot authorize reclamation by itself.
+
+## Execution-group shutdown
+
+Execution groups implement permanent membership and sealed admission. Final CONTROL
+closure currently seals admission but leaves existing members running; there is no
+termination operation or group-completion wait. A caller must not treat sealing or
+an internal zero member count as whole-session cleanup. Deferred network/HOST object
+retirement and externally retained capabilities make that completion boundary more
+than task counting. Resolve the [ownership matrix](wip/execution-group-termination.md)
+in remote-terminal task 5 before exposing a session server. Group/member allocation
+has no quota beyond available storage; the later server must enforce admission policy.

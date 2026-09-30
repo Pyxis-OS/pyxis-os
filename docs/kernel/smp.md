@@ -74,8 +74,8 @@ Batch launch splits submission into BSP-only `user_task_prepare_on()` and
 kernel stack, reusable request area and separate profiling storage without
 enqueueing it; its process remains inactive and owned by the preparer.
 `user_task_discard_prepared()` releases those task allocations, leaving process
-destruction to the preparer. Publication enqueues the complete
-group under the queue lock and transfers every process and task together. It
+destruction to the preparer. After execution-group admission succeeds, publication enqueues the complete
+batch under the queue lock and transfers every process and task together. It
 allocates nothing; after unlocking, the BSP retains only the destination CPU
 index for notification. All observer handles and result slots exist before this
 transfer. The blocked caller lends its capability table to BSP preparation;
@@ -388,3 +388,8 @@ execution again, and inspect the counters to observe timer delivery. Use the
 BSP and the stopping conditions in [gdb.md](../development/gdb.md) for debugger-invoked allocator
 and submission calls. Never call them on an AP. Once a task completes, its
 pointer may already have been freed by the BSP.
+
+Execution-group sealing serializes with batch enrollment/publication under a group
+lock before the scheduler queue lock. Group membership is removed by BSP reaping
+after process and task storage reclamation. This accounting does not provide
+termination or group-completion readiness; see [execution groups](../interfaces/execution-groups.md).
