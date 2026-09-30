@@ -197,6 +197,11 @@ audit and host hello-world probes. ELF-to-P1F conversion already works for the
 two Linux probe images; native startup, runtime threading/TLS, synchronization
 and VM semantics remain unresolved. No Go target or guest execution is claimed.
 
+The [fastfetch investigation](fastfetch.md) records a pinned SDK compile probe
+and proposes a smaller native information/display port. Existing clocks and
+console dimensions can be reused; system-information authority, memory labels
+and a bounded platform/libc adaptation remain to be agreed and implemented.
+
 SDL2/GrafX2 remains a later graphical alternative. A desktop/compositor remains
 a separate [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting
 [design checkpoint](users-and-authority.md), not something a port should define

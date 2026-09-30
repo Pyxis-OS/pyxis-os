@@ -17,6 +17,7 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 
 | Candidate | Intended use and initial investigation |
 | --- | --- |
+| fastfetch | [Pinned SDK probe and bounded port proposal](fastfetch.md): native system information, the Pyxis ASCII logo and a small set of truthful modules. No working port yet; settle authority and memory-accounting labels before implementation. |
 | zlib | Reusable compression/decompression, followed by a concrete consumer such as PNG loading. |
 | libpng | PNG decoding/encoding for viewers, drawing tools and screenshots; depends on zlib. |
 | SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. |
