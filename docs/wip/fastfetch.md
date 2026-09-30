@@ -274,8 +274,10 @@ use a null buffer/negative length on failure; other allocations also assume
 success. Correct libc error returns do not make Fastfetch graceful under OOM.
 The subsequent native port implements the agreed deliberate-failure policy:
 allocation failure prints a diagnostic and exits nonzero, with possible partial
-stdout. Explicit core checks and process-local link wrappers cover the retained
-allocation paths; this does not change shared libc behavior.
+stdout. Process-local malloc/calloc/realloc link wrappers cover the retained
+allocation paths. Upstream containers are retained; the existing negative formatting-result
+checks handle vasprintf/vsnprintf conversion failures separately. This does not
+change shared libc behavior.
 
 ### Prerequisite validation
 
@@ -316,7 +318,7 @@ All validation processes were stopped afterward.
 
 ## Implemented standalone native port
 
-Ports is pinned to `06f74e78cf9e58389813c78e8e5a63a64284ec16`
+Ports is pinned to `8aa098a90e44d8d98b619a0dec80e9ca26b8c57f`
 ([ports PR #26](https://git.internal/PyxisOS/pyxis-ports/pulls/26)). The
 [recipe reference](../../ports/fastfetch/README.md) is authoritative for build
 commands, module/format mappings, error behavior, licenses and validation.
@@ -334,8 +336,11 @@ The agreed error policy is implemented: allocation failure terminates with a
 stderr diagnostic; failed selected modules continue and yield an aggregate
 nonzero status; unknown optional observations remain JSON null. Requesting an
 unavailable format field produces an error rather than an invented value,
-including named/positional forms and explicit references inside inactive
-conditionals. Fatal errors and output failures can leave partial stdout.
+including evaluated named/positional forms. Conditions treat unavailable values
+as unset; skipped branches retain upstream behavior and are not evaluated.
+`showErrors` controls module/format diagnostic visibility without clearing the
+aggregate failure status; JSON module error objects are retained. Fatal errors
+and output failures can leave partial stdout.
 
 Default terminal output selects the six data modules plus Break and Colors.
 Default JSON and pipe-mode text select just the data modules. Colors/Break/
@@ -358,9 +363,8 @@ Local text displayed the complete logo with 160x48 dimensions; remote text used
 `cfb7f0ddfcc1`, allocator memory and monotonic uptime. JSON preserved null fields,
 including bootTime, and explicit JSONC formatting worked. Redirected JSON and
 text (including timing, right-logo and key-width options) contained zero escape
-bytes. Named/positional unavailable fields and a reference inside an inactive
-conditional failed while later modules still printed. Command logos failed
-even with JSON output; an unknown module yielded a JSON error and did not prevent
+bytes. Evaluated named/positional unavailable fields failed while later modules
+still printed. Command logos failed even with JSON output; an unknown module yielded a JSON error and did not prevent
 the next module from running, including with timing enabled.
 
 GDB observed the native CPU adapter return its brand and count at CPL3. A
@@ -370,6 +374,12 @@ and named output grants, and the child exited with status 1. Allocation
 exhaustion was inspected in code, not injected. No tests, self-tests, CI changes
 or boot automation were added. These are functional nested-VM observations,
 not owner-host performance measurements. Validation jobs were stopped afterward.
+
+The four-point review follow-up removes the format prevalidation pass, restores
+`showErrors`, drops redundant allocation helpers/container rewrites and preserves
+upstream I/O/time headers behind Pyxis branches. The standalone recipe was
+rebuilt; the guest observations above are from the initial port, not a new guest
+run of this reduction.
 
 The recipe is registered for standalone builds. Default build/staging/install
 selection is deliberately the next task, together with narrow-console,
