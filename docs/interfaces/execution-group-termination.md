@@ -1,7 +1,7 @@
 # Execution-group termination ownership matrix
 
-Implemented task-5 ownership paths for [remote terminals](remote-terminal.md).
-The public contract is in [execution groups](../interfaces/execution-groups.md).
+Implemented ownership paths for [remote terminals](../userland/remote-terminal.md).
+The public contract is in [execution groups](execution-groups.md).
 
 ## Stopping boundary
 
@@ -66,6 +66,6 @@ can delay completion indefinitely; no bounded cleanup deadline is promised. Ordi
 process observers retain their earlier reclamation boundary.
 
 Foreground Ctrl+C cancellation, nested groups, migration and space teardown are
-outside this milestone. Runtime evidence and unexercised paths are recorded in the
-[remote-terminal validation notes](remote-terminal.md); this matrix records ownership
+outside this implementation. Runtime evidence and unexercised paths are recorded in the
+[remote-terminal validation notes](../userland/remote-terminal.md#validation-evidence); this matrix records ownership
 review, not a claim that every race has been measured.

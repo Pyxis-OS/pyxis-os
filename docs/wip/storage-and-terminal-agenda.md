@@ -93,17 +93,17 @@ owns its progress and handles cancellation/failure. Do not design those policies
 implicitly inside the multiplexer. Shells and editors should remain ordinary
 applications alongside navigators.
 
-The agreed first slice is [native remote terminal sessions](remote-terminal.md),
+The first slice is implemented as [native remote terminal sessions](../userland/remote-terminal.md),
 with a text-based agent/developer client and independent session lifetime.
 The later progression is a minimal multiplexer, then the single-panel navigator
 and its cross-navigator operations. Split that direction
 into bounded milestones before implementation; do not bundle the whole chain.
 
-## Selected next slice
+## Implemented foundation and later choices
 
-The [BSP request milestone](../kernel/bsp-service-requests.md) is complete; the next slice
-is [native remote terminal sessions](remote-terminal.md). Its agreed
-contracts and focused task list replace the earlier open choice for this slice.
-Persistent writable storage, the toolchain transition, multiplexer and navigator
-remain parked directions. Discuss each task's remaining behavior, authority and
-lifetime details before implementation.
+The [BSP request milestone](../kernel/bsp-service-requests.md) and
+[native remote terminal implementation](../userland/remote-terminal.md) provide
+the request-ownership and session-lifetime foundations. Persistent writable
+storage, the toolchain transition, multiplexer and navigator remain parked
+directions. No next implementation slice is selected here; discuss its behavior,
+authority and lifetime details before implementation.

@@ -135,13 +135,13 @@ scheduling opportunities between operations. Request completion is separate from
 user tasks have reusable request storage and separate persistent profiling.
 Public asynchronous I/O and process threads remain outside the implementation.
 
-The agreed next milestone is [native remote terminal sessions](remote-terminal.md):
+The [native remote terminal implementation](../userland/remote-terminal.md) provides
 TCP listeners, readiness waits, independent terminals and contained execution
-lifetime lead to a text-based remote shell for agent/developer work. A host client
-supports interactive Kilo and machine-readable command completion; framebuffer
-screenshots remain for graphical work. Authentication, a multiplexer and process
-threads are separate. The milestone records remaining task-local decisions and
-does not authorize implementation on its own.
+lifetime for text-based agent/developer work. Its host client supports interactive
+Kilo and machine-readable command completion; framebuffer screenshots remain for
+graphical work. See [terminal sessions](../userland/terminal-sessions.md) and
+[execution groups](../interfaces/execution-groups.md) for the underlying contracts.
+Authentication, a multiplexer and process threads remain separate work.
 
 The broader [discussion agenda](storage-and-terminal-agenda.md) covers persistent
 disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
