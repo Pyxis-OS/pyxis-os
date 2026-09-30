@@ -244,6 +244,20 @@ static const char *error_name(uint32_t code)
   }
 }
 
+static const char *completion_name(uint32_t kind, uint32_t status)
+{
+  switch (kind) {
+  case REMOTE_COMPLETION_EXITED: return "exited";
+  case REMOTE_COMPLETION_BUILTIN: return status <= 1 ? "builtin" : NULL;
+  case REMOTE_COMPLETION_FAULTED: return status ? NULL : "faulted";
+  case REMOTE_COMPLETION_TERMINATED: return status ? NULL : "terminated";
+  case REMOTE_COMPLETION_LAUNCH_FAILED: return status ? NULL : "launch_failed";
+  case REMOTE_COMPLETION_REJECTED: return status ? NULL : "rejected";
+  case REMOTE_COMPLETION_LAUNCHED: return status ? NULL : "launched";
+  default: return NULL;
+  }
+}
+
 static int frame_header(struct client *client)
 {
   uint32_t type = remote_decode_u32(client->incoming);
@@ -322,14 +336,22 @@ static int present_frame(struct client *client)
     }
     case REMOTE_COMMAND_COMPLETE: {
       uint64_t command = remote_decode_u64(payload);
-      uint32_t status = remote_decode_u32(payload + 8);
-      if (client->last_command == UINT64_MAX || command != client->last_command + 1 || status > 1) {
+      uint32_t kind = remote_decode_u32(payload + 8);
+      uint32_t status = remote_decode_u32(payload + 12);
+      const char *name = completion_name(kind, status);
+      if (client->last_command == UINT64_MAX || command != client->last_command + 1 || !name) {
         return -1;
       }
       client->last_command = command;
       if (client->machine) {
+        char value[32] = "";
+        if (kind == REMOTE_COMPLETION_EXITED) {
+          snprintf(value, sizeof(value), ",\"exit_status\":%" PRId32, (int32_t)status);
+        } else if (kind == REMOTE_COMPLETION_BUILTIN) {
+          snprintf(value, sizeof(value), ",\"status\":%" PRIu32, status);
+        }
         snprintf(text, sizeof(text), "{\"type\":\"command_complete\",\"command\":%" PRIu64
-                 ",\"status\":%u}\n", command, status);
+                 ",\"kind\":\"%s\"%s}\n", command, name, value);
         output_text(client, text);
       }
       break;

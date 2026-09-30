@@ -17,6 +17,13 @@
 #define TERMINAL_HANGUP UINT64_C(4)
 #define TERMINAL_EVENTS_RIGHT_EMIT (UINT64_C(1) << 0)
 #define TERMINAL_COMMAND_COMPLETE UINT64_C(1)
+#define TERMINAL_COMPLETION_EXITED UINT64_C(1)
+#define TERMINAL_COMPLETION_FAULTED UINT64_C(2)
+#define TERMINAL_COMPLETION_TERMINATED UINT64_C(3)
+#define TERMINAL_COMPLETION_LAUNCH_FAILED UINT64_C(4)
+#define TERMINAL_COMPLETION_BUILTIN UINT64_C(5)
+#define TERMINAL_COMPLETION_REJECTED UINT64_C(6)
+#define TERMINAL_COMPLETION_LAUNCHED UINT64_C(7)
 
 #define TERMINAL_INPUT_CAPACITY 4096
 #define TERMINAL_OUTPUT_CAPACITY 65536
@@ -46,21 +53,30 @@ struct terminal_create_reply {
   handle_t events;
 };
 
-/* EMIT authority; status is 0 (success) or 1 (failure), otherwise BAD_REQUEST.
- * No reply payload. Inserts one indivisible COMMAND_COMPLETE output record,
- * ordered with DATA and controls. Capacity backpressure waits interruptibly;
- * hangup or execution-group stop returns ENDPOINT_CLOSED. */
+/* EMIT authority. Kind is one TERMINAL_COMPLETION value; status is the exact
+ * sign-extended 32-bit exit code for EXITED, 0 (success) or 1 (failure) for
+ * BUILTIN and zero for every other kind. Anything else is BAD_REQUEST.
+ * EXITED/FAULTED/TERMINATED describe a waited foreground command's last stage;
+ * LAUNCH_FAILED is external command preparation or launch failure; REJECTED is
+ * a syntax or submitted line-limit rejection; LAUNCHED is successful background
+ * launch, not later process exit. No reply payload. Inserts one indivisible
+ * COMMAND_COMPLETE output record, ordered with DATA and controls. Capacity
+ * backpressure waits interruptibly; hangup or execution-group stop returns
+ * ENDPOINT_CLOSED. */
 struct terminal_command_complete_request {
   struct message_header header;
-  uint64_t status;
+  uint64_t kind;
+  int64_t status;
 };
 
 /* The kernel assigns command numbers starting at 1 in enqueue order. Failed
  * emits consume no number; exhausted numbering returns LIMIT without wrapping.
- * These are native uint64_t fields, not a wire encoding. */
+ * Kind and status are copied from the validated request. These are native
+ * fields, not a wire encoding. */
 struct terminal_command_complete {
   uint64_t command;
-  uint64_t status;
+  uint64_t kind;
+  int64_t status;
 };
 
 struct terminal_transfer_request {
@@ -103,9 +119,9 @@ struct terminal_record {
 
 _Static_assert(sizeof(struct terminal_create_request) == 32, "terminal create layout");
 _Static_assert(sizeof(struct terminal_create_reply) == 32, "terminal create reply layout");
-_Static_assert(sizeof(struct terminal_command_complete_request) == 24, "terminal event request layout");
-_Static_assert(offsetof(struct terminal_command_complete_request, status) == 16, "terminal event status offset");
-_Static_assert(sizeof(struct terminal_command_complete) == 16, "terminal completion layout");
+_Static_assert(sizeof(struct terminal_command_complete_request) == 32, "terminal event request layout");
+_Static_assert(offsetof(struct terminal_command_complete_request, kind) == 16, "terminal event kind offset");
+_Static_assert(sizeof(struct terminal_command_complete) == 24, "terminal completion layout");
 _Static_assert(sizeof(struct terminal_transfer_request) == 32, "terminal transfer layout");
 _Static_assert(sizeof(struct terminal_transfer_reply) == 8, "terminal transfer reply layout");
 _Static_assert(sizeof(struct terminal_record) == 16, "terminal record layout");
