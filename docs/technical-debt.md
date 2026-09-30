@@ -837,6 +837,13 @@ six flushes in total. This accepts extra synchronous I/O to bound cleanup debt;
 revisit combining batches only after the admission proof and workload measurements
 support an equivalent bound. No latency measurement is claimed.
 
+The consolidated milestone now includes a proposed writable profile, numerical
+reserve/headroom proof, concrete interfaces and host failure model for full review.
+Those mechanisms remain proposals until accepted and implemented; the read-only
+format's maximum profile and prototype reserve defaults do not promise writable
+admission. Revisit these limits with implementation evidence, not by treating
+the design arithmetic as runtime validation.
+
 ## Filesystem host prototype limits
 
 The host-image tools record prototype reserve defaults, but no writable

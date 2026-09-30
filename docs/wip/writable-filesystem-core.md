@@ -1,8 +1,24 @@
 # Writable filesystem core and recovery
 
-Status: agreed milestone scope, 2026-09-30. No writable implementation is
-claimed. Task 1 settles the remaining mechanisms and numerical bounds before
-implementation. Work proceeds one explicitly assigned task at a time.
+Status: consolidated task-1 review, 2026-10-01, against `pyxis-fs` commit
+`82cc242b3d9773d21c0f7e7a71ec9ca9ccb937ed`. No writable implementation is
+claimed. Sections marked **Agreed** retain the approved policy. Sections marked
+**Proposed** supply the concrete mechanisms, bounds and validation model for
+owner review as one design. Acceptance of this specification does not start
+implementation; work proceeds one explicitly assigned task at a time.
+
+Review navigation: [live interfaces](#proposed-live-interfaces-and-reference-ownership),
+[persistent additions](#proposed-persistent-additions-and-supported-media),
+[admission proof](#proposed-writable-profile-and-admission-proof),
+[failure model](#proposed-host-failure-validation-model) and
+[delivery boundaries](#proposed-delivery-boundaries-and-review-closure). Task 1 remains
+unchecked until this full review is accepted. No code, format bytes or
+dependency pin changes in this documentation PR.
+
+The principal new tradeoffs are whole-map rebuilding for every initial publication,
+configurable E/M writable limits (1024 each by default), explicit reserve and
+permanent-headroom refusals, and the scoped host failure utility. They are proposed
+below for this review, not previously accepted implementation behavior.
 
 This is the first of two storage milestones. Its result is a shared core that
 mutates existing Pyxis volumes through bounded COW transactions, durably
@@ -51,7 +67,7 @@ Publication remains pool-wide and serialized. A volume checkpoint covers all
 accepted changes in that volume before its ordering point; sibling-volume
 changes may be included. Close is not a substitute for checkpointing. The
 progress and failure contract below separates operation outcomes from pool
-health; task 1 still defines its concrete interface.
+health; the proposed live interface below gives those facts separate fields.
 
 Live object handles retain identity and granted authority while observing the
 latest committed state. They do not permanently pin the generation at open.
@@ -63,8 +79,8 @@ Removal leaves retained object handles usable. Storage remains charged while an
 object is unlinked but retained. Persistent orphan bookkeeping must let restart
 reclaim objects whose runtime owners no longer exist, without treating a named
 or otherwise protected object as garbage. The retained-file and directory
-behavior and orphan-index lifecycle below are agreed; task 1 still specifies the
-on-disk encoding, concrete reference accounting and workspace bounds.
+behavior and orphan-index lifecycle below are agreed; the proposed mechanisms
+below specify encoding, reference accounting and workspace bounds.
 
 Writable opening requires fully understood, validated media. Refuse writable
 access to degraded or unsupported retained states; keep read-only inspection
@@ -74,9 +90,6 @@ every mutation or reclaim batch. Refusal is not permission to repair or discard
 a damaged state automatically.
 
 ## Agreed mutation rights and retained files
-
-Agreed during task 1, 2026-09-30; these are core behavior requirements, not
-implemented interfaces or the later native ABI mapping.
 
 | Operation | Required held authority |
 | --- | --- |
@@ -120,8 +133,7 @@ enlarging its rights. Reusing its former name does not retarget retained handles
 
 ## Agreed partial large shrinks
 
-Agreed during task 1, 2026-09-30; this is a behavior contract, not an implemented
-resize API. Shrink a large file through successive bounded transactions from
+Shrink a large file through successive bounded transactions from
 the tail toward the requested length. Each transaction publishes a valid shorter
 file and retires only the storage covered by its admission bound. Bound both
 metadata edits and physical blocks retired: one extent can describe far more
@@ -148,13 +160,11 @@ under the existing live-handle contract.
 
 This agreement introduces no persistent detached-tail representation for atomic
 large shrinks. The orphan index remains bookkeeping for unlinked objects, not
-for a named file's discarded tail. Concrete result fields, batch limits and
-admission costs remain task-1 work.
+for a named file's discarded tail.
 
 ## Agreed checkpoint authority
 
-Agreed during task 1, 2026-09-30; the directory right and checkpoint operations
-are not implemented yet. Require `file.checkpoint` through a file handle and an
+Require `file.checkpoint` through a file handle and an
 explicit `dir.checkpoint` through a directory handle. Both request a checkpoint
 of the containing volume, covering accepted changes before its ordering point;
 pool-wide publication may include sibling-volume changes. This confers no access
@@ -188,8 +198,6 @@ bundled permissions.
 
 ## Agreed directory removal and name reuse
 
-Agreed during task 1, 2026-09-30; implementation belongs to task 6.
-
 - Removal requires an empty directory. The volume root cannot be removed.
   Successful removal detaches the directory from its parent namespace.
 - Retained handles keep the detached directory's identity and granted rights.
@@ -217,7 +225,7 @@ themselves define that encoding.
 
 ## Agreed persistent orphan lifecycle
 
-Agreed during task 1, 2026-09-30; implementation belongs to task 6. Use a
+Use a
 per-volume orphan index keyed by object ID. Entries retain objects in the
 volume's existing object index; this is accounting and recovery metadata, not
 a hidden directory that applications can traverse.
@@ -261,12 +269,11 @@ without cleaning them up.
 Opening may take substantial time after many removals or a large abandoned file.
 This first writer completes abandoned-orphan cleanup before applications gain
 access, avoiding concurrent startup cleanup. Exact record encoding, per-batch
-work bounds and admission costs remain task-1 work; this agreement does not
-claim that existing reserve defaults suffice or change the orphan-format gate.
+work bounds and admission costs are proposed below; existing reserve defaults
+do not establish writable sufficiency.
 
 ## Agreed live enumeration and diagnostic views
 
-Agreed during task 1, 2026-09-30; this specifies behavior, not implemented APIs.
 Each directory listing page observes one committed state. Continuations retain
 no old generation or storage references between calls. Validate their directory
 binding and freshness before interpreting a position in the current tree.
@@ -301,14 +308,12 @@ workspace. The initial limitation is that full offline inspection interrupts
 writable access; concurrent diagnostic snapshots would require a separately
 agreed retention and admission policy before introduction.
 
-Task 1 still defines the continuation representation, directory-change tracking
-and operation-reference mechanism. The existing immutable tree-position token
-cannot be used against a changing tree without that binding and freshness check.
-These decisions do not themselves change the core or native ABI.
+The proposed live continuation below supplies binding and freshness. The existing
+immutable tree-position token cannot be used against a changing tree unchecked.
+The native ABI mapping belongs to the subsequent milestone.
 
 ## Agreed progress, failures and read availability
 
-Agreed during task 1, 2026-09-30; this specifies behavior, not implemented APIs.
 An operation result preserves three independent facts:
 
 - Confirmed progress: for a write, the contiguous byte prefix whose transactions
@@ -345,8 +350,9 @@ that candidate. It may leave unreachable bytes in previously free storage.
 
 Deferring cleanup because a bounded batch cannot be admitted is not itself an
 I/O failure or uncertain publication. Keep its storage charged and protected;
-reads remain available and later mutations still require full admission. The
-reclamation design must separately prove how cleanup eventually makes progress.
+reads remain available and later mutations still require full admission and the
+drain requirement. The proposed resource proof below establishes progress for the
+admitted profile; device/integrity failures can still stop it.
 
 These access restrictions are pool-wide, including sibling volumes. In the
 readable but mutation-stopped state, ordinary rights still apply, no read uses
@@ -378,8 +384,8 @@ unqualified healthy success.
 
 ## Agreed synchronous maintenance and stopping condition
 
-Agreed during task 1, 2026-09-30; implementation and numerical proofs remain
-open. Reclamation must progress without another application write. Internal
+Use the [format publication/reclamation envelope](../../fs/docs/format.md#future-publication-and-reclamation-envelope).
+Reclamation must progress without another application write. Internal
 maintenance commits may advance the older retained slot while preserving the
 current namespace and file contents.
 
@@ -402,8 +408,7 @@ metadata fits a strictly bounded pool-wide remainder, fully charged to workspace
 That bound covers the accumulated remainder across successive maintenance cycles;
 it is not another allowance added after each write. Ineligible storage remains
 protected and accounted for, rather than being hidden in the maintenance
-remainder. The allocator design must derive the numerical bound and prove that
-repeated editing keeps it bounded.
+remainder. The proposed admission proof below bounds repeated editing explicitly.
 
 Use synchronous maintenance in this first writer:
 
@@ -434,36 +439,11 @@ protocol count, not a latency measurement. Large writes, shrinks and orphan
 cleanup repeat the sequence across batches. The first writer accepts this cost;
 combining batches is a later optimization requiring an equivalent debt bound.
 
-The conditional pool-metadata bound is:
-
-- Bound newly allocated pool metadata and newly retired pool metadata separately
-  by `H` blocks per publication, including map nodes, the pool root and changed
-  catalog paths. At writable opening establish at most `2H` retired pool blocks,
-  of which at most `H` remain protected by the older retained root after runtime
-  pins have ended.
-- With operation/I/O pins ended and all eligible pool retirements freed, at most
-  `H` previously retired blocks remain protected by the older root, plus at most
-  `H` newly retired blocks. Thus the accumulated remainder stays within `2H`.
-- Keep another `H` blocks already reusable for the next publication. The resulting
-  `3H` workspace envelope covers pool-metadata retirement and replacement only,
-  assuming published live replacements are permanent allocations. Persistently
-  workspace-charged live metadata would need additional capacity. Volume-block
-  replacements and retirements, including recovery-funded orphan cleanup, need
-  their own bounded allowance.
-
-This is not yet a numerical reserve minimum. `H` must cover both old sparse maps
-and their replacements; dense rebuilt-map size alone cannot bound old retirement.
-Catalog nodes surviving many generations still count in the separate permanent
-pool-metadata total. Admission must preserve room for permanent metadata growth
-without consuming volume guarantees, and enough allocation-map records to finish
-cleanup. Merely checking that each candidate fits the current record limit can
-strand later cleanup even when free blocks remain. Task 1 must prove those
-requirements across the entire sequence, including bounded planning memory.
-
-Writable opening must establish the starting bounds and available workspace;
-read-only-valid images need not satisfy them. Refuse writable access when the
-bounds cannot be met. Do not presume that normalizing existing retirement debt
-is affordable or silently change persisted reservations to make it fit.
+The proposed admission proof below supplies the conditional `2H` remainder and
+`3H` pool-workspace construction, permanent metadata allowance, record closure
+and writable-opening checks. Existing percentage reserves alone prove none of
+those requirements. Refuse images that cannot satisfy them; do not silently
+change persisted reservations or assume normalization is affordable.
 
 The last close of a large unlinked file may take substantial time: each
 transaction is bounded, but the complete cleanup can require many transactions.
@@ -481,17 +461,9 @@ uncertain publication stops all ordinary access until recovery. Later mutations
 must first satisfy the outstanding drain requirement as well as ordinary
 admission; they cannot accumulate another batch of retirement debt.
 
-Task 1 remains open for concrete result/status interfaces, directory-continuation
-and operation-reference mechanisms, persistent orphan encoding, bounded
-allocation/reclamation algorithms and admission costs, the recovery validation
-mechanism, and implementation PR boundaries. Numerical admission proofs must
-cover the complete maintenance cycle, its own allocation-map/root replacements
-and the bounded remainder; existing percentage reserves establish none of these
-cost bounds.
-
 ## Agreed whole-map fallback
 
-Agreed during task 1, 2026-09-30; the allocator is not implemented. Provide a
+Provide a
 bounded whole-allocation-map rebuild when incremental map edits cannot close
 within their admitted bound. A tree-depth bound alone does not bound allocator
 self-accounting: retiring one old map node changes the leaf describing that
@@ -535,71 +507,592 @@ layout arithmetic, not a measured implementation cost or a total reserve minimum
 It excludes new volume metadata/data, accumulated retired storage and the
 additional publications needed for retained-root advancement and safe reuse.
 
-Admission must check record/depth limits, bounded planning memory, permanent
-pool-metadata growth and available workspace before publication. The complete
-proof must also cover old sparsely populated maps, operation-specific edits,
-opening requirements, the accumulated maintenance remainder and progress when
-ordinary workspace is exhausted. Do not infer those bounds from a dense rebuilt
-map or claim that the formatter's current reserve defaults suffice. No format
-change follows merely from using this fallback.
+Admission checks record/depth limits, planning memory, permanent metadata growth,
+workspace and old sparse maps under the proposed profile below. The one-publication
+construction alone does not prove reserve sufficiency. No format change follows
+merely from using this fallback.
 
 Whole-map rebuilding may be expensive for a fragmented pool. The accepted
 tradeoff is a finite, accounted fallback; there is no claim about its frequency
 or latency. Revisit incremental optimization after correctness and admission
 bounds are established and measured workloads show the need.
 
-## Publication, reclamation and admission gates
+## Proposed live interfaces and reference ownership
 
-The [existing publication envelope](../../fs/docs/format.md#future-publication-and-reclamation-envelope)
-is authoritative: replacement data and metadata, flush, older-slot publication,
-then flush before durability acknowledgement. A superblock write is not assumed
-atomic. An uncertain write/flush outcome stops mutation until recovery establishes
-safe state; no blind retry or generation-counter shortcut.
+These mechanisms are proposed for the full review. Give `pfs_pool` internal
+state an explicit read-only or writer mode, selected by separate open calls.
+Keep its caller-owned handle and the opaque `pfs_view` lifetime rules. Ordinary
+`pfs_view` handles use immutable or live behavior
+according to that mode, with shared grant evaluation. Immutable diagnostic
+objects/cursors remain restricted to read-only pools.
+The trusted adapter supplies exclusive backing ownership, exact read/write/flush
+callbacks, strong random bytes for new IDs, and the existing capped memory owner.
+The read-only interface still contains no write callback.
 
-Both retained roots and live operation/I/O references protect data, metadata,
-allocation-map nodes and pool roots alike. Publish free-map changes before later
-reuse, with the existing incarnation checks. Reclamation must make sustained
-editing possible; an append-only writer that eventually exhausts workspace does
-not complete this milestone.
+The initial live operation surface is acquisition by trusted context/path/ID,
+held lookup and delegation, metadata/read/list, create, write, resize, remove,
+regular-file rename/replacement, checkpoint, status and close. Namespace mutation
+accepts held parent views plus validated single component names. Creation takes
+kind and optional requested child authority; new ownership defaults to the
+parent's policy owner, with no new explicit grants. Preallocate a requested
+returned view before publication. Generate object IDs with strong randomness,
+reject zero and collisions in both retained states and retained runtime objects,
+and stop after the existing 16-attempt bound. No fallback identity source.
 
-Before implementation, task 1 must establish:
+All calls are serialized by the embedding adapter. Core entry rejects reentry
+with `BUSY`; callbacks cannot call back into the instance. A view owns an immutable
+rights/scope copy and a reference to a shared runtime object entry keyed by volume
+and object ID. That entry counts views and active object operations. Operations
+borrow the selected generation; synchronous I/O returns all borrowed buffers before
+its call returns. End old-generation references before maintenance; retaining a
+view does not retain a generation. No asynchronous I/O or concurrent operations
+are introduced. A future concurrent adapter must supply an equivalent protocol
+before enabling concurrency.
 
-- Maximum transaction dirty bytes/nodes, tree edits, splits and allocation-map
-  changes, including how allocator metadata allocation terminates within a bound.
-- Admission costs for each operation and reclamation, including recovery progress
-  when ordinary space is exhausted. Prototype percentage reserves are not proof
-  of sufficient workspace. Specify refusal for images whose budgets cannot meet
-  writable minimums; do not silently resize their persisted reservations.
-- How validated ownership/reachability evidence is maintained across successive
-  commits and reconstructed on reopening, without relying on obsolete readers.
-- Live-view identity and orphan encoding, mechanisms for directory-local
-  continuation invalidation and operation references, and bounded implementation
-  of the agreed synchronous maintenance and retained-state advancement policy.
-- Concrete interfaces implementing the agreed progress/failure outcomes and
-  pool access states, including cleanup reporting and close/reopen requirements.
-- Compatibility checks for writable access. Preserve supported extension semantics
-  and bytes or refuse writes. Change format versions only for an actual
-  incompatibility; do not bump them simply because a writer now exists.
+An accepted view close consumes the view and clears the caller's pointer even if
+orphan cleanup fails. Its result has `released=true`, cleanup outcome/status and
+pool health; `BUSY` leaves the view live with `released=false`. Retrying that
+close is not a recovery mechanism. Closing while access is stopped only releases
+runtime state. Writer close requires all volume handles, child views and active
+calls to end,
+otherwise returns `BUSY`; it performs no repair or implicit checkpoint. The
+backing adapter outlives all core objects and releases its exclusive ownership
+only after the writer and outstanding callbacks are gone.
 
-These are implementation decisions to review, not permission to reopen settled
-identity, COW, accounting or authority principles. Do not use successful fake
-operations, an unbounded in-memory reconstruction, or a new generic transaction
-framework as a substitute for the concrete bounded algorithms.
+### Results and status
+
+Every valid mutation call initializes a result with these separate fields:
+
+| Field | Meaning |
+| --- | --- |
+| `completion` | `COMPLETE` for the request, `STOPPED` for a known stop, or `UNKNOWN` for an attempted user publication. |
+| `operation_status` | Original operation failure cause, or `OK`; it never becomes a cleanup error. |
+| `confirmed_bytes` | Committed contiguous prefix of this write request; zero for other operation kinds. |
+| `confirmed_length_valid`, `confirmed_length` | Last confirmed file length for resize, initialized from the starting committed state. |
+| `namespace_committed` | Whether this call's namespace transaction completed both flushes. |
+| `maintenance_completion`, `maintenance_status` | Separate `NONE`, `COMPLETE`, `STOPPED` or `UNKNOWN` cleanup outcome and cause. |
+| `health` | `READY`, `READABLE_STOPPED` or `ACCESS_STOPPED`, copied from the writer after the call. |
+
+A completed user operation remains `COMPLETE` if its cleanup fails. For a larger
+request with more chunks outstanding, a drain failure stops the request with
+its confirmed prefix/length intact; the failure cause lives in maintenance fields.
+A call's scalar status returns its operation error first, otherwise its maintenance
+error, otherwise `OK`. Callers must consume the result even on error. Invalid API
+arguments return `INVALID` without changing the result or media. Creation can
+return its preallocated view after a confirmed commit even when later cleanup
+fails; under `ACCESS_STOPPED` that view supports closure only. Unknown creation
+returns no usable child view and must be reconciled after recovery.
+
+Add specific statuses for `EXISTS`, `NOT_EMPTY`, `DETACHED`, `CHANGED`, `NO_SPACE`,
+`QUOTA` and `RECOVERY_REQUIRED`. Insertion through a detached parent returns
+`DETACHED` after checking authority. `LIMIT` continues to identify profile/count/depth/memory
+cap exhaustion; `NO_MEMORY` identifies allocation failure below the cap.
+`NO_SPACE` includes insufficient admitted workspace or permanent pool headroom.
+Mutation in `READABLE_STOPPED`, and ordinary access in `ACCESS_STOPPED`, returns
+`RECOVERY_REQUIRED`. A status query copies in-memory health and last failure
+without touching media; report pending drain separately from health. Ordinary
+view results disclose no sibling identities or pool generation. Health is sticky
+until a fresh validated reopen; no call
+clears it by retrying. Loss of established integrity escalates to `ACCESS_STOPPED`.
+
+Check rights before inspecting otherwise unauthorized names or doing any mutation.
+Create at an existing name returns `EXISTS`. Removing a nonempty directory returns
+`NOT_EMPTY`; the volume root cannot be removed. Rename accepts regular files only,
+with either absent or regular-file destination. Same-parent/same-name rename is a
+no-op after validating the source and source-remove/destination-create authority;
+replacement authority is needed only when displacing a distinct destination.
+Other directory moves/replacements return `UNSUPPORTED`. Zero-length writes and
+same-length resizes are no-ops after argument, authority and health checks, and do
+not advance generation or directory change tracking. No-op namespace success has
+`namespace_committed=false`, since it publishes no transaction.
+
+Checkpoint is a serialized volume ordering barrier. After prior batches and their
+required drains have completed, their two-flush commits already establish it;
+checkpoint need not emit a redundant generation. Pending maintenance must finish
+before it succeeds. It fails in either stopped state, even if earlier data was
+confirmed. This uses only the held checkpoint right and exposes no sibling data.
+
+### Live directory continuation
+
+Use a 64-byte copied core token: 16-byte writer-instance nonce, 16-byte volume
+ID, 16-byte directory ID, `u64` directory change serial and the existing `u64`
+tree position. All-zero starts enumeration. The live page operation takes this
+token type; the read-only page operation retains its immutable token. This is
+not a native ABI change or persistent record. Tokens own no references or rights.
+
+Generate a fresh random nonce at writable open. Maintain a bounded runtime table
+of changed directories keyed by volume/object ID. Untouched preexisting directories
+have serial zero. A never-wrapping global counter supplies fresh serials for new
+directories and confirmed local entry create/remove/rename/replacement or detach.
+Update each affected directory once per transaction. Keep entries until object
+deletion or writer close, even when no view remains; cache eviction must not
+invalidate an unchanged directory's continuation. Reserve table capacity and
+counter increments before publication. File data/length edits and unchanged
+maintenance leave these serials unchanged.
+
+Check listing rights and health first, then token binding and freshness, before
+interpreting the tree position. Wrong instance/object binding or malformed position
+is `INVALID`; a changed serial is `CHANGED`. Both return zero entries and leave
+the continuation unadvanced. End repeats only with unchanged binding and serial.
+Tokens can be copied/replayed; a forged valid position merely selects a point in
+the directory already authorized by the view. Listing still returns names/kinds
+only, not child IDs or authority. Changed-directory table capacity is bounded by
+the writable object bound below, including retained detached directories.
+
+## Proposed persistent additions and supported media
+
+Use volume read-required feature bit 0, `ORPHANS`; this bit remains unsupported
+in pool feature masks. With the volume bit set, the existing
+24 reserved bytes at volume-record offset 424 hold a nullable orphan-index root.
+The volume record stays 448 bytes. Add tree kind 8 and leaf record type 8, ordered
+by object ID, with owning volume set and owning-object ID zero. Its 32-byte leaf
+record is the existing 16-byte record header followed by the object ID. References,
+checksums, internal ID keys and the eight-node depth limit are unchanged. An empty
+orphan index has a null root. Its entry count cannot exceed the object count.
+
+Allow a non-root object's zero parent only with this feature; full validation
+must prove the named-or-orphan invariant in each retained state. Object count
+includes orphans. Cleanup progress is the remaining mappings and grants in the
+ordinary object record/indexes: no additional progress counter or hidden file.
+Remove at most the admitted tail/grant batch, retaining the object and orphan
+entry until their final joint deletion. Inline/none canonical reduction remains
+mandatory. An orphan directory is already empty and owns no directory tree.
+
+A supported writer may enable `ORPHANS` in the same transaction as a volume's
+first unlink/replacement; the older retained state is validated with its own
+feature mask. The bit stays enabled after cleanup. New formatter output may
+explicitly enable it with a null root. No automatic write occurs merely to enable
+it on open. Before enabling it, reserved bytes must be zero. Feature recognition,
+record codecs, object-parent validation, tree traversal and complete checking
+must land together before a writer can produce this representation. No structure
+version bump is required for this declared use of reserved bytes.
+
+`dir.checkpoint` uses directory-right bit 6. It has no feature bit and adds no
+rights to stored grants; new formatter grants may explicitly include it. This
+follows the agreed unknown-rights contract above.
+
+The first writer accepts structure version 1, 128-byte common headers,
+superblock/pool-root used lengths 192/288, and the documented exact fixed record
+lengths. Variable name/key records must have exactly their defined prefix plus
+payload rounded to eight bytes. Tree records end at the declared used length.
+All otherwise reserved metadata fields, alignment and unused bytes must be zero, except
+for the declared orphan root. Pool feature masks are zero; volume masks allow
+only read-required ORPHANS, with write-required/optional masks zero. Grant bits
+must be within the known file, directory and administration masks. Check this
+profile in both retained states. Refuse unknown extension semantics or bytes
+instead of erasing them during COW. Read-only
+inspection keeps its existing broader compatibility contract. Do not rewrite
+unknown grants, widen masks, repair slots or update unrelated repository pins.
+
+## Proposed tree edits and file batching
+
+Keep uncommitted blocks private. Use byte-fit splits, propagate exact minimum
+keys, and collapse a single-child root. At maximum depth eight, refuse an edit
+that would require a ninth level. The conservative single-record envelopes are:
+
+| Edit | New nodes | Old nodes retired |
+| --- | ---: | ---: |
+| Insert, including allowed root growth | 15 | 8 |
+| Same-key, fixed-length update | 8 | 8 |
+| Delete with sibling repair and root collapse | 14 | 14 |
+
+Deletion removes an empty leaf's parent reference. Repair a one-child non-root
+internal node using an adjacent sibling: merge when that sibling has two children,
+otherwise redistribute into two nodes with at least two children each. With fixed
+numeric/ID keys this never increases the live node count. Variable-length name
+separators can grow after deletion and require splitting; include that case in
+the delete envelope. Prove byte fit, not only record count. Newly created private
+nodes superseded within the candidate are discarded, not durably retired.
+
+Set hard per-batch limits `V = 128` new volume blocks and `D = 256` retired volume
+blocks, including both data and metadata. Pool map/root/catalog blocks have their
+separate `H` bound below. Check actual plans against these caps before any writes.
+A one-logical-block write slice touches at most two data blocks: its target and,
+when extending beyond a partial old EOF, that old terminal block. Batch shrink and
+orphan work at no more than six mapping/grant deletions and 128 retired data blocks;
+metadata retirement must still fit the total `D`, not an extra allowance.
+
+These caps cover the fixed representations above. Conservative volume-only
+examples are create 38 new/24 retired blocks, replacement rename 69/62, a write
+slice including old-EOF handling 48/33, and a metadata-only shrink batch at most
+100 metadata blocks plus 128 retired data blocks. Grant cleanup with six deletes
+and final object/orphan removal fits 112 metadata blocks. Include canonical
+extent-tree collapse and actual operation variants in the final plan; these are
+source/layout bounds, not measurements. Generation and counter increments,
+quota, depth and record capacity are independent admission checks.
+
+Shrink removes mappings from the high logical end and trims the boundary mapping
+without copying the retained partial data block. Reads cannot expose bytes beyond
+the committed length. Before later growth exposes any old-EOF suffix, COW that
+block and zero the newly exposed bytes, combining the caller's payload when its
+write targets the same block. Holes remain implicit zeroes. This preserves zero
+growth without making shrink add an extent. If a large write extends the file,
+check resize authority for its entire requested range before its first slice.
+Each successful slice reaches its committed length; an explicit sparse grow can
+publish its new length in one batch after the bounded old-EOF treatment.
+
+Shrinking and orphan cleanup modify only fixed-key extent/object/grant/orphan
+indexes. Enforce node-count-nonincreasing deletion and canonical inline/none
+reduction. Therefore they never increase the number of live data extents or live
+volume-metadata blocks. Variable-name directory edits occur only in separately
+admitted user mutations; orphan directories already have no directory tree.
+This property is essential to the cleanup proof, not an optional optimization.
+
+## Proposed writable profile and admission proof
+
+The first writer uses caller-selected limits `E` on live file mapping extents
+and `M` on live volume-owned metadata blocks, across the pool, including orphans.
+Each inline extent and each extent-tree leaf mapping counts once toward E, even
+when several mappings share one coalesced allocation-map run. Default both to
+1024; callers may request larger profiles within the existing format and memory
+limits. Zero selects the default; require
+`E <= 1,048,576` and `M <= U`, and keep both fixed for the instance. These are
+writable-open options,
+not persisted format fields or quota changes. Report the selected profile and
+computed reserve requirements before attempting mutations. Reopening needs a
+profile that covers the retained states; a default is not a compatibility promise.
+
+Let `N` be the fixed volume count, at most 256. Both retained states must have the
+same volume identities/names and persisted quotas, guarantees and workspace
+capacities; this writer does not administer them. Bound each nonempty catalog by
+`2N - 1` nodes, because it has at most N nonempty leaves and every internal node
+has at least two children. Thus `Pcat = 4N - 2` bounds both catalogs together.
+A fixed-size volume record update replaces at most eight catalog-path nodes;
+volume names and catalog shapes do not change during this milestone.
+
+All published live allocations are permanent. Retired pool metadata is charged
+to recovery workspace; user-batch volume retirements to ordinary workspace;
+orphan-cleanup volume retirements to recovery workspace. Migration capacity
+remains reserved and unused. A validated selected state contains at most `D`
+retired volume blocks, belonging to at most one volume; drain them before starting
+another user/orphan batch. Live retained-orphan data remains permanent until a
+cleanup batch actually retires it.
+
+### Record closure and pool-metadata size
+
+Temporarily treat all live and retired pool metadata as free to count the remaining
+intervals. At most `E` live data extents, `M` live volume-metadata blocks and `D`
+retired volume blocks contribute boundaries, giving:
+
+```
+K = 1 + 2 * (E + M + D)
+Rbase(H) = K + 2 * Pcat + 6 * H
+S(H) = ceil(23 * (Rbase(H) + 20) / 21)
+```
+
+`Rbase` restores at most `Pcat + H` active pool-metadata blocks and `2H` retired
+pool blocks, charging at most two boundaries per block. The complete base map
+already includes the planned volume changes and old pool retirements. The
+whole-map construction above with `C <= 8` then needs at most `F(S) + 9` pool
+blocks. Choose an integer `H >= 10` satisfying:
+
+```
+F(S(H)) + 9 <= H
+S(H) <= 4,194,304
+rebuilt tree depth <= 8
+```
+
+The computation terminates without allocating media or iterating map allocation.
+Let `Hclosed = ceil((K + 2*Pcat + 231) / 15)`. Scan integers from 10 through
+`Hclosed` for the first satisfying choice; stop/refuse if record/depth or capacity
+limits preclude a profile. The loose bound follows from
+`F(S) <= ceil(S/23) <= S/23 + 1` and the ceiling in `S`; `Hclosed` satisfies the
+size inequality absent other limits. Use checked arithmetic throughout.
+
+The baseline publisher uses the whole-map construction for every publication.
+Use the actual base record count and changed catalog path to choose that
+publication's shape and block count; S(H) and H are ceilings, not padding to
+allocate. Every planned leaf must be nonempty and every new node reachable.
+This makes both new and old map-node bounds explicit: each admitted retained map
+has at most `H - 9` nodes. Adding the root and a catalog path gives at most `H`
+new and `H` retired pool blocks per publication. The agreed incremental fallback
+remains the eventual optimization boundary; the initial implementation does not
+need a second allocator before the conservative path is validated. This baseline
+is a proposal for this review, with its pool-wide metadata-write cost explicit.
+
+Every user candidate must preserve `E`, `M`, global record limits and this pool
+bound. Cleanup cannot increase E or M, and each batch drains before another, so
+it cannot strand itself at an allocation-record cap: `S(H)` covers the entire
+sequence, not just the first candidate. Existing sparse maps that exceed the
+old-node cap are refused even if their record count alone fits. No unfunded
+normalization pass is assumed.
+
+### Workspace and permanent capacity
+
+Opening establishes at most `2H` selected-state retired pool blocks, with at most
+`H` protected by the older root. Each publication frees every eligible old pool
+retirement using validated evidence and ended operation/I/O pins. Only the most
+recent at-most-H retirement can remain protected, and the new publication retires
+at most another H. This preserves the accumulated `2H` bound indefinitely.
+
+Reserve another H of already reusable storage for the next publication. With
+`V = 128`, `D = 256`, require persisted capacities of at least:
+
+```
+ordinary workspace >= V + D = 384 blocks
+recovery workspace >= 3*H + V + D = 3*H + 384 blocks
+Pmax = Pcat + H
+Pmax + sum(max(A_i, G_i)) + sum(R_j) <= U
+A_i <= Q_i
+```
+
+`A_i`, `G_i`, `Q_i`, `R_j` and `U` have their existing format meanings. Enforce
+individual occupied-charge limits as well. The recovery allowance covers the
+pool remainder, its next replacement and one recovery-funded orphan batch;
+ordinary admission reserves volume replacements and retirement conservatively.
+Capacities are not fresh allowances per transaction. Existing occupied charges
+reduce availability. In particular, opening with `2H + D` recovery-charged blocks
+still leaves H + V for a candidate. Check actual already-reusable physical ranges,
+not just counters, before allocation. No same-publication free range is usable.
+
+`Pmax` reserves permanent metadata growth independently of temporary workspace.
+Check its capacity inequality both for the starting state and each projected
+permanent user result. A full-quota overwrite can fail if its extent metadata
+would grow. Shrink/orphan cleanup cannot increase permanent volume use, and their
+pool metadata remains within Pmax, so admission already protects their permanent
+capacity. No cleanup borrows unused volume guarantees or migration reserve.
+
+Generation headroom also covers recovery. Let T count live orphan data blocks,
+their grant records and orphan objects, including retained orphans. Every orphan
+batch must reduce T by at least one before its at-most-two drain publications;
+there are no metadata-only progress stages that consume generations without
+reducing T. After runtime pins end, let a be zero with no selected volume
+retirement, one if that retirement is already unprotected by both roots, and
+two otherwise. Writable opening requires checked `generation + a + 3*T` to fit
+in `u64`. A new user batch requires `generation + 3 + 3*T_projected` to fit.
+Use exact generation increments of one. This reserves the ordinary batch/drain
+and later orphan recovery, and remains sufficient at intermediate crash points
+as T and the remaining drain count decrease. Refuse exhaustion before writing;
+never wrap or rely on a future migration to finish an admitted sequence.
+
+| E / M | N | H | Maximum map records S | Minimum recovery blocks | Permanent pool bound Pmax |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1024 / 1024 | 16 | 148 | 6179 | 828 (3.234375 MiB) | 210 |
+| 1024 / 1024 | 256 | 201 | 8630 | 987 (3.855469 MiB, rounded) | 1223 |
+| 4096 / 4096 | 16 | 495 | 21917 | 1869 (7.300781 MiB, rounded) | 557 |
+
+These are arithmetic examples, not performance measurements. With the first
+profile, a 64 MiB pool and explicit 4 MiB recovery reserve can fit: the existing
+4 MiB ordinary and migration floors plus Pmax leave at most 13,100 blocks for
+`sum(max(A_i,G_i))`. Actual image promises must pass that check. Its default
+1 MiB recovery reserve is insufficient; refuse it instead of silently increasing
+it. Formatter overrides already permit different budgets. This proposal changes
+no default, reservation or feature merely to admit an existing image.
+
+### Bounded memory and maintained validation evidence
+
+Reserve all commit/maintenance memory before exposing the writer. A concrete
+arena budget is three S-entry allocation vectors (80 bytes per entry), three
+live-claim vectors (96 bytes per entry, each bounded by `E + M + Pmax`), a
+48-byte changed-directory slot per possible object, `(H + V)` block buffers,
+`8*(H + V + D)` plan/delta slots of 128 bytes each, and 8 MiB of fixed scratch
+for paths, codec buffers and bounded in-place sorting. The delta allowance covers
+new allocations, old claim removal/retirement, eligible frees and unchanged
+fragments of split claims without allocating a fourth complete state vector.
+At most `min(1,048,576, 29*M)` objects fit the object-index leaves. Check these
+products and their sum against the existing memory cap and actual allocation
+results. Implementation structures must fit these slots; otherwise revisit the
+bound before implementation is accepted. Views use remaining capped memory and
+cannot consume the reserved arena. No temporary-file spill in the core.
+
+Writable opening first runs complete validation of both retained states, including
+namespace/orphan rules, all grants, counts and cross-state incarnation/overlap
+checks. Its scratch is separately charged to the same memory owner; failure to
+fit yields refusal, not partial validation. Build two summaries containing root
+identity/generation, sorted allocation intervals and sorted live physical claims
+(owner, object/logical mapping or metadata role, range and birth). No file payload
+scan or checksum is implied. Establish E/M/map/pool/debt/charge limits in both
+states, with the selected-state protected-tail and free-workspace checks above.
+Reject live workspace-charged allocations and occupied migration charges in this
+initial profile. Reject unsupported/degraded/incomplete states without writing.
+
+After full validation and resource checks, perform one writable-open backing
+flush before startup cleanup or returning a writer. A warm reopen can observe
+valid but unflushed bytes in surviving OS/device caches; validation alone does
+not establish their durability. Successful flush must cover all preceding backing
+writes, including those from the prior instance. Failure returns no usable writer
+and reports `ACCESS_STOPPED`.
+This barrier rewrites no slot and retries no mutation; it does not repair a
+corrupt state. Read-only opening never flushes. This adds one opening flush,
+separate from the six-flush mutation/drain count.
+
+Use the third vectors for a private candidate. Compute projected counts and
+admission from bounded deltas first; remove replaced candidate claims before
+inserting final new claims, leaving both durable-state vectors immutable. Build
+the canonical base allocation map by a coalescing merge of old intervals and
+planned changes; intermediate duplicate claims or uncoalesced records may not
+overflow a vector whose final state fits. Known editors preserve unchanged
+validated subtrees and check each changed key, reference, namespace relationship,
+claim and accounting delta against the old summary. Preserve one-name-or-orphan
+uniqueness, reference contexts and compatible cross-state data mappings. Verify
+all new live allocations are reachable and every replaced incarnation is retired.
+Sort and reconcile the candidate using bounded in-place work; no whole-filesystem
+rescan is required per batch. Reclamation checks both interval maps and live-claim
+vectors, plus ended runtime pins; retirement generation alone is never proof.
+
+Finalize all candidate buffers before device writes; emit each allocated block
+exactly once, with at most H + V replacement blocks. Flush, write exactly one
+older-slot block, then flush again. For an identical-generation initial pair, choose slot zero
+first. No speculative rewrite passes or failed-write retries. The platform's 16-block transfer limit bounds each callback, not the
+transaction. Reserve enough generation numbers for the batch and both maintenance
+publications before starting; refuse exhaustion rather than leave an admitted
+drain unable to publish. Slot-write atomicity is never assumed.
+
+After both flushes succeed, rotate the candidate into the selected summary and
+drop the overwritten slot's old summary. Pre-publication failure discards only
+the candidate. Uncertain publication keeps all storage protected, marks access
+stopped and exposes neither guessed state. Reopening reconstructs evidence from
+media. Drain any selected-state volume retirement before abandoned orphans; finish
+orphan cleanup before returning a usable writer. Allocate no further heap storage
+inside an admitted publication/drain. I/O or integrity failure can still stop it
+under the agreed health rules; resource sufficiency is not a guarantee of device
+success.
+
+Writable-open failure returns no usable pool. Its trusted diagnostic reports the
+validation/admission cause, last confirmed cleanup generation and cleanup
+outcome/health, including uncertainty. Earlier confirmed startup cleanup is not
+rolled back. Release private core state after callbacks finish, without further
+writes; the adapter can then release exclusive backing ownership. A fresh open
+must validate again. Ordinary view results do not expose these pool diagnostics.
+
+## Proposed host failure-validation model
+
+The owner authorized bounded host crash/failure validation for this milestone.
+The concrete mechanism below is proposed for review, not implemented here. Use
+one explicitly invoked host utility linked to the real shared core, with a fixed
+scenario table and a failure adapter at the existing exact I/O callbacks. No
+kernel probes, production failure switches, general test framework or CI/boot
+integration. The normal host writer uses actual exact writes and `fsync`.
+
+The simulation uses a sparse durable image and a separate disk-backed volatile
+write log. A log record contains block range, payload and trailing length so reads
+can search backward for the latest write to each block, then fall back to durable
+storage. This avoids an image-sized RAM buffer or bitmap. Use one 64 KiB transfer
+buffer and fixed control records outside separately capped core memory. Bound
+unflushed log payload by `(H + V + 1) * 4096` and record count by `H + V + 1`;
+flush boundaries reset the log. Cap exhaustion or real host I/O failure is
+an infrastructure failure, not a successful simulated-device result.
+
+A successful callback write copies input into the volatile log. Successful flush
+replays pending writes in order into the durable image, calls actual `fsync`, and
+clears the log. A selected crash discards volatile writes and runtime state, then
+reopens only the durable image. A separate warm-recovery case closes the failed
+core instance but keeps the adapter's volatile log: fresh validation reads that
+cache-visible state, and the writable-open barrier must make it durable before
+access resumes. Deliberately promoted bytes are host-flushed before inspection. Close never promotes writes. Merely killing a process while Linux
+caches survive is not the model.
+
+Number callback events and record kind, block range, flush ordinal, selected cut
+and returned status. Slot ranges are the fixed first/last pool blocks. Fixed
+scenario boundaries distinguish user publication, retained-root advancement and
+free-map publication without hooks inside the core. Exercise these selected modes:
+
+- Replacement-write failure before transfer and after a whole-block prefix.
+- First-flush failure with no promotion, a selected whole-block prefix promoted,
+  or all pending replacements promoted before returning `IO`.
+- Slot-write failure leaving the old slot, making the whole new slot durable,
+  or promoting a selected byte mixture of old and new slot contents.
+- Final-flush failure before, partway through and after promotion, including a
+  completely durable publication followed by an error return.
+- Selected pre-first-flush crashes with one replacement data or metadata block
+  promoted early; acknowledged successful flushes are never undone.
+
+For torn-slot cases, mix bytes inside the active header, such as a 32- or 64-byte
+new prefix with the old remainder. Verify the resulting bytes differ from both
+complete slots and fail checksum; do not silently count a valid complete slot as
+a tear. The current superblock uses only 192 bytes, so copying its first 512 bytes
+can produce the entire new slot. These selected byte tears promise no hardware
+sector atomicity and do not enumerate every possible failure.
+
+The core must still report unknown outcome once a slot write was attempted,
+even when the simulator knows it transferred nothing. Private simulator knowledge
+cannot weaken the real callback contract or permit automatic retry.
+
+| Scenario | Required observation |
+| --- | --- |
+| One bounded overwrite/create/rename | Cuts around replacement writes, first flush, slot write and final flush leave an allowed complete old/new state, never mixed contents or half a rename. |
+| Later chunk of write/shrink | Confirmed progress excludes the uncertain chunk; recovered bytes/length match a declared committed boundary. Shrink then growth never exposes discarded partial-block bytes. |
+| Post-commit maintenance | Fail/cut in both maintenance publications; preserve user progress, report cleanup separately and admit no next batch before drain. |
+| Reuse | Trace one range through older-live/newer-retired, retired in both, durably free, then new-live in a later publication with a new birth. |
+| Sustained edits and pressure | Repeated edits reuse physical addresses; quotas, E/M, record, depth, memory and workspace limits refuse before violating a promise. Exercise the whole-map path and supported sparse old maps, plus refusal beyond the old-node bound. |
+| Retained unlink/replacement | Old views retain identity/bytes/rights; recreated names name new identities. Retained orphan storage stays live and charged. Detached directories remain empty and reject insertion. |
+| Final release and reopening | Interrupt bounded orphan batches; marker/object stay paired, cleanup resumes after full validation, and writer access is withheld until startup cleanup completes. |
+| Writable-open barrier | Warm recovery retains cache-visible bytes until its explicit flush; success makes the validated state durable, failure returns no writer. Cold cuts discard the volatile log. |
+| Recovery refusal | Torn/degraded or unsupported peer, insufficient reserves, unknown grants/extensions and incomplete validation prevent writable opening without changing either slot. Read-only inspection follows its own contract. |
+| Authority and continuations | Missing resize rejects an entire extending write; checkpoint rights stay independent; local directory edits invalidate pages while unrelated edits do not. |
+
+For non-crashing failures, immediately attempt representative read, metadata,
+lookup, mutation, checkpoint and close calls. Verify permitted confirmed reads
+before publication failure, and blocked cached reads after uncertainty. Trace
+closure to prove no retries or recovery writes occur in stopped states.
+
+Use independent expected host files and a namespace/identity manifest. Update
+expected bytes/lengths with ordinary host operations, explicitly zeroing regrown
+tails, and compare extraction with bounded streaming. Declare each cut's finite
+set of permitted complete states; do not accept arbitrary bytes after a confirmed
+prefix. Run full checking of both retained states on the unchanged durable image.
+A deliberately torn peer is an expected failed/incomplete check, not a clean
+writable recovery; require writable refusal and, where selectable, correct
+read-only extraction separately.
+
+Record exact revisions, geometry, sector/transfer sizes, persisted budgets,
+profile/memory/log limits, event traces and content results. Structural checking
+does not checksum file payloads; selected-state extraction does not prove payloads
+of every retained state. This model establishes only exercised serial failures,
+not exhaustive scheduling, actual-device power loss, performance or production-data
+safety. Keep ordinary host builds/manual operations and freestanding target
+compilation alongside this scoped utility. No validation execution is claimed by
+this specification.
+
+## Proposed delivery boundaries and review closure
+
+The authoritative format/core implementation belongs in `pyxis-fs`; this document
+is the parent milestone's review contract. Publish dependency commits and PRs
+before a separate Pyxis pin/checklist update, and state merge order. No compiler
+container rebuild, userspace port, native writable mount or FUSE work is implied.
+
+1. Task 2: private COW tree/map planners, the fixed envelopes, bounded arena and
+   canonical codecs/checker support needed by the proposed representation. Keep
+   the public product read-only; no usable writer without admission/reclamation.
+2. Tasks 3 and 4 together: exclusive writable open, validation summaries, ordered
+   publisher, workspace/permanent/profile admission, drain and recovery. Combine
+   these into one implementation PR because publication without its resource and
+   reuse guarantees would be an unsafe intermediate interface. A real host
+   checkpoint/reopen command accompanies the narrowly scoped utility. Its internal
+   unchanged-state maintenance scenario must call the real admitted publisher to
+   exercise replacement and reuse; a clean checkpoint barrier alone does not.
+   Add no fake file mutation commands or public intermediate transaction API.
+   Until task 6 supplies orphan cleanup, refuse writable opening of a nonempty
+   orphan index before any writes; never pretend startup cleanup succeeded.
+3. Task 5: file create/write/resize, creation-time directory serial updates,
+   old-EOF zeroing and partial results, with the corresponding host content and
+   failure scenarios.
+4. Task 6: directory/remove/rename, retained authority, live continuation changes
+   and orphan cleanup/reopening; enable the remaining concrete scenarios.
+5. Task 7: combined sustained reuse, pressure and failure evidence, documentation
+   closure and accepted limits. This does not reopen native persistence scope.
+
+Full review must accept the proposed profile/options and refusal behavior,
+whole-map baseline, concrete representations/interfaces and exact failure model.
+The proofs above depend on enforced editor and representation bounds; implementation
+review must check those invariants, and any violation requires correcting the
+bound or design before delivery. Passing host scenarios alone is not their proof.
+No unresolved policy is silently delegated to an implementation PR. Acceptance
+closes task 1; implementation still requires the next task to be assigned.
 
 ## Focused tasks
 
-1. [ ] **Specify the writable contract.** Audit the pinned format/core, resolve
-   the gates above and document operation rights, state transitions, admission
-   bounds, failure semantics and the recovery validation model. Establish useful
-   PR boundaries for tasks 2–4; they are closely related and need not expose
-   artificial public intermediate APIs. Stop for unresolved policy decisions.
+1. [ ] **Accept the consolidated writable contract.** The complete specification
+   is drafted above for owner review: agreed policy plus proposed mechanisms,
+   numerical bounds, failure model and delivery boundaries. Mark complete after
+   full acceptance; no writable implementation is claimed.
 2. [ ] **Implement bounded COW tree and allocation updates.** Add the required
    index edits, path replacement/splitting and allocation-map accounting, including
    its own replacement blocks. Keep uncommitted changes private and unwind
    failures without modifying a published tree.
 3. [ ] **Implement publication and reopening.** Add exact writes/flushes through
    the platform adapter, ordered two-slot publication, checkpointing and reopening
-   of supported committed states. Stop mutation on uncertain outcomes. Provide
+   of supported committed states. Stop ordinary access on uncertain outcomes. Provide
    only the small host command surface needed to exercise shared-core operations.
 4. [ ] **Implement safe reclamation and enforce admission.** Protect retained
    roots and live operations, durably publish freed ranges before reuse, and
@@ -620,29 +1113,3 @@ framework as a substitute for the concrete bounded algorithms.
    compare contents and check both retained states. Record coverage and limits;
    convert this document to an implemented reference and carry remaining work
    forward without claiming native mounting, FUSE or production-data safety.
-
-## Validation authorization and limits
-
-The owner explicitly agreed to bounded host-side crash/failure validation for
-this milestone. This is a scoped exception to the normal prohibition on fault
-injection, not permission for a general testing framework, new CI, kernel probes
-or boot automation. Task 1 must propose the concrete small mechanism and agree
-its coverage before implementation.
-
-Use disposable images and the real shared core. Cover interruption around
-replacement writes, both flush boundaries and slot publication, plus selected
-write/flush failures and reclamation/orphan transitions. Distinguish failures
-known to precede publication from outcomes that may already be durable.
-Define which writes reach simulated durable storage, including torn publication
-if claimed: merely killing a process while host caches survive does not simulate
-power loss or prove flush ordering. State exactly what the model establishes.
-
-Pair structural checks with extracted-content comparisons: the existing checker
-does not checksum payloads. Keep ordinary host builds/manual operations and
-freestanding target compilation. Record exact revisions, budgets and image
-geometry. No physical-device power-loss or exhaustive failure coverage follows
-from a bounded host model.
-
-Dependency changes belong in published `pyxis-fs` PRs before Pyxis updates its
-pin. Other repository PRs are needed only for actual changes. No compiler
-container rebuild or new userspace port is implied by this milestone.
