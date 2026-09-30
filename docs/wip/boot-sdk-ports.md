@@ -115,9 +115,11 @@ for the persistent development loop or as a replacement for the boot archive.
 The selected next milestone is [native read-only filesystem mounts](native-readonly-filesystem.md):
 init-selected GPT partition and volume, policy-approved directory/file capabilities,
 ordinary reads and executable loading, followed by scoped capacity information
-and Fastfetch Disk. Task 1 is in design review: READ bundling and the shared
-bootstrap principal are agreed; the detailed contract and enumeration choice
-remain a review gate before code.
+and Fastfetch Disk. Task 1 remains in design review. READ bundling, the shared
+bootstrap principal, concurrent duplicate-pool rejection and a small core
+continuation prerequisite are agreed; remaining integration defaults are under
+review. The continuation prerequisite precedes native enumeration and retains no
+per-enumeration kernel state.
 Writable recovery and FUSE stay separate.
 
 The [I/O reliability and attribution report](../development/io-reliability-attribution.md)

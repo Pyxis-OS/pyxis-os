@@ -1,10 +1,11 @@
 # Native read-only filesystem mounts
 
 Status: task-1 design review, 2026-09-30. READ bundling, the shared bootstrap
-principal and the authority boundaries below are agreed. The concrete integration
-contract below is proposed for review; enumeration remains an explicit decision.
+principal, duplicate-pool rejection and a core continuation prerequisite are
+agreed. The remaining concrete integration defaults below are proposed for review.
 No kernel mount or new ABI is implemented. Runtime numbers are starting bounds
-to validate in task 2, not measured capacity. Update each task in its delivery PR.
+to validate in the adapter task, not measured capacity. Update each task in its
+delivery PR.
 
 ## Completion point
 
@@ -126,9 +127,10 @@ facilities; it does not expand this storage milestone.
 ## Task-1 integration contract
 
 The source review uses Pyxis `79f9889`, pinned pyxis-fs `0c51185` and pinned
-userland `c9ed311`. The READ mapping and shared-principal policy are agreed;
-the remaining concrete choices in this section are a proposed implementation
-contract for review. They do not authorize starting later tasks.
+userland `c9ed311`. The READ mapping, shared-principal policy, duplicate-pool
+exclusion and stateless core continuation direction are agreed; the remaining
+concrete choices in this section are a proposed implementation contract for
+review. They do not authorize starting later tasks.
 
 ### Trusted configuration and mount request
 
@@ -224,40 +226,76 @@ A native root with only observation may be obtained by attenuating an already
 acquired grant. Other backends retain their existing rights and behavior; they do
 not gain an invented native-pool query result.
 
-### Enumeration proposal and abandonment
+### Core continuation prerequisite and abandonment
 
-Decision pending: prefer temporary reconstruction with the pinned core for this
-milestone, or add a core continuation/seek interface before integration. The
-following specifies the reconstruction option so its cost is reviewable.
+Agreed: add a small validated continuation/seek interface to pyxis-fs before
+native enumeration. Do not reconstruct a listing by skipping every earlier
+entry on each OS call. The prerequisite supplies a policy-view page operation
+with caller-owned continuation input/output and operation-local scratch; it must
+not require an open cursor or a kernel token registry between calls. Keep format
+parsing and continuation validation in the core. No on-disk format change or
+persistent enumeration index is required.
 
-Retain no core cursor between OS calls. Each native directory wrapper has a
-nonzero, boot-unique enumeration identity, shared by copies of that object and
-never reused after destruction. The public cursor remains opaque: `generation`
-contains that identity and `position` identifies the next entry in the immutable
-core name order. It is not the pool's generation and contains no kernel pointer.
-The zero pair starts a listing. Zero identity with nonzero position is invalid;
-a different nonzero identity returns `DIRECTORY_CHANGED`. Counter exhaustion
-returns `CALL_LIMIT`, without wrapping. A fresh lookup of the same directory can
-have a different identity; callers restart rather than transplant cursors.
+The proposed OS mapping keeps the existing two-word `directory_cursor`. Each
+native directory wrapper has a nonzero, boot-unique enumeration identity, shared
+by copies of that object and never reused after destruction. `generation` holds
+that identity, not the pool generation. `position` carries the core's opaque
+64-bit continuation value, not an entry ordinal or kernel pointer. Zero means
+start; a nonzero value identifies a resume point after a previously emitted
+entry in the selected immutable directory. The core owns its encoding; a bounded
+leaf/slot locator validated through the directory tree is one implementation
+candidate, not authority to read arbitrary blocks. The prerequisite must establish
+that the chosen encoding fits this mapping before the kernel consumes it.
 
-For each call, open a temporary policy-view cursor, skip `position` entries in
-bounded batches and read one candidate. Reject positions above the core record-count bound before scanning. A position
-beyond end is invalid, while position exactly at end repeatedly returns `DIRECTORY_END`. A forged position
-is only an untrusted resume hint: bounds, the operation deadline and the held
-LIST right still apply. ENTRY copies one whole name/kind and advances position.
-BUFFER_TOO_SMALL reports the required NUL-inclusive size without advancing or
-writing a partial name. Any error leaves user output unpublished. Close the
-core cursor on every success, short-buffer, end and error path before completing
-the operation.
+The zero pair starts a listing. Zero identity with nonzero continuation is
+invalid; a different nonzero identity returns `DIRECTORY_CHANGED`. Identity
+counter exhaustion returns `CALL_LIMIT`, without wrapping. A fresh lookup of the
+same directory can have a different identity; callers restart rather than
+transplant OS cursors. Copies of the same directory grant may independently
+replay or fork a continuation without moving a shared position.
 
-Abandoning the OS cursor retains no allocation, cursor registry entry or extra
-volume reference. Closing the directory releases its view after in-flight uses
-finish. Independent enumerations and capability copies have no shared position.
-This choice trades simple ownership for repeated traversal: listing N entries
-can require quadratic enumeration work, in addition to the core's existing
-ancestry/allocation-proof costs. A memory cap does not bound that work. Do not
-hide timeout/limit failures as end-of-directory. If accepted, record this cost
-and the continuation-interface revisit point in technical debt.
+The core treats every continuation as untrusted. Check syntax/ranges, bind
+interpretation to the held view's pool, volume, directory and selected generation,
+and prove the resume entry is reachable from that directory's tree before using
+it. This validates a position in the current view, not the token's origin: the
+same numeric value may also identify a valid position in another authorized
+view. Neither the token nor the OS wrapper identity authenticates a caller.
+A checksum or matching ownership header alone does not prove reachability.
+Validate the traversed tree/reference contexts, allocation ownership and returned
+child kind/parent relations using ordinary read proofs. Caller tokens confer no
+LIST, lookup, metadata or raw-I/O authority. A forged but otherwise valid resume
+point may skip entries inside the authorized directory; it cannot broaden access.
+Invalid/unreachable continuations fail as invalid requests, not successful END;
+backing I/O, unsupported format, proof corruption and resource failures retain
+their distinct operation errors. Untrusted token bytes alone do not establish
+that the mounted directory is corrupt.
+
+Seek from the validated resume key through the tree and return its successor;
+do not walk the already-returned prefix to reconstruct an ordinal. Tree-path,
+ancestry and allocation-proof validation costs still apply: this prerequisite
+removes the added prefix-rescan cost, not every existing core scaling limit.
+Do not restore caller-supplied emitted counts as trusted cursor state. A stateless
+page validates consulted structures and returned entries, without claiming a
+full-list count reconciliation or uniqueness check across skipped pages. Keep
+child-identity duplicate detection within each returned page. Preserve the
+existing diagnostic cursor's end-to-end count checks and the separate whole-image
+checker; the diagnostic cursor does not establish cross-page uniqueness. Document this distinction in pyxis-fs when adding the API.
+
+The OS requests one candidate entry with the held LIST right. ENTRY copies a
+whole name/kind and the returned continuation only after success.
+BUFFER_TOO_SMALL reports the NUL-inclusive size without advancing the caller's
+cursor or publishing a partial name. END leaves a repeatable terminal position;
+replaying the final continuation must return END without scanning from the start.
+Errors publish neither name nor next continuation. Release all core scratch and
+any temporary handles before completing every success, short-buffer, end or
+error path.
+
+Abandoning an OS continuation retains no allocation, cursor registry entry or
+extra volume reference. Closing the directory releases its view after in-flight
+uses finish. Independent enumerations and capability copies have no shared
+position. Stale continuations cannot keep a mount alive or reopen it. Publish
+and review the focused core prerequisite before pinning it for native integration;
+this design PR neither changes that pin nor implements the new interface.
 
 ### Worker, limits and final release
 
@@ -283,7 +321,8 @@ The 32-request and 8 MiB numbers are agreed starting proposals; other numbers
 are proposed integration bounds. Actual allocation failure below a cap is
 `CALL_NO_MEMORY`. Core accounting excludes adapter objects, task/request storage,
 stack, heap overhead and allocator rounding. Charge native persistent objects
-and temporary adapter payload separately; check total kernel cost during task 2.
+and temporary adapter payload separately; check total kernel cost during the
+adapter task.
 Do not substitute the core's 128 MiB default or claim the 8 MiB profile can handle
 every format-valid image. Inspection of `core/pool.c` shows that ordinary
 operations allocate a catalog workspace containing 256 volume/name records,
@@ -292,13 +331,33 @@ x86-64 layout estimates are 215 KiB for this workspace and 5.5 KiB per consulted
 metadata node, retained through proof closure. An otherwise empty 8 MiB budget
 therefore holds only about 1,400 such nodes, fewer after other state/hash-table
 costs. These are source-layout estimates, not measured peaks. Queuing 32 requests
-does not allocate 32 traversal workspaces because execution is serial. Retired wrappers remain charged against both payload and count limits until
-the worker actually frees them; a cleanup backlog cannot bypass the cap.
-Admission storage is already provisioned; final cleanup
-uses embedded retirement links and must not require a free user-request slot.
+does not allocate 32 traversal workspaces because execution is serial. Retired
+wrappers remain charged against both payload and count limits until the worker
+actually frees them; a cleanup backlog cannot bypass the cap. Admission storage
+is already provisioned; final cleanup uses embedded retirement links and must
+not require a free user-request slot.
 
 Share an open pool by authorized device and partition identity/extent, then
-retain its selected pool ID/generation. Share volumes by their retained IDs;
+retain its selected pool ID/generation. Repeated mounts of that same backing
+instance reuse it. Before admitting a newly opened backing instance or publishing
+any root from it, the owning worker must compare its selected pool ID with every
+live or reserved pool identity. The same ID on a different partition/extent is
+`CALL_ALREADY_EXISTS`, with a duplicate-pool diagnostic, even on the same disk
+and even if the copies have different generations or volume names. Do not merge
+their state or pick a preferred clone. This enforces the existing
+[persistent identity agreement](persistent-storage.md#agreed-persistent-identity-and-imported-ownership);
+rejecting multiple block devices is not sufficient.
+
+Identity checking and reservation are serialized by the owning worker. Reserve
+the identity before root publication, keep it reserved across policy acquisition,
+outstanding operations and deferred retirement, and release it only after that
+backing pool is actually closed. An unsuccessful candidate releases only its own
+reservation/state; it cannot remove the live instance's identity. Once all uses
+of the first instance have drained and it is closed, a later mount can select
+another extent with that ID. This excludes concurrent duplicates without a disk
+scan for unmounted copies or a permanent boot-wide claim.
+
+Share volumes by their retained IDs within the accepted backing instance;
 resolve a requested volume name against that same generation, not a new open.
 Every mount request performs its own policy acquisition and receives its own
 view. Multiple pools/volumes share the global budgets rather than multiplying
@@ -355,6 +414,7 @@ no last-error field survives in a pool, volume or worker for the next operation.
 | Malformed request/selector syntax | `CALL_BAD_REQUEST` |
 | Wrong object kind | `CALL_WRONG_TYPE` |
 | Missing partition, volume or child | `CALL_NOT_FOUND` |
+| Same pool ID on a different concurrently retained backing extent | `CALL_ALREADY_EXISTS` |
 | Insufficient capability or persistent policy | `CALL_DENIED` |
 | Valid mutation request against the native backend | `CALL_READ_ONLY`, after ordinary authority checks |
 | Core profile/memory cap exhausted | `CALL_LIMIT` |
@@ -387,7 +447,7 @@ Executable staging is separately owned launch memory, outside the 1 MiB native
 wrapper cap; its existing launch/batch bounds and failure cleanup still apply.
 There is no new aggregate staging budget across callers, so 8 MiB plus 1 MiB is
 not a total native-workload memory bound. Below those per-capture limits, staging
-can still fail with NO_MEMORY; task-2/combined validation must account for it.
+can still fail with NO_MEMORY; adapter/combined validation must account for it.
 
 ### Bindings, handoff and first information fields
 
@@ -440,19 +500,24 @@ pool IDs identify shared capacity and must not be summed per binding/volume.
 
 Task 1 changes documentation only. The rights distinction, cursor ownership,
 error collapse and memory accounting above are established by inspection of the
-pinned core; no kernel runtime capacity or timing has been measured. Task 2 must
+pinned core; the continuation interface is a new prerequisite, not an existing
+capability. No kernel runtime capacity or timing has been measured. Task 3 must
 record peak live core and adapter bytes for representative populated images,
 volume opening, policy acquisition and nested traversal; later object validation
-must include enumeration, repeated mounts and final cleanup. Use ordinary host
-tools, interactive boots and debugger inspection. If the proposed profile cannot
+must include enumeration continuation/replay/end/abandonment, repeated mounts
+of the same instance, rejection of two cloned partitions on one disk, reservation
+lifetime through final cleanup and successful acquisition after the first
+instance closes. Use ordinary host tools, interactive boots and debugger
+inspection. If the proposed profile cannot
 serve those images, revise the bounds explicitly with evidence; do not relabel
 LIMIT as corruption or silently increase the allowance.
 
-Before marking task 1 complete, settle the enumeration choice and review the
-proposed configuration, observation, wrapper/binding limits and error mapping.
-No compiler-container rebuild or dependency pin change is needed for this design
-PR. A core continuation choice would add a focused pyxis-fs prerequisite before
-kernel enumeration; publish that dependency before changing the parent gitlink.
+The enumeration direction and duplicate-identity rule are settled. Before marking
+task 1 complete, review the proposed configuration, observation, wrapper/binding
+limits, continuation mapping and error mapping. No compiler-container rebuild or
+dependency pin change is needed for this design PR. Task 2 publishes the focused
+pyxis-fs continuation prerequisite before the parent updates its gitlink; native
+enumeration must not fall back to reconstructing every prefix.
 
 Agreed scope limitations are tracked in [technical debt](../technical-debt.md#native-mount-design-limits).
 
@@ -463,32 +528,41 @@ Agreed scope limitations are tracked in [technical debt](../technical-debt.md#na
    a concrete rights/lifetime/error mapping and agreed runtime bounds. Record the
    first displayable capacity fields. This is a design PR, not a broad framework
    implementation or a repeat of the filesystem-format design.
-2. [ ] **Link the core and implement bounded block/memory adapters.** Integrate the
+2. [ ] **Add validated core directory continuation.** In pyxis-fs, provide the
+   bounded policy-view continuation/seek operation described above, with no
+   retained enumeration state between calls and no prefix reconstruction.
+   Specify the opaque token, view/generation validation, repeat/end/error rules
+   and ordinary-page versus full-list validation guarantees. Preserve diagnostic
+   cursor checks and update the core interface documentation. Validate through
+   ordinary builds and manual host-tool/debugger inspection of multi-page
+   enumeration. Publish a focused dependency PR before updating the parent pin;
+   this prerequisite does not implement kernel objects or change the disk format.
+3. [ ] **Link the core and implement bounded block/memory adapters.** Integrate the
    pinned freestanding library into Caelum with kernel-appropriate flags; add
    partition-bounded reads, memory accounting and the agreed BSP worker ownership.
    Document manual preparation of a disposable GPT disk using existing host tools.
    Verify opening the selected pool/volume through normal boot and debugger
    inspection without a permanent diagnostic application or automatic probe.
-3. [ ] **Provide read-only directory/file objects.** Implement policy-approved
+4. [ ] **Provide read-only directory/file objects.** Implement policy-approved
    acquisition, enumeration, lookup, length and offset reads through shared-core
    views, including retained object lifetimes and failure cleanup. Enforce the
    agreed rights mapping and read-only backend errors. Keep existing backends
    working. Share internal mount preparation needed by this and the next task;
    do not publish unusable placeholder APIs.
-4. [ ] **Mount and delegate from init.** Add the agreed mount ABI/library/command
+5. [ ] **Mount and delegate from init.** Add the agreed mount ABI/library/command
    support and namespace/session forwarding. Init chooses partition, volume and
    binding through disk-scoped authority. Exercise `ls`, `cat` and launching an
    executable from the disk, plus absent disk, wrong selector, policy denial and
    rejected writes. Default boot needs no development disk.
-5. [ ] **Expose scoped filesystem information.** Implement the settled bounded
+6. [ ] **Expose scoped filesystem information.** Implement the settled bounded
    query and library interface. Document field units, shared-pool meaning,
    verification status, unavailable fields and observation authority. Read queries
    must not trigger a full consistency scan or acquire additional authority.
-6. [ ] **Adapt Fastfetch Disk.** Add the minimal native adapter, explicit resource
+7. [ ] **Adapt Fastfetch Disk.** Add the minimal native adapter, explicit resource
    forwarding if needed, recipe/pin changes and normal image integration. Exercise
    local/remote display, redirected text/JSON and absent disk/query authority.
    Preserve unavailable-value and upstream error behavior; do not broaden the port.
-7. [ ] **Validate the combined workflow and close the milestone.** Rebuild and boot
+8. [ ] **Validate the combined workflow and close the milestone.** Rebuild and boot
    normally with and without the disk; inspect content against the source import,
    nested traversal, executable loading, delegated restrictions, repeated opens
    and process cleanup. Use existing host checking tools before attachment and

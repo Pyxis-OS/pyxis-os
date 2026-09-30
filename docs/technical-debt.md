@@ -732,6 +732,12 @@ service work and wait sets; no worker-process or thread framework is included.
 
 The [native read-only mount contract](wip/native-readonly-filesystem.md) is in
 design review; these are agreed integration limits, not implemented behavior.
+The selected core continuation prerequisite must avoid rescanning the returned
+prefix and retain no per-enumeration kernel state. It does not remove existing
+core ancestry scans or allocation-proof costs; measure those during integration
+and revisit only when they limit representative listings. Stateless page success
+must not be presented as global directory-count reconciliation.
+
 The OS READ grant continues to bundle file bytes and length, so native acquisition
 and descendant lookup must hold both core read and metadata rights. A persistent
 read-only grant lacking metadata cannot become an OS READ grant. Revisit when
