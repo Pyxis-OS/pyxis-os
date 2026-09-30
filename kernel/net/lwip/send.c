@@ -15,6 +15,7 @@ struct tcp_write_call {
   struct tcp_stream *stream; /* The parked caller retains its grant. */
   struct task_wait *wait;
   uint64_t deadline;
+  bool nonblocking;
   size_t length, accepted;
   enum call_status status;
   uint8_t data[TCP_WRITE_MAX_BYTES];
@@ -36,15 +37,15 @@ static void unlock_writes(void)
 }
 
 enum call_status net_tcp_write(struct kernel_object *object, const void *data,
-    size_t length, uint64_t deadline, struct tcp_write_reply *reply)
+    size_t length, uint64_t deadline, bool nonblocking, struct tcp_write_reply *reply)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(length <= TCP_WRITE_MAX_BYTES);
   uint64_t now = arch_monotonic_ns();
-  if (deadline <= now) {
+  if (!nonblocking && deadline <= now) {
     return CALL_TIMED_OUT;
   }
-  if (deadline - now > TCP_WRITE_MAX_WAIT_NS) {
+  if (!nonblocking && deadline - now > TCP_WRITE_MAX_WAIT_NS) {
     return CALL_BAD_REQUEST;
   }
   if (!length) {
@@ -79,6 +80,7 @@ enum call_status net_tcp_write(struct kernel_object *object, const void *data,
   memcpy(call->data, data, length);
   call->length = length;
   call->deadline = deadline;
+  call->nonblocking = nonblocking;
   struct task_wait *wait = task_wait_prepare();
   lock_writes();
   call->wait = wait;
@@ -95,6 +97,7 @@ enum call_status net_tcp_write(struct kernel_object *object, const void *data,
   }
   *call = (struct tcp_write_call){0};
   unlock_writes();
+  net_worker_notify();
   return status;
 }
 
@@ -120,7 +123,7 @@ static bool queue_write(struct tcp_write_call *call, enum call_status *status)
   if (*status != CALL_OK) {
     return true;
   }
-  if (task_deadline_expired(call->deadline)) {
+  if (!call->nonblocking && task_deadline_expired(call->deadline)) {
     *status = CALL_TIMED_OUT;
     return true;
   }
@@ -179,7 +182,12 @@ bool tcp_writes_service(void)
       continue;
     }
     enum call_status status;
-    if (queue_write(call, &status)) {
+    bool complete = queue_write(call, &status);
+    if (!complete && call->nonblocking) {
+      status = CALL_WOULD_BLOCK;
+      complete = true;
+    }
+    if (complete) {
       complete_write(call, status);
       worked = true;
     }
@@ -209,4 +217,20 @@ bool tcp_writes_next_deadline(uint64_t *deadline)
   cpu_restore_interrupts(flags);
   *deadline = next;
   return found;
+}
+
+bool tcp_write_available(struct tcp_stream *stream)
+{
+  uint64_t flags = cpu_save_interrupts();
+  lock_writes();
+  bool available = true;
+  for (size_t i = 0; i < TCP_WRITE_LIMIT; ++i) {
+    if (writes[i].state != WRITE_FREE && writes[i].stream == stream) {
+      available = false;
+      break;
+    }
+  }
+  unlock_writes();
+  cpu_restore_interrupts(flags);
+  return available;
 }

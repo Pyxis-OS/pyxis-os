@@ -17,6 +17,7 @@
 #define TCP_LISTENER_RIGHTS (TCP_LISTENER_RIGHT_INSPECT | TCP_LISTENER_RIGHT_ACCEPT)
 #define TCP_LISTENER_INSPECT UINT64_C(1)
 #define TCP_ACCEPT UINT64_C(2)
+#define TCP_TRY_ACCEPT UINT64_C(3)
 #define TCP_ACCEPT_MAX_WAIT_NS UINT64_C(30000000000)
 #define TCP_LISTENER_LIMIT UINT32_C(4)
 #define TCP_LISTENER_PENDING_LIMIT UINT32_C(4)
@@ -34,6 +35,8 @@
 #define TCP_READ UINT64_C(3)
 #define TCP_WRITE UINT64_C(4)
 #define TCP_SHUTDOWN_WRITE UINT64_C(5)
+#define TCP_TRY_READ UINT64_C(6)
+#define TCP_TRY_WRITE UINT64_C(7)
 #define TCP_READ_MAX_BYTES UINT64_C(4096)
 #define TCP_READ_MAX_WAIT_NS UINT64_C(30000000000)
 #define TCP_WRITE_MAX_BYTES UINT64_C(4096)
@@ -176,6 +179,29 @@ struct tcp_write_request {
 struct tcp_write_reply {
   uint64_t length;
 };
+
+/* TRY_ACCEPT is header-only and returns tcp_accept_reply. TRY_READ/TRY_WRITE
+ * have the same rights, limits, success replies and EOF/error semantics as
+ * their blocking counterparts, but no deadline. One worker attempt returns
+ * progress or WOULD_BLOCK without leaving a pending operation. The BSP worker
+ * handoff may park the caller; waiting for data, send capacity or acceptance
+ * never does. BUSY and global slot/memory/handle exhaustion remain distinct.
+ * Zero-length tries validate authority/buffers and succeed without polling.
+ * Readiness is not a reservation: a stale event may lead to WOULD_BLOCK. */
+struct tcp_try_read_request {
+  struct message_header header;
+  uint64_t buffer;
+  uint64_t capacity;
+};
+
+struct tcp_try_write_request {
+  struct message_header header;
+  uint64_t buffer;
+  uint64_t length;
+};
+
+_Static_assert(sizeof(struct tcp_try_read_request) == 32, "TCP try read request");
+_Static_assert(sizeof(struct tcp_try_write_request) == 32, "TCP try write request");
 
 _Static_assert(sizeof(struct tcp_write_request) == 40, "TCP write request");
 _Static_assert(sizeof(struct tcp_write_reply) == 8, "TCP write reply");

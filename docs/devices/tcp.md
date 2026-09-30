@@ -48,8 +48,53 @@ connections; already accepted streams remain independent. Calls retain their
 object while pending. Losing the configured address permanently invalidates its
 listeners and wakes ACCEPT with UNAVAILABLE; INSPECT remains available. Restoring
 an address does not revive the listener. Link changes alone do not retarget it.
-READ, WRITE and ACCEPT are blocking in this task; readiness and nonblocking
-operations belong to the next remote-terminal task.
+READ, WRITE and ACCEPT retain their blocking behavior. Their separate try forms
+and multi-object readiness waits support a single execution loop.
+
+## Readiness and transfer attempts
+
+Libpyxis `wait_many` in `<wait.h>` accepts 1–16 `{handle, events}` interests and
+returns one event mask per input entry, including zeros for entries that are not
+ready. The complete input is captured and validated before registration; duplicate
+handles or copies are separate observations. Invalid handles return BAD_HANDLE,
+unsupported types/masks or zero masks return BAD_REQUEST, and insufficient rights
+return DENIED. Failure leaves the output array unchanged. Only native TCP streams
+and listeners are supported; terminal attachments and execution-group completion
+join in their own milestone tasks.
+
+| Interest | Required right | Automatically reported conditions |
+| --- | --- | --- |
+| READABLE, PEER_FIN | TCP READ | READABLE includes PEER_FIN; either includes terminal ERROR |
+| WRITABLE, WRITE_CLOSED | TCP WRITE | WRITABLE includes WRITE_CLOSED; either includes terminal ERROR |
+| ACCEPTABLE, CLOSED | Listener ACCEPT | ACCEPTABLE includes CLOSED; either includes terminal ERROR |
+
+ERROR is output-only. INSPECT is not additionally required. FIN may coexist with
+readable bytes; reads drain those bytes before a successful zero-byte result
+reports EOF. FIN alone leaves writing open. Local shutdown closes writing, while
+reset or transport failure reports ERROR. Closure/error events are reported even
+while another call owns that direction. Ordinary data/capacity readiness excludes
+an occupied direction, and releasing its call slot wakes the worker to recheck.
+
+The deadline is absolute monotonic time, at most 30 seconds ahead. Zero requests
+a poll. Current readiness is checked first even if a blocking deadline expired
+while waiting for the worker. If nothing is ready, a poll succeeds with an empty
+result, and an expired blocking wait returns TIMED_OUT. Results are level-triggered
+observations, not reservations or an atomic snapshot across multiple calls. Every
+return removes the registrations and temporary references. Closing a different
+handle copy does not itself close the shared object.
+
+`tcp_try_accept`, `tcp_try_read` and `tcp_try_write` have no deadline. Each performs
+one worker attempt and returns progress, EOF, an error or WOULD_BLOCK. A stale
+readiness result can legitimately lead to WOULD_BLOCK after another holder has
+consumed the data or accepted connection. No operation remains queued on that
+result, and try-accept does not reserve a stream/handle when its queue is empty.
+BUSY, QUEUE_FULL, handle exhaustion and allocation failure remain distinct errors.
+The existing short-transfer rules, 4 KiB transfer limits and zero-length no-op
+behavior apply. Helpers preserve outputs on failure.
+
+All these calls, including polls, may park for the BSP worker handoff. Try calls
+and polls never wait for network readiness. lwIP remains exclusively worker-owned;
+no userspace buffer, callback or submitted background I/O survives return.
 
 ## Capability contract
 
@@ -145,7 +190,7 @@ application-level acknowledgment of the request. HTTP request files are raw
 bytes to this utility; it contains no HTTP or TLS parser. See
 [host request examples](networking.md#tcp-requestresponse-utility).
 
-## Sequential echo server
+## Concurrent echo server
 
 An opt-in trusted init can create a listener and hand it to the existing `tcp`
 utility. Save this native init script as `/tmp/tcp-init.sh`:
@@ -170,13 +215,21 @@ hostfwd_add pyxis_net tcp:127.0.0.1:15001-10.0.2.15:5001
 Return to serial with Ctrl-a c. From the host, use a TCP client that half-closes
 its writing side after stdin EOF and continues reading, for example
 `printf 'hello\n' | socat - TCP:127.0.0.1:15001`. Each connection echoes bytes
-until peer EOF, then shuts down writing and closes. The server retries idle
-ACCEPT/READ deadlines; writes use the utility's ten-second deadline and any other
-connection error stops this simple consumer. It is sequential, so a client that
-stays open prevents the next client from being served.
+until peer EOF, drains pending output, then shuts down writing and closes. Up to
+four accepted clients progress concurrently through `wait_many` and TCP try
+operations. Each has a 4 KiB pending-output buffer; reads stop while it is full,
+and writable readiness is requested only while output is queued. Each pass
+allows at most four try operations and 8 KiB transferred per client, rotating
+which client is served first. A stale readiness result followed by WOULD_BLOCK
+returns that direction to waiting. Connection errors close only that client and
+make the eventual server exit unsuccessful; other clients continue.
+
+The loop retries ten-second readiness deadlines without imposing an idle-client
+or output-drain deadline. Four stalled clients can occupy all active slots;
+transport backlog and global record limits still bound further admission.
 
 `--tcp-count 3` launches `tcp --serve 3`: stop admitting when the third stream is
-accepted, finish that independent stream, then exit. Excess pending connections
+accepted, close the listener, finish all active streams, then exit. Excess pending connections
 are aborted when admission stops. Omit the count to keep serving. The child
 receives only the bound listener, memory, a readable clock and stdout/stderr;
 it receives no LISTEN service, launcher or filesystem roots. The ordinary
@@ -236,8 +289,8 @@ by the host backend, making the host receiver's count especially important.
 
 ## Remaining work
 
-Asynchronous calls and multi-object waits, IPv6, DHCP, richer TCP extensions and per-space network
-domains remain separate milestones. HTTP/TLS, Retawq and userspace scheme
+Readiness for object types beyond TCP, asynchronous calls, IPv6, DHCP, richer TCP
+extensions and per-space network domains remain separate work. HTTP/TLS, Retawq and userspace scheme
 providers are future consumers. Keep the [users/authority checkpoint](../wip/users-and-authority.md)
 ahead of remotely accessible services. Writable virtio-fs is an independent
 candidate for persisting the existing edit/build/run workflow.

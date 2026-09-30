@@ -488,10 +488,13 @@ backlog limit. These development bounds provide no per-space quota or protection
 against exhausting the global budget. Revisit them with concrete concurrent-server
 demand and an explicit authority/accounting policy, not by evicting live records.
 
-The initial echo consumer serves one connection at a time. An idle client prevents
-others from being served, and write failure stops the consumer. The next
-[remote-terminal task](wip/remote-terminal.md#focused-implementation-tasks) adds
-readiness/nonblocking operations before a multi-session server is introduced.
+The echo consumer serves four clients with bounded output and fair service, but
+has no idle-client or output-drain deadline. Four stalled clients can occupy all
+active slots indefinitely. TCP readiness covers listeners and streams only;
+terminal attachment and execution-group readiness belong to the later
+[remote-terminal tasks](wip/remote-terminal.md#focused-implementation-tasks).
+Revisit stalled-client policy with that server's explicit disconnect/drain
+contract; the echo consumer does not yet supervise terminal sessions.
 
 ## UDP ICMP errors and ephemeral selection
 

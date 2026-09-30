@@ -793,7 +793,7 @@ means response EOF, not proof that a remote application processed the request.
 See [outbound TCP](tcp.md) for transport limits and the transmit-only
 [`ttcp` utility](tcp.md#transmit-only-ttcp).
 Trusted init can separately delegate a bound listener to the
-[sequential `tcp --serve` consumer](tcp.md#sequential-echo-server).
+[concurrent `tcp --serve` consumer](tcp.md#concurrent-echo-server).
 
 ## Further networking work
 

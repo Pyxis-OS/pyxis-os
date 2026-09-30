@@ -8,6 +8,7 @@
 #define SYSCALL_CLOSE UINT64_C(3)
 #define SYSCALL_COPY UINT64_C(4)
 #define SYSCALL_HANDLE_INFO UINT64_C(5)
+#define SYSCALL_WAIT_MANY UINT64_C(6)
 #define SYSCALL_EXIT UINT64_C(-1)
 
 enum call_status {
@@ -42,11 +43,12 @@ enum call_status {
    * effect: no known byte count, rollback guarantee or safe automatic retry. */
   CALL_OUTCOME_UNKNOWN = 27,
   CALL_ABANDONED = 28,
+  CALL_WOULD_BLOCK = 29,
   CALL_STATUS_COUNT, /* Validation bound, not a result. */
 };
 
-/* CALL/CLOSE/COPY/HANDLE_INFO return status in RAX and reply bytes in RDX (zero on failure,
- * always zero for CLOSE). COPY takes source, resource rights, transport rights,
+/* CALL/CLOSE/COPY/HANDLE_INFO/WAIT_MANY return status in RAX and reply bytes in
+ * RDX (zero on failure, always zero for CLOSE). WAIT_MANY is defined in wait.h. COPY takes source, resource rights, transport rights,
  * flags and an output handle address in RDI/RSI/RDX/R10/R8; success writes
  * one handle and returns its size. HANDLE_INFO takes a handle and
  * handle_info output address in RDI/RSI; success writes authority and interface.
