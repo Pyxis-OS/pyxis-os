@@ -13,6 +13,7 @@
 #define REMOTE_TAB_WIDTH_SIZE 8u
 #define REMOTE_ERROR_SIZE 4u
 #define REMOTE_FINAL_SIZE 16u
+#define REMOTE_COMMAND_COMPLETE_SIZE 12u
 
 #define REMOTE_HELLO 1u
 #define REMOTE_INPUT 2u
@@ -24,6 +25,7 @@
 #define REMOTE_TAB_WIDTH 19u
 #define REMOTE_ERROR 20u
 #define REMOTE_FINAL 21u
+#define REMOTE_COMMAND_COMPLETE 22u
 
 #define REMOTE_CAUSE_SHELL_EXIT 1u
 #define REMOTE_CAUSE_CLIENT_CLOSE 2u
@@ -67,6 +69,8 @@ static inline void remote_encode_u64(unsigned char *bytes, uint64_t value)
 /* HELLO: columns, rows (u32). INPUT: 1..4096 bytes. END_INPUT/CLOSE: empty.
  * READY/FRESH_LINE: empty. OUTPUT: 1..4096 bytes. TAB_WIDTH: u64, 1..32.
  * ERROR: code (u32). FINAL: cause, process reason, exit status, drain (u32).
+ * COMMAND_COMPLETE: sequential command number (u64, starts at 1), status (u32,
+ * 0 success or 1 failure). Ordered with terminal records, before session FINAL.
  * READY occurs once before terminal records and FINAL. ERROR can reject HELLO
  * before READY or precede FINAL. EOF is not a completion acknowledgment. */
 

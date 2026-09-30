@@ -22,9 +22,11 @@ struct terminal_end {
 
 struct terminal_session {
   atomic_bool locked;
-  struct terminal_end input, output, attachment;
-  size_t live_objects, input_authorities, output_authorities, controllers;
-  uint64_t columns, rows;
+  struct terminal_end input, output, attachment, events;
+  size_t live_objects, input_authorities, controllers;
+  /* Each output-producing object may retire while the other remains open. */
+  size_t output_authorities, event_authorities;
+  uint64_t columns, rows, completed_commands;
   bool input_closed, output_closed, hung_up, reader_active;
   struct task_wait_link *first_reader, *last_reader, *writers;
   struct task_wait *input_wait;
@@ -99,6 +101,8 @@ static size_t *authority_counter(struct kernel_object *object, uint64_t rights)
     return rights & CONSOLE_RIGHT_READ ? &session->input_authorities : NULL;
   case OBJECT_TERMINAL_OUTPUT:
     return rights & CONSOLE_RIGHT_WRITE ? &session->output_authorities : NULL;
+  case OBJECT_TERMINAL_EVENTS:
+    return rights & TERMINAL_EVENTS_RIGHT_EMIT ? &session->event_authorities : NULL;
   case OBJECT_TERMINAL_ATTACHMENT:
     return rights & TERMINAL_RIGHT_HANGUP ? &session->controllers : NULL;
   default:
@@ -109,7 +113,7 @@ static size_t *authority_counter(struct kernel_object *object, uint64_t rights)
 static bool terminal_end_type(enum object_type type)
 {
   return type == OBJECT_TERMINAL_INPUT || type == OBJECT_TERMINAL_OUTPUT ||
-      type == OBJECT_TERMINAL_ATTACHMENT;
+      type == OBJECT_TERMINAL_ATTACHMENT || type == OBJECT_TERMINAL_EVENTS;
 }
 
 bool terminal_authority_retain(struct kernel_object *object, uint64_t rights)
@@ -149,9 +153,12 @@ void terminal_authority_release(struct kernel_object *object, uint64_t rights)
       session->input_closed = true;
       session->input_head = session->input_count = 0;
       wake_input(session);
-    } else if (object->type == OBJECT_TERMINAL_OUTPUT) {
-      session->output_closed = true;
-      wake_all(&session->writers);
+    } else if (object->type == OBJECT_TERMINAL_OUTPUT ||
+        object->type == OBJECT_TERMINAL_EVENTS) {
+      if (!session->output_authorities && !session->event_authorities) {
+        session->output_closed = true;
+        wake_all(&session->writers);
+      }
     } else {
       hangup(session);
     }
@@ -167,7 +174,8 @@ static void destroy_terminal_end(struct kernel_object *object)
   struct terminal_session *session = ((struct terminal_end *)object)->session;
   lock_session(session);
   KASSERT(!*authority_counter(object, object->type == OBJECT_TERMINAL_ATTACHMENT ?
-      TERMINAL_RIGHT_HANGUP : CONSOLE_RIGHTS));
+      TERMINAL_RIGHT_HANGUP : object->type == OBJECT_TERMINAL_EVENTS ?
+      TERMINAL_EVENTS_RIGHT_EMIT : CONSOLE_RIGHTS));
   KASSERT(session->live_objects);
   bool finished = --session->live_objects == 0;
   if (finished) {
@@ -190,11 +198,13 @@ static struct terminal_session *session_create(uint64_t columns, uint64_t rows)
   atomic_init(&session->locked, false);
   session->columns = columns;
   session->rows = rows;
-  session->live_objects = 3;
+  session->live_objects = 4;
   session->input.session = session->output.session = session->attachment.session = session;
+  session->events.session = session;
   object_init(&session->input.object, OBJECT_TERMINAL_INPUT, destroy_terminal_end);
   object_init(&session->output.object, OBJECT_TERMINAL_OUTPUT, destroy_terminal_end);
   object_init(&session->attachment.object, OBJECT_TERMINAL_ATTACHMENT, destroy_terminal_end);
+  object_init(&session->events.object, OBJECT_TERMINAL_EVENTS, destroy_terminal_end);
   return session;
 }
 
@@ -206,26 +216,31 @@ void terminal_create_execute(struct terminal_create_service_request *request)
   if (session) {
     struct kernel_object *objects[] = {
       &session->input.object, &session->output.object, &session->attachment.object,
+      &session->events.object,
     };
-    const uint64_t rights[] = {CONSOLE_RIGHT_READ, CONSOLE_RIGHT_WRITE, TERMINAL_RIGHTS};
-    const uint64_t transport[] = {0, 0, 0};
-    handle_t handles[3];
+    const uint64_t rights[] = {
+      CONSOLE_RIGHT_READ, CONSOLE_RIGHT_WRITE, TERMINAL_RIGHTS, TERMINAL_EVENTS_RIGHT_EMIT,
+    };
+    const uint64_t transport[] = {0, 0, 0, 0};
+    handle_t handles[4];
     enum capability_result result;
     while ((result = capability_insert_batch(request->table, objects, rights,
-        transport, 3, handles)) == CAP_FULL) {
+        transport, 4, handles)) == CAP_FULL) {
       result = capability_grow(request->table);
       if (result != CAP_OK) {
         break;
       }
     }
     if (result == CAP_OK) {
-      request->reply = (struct terminal_create_reply){handles[0], handles[1], handles[2]};
+      request->reply = (struct terminal_create_reply){
+        .input = handles[0], .output = handles[1], .attachment = handles[2], .events = handles[3],
+      };
       request->result = CALL_OK;
     } else {
       KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
       request->result = result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT;
     }
-    for (size_t i = 0; i < 3; ++i) {
+    for (size_t i = 0; i < 4; ++i) {
       object_release(objects[i]);
     }
   }
@@ -473,6 +488,10 @@ static enum call_status enqueue_output(struct terminal_session *session,
       unlock_session(session);
       return CALL_ENDPOINT_CLOSED;
     }
+    if (type == TERMINAL_RECORD_COMMAND_COMPLETE && session->completed_commands == UINT64_MAX) {
+      unlock_session(session);
+      return CALL_LIMIT;
+    }
     size_t available = TERMINAL_OUTPUT_CAPACITY - session->output_count;
     size_t required = sizeof(struct terminal_record) +
         (type == TERMINAL_RECORD_DATA ? 1 : length);
@@ -485,7 +504,17 @@ static enum call_status enqueue_output(struct terminal_session *session,
       size_t tail = (session->output_head + session->output_count) % TERMINAL_OUTPUT_CAPACITY;
       ring_copy_in(session->output_data, TERMINAL_OUTPUT_CAPACITY, tail, &record, sizeof(record));
       tail = (tail + sizeof(record)) % TERMINAL_OUTPUT_CAPACITY;
-      ring_copy_in(session->output_data, TERMINAL_OUTPUT_CAPACITY, tail, bytes, count);
+      if (type == TERMINAL_RECORD_COMMAND_COMPLETE) {
+        /* Number assignment and the whole record share this queue insertion. */
+        const struct terminal_command_complete *completion = bytes;
+        struct terminal_command_complete payload = {
+          .command = session->completed_commands + 1, .status = completion->status,
+        };
+        ring_copy_in(session->output_data, TERMINAL_OUTPUT_CAPACITY, tail, &payload, sizeof(payload));
+        session->completed_commands = payload.command;
+      } else {
+        ring_copy_in(session->output_data, TERMINAL_OUTPUT_CAPACITY, tail, bytes, count);
+      }
       session->output_count += sizeof(record) + count;
       *written = count;
       unlock_session(session);
@@ -593,6 +622,34 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
   }
   size_t written;
   enum call_status status = enqueue_output(session, type, &request.tab_width.columns, length, &written);
+  return (struct syscall_result){status, 0};
+}
+
+struct syscall_result terminal_events_call(struct kernel_object *object,
+    uint64_t rights, uint64_t operation, uintptr_t request_address,
+    size_t request_size)
+{
+  if (operation != TERMINAL_COMMAND_COMPLETE) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (!(rights & TERMINAL_EVENTS_RIGHT_EMIT)) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  struct terminal_command_complete_request request = {0};
+  if (request_size != sizeof(request.status)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request.status, request_address, sizeof(request.status))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (request.status > 1) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  struct terminal_command_complete completion = {.status = request.status};
+  struct terminal_session *session = ((struct terminal_end *)object)->session;
+  size_t written;
+  enum call_status status = enqueue_output(session, TERMINAL_RECORD_COMMAND_COMPLETE,
+      &completion, sizeof(completion), &written);
   return (struct syscall_result){status, 0};
 }
 

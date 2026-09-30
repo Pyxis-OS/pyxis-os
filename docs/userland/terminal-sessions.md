@@ -10,9 +10,9 @@ Native layouts live in [the terminal ABI](../../include/abi/terminal.h).
 ## Creation and authority
 
 Trusted init receives a `terminal` creation service. Its CREATE right returns
-application input, application output and one attachment, or no handles on
-failure. The normal session launcher does not delegate the service. Creation
-accepts 1–512 columns and 1–256 rows, immutable for that session. Allocation and
+application input, application output, one attachment and a separate event
+handle, or no handles on failure. The normal session launcher does not delegate
+the service. Creation accepts 1–512 columns and 1–256 rows, immutable for that session. Allocation and
 failure unwinding remain BSP-owned.
 
 The application input handle permits CONSOLE READ and SIZE; the output handle
@@ -21,6 +21,11 @@ inject input, intercept output or hang up the terminal. Attachment rights are
 separate: INJECT permits input injection and END_INPUT; DRAIN permits output
 collection; HANGUP controls disconnection. Copies refer to the same attachment;
 there is no detach/reattach operation.
+
+The event handle implements TERMINAL_EVENTS with only EMIT authority. It is not
+an application stream or a readiness target and does not imply attachment rights.
+The remote server delegates it only to the root shell; the shell does not pass
+it to children, script interpreters or session successors.
 
 Capability entries and in-flight capability transfers retain logical authority.
 An internal operation or readiness reference retains storage only. Closing the
@@ -41,8 +46,8 @@ serialize accepted chunks and complete controls; whole multi-call messages are
 not atomic. No terminal queue silently drops data under backpressure.
 
 Libpyxis exposes creation, `terminal_try_inject`, `terminal_try_drain`,
-`terminal_end_input` and `terminal_hangup` in `<terminal.h>`. Injection can accept
-a short prefix. Drain returns one complete output record, including its header.
+`terminal_end_input`, `terminal_hangup` and `terminal_command_complete` in
+`<terminal.h>`. Injection can accept a short prefix. Drain returns one complete output record, including its header.
 A buffer too small for that record returns BUFFER_TOO_SMALL without consuming
 it. Empty live output or full live input returns WOULD_BLOCK with no pending
 operation; helper outputs remain unchanged on failure.
@@ -52,9 +57,19 @@ operation; helper outputs remain unchanged on failure.
 | DATA | 1–4096 bytes of native terminal output |
 | FRESH_LINE | None |
 | TAB_WIDTH | One uint64_t, 1–32 columns |
+| COMMAND_COMPLETE | Two uint64_t: consecutive command number and status 0/1 |
 
-Controls are indivisible and ordered with bytes. The attachment forwards that
-order to its presentation. Kernel queues do not translate to host escape
+`terminal_command_complete(events, status)` accepts only success (0) or failure
+(1). It queues a whole record after previously accepted output, waiting
+interruptibly for space in the same bounded output queue. Hangup or execution
+group stopping fails ENDPOINT_CLOSED. The kernel assigns numbers starting at 1
+under the queue lock only when insertion succeeds; failed emits consume no
+number. After UINT64_MAX, further emits fail LIMIT rather than wrapping. There
+is no reply payload. An uncertain result must not be retried, since insertion
+may already have succeeded.
+
+Controls and completion events are indivisible and ordered with bytes. The
+attachment forwards that order to its presentation. Kernel queues do not translate to host escape
 sequences or implement a remote wire protocol. The shared behavior is the
 [existing TTY contract](terminal.md#tty-output-controls): LF resets the column,
 tabs preserve cells and clamp, wrapping is delayed, and FRESH_LINE cancels an
@@ -71,8 +86,11 @@ writes/injections remain validated no-ops, including after hangup; they do not
 probe closure. SIZE still reports immutable dimensions. Closing the last
 READ-authorized application input grant
 also closes injection, discarding input no reader can consume. Closing the last
-WRITE-authorized application output grant preserves queued output; draining
-returns zero only after the final record is consumed.
+WRITE-authorized application output grant and the last EMIT-authorized event
+grant closes output while preserving queued records; draining returns zero only
+after the final record is consumed. Either kind of producer keeps output open,
+including captured IPC grants. Final event-grant closure does not hang up or
+terminate the session.
 
 HANGUP, including final controlling-grant closure, is permanent and idempotent.
 It discards both queues and wakes blocked application operations with
@@ -89,8 +107,8 @@ unsaved edits would be lost. Framebuffer console input still has no EOF operatio
 ## Readiness and ownership
 
 `wait_many` accepts attachment interests together with TCP interests. DRAIN
-authorizes READABLE and PEER_FIN, meaning queued output and application output
-closure respectively; ordinary READABLE includes closure. INJECT authorizes
+authorizes READABLE and PEER_FIN, meaning queued output and closure of both
+output producers respectively; ordinary READABLE includes closure. INJECT authorizes
 WRITABLE and WRITE_CLOSED, meaning input capacity and input closure; ordinary
 WRITABLE includes closure. Either direction automatically reports ERROR on
 hangup. Output closure can coexist with queued records, which must be drained

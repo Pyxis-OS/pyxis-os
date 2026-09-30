@@ -38,6 +38,8 @@ to `remote-terminal.pxe`. Only trusted init carries terminal CREATE and unbound
 launcher CREATE_GROUP. Remote shells receive their bound launcher, named terminal
 input/output, distinct standard streams, memory, clock, pipe creation, the selected
 roots and optional ordinary networking, entropy, endpoint and profiling grants.
+Only the root shell receives the separate `terminal_events` EMIT capability;
+ordinary children, scripts and session successors do not inherit it.
 The service namespace permits LOOKUP only. Shells receive no listener, mount,
 network configuration, physical keyboard, framebuffer, terminal attachment or
 group supervision authority. Nested launches remain in their execution group.
@@ -74,11 +76,75 @@ printf 'ls\nexit\n' | build/tools/pyxis-remote --machine --columns 80 --rows 24 
 Standard input contains raw guest input bytes. Keeping stdin open keeps the
 client usable for later commands; stdin EOF sends END_INPUT while continuing to
 receive output. Standard output is newline-delimited JSON with separate ready,
-output (base64), fresh-line, tab-width, error and final events. Program output
-cannot forge an event. Session FINAL describes shell outcome, group cleanup and
-output draining; per-command completion events are task 7 and are not provided
-here. Do not infer command success from a prompt or silence. Transport EOF
-without FINAL is not successful completion.
+output (base64), fresh-line, tab-width, command-complete, error and final events.
+Program output cannot forge an event. Session FINAL describes shell outcome,
+group cleanup and output draining. Transport EOF without FINAL is not successful
+completion.
+
+A completion event has this shape:
+
+```json
+{"type":"command_complete","command":1,"status":0}
+```
+
+The kernel assigns consecutive command numbers starting at 1 per terminal.
+Status is the shell's success (0) or failure (1), not the child's numeric exit
+code. Foreground commands wait for cleanup; pipelines wait for all stages and
+use the last stage's result. Background commands report launch outcome only.
+Syntax/launch errors and submitted overlong lines report failure. Empty or
+space/tab-only lines below the line limit, cancelled/lost input and EOF with an
+unfinished line emit nothing. Line-limit rejection takes precedence over blank
+input. Explicit `exit` emits success before FINAL. Fatal wait, cleanup or
+terminal errors, including failed event emission, end the shell unsuccessfully
+without inventing or retrying a completion.
+
+Events follow output already accepted by the terminal. Background output may
+follow them; they do not mean every descendant is silent. Interactive clients
+consume them without displaying them. Machine consumers must preserve the full
+unsigned 64-bit command number and use the typed event, never a prompt, silence
+or decoded output resembling JSON, to recognize completion.
+
+### Persistent use through command tools
+
+Keep the actual client running with a FIFO for later input. For example, create
+a private directory once:
+
+```sh
+session_dir=$(mktemp -d /tmp/pyxis-remote.XXXXXX)
+mkfifo "$session_dir/input"
+printf '%s\n' "$session_dir"
+```
+
+Use that printed path in subsequent command-tool calls. Start the client as a
+long-running command without a controlling terminal (replace `SESSION_DIR`):
+
+```sh
+build/tools/pyxis-remote --machine --columns 80 --rows 24 127.0.0.1 2323 \
+  3<>SESSION_DIR/input <&3 >SESSION_DIR/events.jsonl
+```
+
+The extra read/write FIFO descriptor keeps stdin open between writes. In later
+calls, submit a line and inspect newly appended JSON records:
+
+```sh
+printf 'ls\n' >SESSION_DIR/input
+tail -n 20 SESSION_DIR/events.jsonl
+```
+
+Wait for its `command_complete` before submitting the next shell command;
+foreground programs may read stdin themselves. Track the last consumed line or
+file offset to collect output incrementally; a trailing partial JSON line is not
+a record yet. Decode only `output.base64` as base64. The session stays open across
+commands, including commands with status 1. After the final command:
+
+```sh
+printf 'exit\n' >SESSION_DIR/input
+```
+
+Collect its completion and FINAL, wait for the long-running client to exit, then
+remove the FIFO and capture directory when no longer needed. Closing the client
+instead terminates the entire remote session; losing it cannot be treated as a
+successful command result.
 
 ## Framing and lifecycle
 
@@ -100,9 +166,12 @@ coalesced frames and short writes are ordinary TCP behavior.
 | Server TAB_WIDTH (19) | One u64, 1–32 |
 | Server ERROR (20) | One u32 error code |
 | Server FINAL (21) | Four u32: cause, process reason, signed exit-status bits, drain outcome |
+| Server COMMAND_COMPLETE (22) | One u64 command number, then one u32 status (0 or 1); exactly 12 bytes |
 
 HELLO must arrive within ten seconds, precede other client frames and appear
 once. INPUT after END_INPUT, malformed lengths and unknown types are rejected.
+COMMAND_COMPLETE follows READY and precedes FINAL in terminal output order.
+The client rejects skipped/repeated numbers, overflow and status values above 1.
 END_INPUT is idempotent. READY precedes terminal records and FINAL. Errors may
 reject admission before READY or precede an admitted session's FINAL. Error codes
 are bad frame (1), launch failure (2), resource failure (3), internal failure (4)

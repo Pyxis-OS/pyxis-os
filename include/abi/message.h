@@ -38,6 +38,7 @@
 #define PROTOCOL_TERMINAL_SERVICE UINT64_C(31)
 #define PROTOCOL_TERMINAL_ATTACHMENT UINT64_C(32)
 #define PROTOCOL_EXECUTION_GROUP UINT64_C(33)
+#define PROTOCOL_TERMINAL_EVENTS UINT64_C(34)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

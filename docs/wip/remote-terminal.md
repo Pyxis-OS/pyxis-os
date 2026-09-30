@@ -1,9 +1,10 @@
 # Native remote terminal sessions
 
-Status: tasks 1–6 are implemented: listeners/readiness, independent terminal
-sessions, execution-group containment/termination, and the remote server/client.
+Status: tasks 1–7 are implemented: listeners/readiness, independent terminal
+sessions, execution-group containment/termination, remote server/client and
+shell completion events.
 The [implemented remote interface](../userland/remote-terminal.md) records startup,
-authority, framing, shutdown and client usage. Tasks 7–8 remain agreed scope.
+authority, framing, shutdown and client usage. Task 8 remains agreed scope.
 The prerequisite [BSP request milestone](../kernel/bsp-service-requests.md) is complete.
 
 Task 1 implements the agreed [listener contract](../devices/tcp.md#listening-and-admission): trusted init holds
@@ -245,32 +246,35 @@ and input, stream output promptly, and preserve event boundaries separately from
 program text. An agent must be able to keep the client running through normal
 command tools, send commands and incrementally collect results.
 
-The shell optionally emits a completion event after each top-level command, with
-a monotonically increasing command number and its existing exit status:
+Task 7 implements a fourth handle from terminal creation: TERMINAL_EVENTS with
+EMIT authority, delegated only to the root interactive shell. Ordinary children,
+script interpreters and session successors do not receive it. Events share the
+bounded output queue with bytes and controls; the kernel assigns consecutive
+uint64_t numbers starting at 1 only on enqueue and rejects sequence exhaustion.
+Output EOF waits for both application WRITE and event EMIT grants to close.
 
-- Foreground commands/pipelines report after their existing completion waits.
-- Background commands report launch completion, not eventual child exit.
-- Syntax and launch failures also report completion.
-- Output already accepted by the terminal precedes the event; background output
-  may arrive afterward. This is not a guarantee that every descendant is silent.
+Each nonblank submitted interactive line reports success (0) or failure (1).
+Foreground commands/pipelines report after their existing waits, with the last
+stage determining pipeline status. Background commands report launch outcome.
+Syntax/launch errors and submitted overlong lines report failure. Blank or
+space/tab-only input below the line limit, cancelled/lost lines and EOF without
+submission produce no event. Submitted line-limit rejection takes precedence.
+Explicit exit reports success before FINAL. Fatal wait/cleanup/terminal outcomes do not invent a completion; event emission failure exits unsuccessfully
+without retry. Accepted output precedes the event; background output may follow.
 
-Only a separate capability held by the session shell permits these events; it is
-not delegated to ordinary child programs. Events are structured outside program
-output, so prompt-like strings cannot impersonate completion. Do not infer success
-from a prompt, silence or connection closure. Session completion remains distinct
-from command completion and reflects execution cleanup and the defined output
-drain outcome.
+Wire COMMAND_COMPLETE (22) contains a big-endian u64 number and u32 status in
+exactly 12 bytes. Interactive clients consume it silently; machine clients emit
+`{"type":"command_complete","command":1,"status":0}`. Typed framing keeps
+program text from impersonating completion. The client validates consecutive
+numbering and status 0/1. Session FINAL remains distinct from command completion.
+The [persistent workflow](../userland/remote-terminal.md#persistent-use-through-command-tools)
+uses the actual client through ordinary command tools without a controlling TTY.
 
-## Remaining task-local decisions
-
-Task 6 implements eight-byte type/length framing, NDJSON/base64 machine output,
-END_INPUT distinct from transport disconnect, Ctrl+] local close, termination of
-remaining descendants on root-shell exit, and five-second closing output expiry.
-Cleanup still has no finite deadline. CPU 3 runs Remote with optional read-write
-HOST; Development remains the single default network configuration owner.
-The [interface reference](../userland/remote-terminal.md) is authoritative for
-these implemented details. Task 7 still needs the concrete shell-only event API
-and command-completion frame layout before implementation.
+Task 6's implemented eight-byte framing, NDJSON/base64 output, END_INPUT,
+Ctrl+] close, root-shell-exit containment and five-second closing-output expiry
+remain unchanged. Cleanup has no finite deadline. CPU 3 runs Remote with optional
+read-write HOST; Development owns default network configuration. The
+[interface reference](../userland/remote-terminal.md) records the full contract.
 
 ## Focused implementation tasks
 
@@ -309,7 +313,7 @@ Do not implement unrelated async, scheduling, authentication or multiplexer work
   adaptation, interactive/machine modes and host-loopback QEMU TCP forwarding.
   Keep host code out of target libc. Separate client and server PRs if useful,
   while reviewing their shared protocol together.
-- [ ] **7. Shell completion events and agent use.** Add the optional shell-only
+- [x] **7. Shell completion events and agent use.** Add the optional shell-only
   event capability and ordered completion reporting. Document a persistent client
   workflow using ordinary agent command tools; exercise status, launch errors,
   background launch and program output that resembles a prompt/event.
@@ -489,8 +493,38 @@ NET/HOST showed the Remote tab reporting network unavailable and preserved local
 startup. All QEMU, client, virtiofsd and debugger jobs were stopped. No tests,
 temporary exercise program or
 boot/output automation was added; validation used the actual client and ordinary
-manual QEMU/GDB controls. Published HOST cleanup remains unbounded and command
-completion events remain task 7.
+manual QEMU/GDB controls. Published HOST cleanup remains unbounded. This task 6
+validation preceded command completion events.
+
+Task 7 validation: the host-client build and full `make -j16 image` passed with
+the existing compiler and temporary local CMake used by the ports recipe.
+Existing vendor warnings remain; no compiler-container rebuild was required.
+Manual QEMU used four CPUs, nested KVM, 256 MiB, VirtIO NET/RNG, raw OVMF and the
+patched QEMU 10.2.2, with loopback TCP forwarding and no HOST mount. The actual
+machine client stayed connected through a FIFO across twelve numbered commands:
+success, missing executable, malformed pipeline, failed builtin, successful
+last-stage pipeline despite an earlier failure, failed last-stage pipeline,
+Lua failure, background launch, prompt/JSON-like printed text, later success,
+line-limit rejection and explicit exit. Blank lines and Ctrl+C cancellation did
+not consume numbers. Diagnostics preceded their completion; the background
+listener message followed its launch completion. Printed JSON remained base64
+output, without becoming metadata. Explicit exit completion preceded FINAL.
+
+A separate 16×2 session confirmed display-limit rejection and subsequent exit;
+the 80×24 persistent session also rejected an oversized buffer submission after
+its redraw output drained. Additional actual-client sessions confirmed a submitted
+command completes before END_INPUT EOF, while unfinished input emits no event.
+New sessions restarted numbering at 1. Interactive mode consumed completion
+records silently and restored the host terminal after exit. After all sessions
+closed, GDB observed listener-only readiness, one transport record and an empty
+completed-task queue. All client, QEMU and debugger jobs were stopped.
+
+Authority exclusion, captured-grant lifetime, allocation unwind, queue-full
+emission cancellation, uncertain responses and sequence exhaustion were inspected
+in code; they were not individually fault-injected or runtime-exercised. No tests,
+temporary exercise programs or boot/output automation were added. Task 8 retains
+broader combined acceptance; these are nested-VM observations, not host latency
+measurements.
 
 Use ordinary `make -j16` builds, interactive QEMU and debugger inspection. Include
 one- and four-CPU operation with matching networking/init configuration. Inspect
@@ -507,5 +541,5 @@ actually exercised and distinguish inspected failure paths from runtime results.
 Exclude SSH/Telnet compatibility, custom authentication/TLS, OIDC, resize,
 reattachment, remote graphics, multiplexer/navigation, Neovim, Unicode expansion,
 foreground Ctrl+C cancellation, task migration and process threads. Those remain
-separate milestones. Tasks 7–8 remain design and planned validation; completed slices and their
-measured checks are recorded above.
+separate milestones. Task 8 retains combined validation and documentation
+closure; completed slices and their measured checks are recorded above.

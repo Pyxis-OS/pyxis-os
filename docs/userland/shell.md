@@ -66,6 +66,19 @@ no arguments and ends the shell successfully. Interactive command failures do
 not accumulate into the shell's exit status; unrecoverable terminal, wait or
 cleanup failures terminate it with failure.
 
+With an optional `terminal_events` grant, the interactive root shell reports one
+ordered completion for each nonblank submitted line. Status is success (0) or
+failure (1), including syntax/launch errors and submitted line-limit rejection.
+Foreground work reports after the existing waits, using the last pipeline stage;
+background work reports launch outcome. `exit` reports success before leaving.
+Blank lines below the line limit, cancellation, lost input and EOF without
+submission emit nothing; submitted line-limit rejection takes precedence.
+Fatal command handling emits nothing; failed event emission ends the shell with
+failure and is never retried. The event grant remains local to this interactive
+shell and is never forwarded to children, scripts or session successors.
+See the [remote interface](remote-terminal.md#client-modes) for framing and
+persistent machine-client use.
+
 `title [--optional] name` sets the current space's tab label; quote names with
 spaces, for example `title "Source editing"`. It accepts 1–63 printable ASCII
 characters and clips the visible label to the fixed tab width. An error leaves
