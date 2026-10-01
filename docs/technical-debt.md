@@ -842,42 +842,57 @@ six flushes in total. This accepts extra synchronous I/O to bound cleanup debt;
 revisit combining batches only after the admission proof and workload measurements
 support an equivalent bound. No latency measurement is claimed.
 
-The consolidated milestone proposes workload-selected writable profiles, protected
-per-object deletion capacity, concrete interfaces and a bounded host failure model.
-The proposed six-entry removable namespace profile reduces the deletion envelope
-to at most 4 KiB per non-root object, and less for populations with fewer directory
+The consolidated milestone proposes workload-selected writable profiles, concrete
+interfaces and a bounded host failure model. Protected per-object deletion capacity
+and the six-entry removable namespace profile are accepted. The profile reduces
+the deletion envelope to at most 4 KiB per non-root object, and less for populations
+with fewer directory
 roots, before subtracting existing namespace nodes; repeated separately committed
 small writes retain distinct births and can exhaust mapping capacity far below
-disk capacity. These mechanisms remain
-under review. The stronger profile funds bounded variable-key splits without a
-structural-limit deletion refusal; existing underfilled namespace trees may remain
+disk capacity. Workload profiles and detailed interfaces remain under review.
+The stronger profile funds bounded variable-key splits without a structural-limit
+deletion refusal; existing underfilled namespace trees may remain
 read-only until explicitly reformatted/reimported. Formatter packing and editor
-changes are proposed, not implemented or accepted. Funded-drain resource
+changes are accepted design, not implemented. Funded-drain resource
 exhaustion is an invariant failure, not an accepted limitation. The read-only
 format's maxima and formatter reserve defaults do not promise writable admission.
 Revisit capacity and memory costs with populated workloads and implementation
 evidence, not by treating design arithmetic as runtime validation.
 
-After backing writeback errors, plain close/reopen and successful fsync do not
-establish a durable-state recovery boundary. A mandatory persistent session registry
-is not accepted or recommended: it needs independent storage/identity/provisioning
-and still cannot make an ambiguous interrupted session safe to reopen. The revised
-proposal targets qualification of a narrow Linux/XFS direct-I/O path with no
-buffered fallback or
-mixed access, fully initialized fixed host mappings, and documented stable backing
-after errors. That costs full-image provisioning I/O and limits eligible hosts;
-no deployed configuration has been qualified yet. Direct I/O alone is insufficient.
-Accept a concrete backend contract or leave real-host post-error recovery unsupported;
-no automatic repair, force-clear or uncertain-mutation retry. Revisit broader host
-support only with source and backing evidence, not a successful flush experiment.
-
 The filesystem-only scope now requires maintained host contract tests and a CI
-merge gate. The proposed Unity-based host runner incorporates the bounded failure
-adapter and independent content/format expectations; neither tests nor that gate
+merge gate. The accepted Unity-based host runner design incorporates the bounded
+failure adapter and independent content/format expectations; neither tests nor that gate
 exist yet. They land incrementally with implementation, with larger pressure and
 failure campaigns separate from the quick per-PR suite. Passing modeled cases does
 not establish host/device recovery, exhaustive correctness or native guest behavior;
 retain the proofs, ordinary/freestanding builds and eventual guest validation.
+
+## Deferred real-host post-error recovery qualification
+
+The [ordinary host writer contract](wip/writable-filesystem-core.md#agreed-ordinary-host-writer-and-deferred-recovery)
+supports healthy serial sessions and clean reopenings on ordinary local Linux
+backing files, with exclusive access, exact I/O, explicit flushes and stop-on-error
+behavior. It requires neither a registry nor direct I/O or special XFS deployment.
+Real-host post-error recovery qualification is deferred beyond this core milestone;
+no deployed configuration is claimed qualified. After writeback error, close/reopen,
+valid cached bytes and a later successful fsync do not establish durable recovery.
+
+The restriction survives process exit, but the initial tool has no persistent
+cross-process error detector. Known or suspected failed images must stay out of the
+ordinary writable workflow; the caller/operator must retain that context. Unknown
+interrupted mutation history is not proved healthy by reopening. Read-only
+inspection is not durability certification. Do not claim automatic quarantine,
+repair, force-clear or safe retry of uncertain mutations.
+
+Revisit before promising real-host post-error recovery: select one concrete
+backend and establish its durable-state boundary, partial-write semantics,
+quiescence and restart provenance using documented guarantees and targeted evidence.
+Direct I/O would require alignment/fallback/mixed-access and backing-cache evidence;
+a registry needs independent reliable storage/identity/rollback control and still
+cannot establish image contents. Neither mechanism is selected. Keep the core's
+abstract durability requirements and simulated recovery tests, including cache-only
+nonpending writes and independent comparison of both retained payloads. Their
+success is not qualification of an actual host or device.
 
 ## Filesystem host prototype limits
 

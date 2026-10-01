@@ -10,8 +10,8 @@ implementation; work proceeds one explicitly assigned task at a time.
 Review navigation: [live interfaces](#proposed-live-interfaces-and-reference-ownership),
 [persistent additions](#proposed-persistent-additions-and-supported-media),
 [admission proof](#proposed-writable-profile-and-admission-proof),
-[namespace proof](#proposed-removable-namespace-profile-byte-and-repair-proof),
-[host adapter comparison](#host-adapter-investigation-and-recommendation),
+[namespace proof](#agreed-removable-namespace-profile-byte-and-repair-proof),
+[host writer and recovery limit](#agreed-ordinary-host-writer-and-deferred-recovery),
 [host tests](#agreed-maintained-host-tests-and-ci),
 [failure model](#proposed-host-failure-validation-model) and
 [delivery boundaries](#proposed-delivery-boundaries-and-review-closure). Task 1 remains
@@ -22,11 +22,11 @@ The revised requirements include bounded multi-block writes, deletion capacity
 protected from ordinary growth, durable-state recovery evidence after writeback
 errors, and resource-complete funded drains. Whole-map rebuilding for every
 publication is accepted only as the first correctness implementation. Maintained
-host tests and a per-filesystem-PR CI merge gate are also agreed; the concrete
-setup below is proposed. The host
-adapter choice, stronger namespace profile, deletion reservation and validation
-mechanisms below remain proposals for this review. No E/M default or finalized
-allocation strategy is accepted.
+host tests, the Unity setup and a per-filesystem-PR CI merge gate are agreed, as
+are the stronger namespace profile and tighter deletion reservation. The ordinary
+host writer uses the healthy-session contract below; real-host post-error recovery
+qualification is deferred. Other sections marked Proposed remain for full review.
+No E/M default or finalized allocation strategy is accepted.
 
 This is the first of two storage milestones. Its result is a shared core that
 mutates existing Pyxis volumes through bounded COW transactions, durably
@@ -714,7 +714,7 @@ unknown grants, widen masks, repair slots or update unrelated repository pins.
 
 Keep uncommitted blocks private, propagate exact minimum keys and collapse a
 single-child root. Distinguish the existing sparse fixed-key editor from the
-stronger namespace editor proposed below. Newly created private nodes superseded
+accepted stronger namespace editor below. Newly created private nodes superseded
 within a candidate are discarded, not durably retired.
 
 | Single-record edit, maximum depth eight | New nodes | Old nodes retired |
@@ -732,10 +732,10 @@ extent and grant deletion. Namespace trees use the stronger rule and proof below
 variable-name directory deletion may split nodes when separator lengths grow.
 That growth is funded by the permanent namespace envelope, not assumed absent.
 
-### Proposed removable namespace profile: byte and repair proof
+### Agreed removable namespace profile: byte and repair proof
 
-This is an analyzed proposal for task-1 review, not an accepted six-record product
-requirement or implemented editor. Apply it to every directory-entry index and
+The six-entry profile, its bounded editor and formatter implications are accepted
+for the initial writer, but are not implemented. Apply it to every directory-entry index and
 per-volume orphan index, including both retained states. Other indexes keep their
 existing shape rules. Require at least six leaf records or six child references
 in every non-root namespace node. A root leaf may hold any positive count; an
@@ -794,7 +794,7 @@ Depth nine needs 3,359,232 records, exceeding the 1,048,576 global object cap;
 every namespace entry names a non-root object. A valid result at that count cannot
 require depth nine, including a deletion-induced minimum-key split. There is no
 routine structural-limit deletion refusal for an admitted namespace under this
-proposal. Other authority, durable-recovery and lifetime-generation preconditions
+profile. Other authority, durable-recovery and lifetime-generation preconditions
 remain explicit; this is not a claim of unconditional success through I/O failure.
 
 Six is derived for this particular local editor, not guessed. Five would allow
@@ -805,7 +805,7 @@ root fits twelve 255-byte minima and one short minimum (3952 bytes). Removing
 the short minimum from the six-entry leaf leaves five, so no underflow propagates,
 but replacing that separator with a 255-byte name makes the root 4200 bytes.
 Splitting that root would create a ninth level. This is a counterexample to the
-occupancy-only depth argument and the proposed split-on-overflow algorithm, not
+occupancy-only depth argument and this split-on-overflow algorithm, not
 an impossibility proof for every five-entry editor: additional root-child
 compression could avoid that split. Seven, conversely, cannot split thirteen
 overflowing maximum-size internal records into two nodes of at least seven without a wider
@@ -837,7 +837,7 @@ moving one child; leaves can end with one through five records, and internal
 nodes with two through five children. No claim that today's populated images
 are already writable under the stronger profile follows from a clean check.
 
-Propose extending namespace bulk packing, when implementation is assigned, to
+Extend namespace bulk packing, when implementation is assigned, to
 repair each short final group with the preceding group using the same ordered
 merge/partition lemma. A nonfinal greedy group contains at least twelve items,
 so a tail of one through five either merges or can split with at least six on
@@ -1034,7 +1034,7 @@ permanent metadata. Ordinary growth must not consume that capacity. Unlink need
 not free a retained file's contents, reduce its charge or make room for an unrelated
 write immediately. Its final release and reserved drains must be funded too.
 
-**Proposed reservation under the stronger namespace profile:** for each volume
+**Agreed reservation under the stronger namespace profile:** for each volume
 let O_i count all live objects and J_i all live directory objects, both including
 the root and retained orphans. Let `r_i = O_i - 1`. Exactly r_i records appear
 across directory-entry indexes and the orphan index. Let Z_i be their actual live
@@ -1102,8 +1102,8 @@ admitted orphan lifetimes, not every future unlink near counter exhaustion.
 The new envelope uses at most one 4 KiB block per non-root object, versus the old
 two-block bound, and substantially less when there are fewer directories than
 files. This is total namespace capacity, including existing Z_i; only B_i - Z_i
-is additional headroom. It remains a proposal for acceptance, not an on-disk quota
-change. Both the stronger admission rule and tighter reservation must be adopted
+is additional headroom. This accepted admission reservation does not change on-disk
+quota accounting. Enforce the stronger admission rule and tighter reservation
 together: the tighter bound is not valid for arbitrary sparse read-only trees.
 
 ### Generation headroom
@@ -1143,7 +1143,7 @@ root, 922 objects and 12,460,032 payload bytes (11.883 MiB); rounding each file 
 contents beyond those listed, generated output and toolchains. The census is
 measured from tracked blobs; writer layouts and costs below are calculations.
 An initially dense import has about 166 volume metadata blocks (33 object-index,
-132 directory-index and one grant block). Under the proposed stronger
+132 directory-index and one grant block). Under the accepted stronger
 packing, J = 132 and r = 921 give B = 290 namespace blocks; with the modeled 34
 nonnamespace blocks, effective metadata use is about 324 blocks rather than 1876
 under the former envelope. Actual formatter output must be checked for the new
@@ -1260,193 +1260,118 @@ The abstract simulator's durable image can establish such a boundary; that does
 not prove ordinary host recovery. The previously proposed mandatory registry and
 refusal after every interrupted session are not accepted requirements.
 
-### Host adapter investigation and recommendation
+### Agreed ordinary host writer and deferred recovery
 
-**Recommendation for review:** qualify one narrow direct-I/O host profile instead
-of making a persistent session registry mandatory. Direct I/O addresses the Linux
-data-page-cache failure mode; it does not itself establish durability or repair
-errors. The supported configuration and backing guarantee below are part of the
-proposal. No deployed host/kernel/storage combination has been qualified by this
-investigation, and no real failure or power-loss experiment was run.
+Real-host post-error recovery qualification is deferred. The initial host writer
+supports ordinary serial operation on a healthy backing image; it does not supply
+a recovery route after actual backing writeback error. No persistent session
+registry, mandatory O_DIRECT, special XFS configuration or full-image direct-I/O
+provisioning is required. These scope decisions do not weaken the abstract adapter's
+durability contract or the core's publication, admission and recovery rules.
 
-| Question | Qualified direct-I/O profile | Persistent registry alternative |
-| --- | --- | --- |
-| Evidence after interruption | Quiesced I/O and a qualified stable backing view, then fresh direct reads and full validation | ACTIVE records uncertainty but says nothing about surviving image bytes |
-| Extra persistent machinery | No session database; strict image-lifecycle and backend prerequisites | Independent trusted control store, stable identity/provisioning, atomic ACTIVE/CLEAN records and locking |
-| Harmless process interruption | Can reopen if the backing boundary and both retained states pass; no blanket interruption ban | ACTIVE cannot distinguish harmless interruption from failed writeback; no automatic reset |
-| Ordinary cached host image after writeback error | Does not qualify merely by reopening with O_DIRECT | Remains refused until an independently established durable boundary or qualified replacement |
+#### Supported ordinary operation
 
-#### Direct I/O: concrete proposed configuration
+Use a fixed-size regular image on a local Linux filesystem whose file writes and
+`fsync` provide the ordinary data/metadata durability contract through its backing
+storage. Buffered positional I/O is allowed, including sparse images; logical
+pool capacity does not reserve host disk space. The host must honor successful
+flushes. Arbitrary network, synthetic or remapped backends are not certified by
+this statement. No physical power-loss qualification is claimed.
 
-Start with standalone, fixed-size regular images on local XFS, 4 KiB filesystem
-blocks, one data device with internal journal, no DAX/realtime/reflink/always-COW
-mode, and no file compression or encryption. Exclude network/FUSE/overlay/tmpfs
-backings and unqualified virtual/block-remapping stacks. This is a restricted
-qualification target, not a claim that other Linux filesystems cannot work. The
-source audit used upstream Linux v6.12 XFS/iomap; the exact deployed patched
-kernel and filesystem path must be checked before support is claimed. A version
-comparison or a successful probe is not a substitute for that qualification.
+Supported starting points are successful fresh formatting/publication or ordinary
+reopening after a healthy completed session, with no known or suspected backing
+writeback failure. Ordinary reopen checks geometry and both retained states and
+performs the normal opening flush before exposing a writer or doing cleanup.
+Those checks detect current failures and invalid media; they do not certify past
+I/O history. The supported workflow's healthy history is an operating precondition,
+not something inferred from a new descriptor or a successful opening flush.
 
-Use fully initialized, allocated and unshared image ranges with a previously
-durable fixed file length/mapping. No holes, delayed/unwritten extents, reflink,
-hole punching, truncation or host-file growth during the image's writable
-lifetime. This deliberately avoids needing to recover newly allocated host-file
-mappings after an error. Bounded FIEMAP iteration can check range coverage and
-reject unknown, delayed, unwritten or shared mappings; `st_blocks` alone is not
-proof. FIEMAP is a current mapping report, not proof of past durability or exclusive
-ownership. See the [FIEMAP contract](https://www.kernel.org/doc/html/latest/filesystems/fiemap.html).
+Retain one exclusively locked image descriptor through validation, callbacks,
+drain and close. Cooperating tools must honor the lock; external writers, writable
+mappings, truncation, hole punching and other changes to the image are excluded
+while it is owned. Advisory locking cannot prevent a noncooperating process.
+Keep callbacks synchronous and serial, check image geometry and exact transfer
+results, and keep the core's first and final `fsync` for every publication. A
+successful write syscall alone is not a durability barrier. Durable creation also
+requires syncing the containing directory, as specified by
+[fsync(2)](https://man7.org/linux/man-pages/man2/fsync.2.html).
+No delayed durability or batching across completed application calls is introduced.
 
-Provision a fresh image through the qualified direct path, fully initialize its
-range, then successfully sync its contents/metadata and containing directory
-before it is eligible for mutation. Merely calling fallocate does not initialize
-unwritten extents. This adds real provisioning I/O and space cost: a 64 GiB host
-image needs its full range initialized even when the Pyxis pool is mostly free.
-The existing sparse/buffered formatter does not already establish this contract;
-a future explicit host provisioning/formatter mode is required if this proposal
-is accepted. Do not retrofit it by rewriting an uncertain image. An existing
-image requires independently known durable provenance and the same lifetime
-constraints; unknown history is not qualified by a flag or cached-content copy.
+After a negative or short write result, return failure to the core without
+completing a possibly changed suffix or replaying the transaction. This is the
+initial writer's conservative adapter policy; the pinned formatter's existing
+write loop is not evidence that the new writer already implements it. A failed
+write may have changed part of the range, and errors can be reported later by
+flush or close; see [write(2)](https://man7.org/linux/man-pages/man2/write.2.html).
+A flush error ends the attempt; do not loop until a subsequent flush succeeds.
 
-Open the one image descriptor with O_DIRECT and retain exclusive advisory ownership
-through every callback, validation, drain and close. All cooperating writers,
-readers and inspectors of that backing must use the qualified direct path; no
-buffered I/O, mmap, inherited writable descriptor, concurrent external image tool,
-reflink/dedup or mapping-changing administration. No fork while I/O is outstanding.
-Keep transfers synchronous and serial, with no AIO/io_uring, timeout cancellation
-or detached worker. These ownership/lifecycle conditions are deployment
-preconditions: advisory locking and file flags cannot exclude a noncooperating
-process or establish an unknown image's history.
+#### Stop-on-error behavior and restart boundary
 
-Query STATX_DIOALIGN on the opened descriptor, require the returned mask and
-nonzero memory/offset alignments, and refuse values incompatible with 4096-byte
-blocks. Use that write alignment for reads too; newer separate read-alignment
-reporting need not relax it. The filesystem allocation block size is an additional
-constraint, not inferred from the preferred `stx_blksize`. Reserve a suitably
-aligned 64 KiB bounce buffer before exposing the writer; addresses, offsets and
-lengths of every transfer satisfy the discovered requirements. Refuse unsupported
-geometry rather than using read-modify-write or unaligned fallback. See
-[statx alignment fields](https://man7.org/linux/man-pages/man2/statx.2.html).
+Preserve the agreed outcome/health table. Replacement-write or first-flush failure
+stops mutation; confirmed-state reads remain available while integrity is established.
+Uncertain slot publication stops all ordinary access. Failure during cleanup does
+not erase confirmed user progress; pre-publication cleanup failure permits confirmed
+reads, while uncertain cleanup publication stops all ordinary access. Unknown
+outcomes may contain additional committed bytes and are not automatically retryable.
+An ordinary pre-admission quota/profile refusal is not a backing writeback error.
 
-Never reopen without O_DIRECT or substitute buffered I/O after an error. This
-userspace rule alone is insufficient: Linux permits some direct requests to fall
-back inside the filesystem. [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
-explicitly distinguishes O_DIRECT from synchronous durability. In the inspected
-[XFS path](https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/xfs/xfs_file.c),
-ENOTBLK can lead to a buffered write; alignment/no-reflink checks are not a universal
-no-fallback certificate. The
-[iomap implementation](https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/iomap/direct-io.c)
-can request fallback if data-cache invalidation fails. The qualification must
-exclude those paths: filesystem-block-aligned, non-COW mapped writes, and no data
-page-cache population/pinning from buffered or mapped access since provisioning.
-There is no generic userspace success flag certifying which path ran. If the
-chosen kernel/backend cannot establish these conditions, refuse the profile;
-monitoring a few successful direct transfers does not establish the invariant.
+Once stopped for backing I/O failure, issue no further mutation or recovery writes,
+including on checkpoint or close. Quiesce callbacks before releasing their buffers
+or exclusive ownership; a hung synchronous call is not quiesced by a timeout.
+Report the error and confirmed progress independently, close resources, and check
+close results. Close is not a durability barrier and a close error is not retried;
+see [close(2)](https://man7.org/linux/man-pages/man2/close.2.html). A late close error
+must make the host command fail and disclose the backing error without rewriting
+earlier confirmed core results as zero progress or issuing repair writes.
 
-Keep the core's explicit first and final fsync operations. Synchronous syscall
-completion only means its I/O has completed; it is not a durability barrier by
-itself. O_DSYNC/O_SYNC could add per-write persistence at extra cost, but are not
-required by this proposal and do not replace either core flush or post-error
-qualification. The inspected XFS fsync path forces the appropriate log/device
-flush, including a data-device flush when the log force does nothing; it refuses
-filesystem shutdown. The general [fsync contract](https://man7.org/linux/man-pages/man2/fsync.2.html)
-also requires separate directory synchronization for durable image creation.
-No loop that keeps flushing until an earlier error disappears.
+Known or suspected writeback failure leaves that image outside the initial host
+writer's supported reopening workflow, including after the tool exits, the path
+changes or the image is copied from surviving caches. Refuse a recovery request
+whose history is known; no retry, repair, force-clear or flag asserting that a new
+`fsync` cured the failure. The implementation can enforce the stopped state during
+its session, but without a durable external history mechanism it cannot reliably
+discover a previous process's error. Explicitly document this detection limit:
+there is no claim of automatic cross-process quarantine or safe writable reopening
+of arbitrary images. The caller/operator must retain the failure context and must
+not present an affected image as an ordinary healthy reopen. An in-memory flag is
+not the recovery boundary, and process restart does not remove the restriction.
 
-After any failed or short write, stop at the core's existing failure boundary;
-never complete its suffix automatically. A direct-write error can leave some of
-the requested range changed: treat it as potentially inconsistent, not unchanged
-or atomic. A failed slot attempt remains unknown even when O_SYNC was requested.
-The [write error contract](https://man7.org/linux/man-pages/man2/write.2.html)
-supports neither automatic retry nor a claim that the error cancelled all writes.
+There is no persistent ACTIVE marker or blanket permanent ban after every
+interruption. An interruption before any mutation does not itself taint a healthy
+image. An interrupted mutating session whose backing outcome/history is unknown
+is not demonstrated healthy by close/reopen, cached validation or a later successful
+flush. This milestone makes no real-host recovery claim for that case either;
+inspection may report readable structure/content without certifying durability.
+Do not turn an observed successful reopen into post-error recovery evidence.
 
-Quiesce all callbacks before freeing buffers, closing ownership or reading a
-recovery state. On a normal stopped instance, wait for the outstanding synchronous
-call to return. After process termination, wait for its actual exit and ownership
-release; do not treat a timeout or lost connection as completion. The inspected
-synchronous iomap path waits for completion, but that is source-specific evidence,
-not a promise about arbitrary async adapters. A hung operation blocks recovery;
-do not break ownership to race it.
+#### Deferred qualification and retained findings
 
-**Post-error durability limit:** Linux documents cache flush/FUA guarantees for
-completed writes, but that is not a general guarantee about every read-visible
-fragment of a failed device request. See
-[block cache control](https://www.kernel.org/doc/html/latest/block/writeback_cache_control.html).
-For a concrete initial recovery profile, require either no volatile write cache
-anywhere in the qualified backing path or a documented end-to-end power-loss
-protection contract covering all read-visible cached bytes after failed requests.
-A device marketing label, guest-visible cache setting or O_DIRECT flag is
-insufficient; controllers and remapping/virtualization layers matter too. An
-alternative backend could supply an equally explicit post-error stable-view or
-cold-cache boundary, but this investigation does not establish one for arbitrary
-cached disks. The adapter must not change device cache policy automatically.
+Follow-up work must establish a documented durable-state boundary for a concrete
+host/kernel/filesystem/storage configuration, including failed or partial writes,
+quiescence and process restarts, before adding supported real-host post-error
+recovery. Retain the independent old/new payload comparisons and uncertain-progress
+reconciliation; qualification must never authorize replay of an uncertain mutation.
+This follow-up is not a prerequisite for implementing ordinary host writing or
+closing this core milestone with its simulated recovery evidence.
 
-Under that stronger backing premise, fixed durable host mappings and quiesced
-direct I/O, fresh direct reads observe stable old/new/partial bytes rather than
-stale Linux page-cache copies. This is a conditional inference from the stated
-contract, not an experiment showing that failed writes all persisted. Perform
-one checked opening fsync to enforce the normal host boundary and detect current
-backing errors, then fully validate both retained states and admission before
-startup cleanup or returning a writer. The sync alone is not the proof. A torn or
-degraded peer still refuses writable access; no slot repair. Unknown publication
-may include additional committed progress, but recovery never replays the request.
+The earlier investigation found two candidates, neither qualified here. A restricted
+direct-I/O path would still need alignment discovery, exclusion of buffered fallback
+and mixed access, stable host mappings, explicit flushes, outstanding-I/O quiescence
+and a documented stable backing view after errors. O_DIRECT alone supplies none
+of the missing post-error durability proof. The inspected Linux v6.12
+[XFS](https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/xfs/xfs_file.c) and
+[iomap](https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/iomap/direct-io.c)
+paths were investigation evidence, not a required deployment or qualified target.
 
-This contract survives a process restart through persistent properties of the
-backing and its controlled access history, not an in-memory error flag. An ordinary
-interrupted qualified session need not be permanently barred. A previous buffered
-writeback failure, broken exclusivity, unknown provenance, unqualified cache
-behavior or host-filesystem integrity failure invalidates that inference: refuse
-writable recovery rather than silently treating a new descriptor as clean.
-
-#### Registry alternative: deployment and recovery cost
-
-A registry can preserve a refusal decision, but cannot establish surviving image
-contents. To work as previously proposed, it needs durably installed ACTIVE before
-any image write, and CLEAN only after a healthy completed session, checked backing
-close and all required drains. Exclusive identity ownership must span that final
-CLEAN publication too. File plus directory synchronization, atomic replacement,
-missing/invalid-record refusal and protection from rollback are required. Doing
-read-only admission before ACTIVE avoids tainting an ordinary admission refusal;
-a crash after ACTIVE is still ambiguous even if no image write occurred.
-
-"Outside the image's failure domain" means the specified image-storage failure
-cannot invalidate the acknowledged ACTIVE record or resurrect an older CLEAN.
-It needs an independently qualified storage/control path, durable ordering and
-rollback protection under an explicit fault model. Another directory, ordinary
-sidecar, partition, xattr or copied marker does not establish that independence.
-Separate hardware may help, but a shared controller, volatile cache, restore or
-operator rollback can still defeat the claimed separation. No such deployment
-has been selected here; silently assuming it would introduce a storage-management
-facility beyond a simple host adapter.
-
-Identity must bind the pool ID/geometry to one designated backing incarnation.
-Paths change, hard links alias one file, copies preserve pool IDs and inode
-numbers can be reused. A qualified filesystem's persistent file handle plus
-filesystem identity can distinguish incarnations across renames; mount IDs alone
-are not persistent, and stale/unsupported handles must refuse. The
-[Linux file-handle contract](https://man7.org/linux/man-pages/man2/name_to_handle_at.2.html)
-illustrates reuse detection and filesystem-dependent support. Copies/restores
-need explicit independent provenance and rebinding, not a second registration of
-cached uncertain bytes or concurrent writable backing with the same pool identity.
-
-An ACTIVE record cannot distinguish a harmless interruption from a writeback error
-that left cache-visible, nonpending bytes. It therefore offers no automatic way
-back to CLEAN. Possible routes are an independently qualified durable backend
-boundary followed by full validation, a known durable backup restored as a qualified
-backing, or a newly durably formatted image. A generic reboot, cached comparison,
-plain reopen/fsync or deletion of the marker is not such evidence. No force-clear
-command is proposed. The same backend qualification needed for the first route
-would already supply the direct adapter's recovery evidence; the registry adds
-history and provisioning machinery without supplying that missing fact itself.
-
-**Decision still required:** accept a restricted, qualified direct-I/O host target
-and its full-image provisioning/backing requirements, or keep real-host post-error
-recovery unsupported until a different concrete durable-view boundary is supplied.
-The mandatory registry is not recommended or adopted. Neither general Linux
-O_DIRECT nor a sidecar has established portable post-error recovery here. Select
-and document the actual kernel/filesystem/device contract before implementation
-claims host recovery; do not expand this milestone into a registry service,
-cache-control manager or repair tool. Simulator validation remains separately
-useful, and no QEMU/build/storage configuration changes are made by this PR.
+A registry could preserve refusal history but would need independently reliable
+storage outside the image's failure domain, stable identity across path changes,
+rollback protection and an explicit way to resolve harmless interrupted sessions.
+An ordinary sidecar does not establish those properties, and a registry cannot
+supply the missing durable image contents. Neither approach is selected as follow-up
+policy. Record the qualification gap in [technical debt](../technical-debt.md#deferred-real-host-post-error-recovery-qualification);
+do not add a registry service, cache manager, repair tool or special host filesystem
+requirement to this milestone. Simulator recovery remains required under its
+explicit durable-state premise; no real-host failure experiment is claimed.
 
 ### Candidate planning and publication
 
@@ -1496,7 +1421,7 @@ The shared filesystem core will have maintained host tests that run in CI and
 gate merges. This explicitly supersedes the repository no-tests/no-CI restriction
 for this filesystem work only. It does not authorize implementation in this PR,
 a general testing framework, kernel self-tests or unrelated repository changes.
-The owner configures Forgejo branch protection; the proposed check below must
+The owner configures Forgejo branch protection; the agreed check below must
 become required when delivered. Task 1 remains unchecked pending full review.
 
 The governing rule is:
@@ -1516,16 +1441,15 @@ case; a contract change updates its documented expectations in the same PR. Do n
 postpone the suite until milestone closure, preserve accidental behavior as a
 fixture requirement, or weaken an invariant assertion merely to pass a refactor.
 
-### Proposed small host setup in pyxis-fs
+### Agreed small host setup in pyxis-fs
 
-Propose [Unity](https://www.throwtheswitch.org/unity) for assertions, per-case
+Use [Unity](https://www.throwtheswitch.org/unity) for assertions, per-case
 setup/teardown and result reporting, with a small `tests/` entry point and focused
 case/support files linked to the same `libpyxis-fs.a` built by the ordinary Makefile.
 Unity's core is one C source and two headers and integrates directly with Make;
-we need not maintain our own assertion/reporting framework. This framework choice
-remains a proposal, separate from the agreed requirement to maintain tests.
-[cmocka](https://cmocka.org/) is a viable alternative with built-in mocking and
-additional report formats, but those facilities are not needed for this setup.
+we need not maintain our own assertion/reporting framework. This Unity setup is
+accepted for implementation with the behavior it tests; no dependency or test code
+is added by this specification PR.
 
 When implemented, vendor Unity's small required source subset under
 `third_party/unity/` in pyxis-fs, pin a reviewed upstream release/commit and retain
@@ -1534,7 +1458,7 @@ floating checkout or dependency download during a test run. Compile it only into
 the host test executable. Core sources keep their freestanding flags and production
 headers/binaries gain no Unity dependency. The core is linked normally, not rebuilt
 with fault switches. No Ceedling/CMock, generated mocks, Ruby tooling, new build
-system or reusable framework wrapper is proposed.
+system or reusable framework wrapper is part of this setup.
 
 Keep only filesystem-specific support ours: synthetic fixtures, independent expected
 state, the callback adapter, bounded traces and a short explicit case/suite list.
@@ -1571,7 +1495,7 @@ populated blocks is a small fixture, not a claim that a smaller unsupported volu
 is valid. Use bounded disk-backed state for larger cases and delete successful
 scratch files; retain only failing case metadata, traces and bounded reproducer
 artifacts. Cases have isolated state, fixed seeds and no wall-clock/random-host
-input dependence. No root privileges, mounts, QEMU, network or qualified XFS device
+input dependence. No root privileges, mounts, QEMU, network or special host filesystem
 are prerequisites for the core suite. Its simulated durable state is defined
 relative to simulated cuts, not actual host power loss.
 
@@ -1615,7 +1539,7 @@ No test should equate safe resource refusal during that drain with success.
 
 ### Commands, per-PR gate and extended campaigns
 
-The following names are a proposed command contract in the `pyxis-fs` repository;
+The following names are the agreed command contract in the `pyxis-fs` repository;
 they do not exist at the pinned revision and are not implemented by this PR:
 
 | Command, run from pyxis-fs | Purpose and limit |
@@ -1630,7 +1554,7 @@ they do not exist at the pinned revision and are not implemented by this PR:
 Keep `make check` small: fixed cases/seeds, bounded operation counts and temporary
 storage, with a design target below one minute of test execution on the configured
 CI runner, excluding compilation. Measure this when first delivered; no runtime
-is claimed now. Propose a five-minute CI job timeout, with timeout or infrastructure
+is claimed now. Use a five-minute CI job timeout, with timeout or infrastructure
 failure failing the check. Do not hide missing assertions or skip mandatory recovery
 cases to meet a time target. Large populations and broad campaigns belong in the
 explicit commands above; the small suite still covers each implemented contract
@@ -1688,8 +1612,9 @@ Integrate this bounded model into the maintained host runner above, linked to th
 real shared core. Keep one fixed scenario table and one test-owned adapter at the
 existing exact I/O callbacks, reused by quick and extended runs. No standalone
 parallel validation implementation, production failure switches or kernel probes.
-The normal host writer continues to use its actual qualified I/O and durability
-operations. The mechanism below remains proposed, not implemented here.
+The ordinary host writer uses the healthy-session I/O and durability contract
+above; simulated recovery does not qualify its post-error backing state. The
+detailed simulation mechanism below remains proposed, not implemented here.
 
 The simulation uses a sparse durable image and a separate disk-backed volatile
 write log. A log record contains block range, payload, pending/cache-only state
@@ -1719,16 +1644,16 @@ the overlay and independently verify the actual durable old generation. Also exe
 not turn either case into an automatic rewrite/retry; a successful flush alone
 must never authorize post-error recovery.
 
-Separately model the proposed qualified direct backend: completed writes reach
-stable storage, failed requests may leave stable old/new/partial bytes, and no
-buffered data overlay survives to mislead recovery. After all I/O ends, a fresh
-instance validates the resulting retained states or refuses a torn/degraded peer.
-Exercise harmless process interruption without a registry ban as well as error
-refusal. This validates core behavior under that explicit premise, not whether an
-actual Linux/device stack supplies it. Host qualification must separately review
-the exact fallback paths, alignment, backing-cache contract and I/O completion;
-future observed traces or power-loss experiments are evidence for the exercised
-configuration, never a replacement for the documented guarantees.
+Separately model an adapter with an explicitly established durable-state boundary:
+completed writes reach stable storage, failed requests may leave stable old/new/
+partial bytes, and recovery reads only that durable state after all I/O ends.
+A fresh instance validates both retained states or refuses a torn/degraded peer.
+Exercise harmless interruption as well as error refusal. This validates core
+behavior under the abstract guarantee, without selecting direct I/O, XFS or a
+registry as its concrete mechanism. The simulated backend retains its declared
+provenance across adapter instances; the ordinary host adapter cannot infer that
+provenance from a new descriptor. Deferred real-host qualification must supply its
+own evidence and does not remove any of these simulated cases.
 
 Number callback events and record kind, block range, flush ordinal, selected cut
 and returned status. Slot ranges are the fixed first/last pool blocks. Fixed
@@ -1768,7 +1693,7 @@ cannot weaken the real callback contract or permit automatic retry.
 | Older retained payloads | Quiesce overwrite/reuse while two retained roots still differ; independently compare both states' complete file contents before any maintenance may drop the older root. |
 | Retained unlink/replacement | Old views retain identity/bytes/rights; recreated names name new identities. Retained orphan storage stays live and charged. Detached directories remain empty and reject insertion. |
 | Final release and reopening | Interrupt bounded orphan batches; marker/object stay paired, cleanup resumes after full validation, and writer access is withheld until startup cleanup completes. |
-| Host recovery boundary | Qualified quiesced direct backing can reopen after interruption; unqualified buffered-error/cache-only backing refuses even after successful flush and process restart. Cold simulation uses only its explicitly durable image. No registry prerequisite is assumed. |
+| Adapter recovery boundary | Simulated quiesced durable backing can reopen after interruption; unqualified buffered-error/cache-only backing refuses even after successful flush and a fresh adapter instance. Cold simulation uses only its explicitly durable image. This tests the abstract guarantee, not automatic detection of prior real-host errors. No registry prerequisite is assumed. |
 | Recovery refusal | Torn/degraded or unsupported peer, insufficient reserves, unknown grants/extensions and incomplete validation prevent writable opening without changing either slot. Read-only inspection follows its own contract. |
 | Authority and continuations | Missing resize rejects an entire extending write; checkpoint rights stay independent; local directory edits invalidate pages while unrelated edits do not. |
 
@@ -1859,8 +1784,10 @@ container rebuild, userspace port, native writable mount or FUSE work is implied
    funded-drain cases immediately. Use a small synthetic retained-data fixture and
    the real admitted publisher to replace/reuse a range and compare both retained
    payloads without needing a public file-write API; a no-op checkpoint is not
-   evidence of publication. A real host checkpoint/reopen command remains separate
-   from test controls. Add no fake file mutations or public test transaction API.
+   evidence of publication. The real host checkpoint/reopen command follows the
+   ordinary healthy-session contract, with post-error qualification deferred; it
+   remains separate from test controls. Add no fake file mutations or public test
+   transaction API.
    Until task 6 supplies orphan cleanup, refuse nonempty orphan indexes before
    writes and test that refusal; never pretend startup cleanup succeeded.
 3. Task 5: file create/write/resize, creation-time directory serial updates,
@@ -1879,21 +1806,20 @@ container rebuild, userspace port, native writable mount or FUSE work is implied
    this is not the task that first adds tests. Preserve independent host builds,
    target compilation and later native-persistence guest validation.
 
-Full review must accept the proposed workload profiles/options, deletion capacity
-reservation, host adapter/backing qualification, concrete representations/interfaces
-and exact failure model. Whole-map rebuilding is accepted only as the initial
-correctness approach. The profile choices are not accepted product defaults.
-The proofs above depend on enforced editor and representation bounds; implementation
-review must check those invariants, and any violation requires correcting the
-bound or design before delivery. Passing host tests alone is not their proof.
-The maintained-test/CI requirement and contract-based assertion rule are agreed;
-the Unity dependency, runner, command names, gate naming and coverage split above
-are proposed.
-The stronger removable namespace profile, its tighter deletion reservation and
-the proposed direct-I/O backing/workload profiles remain explicit review items; the
-six-entry rule has been analyzed here, not accepted or implemented. Do not treat
-task 1 as ready for acceptance while those choices are unresolved. No policy is
-silently delegated to an implementation PR.
+The namespace profile, bounded repair/formatter rules, tighter permanent deletion
+reservation and Unity host-test/CI setup are accepted design. Real-host post-error
+recovery qualification is deferred; ordinary host writing has the agreed scope
+above. These choices are no longer unresolved prerequisites for task-1 review.
+Whole-map rebuilding remains accepted only as the initial correctness approach.
+
+Full review still covers the consolidated specification, including the proposed
+workload profiles/options, concrete representations/interfaces and detailed failure
+model. The profile examples are not accepted product defaults. The proofs depend
+on enforced editor and representation bounds; implementation review must check
+those invariants, and any violation requires correcting the bound or design before
+delivery. Passing host tests alone is not their proof. Task 1 remains unchecked
+until the owner accepts the specification as a whole; none of these design
+decisions authorizes implementation.
 Acceptance closes task 1; implementation still requires the next task to be assigned.
 
 ## Focused tasks
