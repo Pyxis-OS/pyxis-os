@@ -18,6 +18,30 @@ both milestone closure and writable deployment. The contiguous-placement fix is
 useful independently but does not satisfy that acceptance gate.
 Implementation proceeds one explicitly assigned task at a time.
 
+**Host-storage protection is mandatory during this work.** Do not run write-heavy
+filesystem benchmarks, populated recovery workloads, extended campaigns or loops
+of mutation tests against disk-backed storage. This includes simulator backing
+files, volatile/durable logs, extracted payloads, temporary copies and nested
+images: calling a workload simulated, sparse or disposable does not prevent host
+NVMe writes. Historical commands later in this document or in dependency docs
+are not permission to run them with their old backing paths.
+
+Before execution, verify every workload storage path is RAM-backed and cannot
+spill to swap, including the development VM's memory on its host. `/tmp`, tmpfs,
+guest swap settings and a RAM-sized image alone are not sufficient evidence.
+Use an explicit memory budget, fail on exhaustion and permit no disk fallback.
+If the backing or host no-swap guarantee cannot be established, stop and report
+the missing evidence; do not run the workload speculatively. This applies to
+delegated agents and CI as well as local runs. Audit existing runners and their
+scratch defaults before using them, and bound saved logs to small summaries.
+
+Only source/build artifacts and small result summaries belong on persistent
+storage during this correction. Any intentional device-backed workload requires
+separate owner agreement on the device, workload and maximum total submitted
+write bytes, including metadata, maintenance and repetitions. A payload-size
+limit is not a write budget. Do not use the host NVMe for endurance experiments
+or assume that deleting the resulting files reverses the writes.
+
 Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-ownership),
 [persistent additions](#agreed-persistent-additions-and-supported-media),
 [admission proof](#agreed-writable-profile-and-admission-proof),
@@ -2145,6 +2169,9 @@ this documentation update.
      only small result summaries/logs on persistent storage. Apply this boundary
      to local and CI write-heavy campaigns; infrastructure changes belong in this
      task, not this documentation update.
+     Establish and record this evidence before the first run; pass the same
+     storage boundary explicitly in any agent handoff. Ordinary benchmark
+     approval does not waive the host-storage protection rule above.
 
      Begin with small reproducible Pyxis/ext4/Btrfs workloads on RAM-backed
      storage: 4 KiB and 256 KiB sequential writes, small overwrites, and
