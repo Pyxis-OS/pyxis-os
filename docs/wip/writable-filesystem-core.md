@@ -2223,8 +2223,14 @@ this documentation update.
      its effective boundary must pass the guard before tests execute.
      The separate rootless validation runner and exact trusted options
      are documented in [runner provisioning](../../fs/docs/ram-validation.md#runner-provisioning).
-     Passing CI at both revised heads remains required;
-     this item stays unchecked. Ordinary image builds retain their existing
+     The allowlist correction let CI attach the mount, but Podman's compatible
+     API ignored its tmpfs volume options; both jobs refused before building.
+     A [pre-created named tmpfs volume](../../fs/docs/ram-validation.md#proposed-named-volume-alternative)
+     passed all 111 groups through the local API with the same limits and zero
+     swap/max/OOM events. This is a pending proposal: exclusive runner ownership,
+     capacity one and complete teardown between jobs require owner agreement.
+     Neither that alternative nor passing CI is assumed. This item stays
+     unchecked. Ordinary image builds retain their existing
      runner and are outside the filesystem job's resource cap.
 
      Begin with small reproducible Pyxis/ext4/Btrfs workloads on RAM-backed
