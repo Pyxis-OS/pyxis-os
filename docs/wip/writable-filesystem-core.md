@@ -1910,6 +1910,9 @@ Tasks 3/4 remain a joint delivery boundary and require the next assignment.
    [implemented planners](../../fs/docs/core.md#private-candidate-planning) and [maintained test coverage](../../fs/docs/testing.md).
    The emitted required-check pattern in `pyxis-fs` is
    `Filesystem / host-contract (pull_request)`; the owner configures branch protection.
+   Pyxis also runs the pinned dependency's host build and suite inside its required
+   `Build Pyxis / build (pull_request)` check, so a failing filesystem pin fails
+   the parent PR check.
    All 30 initial test groups pass, including independent expected payload/format
    checks, variable-length occupancy repair and extent successor-bound rejection.
    Ordinary host/target and parent kernel builds pass; the same suite passes under

@@ -23,6 +23,8 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
+      - name: Build and test pinned filesystem
+        run: make -C fs -j16 all check
       - name: Build image and component bundles
         run: make -j16 image bundle-kernel bundle-sdk bundle-ports bundle-userspace
       - uses: https://data.forgejo.org/actions/upload-artifact@v3

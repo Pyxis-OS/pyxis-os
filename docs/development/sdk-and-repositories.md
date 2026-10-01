@@ -112,7 +112,13 @@ allocation-proof, traversal, policy, checking and lifetime contracts, and
 The filesystem repository also owns `make check`, a maintained Unity suite
 linking the real shared core; run `make -C fs check` from Pyxis. Its emitted
 `Filesystem / host-contract (pull_request)` status must be required in **pyxis-fs**
-branch protection, configured by the owner. See [test coverage and limits](../../fs/docs/testing.md).
+branch protection, configured by the owner. The parent workflow also runs
+`make -C fs -j16 all check` against the exact gitlink checked out for each PR,
+before building the image. Require `Build Pyxis / build (pull_request)` in Pyxis
+branch protection: a missing dependency commit, failed host build or failed
+filesystem suite then blocks that parent check. This runs the pinned tests locally
+in the job and needs no cross-repository status API or extra credentials.
+See [test coverage and limits](../../fs/docs/testing.md).
 Pyxis retains the public OS ABI, capabilities
 and namespace integration. Kernel source builds, including image builds, consume
 the pinned read-only core; SDK and ports targets remain independent. The host
