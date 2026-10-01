@@ -134,7 +134,13 @@ RAM-only validation/baselines, incremental allocation-map design with revised
 admission and cleanup bounds, implementation/recovery tests, and repeated write-cost
 acceptance measurements. Large disk-backed runs are suspended; larger profiles
 need a bounded RAM-only execution plan. The placement fix remains useful but does
-not resolve this blocker. See the linked milestone for the corrective task list.
+not resolve this blocker. The first corrective step adds the scoped
+2 GiB RAM / 4 GiB job launcher and a small Pyxis/ext4/Btrfs baseline; this VM is
+the agreed safety boundary. Two 40-case matrices and the maintained suites pass;
+write traffic still misses the ext4 target. A small final-orphan cleanup
+combination is proposed for investigation; implementation and allocator changes
+require a later assignment. See
+the linked milestone for the corrective task list.
 FUSE and installation remain separate. These
 plans do not start implementation or displace explicitly assigned libc/remote work.
 
