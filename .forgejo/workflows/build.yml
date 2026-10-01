@@ -44,7 +44,16 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Build image and component bundles
-        run: make -j16 image bundle-kernel bundle-sdk bundle-ports bundle-userspace
+        run: |
+          if [ "$(id -u)" -eq 0 ]; then
+            build_uid=$(id -u nobody)
+            build_gid=$(id -g nobody)
+            chown -hR "$build_uid:$build_gid" .
+            exec setpriv --reuid="$build_uid" --regid="$build_gid" --clear-groups \
+              --no-new-privs env HOME=/tmp \
+              make -j16 image bundle-kernel bundle-sdk bundle-ports bundle-userspace
+          fi
+          exec make -j16 image bundle-kernel bundle-sdk bundle-ports bundle-userspace
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'

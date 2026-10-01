@@ -1599,8 +1599,12 @@ invariants. The assigned focused correction removes the duplicate job-memory cei
 workflow override: the local launcher or trusted CI runner provisions the budget,
 and guards verify a finite positive actual cap with zero swap. See
 [execution profiles](../../fs/docs/ram-validation.md#contracts-and-execution-profiles).
-The owner selected 16 GiB and capacity one for the shared CI runner; local
-benchmark provisioning and historical measurements retain 4 GiB. No automatic
+The shared CI runner configuration owns the current budget and uses capacity
+one for exclusive scratch access. Validators require bounded resources without
+copying scratch byte/inode or memory amounts into independent ceilings.
+Local benchmark provisioning and historical measurements retain their recorded
+parameters. Compilation and quick/extended tests run unprivileged; only native
+loop/mount/tracing setup and supervision retain privileges. No automatic
 limit increases, allocator changes or broader cleanup are authorized.
 
 ### Agreed small host setup in pyxis-fs
@@ -2248,9 +2252,16 @@ this documentation update.
      limit, zero swap/max/OOM events and a 314,847,232-byte memory peak.
      Every subsequent job still verifies its effective boundary before tests
      execute. The owner subsequently selected one shared runner for both labels,
-     at capacity one and a 16 GiB memory budget. Both job types use its controls;
+     at capacity one, with budgets owned by its configuration. Both job types use its controls;
      workflows no longer impose a competing memory setting. The guards require
      a finite positive cap and zero swap, not the historical 4 GiB amount.
+     The combined review also binds native mutation targets to held RAM-image,
+     loop and root descriptors before writes; it rejects external ext4 journals
+     and multi-device Btrfs. Compilation and workloads run unprivileged, with
+     root retained only for scoped setup and native device/trace supervision.
+     A separate small `--suite safety` exercises two native cases and target
+     refusals. Historical auxiliary timing includes verification and handoff
+     through unmount, not isolated unmount time; the primary table is unchanged.
      This completes the first corrective
      step only; task 7 and the writable-deployment blocker remain open.
 
