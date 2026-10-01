@@ -107,8 +107,9 @@
 - Read/search only relevant files and summarize build output. Avoid repeatedly
   reading whole documents, polling excessively or rerunning checks after a pass
   without a new change or unresolved concern. Keep progress updates concise.
-- Delegate bounded independent work when useful: use gpt-6.1-sol at high effort
-  for all delegated tasks. The primary agent owns design,
+- Delegate bounded independent work to subagent of your own harness at its strongest
+  setting (Codex: gpt-6.1-sol, high effort). If none is available, do the work yourself.
+  The primary agent owns design,
   integration and review. Give explicit scope; avoid overlapping edits and use
   isolated worktrees for parallel code work. Delegation is optional, not ceremony.
 
