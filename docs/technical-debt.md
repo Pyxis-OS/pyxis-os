@@ -822,13 +822,18 @@ adapter paths. No fault injection or physical-hardware validation was performed.
 
 ## Planned writable-filesystem costs
 
-The [writable-core milestone](wip/writable-filesystem-core.md) agrees a bounded
-whole-allocation-map fallback and partial large shrinks; neither is implemented.
-The fallback can make small mutations expensive on fragmented pools. Large
-shrinks may stop or crash at an intermediate committed length, so callers must
-reconcile confirmed progress and uncertain outcomes. Revisit incremental map
-optimization after the admission proof and workload measurements; atomic large
-shrinks would require a separately agreed persistent tail-retention design.
+The [writable-core milestone](wip/writable-filesystem-core.md) accepts whole-map
+rebuilding for every publication as the first correctness implementation, not the
+final allocation strategy or desired performance; it also accepts partial large
+shrinks. Neither is implemented. Rebuilding can write a pool-wide metadata map
+three times per small user batch, causing substantial write amplification. Measure
+metadata bytes written per useful data byte, latency and throughput on populated
+source trees and recorded write histories; calculated envelopes are not measured
+costs. Revisit incremental allocation/map editing after correctness while retaining
+equivalent admission bounds. Large shrinks may stop or crash at an intermediate
+committed length, so callers must reconcile confirmed progress and uncertain
+outcomes. Atomic large shrinks would require a separately agreed persistent
+tail-retention design.
 
 The first writer will drain each bounded batch's retired volume storage before
 admitting another batch, including between chunks of one large operation. A
@@ -837,12 +842,24 @@ six flushes in total. This accepts extra synchronous I/O to bound cleanup debt;
 revisit combining batches only after the admission proof and workload measurements
 support an equivalent bound. No latency measurement is claimed.
 
-The consolidated milestone now includes a proposed writable profile, numerical
-reserve/headroom proof, concrete interfaces and host failure model for full review.
-Those mechanisms remain proposals until accepted and implemented; the read-only
-format's maximum profile and prototype reserve defaults do not promise writable
-admission. Revisit these limits with implementation evidence, not by treating
-the design arithmetic as runtime validation.
+The consolidated milestone proposes workload-selected writable profiles, protected
+per-object deletion capacity, concrete interfaces and a bounded host failure model.
+Deletion headroom can cost roughly 8 KiB per object before subtracting existing
+namespace nodes; repeated separately committed small writes retain distinct births
+and can exhaust mapping capacity far below disk capacity. These mechanisms remain
+under review, including the separate namespace-depth policy. Funded-drain resource
+exhaustion is an invariant failure, not an accepted limitation. The read-only
+format's maxima and formatter reserve defaults do not promise writable admission.
+Revisit capacity and memory costs with populated workloads and implementation
+evidence, not by treating design arithmetic as runtime validation.
+
+After backing writeback errors, plain close/reopen and successful fsync do not
+establish a durable-state recovery boundary. The proposed initial host adapter
+refuses failed/unclean sessions across process restarts using an independently
+trusted persistent session guard; it offers no automatic repair, forced reset or
+uncertain-mutation retry. This also refuses some harmless interruptions and requires
+trusted registry deployment. Review that mechanism before implementation; revisit
+in-place recovery only with a documented durable-state boundary, not a cache flush.
 
 ## Filesystem host prototype limits
 
