@@ -2189,6 +2189,11 @@ this documentation update.
 
      **Accepted first corrective scope:** a scoped launcher with 2 GiB of
      `tmpfs,noswap` scratch, a 4 GiB job memory limit and zero job swap allowance.
+     **Accepted quick-CI adjustment:** the 111-group PR suite may use ordinary
+     tmpfs with the same byte/inode caps when the actual job has the verified
+     zero-swap cgroup limit and all fixture files/pages are newly created after
+     entering that job. The launcher and runner reject this mode for heavier
+     suites; local extended/comparative runs retain mount-level `noswap`.
      No system-wide swap change, automatic resource increase or disk fallback.
      Include images, durable/volatile simulator planes, logs, copies, expected
      payloads and extraction outputs in the storage audit. Bound diagnostics to
@@ -2211,10 +2216,15 @@ this documentation update.
      investigation is combining final small orphan data cleanup and paired
      object/orphan deletion when its full plan fits existing funded bounds.
      This is a proposal, not approval to implement it or the allocator redesign.
-     Local validation is complete; this item remains unchecked because the
-     existing CI runner uses a rootless runtime that rejects `tmpfs,noswap` before
-     any tests run. The owner must provision the verified CI boundary; the guard
-     remains mandatory.
+     The matching rootless setup passes the quick suite locally, and its
+     negative mode/storage checks preserve the heavier-suite boundary. Forgejo
+     runner 13.2 ignores the required workflow mount/swap/core options; CI
+     refuses before building because its dedicated scratch mount is absent.
+     The proposed separate rootless validation runner and exact trusted options
+     are documented in [runner provisioning](../../fs/docs/ram-validation.md#runner-provisioning).
+     Owner provisioning and passing CI at both revised heads remain required;
+     this item stays unchecked. Ordinary image builds retain their existing
+     runner and are outside the filesystem job's resource cap.
 
      Begin with small reproducible Pyxis/ext4/Btrfs workloads on RAM-backed
      storage: 4 KiB and 256 KiB sequential writes, small overwrites, and
