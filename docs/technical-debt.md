@@ -165,10 +165,15 @@ Reconsider BSP-only service when its latency becomes material or before allowing
 concurrent use and mutation of one private address space. The
 [implemented BSP request contract](kernel/bsp-service-requests.md) has separated operation
 ownership, submission/completion and subsystem service from scheduling while
-retaining BSP-only allocation and the inactive-root handoff. Allowing allocation
-on other CPUs remains a separate decision; an allocator spinlock alone does not
-resolve these ownership constraints. Eager task-lifetime storage and long
-non-preemptible operations remain explicit costs.
+retaining BSP-only allocation and the inactive-root handoff. The agreed
+[runtime SMP milestone](wip/scheduling-and-threads.md), after writable core completion,
+will introduce independent spaces, single-task migration and local private-memory
+operations with allocator synchronization and explicit mapping lifetime rules. It
+is not implemented yet; an allocator spinlock alone does not resolve these ownership
+constraints. Selected serial services and deferred destruction remain BSP-owned
+initially. Worker relocation and shared kernel mapping reuse need their own
+handoff/invalidation contracts. Eager task-lifetime storage and long non-preemptible
+operations remain explicit costs; measure them in matched before/after workloads.
 
 ## Synchronous launch preparation
 

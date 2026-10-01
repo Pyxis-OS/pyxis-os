@@ -1,109 +1,291 @@
-# Spaces, CPU scheduling and process threads
+# Runtime SMP and independent spaces
 
-Status: future design direction, 2026-09-29. Discuss decoupling spaces from CPUs
-alongside multiple threads per process and scheduling across CPUs. Keep the BSP's
-current service responsibilities initially. The stages below are proposals, not
-implementation authorization. The separate
-[block-storage foundation](../devices/block-storage.md) is complete.
+Status: agreed milestone direction, 2026-10-01; implementation not started.
+Complete the [writable filesystem core](writable-filesystem-core.md) first.
+This milestone replaces the earlier proposal to combine CPU-independent spaces
+with multiple threads per process while retaining all BSP services.
 
-Related: [current SMP ownership rules](../kernel/smp.md),
-[private-memory handoff](../kernel/memory.md), [spaces](spaces.md) and
-[Neovim/libuv requirements](neovim-libuv.md).
+The outcome is concrete: existing single-task processes share eligible CPU
+capacity, spaces retain their identity and authority as tasks move, and private
+memory allocation/release executes on the caller's CPU. Boot setup and selected
+runtime services can remain BSP-owned. This is not a promise that every subsystem
+becomes parallel or that resource isolation is complete.
 
-The completed [BSP request separation](../kernel/bsp-service-requests.md) clarifies
-subsystem service and request lifetimes without changing CPU placement
-or introducing threads. Its synchronous resource loans still rely on today's
-single-task process model; the sibling-thread requirements below remain necessary.
+Related: [current SMP rules](../kernel/smp.md), [private memory](../kernel/memory.md),
+[BSP requests](../kernel/bsp-service-requests.md), [spaces](spaces.md),
+[Neovim/libuv requirements](neovim-libuv.md) and [technical debt](../technical-debt.md).
+Those subsystem references describe current behavior until implementation updates
+land; the contracts below describe the agreed target.
 
-## Direction
+## Placement and authority
 
-- A space owns processes and their resource/authority domain. A process owns its
-  address space, capability table and threads. The scheduler places runnable
-  threads on eligible CPUs.
-- Space identity, namespace, terminal/display resources and authority do not
-  change when execution moves. CPU count must no longer define the space registry
-  or space identity. This does not itself introduce unlimited space creation.
-- Keep scheduler and architecture execution state CPU-local. Kernel GS remains
-  CPU-local; a running user task obtains its owning space through its process.
-  Kernel services need explicit space context where applicable, not an accidental
-  association with whichever user task last ran on their CPU.
-- Initially keep allocation, VM mutation, deferred destruction and existing BSP
-  workers on the BSP. Proposed placement is userspace on eligible APs in multicore
-  configurations, with the existing single-CPU fallback. Exact affinity rules and
-  any BSP userspace exception remain decisions.
+A space owns processes and their resource/authority domain. A process owns its
+address space and capabilities; it continues to have exactly one user task in
+this milestone. The scheduler places tasks on eligible CPUs. Moving execution
+must not change namespace bindings, terminal/display ownership, capabilities,
+execution-group membership or the identity exposed by those objects.
 
-This extends existing preemptive per-CPU scheduling with migration, load balancing
-and eventually concurrent sibling threads. It does not replace the kernel with
-a multikernel or move all services off the BSP.
+All online CPUs, including the BSP, are eligible for userspace by milestone
+completion. Intermediate PRs may keep AP-only placement while replacing ownership
+assumptions; the single-CPU configuration must keep working throughout. Kernel
+work must be considered when choosing placement. Eligibility is not a guarantee
+that a busy CPU immediately runs a particular task.
 
-## Proposed focused stages
+Trusted boot configuration describes initial spaces by session identity and init
+program, with an optional permitted CPU set. The launcher supplies the authority
+ceiling; trusted init can request its space's affinity within that ceiling before
+handing off to the ordinary session. For example, a launcher permitting CPUs 0–7
+can authorize init to request CPUs 2–3. Configuration names identify sessions,
+not authority. This requires a narrow native space-configuration operation and
+script command, not an ambient right to change arbitrary spaces.
 
-1. **Separate space identity from CPU topology.** Give spaces independent lookup
-   and lifetime rules. Remove CPU-index assumptions from ownership, presentation,
-   navigation and launch. Define how trusted init selects spaces and their initial
-   resources without treating a CPU index as a space identifier. Preserve existing
-   visible sessions while changing those associations.
-2. **Migrate single-threaded processes.** Move only runnable tasks whose previous
-   execution has fully stopped. Define ready-queue ownership, destination wakeups
-   and simple balancing across eligible CPUs. Preserve the early-wakeup/parking
-   handshake and update CPU-local entry state at dispatch; do not move a stack
-   still executing or a process undergoing a BSP loan. Priorities and elaborate
-   placement policy are outside the initial slice.
-3. **Introduce shared-process threads and runtime safety.** Specify thread
-   creation/join/exit, stacks, TLS, synchronization, shared capability access,
-   libc state and process-wide fault/last-thread cleanup. One possible first
-   placement rule is one CPU per multithreaded process, with migration of those
-   processes deferred until safe group coordination exists. This restriction is
-   proposed, not selected, and does not eliminate the shared-state problems.
-4. **Run sibling threads concurrently across CPUs.** Establish address-space
-   activity tracking, mutation coordination and translation invalidation before
-   allowing simultaneous execution in one private root. Account for threads
-   blocked in syscalls, pending operations and references held by kernel services,
-   not only threads currently executing user instructions.
+Keep the existing initial session roles, but stop deriving their number or
+identity from CPU count. Keep Caelum's log space and its restricted authority;
+its special purpose does not give it ownership of CPU 0. Dynamic space creation
+and destruction are outside this milestone.
 
-Each stage needs a concrete contract and smaller PR tasks before implementation.
-Normal preemption, completion notification and wait handoffs should remain
-recognizable; thread migration is not permission to weaken their ownership rules.
+The default launcher ceiling is all online CPUs; absent an init request, the
+space uses its permitted set. A requested set may contain one CPU or several;
+sets may overlap and do not reserve CPUs exclusively. Children inherit the
+space's effective eligibility, not necessarily init's setup authority. Requests
+must remain within the ceiling. Explicit unavailable CPUs, an empty set or an
+unauthorized expansion fail clearly; never silently broaden or partially apply
+an invalid request. No general per-process affinity setter is required now.
 
-## BSP loans with sibling threads
+Initial scope is affinity setup before session handoff, not arbitrary changes to
+a populated running space. Task 1 must settle the capability's exact rights,
+lifetime/delegation and handoff boundary, behavior for repeated setup requests,
+and how the initiating task reaches an eligible CPU before successful completion
+when it excludes its current CPU. This must agree with the migration-safe-point
+contract below; a syscall cannot simply resume on an excluded CPU and claim
+placement is already enforced. Also settle boot/make and script syntax and
+single-CPU defaults before dependent implementation. Replace CPU-index init
+selection explicitly; do not silently reinterpret old indices.
 
-Today parking the sole user task allows the BSP to borrow an inactive private
-address space or exclusively grow its capability table. With siblings, parking
-one caller no longer establishes either condition, even on a single CPU.
+### Scrolling space bar
 
-A proposed first VM-mutation policy is to park all siblings at safe points,
-prevent re-entry into the private root, and drain or account for kernel accesses
-before granting a process-wide loan. After mutation, refresh translations on
-every CPU that could retain stale mappings before allowing affected execution or
-frame reuse. The exact CR3/shootdown and acknowledgement protocol is undecided.
+Keep fixed-width tabs and Super+Left/Right selection. Once the space list exceeds
+the visible width, the tab bar is a viewport. Reserve left/right chevrons as
+indicators: light when more spaces are hidden beyond that viewport edge, muted
+when that end of the complete list is visible. The chevrons do not navigate.
 
-Do not wait for this work until stage 4: shared-process ownership coordination is
-required in stage 3. Capability tables and object lifetimes also need protection
-against concurrent or interleaved resolve/close/growth. Parking user threads alone
-does not prove that another kernel operation has stopped using their memory.
+When moving right, scroll as needed to keep the selected space and its next
+neighbour visible; moving left is symmetric. At the actual end, selection can
+reach the edge slot because there is no further neighbour to reveal. Keep the
+selection visible even when only one tab fits; neighbour preview applies when
+there is room. Selection and viewport track registry order, not CPU indices.
+Caelum stays the first space in that order.
 
-Resolve lock ordering, pending syscalls, wakeups during quiescence, process exit
-and failure paths before implementation. Whole-process parking must not deadlock
-behind a thread or service whose progress depends on the pending mutation.
+Use initial per-task round-robin fairness and modest load balancing. A space with
+more runnable tasks can receive more total CPU time. CPU masks provide placement
+constraints, not CPU budgets, memory limits or protection against exhaustion of
+shared services. Per-space resource accounting/quotas remain separate work.
 
-## Remaining policy and scope decisions
+## Evidence and safety boundaries
 
-- CPU eligibility, migration points, ready-queue locking, load balancing and
-  affinity. Start with a simple policy; NUMA, CPU hotplug and tickless scheduling
-  are not prerequisites.
-- Process/thread exit and faults, cancellation, authority to create threads,
-  stack ownership/limits, TLS representation and shared-runtime synchronization.
-- Scope/lifetime of private-VM loans, retained user buffers, capability-table
-  mutation and translation invalidation. Keeping allocators on BSP does not make
-  the old single-task ownership model safe for siblings.
-- Space enumeration and boot/session selection independent of CPU count. Existing
-  CPU-selected init configuration needs an explicit replacement, not a silent
-  reinterpretation of its indices.
-- Fairness and resource isolation. Equal per-thread scheduling lets a space with
-  many runnable threads obtain more CPU time. Per-space CPU accounting/budgets
-  and protection against exhaustion of shared BSP services require separate
-  policies; neither migration nor address-space separation provides them.
+Read-only investigation used main `36a199a`, after filesystem task-1 acceptance.
+These entry points identify the main coupling; recheck them against the completed
+filesystem-core revision before implementation. No new speedup or contention
+measurement is established by this investigation.
 
-The intended result is stable space ownership with flexible execution placement.
-The first implementation is not selected here, and no Neovim port, complete
-resource-containment system or distributed allocator is implied.
+| Current coupling | Evidence at the inspected revision | Required change or retained guarantee |
+| --- | --- | --- |
+| One space per CPU; init and UI lookup by CPU | `kernel/space.c`, `kernel/user/boot.c`, `kernel/user/launch.c` | Independent registry/session configuration; explicit context for kernel services. |
+| CPU equality in task preparation and execution-group admission | `user_task_prepare_on()` in `kernel/task.c`; `execution_group_check()` and `execution_group_launch_begin()` | Keep space/group authority while making execution placement mutable. |
+| Ready queues, parking and stop publication | `kernel/task.c` | Preserve queue locking and early-wakeup handshake; publish no stack still executing. |
+| Dispatch state and user entry | `arch/x86_64/user.c`, `arch/x86_64/syscall_entry.S` | Install destination CR3, entry stack and user CPU state; kernel GS remains CPU-local. |
+| Heap/PMM/VM have one allocator owner and shared scratch aliases | `kernel/mm/heap.c`, `kernel/mm/pmm.c`, `kernel/mm/vm.c`, `arch/x86_64/paging.c` | Synchronize metadata, provide CPU-local scratch, prove growth/publication and mapping lifetime. |
+| Serial services rely on BSP execution and IF=0 | `kernel/service/request.c`, `kernel/fs/native.c`, `kernel/fs/hostfs.c`, `kernel/virtio/blk.c`, `kernel/net/interface.c` | Retain ownership initially. Off-BSP workers need explicit cross-CPU handoffs, not just different affinity. |
+
+### Scheduler and process lifetime
+
+Start with the existing per-CPU ready queues and one short global queue lock.
+Keep placement/state changes under that lock, preserve resource/group-to-queue
+lock ordering, and never hold it across a context switch. Per-queue locking is
+not a prerequisite; revisit it if measurement identifies contention.
+
+Allow initial load-aware placement and migration of runnable user continuations
+at safe user-preemption boundaries. The source must leave the task stack and
+private root before publishing it elsewhere. Initially, a blocked syscall or
+service-request continuation resumes on its previous CPU; migration becomes
+eligible again after user return. Do not migrate parked, loaned, executing or
+retired tasks. Audit retained CPU-local pointers and captured placement decisions.
+
+Preserve wake-before-park notification, remote wake/stop delivery and exactly one
+executing context per task. Idle balancing must also account for a running task:
+today preemption can skip scheduling when the local queue has no competitor.
+Choose bounded balancing triggers that can correct placement without transferring
+a live context or sending unnecessary IPIs. Exact load scoring and trigger
+mechanics belong to the scheduler task, not a new policy framework.
+
+Batch launch must enroll all members and publish the complete prepared batch
+before any child can execute, even with several destination queues. Preserve
+execution-group sealing, termination, loan unwind and completion only after
+attributed cleanup. The existing serial reaper may remain on the BSP; moving a
+task must not allow its process, request storage or stack to be freed early.
+
+### Allocation, private roots and shared kernel mappings
+
+Use a synchronized shared TLSF allocator and bitmap PMM first, not per-CPU heaps
+or caches. Locks protect allocator metadata and statistics; frame zeroing and
+page-table walks do not belong inside the PMM lock. Heap growth needs a separate
+serialized reserve/map/publish/unwind sequence and a recheck after dropping the
+heap lock. Define lock ordering and interrupt state; do not wait while holding a
+lock needed by the completing CPU. Kernel workers cannot use the current
+user-task-only synchronous request path as a pool-growth fallback.
+
+Give each CPU distinct scratch aliases with their required page-table ancestors
+established before use. Only the owner accesses/remaps its aliases, with local
+invalidation. Private VM records and capability tables retain exclusive ownership
+by the sole task or a deliberately inactive loan; object refcounts alone do not
+make capability-table growth/resolve/close concurrent-safe.
+
+For single-task migration, the source leaves its private root and the destination
+reloads CR3. With current PCID/global-page settings, that supports exclusive-root
+handoff without introducing concurrent sibling execution or a private-root
+shootdown solely for migration. Audit all other borrowers and teardown paths.
+
+Shared upper-half mappings need separate treatment. Current task-stack reuse
+relies on dispatch CR3 reloads, and heap pools remain mapped. General kernel
+unmap/remap, permission changes and physical-frame reuse cannot become safe merely
+by adding an allocator lock. CPU-local invalidation is insufficient when another
+CPU can retain or use the mapping.
+
+Before enabling concurrent heap growth, settle its precise mapping publication
+and failure-unwind contract. A retained, never-reused heap virtual arena is one
+candidate; general first-fit VM allocation is not automatically such an arena.
+Another solution must supply equivalent invalidation/quiescence evidence. Do not
+silently adopt a new VM reservation policy while implementing the allocator task.
+General kernel-range reuse stays with its existing owner/protocol until a wider
+contract is established; BSP ownership by itself is not proof of safe remote use.
+
+After those prerequisites, MEMORY ALLOCATE/RELEASE can mutate the sole caller's
+private root locally. Preserve eager zeroing, permission checks, disjoint allocation,
+exact release, rollback, and the prohibition on accessing released request memory.
+No other task or outstanding loan may concurrently use that root. Preserve stop
+handling and profiler meaning while retiring the obsolete BSP memory request.
+Local capability growth and other allocation-backed operations are later bounded
+follow-ups unless required for this memory path; allocator availability alone does
+not authorize replacing their ownership contracts.
+
+## Performance records and validation
+
+Capture a baseline before implementation and a comparable result after the
+milestone, plus matched before/after records for substantial intermediate changes
+that could affect performance. Use existing tools and report results in the
+relevant PR and a concise record linked here. No benchmark framework, permanent
+boot automation or new CI gate is authorized by this milestone.
+
+Record exact parent/dependency revisions, build options, guest CPUs/RAM/devices,
+QEMU version/accelerator, host or nested-VM environment, workload commands and
+sizes, warm/cold preparation and repetitions. Preserve individual samples plus a
+summary and spread. Change one relevant condition at a time where practical;
+separate unavoidable environment changes rather than claiming a matched speedup.
+Keep unprofiled elapsed controls when profiling affects execution. Unexpected
+regressions require explanation and an owner decision, not automatic unrelated
+optimization. Documentation-only work needs no performance run.
+
+Select a small reproducible set from [allocbench](../development/allocation-profiling.md),
+[I/O and IPC tools](../development/io-ipc-baselines.md) and existing TCP measurements:
+
+- Warm heap allocation, fresh backing growth and page allocation/release.
+- RAM/HOST reads, growing writes and copies; native reads with unchanged fixtures.
+- TCP throughput with matched payload and connection configuration.
+- Concurrent sessions running allocation and I/O/network work, recording per-client
+  latency/throughput and aggregate progress as well as single-client results.
+
+Use remote-terminal command/group completion instead of prompt scraping. Do not
+attribute all TCP or HOST latency to the BSP: host services, transport and nested
+virtualization remain confounders. The existing prompt BSP notification improvement
+is already in the baseline; do not count it as a result of this milestone.
+
+Validate ordinary builds and interactive boots with 1, 2, 4 and a higher CPU count,
+matching devices and accelerator to the feature. Inspect migration, GS/TSS/entry
+stack and FP/FS/user-GS preservation; wake-before-park; remote termination while
+blocked; batch rollback/publication; loans; and task/object retirement. Exercise
+repeated memory growth/release, allocation failure unwind, affinity restrictions,
+CPU-independent session/input/display routing, tab overflow and both scrolling
+ends, and counters returning to expected idle ownership. Check init requests
+within/outside the launcher ceiling, single-CPU setup and session handoff. Distinguish code inspection from behavior actually observed.
+
+Success requires demonstrated parallel process execution and local private-memory
+work without changing authority or lifetime guarantees. No speedup percentage is
+promised before baseline measurements. Shared services may remain bottlenecks;
+record them rather than broadening the milestone without agreement.
+
+## Focused tasks
+
+Tasks may be split further for review; do not start the next implicitly. Each PR
+updates current subsystem docs only for behavior it implements.
+
+1. [ ] **Rebase the investigation and capture the baseline.** After writable core
+   completion, audit changed worker/memory/lifetime dependencies and record the
+   bounded performance set above. Settle session configuration, trusted-init
+   affinity authority/handoff, single-CPU defaults and the mapping-growth design
+   before dependent implementation.
+   Record any unresolved correctness decisions rather than inventing requirements.
+2. [ ] **Separate spaces and boot sessions from CPU topology.** Add independent
+   lookup and update init selection, navigation, presentation/input and explicit
+   service context. Implement the fixed-width scrolling bar and directional
+   neighbour preview. Preserve session roles and Caelum authority; no dynamic
+   space lifecycle.
+3. [ ] **Separate launch authority from execution placement.** Keep space-scoped
+   group admission, launcher ceilings and inherited effective affinity. Prepare
+   the agreed trusted-init setup authority and session handoff; replace captured
+   CPU identity where necessary and prepare atomic batch publication across queues.
+   Preserve launch rollback and transitive completion/termination semantics.
+4. [ ] **Enable safe placement and migration.** Use existing queue synchronization,
+   bounded load-aware placement/balancing, remote notification and the agreed safe
+   points. Enable the native init-affinity request and script command with the
+   agreed completion boundary; invalid requests preserve existing placement.
+   Include BSP userspace eligibility once its prerequisites hold; complete
+   it no later than task 7. Record matched scheduling/concurrency results.
+5. [ ] **Prepare architecture and physical allocation for concurrency.** Add
+   CPU-local scratch mappings, synchronized PMM operations/statistics and explicit
+   interrupt/lock rules. Retain existing mutation call sites until the full memory
+   path is safe; validate zeroing, rollback and ownership.
+6. [ ] **Enable safe concurrent heap growth.** Synchronize TLSF/stats and kernel-VM
+   bookkeeping, implement the agreed growth/publication/unwind contract, and keep
+   general mapping reuse constrained. Review the full lock graph and allocation
+   recursion; record matched allocation results.
+7. [ ] **Make private MEMORY operations local.** Remove the BSP request/loan for
+   this exclusive single-task path, preserving behavior, profiling and cleanup.
+   Verify concurrent callers on distinct roots, migrated callers, termination and
+   BSP eligibility. Record backing-growth/page-operation and mixed-load results.
+8. [ ] **Validate and close.** Run the CPU/device matrix, independent-space and
+   lifetime scenarios and matched final measurements. Document remaining serial
+   services and accepted limits; rewrite this milestone as an implemented kernel
+   reference, preserving thread/worker follow-ups in WIP and technical debt.
+
+## Subsequent work
+
+A declarative YAML init is an agreed follow-up direction, not an SMP dependency.
+A userspace launcher would interpret it and invoke the same native setup operations
+as scripts: mounts, bindings, networking, affinity and final session launch.
+Configuration requests resources within granted authority; parsing it grants none.
+The kernel must not parse YAML or implement service-manifest policy. Exact schema,
+parser dependency, failure/unwind behavior and selection of script versus YAML
+remain a separate bounded design task. Endpoint exports, service dependencies,
+supervision and service-address/port publication remain future work; no orchestration framework
+or new network abstraction is implied by the initial configuration format.
+
+After this milestone, establish general kernel mapping invalidation/reclamation
+and off-BSP kernel-task scheduling, sleep and preemption rules. Then move one
+substantial serial service to an explicit owner CPU. Network and native filesystem
+workers are candidates, selected using mixed-load evidence; filesystem movement
+also requires synchronized cross-CPU block clients. IRQ routing may remain on the
+BSP initially if notifications are correct. Preserve each lwIP/filesystem instance's
+single-owner contract; neither device ownership nor exclusive instance access
+inherently requires CPU 0. Do not move all workers or destructors together.
+
+Multiple user threads remain a separate milestone for native consumers including
+Neovim/libuv and Go. Specify thread creation/join/exit, TLS/errno, synchronization,
+libc shared state, faults and last-thread/process cleanup. Siblings invalidate
+exclusive VM/table loans even if scheduled on one CPU: parking one caller does
+not quiesce the process, outstanding kernel operations or retained user buffers.
+Require shared-table lifetime protection and process-wide VM activity/translation
+coordination before enabling them. No fake threading or separate-process substitute
+for shared-pointer worker callbacks.
+
+Per-space budgets, advanced scheduler policy, NUMA, CPU hotplug and tickless timers
+are not prerequisites. Preserve these as later decisions, not placeholder APIs.
