@@ -7,8 +7,9 @@ Task 2 now implements private COW tree/map planners, canonical/orphan codecs and
 checker support, formatter namespace packing, and the initial maintained Unity
 suite in the pinned `pyxis-fs` dependency. Tasks 3/4 add explicit writable opening,
 retained summaries, admission, ordered publication, synchronous funded drain and
-simulated durable recovery. The host exposes healthy-session open/checkpoint;
-public file/namespace mutations and native writable integration remain unimplemented.
+simulated durable recovery. Task 5 adds public regular-file creation, writing and
+resizing, live directory continuations, and the corresponding healthy host commands. Directory creation,
+removal, rename/orphan cleanup and native writable integration remain unimplemented.
 Implementation proceeds one explicitly assigned task at a time.
 
 Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-ownership),
@@ -19,7 +20,7 @@ Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-owner
 [host tests](#agreed-maintained-host-tests-and-ci),
 [failure model](#agreed-host-failure-validation-model) and
 [delivery boundaries](#agreed-delivery-boundaries-and-design-acceptance). Task 1 is
-complete; tasks 2–4 are delivered by the dependency and pin PRs below.
+complete; tasks 2–5 are delivered by the dependency and pin PRs below.
 
 The revised requirements include bounded multi-block writes, deletion capacity
 protected from ordinary growth, durable-state recovery evidence after writeback
@@ -1902,7 +1903,8 @@ The profile examples are not product defaults or measured capacity guarantees.
 The proofs depend on enforced editor and representation bounds; implementation
 review must check those invariants, and any violation requires correcting the
 bound or design before delivery. Passing host tests alone is not their proof.
-Tasks 3/4 were assigned and delivered together; task 5 requires the next assignment.
+Tasks 3/4 were assigned and delivered together. Task 5 is delivered below;
+task 6 requires the next assignment.
 
 ## Focused tasks
 
@@ -1956,11 +1958,27 @@ Tasks 3/4 were assigned and delivered together; task 5 requires the next assignm
    capacity or native writable operation. Nonempty orphan indexes refuse before
    writes until task 6; public file mutation follows in task 5. Whole-map
    rebuilding and the kernel-stack prerequisite remain recorded limitations.
-5. [ ] **Implement file mutation.** Create, write and resize with authority
+5. [x] **Implement file mutation.** Create, write and resize with authority
    checks, parent-controlled ownership, sparse/fragmented data, coherent live
    reads and explicit partial-progress/error semantics. Exercise durable reopen
    and byte-for-byte extraction against independent expected contents, with
    maintained operation, authority and failure tests in the same PR.
+   Delivered in [pyxis-fs #13](https://git.internal/PyxisOS/pyxis-fs/pulls/13),
+   pinned at `531c137`. The 86-group quick suite includes independent expected
+   sparse/partial/EOF payloads, multi-batch results, every discovered creation
+   allocation failure, 120 long-name creations, authority, live tokens and retained
+   payloads through public overwrite/shrink maintenance. All pass natively and
+   under ASan/UBSan; the separate populated file workload also passes both.
+   Ordinary host tools and the freestanding archive build. Healthy host create,
+   write, resize and extraction comparisons are recorded alongside explicit input
+   and authority refusals. The parent kernel remains read-only.
+   [File mutation](../../fs/docs/core.md#live-file-mutation) documents the implemented
+   interfaces. [Task-5 measurements](../../fs/docs/testing.md#task-5-file-mutation-validation)
+   record three runs on a 4 GiB image with 12 actual source files and sequential,
+   independent small-write, overwrite and shrink/regrow history. The measured
+   metadata amplification and planning costs are limitations, not performance
+   targets or full-profile capacity evidence. Larger combined campaigns remain
+   task 7; no QEMU defaults or kernel-stack implementation changed.
 6. [ ] **Implement namespace changes and orphan lifetime.** Add directories,
    removal and same-volume regular-file rename/replacement. Preserve identities,
    enforce source/destination rights, retain unlinked objects and recover their

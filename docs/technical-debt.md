@@ -831,7 +831,8 @@ The [writable-core milestone](wip/writable-filesystem-core.md) accepts whole-map
 rebuilding for every publication as the first correctness implementation, not the
 final allocation strategy or desired performance; it also accepts partial large
 shrinks. Tasks 2–4 implement the private whole-map planner, admitted publisher
-and synchronous funded drain; public file writes and large shrinks remain unimplemented. Rebuilding can write a pool-wide metadata map
+and synchronous funded drain; task 5 adds public file writes and large shrinks.
+Rebuilding can write a pool-wide metadata map
 three times per small user batch, causing substantial write amplification. Measure
 metadata bytes written per useful data byte, latency and throughput on populated
 source trees and recorded write histories; calculated envelopes are not measured
@@ -846,7 +847,16 @@ admitting another batch, including between chunks of one large operation. A
 batch needing retained-root advancement and separate free-map publication uses
 six flushes in total. This accepts extra synchronous I/O to bound cleanup debt;
 revisit combining batches only after the admission proof and workload measurements
-support an equivalent bound. No latency measurement is claimed.
+support an equivalent bound. The [task-5 host workload](../fs/docs/testing.md#task-5-file-mutation-validation)
+now measures small populated/history cases: 64 separately committed 4 KiB appends
+wrote 25.625 metadata bytes per useful byte including maintenance, versus 0.286
+for sixteen 256 KiB sequential requests in that particular history. These are
+simulator-backed host observations, not device or guest latency guarantees.
+The new file planner also scans admitted claims and copies a 581,272-byte staging
+checkpoint per attempted block; its complete workspace fits the already reserved
+scratch. Revisit these CPU costs alongside map/allocation policy when task-7
+larger workloads establish the next performance target. No optimization or stack
+refactor follows merely from recording these costs.
 
 The accepted milestone design specifies workload-selected writable profiles, concrete
 interfaces and a bounded host failure model. Protected per-object deletion capacity

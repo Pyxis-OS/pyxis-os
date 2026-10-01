@@ -124,8 +124,9 @@ settles bounded publication/reclamation, live handles, admission and maintained
 host contract tests with a per-filesystem-PR CI merge gate. Tests and the bounded
 failure adapter land with their behavior in pyxis-fs. The namespace profile, tighter
 deletion reservation and Unity setup are accepted; real-host post-error recovery
-qualification is deferred. Task 1 design acceptance is complete; implementation
-starts with a separately assigned task.
+qualification is deferred. Tasks 1–5 are complete, including bounded public file
+create/write/resize and their maintained tests. Namespace/orphan lifetime is the
+next separately assigned task.
 FUSE and installation remain separate. These
 plans do not start implementation or displace explicitly assigned libc/remote work.
 
