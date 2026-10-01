@@ -858,6 +858,15 @@ scratch. Revisit these CPU costs alongside map/allocation policy when task-7
 larger workloads establish the next performance target. No optimization or stack
 refactor follows merely from recording these costs.
 
+Write batches are sized against staging limits before quota and available-space
+admission. If a batch exceeds those admission limits, it is refused whole; the
+writer does not retry a smaller prefix. A large request can therefore report zero
+confirmed bytes even when a smaller request would fit. Earlier committed batches
+remain confirmed, and the refusal does not consume the remaining capacity or stop
+a healthy writer. Revisit adaptive batch sizing with quota/space-pressure workloads
+and measured replanning costs; maximal partial progress is not currently promised.
+This does not permit automatic retry after an uncertain publication.
+
 The accepted milestone design specifies workload-selected writable profiles, concrete
 interfaces and a bounded host failure model. Protected per-object deletion capacity
 and the six-entry removable namespace profile are accepted. The profile reduces
