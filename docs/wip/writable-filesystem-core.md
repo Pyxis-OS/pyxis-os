@@ -581,6 +581,46 @@ Incremental editing is now required within this milestone, with equivalent
 correctness guarantees and newly justified bounds. Do not treat this as deferred
 performance debt or resume large disk-backed workloads to gather more evidence.
 
+## Write-efficiency target and research direction
+
+The engineering target is fewer total device-write bytes than contemporary ext4
+on representative development workloads, while preserving Pyxis's documented
+recovery guarantees. This is a target to investigate and measure, not a claim
+that the current writer meets it or a promise to win every operation. Establish
+workload-specific acceptance budgets during the corrective design task.
+
+Compare matched durability boundaries and report any differences in recovery
+semantics explicitly. Measure small synchronous operations separately from
+batched workloads, include final checkpoint/reclamation/compaction writes, and
+repeat on populated filesystems after sustained edits. Track read costs, space
+usage and latency alongside write bytes so a reduction does not conceal another
+large cost. The RAM-only validation boundary applies to these experiments.
+
+Use the following sources to compare mechanisms before choosing the replacement:
+
+| Source | Relevant mechanism and question for Pyxis |
+| --- | --- |
+| [F2FS: A New File System for Flash Storage, FAST '15](https://www.usenix.org/system/files/conference/fast15/fast15-paper-lee.pdf) | Its node-address table interrupts cascading pointer updates. Study how to bound update propagation, including the cost and recovery of the added indirection; it is not a ready-made solution to our allocator self-accounting. |
+| [iJournaling, USENIX ATC '17](https://www.usenix.org/conference/atc17/technical-sessions/presentation/park) | File-specific synchronous transactions avoid forcing unrelated metadata through the same commit. The paper emphasizes latency; assess total writes independently rather than assuming an endurance gain. |
+| [Bcachefs architecture](https://bcachefs-docs.readthedocs.io/en/latest/performance.html) | Journaled updates and log-structured B-tree nodes let changes accumulate before tree writes. Compare compact logging with immediate path replacement, including replay, consolidation and maintenance costs. |
+| [Extending the Lifetime of Flash-based Storage, FAST '13](https://www.usenix.org/conference/fast13/technical-sessions/presentation/lu_youyou) | Studies reducing indexing, allocation-accounting and small-update writes. Its custom flash-translation layer and byte-granular interface are hardware assumptions we cannot make for ordinary consumer NVMe; use it as research context, not a transferable performance claim. |
+
+[Analyzing IO Amplification in Linux File Systems](https://arxiv.org/pdf/1707.08514)
+provides a measurement reference: its 2017 individually synchronized 4 KiB append
+workload reports 2.66x total amplification for F2FS and 6x for ext4. These are
+historical workload results, not current acceptance thresholds. Record versions
+and configuration for our own ext4 baseline, including a
+[fast-commit configuration](https://www.kernel.org/doc/html/latest/filesystems/ext4/journal.html).
+
+Incremental path replacement is the first candidate, but calculate whether its
+publication and maintenance costs can meet the target before committing to it.
+Compact deltas or a hybrid publication scheme are alternatives for discussion,
+not approved implementation scope. A proposal must account for every major
+category of writes and explain its recovery, memory and reclamation obligations.
+Keep data COW and retained-generation payload protection in the current contract;
+neither in-place data overwrite nor new snapshot/reflink features follow from
+this investigation. Changes to durability batching require separate agreement.
+
 ## Agreed live interfaces and reference ownership
 
 These mechanisms are accepted design, not implemented behavior. Give `pfs_pool` internal
@@ -2127,6 +2167,8 @@ this documentation update.
      Preserve both retained states, publication ordering and recovery semantics.
      Set numerical write-cost budgets from the baseline and algorithm before
      implementation acceptance; discuss unresolved design choices before coding.
+     Use the [write-efficiency target and research direction](#write-efficiency-target-and-research-direction)
+     to compare mechanisms rather than assuming path copying alone meets the target.
 
    - [ ] **Implement and validate the correction.** Land incremental publication
      and maintenance with contract-focused host tests. Retain older-state payload
