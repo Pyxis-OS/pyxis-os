@@ -55,7 +55,9 @@ do not themselves authorize kernel operations.
   Directory/group changes do not implicitly revoke already-delegated grants.
   Logout, suspension and cross-session delegation need explicit policy.
 - Becoming an identity provider, credential management and biometrics are later
-  work. None is required to settle persistent ownership now.
+  work. None is required to settle persistent ownership now. The parked
+  [credentials and biometric unlock direction](credentials-and-biometrics.md)
+  records the agreed TPM-sealed, root-factor-first trust model.
 
 Protocol references: [OpenID Connect Core](https://openid.net/specs/openid-connect-core-1_0.html)
 and [OAuth Device Authorization Grant](https://www.rfc-editor.org/rfc/rfc8628.html).
