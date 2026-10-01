@@ -2225,11 +2225,12 @@ this documentation update.
      are documented in [runner provisioning](../../fs/docs/ram-validation.md#runner-provisioning).
      The allowlist correction let CI attach the mount, but Podman's compatible
      API ignored its tmpfs volume options; both jobs refused before building.
-     A [pre-created named tmpfs volume](../../fs/docs/ram-validation.md#proposed-named-volume-alternative)
+     A [pre-created named tmpfs volume](../../fs/docs/ram-validation.md#named-volume-provisioning)
      passed all 111 groups through the local API with the same limits and zero
-     swap/max/OOM events. This is a pending proposal: exclusive runner ownership,
-     capacity one and complete teardown between jobs require owner agreement.
-     Neither that alternative nor passing CI is assumed. This item stays
+     swap/max/OOM events. The owner accepted exclusive runner ownership,
+     capacity one and complete teardown between jobs. The workflows use that
+     trusted runner setup; provisioning and passing CI still need verification.
+     This item stays
      unchecked. Ordinary image builds retain their existing
      runner and are outside the filesystem job's resource cap.
 
