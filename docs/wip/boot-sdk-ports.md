@@ -126,9 +126,15 @@ failure adapter land with their behavior in pyxis-fs. The namespace profile, tig
 deletion reservation and Unity setup are accepted; real-host post-error recovery
 qualification is deferred. Tasks 1–6 are complete, including public file/namespace
 mutation, retained-handle lifetime, funded orphan cleanup and their maintained
-tests. Task 7 begins with the shared extended campaigns and populated 4 GiB
-recovery workload; the 64 GiB/256 GiB profiles and milestone closure remain later
-assignments. See the linked milestone for measured capacity limits and progress.
+tests. Task 7 has shared extended campaigns and the populated 4 GiB recovery
+workload, with a focused contiguous-volume-selection correction for the observed
+fragmentation limit. Its measured 826.1075 metadata bytes per useful byte for small
+appends blocks milestone closure and writable deployment. Task 7 now requires
+RAM-only validation/baselines, incremental allocation-map design with revised
+admission and cleanup bounds, implementation/recovery tests, and repeated write-cost
+acceptance measurements. Large disk-backed runs are suspended; larger profiles
+need a bounded RAM-only execution plan. The placement fix remains useful but does
+not resolve this blocker. See the linked milestone for the corrective task list.
 FUSE and installation remain separate. These
 plans do not start implementation or displace explicitly assigned libc/remote work.
 
