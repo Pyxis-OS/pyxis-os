@@ -2037,7 +2037,38 @@ Task 7 is assigned in bounded steps: the first adds extended campaigns and runs 
    no bytes and leaves the writer healthy. Durable reopen independently verifies
    the full confirmed prefix and source census, with both retained states passing
    structural checks. This is a failed full-workload validation, not an accepted
-   capacity guarantee: append/churn phases are not reached. Allocation fragmentation
-   and profile sizing need focused review before changing the workload or limits.
+   capacity guarantee: append/churn phases are not reached. The follow-up below
+   addresses the investigated allocation cause without changing that workload or limits.
    The 64 GiB/256 GiB runs, remaining coverage review and document
    conversion are not delivered in this step; task 7 remains unchecked.
+
+   **Step 2: contiguous volume selection.**
+   [pyxis-fs #16](https://git.internal/PyxisOS/pyxis-fs/pulls/16) implements
+   the focused correction. Investigation of the refused candidate
+   proves E=8194 exceeds 8192; the other first-envelope bounds fit. The old
+   lowest-eligible-first selection splits 64 new data blocks into seven extents,
+   despite a sufficiently large eligible run. The accepted correction prefers
+   the first contiguous 128-block run eligible against both retained maps and
+   both live-claim sets, falling back to the original fragmented selection when
+   no such run exists. Reservation size, admission limits and pool-metadata
+   selection policy stay unchanged. Birth generations still prevent coalescing
+   across separately committed writes; contiguity never authorizes reuse of
+   protected blocks. Four maintained groups cover selection, interrupted runs,
+   boundary joining, fallback and independently expected contents/protection.
+   See [investigation and matched observations](../../fs/docs/testing.md#contiguous-volume-selection-follow-up).
+   The unchanged 4 GiB workload now completes all 1 GiB sequential writes,
+   2000 independent appends and bounded churn, then independently verifies all
+   output/source contents, identities and directory counts after durable reopen.
+   Both retained states and cross-state checks pass. Final E=6947/8192 and
+   M=360/4096; peak charged memory is 34,439,216 bytes under the unchanged 128 MiB
+   cap. All 111 quick and six seed-1 extended groups pass natively and under
+   ASan/UBSan. Whole-map rebuilding remains costly: the populated small-append
+   phase writes 826.1075 metadata bytes per useful byte including maintenance.
+   At the same 314.25 MiB prefix, new-file extents fall from 7397 to 1257 and
+   metadata amplification from 4.503232 to 1.811916 bytes per useful byte, with
+   identical publication/flush counts. Matched 288 MiB timing samples average
+   255.827 seconds before and 184.768
+   seconds after; these are simulator-backed host observations, not guest/NVMe
+   performance guarantees.
+   This validates the exact recovery history, not all fragmentation or the larger
+   profiles; task 7 remains unchecked.
