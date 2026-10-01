@@ -2171,9 +2171,9 @@ this documentation update.
    This validates the exact recovery history, not all fragmentation or the larger
    profiles; task 7 remains unchecked.
 
-   **Remaining corrective steps (each may span multiple focused PRs):**
+   **Corrective steps (each may span multiple focused PRs):**
 
-   - [ ] **RAM-only validation and comparative baseline.** Audit images, recovery
+   - [x] **RAM-only validation and comparative baseline.** Audit images, recovery
      logs, temporary copies and extraction outputs before running write-heavy
      workloads. Back all payload storage with explicitly bounded RAM, prevent
      swap inside this VM (the agreed safety boundary), and fail on exhaustion
@@ -2217,22 +2217,18 @@ this documentation update.
      object/orphan deletion when its full plan fits existing funded bounds.
      This is a proposal, not approval to implement it or the allocator redesign.
      The matching rootless setup passes the quick suite locally, and its
-     negative mode/storage checks preserve the heavier-suite boundary. Forgejo
-     runner 13.2 ignores the required workflow mount/swap/core options. The
-     filesystem jobs now select the owner's dedicated `pyxis-fs-ram` runner;
-     its effective boundary must pass the guard before tests execute.
-     The separate rootless validation runner and exact trusted options
-     are documented in [runner provisioning](../../fs/docs/ram-validation.md#runner-provisioning).
-     The allowlist correction let CI attach the mount, but Podman's compatible
-     API ignored its tmpfs volume options; both jobs refused before building.
-     A [pre-created named tmpfs volume](../../fs/docs/ram-validation.md#named-volume-provisioning)
-     passed all 111 groups through the local API with the same limits and zero
-     swap/max/OOM events. The owner accepted exclusive runner ownership,
-     capacity one and complete teardown between jobs. The workflows use that
-     trusted runner setup; provisioning and passing CI still need verification.
-     This item stays
-     unchecked. Ordinary image builds retain their existing
-     runner and are outside the filesystem job's resource cap.
+     negative mode/storage checks preserve the heavier-suite boundary. The
+     filesystem jobs select the owner's dedicated `pyxis-fs-ram` runner and
+     [pre-created named tmpfs volume](../../fs/docs/ram-validation.md#named-volume-provisioning).
+     The owner accepted exclusive runner ownership, capacity one and complete
+     teardown between jobs. [CI run 577](https://git.internal/PyxisOS/pyxis-os/actions/runs/577)
+     verified the provisioned boundary at parent `6a4525e` / filesystem `2d8ce96`:
+     all 111 groups passed with 2 GiB scratch, 65,536 inodes, a 4 GiB memory
+     limit, zero swap/max/OOM events and a 314,847,232-byte memory peak.
+     Every subsequent job still verifies its effective boundary before tests
+     execute. Ordinary image builds retain their existing runner and are outside
+     the filesystem job's resource cap. This completes the first corrective
+     step only; task 7 and the writable-deployment blocker remain open.
 
      Begin with small reproducible Pyxis/ext4/Btrfs workloads on RAM-backed
      storage: 4 KiB and 256 KiB sequential writes, small overwrites, and
