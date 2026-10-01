@@ -827,18 +827,23 @@ adapter paths. No fault injection or physical-hardware validation was performed.
 
 ## Writable-filesystem costs and remaining validation
 
-The [writable-core milestone](wip/writable-filesystem-core.md) accepts whole-map
-rebuilding for every publication as the first correctness implementation, not the
-final allocation strategy or desired performance; it also accepts partial large
-shrinks. Tasks 2–4 implement the private whole-map planner, admitted publisher
+The [writable-core milestone](wip/writable-filesystem-core.md) used whole-map
+rebuilding for every publication as the first correctness implementation.
+Measured small-write cost now makes its replacement a milestone-closure and
+writable-deployment blocker, not deferred optimization. Task 7 owns RAM-only
+baseline work, incremental-map design and revised bounds, implementation/recovery
+tests, and repeated acceptance measurements. Large disk-backed workloads are
+suspended pending the RAM-only validation boundary; this entry does not authorize
+benchmark execution. Partial large shrinks remain accepted.
+Tasks 2–4 implement the private whole-map planner, admitted publisher
 and synchronous funded drain; task 5 adds public file writes and large shrinks,
 and task 6 adds namespace mutation and orphan cleanup.
 Rebuilding can write a pool-wide metadata map
 three times per small user batch, causing substantial write amplification. Measure
 metadata bytes written per useful data byte, latency and throughput on populated
 source trees and recorded write histories; calculated envelopes are not measured
-costs. Revisit incremental allocation/map editing after correctness while retaining
-equivalent admission bounds. Large shrinks may stop or crash at an intermediate
+costs. Re-derive admission and funded-cleanup bounds for incremental allocation/map
+editing within this milestone. Large shrinks may stop or crash at an intermediate
 committed length, so callers must reconcile confirmed progress and uncertain
 outcomes. Atomic large shrinks would require a separately agreed persistent
 tail-retention design.
@@ -862,15 +867,18 @@ the original fragmented fallback and both-state protection. Pool-metadata select
 policy, reservations and admission limits are unchanged. This addresses that
 placement cause; it does not guarantee contiguity or eliminate extent growth from
 separately committed birth generations. Whole-map rebuilding and small-write
-metadata amplification remain follow-up costs: the completed populated history
+metadata amplification remain blocking costs: the completed populated history
 measures 826.1075 metadata bytes per useful byte for 2000 separate 4 KiB appends,
-including maintenance. Larger 64/256 GiB validation and
+including maintenance. This is about 6.3 GiB of metadata write requests for
+7.8125 MiB of application writes, not permanent metadata occupancy or measured
+NAND traffic. The placement improvement does not make this acceptable. Larger
+64/256 GiB validation and
 milestone closure remain pending; no profile increase or general allocator redesign
 follows from this correction.
 The file planner also scans admitted claims and copies a staging checkpoint
 (581,272 bytes measured at task 5) per attempted block; its complete workspace fits the already reserved
-scratch. Revisit these CPU costs alongside map/allocation policy when task-7
-larger workloads establish the next performance target. No optimization or stack
+scratch. Measure these CPU costs alongside the task-7 map/allocation correction
+without expanding it into an unrelated optimization pass. No optimization or stack
 refactor follows merely from recording these costs.
 
 Write batches are sized against staging limits before quota and available-space

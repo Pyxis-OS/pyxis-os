@@ -2,7 +2,8 @@
 
 Status: task-1 design accepted, 2026-10-01, against `pyxis-fs` commit
 `82cc242b3d9773d21c0f7e7a71ec9ca9ccb937ed`. The policy, concrete mechanisms,
-bounds and validation plan below are accepted as the implementation contract.
+bounds and validation plan below record the initial implementation contract,
+subject to the write-amplification correction below.
 Task 2 now implements private COW tree/map planners, canonical/orphan codecs and
 checker support, formatter namespace packing, and the initial maintained Unity
 suite in the pinned `pyxis-fs` dependency. Tasks 3/4 add explicit writable opening,
@@ -12,7 +13,9 @@ resizing, live directory continuations, and the corresponding healthy host comma
 Task 6 adds directory creation, removal, same-volume regular-file rename/replacement,
 retained object authority and funded orphan cleanup on final release and durable
 reopening. Combined extended validation remains task 7; native writable integration
-remains a separate milestone.
+remains a separate milestone. The measured small-write amplification now blocks
+both milestone closure and writable deployment. The contiguous-placement fix is
+useful independently but does not satisfy that acceptance gate.
 Implementation proceeds one explicitly assigned task at a time.
 
 Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-ownership),
@@ -28,7 +31,10 @@ complete; tasks 2–5 are delivered by the dependency and pin PRs below.
 The revised requirements include bounded multi-block writes, deletion capacity
 protected from ordinary growth, durable-state recovery evidence after writeback
 errors, and resource-complete funded drains. Whole-map rebuilding for every
-publication is accepted only as the first correctness implementation. Maintained
+publication was accepted for the first correctness implementation; that acceptance
+does not extend to milestone completion. Task 7 now requires RAM-only validation,
+an agreed incremental allocation-map design with revised bounds, implementation
+and recovery checks, and repeated write-cost measurements. Maintained
 host tests, the Unity setup and a per-filesystem-PR CI merge gate are agreed, as
 are the stronger namespace profile and tighter deletion reservation. The ordinary
 host writer uses the healthy-session contract below; real-host post-error recovery
@@ -505,9 +511,17 @@ maintenance in the stopped instance or admitting another application mutation.
 
 ## Agreed whole-map fallback
 
-Provide a
-bounded whole-allocation-map rebuild when incremental map edits cannot close
-within their admitted bound. A tree-depth bound alone does not bound allocator
+**Acceptance update:** this section and its dependent numerical bounds describe
+the implemented correctness baseline, not an approved final allocation strategy.
+The measured 826.1075 metadata bytes per useful byte for small appends is
+unacceptable for writable deployment. Task 7 must replace routine whole-map
+rebuilding and re-establish admission and funded-drain bounds. Whether a bounded
+whole-map fallback remains, and when it may run, requires explicit design review;
+the existing proof does not by itself make its write cost acceptable.
+
+The initial contract provided a bounded whole-allocation-map rebuild when
+incremental map edits could not close within their admitted bound. A tree-depth
+bound alone does not bound allocator
 self-accounting: retiring one old map node changes the leaf describing that
 block, whose replacement can require another leaf to change. Valid physical
 layouts can extend this dependency through every map leaf. Contiguous allocation
@@ -554,7 +568,7 @@ workspace and old sparse maps under the specified profile below. The one-publica
 construction alone does not prove reserve sufficiency. No format change follows
 merely from using this fallback.
 
-Whole-map rebuilding for every publication is accepted as the first correctness
+Whole-map rebuilding for every publication was accepted for the first correctness
 implementation, not the finalized allocation strategy or desired performance.
 Its pool-wide metadata writes scale with map fragmentation even for a small data
 edit; synchronous drain can rebuild the map three times for one user batch. The
@@ -563,8 +577,9 @@ publications for a 4 KiB edit (330 metadata bytes per useful data byte), before
 volume metadata and slots. That is calculated amplification, not a measurement.
 Measure metadata bytes written per useful data byte, latency and throughput on
 the populated workloads below, distinguishing user publication from drain costs.
-Revisit incremental editing/allocation strategy after correctness, retaining a
-bounded fallback and equivalent admission guarantees.
+Incremental editing is now required within this milestone, with equivalent
+correctness guarantees and newly justified bounds. Do not treat this as deferred
+performance debt or resume large disk-backed workloads to gather more evidence.
 
 ## Agreed live interfaces and reference ownership
 
@@ -1009,10 +1024,9 @@ publication's shape and block count; S(H) and H are ceilings, not padding to
 allocate. Every planned leaf must be nonempty and every new node reachable.
 This makes both new and old map-node bounds explicit: each admitted retained map
 has at most `H - 9` nodes. Adding the root and a catalog path gives at most `H`
-new and `H` retired pool blocks per publication. The agreed incremental fallback
-remains the eventual optimization boundary; the initial implementation does not
-need a second allocator before the conservative path is validated. Acceptance
-of this initial approach does not accept its performance as the final target.
+new and `H` retired pool blocks per publication. These are baseline bounds for the
+implemented conservative path. Task 7 must justify the incremental replacement's
+bounds before implementation acceptance; this derivation does not establish them.
 
 Every user candidate must preserve `E`, `M`, global record limits and this pool
 bound. Cleanup cannot increase E or M, and each batch drains before another, so
@@ -1895,6 +1909,8 @@ container rebuild, userspace port, native writable mount or FUSE work is implied
    second orphan/crash harness.
 5. Task 7: run and record combined extended pressure, populated-workload and failure
    campaigns, close remaining coverage gaps and document measured costs/limits.
+   The corrective steps below must resolve unacceptable write amplification before
+   closure; existing tests passing is insufficient.
    The required quick CI gate already exists and remains maintained after closure;
    this is not the task that first adds tests. Preserve independent host builds,
    target compilation and later native-persistence guest validation.
@@ -1902,8 +1918,8 @@ container rebuild, userspace port, native writable mount or FUSE work is implied
 The namespace profile, bounded repair/formatter rules, tighter permanent deletion
 reservation and Unity host-test/CI setup are accepted design. Real-host post-error
 recovery qualification is deferred; ordinary host writing has the agreed scope
-above. Whole-map rebuilding remains accepted only as the initial correctness
-approach.
+above. Whole-map rebuilding remains the initial correctness baseline; its routine
+use must be replaced before milestone acceptance.
 
 Task 1 accepts the consolidated specification, including the workload validation
 profiles/options, concrete representations/interfaces and detailed failure model.
@@ -1912,8 +1928,11 @@ The proofs depend on enforced editor and representation bounds; implementation
 review must check those invariants, and any violation requires correcting the
 bound or design before delivery. Passing host tests alone is not their proof.
 Tasks 3/4 were assigned and delivered together. Tasks 5/6 are delivered below.
-Task 7 is assigned in bounded steps: the first adds extended campaigns and runs the populated 4 GiB recovery profile. The
-64 GiB/256 GiB profiles and milestone closure require a later assignment.
+Task 7 proceeds through the bounded corrective steps below. Large disk-backed
+validation is suspended. The 64 GiB/256 GiB profiles remain coverage goals, not
+permission to run them on persistent storage; execution needs an explicit memory
+budget and a RAM-only backing plan. No corrective implementation is assigned by
+this documentation update.
 
 ## Focused tasks
 
@@ -2021,6 +2040,8 @@ Task 7 is assigned in bounded steps: the first adds extended campaigns and runs 
    workload commands; retain the already-required per-PR suite. Record coverage and limits;
    convert this document to an implemented reference and carry remaining work
    forward without claiming native mounting, FUSE or production-data safety.
+   Closure and subsequent writable native integration are blocked on the
+   write-amplification correction below, not merely on finishing larger runs.
 
    **Step 1:** [pyxis-fs #15](https://git.internal/PyxisOS/pyxis-fs/pulls/15)
    adds `make check-extended` and
@@ -2072,3 +2093,54 @@ Task 7 is assigned in bounded steps: the first adds extended campaigns and runs 
    performance guarantees.
    This validates the exact recovery history, not all fragmentation or the larger
    profiles; task 7 remains unchecked.
+
+   **Remaining corrective steps (each a focused task/PR):**
+
+   - [ ] **RAM-only validation and comparative baseline.** Audit images, recovery
+     logs, temporary copies and extraction outputs before running write-heavy
+     workloads. Back all payload storage with explicitly bounded RAM, prevent
+     swap at both guest and host levels, and fail on exhaustion without a disk
+     fallback. A tmpfs path alone does not establish this guarantee. If the host
+     guarantee cannot be established, stop and resolve it before running. Save
+     only small result summaries/logs on persistent storage. Apply this boundary
+     to local and CI write-heavy campaigns; infrastructure changes belong in this
+     task, not this documentation update.
+
+     Begin with small reproducible Pyxis/ext4/Btrfs workloads on RAM-backed
+     storage: 4 KiB and 256 KiB sequential writes, small overwrites, and
+     create/write/close/rename/delete histories resembling compiler output. Repeat
+     at different filesystem populations. Compare durable-per-operation and
+     batched durability separately; the current Pyxis writer has no new batching
+     contract. Count writes through final synchronization and maintenance. Record
+     total block writes for cross-filesystem comparison, Pyxis data/metadata and
+     user/maintenance breakdowns, and bytes per namespace operation when there is
+     no payload denominator. These measure filesystem requests, not SSD latency,
+     NAND amplification or real-device crash durability. Record revisions,
+     settings, actual durability boundaries and measurement limitations.
+
+   - [ ] **Agree incremental allocation-map design and bounds.** Replace routine
+     whole-map reconstruction with updates to affected paths and necessary
+     balancing nodes. Address allocator self-accounting dependencies described
+     above rather than assuming a tree-depth bound solves them. Re-derive
+     admission, retirement, planning-memory and funded-drain bounds against the
+     actual design, including maintenance publications and any proposed fallback.
+     Preserve both retained states, publication ordering and recovery semantics.
+     Set numerical write-cost budgets from the baseline and algorithm before
+     implementation acceptance; discuss unresolved design choices before coding.
+
+   - [ ] **Implement and validate the correction.** Land incremental publication
+     and maintenance with contract-focused host tests. Retain older-state payload
+     protection, corruption/failure coverage and funded-drain progress checks.
+     Add write-cost regression checks for small operations in populated pools,
+     including reclamation. Assert documented bounds with headroom, not exact
+     incidental tree layouts or write counts. Whole-map work must not merely move
+     from user publication into cleanup.
+
+   - [ ] **Repeat measurements and complete acceptance.** Run matched RAM-only
+     before/after workloads and remaining recovery/pressure coverage. Record the
+     measured costs against agreed budgets; explain any missing larger-profile
+     coverage instead of marking it passed. Only then close task 7 and convert
+     this document to a reference. Batching remains a separate future decision
+     about durability, not a substitute for correcting whole-map write costs.
+     A later real-device check needs its own small explicit write budget; large
+     persistent-storage benchmarks are not required for this correction.
