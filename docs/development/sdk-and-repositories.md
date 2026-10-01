@@ -109,6 +109,10 @@ lives in that repository, including accepted follow-up decisions. See the
 [implemented core boundary](../../fs/docs/core.md) for codec, construction, selection,
 allocation-proof, traversal, policy, checking and lifetime contracts, and
 [host validation](../../fs/docs/host-tools.md#validation) for measured coverage.
+The filesystem repository also owns `make check`, a maintained Unity suite
+linking the real shared core; run `make -C fs check` from Pyxis. Its emitted
+`Filesystem / host-contract (pull_request)` status must be required in **pyxis-fs**
+branch protection, configured by the owner. See [test coverage and limits](../../fs/docs/testing.md).
 Pyxis retains the public OS ABI, capabilities
 and namespace integration. Kernel source builds, including image builds, consume
 the pinned read-only core; SDK and ports targets remain independent. The host
