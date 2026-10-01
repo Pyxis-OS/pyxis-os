@@ -844,22 +844,32 @@ support an equivalent bound. No latency measurement is claimed.
 
 The consolidated milestone proposes workload-selected writable profiles, protected
 per-object deletion capacity, concrete interfaces and a bounded host failure model.
-Deletion headroom can cost roughly 8 KiB per object before subtracting existing
-namespace nodes; repeated separately committed small writes retain distinct births
-and can exhaust mapping capacity far below disk capacity. These mechanisms remain
-under review, including the separate namespace-depth policy. Funded-drain resource
+The proposed six-entry removable namespace profile reduces the deletion envelope
+to at most 4 KiB per non-root object, and less for populations with fewer directory
+roots, before subtracting existing namespace nodes; repeated separately committed
+small writes retain distinct births and can exhaust mapping capacity far below
+disk capacity. These mechanisms remain
+under review. The stronger profile funds bounded variable-key splits without a
+structural-limit deletion refusal; existing underfilled namespace trees may remain
+read-only until explicitly reformatted/reimported. Formatter packing and editor
+changes are proposed, not implemented or accepted. Funded-drain resource
 exhaustion is an invariant failure, not an accepted limitation. The read-only
 format's maxima and formatter reserve defaults do not promise writable admission.
 Revisit capacity and memory costs with populated workloads and implementation
 evidence, not by treating design arithmetic as runtime validation.
 
 After backing writeback errors, plain close/reopen and successful fsync do not
-establish a durable-state recovery boundary. The proposed initial host adapter
-refuses failed/unclean sessions across process restarts using an independently
-trusted persistent session guard; it offers no automatic repair, forced reset or
-uncertain-mutation retry. This also refuses some harmless interruptions and requires
-trusted registry deployment. Review that mechanism before implementation; revisit
-in-place recovery only with a documented durable-state boundary, not a cache flush.
+establish a durable-state recovery boundary. A mandatory persistent session registry
+is not accepted or recommended: it needs independent storage/identity/provisioning
+and still cannot make an ambiguous interrupted session safe to reopen. The revised
+proposal targets qualification of a narrow Linux/XFS direct-I/O path with no
+buffered fallback or
+mixed access, fully initialized fixed host mappings, and documented stable backing
+after errors. That costs full-image provisioning I/O and limits eligible hosts;
+no deployed configuration has been qualified yet. Direct I/O alone is insufficient.
+Accept a concrete backend contract or leave real-host post-error recovery unsupported;
+no automatic repair, force-clear or uncertain-mutation retry. Revisit broader host
+support only with source and backing evidence, not a successful flush experiment.
 
 ## Filesystem host prototype limits
 

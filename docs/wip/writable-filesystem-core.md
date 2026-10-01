@@ -10,6 +10,8 @@ implementation; work proceeds one explicitly assigned task at a time.
 Review navigation: [live interfaces](#proposed-live-interfaces-and-reference-ownership),
 [persistent additions](#proposed-persistent-additions-and-supported-media),
 [admission proof](#proposed-writable-profile-and-admission-proof),
+[namespace proof](#proposed-removable-namespace-profile-byte-and-repair-proof),
+[host adapter comparison](#host-adapter-investigation-and-recommendation),
 [failure model](#proposed-host-failure-validation-model) and
 [delivery boundaries](#proposed-delivery-boundaries-and-review-closure). Task 1 remains
 unchecked until this full review is accepted. No code, format bytes or
@@ -19,7 +21,7 @@ The revised requirements include bounded multi-block writes, deletion capacity
 protected from ordinary growth, durable-state recovery evidence after writeback
 errors, and resource-complete funded drains. Whole-map rebuilding for every
 publication is accepted only as the first correctness implementation. The host
-session guard, deletion reservation, workload profiles and detailed validation
+adapter choice, stronger namespace profile, deletion reservation and validation
 mechanisms below remain proposals for this review. No E/M default or finalized
 allocation strategy is accepted.
 
@@ -707,23 +709,149 @@ unknown grants, widen masks, repair slots or update unrelated repository pins.
 
 ## Proposed tree edits and file batching
 
-Keep uncommitted blocks private. Use byte-fit splits, propagate exact minimum
-keys, and collapse a single-child root. At maximum depth eight, refuse an edit
-that would require a ninth level. The conservative single-record envelopes are:
+Keep uncommitted blocks private, propagate exact minimum keys and collapse a
+single-child root. Distinguish the existing sparse fixed-key editor from the
+stronger namespace editor proposed below. Newly created private nodes superseded
+within a candidate are discarded, not durably retired.
 
-| Edit | New nodes | Old nodes retired |
+| Single-record edit, maximum depth eight | New nodes | Old nodes retired |
 | --- | ---: | ---: |
-| Insert, including allowed root growth | 15 | 8 |
+| Insert, including permitted root growth | 15 | 8 |
 | Same-key, fixed-length update | 8 | 8 |
-| Delete with sibling repair and root collapse | 14 | 14 |
+| Sparse fixed-key delete (object/extent/grant indexes) | 14 | 14 |
+| Namespace delete with six-entry occupancy repair | 15 | 15 |
 
-Deletion removes an empty leaf's parent reference. Repair a one-child non-root
-internal node using an adjacent sibling: merge when that sibling has two children,
-otherwise redistribute into two nodes with at least two children each. With fixed
-numeric/ID keys this never increases the live node count. Variable-length name
-separators can grow after deletion and require splitting; include that case in
-the delete envelope. Prove byte fit, not only record count. Newly created private
-nodes superseded within the candidate are discarded, not durably retired.
+The sparse fixed-key editor removes an empty leaf's reference and repairs a
+one-child non-root internal node using an adjacent sibling: merge when that sibling
+has two children, otherwise redistribute into two nodes with at least two children
+each. This does not increase live node count. It remains sufficient for object,
+extent and grant deletion. Namespace trees use the stronger rule and proof below;
+variable-name directory deletion may split nodes when separator lengths grow.
+That growth is funded by the permanent namespace envelope, not assumed absent.
+
+### Proposed removable namespace profile: byte and repair proof
+
+This is an analyzed proposal for task-1 review, not an accepted six-record product
+requirement or implemented editor. Apply it to every directory-entry index and
+per-volume orphan index, including both retained states. Other indexes keep their
+existing shape rules. Require at least six leaf records or six child references
+in every non-root namespace node. A root leaf may hold any positive count; an
+internal root needs at least two children. Empty indexes have no root. Roots and
+non-roots still obey actual byte fit, exact minimum keys and uniform leaf depth.
+There is no artificial twelve-entry maximum: short records may pack more densely. Do not
+apply the rule to volume-catalog leaves, whose 448-byte records fit only eight
+per node; those immutable catalogs are outside this namespace profile.
+
+The pinned version-1 codec uses a 192-byte tree header, four-byte slots, eight-byte
+record alignment, and four extra alignment bytes when the count is odd. For n
+records of encoded lengths l_j, node size is exactly
+`192 + sum(l_j + 4) + 4*(n mod 2)`. The canonical writable profile excludes unknown
+record extensions, so these maxima are complete:
+
+| Namespace record | Encoded bytes | Bytes including its slot |
+| --- | ---: | ---: |
+| Directory leaf, name length 1..255 | align8(40 + name length), 48..296 | 52..300 |
+| Directory internal minimum-key/reference | align8(48 + key length), 56..304 | 60..308 |
+| Orphan leaf, proposed ID record | 32 | 36 |
+| Orphan internal ID/reference | 64 | 68 |
+
+Twelve maximum-size internal records occupy 3888 bytes; thirteen occupy 4200 and
+may not fit. Thirteen maximum-size directory leaf records fit exactly 4096.
+Consequently any twelve records of any namespace node type fit, independent of
+name lengths and order. A byte overflow has at least thirteen records.
+
+Use a bottom-up, adjacent-sibling editor. Insertion changes one leaf, then at
+most two child references in its parent at each level. Deletion can leave five
+records/children in a non-root node: combine it with one adjacent sibling under
+the same parent. If the ordered combined sequence fits one node, merge it;
+otherwise repartition into two. An overfull single node is likewise split into
+two. Never borrow a single record without checking the resulting bytes and counts.
+Recompute both exact minima, then continue with their one parent. The parent can
+lose one child, gain one child, or replace at most two references. One level's
+repair therefore induces only one next-level repair, not a branching traversal.
+
+The required ordered partition always exists. Put C = 3904 (block minus header)
+and w = 308 (largest record plus slot). An underfull node has exactly five items;
+its sequence plus a fitting sibling has weight at most C + 5w. Updating at most
+two parent references produces weight at most C + 2w, a smaller case. If a combined
+sequence fits, merging preserves occupancy: five plus at least six gives at
+least eleven. Otherwise it has at least thirteen items. Choose the largest prefix
+that fits while leaving at least six items. The first six always fit. If the cut
+is limited by leaving six, that suffix fits. Otherwise the next item fails byte
+fit, so prefix weight exceeds C - (w + 4). The suffix's weight plus its possible
+alignment is then below `5w + (w + 4) + 4 = 1856`, well below C. Both outputs
+therefore fit and have at least six items. This proof covers variable-length
+records, key growth, leaf repair and internal redistribution; it does not assume
+fixed record counts imply byte fit.
+
+At the root, drop an empty leaf, collapse a one-child internal root, or split an
+overfull root into two legal non-root nodes plus a new two-child root. At depth d,
+a tree with this occupancy has at least `2*6^(d-1)` leaf records when d >= 2.
+Depth nine needs 3,359,232 records, exceeding the 1,048,576 global object cap;
+every namespace entry names a non-root object. A valid result at that count cannot
+require depth nine, including a deletion-induced minimum-key split. There is no
+routine structural-limit deletion refusal for an admitted namespace under this
+proposal. Other authority, durable-recovery and lifetime-generation preconditions
+remain explicit; this is not a claim of unconditional success through I/O failure.
+
+Six is derived for this particular local editor, not guessed. Five would allow
+`2*5^8 = 781250` records at depth nine, so the count proof fails. A concrete depth-
+eight counterexample can have thirteen root children, each with the minimum
+`5^7` leaf records, plus one extra record in the first leaf: 1,015,626 total. Its
+root fits twelve 255-byte minima and one short minimum (3952 bytes). Removing
+the short minimum from the six-entry leaf leaves five, so no underflow propagates,
+but replacing that separator with a 255-byte name makes the root 4200 bytes.
+Splitting that root would create a ninth level. This is a counterexample to the
+occupancy-only depth argument and the proposed split-on-overflow algorithm, not
+an impossibility proof for every five-entry editor: additional root-child
+compression could avoid that split. Seven, conversely, cannot split thirteen
+overflowing maximum-size internal records into two nodes of at least seven without a wider
+repair algorithm. Six meets both the depth and local partition requirements
+without that extra repair case; this is not a claim that it optimizes every possible tree editor.
+
+For one namespace delete, each non-root level retires at most the changed node
+and one sibling, producing at most two nodes. A root that does not grow adds at
+most one old and one new node: at depth eight this is 15/15. If a root grows,
+old depth is at most seven and the new count is at most `2*d + 1 <= 15`, including
+the additional root. Insertion needs no sibling repair, so retires at most eight
+nodes and also creates at most fifteen. Fixed-key orphan deletion cannot overflow
+an ancestor on minimum-key change: merge or redistribution never increases live
+node count. Directory deletion may increase it but remains inside these bounds.
+
+### Writable admission and formatter implications
+
+Complete writable admission must check this occupancy in every namespace tree
+of both retained states before any writes, alongside existing depth/byte/ownership
+validation and the deletion-capacity promise. A sparse but format-valid namespace
+that violates it is unsupported by this writable profile; report the profile
+limit without calling the image corrupt. Do not normalize it automatically or
+accept only the selected root. Ordinary read-only access and complete format
+checking retain their existing broader shape contract.
+
+The current pinned formatter does not guarantee this profile. Its `plan_tree`
+uses greedy byte packing and repairs only a final one-child internal node by
+moving one child; leaves can end with one through five records, and internal
+nodes with two through five children. No claim that today's populated images
+are already writable under the stronger profile follows from a clean check.
+
+Propose extending namespace bulk packing, when implementation is assigned, to
+repair each short final group with the preceding group using the same ordered
+merge/partition lemma. A nonfinal greedy group contains at least twelve items,
+so a tail of one through five either merges or can split with at least six on
+each side. Recompute minima and repeat at each parent level; keep a sole root
+leaf small and collapse a sole internal child. This is bounded bulk planning,
+not a runtime repair pass. Recalculate exact node counts, allocation-map shape,
+quota/headroom and memory before creating output, using the existing plan/build
+flow. Fresh formatter plans intended for this writer must also demonstrate the
+chosen E/M and permanent deletion promises, not occupancy alone. Existing images
+may already pass; others require explicit fresh formatting/reimport, not in-place
+migration in this milestone.
+
+This is a writable implementation profile within existing version-1 encodings.
+It changes neither read semantics nor authority; no occupancy feature bit or
+version bump is needed. The separately proposed ORPHANS feature remains required
+for orphan records. Formatter/editor changes and their validation belong to the
+future pyxis-fs implementation PRs, not this documentation revision.
 
 Set hard per-batch limits `V = 128` new volume blocks and `D = 256` retired volume
 blocks, including both data and metadata. Pool map/root/catalog blocks have their
@@ -740,12 +868,20 @@ orphan work at no more than six mapping/grant deletions and 128 retired data blo
 metadata retirement must still fit the total `D`, not an extra allowance.
 
 These caps cover the fixed representations above. Conservative volume-only
-examples are create 38 new/24 retired blocks, replacement rename 69/62, a write
+examples are create 38 new/24 retired blocks, replacement rename 70/63, a write
 slice including old-EOF handling 48/33, and a metadata-only shrink batch at most
 100 metadata blocks plus 128 retired data blocks. Grant cleanup with six deletes
-and final object/orphan removal fits 112 metadata blocks. Include canonical
-extent-tree collapse and actual operation variants in the final plan; these are
-source/layout bounds, not measurements. Generation and counter increments,
+and final object/orphan removal fits 113 new/113 retired metadata blocks. Include
+canonical extent-tree collapse and actual operation variants in the final plan; these are
+source/layout bounds, not measurements. Unlink fits 46 new/39 retired blocks;
+a cross-directory rename without a victim fits 54/47. Replacement's 70/63 covers
+source-directory delete (15/15), destination same-key update (8/8), orphan insert
+(15/8) and four object updates (32/32: source, victim and both parents). Final
+orphan release covers six grant deletes (84/84), object delete (14/14) and orphan
+delete (15/15). Same-parent/shared paths can only reduce these conservative sums;
+superseded private blocks do not become published allocations. All remain inside
+V = 128 and D = 256, so no transaction/workspace-cap expansion is proposed.
+Generation and counter increments,
 quota, depth and record capacity are independent admission checks.
 
 Shrink removes mappings from the high logical end and trims the boundary mapping
@@ -895,14 +1031,34 @@ permanent metadata. Ordinary growth must not consume that capacity. Unlink need
 not free a retained file's contents, reduce its charge or make room for an unrelated
 write immediately. Its final release and reserved drains must be funded too.
 
-**Proposed reservation:** for each volume let O_i count live objects, including
-the root and retained orphans; let Z_i count live nodes in all its directory-entry
-indexes and its orphan index. Each non-root object has exactly one naming entry
-or orphan marker, so these trees contain O_i - 1 records in total. A nonempty tree
-has at most one leaf per record and, with at least two children per internal node,
-at most twice that many nodes minus one. Therefore the conservative envelope
-`B_i = 2*(O_i - 1)` bounds their total nodes regardless of partition among trees,
-leaf packing, orphan splits or directory separator growth.
+**Proposed reservation under the stronger namespace profile:** for each volume
+let O_i count all live objects and J_i all live directory objects, both including
+the root and retained orphans. Let `r_i = O_i - 1`. Exactly r_i records appear
+across directory-entry indexes and the orphan index. Let Z_i be their actual live
+node count. J_i counts even empty/unlinked directories; do not substitute the
+current number of nonempty trees, which can increase during unlink. Derive J_i
+during full opening validation and maintain it in candidate summaries; no new
+persisted counter is needed.
+
+For a nonempty tree with r records, L leaves and I internal nodes, an internal
+root has at least two children and other internal nodes at least six. Counting
+edges gives `L + I - 1 >= 2 + 6*(I - 1)`, hence `I <= (L + 3)/5`. Non-root leaves
+have at least six records, so `r >= 6L` and total nodes are at most `(r + 3)/5`.
+A root-only leaf instead has one node, bounded by `(r + 4)/5` even when r = 1.
+Thus every nonempty tree has at most `(r + 4)/5` nodes. There can be no more than
+`min(r_i, J_i + 1)` nonempty trees: one per directory and one orphan index.
+Summing and rounding down gives the monotone permanent envelope:
+
+```
+B_i = floor((r_i + 4*min(r_i, J_i + 1)) / 5)
+Z_i <= B_i <= r_i
+```
+
+An empty volume namespace has r_i = B_i = 0. The former `2*r_i` envelope remains
+safe but is unnecessarily loose after this stronger occupancy rule. Merely using
+r_i/5 would be wrong: many one-entry directory root leaves need one block each.
+The root allowance above funds new orphan-root creation and arbitrary retained-
+handle partition changes without assuming a single spare leaf suffices.
 
 Reserve `B_i - Z_i` additional permanent blocks. The volume's effective promise
 is `Aeff_i = A_i - Z_i + B_i`; require Aeff_i <= quota and use it in the pool
@@ -917,12 +1073,15 @@ the Pmax allowance then covers the additional allocation-map/catalog costs too.
 Unlink and replacement move records between these indexes without increasing O_i.
 Object parent/count updates are fixed-length; their changed paths replace nodes
 without increasing their live count. Thus namespace splits and changed paths may
-consume the protected capacity, but cannot exceed B_i. Ordinary creates must fund
-the larger O_i/B_i before admission; file growth and writes must preserve the full
+consume the protected capacity, but cannot exceed B_i. Unlink and replacement
+leave both O_i and J_i unchanged. Ordinary creates must fund their projected
+O_i/J_i/B_i before admission; file growth and writes must preserve the full
 promise. A fixed pool of spare orphan leaves would fail under repeated unlinks
 with retained handles, whereas this reservation persists for every live object.
-Removing the final orphan marker/object decreases O_i; fixed-key data/grant/object
-cleanup cannot increase other live metadata or data, so the promise decreases.
+Removing the final orphan marker/object decreases O_i and, for a directory, J_i.
+B_i is monotone in both inputs; fixed-key data/grant/object cleanup cannot increase
+other live metadata or data, so the promise cannot increase. Floor rounding means
+it need not strictly decrease at every individual release.
 Temporary old/new paths and retired blocks still require V/D/H workspace; that
 separate proof does not replace permanent deletion capacity.
 
@@ -931,32 +1090,18 @@ orphan transition in regular-file replacement. Renaming into a longer name can
 change directory shape, but total namespace records still stay within the envelope.
 It does not promise immediate content reclamation with live handles, cross-volume
 or directory moves, success without authority, or operation through I/O/integrity
-failure. Existing unsupported media/profile shapes are refused at writable open;
-no automatic normalization. This is a guarantee against permanent-capacity
-exhaustion, not yet an unconditional
-promise that every format-valid namespace shape can be removed. A depth-eight
-variable-name tree can need another level after separator growth on deletion;
-a sparse depth-eight orphan tree can need a root split on insertion. The current
-editor proposal refuses such edits. The B_i proof does not eliminate that limit.
+failure. The stronger occupancy profile is checked before writable admission;
+unsupported existing shapes are refused there, with no automatic normalization.
+Once admitted, namespace removal does not encounter a ninth-level refusal under
+the count and repair proof above. Generation reservation still funds already-
+admitted orphan lifetimes, not every future unlink near counter exhaustion.
 
-**Focused proposal for the remaining review choice:** keep the narrow capacity
-guarantee and explicit structural-limit refusal for this first writer. Requiring
-unconditional removal would need a stronger removable namespace profile. A candidate stronger rule requires at least six records per
-non-root namespace leaf and six children per non-root internal node: a ninth
-level would then require at least `2*6^8 = 3,359,232` entries, above the current
-1,048,576 object cap. This would change deletion repair, opening admission and the
-edit envelopes; it is not adopted here and needs a separate proof before claiming
-unconditional structural progress. Likewise the generation reservation below
-funds already-admitted orphan lifetimes, not every possible future unlink near
-counter exhaustion. These boundaries must be resolved explicitly in task-1 review;
-no editor/profile expansion is authorized by this document.
-
-The reservation costs up to roughly 8 KiB per non-root object minus its already
-live namespace nodes. That is conservative and can materially reduce usable quota
-for many small files. It is a focused policy/mechanism proposal for review, not an
-accepted quota change or a claim that current images already carry this promise.
-Tighter shape-aware reservation can be considered later only with an equivalent
-bound for every permitted retained-handle history.
+The new envelope uses at most one 4 KiB block per non-root object, versus the old
+two-block bound, and substantially less when there are fewer directories than
+files. This is total namespace capacity, including existing Z_i; only B_i - Z_i
+is additional headroom. It remains a proposal for acceptance, not an on-disk quota
+change. Both the stronger admission rule and tighter reservation must be adopted
+together: the tighter bound is not valid for arbitrary sparse read-only trees.
 
 ### Generation headroom
 
@@ -995,9 +1140,12 @@ root, 922 objects and 12,460,032 payload bytes (11.883 MiB); rounding each file 
 contents beyond those listed, generated output and toolchains. The census is
 measured from tracked blobs; writer layouts and costs below are calculations.
 An initially dense import has about 166 volume metadata blocks (33 object-index,
-132 directory-index and one grant block), but the deletion envelope is already
-1842 namespace blocks plus nonnamespace metadata. Thus 1024/1024 was not a useful
-normal profile even for this small populated source workload and its headroom.
+132 directory-index and one grant block). Under the proposed stronger
+packing, J = 132 and r = 921 give B = 290 namespace blocks; with the modeled 34
+nonnamespace blocks, effective metadata use is about 324 blocks rather than 1876
+under the former envelope. Actual formatter output must be checked for the new
+occupancy rule. The old 1024/1024 suggestion still does not cover the write histories
+below and is not restored as a normal product default.
 
 Use 8 GiB RAM as the proposed normal QEMU development baseline, 64 GiB representative
 disk images, 4 GiB smaller recovery/round-trip images, and 32 GiB RAM / 256 GiB NVMe
@@ -1033,14 +1181,14 @@ Representative histories to validate, with independently expected bytes:
   output in 256 KiB transactions, and 20,000 separately committed 4 KiB appends.
   With the extra source roots and two output files, 166872 mappings and 18443
   objects precede further overwrite/rename/retained-unlink churn. The namespace
-  reservation is 36884 blocks; a dense modeled 3345 other metadata blocks gives
-  an effective M use of about 40229, below 65536. Measure actual layouts.
+  reservation with J = 2641 is 5802 blocks; a dense modeled 3345 other metadata
+  blocks gives an effective M use of about 9147, below 65536. Measure actual layouts.
 - Physical target: forty source populations, 96 GiB of sequential output at the
   same granularity, and 50,000 separately committed 4 KiB appends: 474816 mappings
-  and 36883 objects before churn. The 73764 namespace-reservation blocks plus
-  a dense modeled 9199 other metadata blocks give about 82963 effective M use,
-  below 131072. Larger source
-  trees, build artifacts, fragmented placement and longer histories must be
+  and 36883 objects before churn. With J = 5281, the 11602 namespace-reservation
+  blocks plus a dense modeled 9199 other metadata blocks give about 20801 effective
+  M use, below 131072. Larger source trees, build artifacts, fragmented placement
+  and longer histories must be
   admitted from their measured counts, not assumed to fit this example.
 
 These are proposed workloads, not executions or promises of contiguous allocation.
@@ -1057,8 +1205,9 @@ At N = 16, even E = 1048576 and M = 262144 would reserve about 1568.36 MiB befor
 opening scratch, exceeding the existing 1 GiB cap. More RAM or a larger empty
 image does not bypass that contract. Consider higher caps or a more compact
 summary/allocation strategy only with workload evidence and a focused subsequent
-proposal; neither is silently required to implement this first writer. Record
-actual object/mapping/metadata counts and peak memory after the stated histories.
+proposal; neither is silently required to implement this first writer. The E/M profiles and their memory/workspace ceilings remain unchanged despite the
+tighter namespace promise; those are conservative configured capacities. Record
+actual object/directory/mapping/metadata counts and peak memory after the stated histories.
 
 ### Bounded memory and maintained validation evidence
 
@@ -1104,37 +1253,199 @@ Read-only inspection never flushes and makes no historical durability claim.
 host writer unless a documented durable-state recovery boundary is established.
 An in-memory failure flag is insufficient across host-tool restarts. No automatic
 repair, retry of uncertain mutations or rewrite of a possibly lost publication.
-The initial host adapter supplies no in-place recovery procedure for this case.
-The simulator's explicit durable image can establish an abstract recovery boundary;
-that is not evidence that a normal host `fsync` recovered failed backing writes.
+The abstract simulator's durable image can establish such a boundary; that does
+not prove ordinary host recovery. The previously proposed mandatory registry and
+refusal after every interrupted session are not accepted requirements.
 
-**Proposed host mechanism for review:** require managed images with a persistent
-session guard in a trusted control registry outside pool bytes and outside the
-image backing's failure domain. Register known-clean provenance and image/pool
-identity; pathname alone is insufficient (renames/hard links cannot bypass the
-guard). Missing, malformed, unreadable, mismatched or ambiguous records refuse
-writable access. Registration of an existing image needs independently qualified
-durable provenance; structural validation of cached bytes alone does not qualify.
+### Host adapter investigation and recommendation
 
-Hold exclusive registry and image ownership. Durably establish an `ACTIVE`
-session record, including file and containing-directory synchronization, before
-any backing image write, including startup cleanup. Only an error-free completed
-session with all required drains finished, successful publication flushes,
-quiescence and checked backing close may publish `CLEAN`. This adapter bookkeeping
-does not make core close a checkpoint. Any backing error, uncertain publication,
-failed startup/close or process termination leaves the session unclean. Restart
-refuses writing for that session without trying a recovery flush. Establishing
-ACTIVE before writes makes refusal independent of successfully recording an error
-after the device fails.
+**Recommendation for review:** qualify one narrow direct-I/O host profile instead
+of making a persistent session registry mandatory. Direct I/O addresses the Linux
+data-page-cache failure mode; it does not itself establish durability or repair
+errors. The supported configuration and backing guarantee below are part of the
+proposal. No deployed host/kernel/storage combination has been qualified by this
+investigation, and no real failure or power-loss experiment was run.
 
-No initial force-clear, reset or recovery command. A fresh durably formatted image
-or separately qualified durable backup can establish new clean provenance; copying
-the failed image through surviving caches cannot. Without the trusted registry,
-this proposed host writer is unsupported. This deliberately refuses some harmless
-interruptions too. Normal reopening of a recorded clean session still validates
-both retained states and the resource profile before enabling writes. The registry
-and its deployment assumptions are a focused proposal requiring review, not an
-already agreed host facility or a new on-disk pool feature.
+| Question | Qualified direct-I/O profile | Persistent registry alternative |
+| --- | --- | --- |
+| Evidence after interruption | Quiesced I/O and a qualified stable backing view, then fresh direct reads and full validation | ACTIVE records uncertainty but says nothing about surviving image bytes |
+| Extra persistent machinery | No session database; strict image-lifecycle and backend prerequisites | Independent trusted control store, stable identity/provisioning, atomic ACTIVE/CLEAN records and locking |
+| Harmless process interruption | Can reopen if the backing boundary and both retained states pass; no blanket interruption ban | ACTIVE cannot distinguish harmless interruption from failed writeback; no automatic reset |
+| Ordinary cached host image after writeback error | Does not qualify merely by reopening with O_DIRECT | Remains refused until an independently established durable boundary or qualified replacement |
+
+#### Direct I/O: concrete proposed configuration
+
+Start with standalone, fixed-size regular images on local XFS, 4 KiB filesystem
+blocks, one data device with internal journal, no DAX/realtime/reflink/always-COW
+mode, and no file compression or encryption. Exclude network/FUSE/overlay/tmpfs
+backings and unqualified virtual/block-remapping stacks. This is a restricted
+qualification target, not a claim that other Linux filesystems cannot work. The
+source audit used upstream Linux v6.12 XFS/iomap; the exact deployed patched
+kernel and filesystem path must be checked before support is claimed. A version
+comparison or a successful probe is not a substitute for that qualification.
+
+Use fully initialized, allocated and unshared image ranges with a previously
+durable fixed file length/mapping. No holes, delayed/unwritten extents, reflink,
+hole punching, truncation or host-file growth during the image's writable
+lifetime. This deliberately avoids needing to recover newly allocated host-file
+mappings after an error. Bounded FIEMAP iteration can check range coverage and
+reject unknown, delayed, unwritten or shared mappings; `st_blocks` alone is not
+proof. FIEMAP is a current mapping report, not proof of past durability or exclusive
+ownership. See the [FIEMAP contract](https://www.kernel.org/doc/html/latest/filesystems/fiemap.html).
+
+Provision a fresh image through the qualified direct path, fully initialize its
+range, then successfully sync its contents/metadata and containing directory
+before it is eligible for mutation. Merely calling fallocate does not initialize
+unwritten extents. This adds real provisioning I/O and space cost: a 64 GiB host
+image needs its full range initialized even when the Pyxis pool is mostly free.
+The existing sparse/buffered formatter does not already establish this contract;
+a future explicit host provisioning/formatter mode is required if this proposal
+is accepted. Do not retrofit it by rewriting an uncertain image. An existing
+image requires independently known durable provenance and the same lifetime
+constraints; unknown history is not qualified by a flag or cached-content copy.
+
+Open the one image descriptor with O_DIRECT and retain exclusive advisory ownership
+through every callback, validation, drain and close. All cooperating writers,
+readers and inspectors of that backing must use the qualified direct path; no
+buffered I/O, mmap, inherited writable descriptor, concurrent external image tool,
+reflink/dedup or mapping-changing administration. No fork while I/O is outstanding.
+Keep transfers synchronous and serial, with no AIO/io_uring, timeout cancellation
+or detached worker. These ownership/lifecycle conditions are deployment
+preconditions: advisory locking and file flags cannot exclude a noncooperating
+process or establish an unknown image's history.
+
+Query STATX_DIOALIGN on the opened descriptor, require the returned mask and
+nonzero memory/offset alignments, and refuse values incompatible with 4096-byte
+blocks. Use that write alignment for reads too; newer separate read-alignment
+reporting need not relax it. The filesystem allocation block size is an additional
+constraint, not inferred from the preferred `stx_blksize`. Reserve a suitably
+aligned 64 KiB bounce buffer before exposing the writer; addresses, offsets and
+lengths of every transfer satisfy the discovered requirements. Refuse unsupported
+geometry rather than using read-modify-write or unaligned fallback. See
+[statx alignment fields](https://man7.org/linux/man-pages/man2/statx.2.html).
+
+Never reopen without O_DIRECT or substitute buffered I/O after an error. This
+userspace rule alone is insufficient: Linux permits some direct requests to fall
+back inside the filesystem. [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)
+explicitly distinguishes O_DIRECT from synchronous durability. In the inspected
+[XFS path](https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/xfs/xfs_file.c),
+ENOTBLK can lead to a buffered write; alignment/no-reflink checks are not a universal
+no-fallback certificate. The
+[iomap implementation](https://raw.githubusercontent.com/torvalds/linux/v6.12/fs/iomap/direct-io.c)
+can request fallback if data-cache invalidation fails. The qualification must
+exclude those paths: filesystem-block-aligned, non-COW mapped writes, and no data
+page-cache population/pinning from buffered or mapped access since provisioning.
+There is no generic userspace success flag certifying which path ran. If the
+chosen kernel/backend cannot establish these conditions, refuse the profile;
+monitoring a few successful direct transfers does not establish the invariant.
+
+Keep the core's explicit first and final fsync operations. Synchronous syscall
+completion only means its I/O has completed; it is not a durability barrier by
+itself. O_DSYNC/O_SYNC could add per-write persistence at extra cost, but are not
+required by this proposal and do not replace either core flush or post-error
+qualification. The inspected XFS fsync path forces the appropriate log/device
+flush, including a data-device flush when the log force does nothing; it refuses
+filesystem shutdown. The general [fsync contract](https://man7.org/linux/man-pages/man2/fsync.2.html)
+also requires separate directory synchronization for durable image creation.
+No loop that keeps flushing until an earlier error disappears.
+
+After any failed or short write, stop at the core's existing failure boundary;
+never complete its suffix automatically. A direct-write error can leave some of
+the requested range changed: treat it as potentially inconsistent, not unchanged
+or atomic. A failed slot attempt remains unknown even when O_SYNC was requested.
+The [write error contract](https://man7.org/linux/man-pages/man2/write.2.html)
+supports neither automatic retry nor a claim that the error cancelled all writes.
+
+Quiesce all callbacks before freeing buffers, closing ownership or reading a
+recovery state. On a normal stopped instance, wait for the outstanding synchronous
+call to return. After process termination, wait for its actual exit and ownership
+release; do not treat a timeout or lost connection as completion. The inspected
+synchronous iomap path waits for completion, but that is source-specific evidence,
+not a promise about arbitrary async adapters. A hung operation blocks recovery;
+do not break ownership to race it.
+
+**Post-error durability limit:** Linux documents cache flush/FUA guarantees for
+completed writes, but that is not a general guarantee about every read-visible
+fragment of a failed device request. See
+[block cache control](https://www.kernel.org/doc/html/latest/block/writeback_cache_control.html).
+For a concrete initial recovery profile, require either no volatile write cache
+anywhere in the qualified backing path or a documented end-to-end power-loss
+protection contract covering all read-visible cached bytes after failed requests.
+A device marketing label, guest-visible cache setting or O_DIRECT flag is
+insufficient; controllers and remapping/virtualization layers matter too. An
+alternative backend could supply an equally explicit post-error stable-view or
+cold-cache boundary, but this investigation does not establish one for arbitrary
+cached disks. The adapter must not change device cache policy automatically.
+
+Under that stronger backing premise, fixed durable host mappings and quiesced
+direct I/O, fresh direct reads observe stable old/new/partial bytes rather than
+stale Linux page-cache copies. This is a conditional inference from the stated
+contract, not an experiment showing that failed writes all persisted. Perform
+one checked opening fsync to enforce the normal host boundary and detect current
+backing errors, then fully validate both retained states and admission before
+startup cleanup or returning a writer. The sync alone is not the proof. A torn or
+degraded peer still refuses writable access; no slot repair. Unknown publication
+may include additional committed progress, but recovery never replays the request.
+
+This contract survives a process restart through persistent properties of the
+backing and its controlled access history, not an in-memory error flag. An ordinary
+interrupted qualified session need not be permanently barred. A previous buffered
+writeback failure, broken exclusivity, unknown provenance, unqualified cache
+behavior or host-filesystem integrity failure invalidates that inference: refuse
+writable recovery rather than silently treating a new descriptor as clean.
+
+#### Registry alternative: deployment and recovery cost
+
+A registry can preserve a refusal decision, but cannot establish surviving image
+contents. To work as previously proposed, it needs durably installed ACTIVE before
+any image write, and CLEAN only after a healthy completed session, checked backing
+close and all required drains. Exclusive identity ownership must span that final
+CLEAN publication too. File plus directory synchronization, atomic replacement,
+missing/invalid-record refusal and protection from rollback are required. Doing
+read-only admission before ACTIVE avoids tainting an ordinary admission refusal;
+a crash after ACTIVE is still ambiguous even if no image write occurred.
+
+"Outside the image's failure domain" means the specified image-storage failure
+cannot invalidate the acknowledged ACTIVE record or resurrect an older CLEAN.
+It needs an independently qualified storage/control path, durable ordering and
+rollback protection under an explicit fault model. Another directory, ordinary
+sidecar, partition, xattr or copied marker does not establish that independence.
+Separate hardware may help, but a shared controller, volatile cache, restore or
+operator rollback can still defeat the claimed separation. No such deployment
+has been selected here; silently assuming it would introduce a storage-management
+facility beyond a simple host adapter.
+
+Identity must bind the pool ID/geometry to one designated backing incarnation.
+Paths change, hard links alias one file, copies preserve pool IDs and inode
+numbers can be reused. A qualified filesystem's persistent file handle plus
+filesystem identity can distinguish incarnations across renames; mount IDs alone
+are not persistent, and stale/unsupported handles must refuse. The
+[Linux file-handle contract](https://man7.org/linux/man-pages/man2/name_to_handle_at.2.html)
+illustrates reuse detection and filesystem-dependent support. Copies/restores
+need explicit independent provenance and rebinding, not a second registration of
+cached uncertain bytes or concurrent writable backing with the same pool identity.
+
+An ACTIVE record cannot distinguish a harmless interruption from a writeback error
+that left cache-visible, nonpending bytes. It therefore offers no automatic way
+back to CLEAN. Possible routes are an independently qualified durable backend
+boundary followed by full validation, a known durable backup restored as a qualified
+backing, or a newly durably formatted image. A generic reboot, cached comparison,
+plain reopen/fsync or deletion of the marker is not such evidence. No force-clear
+command is proposed. The same backend qualification needed for the first route
+would already supply the direct adapter's recovery evidence; the registry adds
+history and provisioning machinery without supplying that missing fact itself.
+
+**Decision still required:** accept a restricted, qualified direct-I/O host target
+and its full-image provisioning/backing requirements, or keep real-host post-error
+recovery unsupported until a different concrete durable-view boundary is supplied.
+The mandatory registry is not recommended or adopted. Neither general Linux
+O_DIRECT nor a sidecar has established portable post-error recovery here. Select
+and document the actual kernel/filesystem/device contract before implementation
+claims host recovery; do not expand this milestone into a registry service,
+cache-control manager or repair tool. Simulator validation remains separately
+useful, and no QEMU/build/storage configuration changes are made by this PR.
+
+### Candidate planning and publication
 
 Use the third vectors for a private candidate. Compute projected counts and
 admission from bounded deltas first; remove replaced candidate claims before
@@ -1188,8 +1499,7 @@ integration. The normal host writer uses actual exact writes and `fsync`.
 The simulation uses a sparse durable image and a separate disk-backed volatile
 write log. A log record contains block range, payload, pending/cache-only state
 and trailing length so reads can search backward for the latest write to each
-block, then fall back to durable
-storage. This avoids an image-sized RAM buffer or bitmap. Use one 64 KiB transfer
+block, then fall back to durable storage. This avoids an image-sized RAM buffer or bitmap. Use one 64 KiB transfer
 buffer and fixed control records outside separately capped core memory. Bound
 unflushed log payload by `(H + V + 1) * 4096` and record count by `H + V + 1`.
 Successful promotion removes the corresponding overlay records; cache-only records
@@ -1203,15 +1513,27 @@ runtime state, then inspects only the explicitly durable image. Deliberately
 promoted bytes are host-flushed before inspection. Close never promotes writes;
 merely killing a process while Linux caches survive is not this cold-cut model.
 
-The targeted writeback-error scenario leaves a complete new slot cache-visible
-but neither durable nor flush-pending after a failed final flush. A later flush
+The targeted buffered-writeback-error counterexample leaves a complete new slot
+cache-visible but neither durable nor flush-pending after a failed final flush. A later flush
 returns success without persisting that slot. Warm validation may select the
-apparently valid new generation, but the unclean session must still refuse a
-writer. Repeat the refusal after a host-tool process restart with the same
-persistent guard. Drop the overlay and independently verify the actual durable
-old generation. Also exercise the case where failed writes remain pending. Do
+apparently valid new generation, but that backing has no qualified durable
+boundary and must still refuse a writer. Repeat the refusal through a fresh
+adapter/core instance with the same unqualified backend; no volatile error flag
+or assumption that all failed bytes remain pending may authorize recovery. Drop
+the overlay and independently verify the actual durable old generation. Also exercise the case where failed writes remain pending. Do
 not turn either case into an automatic rewrite/retry; a successful flush alone
 must never authorize post-error recovery.
+
+Separately model the proposed qualified direct backend: completed writes reach
+stable storage, failed requests may leave stable old/new/partial bytes, and no
+buffered data overlay survives to mislead recovery. After all I/O ends, a fresh
+instance validates the resulting retained states or refuses a torn/degraded peer.
+Exercise harmless process interruption without a registry ban as well as error
+refusal. This validates core behavior under that explicit premise, not whether an
+actual Linux/device stack supplies it. Host qualification must separately review
+the exact fallback paths, alignment, backing-cache contract and I/O completion;
+future observed traces or power-loss experiments are evidence for the exercised
+configuration, never a replacement for the documented guarantees.
 
 Number callback events and record kind, block range, flush ordinal, selected cut
 and returned status. Slot ranges are the fixed first/last pool blocks. Fixed
@@ -1251,9 +1573,23 @@ cannot weaken the real callback contract or permit automatic retry.
 | Older retained payloads | Quiesce overwrite/reuse while two retained roots still differ; independently compare both states' complete file contents before any maintenance may drop the older root. |
 | Retained unlink/replacement | Old views retain identity/bytes/rights; recreated names name new identities. Retained orphan storage stays live and charged. Detached directories remain empty and reject insertion. |
 | Final release and reopening | Interrupt bounded orphan batches; marker/object stay paired, cleanup resumes after full validation, and writer access is withheld until startup cleanup completes. |
-| Host recovery boundary | Clean-session reopen works; failed/unclean-session guard survives restart and refuses writing. Cache-visible nonpending new slots remain unsafe after successful flush. Cold simulation recovery uses only its explicitly durable image. |
+| Host recovery boundary | Qualified quiesced direct backing can reopen after interruption; unqualified buffered-error/cache-only backing refuses even after successful flush and process restart. Cold simulation uses only its explicitly durable image. No registry prerequisite is assumed. |
 | Recovery refusal | Torn/degraded or unsupported peer, insufficient reserves, unknown grants/extensions and incomplete validation prevent writable opening without changing either slot. Read-only inspection follows its own contract. |
 | Authority and continuations | Missing resize rejects an entire extending write; checkpoint rights stay independent; local directory edits invalidate pages while unrelated edits do not. |
+
+Namespace validation must cover 1- and 255-byte names, mixed-length separators,
+the exact thirteen-long-directory-record fit, twelve-versus-thirteen long internal
+references, and all tail occupancies one through five in bulk packing. Exercise
+six-to-five underflow with minimal and byte-full siblings, merge, redistribution,
+minimum-key growth splits at successive levels, root split/collapse and empty-root
+removal. Use near-limit depth/count fixtures satisfying the profile, and verify
+actual new/retired node counts against 15/15 plus the operation envelopes. An
+admitted deletion hitting a structural resource limit is a failed editor proof,
+not an accepted refusal. Verify writable rejection of an underfilled but otherwise
+valid retained tree while read-only checking still succeeds; both roots matter.
+Include many tiny directory roots and changing orphan-root presence when checking
+the tighter reservation, plus final releases where floor rounding leaves B_i
+unchanged. Do not count only dense formatter output as editor validation.
 
 For non-crashing failures, immediately attempt representative read, metadata,
 lookup, mutation, checkpoint and close calls. Verify permitted confirmed reads
@@ -1334,15 +1670,17 @@ container rebuild, userspace port, native writable mount or FUSE work is implied
    closure and accepted limits. This does not reopen native persistence scope.
 
 Full review must accept the proposed workload profiles/options, deletion capacity
-reservation, host guard/deployment restrictions, concrete representations/interfaces
+reservation, host adapter/backing qualification, concrete representations/interfaces
 and exact failure model. Whole-map rebuilding is accepted only as the initial
 correctness approach. The profile choices are not accepted product defaults.
 The proofs above depend on enforced editor and representation bounds; implementation
 review must check those invariants, and any violation requires correcting the
 bound or design before delivery. Passing host scenarios alone is not their proof.
-The namespace-depth choice and proposed host registry/profile policy above remain
-explicit review items; do not treat task 1 as ready for acceptance while those
-choices are unresolved. No policy is silently delegated to an implementation PR.
+The stronger removable namespace profile, its tighter deletion reservation and
+the proposed direct-I/O backing/workload profiles remain explicit review items; the
+six-entry rule has been analyzed here, not accepted or implemented. Do not treat
+task 1 as ready for acceptance while those choices are unresolved. No policy is
+silently delegated to an implementation PR.
 Acceptance closes task 1; implementation still requires the next task to be assigned.
 
 ## Focused tasks
