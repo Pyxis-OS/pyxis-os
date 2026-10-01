@@ -624,7 +624,7 @@ static void destroy_nodes(struct nativefs_node *list)
     cpu_restore_interrupts(flags);
     /* Views have no independently retained child handles. Each derived view
      * retains the volume directly, so closing this view cannot be BUSY. */
-    KASSERT(pfs_view_close(&node->view) == PFS_OK);
+    KASSERT(pfs_view_close(&node->view, &(struct pfs_view_close_result){0}) == PFS_OK);
     flags = cpu_save_interrupts();
     nativefs_volume_put(node->volume);
     cpu_restore_interrupts(flags);
@@ -670,7 +670,7 @@ static enum call_status acquire_root(struct nativefs_job *job)
     status = create_node(volume, view, DIRECTORY_KIND_DIRECTORY, job->rights, &job->object);
   }
   if (status != CALL_OK) {
-    KASSERT(pfs_view_close(&view) == PFS_OK);
+    KASSERT(pfs_view_close(&view, &(struct pfs_view_close_result){0}) == PFS_OK);
     uint64_t flags = cpu_save_interrupts();
     nativefs_volume_put(volume);
     cpu_restore_interrupts(flags);
@@ -715,7 +715,7 @@ static enum call_status lookup_node(struct nativefs_job *job)
   if (job->core_status != PFS_OK) {
     return core_result(job->core_status);
   }
-  KASSERT(pfs_view_close(&view) == PFS_OK);
+  KASSERT(pfs_view_close(&view, &(struct pfs_view_close_result){0}) == PFS_OK);
   if (identity.kind != (job->kind == DIRECTORY_KIND_DIRECTORY ?
       PFS_OBJECT_DIRECTORY : PFS_OBJECT_FILE)) {
     return CALL_WRONG_TYPE;
@@ -736,7 +736,7 @@ static enum call_status lookup_node(struct nativefs_job *job)
   enum call_status status = retained ?
       create_node(volume, view, job->kind, job->child_rights, &job->object) : CALL_LIMIT;
   if (status != CALL_OK) {
-    KASSERT(pfs_view_close(&view) == PFS_OK);
+    KASSERT(pfs_view_close(&view, &(struct pfs_view_close_result){0}) == PFS_OK);
     if (retained) {
       flags = cpu_save_interrupts();
       nativefs_volume_put(volume);

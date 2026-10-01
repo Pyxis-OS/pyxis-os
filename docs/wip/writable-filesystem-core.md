@@ -8,8 +8,11 @@ checker support, formatter namespace packing, and the initial maintained Unity
 suite in the pinned `pyxis-fs` dependency. Tasks 3/4 add explicit writable opening,
 retained summaries, admission, ordered publication, synchronous funded drain and
 simulated durable recovery. Task 5 adds public regular-file creation, writing and
-resizing, live directory continuations, and the corresponding healthy host commands. Directory creation,
-removal, rename/orphan cleanup and native writable integration remain unimplemented.
+resizing, live directory continuations, and the corresponding healthy host commands.
+Task 6 adds directory creation, removal, same-volume regular-file rename/replacement,
+retained object authority and funded orphan cleanup on final release and durable
+reopening. Combined extended validation remains task 7; native writable integration
+remains a separate milestone.
 Implementation proceeds one explicitly assigned task at a time.
 
 Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-ownership),
@@ -1903,8 +1906,8 @@ The profile examples are not product defaults or measured capacity guarantees.
 The proofs depend on enforced editor and representation bounds; implementation
 review must check those invariants, and any violation requires correcting the
 bound or design before delivery. Passing host tests alone is not their proof.
-Tasks 3/4 were assigned and delivered together. Task 5 is delivered below;
-task 6 requires the next assignment.
+Tasks 3/4 were assigned and delivered together. Tasks 5/6 are delivered below;
+task 7 requires the next assignment.
 
 ## Focused tasks
 
@@ -1955,8 +1958,9 @@ task 6 requires the next assignment.
    [healthy host command](../../fs/docs/host-tools.md#healthy-writer-sessions) and
    [coverage/measurements](../../fs/docs/testing.md#tasks-34-validation-observations).
    This does not qualify real-host post-error recovery, large populated workload
-   capacity or native writable operation. Nonempty orphan indexes refuse before
-   writes until task 6; public file mutation follows in task 5. Whole-map
+   capacity or native writable operation. The task-3/4 implementation refused nonempty
+   orphan indexes before writes; task 6 replaces that temporary restriction with
+   funded startup cleanup. Whole-map
    rebuilding and the kernel-stack prerequisite remain recorded limitations.
 5. [x] **Implement file mutation.** Create, write and resize with authority
    checks, parent-controlled ownership, sparse/fragmented data, coherent live
@@ -1979,12 +1983,28 @@ task 6 requires the next assignment.
    metadata amplification and planning costs are limitations, not performance
    targets or full-profile capacity evidence. Larger combined campaigns remain
    task 7; no QEMU defaults or kernel-stack implementation changed.
-6. [ ] **Implement namespace changes and orphan lifetime.** Add directories,
+6. [x] **Implement namespace changes and orphan lifetime.** Add directories,
    removal and same-volume regular-file rename/replacement. Preserve identities,
    enforce source/destination rights, retain unlinked objects and recover their
    abandoned storage after restart. Rename publishes the old or new namespace,
    never a half-applied move. Deliver retained-handle, deletion-reservation and
    final-orphan-release/recovery tests with these operations.
+   Delivered in [pyxis-fs #14](https://git.internal/PyxisOS/pyxis-fs/pulls/14),
+   pinned at `044c5e2`. All 106 quick groups and the separate populated file workload
+   pass natively and under ASan/UBSan; host tools, the freestanding archive and
+   parent read-only kernel build pass.
+   Implemented interfaces and reference ownership are documented in
+   [namespace changes and orphan lifetime](../../fs/docs/core.md#namespace-changes-and-orphan-lifetime).
+   Last release and startup cleanup use reserved storage without further allocation;
+   consumed-close and confirmed startup progress remain reportable on failure.
+   Tests cover quota/profile/pool/generation boundaries, 120 retained maximum-name
+   victims under quota pressure, detached/recreated directories, explicit replacement,
+   local continuation invalidation and cleanup interrupted after confirmed progress.
+   [Task-6 coverage](../../fs/docs/testing.md#task-6-namespace-and-orphan-validation)
+   records the bounded scenarios and healthy host extraction checks. Larger combined
+   campaigns remain task 7; real-host interrupted-session recovery remains unqualified.
+   The parent changes only read-only close-result consumers; the writer is not
+   kernel-linked and the stack prerequisite remains deferred.
 7. [ ] **Validate the combined writer and close the milestone.** Exercise
    repeated edits, quota/workspace pressure, retained handles, orphan recovery,
    fragmented/sparse files and the agreed interruption cases. Reopen, extract,
