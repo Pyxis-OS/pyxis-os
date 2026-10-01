@@ -842,14 +842,15 @@ six flushes in total. This accepts extra synchronous I/O to bound cleanup debt;
 revisit combining batches only after the admission proof and workload measurements
 support an equivalent bound. No latency measurement is claimed.
 
-The consolidated milestone proposes workload-selected writable profiles, concrete
+The accepted milestone design specifies workload-selected writable profiles, concrete
 interfaces and a bounded host failure model. Protected per-object deletion capacity
 and the six-entry removable namespace profile are accepted. The profile reduces
 the deletion envelope to at most 4 KiB per non-root object, and less for populations
 with fewer directory
 roots, before subtracting existing namespace nodes; repeated separately committed
 small writes retain distinct births and can exhaust mapping capacity far below
-disk capacity. Workload profiles and detailed interfaces remain under review.
+disk capacity. Validation profiles are not product defaults or measured capacity
+guarantees; the interfaces and validation plan are accepted design.
 The stronger profile funds bounded variable-key splits without a structural-limit
 deletion refusal; existing underfilled namespace trees may remain
 read-only until explicitly reformatted/reimported. Formatter packing and editor
@@ -879,10 +880,10 @@ valid cached bytes and a later successful fsync do not establish durable recover
 
 The restriction survives process exit, but the initial tool has no persistent
 cross-process error detector. Known or suspected failed images must stay out of the
-ordinary writable workflow; the caller/operator must retain that context. Unknown
-interrupted mutation history is not proved healthy by reopening; real-host
-interrupted-session orphan recovery remains unsupported where healthy backing
-history cannot be established. Read-only inspection is not durability certification. Do not claim automatic quarantine,
+ordinary writable workflow; the caller/operator must retain that context. A mutating
+host session that ends without a successful writer close is outside the supported
+ordinary reopening workflow, including interrupted-session orphan recovery.
+Read-only inspection is not durability certification. Do not claim automatic quarantine,
 repair, force-clear or safe retry of uncertain mutations.
 
 Logical admission and deletion headroom do not reserve physical host space for

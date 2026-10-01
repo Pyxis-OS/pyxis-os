@@ -1,22 +1,21 @@
 # Writable filesystem core and recovery
 
-Status: consolidated task-1 review, 2026-10-01, against `pyxis-fs` commit
-`82cc242b3d9773d21c0f7e7a71ec9ca9ccb937ed`. No writable implementation is
-claimed. Sections marked **Agreed** retain the approved policy. Sections marked
-**Proposed** supply the concrete mechanisms, bounds and validation model for
-owner review as one design. Acceptance of this specification does not start
-implementation; work proceeds one explicitly assigned task at a time.
+Status: task-1 design accepted, 2026-10-01, against `pyxis-fs` commit
+`82cc242b3d9773d21c0f7e7a71ec9ca9ccb937ed`. The policy, concrete mechanisms,
+bounds and validation plan below are accepted as the implementation contract.
+No writable implementation or execution of the planned validation suite is claimed.
+Implementation proceeds one explicitly assigned task at a time; design acceptance
+does not start it.
 
-Review navigation: [live interfaces](#proposed-live-interfaces-and-reference-ownership),
-[persistent additions](#proposed-persistent-additions-and-supported-media),
-[admission proof](#proposed-writable-profile-and-admission-proof),
+Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-ownership),
+[persistent additions](#agreed-persistent-additions-and-supported-media),
+[admission proof](#agreed-writable-profile-and-admission-proof),
 [namespace proof](#agreed-removable-namespace-profile-byte-and-repair-proof),
 [host writer and recovery limit](#agreed-ordinary-host-writer-and-deferred-recovery),
 [host tests](#agreed-maintained-host-tests-and-ci),
-[failure model](#proposed-host-failure-validation-model) and
-[delivery boundaries](#proposed-delivery-boundaries-and-review-closure). Task 1 remains
-unchecked until this full review is accepted. No code, format bytes or
-dependency pin changes in this documentation PR.
+[failure model](#agreed-host-failure-validation-model) and
+[delivery boundaries](#agreed-delivery-boundaries-and-design-acceptance). Task 1 is
+complete. No code, format bytes or dependency pin changes in this documentation PR.
 
 The revised requirements include bounded multi-block writes, deletion capacity
 protected from ordinary growth, durable-state recovery evidence after writeback
@@ -25,7 +24,7 @@ publication is accepted only as the first correctness implementation. Maintained
 host tests, the Unity setup and a per-filesystem-PR CI merge gate are agreed, as
 are the stronger namespace profile and tighter deletion reservation. The ordinary
 host writer uses the healthy-session contract below; real-host post-error recovery
-qualification is deferred. Other sections marked Proposed remain for full review.
+qualification is deferred.
 No E/M default or finalized allocation strategy is accepted.
 
 This is the first of two storage milestones. Its result is a shared core that
@@ -77,7 +76,7 @@ Publication remains pool-wide and serialized. A volume checkpoint covers all
 accepted changes in that volume before its ordering point; sibling-volume
 changes may be included. Close is not a substitute for checkpointing. The
 progress and failure contract below separates operation outcomes from pool
-health; the proposed live interface below gives those facts separate fields.
+health; the specified live interface below gives those facts separate fields.
 
 Live object handles retain identity and granted authority while observing the
 latest committed state. They do not permanently pin the generation at open.
@@ -89,7 +88,7 @@ Removal leaves retained object handles usable. Storage remains charged while an
 object is unlinked but retained. Persistent orphan bookkeeping must let restart
 reclaim objects whose runtime owners no longer exist, without treating a named
 or otherwise protected object as garbage. The retained-file and directory
-behavior and orphan-index lifecycle below are agreed; the proposed mechanisms
+behavior and orphan-index lifecycle below are agreed; the specified mechanisms
 below specify encoding, reference accounting and workspace bounds.
 
 Writable opening requires fully understood, validated media. Refuse writable
@@ -285,7 +284,7 @@ without cleaning them up.
 Opening may take substantial time after many removals or a large abandoned file.
 This first writer completes abandoned-orphan cleanup before applications gain
 access, avoiding concurrent startup cleanup. Exact record encoding, per-batch
-work bounds and admission costs are proposed below; existing reserve defaults
+work bounds and admission costs are specified below; existing reserve defaults
 do not establish writable sufficiency.
 
 ## Agreed live enumeration and diagnostic views
@@ -324,7 +323,7 @@ workspace. The initial limitation is that full offline inspection interrupts
 writable access; concurrent diagnostic snapshots would require a separately
 agreed retention and admission policy before introduction.
 
-The proposed live continuation below supplies binding and freshness. The existing
+The specified live continuation below supplies binding and freshness. The existing
 immutable tree-position token cannot be used against a changing tree unchecked.
 The native ABI mapping belongs to the subsequent milestone.
 
@@ -434,11 +433,10 @@ metadata fits a strictly bounded pool-wide remainder, fully charged to workspace
 That bound covers the accumulated remainder across successive maintenance cycles;
 it is not another allowance added after each write. Ineligible storage remains
 protected and accounted for, rather than being hidden in the maintenance
-remainder. The proposed admission proof below bounds repeated editing explicitly.
+remainder. The admission proof below bounds repeated editing explicitly.
 
 Use synchronous maintenance in this first writer:
 
-- Before admission, reclaim eligible storage when needed to restore workspace.
 - After each confirmed user or orphan-cleanup batch, drain that batch's retired
   volume storage before admitting the next batch. This applies between chunks
   of a large write or shrink as well as between separate calls.
@@ -465,7 +463,7 @@ protocol count, not a latency measurement. Large writes, shrinks and orphan
 cleanup repeat the sequence across batches. The first writer accepts this cost;
 combining batches is a later optimization requiring an equivalent debt bound.
 
-The proposed admission proof below supplies the conditional `2H` remainder and
+The admission proof below supplies the conditional `2H` remainder and
 `3H` pool-workspace construction, permanent metadata allowance, record closure
 and writable-opening checks. Existing percentage reserves alone prove none of
 those requirements. Refuse images that cannot satisfy them; do not silently
@@ -540,7 +538,7 @@ It excludes new volume metadata/data, accumulated retired storage and the
 additional publications needed for retained-root advancement and safe reuse.
 
 Admission checks record/depth limits, planning memory, permanent metadata growth,
-workspace and old sparse maps under the proposed profile below. The one-publication
+workspace and old sparse maps under the specified profile below. The one-publication
 construction alone does not prove reserve sufficiency. No format change follows
 merely from using this fallback.
 
@@ -556,9 +554,9 @@ the populated workloads below, distinguishing user publication from drain costs.
 Revisit incremental editing/allocation strategy after correctness, retaining a
 bounded fallback and equivalent admission guarantees.
 
-## Proposed live interfaces and reference ownership
+## Agreed live interfaces and reference ownership
 
-These mechanisms are proposed for the full review. Give `pfs_pool` internal
+These mechanisms are accepted design, not implemented behavior. Give `pfs_pool` internal
 state an explicit read-only or writer mode, selected by separate open calls.
 Keep its caller-owned handle and the opaque `pfs_view` lifetime rules. Ordinary
 `pfs_view` handles use immutable or live behavior
@@ -691,7 +689,7 @@ the directory already authorized by the view. Listing still returns names/kinds
 only, not child IDs or authority. Changed-directory table capacity is bounded by
 the writable object bound below, including retained detached directories.
 
-## Proposed persistent additions and supported media
+## Agreed persistent additions and supported media
 
 Use volume read-required feature bit 0, `ORPHANS`; this bit remains unsupported
 in pool feature masks. With the volume bit set, the existing
@@ -736,7 +734,7 @@ instead of erasing them during COW. Read-only
 inspection keeps its existing broader compatibility contract. Do not rewrite
 unknown grants, widen masks, repair slots or update unrelated repository pins.
 
-## Proposed tree edits and file batching
+## Agreed tree edits and file batching
 
 Keep uncommitted blocks private, propagate exact minimum keys and collapse a
 single-child root. Distinguish the existing sparse fixed-key editor from the
@@ -781,7 +779,7 @@ record extensions, so these maxima are complete:
 | --- | ---: | ---: |
 | Directory leaf, name length 1..255 | align8(40 + name length), 48..296 | 52..300 |
 | Directory internal minimum-key/reference | align8(48 + key length), 56..304 | 60..308 |
-| Orphan leaf, proposed ID record | 32 | 36 |
+| Orphan leaf, specified ID record | 32 | 36 |
 | Orphan internal ID/reference | 64 | 68 |
 
 Twelve maximum-size internal records occupy 3888 bytes; thirteen occupy 4200 and
@@ -878,7 +876,7 @@ migration in this milestone.
 
 This is a writable implementation profile within existing version-1 encodings.
 It changes neither read semantics nor authority; no occupancy feature bit or
-version bump is needed. The separately proposed ORPHANS feature remains required
+version bump is needed. The specified ORPHANS feature remains required
 for orphan records. Formatter/editor changes and their validation belong to the
 task 2 pyxis-fs implementation PR, including short-tail packing and its contract
 tests; profile/headroom enforcement joins tasks 3/4. None is implemented by this
@@ -932,14 +930,14 @@ volume-metadata blocks. Variable-name directory edits occur only in separately
 admitted user mutations; orphan directories already have no directory tree.
 This property is essential to the cleanup proof, not an optional optimization.
 
-## Proposed writable profile and admission proof
+## Agreed writable profile and admission proof
 
 The first writer uses caller-selected limits `E` on live file mapping extents
 and `M` on live volume-owned metadata blocks, across the pool, including orphans.
 Each inline extent and each extent-tree leaf mapping counts once toward E, even
 when several mappings share one coalesced allocation-map run. No E/M product
 default is accepted; the former 1024/1024 suggestion is withdrawn. Require explicit
-profile selection for this proposal, with `E <= 1,048,576` and `M <= U`, fixed for
+profile selection for this design, with `E <= 1,048,576` and `M <= U`, fixed for
 the instance and within existing record/memory limits. These are writable-open
 options, not persisted format fields or quota changes. M also funds the deletion
 reservation below, rather than merely today's actual metadata. Report the selected
@@ -1149,7 +1147,7 @@ and later orphan recovery, and remains sufficient at intermediate crash points
 as T and the remaining drain count decrease. Refuse exhaustion before writing;
 never wrap or rely on a future migration to finish an admitted sequence.
 
-### Workloads, capacity and proposed development profiles
+### Workloads, capacity and development validation profiles
 
 V/D bound one transaction, not total file or filesystem capacity. Mapping records
 also preserve birth generation: even physically adjacent logical runs written in
@@ -1178,28 +1176,28 @@ under the former envelope. Actual formatter output must be checked for the new
 occupancy rule. The old 1024/1024 suggestion still does not cover the write histories
 below and is not restored as a normal product default.
 
-Use 8 GiB RAM as the proposed normal QEMU development baseline, 64 GiB representative
+Use 8 GiB RAM as the normal QEMU development validation baseline, 64 GiB representative
 disk images, 4 GiB smaller recovery/round-trip images, and 32 GiB RAM / 256 GiB NVMe
 as the first physical target. These are design/validation targets only; this PR
-changes no QEMU defaults or build configuration. Propose the following explicit
-profiles for review, with N = 16 as a conservative volume-count allowance; compute
+changes no QEMU defaults or build configuration. Use the following explicit
+validation profiles, with N = 16 as a conservative volume-count allowance; compute
 requirements from the actual N at opening:
 
-| Workload target | E | M | H | S | Recovery minimum | Pmax | Reserved arena | Proposed core memory cap |
+| Workload target | E | M | H | S | Recovery minimum | Pmax | Reserved arena | Validation core memory cap |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 4 GiB recovery image | 8192 | 4096 | 726 | 32407 | 2562 blocks / 10.008 MiB | 788 | 28.87 MiB | 128 MiB |
 | 64 GiB development image, 8 GiB RAM | 262144 | 65536 | 18570 | 840527 | 56094 blocks / 219.117 MiB | 18632 | 435.05 MiB | 768 MiB |
 | 256 GiB physical target, 32 GiB RAM | 524288 | 131072 | 37105 | 1680103 | 111699 blocks / 436.324 MiB | 37167 | 812.81 MiB | 1 GiB |
 
 The arena calculation is itemized below and excludes opening-check scratch and
-live handles; all share the selected cap. These proposed caps leave room to
+live handles; all share the selected cap. These validation caps leave room to
 investigate that additional cost, not proof that every profile-limit population
 passes complete validation. The existing 1 GiB maximum is not increased. If
 validation does not fit, lower the admitted population or return to review with
 measured memory/layout evidence; do not skip checks or claim the table guarantees
 full occupancy. Views cannot spend the arena reserved for drain. Raising the
 normal cap above the existing 128 MiB default is an explicit writer option in
-this proposal, not a change to host or QEMU defaults.
+this design, not a change to host or QEMU defaults.
 
 Representative histories to validate, with independently expected bytes:
 
@@ -1222,7 +1220,7 @@ Representative histories to validate, with independently expected bytes:
   and longer histories must be
   admitted from their measured counts, not assumed to fit this example.
 
-These are proposed workloads, not executions or promises of contiguous allocation.
+These are planned validation workloads, not executions or promises of contiguous allocation.
 A 256 KiB transaction uses 64 data blocks, leaving up to 64 of V for volume paths
 and splits; use the actual plan and reduce the prefix if needed. Fragmentation,
 partial EOF work and separate small calls can raise E or transaction count. With
@@ -1373,10 +1371,10 @@ image. An interrupted mutating session whose backing outcome/history is unknown
 is not demonstrated healthy by close/reopen, cached validation or a later successful
 flush. This milestone makes no real-host recovery claim for that case either;
 inspection may report readable structure/content without certifying durability.
-In particular, real-host interrupted-session orphan recovery is outside the
-supported workflow where healthy backing history cannot be established. The core
-still performs orphan recovery with an adapter satisfying its precondition,
-including in the simulator. Do not turn an observed successful reopen into
+A mutating host session that ends without a successful writer close is outside
+the supported ordinary reopening workflow, including interrupted-session orphan
+recovery. The core still performs orphan recovery with an adapter satisfying its
+precondition, including in the simulator. Do not turn an observed successful reopen into
 post-error recovery evidence.
 
 #### Deferred qualification and retained findings
@@ -1457,7 +1455,8 @@ gate merges. This explicitly supersedes the repository no-tests/no-CI restrictio
 for this filesystem work only. It does not authorize implementation in this PR,
 a general testing framework, kernel self-tests or unrelated repository changes.
 The owner configures Forgejo branch protection; the agreed check below must
-become required when delivered. Task 1 remains unchecked pending full review.
+become required when delivered. Task 1 design is accepted; implementation remains
+separate.
 
 The governing rule is:
 
@@ -1591,7 +1590,7 @@ they do not exist at the pinned revision and are not implemented by this PR:
 | `make check` | Build/run `build/pyxis-fs-tests --suite pr`: deterministic small contract cases and the bounded failure scenarios required for implemented behavior, including both retained payloads. This is the every-PR gate. |
 | `make check-extended` | Build/run the same runner with `--suite extended --seed 1`: longer reuse/retained-orphan histories, near-maximum depth/count pressure, broader deterministic cut/promotion combinations and adversarial namespace shapes. No exhaustive-failure claim. |
 | `build/pyxis-fs-tests --suite workload --profile recovery --seed 1` | The documented populated 4 GiB history with streaming expected contents and resource accounting; run after building the runner with `make check`. |
-| `build/pyxis-fs-tests --suite workload --profile development --seed 1` | The populated 64 GiB / proposed 8 GiB RAM development workload. Explicitly provision its disk, memory and time budget. |
+| `build/pyxis-fs-tests --suite workload --profile development --seed 1` | The populated 64 GiB / 8 GiB RAM development validation workload. Explicitly provision its disk, memory and time budget. |
 | `build/pyxis-fs-tests --suite workload --profile physical --seed 1` | The representative 256 GiB / 32 GiB RAM profile on host storage. This exercises capacity/history, not native NVMe or device recovery qualification. |
 
 Keep `make check` small: fixed cases/seeds, bounded operation counts and temporary
@@ -1652,7 +1651,7 @@ writable adapters still require guest/QEMU and appropriate device validation in
 the native-persistence milestone. This host-test decision does not add kernel
 self-tests or substitute for that eventual guest evidence.
 
-## Proposed host failure-validation model
+## Agreed host failure-validation model
 
 Integrate this bounded model into the maintained host runner above, linked to the
 real shared core. Keep one fixed scenario table and one test-owned adapter at the
@@ -1660,7 +1659,7 @@ existing exact I/O callbacks, reused by quick and extended runs. No standalone
 parallel validation implementation, production failure switches or kernel probes.
 The ordinary host writer uses the healthy-session I/O and durability contract
 above; simulated recovery does not qualify its post-error backing state. The
-detailed simulation mechanism below remains proposed, not implemented here.
+detailed simulation mechanism below is accepted design, not implemented here.
 
 The simulation uses a sparse durable image and a separate disk-backed volatile
 write log. A log record contains block range, payload, pending/cache-only state
@@ -1834,7 +1833,7 @@ safety. Keep ordinary host builds/manual operations and freestanding target
 compilation alongside the maintained suite. Neither this suite nor its CI gate
 is implemented or run by this specification revision.
 
-## Proposed delivery boundaries and review closure
+## Agreed delivery boundaries and design acceptance
 
 The authoritative format/core implementation belongs in `pyxis-fs`; this document
 is the parent milestone's review contract. Publish dependency commits and PRs
@@ -1884,25 +1883,22 @@ container rebuild, userspace port, native writable mount or FUSE work is implied
 The namespace profile, bounded repair/formatter rules, tighter permanent deletion
 reservation and Unity host-test/CI setup are accepted design. Real-host post-error
 recovery qualification is deferred; ordinary host writing has the agreed scope
-above. These choices are no longer unresolved prerequisites for task-1 review.
-Whole-map rebuilding remains accepted only as the initial correctness approach.
+above. Whole-map rebuilding remains accepted only as the initial correctness
+approach.
 
-Full review still covers the consolidated specification, including the proposed
-workload profiles/options, concrete representations/interfaces and detailed failure
-model. The profile examples are not accepted product defaults. The proofs depend
-on enforced editor and representation bounds; implementation review must check
-those invariants, and any violation requires correcting the bound or design before
-delivery. Passing host tests alone is not their proof. Task 1 remains unchecked
-until the owner accepts the specification as a whole; none of these design
-decisions authorizes implementation.
-Acceptance closes task 1; implementation still requires the next task to be assigned.
+Task 1 accepts the consolidated specification, including the workload validation
+profiles/options, concrete representations/interfaces and detailed failure model.
+The profile examples are not product defaults or measured capacity guarantees.
+The proofs depend on enforced editor and representation bounds; implementation
+review must check those invariants, and any violation requires correcting the
+bound or design before delivery. Passing host tests alone is not their proof.
+Implementation still requires the next task to be assigned.
 
 ## Focused tasks
 
-1. [ ] **Accept the consolidated writable contract.** The complete specification
-   is drafted above for owner review: agreed policy plus proposed mechanisms,
-   numerical bounds, failure model and delivery boundaries. Mark complete after
-   full acceptance; no writable implementation is claimed.
+1. [x] **Accept the consolidated writable contract.** Accepted policy, concrete
+   mechanisms, numerical bounds, failure model and delivery boundaries are
+   specified above. No writable implementation is claimed.
 2. [ ] **Implement bounded COW tree and allocation updates.** Add the required
    index edits, path replacement/splitting and allocation-map accounting, including
    its own replacement blocks. Keep uncommitted changes private and unwind
