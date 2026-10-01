@@ -1990,12 +1990,14 @@ task 7 requires the next assignment.
    never a half-applied move. Deliver retained-handle, deletion-reservation and
    final-orphan-release/recovery tests with these operations.
    Delivered in [pyxis-fs #14](https://git.internal/PyxisOS/pyxis-fs/pulls/14),
-   pinned at `044c5e2`. All 106 quick groups and the separate populated file workload
+   pinned at `ce88062`. All 107 quick groups and the separate populated file workload
    pass natively and under ASan/UBSan; host tools, the freestanding archive and
    parent read-only kernel build pass.
    Implemented interfaces and reference ownership are documented in
    [namespace changes and orphan lifetime](../../fs/docs/core.md#namespace-changes-and-orphan-lifetime).
-   Last release and startup cleanup use reserved storage without further allocation;
+   Persisted-accounting coverage requires cleanup retirements to use recovery
+   workspace, while user mutations (including retained-orphan writes) use ordinary
+   workspace. Last release and startup cleanup use reserved storage without further allocation;
    consumed-close and confirmed startup progress remain reportable on failure.
    Tests cover quota/profile/pool/generation boundaries, 120 retained maximum-name
    victims under quota pressure, detached/recreated directories, explicit replacement,
