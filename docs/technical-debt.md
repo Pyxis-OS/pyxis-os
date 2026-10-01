@@ -830,8 +830,8 @@ adapter paths. No fault injection or physical-hardware validation was performed.
 The [writable-core milestone](wip/writable-filesystem-core.md) accepts whole-map
 rebuilding for every publication as the first correctness implementation, not the
 final allocation strategy or desired performance; it also accepts partial large
-shrinks. Task 2 implements the private whole-map planner; the publisher and large
-shrinks remain unimplemented. Rebuilding can write a pool-wide metadata map
+shrinks. Tasks 2–4 implement the private whole-map planner, admitted publisher
+and synchronous funded drain; public file writes and large shrinks remain unimplemented. Rebuilding can write a pool-wide metadata map
 three times per small user batch, causing substantial write amplification. Measure
 metadata bytes written per useful data byte, latency and throughput on populated
 source trees and recorded write histories; calculated envelopes are not measured
@@ -841,7 +841,7 @@ committed length, so callers must reconcile confirmed progress and uncertain
 outcomes. Atomic large shrinks would require a separately agreed persistent
 tail-retention design.
 
-The first writer will drain each bounded batch's retired volume storage before
+The first writer drains each bounded batch's retired volume storage before
 admitting another batch, including between chunks of one large operation. A
 batch needing retained-root advancement and separate free-map publication uses
 six flushes in total. This accepts extra synchronous I/O to bound cleanup debt;
@@ -860,8 +860,9 @@ guarantees; the interfaces and validation plan are accepted design.
 The stronger profile funds bounded variable-key splits without a structural-limit
 deletion refusal; existing underfilled namespace trees may remain
 read-only until explicitly reformatted/reimported. Formatter packing and editor
-changes are implemented with contract tests in task 2; complete writable admission
-and deletion funding remain tasks 3/4. Funded-drain resource
+changes are implemented with contract tests in task 2; writable admission
+and deletion funding are enforced by tasks 3/4 admission. Actual deletion/orphan
+operations and their final-release resource tests remain task 6. Funded-drain resource
 exhaustion is an invariant failure, not an accepted limitation. The read-only
 format's maxima and formatter reserve defaults do not promise writable admission.
 Revisit capacity and memory costs with populated workloads and implementation
@@ -870,8 +871,8 @@ evidence, not by treating design arithmetic as runtime validation.
 The filesystem-only scope now requires maintained host contract tests and a CI
 merge gate. Task 2 delivers the Unity runner, independent content/format
 expectations and the `Filesystem / host-contract (pull_request)` check in
-`pyxis-fs`; the owner configures it as required. The bounded failure adapter lands
-with publication/admission in tasks 3/4 in that same runner. Tests continue landing
+`pyxis-fs`; the owner configures it as required. The bounded failure adapter and publication/admission coverage now run
+in that same suite with tasks 3/4. Tests continue landing
 with behavior, with larger pressure and failure campaigns separate from the quick
 per-PR suite. See [current coverage and limits](../fs/docs/testing.md). Passing modeled cases does
 not establish host/device recovery, exhaustive correctness or native guest behavior;

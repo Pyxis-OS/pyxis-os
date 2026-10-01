@@ -5,8 +5,10 @@ Status: task-1 design accepted, 2026-10-01, against `pyxis-fs` commit
 bounds and validation plan below are accepted as the implementation contract.
 Task 2 now implements private COW tree/map planners, canonical/orphan codecs and
 checker support, formatter namespace packing, and the initial maintained Unity
-suite in the pinned `pyxis-fs` dependency. Public operations remain read-only;
-publication, writable admission, funded drain and recovery are not implemented.
+suite in the pinned `pyxis-fs` dependency. Tasks 3/4 add explicit writable opening,
+retained summaries, admission, ordered publication, synchronous funded drain and
+simulated durable recovery. The host exposes healthy-session open/checkpoint;
+public file/namespace mutations and native writable integration remain unimplemented.
 Implementation proceeds one explicitly assigned task at a time.
 
 Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-ownership),
@@ -17,7 +19,7 @@ Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-owner
 [host tests](#agreed-maintained-host-tests-and-ci),
 [failure model](#agreed-host-failure-validation-model) and
 [delivery boundaries](#agreed-delivery-boundaries-and-design-acceptance). Task 1 is
-complete; task 2 is delivered by the dependency and pin PRs below.
+complete; tasks 2–4 are delivered by the dependency and pin PRs below.
 
 The revised requirements include bounded multi-block writes, deletion capacity
 protected from ordinary growth, durable-state recovery evidence after writeback
@@ -1831,8 +1833,8 @@ does not checksum file payloads; selected-state extraction does not prove payloa
 of every retained state. This model establishes only exercised serial failures,
 not exhaustive scheduling, actual-device power loss, performance or production-data
 safety. Keep ordinary host builds/manual operations and freestanding target
-compilation alongside the maintained suite. Neither this suite nor its CI gate
-is implemented or run by this specification revision.
+compilation alongside the maintained suite. Implemented coverage and limits are recorded with the focused tasks below;
+future-operation scenarios land with their corresponding behavior.
 
 ## Agreed delivery boundaries and design acceptance
 
@@ -1893,7 +1895,7 @@ The profile examples are not product defaults or measured capacity guarantees.
 The proofs depend on enforced editor and representation bounds; implementation
 review must check those invariants, and any violation requires correcting the
 bound or design before delivery. Passing host tests alone is not their proof.
-Tasks 3/4 remain a joint delivery boundary and require the next assignment.
+Tasks 3/4 were assigned and delivered together; task 5 requires the next assignment.
 
 ## Focused tasks
 
@@ -1920,16 +1922,29 @@ Tasks 3/4 remain a joint delivery boundary and require the next assignment.
    ASan/UBSan. No publication/failure-simulator or guest validation is claimed.
    [Writer stack usage](../technical-debt.md#writable-filesystem-kernel-stack-prerequisite)
    must be resolved before native writable integration; its refactor is deferred.
-3. [ ] **Implement publication and reopening.** Add exact writes/flushes through
+3. [x] **Implement publication and reopening.** Add exact writes/flushes through
    the platform adapter, ordered two-slot publication, checkpointing and reopening
    of supported committed states. Stop ordinary access on uncertain outcomes. Provide
    only the small host command surface needed to exercise shared-core operations.
    Integrate the shared test failure adapter and gate publication/recovery behavior.
-4. [ ] **Implement safe reclamation and enforce admission.** Protect retained
+4. [x] **Implement safe reclamation and enforce admission.** Protect retained
    roots and live operations, durably publish freed ranges before reuse, and
    enforce volume/pool/workspace limits. Demonstrate repeated reuse, not just
    monotonically growing allocations. Add admission, funded-drain and independently
    expected retained-payload tests with this behavior, including pre-file-API cases.
+   Tasks 3/4 are delivered together in [pyxis-fs #12](https://git.internal/PyxisOS/pyxis-fs/pulls/12),
+   pinned at `e768b6c`. The 68-group maintained suite covers real private-editor
+   publication, user/advance/free write and flush failures, both retained payloads
+   before each maintenance slot write, historical-retirement reuse, generation
+   boundaries, authority/reentry, ordinary refusals and funded drains at computed
+   resource minima. ASan/UBSan, host tools and the freestanding archive pass.
+   See [implemented writer](../../fs/docs/core.md#admitted-writer-and-publication),
+   [healthy host command](../../fs/docs/host-tools.md#healthy-writer-sessions) and
+   [coverage/measurements](../../fs/docs/testing.md#tasks-34-validation-observations).
+   This does not qualify real-host post-error recovery, large populated workload
+   capacity or native writable operation. Nonempty orphan indexes refuse before
+   writes until task 6; public file mutation follows in task 5. Whole-map
+   rebuilding and the kernel-stack prerequisite remain recorded limitations.
 5. [ ] **Implement file mutation.** Create, write and resize with authority
    checks, parent-controlled ownership, sparse/fragmented data, coherent live
    reads and explicit partial-progress/error semantics. Exercise durable reopen
