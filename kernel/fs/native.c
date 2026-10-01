@@ -246,7 +246,12 @@ static enum call_status core_result(enum pfs_status status)
 {
   switch (status) {
   case PFS_OK: return CALL_OK;
-  case PFS_INVALID: return CALL_IO;
+  case PFS_INVALID:
+  case PFS_EXISTS:
+  case PFS_DETACHED:
+  case PFS_CHANGED:
+    /* Writable-core outcomes cannot originate from this read-only adapter. */
+    return CALL_IO;
   case PFS_NOT_FOUND: return CALL_NOT_FOUND;
   case PFS_ABSENT: return CALL_IO;
   case PFS_UNSUPPORTED: return CALL_UNAVAILABLE;
