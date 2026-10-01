@@ -12,6 +12,7 @@ Review navigation: [live interfaces](#proposed-live-interfaces-and-reference-own
 [admission proof](#proposed-writable-profile-and-admission-proof),
 [namespace proof](#proposed-removable-namespace-profile-byte-and-repair-proof),
 [host adapter comparison](#host-adapter-investigation-and-recommendation),
+[host tests](#agreed-maintained-host-tests-and-ci),
 [failure model](#proposed-host-failure-validation-model) and
 [delivery boundaries](#proposed-delivery-boundaries-and-review-closure). Task 1 remains
 unchecked until this full review is accepted. No code, format bytes or
@@ -20,7 +21,9 @@ dependency pin changes in this documentation PR.
 The revised requirements include bounded multi-block writes, deletion capacity
 protected from ordinary growth, durable-state recovery evidence after writeback
 errors, and resource-complete funded drains. Whole-map rebuilding for every
-publication is accepted only as the first correctness implementation. The host
+publication is accepted only as the first correctness implementation. Maintained
+host tests and a per-filesystem-PR CI merge gate are also agreed; the concrete
+setup below is proposed. The host
 adapter choice, stronger namespace profile, deletion reservation and validation
 mechanisms below remain proposals for this review. No E/M default or finalized
 allocation strategy is accepted.
@@ -1487,14 +1490,206 @@ writes; the adapter can then release exclusive backing ownership. A fresh open
 must satisfy the adapter recovery boundary and validate again. Ordinary view
 results do not expose these pool diagnostics.
 
+## Agreed maintained host tests and CI
+
+The shared filesystem core will have maintained host tests that run in CI and
+gate merges. This explicitly supersedes the repository no-tests/no-CI restriction
+for this filesystem work only. It does not authorize implementation in this PR,
+a general testing framework, kernel self-tests or unrelated repository changes.
+The owner configures Forgejo branch protection; the proposed check below must
+become required when delivered. Task 1 remains unchecked pending full review.
+
+The governing rule is:
+
+> Host tests must validate filesystem behavior, documented invariants, corruption
+> handling and recovery semantics, not duplicate incidental implementation details
+> or current on-disk fixture contents. Prefer small synthetic fixtures and assert
+> only properties that are part of the filesystem contract. Implementation refactors
+> or harmless fixture/layout changes should not require broad test rewrites.
+>
+> Exact bytes and offsets are appropriate assertions when specified by the disk
+> format. Expected results must be independently defined: agreement between our
+> writer, reader and checker alone is insufficient.
+
+Tests land with the behavior they exercise. A bug fix includes a focused regression
+case; a contract change updates its documented expectations in the same PR. Do not
+postpone the suite until milestone closure, preserve accidental behavior as a
+fixture requirement, or weaken an invariant assertion merely to pass a refactor.
+
+### Proposed small host setup in pyxis-fs
+
+Propose [Unity](https://www.throwtheswitch.org/unity) for assertions, per-case
+setup/teardown and result reporting, with a small `tests/` entry point and focused
+case/support files linked to the same `libpyxis-fs.a` built by the ordinary Makefile.
+Unity's core is one C source and two headers and integrates directly with Make;
+we need not maintain our own assertion/reporting framework. This framework choice
+remains a proposal, separate from the agreed requirement to maintain tests.
+[cmocka](https://cmocka.org/) is a viable alternative with built-in mocking and
+additional report formats, but those facilities are not needed for this setup.
+
+When implemented, vendor Unity's small required source subset under
+`third_party/unity/` in pyxis-fs, pin a reviewed upstream release/commit and retain
+its MIT license/provenance and upstream formatting. Record any local changes; no
+floating checkout or dependency download during a test run. Compile it only into
+the host test executable. Core sources keep their freestanding flags and production
+headers/binaries gain no Unity dependency. The core is linked normally, not rebuilt
+with fault switches. No Ceedling/CMock, generated mocks, Ruby tooling, new build
+system or reusable framework wrapper is proposed.
+
+Keep only filesystem-specific support ours: synthetic fixtures, independent expected
+state, the callback adapter, bounded traces and a short explicit case/suite list.
+Use Unity's assertions and case reporting directly. Group cases by contract
+(format/corruption, operations/authority/lifetime, admission/recovery), not by a
+mirror of core source files or every private helper. Teardown must own the scratch
+files and core handles even when an assertion aborts a case. Callback adapters
+record violations and return through the normal core call before the test asserts;
+do not let an assertion jump out through an active core operation and bypass its
+unwinding. Convert test failures
+or ignored cases to a reliable nonzero process result; do not allow a large failure
+count to wrap the shell exit status to success. No second assertion layer, discovery
+system, plugin layer or separate filesystem implementation.
+
+Use ordinary core interfaces wherever available. Before public mutation exists,
+private editor/planner entry points may be exercised for their documented input,
+result and resource invariants; do not export test-only production APIs or assert
+private structure layouts. No mock writer, allocator algorithm or checker replaces
+the real code being tested. The bounded failure adapter below is shared support in
+this runner, replacing the separately proposed manual failure utility. Extended
+campaigns use that same runner, fixtures, independent oracles and adapter.
+
+All failure controls stay in test-owned implementations of the existing platform
+callbacks: exact block I/O, flush, memory allocation and randomness where supplied.
+There are no production fault switches, injected branches or kernel hooks. Supply
+fixed test identities/data and bounded allocation caps; do not replace production
+randomness or allocation policy outside the harness. Count actual allocations and
+I/O ranges only to check documented bounds, ownership or protocol ordering, not
+an incidental exact allocation sequence.
+
+Construct small synthetic images afresh in private temporary directories. Respect
+format geometry and formatter floors: a 64 MiB sparse logical image with a few
+populated blocks is a small fixture, not a claim that a smaller unsupported volume
+is valid. Use bounded disk-backed state for larger cases and delete successful
+scratch files; retain only failing case metadata, traces and bounded reproducer
+artifacts. Cases have isolated state, fixed seeds and no wall-clock/random-host
+input dependence. No root privileges, mounts, QEMU, network or qualified XFS device
+are prerequisites for the core suite. Its simulated durable state is defined
+relative to simulated cuts, not actual host power loss.
+
+### Independent expectations and coverage
+
+Define the expected namespace, identities, granted rights, file lengths and bytes
+in each scenario before invoking the implementation. A small list of objects and
+expected byte arrays/ranges suffices; ordinary host files can hold larger payloads.
+Update expected state from the scenario's operations and declared commit boundaries,
+not by asking the core what it wrote. Compare complete relevant payloads and state,
+including permitted alternatives after uncertainty. Writer/reader/checker agreement
+is useful additional evidence, never the sole oracle.
+
+Use a few independently authored format vectors for specified magic, endianness,
+field offsets, checksums and record/reference encodings. Generated valid fixtures
+may use core construction, but independent expectations must still catch mutually
+consistent writer/reader mistakes. Targeted malformed cases change specified fields;
+where a deeper invariant is under test, maintain a valid enclosing checksum so an
+earlier checksum rejection does not falsely satisfy the case. Keep checksum known
+answers/reference calculation and mutation offsets independent of the encoder under
+test. Do not freeze whole populated images, allocator placements, split choices,
+exact tree shapes, private arena layouts, diagnostic wording or raw event ordinals
+as golden outputs. Discover referenced blocks through format-defined references
+when a scenario needs a particular role; the assertion is the resulting contract.
+
+| Contract area | Small cases required as that behavior lands |
+| --- | --- |
+| Ordinary operations | Open/read/list; create, write and resize with holes, partial blocks, old-EOF zeroing and multi-block/partial progress; rename/replacement and checkpoint; expected bytes, length, identity and namespace after reopen. |
+| Authority and lifetime | Denied operations leave state unchanged; held rights do not widen; extending writes require resize before any progress; explicit checkpoint rights; retain/unlink/name reuse; detached empty directories; last-reference cleanup and live continuation invalidation. |
+| Malformed and unsupported input | Invalid checksums, lengths, alignment, bounds/overflow, keys/references, cycles, namespace/orphan relations and live-allocation overlaps; incompatible retained claims, torn/degraded peers, unknown rights/features. Assert the documented corruption/unsupported/limit outcome, incomplete validation where required, and absence of unauthorized writes. |
+| Admission and funded cleanup | At and below quota/profile/workspace/memory/generation requirements, including formatter floors and protected deletion capacity. Refusal occurs before admission; admitted mutation and final orphan release finish their funded drains without new application work. Unexpected resource refusal during drain fails the test. |
+| Publication and recovery | Before/after each protocol phase, selected short/torn writes and failed flushes, confirmed partial progress, unknown additional progress, pre-publication read availability, post-uncertainty access stop, post-commit cleanup failure and no implicit retry. Include cache-visible nonpending writes, qualified/unqualified recovery boundaries and both retained payloads while they differ. |
+| Namespace/editor invariants | Small variable-length split/merge/redistribution/root cases and formatter tails; preserved ordering, byte fit and admitted occupancy; upper bounds on new/retired nodes rather than one mandated shape. Check writable admission against both retained states. |
+
+For corruption cases isolate the intended defect, or assert only the documented
+set of outcomes if the contract permits more than one first failure. Check output
+and ownership/lifetime behavior on failure, not just a nonzero status. Add bounded
+memory-callback failure cases before admission and verify teardown; once an admitted
+drain starts, the promised arena must suffice without further allocation requests.
+No test should equate safe resource refusal during that drain with success.
+
+### Commands, per-PR gate and extended campaigns
+
+The following names are a proposed command contract in the `pyxis-fs` repository;
+they do not exist at the pinned revision and are not implemented by this PR:
+
+| Command, run from pyxis-fs | Purpose and limit |
+| --- | --- |
+| `make -j16` | Preserve the ordinary freestanding core archive and host tools build. |
+| `make check` | Build/run `build/pyxis-fs-tests --suite pr`: deterministic small contract cases and the bounded failure scenarios required for implemented behavior, including both retained payloads. This is the every-PR gate. |
+| `make check-extended` | Build/run the same runner with `--suite extended --seed 1`: longer reuse/retained-orphan histories, near-maximum depth/count pressure, broader deterministic cut/promotion combinations and adversarial namespace shapes. No exhaustive-failure claim. |
+| `build/pyxis-fs-tests --suite workload --profile recovery --seed 1` | The documented populated 4 GiB history with streaming expected contents and resource accounting; run after building the runner with `make check`. |
+| `build/pyxis-fs-tests --suite workload --profile development --seed 1` | The populated 64 GiB / proposed 8 GiB RAM development workload. Explicitly provision its disk, memory and time budget. |
+| `build/pyxis-fs-tests --suite workload --profile physical --seed 1` | The representative 256 GiB / 32 GiB RAM profile on host storage. This exercises capacity/history, not native NVMe or device recovery qualification. |
+
+Keep `make check` small: fixed cases/seeds, bounded operation counts and temporary
+storage, with a design target below one minute of test execution on the configured
+CI runner, excluding compilation. Measure this when first delivered; no runtime
+is claimed now. Propose a five-minute CI job timeout, with timeout or infrastructure
+failure failing the check. Do not hide missing assertions or skip mandatory recovery
+cases to meet a time target. Large populations and broad campaigns belong in the
+explicit commands above; the small suite still covers each implemented contract
+category and representative resource/recovery boundaries on every PR.
+
+Add a Forgejo workflow in `pyxis-fs` with workflow name `Filesystem` and job ID/name
+`host-contract`, running the ordinary `make -j16` and `make check` on every PR and
+main update. Do not apply path filters that can omit the merge gate. Build from the
+submitted revision with the supported GNU C23 host compiler, without rebuilding
+the compiler container. Zero executed cases, unexpected skips, mismatches, crashes,
+timeouts or infrastructure errors must not produce success. Initially register
+only behavior actually implemented; do not add passing placeholders for future
+tasks. Record the executed case list/count so scope remains reviewable as it grows.
+
+The owner should require **`Filesystem / host-contract (pull_request)`** in Forgejo
+branch protection after the workflow lands, confirming the emitted context matches
+that name. Require a successful run for the exact candidate revision; a successful
+older run or parent-only build is insufficient. This document does not configure
+branch protection, and the current Pyxis `Build Pyxis / build` check is not the new
+filesystem test gate. Workflow/tests land in `pyxis-fs` before its parent pin update.
+The parent pin PR also checks the dependency's exact revision and ordinary integrated
+build status. No duplicate suite or general orchestration service in the parent.
+
+Extended runs are explicitly invoked rather than a second mandatory per-PR gate.
+Require relevant campaigns before closing the milestone and when a change affects
+their resource bounds or recovery coverage; report commands, exact revisions,
+profiles, elapsed time and coverage. Publish named failing cases, seed, selected
+cut, confirmed outcome/health and bounded traces for reproduction. Choose cuts by
+protocol phase/block role using the callback trace, not a saved ordinal from a
+previous allocator layout. Event numbers are diagnostics. Do not enumerate every
+callback combination in the quick gate or claim that the extended set is exhaustive.
+
+### What a passing suite establishes
+
+Passing establishes agreement with independently specified expected behavior for
+the executed fixtures, bounds and modeled failures at that revision. It provides
+maintained regression evidence for the shared core, including the exercised retained
+payloads. It does not prove all trees, write histories, schedules or failures; replace
+neither the admission/editor proofs nor review with a green check. Structural checking
+alone still does not authenticate file data.
+
+It does not qualify Linux direct-I/O fallback behavior, host filesystem/device cache
+semantics, physical power-loss recovery, performance or production-data safety. The
+simulator's declared durability boundary is an input assumption. Ordinary host-tool
+use, freestanding compilation and the existing parent kernel build remain necessary;
+host libc linkage of the runner must not leak into the core. Target cross-compilation
+continues through the parent integration using the pinned dependency. Later native
+writable adapters still require guest/QEMU and appropriate device validation in
+the native-persistence milestone. This host-test decision does not add kernel
+self-tests or substitute for that eventual guest evidence.
+
 ## Proposed host failure-validation model
 
-The owner authorized bounded host crash/failure validation for this milestone.
-The concrete mechanism below is proposed for review, not implemented here. Use
-one explicitly invoked host utility linked to the real shared core, with a fixed
-scenario table and a failure adapter at the existing exact I/O callbacks. No
-kernel probes, production failure switches, general test framework or CI/boot
-integration. The normal host writer uses actual exact writes and `fsync`.
+Integrate this bounded model into the maintained host runner above, linked to the
+real shared core. Keep one fixed scenario table and one test-owned adapter at the
+existing exact I/O callbacks, reused by quick and extended runs. No standalone
+parallel validation implementation, production failure switches or kernel probes.
+The normal host writer continues to use its actual qualified I/O and durability
+operations. The mechanism below remains proposed, not implemented here.
 
 The simulation uses a sparse durable image and a separate disk-backed volatile
 write log. A log record contains block range, payload, pending/cache-only state
@@ -1608,9 +1803,9 @@ read-only extraction separately.
 For at least one overwrite/reuse history, quiesce after confirmed user publication
 and before retained-root advancement, while old/new roots name different expected
 bytes. Use the failure adapter to stop before the first maintenance write
-transfers anything, then close the stopped core without writes; the utility owns
+transfers anything, then close the stopped core without writes; the runner owns
 the quiescent image throughout. Independently compare every expected file of both
-retained states on that unchanged image. A utility-only read adapter may mask the newer slot to select the
+retained states on that unchanged image. A test-only read adapter may mask the newer slot to select the
 older root through the existing degraded read-only path; it changes no image bytes
 or production interface and does not claim that masked view is a clean two-slot
 pool. Validate the original two-slot image separately. Resume maintenance through
@@ -1638,8 +1833,8 @@ does not checksum file payloads; selected-state extraction does not prove payloa
 of every retained state. This model establishes only exercised serial failures,
 not exhaustive scheduling, actual-device power loss, performance or production-data
 safety. Keep ordinary host builds/manual operations and freestanding target
-compilation alongside this scoped utility. No validation execution is claimed by
-this specification.
+compilation alongside the maintained suite. Neither this suite nor its CI gate
+is implemented or run by this specification revision.
 
 ## Proposed delivery boundaries and review closure
 
@@ -1648,26 +1843,41 @@ is the parent milestone's review contract. Publish dependency commits and PRs
 before a separate Pyxis pin/checklist update, and state merge order. No compiler
 container rebuild, userspace port, native writable mount or FUSE work is implied.
 
-1. Task 2: private COW tree/map planners, the fixed envelopes, bounded arena and
-   canonical codecs/checker support needed by the proposed representation. Keep
-   the public product read-only; no usable writer without admission/reclamation.
+1. Task 2: private COW tree/map planners, fixed envelopes, bounded arena and
+   canonical codecs/checker support. Land the small runner, synthetic-fixture and
+   independent-oracle support, `make check` and the filesystem CI workflow in this
+   PR, including the accepted framework dependency and its license/provenance,
+   with a small existing read-only/format/authority baseline and contract cases
+   for the new editors, encoding, occupancy and bounds. Keep the public product
+   read-only; no usable writer without admission/reclamation. The owner makes the
+   emitted host-contract check required. No empty or future-behavior placeholders.
 2. Tasks 3 and 4 together: exclusive writable open, validation summaries, ordered
    publisher, workspace/permanent/profile admission, drain and recovery. Combine
-   these into one implementation PR because publication without its resource and
-   reuse guarantees would be an unsafe intermediate interface. A real host
-   checkpoint/reopen command accompanies the narrowly scoped utility. Its internal
-   unchanged-state maintenance scenario must call the real admitted publisher to
-   exercise replacement and reuse; a clean checkpoint barrier alone does not.
-   Add no fake file mutation commands or public intermediate transaction API.
-   Until task 6 supplies orphan cleanup, refuse writable opening of a nonempty
-   orphan index before any writes; never pretend startup cleanup succeeded.
+   these into one implementation PR because publication without resource and reuse
+   guarantees is unsafe. Add the bounded failure adapter to the same runner and
+   gate representative publication/recovery, corruption, resource-boundary and
+   funded-drain cases immediately. Use a small synthetic retained-data fixture and
+   the real admitted publisher to replace/reuse a range and compare both retained
+   payloads without needing a public file-write API; a no-op checkpoint is not
+   evidence of publication. A real host checkpoint/reopen command remains separate
+   from test controls. Add no fake file mutations or public test transaction API.
+   Until task 6 supplies orphan cleanup, refuse nonempty orphan indexes before
+   writes and test that refusal; never pretend startup cleanup succeeded.
 3. Task 5: file create/write/resize, creation-time directory serial updates,
-   old-EOF zeroing and partial results, with the corresponding host content and
-   failure scenarios.
+   old-EOF zeroing and partial results. Land their ordinary, rights, multi-block,
+   partial-progress, content and failure tests in this same PR; exercise older
+   retained payloads again through public overwrite/shrink operations. Add the
+   relevant large sequential/small-write workload cases to the shared runner.
 4. Task 6: directory/remove/rename, retained authority, live continuation changes
-   and orphan cleanup/reopening; enable the remaining concrete scenarios.
-5. Task 7: combined sustained reuse, pressure and failure evidence, documentation
-   closure and accepted limits. This does not reopen native persistence scope.
+   and orphan cleanup/reopening. Land namespace/retained-handle/deletion-headroom,
+   final orphan release, funded recovery and malformed orphan tests with these
+   operations. Expand quick coverage and the same extended scenario table; no
+   second orphan/crash harness.
+5. Task 7: run and record combined extended pressure, populated-workload and failure
+   campaigns, close remaining coverage gaps and document measured costs/limits.
+   The required quick CI gate already exists and remains maintained after closure;
+   this is not the task that first adds tests. Preserve independent host builds,
+   target compilation and later native-persistence guest validation.
 
 Full review must accept the proposed workload profiles/options, deletion capacity
 reservation, host adapter/backing qualification, concrete representations/interfaces
@@ -1675,7 +1885,10 @@ and exact failure model. Whole-map rebuilding is accepted only as the initial
 correctness approach. The profile choices are not accepted product defaults.
 The proofs above depend on enforced editor and representation bounds; implementation
 review must check those invariants, and any violation requires correcting the
-bound or design before delivery. Passing host scenarios alone is not their proof.
+bound or design before delivery. Passing host tests alone is not their proof.
+The maintained-test/CI requirement and contract-based assertion rule are agreed;
+the Unity dependency, runner, command names, gate naming and coverage split above
+are proposed.
 The stronger removable namespace profile, its tighter deletion reservation and
 the proposed direct-I/O backing/workload profiles remain explicit review items; the
 six-entry rule has been analyzed here, not accepted or implemented. Do not treat
@@ -1692,27 +1905,33 @@ Acceptance closes task 1; implementation still requires the next task to be assi
 2. [ ] **Implement bounded COW tree and allocation updates.** Add the required
    index edits, path replacement/splitting and allocation-map accounting, including
    its own replacement blocks. Keep uncommitted changes private and unwind
-   failures without modifying a published tree.
+   failures without modifying a published tree. Deliver the maintained runner,
+   initial contract tests and per-PR filesystem CI gate alongside these changes.
 3. [ ] **Implement publication and reopening.** Add exact writes/flushes through
    the platform adapter, ordered two-slot publication, checkpointing and reopening
    of supported committed states. Stop ordinary access on uncertain outcomes. Provide
    only the small host command surface needed to exercise shared-core operations.
+   Integrate the shared test failure adapter and gate publication/recovery behavior.
 4. [ ] **Implement safe reclamation and enforce admission.** Protect retained
    roots and live operations, durably publish freed ranges before reuse, and
    enforce volume/pool/workspace limits. Demonstrate repeated reuse, not just
-   monotonically growing allocations.
+   monotonically growing allocations. Add admission, funded-drain and independently
+   expected retained-payload tests with this behavior, including pre-file-API cases.
 5. [ ] **Implement file mutation.** Create, write and resize with authority
    checks, parent-controlled ownership, sparse/fragmented data, coherent live
    reads and explicit partial-progress/error semantics. Exercise durable reopen
-   and byte-for-byte extraction against expected contents.
+   and byte-for-byte extraction against independent expected contents, with
+   maintained operation, authority and failure tests in the same PR.
 6. [ ] **Implement namespace changes and orphan lifetime.** Add directories,
    removal and same-volume regular-file rename/replacement. Preserve identities,
    enforce source/destination rights, retain unlinked objects and recover their
    abandoned storage after restart. Rename publishes the old or new namespace,
-   never a half-applied move.
+   never a half-applied move. Deliver retained-handle, deletion-reservation and
+   final-orphan-release/recovery tests with these operations.
 7. [ ] **Validate the combined writer and close the milestone.** Exercise
    repeated edits, quota/workspace pressure, retained handles, orphan recovery,
    fragmented/sparse files and the agreed interruption cases. Reopen, extract,
-   compare contents and check both retained states. Record coverage and limits;
+   compare contents and check both retained states. Run the extended and populated
+   workload commands; retain the already-required per-PR suite. Record coverage and limits;
    convert this document to an implemented reference and carry remaining work
    forward without claiming native mounting, FUSE or production-data safety.

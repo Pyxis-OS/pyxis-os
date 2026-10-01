@@ -119,8 +119,10 @@ information and Fastfetch Disk. Combined validation covers source-content reads,
 retained rights, repeated operations, final cleanup and unchanged media.
 The agreed storage continuation is [writable core and recovery](writable-filesystem-core.md),
 then [native persistent volumes](native-persistent-volumes.md). The first task
-settles bounded publication/reclamation, live handles, admission and the scoped
-host failure-validation mechanism. FUSE and installation remain separate. These
+settles bounded publication/reclamation, live handles, admission and maintained
+host contract tests with a per-filesystem-PR CI merge gate. Tests and the bounded
+failure adapter land with their behavior in pyxis-fs; task 1 remains under review.
+FUSE and installation remain separate. These
 plans do not start implementation or displace explicitly assigned libc/remote work.
 
 The [libc input read-ahead milestone](../userland/stdio.md#input-read-ahead) is

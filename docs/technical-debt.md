@@ -871,6 +871,14 @@ Accept a concrete backend contract or leave real-host post-error recovery unsupp
 no automatic repair, force-clear or uncertain-mutation retry. Revisit broader host
 support only with source and backing evidence, not a successful flush experiment.
 
+The filesystem-only scope now requires maintained host contract tests and a CI
+merge gate. The proposed Unity-based host runner incorporates the bounded failure
+adapter and independent content/format expectations; neither tests nor that gate
+exist yet. They land incrementally with implementation, with larger pressure and
+failure campaigns separate from the quick per-PR suite. Passing modeled cases does
+not establish host/device recovery, exhaustive correctness or native guest behavior;
+retain the proofs, ordinary/freestanding builds and eventual guest validation.
+
 ## Filesystem host prototype limits
 
 The host-image tools record prototype reserve defaults, but no writable
