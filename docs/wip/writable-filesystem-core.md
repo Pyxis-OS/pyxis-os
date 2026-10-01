@@ -3,9 +3,11 @@
 Status: task-1 design accepted, 2026-10-01, against `pyxis-fs` commit
 `82cc242b3d9773d21c0f7e7a71ec9ca9ccb937ed`. The policy, concrete mechanisms,
 bounds and validation plan below are accepted as the implementation contract.
-No writable implementation or execution of the planned validation suite is claimed.
-Implementation proceeds one explicitly assigned task at a time; design acceptance
-does not start it.
+Task 2 now implements private COW tree/map planners, canonical/orphan codecs and
+checker support, formatter namespace packing, and the initial maintained Unity
+suite in the pinned `pyxis-fs` dependency. Public operations remain read-only;
+publication, writable admission, funded drain and recovery are not implemented.
+Implementation proceeds one explicitly assigned task at a time.
 
 Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-ownership),
 [persistent additions](#agreed-persistent-additions-and-supported-media),
@@ -15,7 +17,7 @@ Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-owner
 [host tests](#agreed-maintained-host-tests-and-ci),
 [failure model](#agreed-host-failure-validation-model) and
 [delivery boundaries](#agreed-delivery-boundaries-and-design-acceptance). Task 1 is
-complete. No code, format bytes or dependency pin changes in this documentation PR.
+complete; task 2 is delivered by the dependency and pin PRs below.
 
 The revised requirements include bounded multi-block writes, deletion capacity
 protected from ordinary growth, durable-state recovery evidence after writeback
@@ -879,8 +881,7 @@ It changes neither read semantics nor authority; no occupancy feature bit or
 version bump is needed. The specified ORPHANS feature remains required
 for orphan records. Formatter/editor changes and their validation belong to the
 task 2 pyxis-fs implementation PR, including short-tail packing and its contract
-tests; profile/headroom enforcement joins tasks 3/4. None is implemented by this
-documentation revision.
+tests, now delivered; profile/headroom enforcement remains tasks 3/4.
 
 Set hard per-batch limits `V = 128` new volume blocks and `D = 256` retired volume
 blocks, including both data and metadata. Pool map/root/catalog blocks have their
@@ -1892,19 +1893,33 @@ The profile examples are not product defaults or measured capacity guarantees.
 The proofs depend on enforced editor and representation bounds; implementation
 review must check those invariants, and any violation requires correcting the
 bound or design before delivery. Passing host tests alone is not their proof.
-Implementation still requires the next task to be assigned.
+Tasks 3/4 remain a joint delivery boundary and require the next assignment.
 
 ## Focused tasks
 
 1. [x] **Accept the consolidated writable contract.** Accepted policy, concrete
    mechanisms, numerical bounds, failure model and delivery boundaries are
    specified above. No writable implementation is claimed.
-2. [ ] **Implement bounded COW tree and allocation updates.** Add the required
+2. [x] **Implement bounded COW tree and allocation updates.** Add the required
    index edits, path replacement/splitting and allocation-map accounting, including
    its own replacement blocks. Keep uncommitted changes private and unwind
    failures without modifying a published tree. Deliver the maintained runner,
    initial contract tests and per-PR filesystem CI gate alongside these changes.
    Include formatter namespace tail packing/root repair and boundary cases.
+   Delivered in [pyxis-fs #11](https://git.internal/PyxisOS/pyxis-fs/pulls/11); see
+   [implemented planners](../../fs/docs/core.md#private-candidate-planning) and [maintained test coverage](../../fs/docs/testing.md).
+   The emitted required-check pattern in `pyxis-fs` is
+   `Filesystem / host-contract (pull_request)`; the owner configures branch protection.
+   Pyxis also runs the pinned dependency's host build and suite inside its required
+   `Build Pyxis / build (pull_request)` check, so a failing filesystem pin fails
+   the parent PR check.
+   All 32 test groups pass, including independent expected payload/format checks,
+   variable-length occupancy repair, extent successor and new-split adjacency
+   checks, and inconsistent-delta versus corrupt-base error classification.
+   Ordinary host/target and parent kernel builds pass; the same suite passes under
+   ASan/UBSan. No publication/failure-simulator or guest validation is claimed.
+   [Writer stack usage](../technical-debt.md#writable-filesystem-kernel-stack-prerequisite)
+   must be resolved before native writable integration; its refactor is deferred.
 3. [ ] **Implement publication and reopening.** Add exact writes/flushes through
    the platform adapter, ordered two-slot publication, checkpointing and reopening
    of supported committed states. Stop ordinary access on uncertain outcomes. Provide
