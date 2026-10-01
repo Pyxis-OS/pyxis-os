@@ -2003,8 +2003,9 @@ task 7 requires the next assignment.
    [Task-6 coverage](../../fs/docs/testing.md#task-6-namespace-and-orphan-validation)
    records the bounded scenarios and healthy host extraction checks. Larger combined
    campaigns remain task 7; real-host interrupted-session recovery remains unqualified.
-   The parent changes only read-only close-result consumers; the writer is not
-   kernel-linked and the stack prerequisite remains deferred.
+   The parent updates read-only close-result consumers and defensively handles
+   the new writer-only status; the writer is not kernel-linked and the stack
+   prerequisite remains deferred.
 7. [ ] **Validate the combined writer and close the milestone.** Exercise
    repeated edits, quota/workspace pressure, retained handles, orphan recovery,
    fragmented/sparse files and the agreed interruption cases. Reopen, extract,
