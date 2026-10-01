@@ -172,9 +172,9 @@ checkpoint ahead of persistent ownership and broader sharing decisions; do not
 leave it as account UI to bolt on after those interfaces are fixed.
 
 [Credentials and biometric unlock](credentials-and-biometrics.md) parks fingerprint
-login and a Pyxis-wide credential store. The master key is sealed in the TPM to a
-boot measurement, a password or PIN is the root factor, and biometrics only gate
-use after a root-factor unlock. It follows local users, USB and a TPM driver.
+login and a Pyxis-wide credential store. The master key is sealed in the TPM under
+a measured-boot policy, a password or PIN is the root factor, and biometrics only
+gate use after a root-factor unlock. It follows local users, USB and a TPM driver.
 
 ## Persistent storage and installation
 

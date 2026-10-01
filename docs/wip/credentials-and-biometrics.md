@@ -13,8 +13,10 @@ The goal is biometric login on the first hardware target, the ThinkPad T14 Gen 1
 - The credential store is encrypted with a random master key. Keys are never
   derived from biometric data: fingerprints are not secret, cannot be changed
   after compromise, and every scan differs.
-- The TPM seals the master key to a measurement of the booted system. A different
-  boot chain or modified image cannot unseal it.
+- The TPM seals the master key under a measured-boot policy. Unsealing requires
+  the configured authentication and an approved measured-boot state; authorized
+  updates may introduce new approved measurements. The guarantee covers only
+  what the boot chain actually measures.
 - A password or PIN is the root factor. The first unlock after boot always uses
   it.
 - Biometrics are a convenience gate after a root-factor unlock. A fingerprint
@@ -55,20 +57,29 @@ Everything in this section is open for review.
 
 ### Sensor trust
 
-- The T14's reader is expected to be a Synaptics match-on-chip USB sensor
-  (vendor `06cb`); confirm from the hardware inventory. Templates and matching
-  stay on the sensor; the host receives only "enrolled finger N matched" or "no
-  match". Pyxis never handles fingerprint images.
+The following are investigation leads, not established properties of this
+laptop. They depend on the actual sensor, its firmware and its configuration.
+
+- The T14's reader may be a Synaptics match-on-chip USB sensor (vendor `06cb`);
+  confirm the device from the hardware inventory. If it is match-on-chip,
+  templates and matching stay on the sensor and the host receives only a match
+  result for an enrolled template, so Pyxis would never handle fingerprint
+  images.
 - A sensor's answer is only as trustworthy as the channel. Without an
   authenticated host–sensor channel, a device impersonating the sensor over USB
   could report a match. Design for an authenticated, encrypted channel from the
-  start, such as Microsoft's Secure Device Connection Protocol (SDCP), which these
-  sensors implement. Published research has bypassed readers that did not enforce
-  it.
+  start. Determine whether this sensor supports Microsoft's Secure Device
+  Connection Protocol (SDCP) and whether its firmware enables it. Published
+  research on a Synaptics ThinkPad T14s reader found SDCP supported but shipped
+  disabled, with a custom TLS channel used instead, which the researchers broke:
+  [A Touch of Pwn](https://blackwinghq.com/blog/posts/a-touch-of-pwn-part-i/).
 - Sensor template storage is shared with any other operating system on the
-  machine. Pyxis records which template IDs it enrolled and for which principal,
-  and ignores other enrollments.
-- libfprint contains a reverse-engineered driver for these sensors. It is
+  machine. Recording which template IDs Pyxis enrolled does not establish
+  ownership: another OS or a compromised enrollment interface can replace a
+  fingerprint while keeping its ID. The same research did exactly that, enrolling
+  an attacker's fingerprint under a legitimate user's template ID. Authenticated
+  enrollment ownership is an unresolved requirement.
+- libfprint may contain a reverse-engineered driver for the sensor. It is
   LGPL-licensed; decide deliberately whether to use it as reference only or to
   port it.
 
