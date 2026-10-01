@@ -831,7 +831,8 @@ The [writable-core milestone](wip/writable-filesystem-core.md) accepts whole-map
 rebuilding for every publication as the first correctness implementation, not the
 final allocation strategy or desired performance; it also accepts partial large
 shrinks. Tasks 2–4 implement the private whole-map planner, admitted publisher
-and synchronous funded drain; task 5 adds public file writes and large shrinks.
+and synchronous funded drain; task 5 adds public file writes and large shrinks,
+and task 6 adds namespace mutation and orphan cleanup.
 Rebuilding can write a pool-wide metadata map
 three times per small user batch, causing substantial write amplification. Measure
 metadata bytes written per useful data byte, latency and throughput on populated
@@ -852,8 +853,8 @@ now measures small populated/history cases: 64 separately committed 4 KiB append
 wrote 25.625 metadata bytes per useful byte including maintenance, versus 0.286
 for sixteen 256 KiB sequential requests in that particular history. These are
 simulator-backed host observations, not device or guest latency guarantees.
-The new file planner also scans admitted claims and copies a 581,272-byte staging
-checkpoint per attempted block; its complete workspace fits the already reserved
+The file planner also scans admitted claims and copies a staging checkpoint
+(581,272 bytes measured at task 5) per attempted block; its complete workspace fits the already reserved
 scratch. Revisit these CPU costs alongside map/allocation policy when task-7
 larger workloads establish the next performance target. No optimization or stack
 refactor follows merely from recording these costs.
@@ -880,8 +881,11 @@ The stronger profile funds bounded variable-key splits without a structural-limi
 deletion refusal; existing underfilled namespace trees may remain
 read-only until explicitly reformatted/reimported. Formatter packing and editor
 changes are implemented with contract tests in task 2; writable admission
-and deletion funding are enforced by tasks 3/4 admission. Actual deletion/orphan
-operations and their final-release resource tests remain task 6. Funded-drain resource
+and deletion funding are enforced by tasks 3/4 admission. Task 6 implements
+deletion/orphan operations, allocation-free final-release/startup cleanup and
+resource-boundary tests. Last release and startup can require many synchronous
+bounded publications; linear runtime-identity lookup adds cost as live handle
+populations grow. Revisit those costs in the combined task-7 workloads. Funded-drain resource
 exhaustion is an invariant failure, not an accepted limitation. The read-only
 format's maxima and formatter reserve defaults do not promise writable admission.
 Revisit capacity and memory costs with populated workloads and implementation
