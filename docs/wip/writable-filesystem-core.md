@@ -613,6 +613,18 @@ recovery guarantees. This is a target to investigate and measure, not a claim
 that the current writer meets it or a promise to win every operation. Establish
 workload-specific acceptance budgets during the corrective design task.
 
+Efficiency work may land through several small, independently useful PRs; no
+single change must reach the final target. A measured reduction from roughly
+826 to 413 metadata bytes per useful byte would be worthwhile progress even
+though the remaining cost still blocks deployment. Select bounded changes from
+the measured breakdown, validate the affected correctness/admission obligations,
+and record matched before/after results for each. Retain cumulative measurements
+so improvements are not lost or credited twice. Final milestone acceptance is
+separate from accepting an intermediate improvement: keep the blocker until the
+agreed budgets are met. Do not combine unrelated optimizations into a large
+rewrite or require the complete replacement design before landing a correction
+that preserves the existing contract and has independently justified bounds.
+
 Compare matched durability boundaries and report any differences in recovery
 semantics explicitly. Measure small synchronous operations separately from
 batched workloads, include final checkpoint/reclamation/compaction writes, and
@@ -2158,7 +2170,7 @@ this documentation update.
    This validates the exact recovery history, not all fragmentation or the larger
    profiles; task 7 remains unchecked.
 
-   **Remaining corrective steps (each a focused task/PR):**
+   **Remaining corrective steps (each may span multiple focused PRs):**
 
    - [ ] **RAM-only validation and comparative baseline.** Audit images, recovery
      logs, temporary copies and extraction outputs before running write-heavy
@@ -2204,6 +2216,11 @@ this documentation update.
      including reclamation. Assert documented bounds with headroom, not exact
      incidental tree layouts or write counts. Whole-map work must not merely move
      from user publication into cleanup.
+     Split delivery into independently reviewable, measured improvements rather
+     than waiting for one change to achieve the final efficiency target. Smaller
+     improvements may precede the full map replacement where their bounds and
+     recovery obligations are established. Each PR records what cost remains;
+     merging it does not imply that the deployment blocker is resolved.
 
    - [ ] **Repeat measurements and complete acceptance.** Run matched RAM-only
      before/after workloads and remaining recovery/pressure coverage. Record the
