@@ -853,6 +853,14 @@ now measures small populated/history cases: 64 separately committed 4 KiB append
 wrote 25.625 metadata bytes per useful byte including maintenance, versus 0.286
 for sixteen 256 KiB sequential requests in that particular history. These are
 simulator-backed host observations, not device or guest latency guarantees.
+The [task-7 populated recovery run](../fs/docs/testing.md#task-7-step-1-observations)
+adds a concrete unresolved capacity boundary: the E=8192 profile refuses after
+314.25 MiB of the requested 1 GiB sequential history, with 7397 new-file extents
+from 1257 calls. Confirmed contents survive durable reopen, but the full workload
+is not validated. User plus maintenance metadata costs 4.503232 bytes per useful
+byte through that prefix. Review allocation fragmentation and profile sizing before
+accepting workload capacity or advancing the larger profiles; this does not
+authorize increasing limits, reducing the workload or redesigning allocation.
 The file planner also scans admitted claims and copies a staging checkpoint
 (581,272 bytes measured at task 5) per attempted block; its complete workspace fits the already reserved
 scratch. Revisit these CPU costs alongside map/allocation policy when task-7

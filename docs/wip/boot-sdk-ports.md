@@ -126,8 +126,9 @@ failure adapter land with their behavior in pyxis-fs. The namespace profile, tig
 deletion reservation and Unity setup are accepted; real-host post-error recovery
 qualification is deferred. Tasks 1–6 are complete, including public file/namespace
 mutation, retained-handle lifetime, funded orphan cleanup and their maintained
-tests. Combined extended validation and milestone closure are the next separately
-assigned task.
+tests. Task 7 begins with the shared extended campaigns and populated 4 GiB
+recovery workload; the 64 GiB/256 GiB profiles and milestone closure remain later
+assignments. See the linked milestone for measured capacity limits and progress.
 FUSE and installation remain separate. These
 plans do not start implementation or displace explicitly assigned libc/remote work.
 

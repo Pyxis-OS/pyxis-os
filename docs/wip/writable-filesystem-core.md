@@ -1214,7 +1214,9 @@ Representative histories to validate, with independently expected bytes:
 
 - Small image: the source census, then a 1 GiB sequential file written in 256 KiB
   committed chunks (4096 additional extents in the contiguous case), plus 2000
-  separately committed 4 KiB appends. About 6886 mappings fit E; M must cover
+  separately committed 4 KiB appends. About 6886 mappings fit E only in the
+  contiguous model; the task-7 run below shows that the initial writer does not
+  complete this history under the E=8192/M=4096 profile. M must cover
   directory/orphan reservation and the resulting extent trees. This exercises
   real data and history within 4 GiB, rather than an empty sparse image.
 - Development image: twenty copies of that source population, 32 GiB of sequential
@@ -1595,17 +1597,20 @@ displacement with it, plus absent-destination and same-name cases.
 
 ### Commands, per-PR gate and extended campaigns
 
-The following names are the agreed command contract in the `pyxis-fs` repository;
-they do not exist at the pinned revision and are not implemented by this PR:
+The following names are the agreed command contract in the `pyxis-fs` repository.
+Ordinary builds, the quick gate, extended campaigns and the recovery workload are
+implemented. The development/physical profiles remain planned and the runner
+rejects them until delivered. Provision temporary storage as documented in
+[maintained testing](../../fs/docs/testing.md#extended-campaigns-and-recovery-workload).
 
 | Command, run from pyxis-fs | Purpose and limit |
 | --- | --- |
 | `make -j16` | Preserve the ordinary freestanding core archive and host tools build. |
 | `make check` | Build/run `build/pyxis-fs-tests --suite pr`: deterministic small contract cases and the bounded failure scenarios required for implemented behavior, including both retained payloads. This is the every-PR gate. |
 | `make check-extended` | Build/run the same runner with `--suite extended --seed 1`: longer reuse/retained-orphan histories, near-maximum depth/count pressure, broader deterministic cut/promotion combinations and adversarial namespace shapes. No exhaustive-failure claim. |
-| `build/pyxis-fs-tests --suite workload --profile recovery --seed 1` | The documented populated 4 GiB history with streaming expected contents and resource accounting; run after building the runner with `make check`. |
-| `build/pyxis-fs-tests --suite workload --profile development --seed 1` | The populated 64 GiB / 8 GiB RAM development validation workload. Explicitly provision its disk, memory and time budget. |
-| `build/pyxis-fs-tests --suite workload --profile physical --seed 1` | The representative 256 GiB / 32 GiB RAM profile on host storage. This exercises capacity/history, not native NVMe or device recovery qualification. |
+| `build/pyxis-fs-tests --suite workload --profile recovery --seed 1 --source PATH` | The documented populated 4 GiB history with streaming expected contents and resource accounting; run after building the runner with `make check`. |
+| `build/pyxis-fs-tests --suite workload --profile development --seed 1` | Planned: the populated 64 GiB / 8 GiB RAM development validation workload. Explicitly provision its disk, memory and time budget. |
+| `build/pyxis-fs-tests --suite workload --profile physical --seed 1` | Planned: the representative 256 GiB / 32 GiB RAM profile on host storage. This exercises capacity/history, not native NVMe or device recovery qualification. |
 
 Keep `make check` small: fixed cases/seeds, bounded operation counts and temporary
 storage, with a design target below one minute of test execution on the configured
@@ -1906,8 +1911,9 @@ The profile examples are not product defaults or measured capacity guarantees.
 The proofs depend on enforced editor and representation bounds; implementation
 review must check those invariants, and any violation requires correcting the
 bound or design before delivery. Passing host tests alone is not their proof.
-Tasks 3/4 were assigned and delivered together. Tasks 5/6 are delivered below;
-task 7 requires the next assignment.
+Tasks 3/4 were assigned and delivered together. Tasks 5/6 are delivered below.
+Task 7 is assigned in bounded steps: the first adds extended campaigns and runs the populated 4 GiB recovery profile. The
+64 GiB/256 GiB profiles and milestone closure require a later assignment.
 
 ## Focused tasks
 
@@ -2015,3 +2021,23 @@ task 7 requires the next assignment.
    workload commands; retain the already-required per-PR suite. Record coverage and limits;
    convert this document to an implemented reference and carry remaining work
    forward without claiming native mounting, FUSE or production-data safety.
+
+   **Step 1:** [pyxis-fs #15](https://git.internal/PyxisOS/pyxis-fs/pulls/15)
+   adds `make check-extended` and
+   `--suite workload --profile recovery --seed 1 --source PATH`. The quick
+   107-group `make check` remains the per-PR gate. The extended suite covers
+   variable-length names, a valid depth-eight namespace, retained replacements
+   and 432 selected publication/cleanup fault cuts. The recovery workload imports
+   the agreed 922-object source census and requests the full 1 GiB sequential plus
+   2000 separately committed 4 KiB append history, followed by bounded churn.
+   [Commands, coverage and observed limits](../../fs/docs/testing.md#extended-campaigns-and-recovery-workload)
+   distinguish editor pressure, full-volume admission and independent payload
+   expectations. The first recovery run refuses sequential call 1258 at
+   314.25 MiB confirmed, with 8187 extents against E=8192; the refused call confirms
+   no bytes and leaves the writer healthy. Durable reopen independently verifies
+   the full confirmed prefix and source census, with both retained states passing
+   structural checks. This is a failed full-workload validation, not an accepted
+   capacity guarantee: append/churn phases are not reached. Allocation fragmentation
+   and profile sizing need focused review before changing the workload or limits.
+   The 64 GiB/256 GiB runs, remaining coverage review and document
+   conversion are not delivered in this step; task 7 remains unchecked.
