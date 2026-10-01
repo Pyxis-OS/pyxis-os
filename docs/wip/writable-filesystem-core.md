@@ -1595,10 +1595,13 @@ correctness. Exact format assertions and deliberate scenario expectations remain
 appropriate; incidental defaults do not define correctness for other inputs.
 
 The launcher budgets are operational profile choices, separate from filesystem
-invariants. Their current duplicated ceilings are an identified
-[configuration-coupling limitation](../../fs/docs/ram-validation.md#contracts-and-execution-profiles).
-This standing constraint does not itself change runtime limits or authorize a
-broader cleanup; the focused budget-propagation correction remains to be assigned.
+invariants. The assigned focused correction removes the duplicate job-memory ceiling and
+workflow override: the local launcher or trusted CI runner provisions the budget,
+and guards verify a finite positive actual cap with zero swap. See
+[execution profiles](../../fs/docs/ram-validation.md#contracts-and-execution-profiles).
+The owner selected 16 GiB and capacity one for the shared CI runner; local
+benchmark provisioning and historical measurements retain 4 GiB. No automatic
+limit increases, allocator changes or broader cleanup are authorized.
 
 ### Agreed small host setup in pyxis-fs
 
@@ -2236,7 +2239,7 @@ this documentation update.
      This is a proposal, not approval to implement it or the allocator redesign.
      The matching rootless setup passes the quick suite locally, and its
      negative mode/storage checks preserve the heavier-suite boundary. The
-     filesystem jobs select the owner's dedicated `pyxis-fs-ram` runner and
+     filesystem jobs select the owner's `pyxis-fs-ram` runner label and
      [pre-created named tmpfs volume](../../fs/docs/ram-validation.md#named-volume-provisioning).
      The owner accepted exclusive runner ownership, capacity one and complete
      teardown between jobs. [CI run 577](https://git.internal/PyxisOS/pyxis-os/actions/runs/577)
@@ -2244,8 +2247,11 @@ this documentation update.
      all 111 groups passed with 2 GiB scratch, 65,536 inodes, a 4 GiB memory
      limit, zero swap/max/OOM events and a 314,847,232-byte memory peak.
      Every subsequent job still verifies its effective boundary before tests
-     execute. Ordinary image builds retain their existing runner and are outside
-     the filesystem job's resource cap. This completes the first corrective
+     execute. The owner subsequently selected one shared runner for both labels,
+     at capacity one and a 16 GiB memory budget. Both job types use its controls;
+     workflows no longer impose a competing memory setting. The guards require
+     a finite positive cap and zero swap, not the historical 4 GiB amount.
+     This completes the first corrective
      step only; task 7 and the writable-deployment blocker remain open.
 
      Begin with small reproducible Pyxis/ext4/Btrfs workloads on RAM-backed
