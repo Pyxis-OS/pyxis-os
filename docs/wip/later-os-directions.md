@@ -11,6 +11,52 @@ process replacement (`exec`) still needs its own resource and failure contract.
 Init supervision and restart policies remain deferred to the first web-server
 milestone; this does not commit to Unix PID 1 semantics.
 
+## Backend interfaces and scoped service dependencies
+
+Agreed direction to revisit later, not an implementation task. Finish the
+[writable filesystem core](writable-filesystem-core.md), then the
+[runtime SMP and independent spaces milestone](scheduling-and-threads.md).
+This idea adds no prerequisites or tasks to either milestone.
+
+Borrow explicit dependency wiring and scoped resolution from inversion of control
+and dependency injection. Launchers already supply capabilities, and FILE and
+DIRECTORY already define message contracts. HTTP/HTTPS providers implement FILE
+in userspace. Kernel filesystem wrappers still select backends through explicit
+backing kinds; a later implementation interface could reduce that repeated dispatch.
+
+Keep these responsibilities distinct:
+
+- Capabilities identify held resources and granted authority.
+- Protocols define operations, message layouts and result semantics.
+- Backend interfaces connect those operations to concrete implementations.
+- Namespaces and scoped resolvers select resources and return bounded grants.
+
+Prefer direct dependencies for required services: a filesystem adapter receives
+its block device; an HTTP provider receives networking, clock and trust resources.
+Pass a resolver when dynamic discovery is actually needed. The resolver itself
+must be a capability with bounded scope and delegation rights, never an ambient
+machine-wide service locator. Different spaces may resolve the same name to
+different providers. Supporting a protocol does not grant authority to invoke it.
+
+Init is a natural place to start providers, choose implementations, bind names and
+delegate dependencies to the session. Replacing a binding affects future resolution;
+existing handles retain their established identity and lifetime. Revocation and
+replacement of held authority require separate explicit semantics. This preserves
+the existing [namespace contract](../interfaces/namespaces.md).
+
+Inside the kernel, consider small typed operation tables and explicit constructor
+arguments where multiple implementations already justify them. File and directory
+backends are candidates; network devices need packet-oriented contracts of their
+own. Userspace providers implement message protocols, not kernel function tables.
+Define buffer/object ownership, partial progress, completion, cancellation, sleeping
+and executor constraints before extracting an interface. Preserve worker ownership
+and leave room for asynchronous completion without implementing it speculatively.
+
+Avoid a universal object framework, inheritance hierarchy, reflection, automatic
+dependency graphs or interface discovery machinery. Revisit concrete filesystem
+backend duplication or additional network drivers when that work is selected;
+the present note does not schedule a refactor or introduce APIs.
+
 ## Additional ports
 
 Kilo and TCC provide the [edit/build/run workflow](../development/edit-build-run.md).

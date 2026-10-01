@@ -186,6 +186,8 @@ before/after performance records; selected services remain serial initially.
 Declarative YAML init is a separate userspace follow-up, not an SMP prerequisite.
 User threads and off-BSP service-worker placement follow separately. Native writable
 mount integration remains a storage follow-up, not a prerequisite for this SMP work.
+The [backend interfaces and scoped dependency direction](later-os-directions.md#backend-interfaces-and-scoped-service-dependencies)
+is parked for later; it does not change the filesystem-core-then-spaces/SMP order.
 
 The [persistent storage design](persistent-storage.md) records the agreed custom
 COW pool, volume guarantees, migration strategy, durability and compatibility
