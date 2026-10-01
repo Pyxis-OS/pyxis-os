@@ -97,9 +97,31 @@ applications alongside navigators.
 
 The first slice is implemented as [native remote terminal sessions](../userland/remote-terminal.md),
 with a text-based agent/developer client and independent session lifetime.
-The later progression is a minimal multiplexer, then the single-panel navigator
-and its cross-navigator operations. Split that direction
-into bounded milestones before implementation; do not bundle the whole chain.
+The agreed order is to finish [writable filesystem core](writable-filesystem-core.md),
+then [runtime SMP and independent spaces](scheduling-and-threads.md), followed by
+these focused milestones:
+
+1. [VirtIO GPU presentation and dynamic display resizing](desktop-graphics.md#virtio-gpu-presentation-and-display-resizing):
+   present the software framebuffer and propagate changed terminal dimensions,
+   without 3D acceleration or a compositor.
+2. A single-panel file navigator/browser in an ordinary terminal: browse directory
+   capabilities and schemes, select entries, and launch an editor or viewer.
+   Redraw correctly when terminal dimensions change. The navigator and file
+   browser are one application, not separate projects; settle exact operations
+   and any rendering dependency before implementation.
+3. A terminal multiplexer with binary-space-partitioned panes and independent
+   terminal sessions. Pane changes use the same terminal resize contract; the
+   existing navigator, shells and editors provide concrete consumers.
+4. Cross-navigator operations through explicit endpoints, scoped discovery and
+   delegated capabilities. Settle the operation ownership and failure rules above
+   from concrete interactions rather than bundling them into the first navigator.
+
+This sequence combines visible applications with reusable display and terminal
+infrastructure. Define each milestone's bounded tasks before starting it; this
+ordering does not authorize implementing the whole chain. Initial navigator work
+can use RAM and writable `host://` storage plus read-only native mounts. Completing
+the shared writable core does not itself enable writable native mounts in Caelum;
+that integration remains separate.
 
 ## Implemented foundation and later choices
 
@@ -107,5 +129,5 @@ The [BSP request milestone](../kernel/bsp-service-requests.md) and
 [native remote terminal implementation](../userland/remote-terminal.md) provide
 the request-ownership and session-lifetime foundations. Persistent writable
 storage, the toolchain transition, multiplexer and navigator remain parked
-directions. No next implementation slice is selected here; discuss its behavior,
-authority and lifetime details before implementation.
+directions. The sequence above is agreed, but each future slice still needs its
+behavior, authority and lifetime decisions settled before implementation.

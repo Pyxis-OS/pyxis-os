@@ -168,6 +168,16 @@ graphical work. See [terminal sessions](../userland/terminal-sessions.md) and
 [execution groups](../interfaces/execution-groups.md) for the underlying contracts.
 Authentication, a multiplexer and process threads remain separate work.
 
+The parked [VirtIO GPU presentation direction](desktop-graphics.md#virtio-gpu-presentation-and-display-resizing)
+groups software framebuffer presentation, live display resizing and terminal
+geometry notifications into one future milestone. It requires no 3D acceleration and does not
+block a multiplexer on a fixed-size display.
+The agreed [visible-work sequence](storage-and-terminal-agenda.md#4-native-terminal-sessions-multiplexer-and-navigator)
+after filesystem core and spaces/SMP is that display milestone, a resize-aware
+single-panel file navigator, a terminal multiplexer, then cross-navigator operations.
+These are separate bounded milestones; the navigator first runs in an ordinary
+terminal and later becomes a multiplexer consumer.
+
 The broader [discussion agenda](storage-and-terminal-agenda.md) covers persistent
 disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
 native terminal sessions leading to a BSP multiplexer and independent navigators.
