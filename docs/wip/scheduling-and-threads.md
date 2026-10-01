@@ -31,28 +31,50 @@ assumptions; the single-CPU configuration must keep working throughout. Kernel
 work must be considered when choosing placement. Eligibility is not a guarantee
 that a busy CPU immediately runs a particular task.
 
-Trusted boot configuration describes initial spaces by session identity, init
-program and optional CPU set. Conceptually, not as selected command syntax:
-
-```text
-development: init=development.sh, cpus=all
-readonly:    init=readonly.sh,    cpus=all
-remote:      init=remote.sh,      cpus=all
-```
+Trusted boot configuration describes initial spaces by session identity and init
+program, with an optional permitted CPU set. The launcher supplies the authority
+ceiling; trusted init can request its space's affinity within that ceiling before
+handing off to the ordinary session. For example, a launcher permitting CPUs 0–7
+can authorize init to request CPUs 2–3. Configuration names identify sessions,
+not authority. This requires a narrow native space-configuration operation and
+script command, not an ambient right to change arbitrary spaces.
 
 Keep the existing initial session roles, but stop deriving their number or
 identity from CPU count. Keep Caelum's log space and its restricted authority;
 its special purpose does not give it ownership of CPU 0. Dynamic space creation
 and destruction are outside this milestone.
 
-Default affinity is all online CPUs. A space may instead use one CPU or a set;
-sets may overlap and do not reserve CPUs exclusively. Children inherit their
-space's boot-configured eligibility. No public affinity capability or per-process
-setter is required now. An explicit set naming unavailable CPUs fails clearly;
-never silently broaden it. Configuration names identify sessions, not authority.
-The exact boot/make syntax and invalid-configuration diagnostic are task-1
-contracts to settle before implementation. Replace CPU-index init selection
-explicitly and update its consumers; do not silently reinterpret old indices.
+The default launcher ceiling is all online CPUs; absent an init request, the
+space uses its permitted set. A requested set may contain one CPU or several;
+sets may overlap and do not reserve CPUs exclusively. Children inherit the
+space's effective eligibility, not necessarily init's setup authority. Requests
+must remain within the ceiling. Explicit unavailable CPUs, an empty set or an
+unauthorized expansion fail clearly; never silently broaden or partially apply
+an invalid request. No general per-process affinity setter is required now.
+
+Initial scope is affinity setup before session handoff, not arbitrary changes to
+a populated running space. Task 1 must settle the capability's exact rights,
+lifetime/delegation and handoff boundary, behavior for repeated setup requests,
+and how the initiating task reaches an eligible CPU before successful completion
+when it excludes its current CPU. This must agree with the migration-safe-point
+contract below; a syscall cannot simply resume on an excluded CPU and claim
+placement is already enforced. Also settle boot/make and script syntax and
+single-CPU defaults before dependent implementation. Replace CPU-index init
+selection explicitly; do not silently reinterpret old indices.
+
+### Scrolling space bar
+
+Keep fixed-width tabs and Super+Left/Right selection. Once the space list exceeds
+the visible width, the tab bar is a viewport. Reserve left/right chevrons as
+indicators: light when more spaces are hidden beyond that viewport edge, muted
+when that end of the complete list is visible. The chevrons do not navigate.
+
+When moving right, scroll as needed to keep the selected space and its next
+neighbour visible; moving left is symmetric. At the actual end, selection can
+reach the edge slot because there is no further neighbour to reveal. Keep the
+selection visible even when only one tab fits; neighbour preview applies when
+there is room. Selection and viewport track registry order, not CPU indices.
+Caelum stays the first space in that order.
 
 Use initial per-task round-robin fairness and modest load balancing. A space with
 more runnable tasks can receive more total CPU time. CPU masks provide placement
@@ -182,8 +204,9 @@ matching devices and accelerator to the feature. Inspect migration, GS/TSS/entry
 stack and FP/FS/user-GS preservation; wake-before-park; remote termination while
 blocked; batch rollback/publication; loans; and task/object retirement. Exercise
 repeated memory growth/release, allocation failure unwind, affinity restrictions,
-CPU-independent session/input/display routing and counters returning to expected
-idle ownership. Distinguish code inspection from behavior actually observed.
+CPU-independent session/input/display routing, tab overflow and both scrolling
+ends, and counters returning to expected idle ownership. Check init requests
+within/outside the launcher ceiling, single-CPU setup and session handoff. Distinguish code inspection from behavior actually observed.
 
 Success requires demonstrated parallel process execution and local private-memory
 work without changing authority or lifetime guarantees. No speedup percentage is
@@ -197,20 +220,25 @@ updates current subsystem docs only for behavior it implements.
 
 1. [ ] **Rebase the investigation and capture the baseline.** After writable core
    completion, audit changed worker/memory/lifetime dependencies and record the
-   bounded performance set above. Settle concrete session/affinity configuration,
-   single-CPU defaults and the mapping-growth design before dependent implementation.
+   bounded performance set above. Settle session configuration, trusted-init
+   affinity authority/handoff, single-CPU defaults and the mapping-growth design
+   before dependent implementation.
    Record any unresolved correctness decisions rather than inventing requirements.
 2. [ ] **Separate spaces and boot sessions from CPU topology.** Add independent
    lookup and update init selection, navigation, presentation/input and explicit
-   service context. Preserve session roles and Caelum authority; no dynamic space
-   lifecycle or public affinity API.
+   service context. Implement the fixed-width scrolling bar and directional
+   neighbour preview. Preserve session roles and Caelum authority; no dynamic
+   space lifecycle.
 3. [ ] **Separate launch authority from execution placement.** Keep space-scoped
-   group admission and inherited affinity. Replace captured CPU identity where
-   necessary; prepare atomic batch publication across possible destination queues.
+   group admission, launcher ceilings and inherited effective affinity. Prepare
+   the agreed trusted-init setup authority and session handoff; replace captured
+   CPU identity where necessary and prepare atomic batch publication across queues.
    Preserve launch rollback and transitive completion/termination semantics.
 4. [ ] **Enable safe placement and migration.** Use existing queue synchronization,
    bounded load-aware placement/balancing, remote notification and the agreed safe
-   points. Include BSP userspace eligibility once its prerequisites hold; complete
+   points. Enable the native init-affinity request and script command with the
+   agreed completion boundary; invalid requests preserve existing placement.
+   Include BSP userspace eligibility once its prerequisites hold; complete
    it no later than task 7. Record matched scheduling/concurrency results.
 5. [ ] **Prepare architecture and physical allocation for concurrency.** Add
    CPU-local scratch mappings, synchronized PMM operations/statistics and explicit
@@ -230,6 +258,16 @@ updates current subsystem docs only for behavior it implements.
    reference, preserving thread/worker follow-ups in WIP and technical debt.
 
 ## Subsequent work
+
+A declarative YAML init is an agreed follow-up direction, not an SMP dependency.
+A userspace launcher would interpret it and invoke the same native setup operations
+as scripts: mounts, bindings, networking, affinity and final session launch.
+Configuration requests resources within granted authority; parsing it grants none.
+The kernel must not parse YAML or implement service-manifest policy. Exact schema,
+parser dependency, failure/unwind behavior and selection of script versus YAML
+remain a separate bounded design task. Endpoint exports, service dependencies,
+supervision and service-address/port publication remain future work; no orchestration framework
+or new network abstraction is implied by the initial configuration format.
 
 After this milestone, establish general kernel mapping invalidation/reclamation
 and off-BSP kernel-task scheduling, sleep and preemption rules. Then move one

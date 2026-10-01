@@ -23,6 +23,12 @@ The shared session interface could initially be a text display with a tab bar:
 [Caelum   ] [shell    ] [editor   ] [desktop A] [desktop B] [+]
 ```
 
+The agreed [runtime SMP milestone](scheduling-and-threads.md#scrolling-space-bar)
+adds a scrolling viewport over fixed-width tabs. Super+Left/Right changes selection
+and reveals the next neighbour in that direction when possible; noninteractive
+chevrons indicate hidden spaces at each edge. These navigation choices do not
+implement the future dynamic creation flow below.
+
 Starting a new space begins with an empty tab. The user enters the program they
 want to run in that tab and presses Enter to launch it, without requiring an
 intermediate shell. Tabs have a fixed width to simplify the initial interface.
@@ -86,7 +92,8 @@ accounting boundaries.
 
 The original prototype associated one space with each CPU. The agreed
 [runtime SMP milestone](scheduling-and-threads.md) replaces that association with
-independent space identity and boot-configured CPU eligibility. Workload spaces
+independent space identity and CPU eligibility. Trusted init can request affinity
+within its launcher's permitted CPU set before session handoff. Workload spaces
 share all online CPUs by default, including the BSP, or may be restricted to a
 CPU set. Affinity is neither an exclusive reservation nor a resource budget.
 Caelum remains the restricted kernel log space without owning CPU 0.

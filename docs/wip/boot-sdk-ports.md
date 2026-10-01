@@ -179,8 +179,10 @@ After writable filesystem core completion, the agreed
 [runtime SMP milestone](scheduling-and-threads.md) separates spaces and boot sessions
 from CPU topology, schedules existing single-task processes across eligible CPUs
 including the BSP, and brings private-memory operations onto the caller's CPU.
-Boot-configured affinity and initial per-task fairness are explicit. Capture matched
+Trusted init requests affinity within a launcher-supplied ceiling; initial
+per-task fairness and a scrolling space bar are explicit. Capture matched
 before/after performance records; selected services remain serial initially.
+Declarative YAML init is a separate userspace follow-up, not an SMP prerequisite.
 User threads and off-BSP service-worker placement follow separately. Native writable
 mount integration remains a storage follow-up, not a prerequisite for this SMP work.
 
