@@ -1582,6 +1582,24 @@ case; a contract change updates its documented expectations in the same PR. Do n
 postpone the suite until milestone closure, preserve accidental behavior as a
 fixture requirement, or weaken an invariant assertion merely to pass a refactor.
 
+**Standing design constraint:** current configuration, authored or draft values,
+implementation structure, benchmark parameters, machine properties and convenient
+fixtures are not contracts without an explicit architectural reason. Before an
+assertion or validator is added, identify the deliberate contract that changing
+the value would violate. Keep one authority for each setting and mutable state;
+configure a chosen input and verify its propagation and behavior against independent
+expectations. Do not preserve duplicate ownership with copying and consistency
+tests, or transplant obsolete assumptions into a replacement implementation.
+Green checks, coverage and matching documentation do not establish architectural
+correctness. Exact format assertions and deliberate scenario expectations remain
+appropriate; incidental defaults do not define correctness for other inputs.
+
+The launcher budgets are operational profile choices, separate from filesystem
+invariants. Their current duplicated ceilings are an identified
+[configuration-coupling limitation](../../fs/docs/ram-validation.md#contracts-and-execution-profiles).
+This standing constraint does not itself change runtime limits or authorize a
+broader cleanup; the focused budget-propagation correction remains to be assigned.
+
 ### Agreed small host setup in pyxis-fs
 
 Use [Unity](https://www.throwtheswitch.org/unity) for assertions, per-case

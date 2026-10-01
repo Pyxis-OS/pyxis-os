@@ -40,6 +40,13 @@
   Solve concrete needs without forcing POSIX compatibility, novelty for its own
   sake, or another OS's architecture. Port through native interfaces; do not bend
   the kernel around an individual application or add successful fake operations.
+- Keep configuration, authored data, draft values, benchmark parameters, machine
+  properties and implementation choices distinct from architectural contracts.
+  Before adding a validator or assertion, identify the deliberate contract that
+  changing the value would violate. Keep one authority for each setting or mutable
+  state; investigate overlapping ownership instead of adding synchronization and
+  tests that preserve it. Promote a provisional choice into a contract only for an
+  explicit architectural reason, recorded with that contract.
 
 ## Branches, repositories and delivery
 
@@ -95,6 +102,13 @@
   inspection. Do not add tests, self-tests, fault injection, CI or boot/output
   automation unless explicitly requested. Documentation-only changes need document
   and link review, not a gratuitous boot.
+- When tests are authorized, configure inputs and verify deliberate behavior and
+  propagation against independently defined expectations. Do not copy today's
+  configuration or fixture contents into multiple expected-value authorities, or
+  freeze incidental structure. Exact constants are appropriate when specified by
+  a deliberate contract such as the disk format. When replacing an implementation,
+  reassess its tests rather than transplanting obsolete assumptions. Green checks,
+  coverage and matching documentation do not establish architectural correctness.
 - Start with README.md and relevant build/run documentation for commands and options.
   Use make -j16 where appropriate. Match CPU count, devices and accelerator to the
   feature being checked; report the configuration and distinguish nested-VM
