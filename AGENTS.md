@@ -99,6 +99,12 @@
   Use make -j16 where appropriate. Match CPU count, devices and accelerator to the
   feature being checked; report the configuration and distinguish nested-VM
   measurements from the owner's host results. Clean up your own QEMU/debugger jobs.
+- For milestones and substantial tasks that may affect performance, capture a
+  baseline before implementation and repeat matched workloads afterward. Record
+  revisions, configuration, commands, repeated samples and variation in the relevant
+  docs/PR; distinguish host/nested-VM and profiled/unprofiled results. Explain
+  regressions and discuss material tradeoffs rather than expanding scope to optimize
+  everything. Use existing tools; this does not authorize new benchmark infrastructure.
 - Inspect existing CI for the exact submitted revision, including dependent repo
   jobs when relevant. Report pending, failed or unavailable checks honestly.
   Existing independent bundles can avoid unnecessary rebuilds; follow
