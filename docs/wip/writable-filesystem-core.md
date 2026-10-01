@@ -111,6 +111,9 @@ a damaged state automatically.
 | Rename a regular file within its volume | Source-parent `dir.remove` and destination-parent `dir.create` |
 | Replace an existing destination during rename | Rename authority above, plus destination-parent `dir.replace` |
 
+Replacement also requires the caller's explicit `replace=true` request; merely
+holding `dir.replace` does not request displacement.
+
 Directory operations act on component names through already-held parent handles.
 Obtaining those handles through path traversal requires normal lookup authority.
 Removing or replacing an entry does not require read or write rights on the
@@ -332,7 +335,8 @@ An operation result preserves three independent facts:
 - Confirmed progress: for a write, the contiguous byte prefix whose transactions
   completed both required flushes. No byte in an uncertain transaction contributes
   to that count. For a shrink, the last confirmed committed length, excluding any
-  uncertain step. Namespace operations report whether their transaction committed.
+  uncertain step. Namespace operations report whether their transaction is
+  confirmed committed.
 - Operation completion: complete, stopped with a known failure, or outcome
   unknown for the transaction being published. Preserve the failure cause.
 - Pool health and any maintenance failure: whether ordinary access and mutation
@@ -355,18 +359,21 @@ that candidate. It may leave unreachable bytes in previously free storage.
 
 | Failure point | Operation outcome | Pool access afterward |
 | --- | --- | --- |
-| Ordinary permission, quota, workspace or memory admission failure | Current transaction not committed; retain any earlier confirmed progress | Reads and later mutations remain available. |
+| Ordinary permission, quota, workspace or memory refusal before admission | Current transaction not committed; retain any earlier confirmed progress | Reads and later mutations remain available. |
 | Replacement write or first flush fails before slot publication | Current transaction not committed; retain any earlier confirmed progress | Stop mutation until recovery. Reads, metadata, listing and lookup may use the last confirmed state while its integrity remains established. |
 | Slot write or final flush has an uncertain outcome | Current transaction unknown; retain any earlier confirmed progress | Stop all ordinary access until recovery, including reads, metadata, listing, lookup, new acquisition and derivation through existing handles. |
 | Cleanup after a confirmed user commit fails before its own slot publication | User commit remains confirmed; report cleanup failure separately | A cleanup write/flush failure stops mutation until recovery. Reads may use the last confirmed state, including the confirmed user commit, while its integrity remains established. |
+| Unexpected resource exhaustion during an admitted drain | Preserve confirmed user and cleanup progress; report an admission/editor invariant failure | Enter `READABLE_STOPPED`; escalate to `ACCESS_STOPPED` if integrity is no longer established or publication is uncertain. No maintenance retry in this instance. |
 | Cleanup's own slot publication becomes uncertain | User commit remains confirmed; cleanup outcome is unknown | Stop all ordinary access until recovery, even if cleanup was intended to change only allocation bookkeeping. |
 
 An ordinary mutation may be refused before admission. Once a batch is admitted,
 its reserved drain must finish without additional application mutations, absent
 I/O or integrity failure. Unexpected space, memory, record-capacity or generation
 exhaustion during that drain is a failed admission/editor invariant. Defensive
-reporting must preserve confirmed progress, keep storage protected and stop
-mutation; confirmed reads remain available only while integrity is established.
+reporting must preserve confirmed progress, keep storage protected and enter
+`READABLE_STOPPED`; escalate to `ACCESS_STOPPED` if integrity is no longer
+established or publication is uncertain. That instance cannot retry maintenance,
+checkpoint or a mutation back to health.
 A safe refusal at that point is still a validation failure, not successful
 pressure handling. Final orphan release has the same funded-progress requirement;
 a live retained handle may defer release, resource exhaustion may not.
@@ -473,12 +480,18 @@ rules take precedence: stopped mutation or uncertain publication does not permit
 cleanup writes during close or an automatic retry of failed maintenance. Closing
 still does not substitute for an application-requested checkpoint.
 
-If a drain cannot finish, stop the enclosing multi-batch operation before its
-next batch and preserve confirmed progress. Admission failure alone keeps reads
-available under the existing rules; cleanup I/O failure stops mutation, and
-uncertain publication stops all ordinary access until recovery. Later mutations
-must first satisfy the outstanding drain requirement as well as ordinary
-admission; they cannot accumulate another batch of retirement debt.
+An admitted drain either completes, stops for I/O/integrity failure under the
+health table, or encounters a resource invariant failure and enters
+`READABLE_STOPPED` (escalating to `ACCESS_STOPPED` when required above). Stop the
+enclosing multi-batch operation before its next batch and preserve confirmed
+progress. Ordinary refusal before admission leaves an otherwise healthy writer
+usable; it is not a possible resource outcome of a correctly funded drain.
+At a completed call boundary, a `READY` writer has no outstanding required drain;
+the permitted pool-metadata retirement remainder is not such a drain. A stopped
+instance may report pending drain diagnostically but cannot resume it. Leftover
+retirement can be processed only by a fresh validated writable open after the
+adapter/operator establishes the required backing precondition, never by retrying
+maintenance in the stopped instance or admitting another application mutation.
 
 ## Agreed whole-map fallback
 
@@ -553,13 +566,17 @@ according to that mode, with shared grant evaluation. Immutable diagnostic
 objects/cursors remain restricted to read-only pools.
 The trusted adapter supplies exclusive backing ownership, exact read/write/flush
 callbacks, strong random bytes for new IDs, and the existing capped memory owner.
-The read-only interface still contains no write callback.
+Establishing a durable recovery boundary is an adapter/operator precondition,
+not a fact the core can infer from valid bytes and successful callbacks. There is
+no new recovery-history flag or open-time declaration. The read-only interface
+still contains no write callback.
 
 The initial live operation surface is acquisition by trusted context/path/ID,
 held lookup and delegation, metadata/read/list, create, write, resize, remove,
 regular-file rename/replacement, checkpoint, status and close. Namespace mutation
-accepts held parent views plus validated single component names. Creation takes
-kind and optional requested child authority; new ownership defaults to the
+accepts held parent views plus validated single component names. Rename also
+takes an explicit `replace` boolean, false by default; authority alone does not
+request replacement. Creation takes kind and optional requested child authority; new ownership defaults to the
 parent's policy owner, with no new explicit grants. Preallocate a requested
 returned view before publication. Generate object IDs with strong randomness,
 reject zero and collisions in both retained states and retained runtime objects,
@@ -595,7 +612,7 @@ Every valid mutation call initializes a result with these separate fields:
 | `operation_status` | Original operation failure cause, or `OK`; it never becomes a cleanup error. |
 | `confirmed_bytes` | Committed contiguous prefix of this write request; zero for other operation kinds. |
 | `confirmed_length_valid`, `confirmed_length` | Last confirmed file length for resize, initialized from the starting committed state. |
-| `namespace_committed` | Whether this call's namespace transaction completed both flushes. |
+| `namespace_confirmed` | True only when this call's namespace transaction completed both flushes. False means not confirmed, including `UNKNOWN` outcomes that may have committed; it does not establish that nothing changed. |
 | `maintenance_completion`, `maintenance_status` | Separate `NONE`, `COMPLETE`, `STOPPED` or `UNKNOWN` cleanup outcome and cause. |
 | `health` | `READY`, `READABLE_STOPPED` or `ACCESS_STOPPED`, copied from the writer after the call. |
 
@@ -616,27 +633,36 @@ cap exhaustion; `NO_MEMORY` identifies allocation failure below the cap.
 `NO_SPACE` includes insufficient admitted workspace or permanent pool headroom.
 Mutation in `READABLE_STOPPED`, and ordinary access in `ACCESS_STOPPED`, returns
 `RECOVERY_REQUIRED`. A status query copies in-memory health and last failure
-without touching media; report pending drain separately from health. Ordinary
-view results disclose no sibling identities or pool generation. Health is sticky
-until a fresh validated reopen; no call
-clears it by retrying. Loss of established integrity escalates to `ACCESS_STOPPED`.
+without touching media. Pending drain is diagnostic in a stopped instance, not
+permission to resume maintenance; `READY` has no required drain pending at a
+completed call boundary. Ordinary view results disclose no sibling identities or pool generation. Health is sticky
+until a fresh validated reopen satisfying the adapter/operator precondition; no
+call clears it by retrying. Loss of established integrity escalates to `ACCESS_STOPPED`.
 
 Check rights before inspecting otherwise unauthorized names or doing any mutation.
 Create at an existing name returns `EXISTS`. Removing a nonempty directory returns
 `NOT_EMPTY`; the volume root cannot be removed. Rename accepts regular files only,
 with either absent or regular-file destination. Same-parent/same-name rename is a
-no-op after validating the source and source-remove/destination-create authority;
-replacement authority is needed only when displacing a distinct destination.
-Other directory moves/replacements return `UNSUPPORTED`. Zero-length writes and
-same-length resizes are no-ops after argument, authority and health checks, and do
+no-op after validating the source and source-remove/destination-create authority.
+For a distinct existing regular-file destination, `replace=false` returns `EXISTS`
+without mutation, even if the caller holds `dir.replace`. With `replace=true`,
+displacing that destination additionally requires `dir.replace`; missing authority
+returns `DENIED`. An absent destination needs only
+ordinary rename authority, irrespective of `replace`. The same-name no-op needs
+no replacement authority. Other directory moves/replacements return `UNSUPPORTED`.
+Zero-length writes and same-length resizes are no-ops after argument, authority and health checks, and do
 not advance generation or directory change tracking. No-op namespace success has
-`namespace_committed=false`, since it publishes no transaction.
+`namespace_confirmed=false` with `completion=COMPLETE`, since it publishes no
+transaction. By contrast, `completion=UNKNOWN` with `namespace_confirmed=false`
+may already have changed the namespace and is not automatically retryable.
 
 Checkpoint is a serialized volume ordering barrier. After prior batches and their
 required drains have completed, their two-flush commits already establish it;
-checkpoint need not emit a redundant generation. Pending maintenance must finish
-before it succeeds. It fails in either stopped state, even if earlier data was
-confirmed. This uses only the held checkpoint right and exposes no sibling data.
+checkpoint need not emit a redundant generation. Serialization means no earlier
+call has an active required drain when checkpoint starts on a `READY` writer. It
+fails in either stopped state, even if earlier data was confirmed, and never
+retries diagnostic pending maintenance. This uses only the held checkpoint right
+and exposes no sibling data.
 
 ### Live directory continuation
 
@@ -854,7 +880,9 @@ This is a writable implementation profile within existing version-1 encodings.
 It changes neither read semantics nor authority; no occupancy feature bit or
 version bump is needed. The separately proposed ORPHANS feature remains required
 for orphan records. Formatter/editor changes and their validation belong to the
-future pyxis-fs implementation PRs, not this documentation revision.
+task 2 pyxis-fs implementation PR, including short-tail packing and its contract
+tests; profile/headroom enforcement joins tasks 3/4. None is implemented by this
+documentation revision.
 
 Set hard per-batch limits `V = 128` new volume blocks and `D = 256` retired volume
 blocks, including both data and metadata. Pool map/root/catalog blocks have their
@@ -1274,8 +1302,11 @@ durability contract or the core's publication, admission and recovery rules.
 Use a fixed-size regular image on a local Linux filesystem whose file writes and
 `fsync` provide the ordinary data/metadata durability contract through its backing
 storage. Buffered positional I/O is allowed, including sparse images; logical
-pool capacity does not reserve host disk space. The host must honor successful
-flushes. Arbitrary network, synthetic or remapped backends are not certified by
+pool capacity and logical admission/deletion guarantees do not reserve physical
+host disk space. Host ENOSPC or quota exhaustion on write/flush is a backing I/O
+failure, not a core pre-admission refusal; apply the same stop rules and post-error
+reopening restriction. No full physical preallocation is required. The host must
+honor successful flushes. Arbitrary network, synthetic or remapped backends are not certified by
 this statement. No physical power-loss qualification is claimed.
 
 Supported starting points are successful fresh formatting/publication or ordinary
@@ -1342,7 +1373,11 @@ image. An interrupted mutating session whose backing outcome/history is unknown
 is not demonstrated healthy by close/reopen, cached validation or a later successful
 flush. This milestone makes no real-host recovery claim for that case either;
 inspection may report readable structure/content without certifying durability.
-Do not turn an observed successful reopen into post-error recovery evidence.
+In particular, real-host interrupted-session orphan recovery is outside the
+supported workflow where healthy backing history cannot be established. The core
+still performs orphan recovery with an adapter satisfying its precondition,
+including in the simulator. Do not turn an observed successful reopen into
+post-error recovery evidence.
 
 #### Deferred qualification and retained findings
 
@@ -1523,11 +1558,11 @@ when a scenario needs a particular role; the assertion is the resulting contract
 
 | Contract area | Small cases required as that behavior lands |
 | --- | --- |
-| Ordinary operations | Open/read/list; create, write and resize with holes, partial blocks, old-EOF zeroing and multi-block/partial progress; rename/replacement and checkpoint; expected bytes, length, identity and namespace after reopen. |
+| Ordinary operations | Open/read/list; create, write and resize with holes, partial blocks, old-EOF zeroing and multi-block/partial progress; rename with and without explicit replacement and checkpoint; expected bytes, length, identity and namespace after reopen. |
 | Authority and lifetime | Denied operations leave state unchanged; held rights do not widen; extending writes require resize before any progress; explicit checkpoint rights; retain/unlink/name reuse; detached empty directories; last-reference cleanup and live continuation invalidation. |
 | Malformed and unsupported input | Invalid checksums, lengths, alignment, bounds/overflow, keys/references, cycles, namespace/orphan relations and live-allocation overlaps; incompatible retained claims, torn/degraded peers, unknown rights/features. Assert the documented corruption/unsupported/limit outcome, incomplete validation where required, and absence of unauthorized writes. |
-| Admission and funded cleanup | At and below quota/profile/workspace/memory/generation requirements, including formatter floors and protected deletion capacity. Refusal occurs before admission; admitted mutation and final orphan release finish their funded drains without new application work. Unexpected resource refusal during drain fails the test. |
-| Publication and recovery | Before/after each protocol phase, selected short/torn writes and failed flushes, confirmed partial progress, unknown additional progress, pre-publication read availability, post-uncertainty access stop, post-commit cleanup failure and no implicit retry. Include cache-visible nonpending writes, qualified/unqualified recovery boundaries and both retained payloads while they differ. |
+| Admission and funded cleanup | At and below quota/profile/workspace/memory/generation requirements, including formatter floors and protected deletion capacity. Refusal occurs before admission; admitted mutation and final orphan release finish their funded drains without new application work. Unexpected resource refusal during drain fails the test; additionally check preserved progress and sticky `READABLE_STOPPED`/required escalation, never resumed maintenance. |
+| Publication and recovery | Before/after each protocol phase, selected short/torn writes and failed flushes, confirmed partial progress, unknown additional progress, pre-publication read availability, post-uncertainty access stop, post-commit cleanup failure and no implicit retry. Include cache-visible nonpending writes, the distinction between core health and adapter recovery preconditions, and both retained payloads through maintenance replacement writes. |
 | Namespace/editor invariants | Small variable-length split/merge/redistribution/root cases and formatter tails; preserved ordering, byte fit and admitted occupancy; upper bounds on new/retired nodes rather than one mandated shape. Check writable admission against both retained states. |
 
 For corruption cases isolate the intended defect, or assert only the documented
@@ -1535,7 +1570,15 @@ set of outcomes if the contract permits more than one first failure. Check outpu
 and ownership/lifetime behavior on failure, not just a nonzero status. Add bounded
 memory-callback failure cases before admission and verify teardown; once an admitted
 drain starts, the promised arena must suffice without further allocation requests.
-No test should equate safe resource refusal during that drain with success.
+No test should equate safe resource refusal during that drain with success. If
+an invariant failure is encountered, check the defensive stopped-state contract
+and absence of retry writes too; correct refusal still leaves that drain case
+failed. Ordinary pre-admission refusal must instead leave the healthy writer usable.
+
+Exercise rename with an existing destination and `replace=false` both with and
+without replacement authority; both return `EXISTS` after base rights checks.
+With `replace=true`, check `DENIED` without replacement authority and confirmed
+displacement with it, plus absent-destination and same-name cases.
 
 ### Commands, per-PR gate and extended campaigns
 
@@ -1598,7 +1641,10 @@ alone still does not authenticate file data.
 
 It does not qualify Linux direct-I/O fallback behavior, host filesystem/device cache
 semantics, physical power-loss recovery, performance or production-data safety. The
-simulator's declared durability boundary is an input assumption. Ordinary host-tool
+simulator's declared durability boundary is an input assumption. Its substituted
+callbacks do not test the real host adapter's short-write, flush-retry or late-close
+error policy; that policy needs implementation review and ordinary host validation,
+and is not established by a green core suite. Ordinary host-tool
 use, freestanding compilation and the existing parent kernel build remain necessary;
 host libc linkage of the runner must not leak into the core. Target cross-compilation
 continues through the parent integration using the pinned dependency. Later native
@@ -1634,15 +1680,25 @@ promoted bytes are host-flushed before inspection. Close never promotes writes;
 merely killing a process while Linux caches survive is not this cold-cut model.
 
 The targeted buffered-writeback-error counterexample leaves a complete new slot
-cache-visible but neither durable nor flush-pending after a failed final flush. A later flush
-returns success without persisting that slot. Warm validation may select the
-apparently valid new generation, but that backing has no qualified durable
-boundary and must still refuse a writer. Repeat the refusal through a fresh
-adapter/core instance with the same unqualified backend; no volatile error flag
-or assumption that all failed bytes remain pending may authorize recovery. Drop
-the overlay and independently verify the actual durable old generation. Also exercise the case where failed writes remain pending. Do
-not turn either case into an automatic rewrite/retry; a successful flush alone
-must never authorize post-error recovery.
+cache-visible but neither durable nor flush-pending after a failed final flush.
+First verify the failed core instance stays `ACCESS_STOPPED`: reads, mutations
+and checkpoint cannot clear it or emit retry writes; status and closure remain
+available. After quiescence, separately exercise the test backend's flush, which
+returns success without persisting that slot. This is not a flush requested through
+the stopped core. On unchanged snapshots, use read-only validation/extraction to
+show the warm cached view selects the new generation while the explicitly durable
+image retains the old generation and independently expected old payload. This is
+a concrete counterexample to cached validation plus successful flush establishing
+durability, not a requirement for a fresh core to discover hidden failure history.
+
+Discard the overlay and reopen a fresh core on the simulator's explicitly durable
+image; assert the permitted generation and independent contents. Also exercise
+failed writes that remain pending. A simulator adapter may separately refuse open
+because its own retained scenario history lacks a recovery boundary, including
+across adapter instances. Label that assertion adapter enforcement, not evidence
+of core detection. With identical valid input bytes/callbacks, the core has no
+basis for distinguishing unsafe cached provenance. No recovery flag or implicit
+history detector is added, and neither scenario permits automatic mutation retry.
 
 Separately model an adapter with an explicitly established durable-state boundary:
 completed writes reach stable storage, failed requests may leave stable old/new/
@@ -1685,7 +1741,7 @@ cannot weaken the real callback contract or permit automatic retry.
 | --- | --- |
 | One bounded overwrite/create/rename | Cuts around replacement writes, first flush, slot write and final flush leave an allowed complete old/new state, never mixed contents or half a rename. |
 | Later chunk of write/shrink | Confirmed progress excludes the uncertain chunk; recovered bytes/length match a declared committed boundary. Shrink then growth never exposes discarded partial-block bytes. |
-| Post-commit maintenance | Fail/cut in both maintenance publications; preserve user progress, report cleanup separately and admit no next batch before drain. |
+| Post-commit maintenance | Fail/cut in both maintenance publications; preserve user progress, report cleanup separately and enter the specified sticky stopped state. Compare both currently retained payloads after replacement writes and before each maintenance slot write. No next batch or maintenance retry in the stopped instance. |
 | Reuse | Trace one range through older-live/newer-retired, retired in both, durably free, then new-live in a later publication with a new birth. |
 | Sustained edits and pressure | Populated source trees plus sequential and separately committed small-write histories reuse physical addresses; quota/profile/depth/memory/workspace refusals occur before admission. Exercise whole-map rebuilding, supported sparse old maps and refusal beyond the old-node bound. Resource exhaustion after admission fails validation. |
 | Funded drain at minimum resources | For ordinary mutations and final orphan release, admit near computed requirements and formatter floors, then complete every reserved publication without new application mutations or more resources. Space/memory/record/generation refusal during drain is an invariant failure. |
@@ -1693,7 +1749,7 @@ cannot weaken the real callback contract or permit automatic retry.
 | Older retained payloads | Quiesce overwrite/reuse while two retained roots still differ; independently compare both states' complete file contents before any maintenance may drop the older root. |
 | Retained unlink/replacement | Old views retain identity/bytes/rights; recreated names name new identities. Retained orphan storage stays live and charged. Detached directories remain empty and reject insertion. |
 | Final release and reopening | Interrupt bounded orphan batches; marker/object stay paired, cleanup resumes after full validation, and writer access is withheld until startup cleanup completes. |
-| Adapter recovery boundary | Simulated quiesced durable backing can reopen after interruption; unqualified buffered-error/cache-only backing refuses even after successful flush and a fresh adapter instance. Cold simulation uses only its explicitly durable image. This tests the abstract guarantee, not automatic detection of prior real-host errors. No registry prerequisite is assumed. |
+| Adapter recovery boundary | Failed-instance health is sticky. Cold recovery uses the explicitly durable image. Warm cached validation plus successful backend flush may disagree with durable generation/payload. Any refusal based on simulator history is adapter enforcement, not fresh-core detection; no new flag or registry prerequisite. |
 | Recovery refusal | Torn/degraded or unsupported peer, insufficient reserves, unknown grants/extensions and incomplete validation prevent writable opening without changing either slot. Read-only inspection follows its own contract. |
 | Authority and continuations | Missing resize rejects an entire extending write; checkpoint rights stay independent; local directory edits invalidate pages while unrelated edits do not. |
 
@@ -1725,18 +1781,35 @@ A deliberately torn peer is an expected failed/incomplete check, not a clean
 writable recovery; require writable refusal and, where selectable, correct
 read-only extraction separately.
 
-For at least one overwrite/reuse history, quiesce after confirmed user publication
-and before retained-root advancement, while old/new roots name different expected
-bytes. Use the failure adapter to stop before the first maintenance write
-transfers anything, then close the stopped core without writes; the runner owns
-the quiescent image throughout. Independently compare every expected file of both
-retained states on that unchanged image. A test-only read adapter may mask the newer slot to select the
-older root through the existing degraded read-only path; it changes no image bytes
-or production interface and does not claim that masked view is a clean two-slot
-pool. Validate the original two-slot image separately. Resume maintenance through
-the simulator's qualified durable boundary only after both payload comparisons; dropping the older state first invalidates the
-scenario. Repeat reuse only after durable free, verifying that the earlier live
-incarnation was not overwritten while protected.
+For at least one overwrite/reuse history, independently compare complete expected
+file contents of both retained states at three quiescent cuts: after the user
+publication before maintenance starts, then after replacement writes and their
+first successful flush but before the slot write in each maintenance publication.
+The latter two cuts are mandatory: checking only before maintenance writes cannot
+detect premature reuse by replacement metadata. Use bounded streaming comparisons
+against independently defined contents, not allocator placement assertions.
+
+For example, after user publication g+1, the first maintenance pre-slot cut still
+retains g and g+1, whose payloads deliberately differ. Allow the first maintenance
+publication g+2 to complete in a separate run of the history; the second maintenance
+pre-slot cut then compares g+1 and g+2. Those payloads may agree, but both retained
+mappings must remain intact. Do not demand protection for g after it has legitimately
+ceased to be retained; determine the applicable pair from completed publications
+and the scenario's independently expected state at each cut.
+
+For the initial post-user-publication cut, stop before the first maintenance
+replacement write transfers bytes. At each later maintenance cut, the adapter stops the slot callback before it
+transfers any bytes, after all replacement bytes have reached simulated durable
+storage. Close the stopped core without writes and keep the image quiescent under
+the runner's ownership while comparing both retained payloads and checking the
+original two-slot structure. A test-only read adapter may mask the newer slot to
+select the older root through the existing degraded read-only path; it changes no
+image bytes and is not a clean two-slot writable recovery. Use separate runs from
+the same initial scenario to reach later cuts, or a fresh validated open through
+the simulator's durable boundary, never a retry in the stopped instance. Required
+comparisons occur before the corresponding slot write can drop the older root.
+Then exercise reuse only after durable free and fresh protection checks. This
+scenario lands with the real publisher and runs in the quick maintained suite.
 
 Near-minimum scenarios must use reachable, fully validated states, with workspace
 capacities at `max(formatter floor, computed requirement)` and cases just below
@@ -1771,7 +1844,9 @@ container rebuild, userspace port, native writable mount or FUSE work is implied
 1. Task 2: private COW tree/map planners, fixed envelopes, bounded arena and
    canonical codecs/checker support. Land the small runner, synthetic-fixture and
    independent-oracle support, `make check` and the filesystem CI workflow in this
-   PR, including the accepted framework dependency and its license/provenance,
+   PR, including the accepted framework dependency and its license/provenance.
+   Implement formatter namespace tail packing/root repair and its small boundary
+   fixtures in task 2, using the same accepted occupancy/byte-fit rules. Start
    with a small existing read-only/format/authority baseline and contract cases
    for the new editors, encoding, occupancy and bounds. Keep the public product
    read-only; no usable writer without admission/reclamation. The owner makes the
@@ -1783,8 +1858,8 @@ container rebuild, userspace port, native writable mount or FUSE work is implied
    gate representative publication/recovery, corruption, resource-boundary and
    funded-drain cases immediately. Use a small synthetic retained-data fixture and
    the real admitted publisher to replace/reuse a range and compare both retained
-   payloads without needing a public file-write API; a no-op checkpoint is not
-   evidence of publication. The real host checkpoint/reopen command follows the
+   payloads through both maintenance replacement/pre-slot cuts without needing a
+   public file-write API; a no-op checkpoint is not evidence of publication. The real host checkpoint/reopen command follows the
    ordinary healthy-session contract, with post-error qualification deferred; it
    remains separate from test controls. Add no fake file mutations or public test
    transaction API.
@@ -1833,6 +1908,7 @@ Acceptance closes task 1; implementation still requires the next task to be assi
    its own replacement blocks. Keep uncommitted changes private and unwind
    failures without modifying a published tree. Deliver the maintained runner,
    initial contract tests and per-PR filesystem CI gate alongside these changes.
+   Include formatter namespace tail packing/root repair and boundary cases.
 3. [ ] **Implement publication and reopening.** Add exact writes/flushes through
    the platform adapter, ordered two-slot publication, checkpointing and reopening
    of supported committed states. Stop ordinary access on uncertain outcomes. Provide

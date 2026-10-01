@@ -880,9 +880,15 @@ valid cached bytes and a later successful fsync do not establish durable recover
 The restriction survives process exit, but the initial tool has no persistent
 cross-process error detector. Known or suspected failed images must stay out of the
 ordinary writable workflow; the caller/operator must retain that context. Unknown
-interrupted mutation history is not proved healthy by reopening. Read-only
-inspection is not durability certification. Do not claim automatic quarantine,
+interrupted mutation history is not proved healthy by reopening; real-host
+interrupted-session orphan recovery remains unsupported where healthy backing
+history cannot be established. Read-only inspection is not durability certification. Do not claim automatic quarantine,
 repair, force-clear or safe retry of uncertain mutations.
+
+Logical admission and deletion headroom do not reserve physical host space for
+sparse images. Host space/quota exhaustion on write or flush follows the backing
+I/O failure rules and post-error reopening restriction, even when every logical
+core bound was met. No physical preallocation requirement is added.
 
 Revisit before promising real-host post-error recovery: select one concrete
 backend and establish its durable-state boundary, partial-write semantics,
@@ -891,8 +897,10 @@ Direct I/O would require alignment/fallback/mixed-access and backing-cache evide
 a registry needs independent reliable storage/identity/rollback control and still
 cannot establish image contents. Neither mechanism is selected. Keep the core's
 abstract durability requirements and simulated recovery tests, including cache-only
-nonpending writes and independent comparison of both retained payloads. Their
-success is not qualification of an actual host or device.
+nonpending writes and independent comparison of both retained payloads through
+maintenance replacement/pre-slot cuts. History-based simulator refusal is adapter
+enforcement; the core cannot infer historical failure from valid bytes/callbacks.
+Their success is not qualification of an actual host or device.
 
 ## Filesystem host prototype limits
 
