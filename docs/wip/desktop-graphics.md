@@ -54,9 +54,11 @@ or complete SDL subsystem contract is selected yet.
 
 ## VirtIO GPU presentation and display resizing
 
-Agreed future milestone scope, not an implementation task. Finish the writable
-filesystem core, then runtime SMP and independent spaces; this adds no prerequisite
-to either milestone or to the first terminal multiplexer.
+Agreed future milestone scope, not an implementation task. Schedule it after
+writable filesystem core and runtime SMP/independent spaces, before the
+[navigator and multiplexer progression](storage-and-terminal-agenda.md#4-native-terminal-sessions-multiplexer-and-navigator).
+It adds no prerequisite to the filesystem or SMP milestones. A multiplexer could
+work on a fixed-size display, but the chosen order establishes resizing first.
 
 Software framebuffer presentation and dynamic display resizing belong in the
 same milestone, along with propagating changed terminal dimensions. The boundary
