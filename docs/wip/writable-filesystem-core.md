@@ -1913,10 +1913,13 @@ Tasks 3/4 remain a joint delivery boundary and require the next assignment.
    Pyxis also runs the pinned dependency's host build and suite inside its required
    `Build Pyxis / build (pull_request)` check, so a failing filesystem pin fails
    the parent PR check.
-   All 30 initial test groups pass, including independent expected payload/format
-   checks, variable-length occupancy repair and extent successor-bound rejection.
+   All 32 test groups pass, including independent expected payload/format checks,
+   variable-length occupancy repair, extent successor and new-split adjacency
+   checks, and inconsistent-delta versus corrupt-base error classification.
    Ordinary host/target and parent kernel builds pass; the same suite passes under
    ASan/UBSan. No publication/failure-simulator or guest validation is claimed.
+   [Writer stack usage](../technical-debt.md#writable-filesystem-kernel-stack-prerequisite)
+   must be resolved before native writable integration; its refactor is deferred.
 3. [ ] **Implement publication and reopening.** Add exact writes/flushes through
    the platform adapter, ordered two-slot publication, checkpointing and reopening
    of supported committed states. Stop ordinary access on uncertain outcomes. Provide

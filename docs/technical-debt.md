@@ -872,6 +872,40 @@ per-PR suite. See [current coverage and limits](../fs/docs/testing.md). Passing 
 not establish host/device recovery, exhaustive correctness or native guest behavior;
 retain the proofs, ordinary/freestanding builds and eventual guest validation.
 
+## Writable filesystem kernel-stack prerequisite
+
+The reviewed task-2 head (`pyxis-fs` `3e63569`) uses approximately 19,104 bytes
+across the nested edit, canonical validation, encode and decode path. Rechecking
+the split-boundary correction with Pyxis GCC 16.2.0, the parent Makefile's kernel
+flags, `kernel/fs/build.mk`'s freestanding flags and `-fstack-usage` gives:
+
+```text
+pfs_edit_tree                 1968
+  read_node                    192
+    pfs_canonical_tree_validate 8752
+      pfs_tree_encode         6112
+        pfs_tree_decode.part.0 2096
+sum of reported maxima       19120 bytes
+```
+
+The call edges were checked in the generated object code; the tree-decode wrapper
+tail-jumps into its split body. The editor report is dynamic but bounded and
+includes outgoing argument space used on other calls; summing the per-function
+maxima conservatively overstates this particular principal path by 16 bytes.
+This compiler-derived estimate excludes deeper
+record/helpers and outer worker/adapter frames. It already exceeds Caelum's
+16 KiB kernel-task stack (`TASK_STACK_SIZE` in `kernel/task.c`); it is not a runtime
+high-water measurement or a complete worst-case stack bound. Successful host tests
+and freestanding compilation do not establish kernel-stack safety.
+
+The private `edit`, `canonical` and `plan` objects are not currently linked by
+`kernel/fs/build.mk`. Before [native writable integration](wip/native-persistent-volumes.md)
+links or enables the writer in Caelum, resolve this requirement, preferably by
+moving large temporary codec/editor buffers into caller-reserved workspace.
+Account for nested calls and outer adapter/worker frames, then verify the complete
+path fits the actual kernel-task stack with headroom. The implementation refactor
+is deferred beyond task 2; this records the debt and integration dependency.
+
 ## Deferred real-host post-error recovery qualification
 
 The [ordinary host writer contract](wip/writable-filesystem-core.md#agreed-ordinary-host-writer-and-deferred-recovery)

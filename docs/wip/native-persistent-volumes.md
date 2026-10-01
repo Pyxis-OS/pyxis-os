@@ -16,6 +16,11 @@ Extend the existing [native filesystem adapter](../devices/filesystem-native-ada
 and its serial BSP worker. Preserve BSP allocation/VM ownership and existing
 request publication, cancellation and deferred cleanup rules. Do not add a
 second filesystem implementation or perform backing I/O in interrupt context.
+Before linking or enabling the shared writer, resolve the
+[kernel-stack prerequisite](../technical-debt.md#writable-filesystem-kernel-stack-prerequisite):
+the reviewed private edit/validation/codec path exceeds the current 16 KiB
+kernel-task stack. Prefer caller-reserved workspace for large temporaries and
+verify the full nested path including outer worker/adapter frames.
 
 Trusted init selects partition, volume and namespace binding. Writable mounting
 and observation remain explicit authority choices; ordinary programs cannot
@@ -58,7 +63,8 @@ operations or discard necessary orphan/recovery bookkeeping.
    trusted init/mount configuration and worker attachment. Preserve defaults and
    existing read-only grants unless explicitly changed; exercise restricted
    session handoff without hard-coded CPU authority.
-3. [ ] **Integrate mutation and lifetime.** Wire existing operations to the
+3. [ ] **Integrate mutation and lifetime.** Requires resolution of the writer
+   stack prerequisite above before enabling these paths in Caelum. Wire existing operations to the
    shared core, including bounded progress, namespace changes, retained unlinked
    objects and deferred final cleanup. Validate coherent views across separately
    held grants and enumeration invalidation.
