@@ -24,8 +24,8 @@ starting work. Local uncommitted source edits are usable for development;
 the exported SDK manifest records dirty userland inputs.
 
 Kernel source builds require the pinned filesystem core. The host tools remain
-opt-in: `make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs.a`, `mkpyxisfs` and
-`pyxisfs-inspect`. SDK builds do not require the filesystem core. See the
+opt-in: `make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs.a`, `mkpyxisfs`,
+`pyxisfs-inspect` and `pyxisfs-write`. SDK builds do not require the filesystem core. See the
 [host-tool guide](../../fs/docs/host-tools.md) for source import, extraction and
 `pyxisfs-inspect check` whole-image consistency inspection.
 

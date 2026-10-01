@@ -5,8 +5,10 @@ Status: task-1 design accepted, 2026-10-01, against `pyxis-fs` commit
 bounds and validation plan below are accepted as the implementation contract.
 Task 2 now implements private COW tree/map planners, canonical/orphan codecs and
 checker support, formatter namespace packing, and the initial maintained Unity
-suite in the pinned `pyxis-fs` dependency. Public operations remain read-only;
-publication, writable admission, funded drain and recovery are not implemented.
+suite in the pinned `pyxis-fs` dependency. Tasks 3/4 add explicit writable opening,
+retained summaries, admission, ordered publication, synchronous funded drain and
+simulated durable recovery. The host exposes healthy-session open/checkpoint;
+public file/namespace mutations and native writable integration remain unimplemented.
 Implementation proceeds one explicitly assigned task at a time.
 
 Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-ownership),
@@ -17,7 +19,7 @@ Design navigation: [live interfaces](#agreed-live-interfaces-and-reference-owner
 [host tests](#agreed-maintained-host-tests-and-ci),
 [failure model](#agreed-host-failure-validation-model) and
 [delivery boundaries](#agreed-delivery-boundaries-and-design-acceptance). Task 1 is
-complete; task 2 is delivered by the dependency and pin PRs below.
+complete; tasks 2–4 are delivered by the dependency and pin PRs below.
 
 The revised requirements include bounded multi-block writes, deletion capacity
 protected from ordinary growth, durable-state recovery evidence after writeback
@@ -363,7 +365,8 @@ that candidate. It may leave unreachable bytes in previously free storage.
 | Ordinary permission, quota, workspace or memory refusal before admission | Current transaction not committed; retain any earlier confirmed progress | Reads and later mutations remain available. |
 | Replacement write or first flush fails before slot publication | Current transaction not committed; retain any earlier confirmed progress | Stop mutation until recovery. Reads, metadata, listing and lookup may use the last confirmed state while its integrity remains established. |
 | Slot write or final flush has an uncertain outcome | Current transaction unknown; retain any earlier confirmed progress | Stop all ordinary access until recovery, including reads, metadata, listing, lookup, new acquisition and derivation through existing handles. |
-| Cleanup after a confirmed user commit fails before its own slot publication | User commit remains confirmed; report cleanup failure separately | A cleanup write/flush failure stops mutation until recovery. Reads may use the last confirmed state, including the confirmed user commit, while its integrity remains established. |
+| Cleanup replacement write or first flush fails before its own slot publication | User commit remains confirmed; report cleanup failure separately | A cleanup write/flush failure stops mutation until recovery. Reads may use the last confirmed state, including the confirmed user commit, while its integrity remains established. |
+| Any backing read fails during an ordinary operation, publication planning or maintenance | Current publication is not confirmed; retain all earlier confirmed user and cleanup progress | Enter `ACCESS_STOPPED` pool-wide, even for a transient read error. |
 | Unexpected resource exhaustion during an admitted drain | Preserve confirmed user and cleanup progress; report an admission/editor invariant failure | Enter `READABLE_STOPPED`; escalate to `ACCESS_STOPPED` if integrity is no longer established or publication is uncertain. No maintenance retry in this instance. |
 | Cleanup's own slot publication becomes uncertain | User commit remains confirmed; cleanup outcome is unknown | Stop all ordinary access until recovery, even if cleanup was intended to change only allocation bookkeeping. |
 
@@ -383,10 +386,13 @@ These access restrictions are pool-wide, including sibling volumes. In the
 readable but mutation-stopped state, ordinary rights still apply, no read uses
 the unpublished candidate, and no operation advances retained roots or frees or
 reuses blocks. A checkpoint fails while mutation is stopped; it cannot clear the
-failure or promise renewed storage health. Reads can still fail with their own
-I/O or validation errors. If integrity of the confirmed state is no longer
-established, stop ordinary access rather than serving an unproved state or
-switching generations under existing handles.
+failure or promise renewed storage health. The initial writer uses the accepted
+conservative read-error policy: any backing read failure during ordinary access,
+publication planning or maintenance enters `ACCESS_STOPPED`, even if transient.
+A fresh validated reopen under the existing adapter recovery preconditions is
+required; clearing the backing error does not restore the failed instance.
+Integrity failure also stops ordinary access; do not serve an unproved state or
+switch generations under existing handles.
 
 After uncertain publication, even cached object data is unavailable through
 ordinary operations. In-memory outcome/health reporting and handle closure remain
@@ -1340,8 +1346,11 @@ A flush error ends the attempt; do not loop until a subsequent flush succeeds.
 Preserve the agreed outcome/health table. Replacement-write or first-flush failure
 stops mutation; confirmed-state reads remain available while integrity is established.
 Uncertain slot publication stops all ordinary access. Failure during cleanup does
-not erase confirmed user progress; pre-publication cleanup failure permits confirmed
-reads, while uncertain cleanup publication stops all ordinary access. Unknown
+not erase confirmed user progress; cleanup replacement-write/first-flush failure
+permits confirmed reads, while uncertain cleanup publication stops all ordinary
+access. Any backing read failure during ordinary access, planning or maintenance
+stops all ordinary access pool-wide, even if transient, and requires a fresh
+validated reopen under the existing adapter recovery preconditions. Unknown
 outcomes may contain additional committed bytes and are not automatically retryable.
 An ordinary pre-admission quota/profile refusal is not a backing writeback error.
 
@@ -1562,7 +1571,7 @@ when a scenario needs a particular role; the assertion is the resulting contract
 | Authority and lifetime | Denied operations leave state unchanged; held rights do not widen; extending writes require resize before any progress; explicit checkpoint rights; retain/unlink/name reuse; detached empty directories; last-reference cleanup and live continuation invalidation. |
 | Malformed and unsupported input | Invalid checksums, lengths, alignment, bounds/overflow, keys/references, cycles, namespace/orphan relations and live-allocation overlaps; incompatible retained claims, torn/degraded peers, unknown rights/features. Assert the documented corruption/unsupported/limit outcome, incomplete validation where required, and absence of unauthorized writes. |
 | Admission and funded cleanup | At and below quota/profile/workspace/memory/generation requirements, including formatter floors and protected deletion capacity. Refusal occurs before admission; admitted mutation and final orphan release finish their funded drains without new application work. Unexpected resource refusal during drain fails the test; additionally check preserved progress and sticky `READABLE_STOPPED`/required escalation, never resumed maintenance. |
-| Publication and recovery | Before/after each protocol phase, selected short/torn writes and failed flushes, confirmed partial progress, unknown additional progress, pre-publication read availability, post-uncertainty access stop, post-commit cleanup failure and no implicit retry. Include cache-visible nonpending writes, the distinction between core health and adapter recovery preconditions, and both retained payloads through maintenance replacement writes. |
+| Publication and recovery | Before/after each protocol phase, selected short/torn writes and failed flushes, confirmed partial progress, unknown additional progress, read availability after replacement-write/first-flush failure, pool-wide access stop after any backing read failure (including planning and maintenance), post-uncertainty access stop, post-commit cleanup failure and no implicit retry. Include cache-visible nonpending writes, the distinction between core health and adapter recovery preconditions, and both retained payloads through maintenance replacement writes. |
 | Namespace/editor invariants | Small variable-length split/merge/redistribution/root cases and formatter tails; preserved ordering, byte fit and admitted occupancy; upper bounds on new/retired nodes rather than one mandated shape. Check writable admission against both retained states. |
 
 For corruption cases isolate the intended defect, or assert only the documented
@@ -1831,8 +1840,8 @@ does not checksum file payloads; selected-state extraction does not prove payloa
 of every retained state. This model establishes only exercised serial failures,
 not exhaustive scheduling, actual-device power loss, performance or production-data
 safety. Keep ordinary host builds/manual operations and freestanding target
-compilation alongside the maintained suite. Neither this suite nor its CI gate
-is implemented or run by this specification revision.
+compilation alongside the maintained suite. Implemented coverage and limits are recorded with the focused tasks below;
+future-operation scenarios land with their corresponding behavior.
 
 ## Agreed delivery boundaries and design acceptance
 
@@ -1893,7 +1902,7 @@ The profile examples are not product defaults or measured capacity guarantees.
 The proofs depend on enforced editor and representation bounds; implementation
 review must check those invariants, and any violation requires correcting the
 bound or design before delivery. Passing host tests alone is not their proof.
-Tasks 3/4 remain a joint delivery boundary and require the next assignment.
+Tasks 3/4 were assigned and delivered together; task 5 requires the next assignment.
 
 ## Focused tasks
 
@@ -1920,16 +1929,33 @@ Tasks 3/4 remain a joint delivery boundary and require the next assignment.
    ASan/UBSan. No publication/failure-simulator or guest validation is claimed.
    [Writer stack usage](../technical-debt.md#writable-filesystem-kernel-stack-prerequisite)
    must be resolved before native writable integration; its refactor is deferred.
-3. [ ] **Implement publication and reopening.** Add exact writes/flushes through
+3. [x] **Implement publication and reopening.** Add exact writes/flushes through
    the platform adapter, ordered two-slot publication, checkpointing and reopening
    of supported committed states. Stop ordinary access on uncertain outcomes. Provide
    only the small host command surface needed to exercise shared-core operations.
    Integrate the shared test failure adapter and gate publication/recovery behavior.
-4. [ ] **Implement safe reclamation and enforce admission.** Protect retained
+4. [x] **Implement safe reclamation and enforce admission.** Protect retained
    roots and live operations, durably publish freed ranges before reuse, and
    enforce volume/pool/workspace limits. Demonstrate repeated reuse, not just
    monotonically growing allocations. Add admission, funded-drain and independently
    expected retained-payload tests with this behavior, including pre-file-API cases.
+   Tasks 3/4 are delivered together in [pyxis-fs #12](https://git.internal/PyxisOS/pyxis-fs/pulls/12),
+   pinned at `efe2453`. The 71-group maintained suite covers real private-editor
+   publication, user/advance/free write and flush failures, both retained payloads
+   before each maintenance slot write, historical-retirement reuse, generation
+   boundaries, authority/reentry, ordinary refusals and funded drains at computed
+   resource minima. Planning/maintenance read-error cases require pool-wide
+   `ACCESS_STOPPED` while preserving confirmed progress; in-place allocation-delta
+   heapsort has ordering/content-preservation coverage. Its predecessor's quadratic
+   cost is a calculated concern, not a measured benchmark. ASan/UBSan, host tools
+   and the freestanding archive pass.
+   See [implemented writer](../../fs/docs/core.md#admitted-writer-and-publication),
+   [healthy host command](../../fs/docs/host-tools.md#healthy-writer-sessions) and
+   [coverage/measurements](../../fs/docs/testing.md#tasks-34-validation-observations).
+   This does not qualify real-host post-error recovery, large populated workload
+   capacity or native writable operation. Nonempty orphan indexes refuse before
+   writes until task 6; public file mutation follows in task 5. Whole-map
+   rebuilding and the kernel-stack prerequisite remain recorded limitations.
 5. [ ] **Implement file mutation.** Create, write and resize with authority
    checks, parent-controlled ownership, sparse/fragmented data, coherent live
    reads and explicit partial-progress/error semantics. Exercise durable reopen

@@ -250,12 +250,15 @@ static enum call_status core_result(enum pfs_status status)
   case PFS_NOT_FOUND: return CALL_NOT_FOUND;
   case PFS_ABSENT: return CALL_IO;
   case PFS_UNSUPPORTED: return CALL_UNAVAILABLE;
-  case PFS_LIMIT: return CALL_LIMIT;
+  case PFS_LIMIT:
+  case PFS_NO_SPACE:
+  case PFS_QUOTA: return CALL_LIMIT;
   case PFS_NO_MEMORY: return CALL_NO_MEMORY;
   case PFS_READ_ONLY: return CALL_READ_ONLY;
   case PFS_BUSY: return CALL_BUSY;
   case PFS_DENIED: return CALL_DENIED;
   case PFS_CORRUPT: return CALL_IO;
+  case PFS_RECOVERY_REQUIRED:
   case PFS_IO:
     KASSERT(operation);
     if (operation->backing_error == BLOCK_TIMED_OUT) {

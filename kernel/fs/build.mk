@@ -1,5 +1,6 @@
-# Pinned read-only core; construction, checking and host adapters stay out.
-PFS_CORE := base block record tree platform pool access
+# Pinned read-only core and mode/health bridge; the publisher, planners,
+# construction, checking and host adapters stay out.
+PFS_CORE := base block record tree platform pool access writer_access
 PFS_SOURCES := $(addprefix fs/core/,$(addsuffix .c,$(PFS_CORE)))
 PFS_OBJECTS := $(patsubst %.c,build/%.o,$(PFS_SOURCES))
 PFS_INCLUDES := -Ifs/include -Ifs/core
