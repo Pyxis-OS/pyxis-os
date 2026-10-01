@@ -82,22 +82,18 @@ policy, and resource-accounting responsibilities. Discovery does not itself
 grant access; each transport must preserve the applicable authority and
 accounting boundaries.
 
-## Prototype placement idea
+## Execution placement
 
-The current prototype idea assigns each space exclusively to one core and keeps
-its execution on that core. This makes CPU ownership straightforward and bounds
-the number of simultaneously running spaces by the number of available cores.
+The original prototype associated one space with each CPU. The agreed
+[runtime SMP milestone](scheduling-and-threads.md) replaces that association with
+independent space identity and boot-configured CPU eligibility. Workload spaces
+share all online CPUs by default, including the BSP, or may be restricted to a
+CPU set. Affinity is neither an exclusive reservation nor a resource budget.
+Caelum remains the restricted kernel log space without owning CPU 0.
 
-The BSP would initially be reserved for the kernel tab, leaving the remaining
-cores available for user spaces. The meaning of “core” still needs clarification
-where SMT exposes multiple logical CPUs. Placement of the shared session
-interface and other system services remains open; additional reservations could
-further reduce the number of cores available to spaces.
-
-Core assignment provides CPU separation. Memory containment still requires
-protection and resource limits, and shared kernel resources still require
-synchronization across cores. This placement idea does not settle the eventual
-process model or commit later versions to one core per space.
+This changes placement, not the requirement for memory containment, resource
+accounting and synchronization. The detailed SMP task list is authoritative for
+that transition; the wider space lifecycle and containment ideas remain future work.
 
 ## Failure and resource isolation
 

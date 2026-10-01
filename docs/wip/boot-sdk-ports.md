@@ -118,7 +118,8 @@ explicit root delegation, ordinary reads and executable loading, scoped filesyst
 information and Fastfetch Disk. Combined validation covers source-content reads,
 retained rights, repeated operations, final cleanup and unchanged media.
 The agreed storage continuation is [writable core and recovery](writable-filesystem-core.md),
-then [native persistent volumes](native-persistent-volumes.md). The first task
+with [native persistent volumes](native-persistent-volumes.md) as its later
+integration. The first task
 settles bounded publication/reclamation, live handles, admission and maintained
 host contract tests with a per-filesystem-PR CI merge gate. Tests and the bounded
 failure adapter land with their behavior in pyxis-fs. The namespace profile, tighter
@@ -174,10 +175,14 @@ evidence and header probes; its proposed native event, threading, metadata and
 terminal milestones remain deferred. No Neovim build or runtime compatibility
 is claimed. The LLVM investigation remains separate future work.
 
-The [scheduling and threads direction](scheduling-and-threads.md) connects future
-process threading with independent space identity, task migration and execution
-across CPUs, initially retaining BSP services. Its staged proposals and ownership
-decisions do not start another implementation track.
+After writable filesystem core completion, the agreed
+[runtime SMP milestone](scheduling-and-threads.md) separates spaces and boot sessions
+from CPU topology, schedules existing single-task processes across eligible CPUs
+including the BSP, and brings private-memory operations onto the caller's CPU.
+Boot-configured affinity and initial per-task fairness are explicit. Capture matched
+before/after performance records; selected services remain serial initially.
+User threads and off-BSP service-worker placement follow separately. Native writable
+mount integration remains a storage follow-up, not a prerequisite for this SMP work.
 
 The [persistent storage design](persistent-storage.md) records the agreed custom
 COW pool, volume guarantees, migration strategy, durability and compatibility
