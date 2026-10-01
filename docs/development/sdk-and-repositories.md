@@ -120,7 +120,8 @@ cgroup limit. Its quick-only mode creates fresh fixture pages after joining
 that job; heavier suites still require mount-level `noswap`. Forgejo runner 13.2
 needs trusted runner configuration for the mount, swap and core limits; see
 [runner provisioning](../../fs/docs/ram-validation.md#runner-provisioning).
-That provisioning is pending, so the checks currently refuse before testing.
+The filesystem jobs select the dedicated `pyxis-fs-ram` runner and verify its
+effective controls before testing; ordinary image builds retain `pyxis`.
 The image `build` job explicitly fails unless that job succeeds. Require `Build Pyxis / build (pull_request)` in Pyxis
 branch protection: a missing dependency commit, failed host build or failed
 filesystem suite then blocks that parent check. This runs the pinned tests locally

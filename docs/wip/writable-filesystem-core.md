@@ -2218,11 +2218,12 @@ this documentation update.
      This is a proposal, not approval to implement it or the allocator redesign.
      The matching rootless setup passes the quick suite locally, and its
      negative mode/storage checks preserve the heavier-suite boundary. Forgejo
-     runner 13.2 ignores the required workflow mount/swap/core options; CI
-     refuses before building because its dedicated scratch mount is absent.
-     The proposed separate rootless validation runner and exact trusted options
+     runner 13.2 ignores the required workflow mount/swap/core options. The
+     filesystem jobs now select the owner's dedicated `pyxis-fs-ram` runner;
+     its effective boundary must pass the guard before tests execute.
+     The separate rootless validation runner and exact trusted options
      are documented in [runner provisioning](../../fs/docs/ram-validation.md#runner-provisioning).
-     Owner provisioning and passing CI at both revised heads remain required;
+     Passing CI at both revised heads remains required;
      this item stays unchecked. Ordinary image builds retain their existing
      runner and are outside the filesystem job's resource cap.
 
