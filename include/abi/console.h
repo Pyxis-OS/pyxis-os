@@ -61,15 +61,17 @@ struct console_tab_width_request {
  *
  * ARM_INTERRUPT needs INTERRUPT and returns a handle carrying only ARMED. The
  * input stays armed while any ARMED grant exists; closing the last one disarms
- * and clears the latch. Arming while armed is BUSY. Each armed interval starts
- * with a clear latch.
+ * and clears the latch. Arming while armed is BUSY; BUSY can also be transient
+ * while another ARM is installing its handle. Each armed interval starts with
+ * a clear latch.
  *
  * PASSTHROUGH needs READ and returns a handle carrying only PASSTHROUGH. While
  * any PASSTHROUGH grant exists, Ctrl+C is ordinary input.
  *
  * While armed without passthrough, each byte 3 from keyboard text or terminal
  * injection is removed from input, sets the one latch, and discards input
- * queued before it; later bytes are kept. Raw keyboard events are unaffected.
+ * queued before it, including a pending input loss; later bytes are kept. Raw
+ * keyboard events are unaffected.
  * Unarmed or passthrough byte 3 is data. wait_many WAIT_INTERRUPT on an ARMED
  * handle reports the latch, level-triggered and not consumed; terminal hangup
  * reports WAIT_ERROR. */

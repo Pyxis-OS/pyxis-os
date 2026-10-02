@@ -112,9 +112,13 @@ void console_authority_release(struct kernel_object *object, uint64_t rights)
 
 uint64_t console_interrupt_ready(struct console_interrupt *interrupt)
 {
+  /* The readiness worker runs preemptibly; keyboard routing takes this lock
+   * with IF=0, so a preempted holder would never get the CPU back. */
+  uint64_t flags = cpu_save_interrupts();
   lock_interrupt(interrupt);
   bool latched = interrupt->latched;
   unlock_interrupt(interrupt);
+  cpu_restore_interrupts(flags);
   return latched ? WAIT_INTERRUPT : 0;
 }
 
@@ -298,10 +302,12 @@ void console_input(struct console_object *console, const char *bytes, size_t siz
   KASSERT(arch_cpu_index() == 0);
   uint64_t flags = cpu_save_interrupts();
   lock_input(console);
-  /* Recognized before input loss: the interrupt discards queued input anyway. */
+  /* Recognized before input loss. The interrupt discards everything a pending
+   * loss described, so later bytes start a fresh stream. */
   size_t consumed = console_interrupt_scan(&console->interrupt, bytes, size);
   if (consumed) {
     console->input_head = console->input_count = 0;
+    console->input_lost = false;
     bytes += consumed;
     size -= consumed;
   }

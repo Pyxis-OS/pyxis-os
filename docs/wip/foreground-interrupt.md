@@ -237,7 +237,11 @@ These are implementation checks, not open policy:
      - A remote shell that exited holding an armed handle released it (GDB:
        armed 1 to 0, latch cleared), and the terminal was destroyed with zero
        armed and passthrough counts.
-     - Terminal hangup reporting WAIT_ERROR was reviewed in source only.
+     - After review, local input overflowed by 4,200 keys while armed: without
+       Ctrl+C the read reported INPUT_LOST; with Ctrl+C, `d`, `e` after the
+       same flood the latch was set and the read returned only `de`.
+     - Terminal hangup reporting WAIT_ERROR, and the readiness worker
+       preemption the review found, were reviewed in source only.
    - Found for task 3: when a terminal's input queue is full, the remote
      server stops reading frames until its pending injection drains, so a
      later Ctrl+C never reaches the kernel while the command does not read.

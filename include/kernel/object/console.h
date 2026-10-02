@@ -56,7 +56,7 @@ bool console_write(struct console_object *console, const char *bytes, size_t siz
 bool console_authority_retain(struct kernel_object *object, uint64_t rights);
 void console_authority_release(struct kernel_object *object, uint64_t rights);
 
-/* Any CPU, IF=0. WAIT_INTERRUPT while the latch is set, otherwise zero. */
+/* Any CPU, preserves IF. WAIT_INTERRUPT while the latch is set, otherwise zero. */
 uint64_t console_interrupt_ready(struct console_interrupt *interrupt);
 
 /* IF=0, under the owner's input lock. While armed without passthrough, returns

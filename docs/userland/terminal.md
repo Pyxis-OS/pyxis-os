@@ -176,7 +176,8 @@ READ when it delegates it.
   same input object, carrying only `CONSOLE_RIGHT_ARMED`. The input stays armed
   while any armed grant exists. Closing the last one, including at process
   exit, disarms and clears the latch. Arming while armed returns `CALL_BUSY`,
-  and each armed interval starts with a clear latch.
+  and each armed interval starts with a clear latch. BUSY can also be
+  transient while another arm request is installing its handle.
 - `console_passthrough()` needs READ. It returns a handle carrying only
   `CONSOLE_RIGHT_PASSTHROUGH`. While any such grant exists, Ctrl+C stays
   ordinary input. Closing it withdraws the request.
@@ -190,6 +191,8 @@ injection is removed from input and sets one latch, and input queued before it
 is discarded. Bytes after the last Ctrl+C in the same keyboard sequence or
 injection are kept. Recognition runs before the console's input-loss check and
 before a terminal's capacity check, so a full queue cannot hide the interrupt.
+On the console it also clears a pending input loss, since that loss described
+input the interrupt discards; later bytes start a fresh stream.
 The discarded prefix of an injection counts as accepted. Unarmed byte 3 is data,
 as before. Raw keyboard owners receive key events that never become console
 text, so they are unaffected.
