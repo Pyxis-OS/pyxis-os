@@ -559,7 +559,9 @@ termination, including blocked-operation unwind, whether or not the process
 belongs to a group. It is idempotent and also succeeds after completion: an exit
 or fault already committed keeps its result, otherwise the result is TERMINATED.
 Only that process stops; processes it launched are unaffected, and its group's
-admission is not sealed. A handle restricted to WAIT is denied.
+admission is not sealed. A handle restricted to WAIT is denied. Today no
+process forwards an observer. Any future transfer of an observer handle carries
+TERMINATE unless the rights are reduced to WAIT at transfer.
 
 For TERMINATE, the control object borrows a task link. Launch preparation sets it
 after installing the observer, and the BSP clears it under the completion lock
