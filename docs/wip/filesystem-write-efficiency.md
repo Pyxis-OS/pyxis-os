@@ -661,24 +661,64 @@ substantially. Global validation/vector/admission work remains, and instrumented
 planning intervals include adapter reads and optional reference counting.
 These are RAM observations, not NVMe latency or a local worst-case theorem.
 
-**One proposed next bounded improvement, unassigned:** compare both immediate
+**Subsequently approved bounded improvement:** compare both immediate
 clean neighbours using validated expanded-run occupancy before repair, including
 any marked run bridged by the chosen neighbour. Keep a deterministic left tie
 break, monotone marks, the fixed eligible-ID prefix and renewed accounting/seam
 closure. Existing q/J/H resource and termination bounds can remain intact;
 structural splits/merges, new placement, budgets and reserve/admission policy
 stay outside the proposal. The measured redistribution marks justify investigating
-this choice but do not establish that left preference caused them or predict
-savings. A later assigned task should record bounded repair/alternative-capacity
-counters and repeat the unchanged matched histories through all maintenance.
-It would not remove global planning cost or qualify deployment by itself.
+this choice but did not establish that left preference caused them or predict
+savings. After filesystem #23 / Pyxis #324 merged, the owner assigned this
+correction, bounded repair/alternative-capacity diagnostics and the unchanged
+matched histories through all maintenance. The selector scores the complete
+expanded run's distance to `[leaves, 46*leaves]`, with left ties, before marking
+one neighbour and ancestors and renewing accounting. Its fixed diagnostics do
+not change arena layout or budgets. It does not remove global planning cost or
+qualify deployment by itself.
 
 Storage evidence separates member-cgroup peaks from independent tmpfs bounds.
 Native backing/scratch end allocation exceeds the member peak in a recorded
 case; native kernel/cache charging is not completely established. Do not use
 that peak as whole-native-job RAM high-water evidence. The existing bounded
 RAM/no-swap setup and configured budgets are unchanged, with conservative native
-cache accounting retained. No further implementation or campaign is assigned.
+cache accounting retained. Further improvements or campaigns still need their
+own assignment.
+
+## Implemented occupancy-aware neighbour follow-up
+
+After filesystem #23 and Pyxis #324 merged, the owner assigned the bounded
+selector. [Filesystem #24](https://git.internal/PyxisOS/pyxis-fs/pulls/24)
+publishes `4b1e81dfbc71d46ca287a93c69b7b83917a84f87`, which this parent pins. For the first failing
+run, score both immediate clean neighbours against the complete expanded run,
+including a marked run bridged through that neighbour; prefer fit/smaller deficit,
+with left ties. Mark only the chosen leaf and ancestors and renew accounting and
+seams. Source inventory, fixed eligible prefix and monotone marks retain the
+existing termination/funding proof. No topology, packing, placement, reserve,
+admission, caller-budget or runner-policy change is introduced.
+
+The [matched record](../../fs/docs/neighbour-repair-measurements.md) retains the
+before matrix, fresh before control, unchanged after histories, all maintenance,
+repair diagnostics and bounded storage evidence. The results are mixed; this
+intermediate selector is not a claim of uniformly lower traffic. All 54 after
+cases complete and independently verify; paired Pyxis byte totals are identical.
+The smallest overwrite improves 6.141%, the smallest append regresses 0.645%,
+and the largest overwrite regresses 1.934%. Largest append/compiler totals improve
+1.343%/0.438%, while their first/early windows become more expensive. The largest
+append/overwrite remain above recorded Btrfs totals. Nearly all of the largest
+regression is map-node traffic, including later history without new repairs.
+Broad local
+closure and population-dependent planning remain. Diagnostics describe observed
+choices and costs, not an optimal alternative history. The maintained host suite
+adds six deliberate fit/deficit/tie/bridging cases with independent candidate
+coverage, immutable source/sharing checks and renewed self-accounting. Existing
+recovery, retained-payload, authority and funded-cleanup coverage stays intact.
+All 141 quick and six extended groups pass normally and with ASan/UBSan;
+ordinary host tools and the complete shared archive with Pyxis freestanding/kernel
+ABI flags compile. Local unprivileged `make -j16` builds and links Caelum with
+this published pin through the existing read-only core subset; the writer remains
+excluded. Task 7 and writable deployment remain open; no further mechanism is
+assigned.
 
 ## Proposed deployment comparisons and acceptance
 

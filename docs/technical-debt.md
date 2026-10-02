@@ -886,8 +886,14 @@ completes 54 RAM-only cases and reaches J=216. Allocation-map replacement accoun
 for about 70–84% of append/overwrite window metadata despite predominantly local
 publication; largest complete-history append/overwrite totals exceed Btrfs.
 Compiler window writes are non-monotonic with population while instrumented planning
-time grows. The proposed occupancy-aware immediate-neighbour correction needs a
-separate assignment; it is not implemented or deployment qualification.
+time grows. The subsequently assigned [occupancy-aware immediate-neighbour
+correction](../fs/docs/neighbour-repair-measurements.md) is implemented under the
+existing monotone closure/funding bounds, including bridged marked runs. Matched
+results include a 6.141% small-overwrite improvement and a 1.934% largest-overwrite
+regression. Largest append/overwrite histories still exceed Btrfs. It does not
+establish deployment readiness or remove broad
+local replacement and population-dependent planning. Further mechanisms need
+their own assignment.
 Native scratch/backing allocation exceeds the member-
 cgroup peak in a recorded case; do not treat that peak as whole-native-job RAM
 high-water evidence. Scratch/trace remain independently bounded with no swap or
