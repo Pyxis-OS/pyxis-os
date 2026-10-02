@@ -113,94 +113,9 @@ class parsing without rewriting the working storage path. Phase B validation
 should include an unrelated unsupported USB device as well as the chosen disk.
 Phase A itself needs no kernel USB abstractions or placeholder drivers.
 
-## Native hardware inspection and text databases
-
-The owner also wants native `lspci` and `lsusb` tools with packaged, plain-text
-name databases. This is an agreed direction for focused follow-up tasks, not an
-expansion of boot-image Phase A. PCI discovery already exists, so `lspci` can be
-assigned independently; `lsusb` follows USB enumeration and should help inspect
-devices even when no class driver supports them.
-
-- `lspci`: PCI address, numeric vendor/device IDs, resolved names, class and
-  driver ownership where the kernel exposes it.
-- `lsusb`: controller/port topology, numeric IDs, device-provided strings and
-  resolved names, negotiated speed, interface classes and bound/unsupported state.
-  Endpoint detail is useful for debugging once that information exists.
-
-Expose observed inventory through explicit read-only observation authority.
-Listing must not grant raw configuration access, reset authority, arbitrary USB
-transfers or access to storage contents. Settle the inventory scope, lifetime and
-delegation contract before adding an ABI; reuse existing observation facilities
-where appropriate. Userland owns name lookup and formatting. Device strings and
-database labels are descriptive data, never authentication, grants or driver
-selection policy; escape device text for terminal output.
-
-Package pinned upstream snapshots, preserving provenance and license notices,
-at proposed paths `app://share/hwdata/pci.ids` and
-`app://share/hwdata/usb.ids`. Both databases offer BSD-3-Clause or GPL-2.0-or-later;
-use the BSD option. No udev hardware database, libusb port, full pciutils port or
-background updater is required by these native tools. Missing database entries
-must leave numeric identification usable, with device strings where available.
-
-Downloaded source observations on 2026-10-02:
-
-| Database | Snapshot date | Uncompressed bytes | Lines |
-| --- | --- | ---: | ---: |
-| `usb.ids` | 2026-06-26 | 730,605 | 25,705 |
-| `pci.ids` | 2026-10-01 | 1,671,363 | 43,261 |
-
-Together these are about 2.3 MiB of useful text for hardware naming, editor use,
-buffered reads and future `wc`, `grep`, `sort` and pipeline workloads. These
-observations select no permanent version or size. Pin the chosen revisions when
-packaging; database updates must not break validation through frozen line counts,
-specific vendor entries or copies of today's contents. Use small independently
-defined inputs for parser behaviour; the real corpus is ordinary packaged data.
-
-1. [ ] **Package the two text databases.** Choose immutable upstream revisions,
-   preserve BSD notices and stage through existing asset assembly. Keep the
-   files readable by ordinary text tools; no compiled database is needed initially.
-2. [ ] **Expose PCI inventory and implement native `lspci`.** Settle observation
-   authority first, then use existing enumeration without rescanning hardware
-   from userland. Exercise known and unknown IDs and missing name data.
-3. [ ] **Expose USB inventory and implement native `lsusb`.** Follow enumeration,
-   showing supported and unbound devices through the same observation boundary.
-   Validate topology and interface reporting alongside the selected storage device.
-
-### Everyday pipeline performance target
-
-Once `wc` is available, use the packaged PCI database for a small end-to-end
-workload, with the proposed asset path:
-
-```sh
-cat app://share/hwdata/pci.ids | wc
-wc < app://share/hwdata/pci.ids
-```
-
-The owner observed `cat ~/Downloads/pci.ids | wc` on the Linux host completing
-in approximately 5 ms, with output `43261 244004 1671363` (lines, words, bytes).
-That single wall-clock sample used surrounding `date +%s%3N` commands and includes
-shell/timing overhead; it is context, not a precise pipeline-only baseline.
-
-The initial Pyxis target is **under one second** for this approximately 1.6 MiB
-file from the boot archive or RAM filesystem in an agreed QEMU configuration.
-Exceeding it calls for investigation, not an automatic conclusion about which
-subsystem failed. The pipeline exercises file reads, libc, process launch, pipe
-transfers, scheduling/wakeups and counting. Comparing direct stdin redirection
-helps identify the extra producer/pipe cost, without fully isolating it.
-
-Record the input revision/hash and size, tool versions and counting semantics,
-backend, QEMU resources/accelerator, nested versus host execution, and profiling
-state. Repeat samples and report median/range; distinguish first reads from
-cached runs and use a monotonic elapsed-time source when available. Verify counts
-against the same input and agreed semantics; the observed counts above are not
-permanent assertions. Keep launch and completion timing boundaries consistent.
-Native disk, HOST and HTTPS need separately labelled results and targets.
-
-This is a configuration-specific responsiveness goal, not a filesystem invariant,
-a universal CI deadline or a claim of current Pyxis performance. Larger future
-database snapshots require the workload/target to be reconsidered explicitly.
-It does not assign a `wc` port, new benchmark infrastructure or optimisation work,
-and adds no dependency to boot-image Phase A.
+Native hardware-listing tools and their name databases are a separate
+[hardware-inspection proposal](hardware-inspection.md). `lsusb` will consume the
+USB inventory; neither tool nor its benchmark is a boot-image prerequisite.
 
 ## Proposed staged milestones
 
@@ -285,7 +200,3 @@ support does not require completion of native writable integration.
 - [USB-IF Bulk-Only Transport specification](https://www.usb.org/sites/default/files/usbmassbulk_10.pdf).
 - [Intel xHCI specification](https://www.intel.com/content/www/us/en/content-details/625472/extensible-host-controller-interface-for-universal-serial-bus-xhci-requirements-specification.html).
 - [Linux cache-control contract](https://docs.kernel.org/block/writeback_cache_control.html).
-- [USB ID database and licensing](https://usb-ids.gowdy.us/) and its
-  [text source](https://github.com/usbids/usbids).
-- [PCI ID database and licensing](https://pci-ids.ucw.cz/) and its
-  [text source](https://github.com/pciutils/pciids).

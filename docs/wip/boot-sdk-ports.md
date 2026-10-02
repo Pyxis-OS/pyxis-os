@@ -253,10 +253,11 @@ independently in a parallel worktree; kernel USB and writable stages remain
 unassigned. Reusable controller/USB/class/block boundaries are required, without
 speculative driver frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.
-Its [hardware-inspection follow-ups](usb-installation.md#native-hardware-inspection-and-text-databases)
-add native `lspci`/`lsusb` consumers of read-only inventory and pinned plain-text
-PCI/USB name databases, also useful for text-tool workloads. `lspci` can precede
-USB support; these tasks do not expand boot-image Phase A.
+The separate [hardware-inspection proposal](hardware-inspection.md) adds native
+`lspci`/`lsusb` consumers of read-only inventory and pinned plain-text PCI/USB name
+databases. `lspci` can precede USB support; these tasks do not expand boot-image
+Phase A. The [everyday pipeline performance target](../development/io-reliability-attribution.md#everyday-pipeline-performance-target)
+records their use as text-tool input without assigning a port or benchmark campaign.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

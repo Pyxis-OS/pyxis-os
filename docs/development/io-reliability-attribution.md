@@ -331,3 +331,40 @@ mixed-workload fairness and process CPU accounting were outside this milestone.
 CALL deadlines still do not bound RECEIVE, pipe or process waits. Unfinished
 receipts can still hold all sixteen records; see
 [endpoint cancellation/capacity](../technical-debt.md#endpoint-cancellation-and-capacity).
+
+### Everyday pipeline performance target
+
+Future workload, recorded 2026-10-02; no Pyxis result is claimed. Once `wc` is
+available, use the [proposed packaged PCI database](../wip/hardware-inspection.md#packaged-databases) for a small end-to-end
+workload, with the proposed asset path:
+
+```sh
+cat app://share/hwdata/pci.ids | wc
+wc < app://share/hwdata/pci.ids
+```
+
+The owner observed `cat ~/Downloads/pci.ids | wc` on the Linux host completing
+in approximately 5 ms, with output `43261 244004 1671363` (lines, words, bytes).
+That single wall-clock sample used surrounding `date +%s%3N` commands and includes
+shell/timing overhead; it is context, not a precise pipeline-only baseline.
+
+The initial Pyxis target is **under one second** for this approximately 1.6 MiB
+file from the boot archive or RAM filesystem in an agreed QEMU configuration.
+Exceeding it calls for investigation, not an automatic conclusion about which
+subsystem failed. The pipeline exercises file reads, libc, process launch, pipe
+transfers, scheduling/wakeups and counting. Comparing direct stdin redirection
+helps identify the extra producer/pipe cost, without fully isolating it.
+
+Record the input revision/hash and size, tool versions and counting semantics,
+backend, QEMU resources/accelerator, nested versus host execution, and profiling
+state. Repeat samples and report median/range; distinguish first reads from
+cached runs and use a monotonic elapsed-time source when available. Verify counts
+against the same input and agreed semantics; the observed counts above are not
+permanent assertions. Keep launch and completion timing boundaries consistent.
+Native disk, HOST and HTTPS need separately labelled results and targets.
+
+This is a configuration-specific responsiveness goal, not a filesystem invariant,
+a universal CI deadline or a claim of current Pyxis performance. Larger future
+database snapshots require the workload/target to be reconsidered explicitly.
+It does not assign a `wc` port, new benchmark infrastructure or optimisation work,
+and adds no dependency to the separate USB boot-image work.
