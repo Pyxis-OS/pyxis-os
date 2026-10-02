@@ -1141,7 +1141,9 @@ page-aligned BAR0 prefix, interpreted extended capabilities within that 4 KiB
 prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles, external hubs,
 power management and insertion after the startup snapshot are unsupported.
 QEMU advertises zero scratchpads and 32-byte contexts; nonzero scratchpads,
-64-byte device contexts and BIOS ownership handoff remain unmeasured paths.
+64-byte device contexts, nondefault PSI mappings and BIOS ownership handoff remain
+unmeasured paths. Enumeration now prepares a descriptor-supported BOT transport,
+but LUN/media support and USB block access remain pending.
 
 USB 2 port reset has no explicit connect-debounce interval. The startup snapshot
 waits 20 ms only after the driver powers a port; it has no separate link-settling
@@ -1171,3 +1173,28 @@ Runtime stop retains claims, mappings, slot/command records and DMA backing unti
 reboot, even after confirmed halt. This follows current shared-VM ownership and
 prevents reuse while device ownership is uncertain. Runtime reclamation belongs
 with the VM/device lifetime work, not a local allocator-lock workaround.
+
+## USB descriptor bounds and per-port preparation
+
+[Enumeration](devices/usb-enumeration.md) inspects every advertised configuration
+using an initial 4 KiB descriptor/control budget. A larger configuration makes
+inventory incomplete, even after finding a BOT candidate. Unknown/vendor classes
+and external hubs also prevent proving uniqueness. Revisit those bounds or class
+classification only with a concrete target descriptor/topology requirement.
+
+All advertised ports receive input/output contexts, an EP0 ring/control buffer and
+two initial non-control rings before AP startup. With the current 4 KiB buffer
+and 4 KiB allocations, this adds six pages/range records per port even when empty.
+This fits QEMU's eight-port profile but consumes the shared VM range budget and
+can fail preparation on larger controllers. Revisit boot inventory/resource
+preparation with physical port-count evidence; runtime allocation/reclamation
+requires the VM ownership work rather than allocator locks.
+
+The first implementation bounds each device to one active control request. Early
+errors, deadlines or removal during active work stop the whole controller and
+retain unresolved DMA until reboot. There is no endpoint-local recovery yet.
+The initial client reads complete descriptors and sends configuration requests;
+short packets, active abandonment, early errors, ring wrap and nonzero alternate
+selection follow reviewed source/spec rules but have no synthetic validation.
+Revisit with an actual class-transfer workload in BOT/SCSI work, keeping hardware
+ownership explicit. Physical USB qualification remains separate.

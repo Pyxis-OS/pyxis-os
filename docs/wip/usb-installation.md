@@ -1,13 +1,14 @@
 # USB boot and first physical installation
 
-Status: Phase A image assembly/USB boot and Phase B.2 controller bring-up
-implemented, 2026-10-02; USB enumeration, transfers and storage remain pending.
+Status: Phase A image assembly/USB boot and Phase B.3 enumeration/control
+transfers implemented, 2026-10-02; BOT/SCSI media and block access remain pending.
 The owner wants a replaceable USB drive as the first
 physical installation target, with QEMU development before laptop validation.
 Implemented image behavior lives in the [USB image reference](../development/usb-image.md).
 Phase B follows the read-only contracts below. Implemented controller behavior
-lives in the [xHCI reference](../devices/usb-xhci.md). Writable installation is
-unassigned. This document does not
+lives in the [xHCI reference](../devices/usb-xhci.md), with checked discovery and
+request ownership in [USB enumeration](../devices/usb-enumeration.md). Writable
+installation is unassigned. This document does not
 authorize physical writes or reorder the active filesystem, spaces/SMP and
 display work.
 
@@ -151,6 +152,14 @@ cannot silently make another disk win. The initial storage profile accepts one
 non-composite interface and one logical unit, LUN 0. Multiple logical units or
 unsupported interface shapes produce an explicit unsupported result. Descriptor
 selection must allow the target's BOT/UAS alternate settings, selecting BOT.
+
+For B.3, the owner accepted inspecting every advertised configuration within
+bounded descriptor storage, then choosing the first supported one-interface
+SCSI/Bulk-Only configuration and alternate setting in descriptor order. Each
+physical device contributes at most one candidate; its alternate configurations
+are not additional disks. Configuration values, interface numbers and alternate
+numbers come from descriptors. Unreadable/unclassifiable descriptors or exhausted
+bounds still make discovery incomplete, even after a candidate was found.
 
 A positively identified unrelated class stays unbound. A mouse alongside the
 disk must work as that case. Per-device unsupported results do not automatically
@@ -338,7 +347,7 @@ host tools and the later physical-preparation procedure.
    rings, interrupt delivery and root-port state. Start with one directly attached
    supported storage device present at boot. Leave UAS, external hubs, insertion
    after boot, legacy UHCI/OHCI/EHCI and power management outside this first slice.
-3. [ ] **Enumerate and transfer.** Implement control transfers, checked descriptor
+3. [x] **Enumerate and transfer.** Implement control transfers, checked descriptor
    parsing, addressing/configuration and endpoint setup. Select supported
    SCSI/Bulk-Only interfaces by descriptors; unsupported devices fail explicitly.
    Support the endpoint packet/burst requirements of the chosen SuperSpeed path.
@@ -372,10 +381,10 @@ host tools and the later physical-preparation procedure.
 
 ## Remaining assignment and qualification decisions
 
-- Phase A and B.2 controller bring-up are implemented; B.1 defines the read-only
-  contract.
-  Deliver enumeration next, then BOT/SCSI reads and
-  native integration. Writable work and its roadmap ordering remain unassigned.
+- Phase A and B.3 enumeration/control transfers are implemented; B.1 defines the
+  read-only contract. BOT transport selection is provisional until B.4 establishes
+  LUN/media support. BOT/SCSI reads and native integration remain pending. Writable
+  work and its roadmap ordering remain unassigned.
 - Image update/preservation ownership remains open for persistent installation.
   Read-only disk selection does not qualify a write target or authenticate media.
 - If the physical target requires hubs, firmware capabilities outside the
