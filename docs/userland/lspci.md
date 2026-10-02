@@ -28,8 +28,10 @@ The class label is the subclass name if the database has one, otherwise the
 base-class name, otherwise `Class`. An unknown vendor name is left out, and an
 unknown device name becomes `Device`. Database labels are descriptive text
 only. Bytes outside printable ASCII are written as `\xHH`, and a backslash is
-written as `\\`. Addresses carry a `SSSS:` segment prefix only if some function
-has a nonzero segment. Today's kernel discovers segment zero only.
+written as `\\`. The database contains some UTF-8 vendor names, so those lines
+differ from host `lspci` until the terminal handles UTF-8. Addresses carry a
+`SSSS:` segment prefix only if some function has a nonzero segment. Today's
+kernel discovers segment zero only.
 
 | Option | Effect |
 | --- | --- |
@@ -53,7 +55,9 @@ part of the query but is not shown.
 | Missing `system_info`, query failure, bad usage or stdout failure | A stderr message | 1 |
 
 A database failure discards any names read before it, so a partly read database
-is never mistaken for missing entries.
+is never mistaken for missing entries. stdout is unbuffered and `fclose` reports
+only closing the descriptor, so `lspci` checks the stream error indicator after
+each line. On the first failed write it stops listing and reports the error.
 
 ## Authority and limits
 
@@ -95,7 +99,16 @@ GDB showed 10 retained kernel records with class fields and revision, and a list
 that ended after the tenth. Setting the kernel's completeness flag to false from
 GDB produced the full list, the incomplete warning and status 1. Setting it to
 unavailable produced the unavailable message and status 1. Both values were then
-restored, and output was normal again. These two states were forced from the
+restored, and output was normal again.
+
+A review found that the first version ignored failed stdout writes, and userland
+`31d59f3` fixed it. In `lspci | lua -e ''`, the reader exits while `lspci` is
+still reading the database, so every later write fails. Before the fix,
+`lspci` exited 0 with no diagnostic. After the fix, two runs each reported
+`lspci: stdout: Endpoint closed` and status 1, and the shell printed its
+stage-1 diagnostic. `lspci -n` writes before such a reader exits, so it is not
+a reliable failure case and succeeded. `lspci > home://out.txt` and
+`lspci | cat` still produced the full listing with status 0. These two states were forced from the
 debugger; no topology fault occurred. Inventory states caused by real
 malformed topology or failed record allocation were reviewed in source only.
 QEMU and GDB were stopped afterwards.
