@@ -2,7 +2,8 @@
 
 Status: direction, first-slice decisions and the interrupt event contract
 agreed 2026-10-02, including the review follow-ups: minimal passthrough,
-raw-keyboard exemption and typeahead disposal. Implementation is not started.
+raw-keyboard exemption and typeahead disposal. Task 1 (process termination) is
+implemented; see [processes](../interfaces/processes.md).
 
 Ctrl+C currently only cancels the shell's line being edited. It cannot stop a
 running foreground command, locally or through the
@@ -152,8 +153,26 @@ These are implementation checks, not open policy:
 
 ## Focused tasks
 
-1. [ ] **Process termination.** Add the terminate right and operation, the
+1. [x] **Process termination.** Add the terminate right and operation, the
    process-to-task link and its lifetime. Verify the ungrouped stop path.
+   - Implemented: launch observers carry WAIT and TERMINATE, and libpyxis has
+     `process_terminate()`. The link is detached under the completion lock in
+     the reaper before the task is freed, and when a preparation is discarded.
+   - Ungrouped stopping needed no change: stop checks run at syscall entry and
+     exit, preemption and interrupt return, use only the task's own flag, and
+     retire through the ordinary reaper.
+   - Evidence: four CPUs on nested KVM, with a temporary uncommitted shell hook
+     that terminated a foreground job after a delay.
+     - Remote (grouped): a Lua CPU loop, a terminal-blocked `cat`, and two- and
+       three-stage pipelines of blocked readers and CPU loops reported
+       `terminated` for every stage.
+     - Local (ungrouped): the same with `cat` and a Lua loop piped to `cat`.
+       The shell then kept editing and ran later commands.
+     - A process that had already exited kept its exit status 5.
+     - A WAIT-only copy was denied, and repeated requests succeeded.
+     - GDB saw each stop request reach the task, with a null group for local
+       children. Every TERMINATED completion found the link already cleared.
+     - Both remote sessions ended with a complete FINAL.
 2. [ ] **Interrupt arming and events.** Add the interrupt right, armed Ctrl+C
    recognition on console and terminal text input, typeahead disposal, the
    `wait_many` event and the passthrough request, including cleanup when the
