@@ -12,6 +12,7 @@ set -eu
 : "${VIRTIO_RNG:=1}"
 : "${VIRTIO_BLK_IMAGE:=}"
 : "${VIRTIO_BLK_READONLY:=0}"
+: "${USB_BOOT_IMAGE:=}"
 : "${UDP_FORWARD:=}"
 : "${TCP_FORWARD:=}"
 command -v "$QEMU" >/dev/null 2>&1 || {
@@ -25,12 +26,36 @@ for firmware in "$OVMF_CODE" "$OVMF_VARS"; do
   }
 done
 # Fresh variables per invocation; never pass the host variables file writable.
+mkdir -p build
 cp "$OVMF_VARS" build/OVMF_VARS.fd
-set -- "${1:-run}"
-if [ "$1" = debug ]; then
-  set -- -S -gdb tcp:127.0.0.1:1234
+mode=${1:-run}
+case "$mode" in
+  debug|debug-usb) set -- -S -gdb tcp:127.0.0.1:1234 ;;
+  run|run-usb) set -- ;;
+  *) echo 'Launch mode must be run, debug, run-usb or debug-usb.' >&2; exit 1 ;;
+esac
+if [ "$mode" = run-usb ] || [ "$mode" = debug-usb ]; then
+  [ -f "$USB_BOOT_IMAGE" ] || {
+    echo 'USB_BOOT_IMAGE must name an existing regular raw image file; build it with make usb-image.' >&2
+    exit 1
+  }
+  [ -z "$VIRTIO_BLK_IMAGE" ] || {
+    echo 'USB boot requires VIRTIO_BLK_IMAGE to be empty so a second disk cannot mask missing USB access.' >&2
+    exit 1
+  }
+  case "$USB_BOOT_IMAGE" in
+    /*) usb_image=$USB_BOOT_IMAGE ;;
+    *) usb_image="$(pwd -P)/$USB_BOOT_IMAGE" ;;
+  esac
+  case "$usb_image" in
+    *,*) echo 'USB_BOOT_IMAGE absolute path must not contain commas.' >&2; exit 1 ;;
+  esac
+  set -- "$@" \
+    -drive "if=none,id=pyxis_usb,format=raw,readonly=on,file=$usb_image" \
+    -device qemu-xhci,id=pyxis_xhci \
+    -device usb-storage,bus=pyxis_xhci.0,port=1,drive=pyxis_usb,bootindex=1
 else
-  set --
+  set -- "$@" -cdrom build/pyxis.iso -boot d
 fi
 net_backend=user,id=pyxis_net
 if [ -n "$UDP_FORWARD" ]; then
@@ -136,5 +161,5 @@ exec "$QEMU" -machine "$machine" -accel "$ACCEL" -cpu max \
   -smp "cpus=$CPUS,sockets=1,cores=$CPUS,threads=1" -m "$MEMORY" \
   -drive "if=pflash,format=raw,unit=0,readonly=on,file=$OVMF_CODE" \
   -drive if=pflash,format=raw,unit=1,file=build/OVMF_VARS.fd \
-  -cdrom build/pyxis.iso -boot d -display "$QEMU_DISPLAY" -serial mon:stdio \
+  -display "$QEMU_DISPLAY" -serial mon:stdio \
   -no-reboot -no-shutdown "$@"

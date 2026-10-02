@@ -49,6 +49,8 @@ provides persistent `host://` files and executable loading; no overlay is needed
 Networking is opt-in with `VIRTIO_NET=1`; see [network setup](docs/devices/networking.md).
 Kernel-only [block storage](docs/devices/block-storage.md) is opt-in with
 `VIRTIO_BLK_IMAGE=/path/to/disk.raw`.
+The opt-in [raw USB image](docs/development/usb-image.md) builds a FAT32/GPT
+installation image and boots it through emulated USB with `make run-usb`.
 [Native read-only mounts](docs/userland/init.md#native-disk-configuration-and-mounting)
 add paired `MOUNT_DISK`/`MOUNT_PRINCIPAL` configuration, read-only image attachment
 and an explicit mount in trusted init.

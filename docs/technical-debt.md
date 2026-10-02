@@ -496,6 +496,22 @@ metadata prevent fallback. These conservative bounds can exclude otherwise usabl
 media. Revisit only for a concrete consumer with explicit resource limits and
 recovery policy; no automatic repair is available.
 
+## USB image updates and firmware qualification
+
+The [raw USB image builder](development/usb-image.md) creates fresh images and
+replaces the sample pool and its identities on every rebuild. There is no
+preservation of installed data, rollback or atomic physical update protocol.
+The manual copy procedure relocates backup GPT on larger media but does not
+expand the pool. Revisit image preparation and update ownership before the
+persistent-installation phase stores user data.
+
+Emulated USB boot has reached the shell, but one
+[pre-kernel Limine file-open failure](development/qemu.md#usb-firmware-file-open-failure-before-kernel-entry)
+remains unexplained. Successful unchanged-image retries do not qualify firmware
+boot reliability or physical-controller behavior. Revisit with firmware/USB I/O
+diagnosis and the separately assigned hardware stage; native reads/writes and
+physical media have no validation claim from Phase A.
+
 ## Virtio-net runtime resource retention
 
 The [network transport](devices/networking.md#virtio-net-transport) uses two nine-page
