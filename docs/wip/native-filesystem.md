@@ -3,9 +3,9 @@
 Status: **owner direction, 2026-10-02.** This restarts writable filesystem
 work. It supersedes the pyxis-fs writer plans listed under
 [what stops](#what-stops). The [owner decisions](#owner-decisions) and
-[v1 answers](#v1-answers) are accepted. The [pool sketch](#proposed-pool-sketch),
-[next questions](#next-questions) and
-[proposed working method](#proposed-working-method) await the owner.
+[v1 answers](#v1-answers) and the sections after them up to
+[focused tasks](#focused-tasks) are accepted. The [pool sketch](#proposed-pool-sketch)
+and [proposed working method](#proposed-working-method) await the owner.
 [Later ideas](#later-ideas) are not requirements.
 
 ## Owner decisions
@@ -141,24 +141,32 @@ Accepted 2026-10-02.
    V1 ships a fixed set of standard inits. Programs still run from the boot
    archive; the pool holds persistent volumes mounted after boot.
 
-## Next questions
+## Code, file layout and order
 
-1. **Where does the new code live?** Proposed default: reuse the pyxis-fs
-   repository. The new format library starts beside the old core, and the old
-   core is deleted once the native read-only mounts move to the new format. Git
-   keeps the history. The alternative is a new repository, which the owner
-   creates.
-2. **How do files map to blocks?** Proposed default: extents. Up to a few are
-   stored inline in the inode, with one level of extent blocks when more are
-   needed. Large files such as the boot archive then need almost no metadata. The
-   alternative, ext2's direct and indirect block pointers, is even simpler but
-   costs one pointer per block.
-3. **In what order is it built?** Proposed default:
-   1. the format library, plus host `mkfs`, `fsck` and inspection, with link-time
-      symbols;
-   2. native read/write in Caelum on virtio-blk;
-   3. the installer tools: GPT, FAT32 boot partition, pool format and copying;
-   4. install and boot end to end in QEMU, then on the ThinkPad.
+Accepted 2026-10-02.
+
+1. **Repository.** Reuse the pyxis-fs repository. The new format library starts
+   beside the old core, and the old core is deleted once the native read-only
+   mounts move to the new format. Git keeps the history.
+2. **Files use block pointers,** with ext2-style direct and indirect pointers.
+   Each inode carries a mapping-type field whose only defined value in v1 is
+   "block pointers". Extents can later be added behind a feature flag, for example
+   for large copied files, without changing the format. Supporting both mappings,
+   and converting between them, is not v1 work.
+3. **Build order** is the [focused task](#focused-tasks) sequence below.
+
+## Focused tasks
+
+1. [ ] **Format proposal.** A short design of the on-disk format: pool header,
+   bitmap, volume table, inodes, directories and journal, with reserved bytes and
+   feature flags. Owner decisions go at most three per round.
+2. [ ] **Format library and host tools.** Structure definitions, encoding and
+   decoding with link-time symbols, plus host `mkfs`, `fsck` and inspection.
+3. [ ] **Native read/write in Caelum** on virtio-blk, with persistent in-memory
+   state and caching. Latency and bytes written are measured from the start.
+4. [ ] **Installer tools:** GPT creation, the FAT32 boot partition, pool
+   formatting and copying files from the boot archive.
+5. [ ] **End to end:** install and boot in QEMU, then on the ThinkPad.
 
 ## Later ideas
 
