@@ -5,6 +5,7 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/capability.h>
+#include <kernel/object/console.h>
 #include <kernel/object/terminal.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -27,6 +28,7 @@ struct terminal_session {
   /* Each output-producing object may retire while the other remains open. */
   size_t output_authorities, event_authorities;
   uint64_t columns, rows, completed_commands;
+  struct console_interrupt interrupt;
   bool input_closed, output_closed, hung_up, reader_active;
   struct task_wait_link *first_reader, *last_reader, *writers;
   struct task_wait *input_wait;
@@ -121,6 +123,10 @@ bool terminal_authority_retain(struct kernel_object *object, uint64_t rights)
   if (!terminal_end_type(object->type)) {
     return true;
   }
+  if (object->type == OBJECT_TERMINAL_INPUT && !(rights & CONSOLE_RIGHT_READ)) {
+    return console_interrupt_retain(&((struct terminal_end *)object)->session->interrupt,
+        rights);
+  }
   size_t *counter = authority_counter(object, rights);
   if (!counter) {
     return true;
@@ -138,6 +144,10 @@ bool terminal_authority_retain(struct kernel_object *object, uint64_t rights)
 void terminal_authority_release(struct kernel_object *object, uint64_t rights)
 {
   if (!terminal_end_type(object->type)) {
+    return;
+  }
+  if (object->type == OBJECT_TERMINAL_INPUT && !(rights & CONSOLE_RIGHT_READ)) {
+    console_interrupt_release(&((struct terminal_end *)object)->session->interrupt, rights);
     return;
   }
   size_t *counter = authority_counter(object, rights);
@@ -181,6 +191,7 @@ static void destroy_terminal_end(struct kernel_object *object)
   if (finished) {
     KASSERT(!session->reader_active && !session->first_reader &&
         !session->writers && !session->input_wait);
+    KASSERT(!session->interrupt.armed && !session->interrupt.passthrough);
   }
   unlock_session(session);
   if (finished) {
@@ -196,6 +207,7 @@ static struct terminal_session *session_create(uint64_t columns, uint64_t rows)
   }
   memset(session, 0, sizeof(*session));
   atomic_init(&session->locked, false);
+  atomic_init(&session->interrupt.locked, false);
   session->columns = columns;
   session->rows = rows;
   session->live_objects = 4;
@@ -219,7 +231,8 @@ void terminal_create_execute(struct terminal_create_service_request *request)
       &session->events.object,
     };
     const uint64_t rights[] = {
-      CONSOLE_RIGHT_READ, CONSOLE_RIGHT_WRITE, TERMINAL_RIGHTS, TERMINAL_EVENTS_RIGHT_EMIT,
+      CONSOLE_RIGHT_READ | CONSOLE_RIGHT_INTERRUPT, CONSOLE_RIGHT_WRITE, TERMINAL_RIGHTS,
+      TERMINAL_EVENTS_RIGHT_EMIT,
     };
     const uint64_t transport[] = {0, 0, 0, 0};
     handle_t handles[4];
@@ -582,6 +595,8 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
   case CONSOLE_FRESH_LINE:
   case CONSOLE_SET_TAB_WIDTH: required = CONSOLE_RIGHT_WRITE; break;
   case CONSOLE_SIZE: required = CONSOLE_RIGHTS; break;
+  case CONSOLE_ARM_INTERRUPT: required = CONSOLE_RIGHT_INTERRUPT; break;
+  case CONSOLE_PASSTHROUGH: required = CONSOLE_RIGHT_READ; break;
   default: return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & required)) {
@@ -595,6 +610,10 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   struct terminal_session *session = ((struct terminal_end *)object)->session;
+  if (operation == CONSOLE_ARM_INTERRUPT || operation == CONSOLE_PASSTHROUGH) {
+    return console_interrupt_call(object, &session->interrupt, operation,
+        reply_address, reply_capacity);
+  }
   if (operation == CONSOLE_READ) {
     return application_read(session, &request.read, reply_address, reply_capacity);
   }
@@ -724,17 +743,27 @@ static struct syscall_result attachment_transfer(struct terminal_session *sessio
   } else if (session->hung_up) {
     status = CALL_ENDPOINT_CLOSED;
   } else if (inject) {
+    /* A recognized Ctrl+C precedes the capacity check: it discards queued input
+     * and its prefix, which count as accepted. */
+    size_t consumed = session->input_closed ? 0 :
+        console_interrupt_scan(&session->interrupt, bytes, length);
+    if (consumed) {
+      session->input_head = session->input_count = 0;
+    }
     if (session->input_closed) {
       status = CALL_ENDPOINT_CLOSED;
     } else if (session->input_count == TERMINAL_INPUT_CAPACITY) {
       status = CALL_WOULD_BLOCK;
     } else {
       size_t available = TERMINAL_INPUT_CAPACITY - session->input_count;
-      reply.length = length < available ? length : available;
+      size_t queued = length - consumed < available ? length - consumed : available;
       size_t tail = (session->input_head + session->input_count) % TERMINAL_INPUT_CAPACITY;
-      ring_copy_in(session->input_data, TERMINAL_INPUT_CAPACITY, tail, bytes, reply.length);
-      session->input_count += reply.length;
-      wake_input(session);
+      ring_copy_in(session->input_data, TERMINAL_INPUT_CAPACITY, tail, bytes + consumed, queued);
+      session->input_count += queued;
+      reply.length = consumed + queued;
+      if (queued) {
+        wake_input(session);
+      }
     }
   } else if (session->output_count) {
     struct terminal_record record;
@@ -803,6 +832,19 @@ struct syscall_result terminal_attachment_call(struct kernel_object *object,
   unlock_session(session);
   readiness_notify();
   return (struct syscall_result){CALL_OK, 0};
+}
+
+uint64_t terminal_input_ready(struct kernel_object *object)
+{
+  KASSERT(object->type == OBJECT_TERMINAL_INPUT);
+  uint64_t flags = cpu_save_interrupts();
+  struct terminal_session *session = ((struct terminal_end *)object)->session;
+  lock_session(session);
+  uint64_t ready = session->hung_up ? WAIT_ERROR : 0;
+  ready |= console_interrupt_ready(&session->interrupt);
+  unlock_session(session);
+  cpu_restore_interrupts(flags);
+  return ready;
 }
 
 uint64_t terminal_attachment_ready(struct kernel_object *object, uint64_t events)

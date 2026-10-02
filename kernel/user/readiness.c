@@ -2,6 +2,7 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/net/interface.h>
+#include <kernel/object/console.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/process.h>
@@ -81,6 +82,13 @@ bool readiness_service(struct bsp_request **active_list)
         break;
       case OBJECT_TERMINAL_ATTACHMENT:
         interest->ready = terminal_attachment_ready(interest->object, interest->events);
+        break;
+      case OBJECT_TERMINAL_INPUT:
+        interest->ready = terminal_input_ready(interest->object);
+        break;
+      case OBJECT_CONSOLE:
+        interest->ready = console_interrupt_ready(
+            &((struct console_object *)interest->object)->interrupt);
         break;
       default:
         KASSERT(false);

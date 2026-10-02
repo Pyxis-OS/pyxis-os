@@ -2,8 +2,9 @@
 
 Status: direction, first-slice decisions and the interrupt event contract
 agreed 2026-10-02, including the review follow-ups: minimal passthrough,
-raw-keyboard exemption and typeahead disposal. Task 1 (process termination) is
-implemented; see [processes](../interfaces/processes.md).
+raw-keyboard exemption and typeahead disposal. Arming and passthrough lifetimes
+were settled as returned handles on 2026-10-02, before task 2. Task 1 (process
+termination) is implemented; see [processes](../interfaces/processes.md).
 
 Ctrl+C currently only cancels the shell's line being edited. It cannot stop a
 running foreground command, locally or through the
@@ -45,17 +46,20 @@ general signal mechanism.
    - It is general enough for a later process-control tool; no such tool is
      part of this work.
 2. **Ctrl+C is recognized only while interrupts are armed.**
-   - A new `CONSOLE_RIGHT_INTERRUPT` on the existing console input object can
-     arm and disarm interruption.
+   - A new `CONSOLE_RIGHT_INTERRUPT` on the existing console input object
+     authorizes arming. Arming returns an armed handle to the same input
+     object, and closing that handle disarms (see
+     [handle lifetimes](#handle-lifetimes)).
    - While armed, an input byte 3 is removed from the input stream and becomes
      an interrupt event, observable through `wait_many`. Applications do not
-     receive that byte unless they hold passthrough (decision 5).
+     receive that byte unless passthrough is active (decision 5).
    - Both input producers apply the same rule: local console keyboard text and
      terminal injection, which carries remote input. The remote client already
      forwards Ctrl+C as byte 3 and needs no change.
    - The new right goes only on the root shell's own input grant. Commands'
      standard input stays READ-only and cannot observe or consume interrupts.
-     No new shell-only handle or session object is introduced.
+     No new object type or session object is introduced; armed and
+     passthrough handles refer to the existing input object.
    - Event details are under [interrupt event contract](#interrupt-event-contract).
 3. **The shell owns the policy.**
    - It arms interrupts before launching a foreground job's stages, so Ctrl+C
@@ -77,14 +81,15 @@ general signal mechanism.
    - A nested interactive `shell` gets READ-only input and cannot arm, so Ctrl+C
      in the outer shell ends the whole inner shell.
 5. **Minimal passthrough, in this slice.** An application can ask, on its own
-   READ-authorized input handle, to receive Ctrl+C as data.
-   - While a passthrough request is active, an armed Ctrl+C byte is delivered
-     as input: no latch is set and no typeahead is discarded.
-   - The request lasts until the application withdraws it or its handle
-     closes, including at process exit. It never affects other input objects.
-   - libterm exposes the request. Its line editor holds passthrough only while
-     reading a line, so in the Lua REPL Ctrl+C cancels the typed line as before,
-     while running Lua code can still be interrupted.
+   READ-authorized input handle, to receive Ctrl+C as data. The request returns
+   a passthrough handle to the same input object.
+   - While any passthrough handle exists, an armed Ctrl+C byte is delivered as
+     input: no latch is set and no typeahead is discarded.
+   - Closing the passthrough handle withdraws the request, and process exit
+     closes it. It never affects other input objects.
+   - libterm exposes the request. Its line editor holds a passthrough handle
+     only while reading a line, so in the Lua REPL Ctrl+C cancels the typed line
+     as before, while running Lua code can still be interrupted.
    - Kilo deliberately ignores Ctrl+C to protect unsaved edits (pinned upstream
      `kilo.c`, the `CTRL_C` case). A Kilo port patch requests passthrough for
      the editing session, so Ctrl+C cannot discard unsaved work.
@@ -98,6 +103,35 @@ general signal mechanism.
    programs end through their own controls. Remote terminals have no raw
    keyboard. Intercepting raw events was rejected, because Doom uses Ctrl as
    fire and the matching press and release would need suppression.
+
+## Handle lifetimes
+
+Agreed before task 2. The kernel tracks closure by counting grants per right,
+not per handle: two READ handles to one input object are indistinguishable,
+and an application's READ handle is often a standard input shared with other
+processes. Interrupt-capable input also passes through init, session and the
+startup script before reaching the root shell, so several processes hold
+copies. Arming and passthrough are therefore separate handles to the same input
+object, each carrying a single dedicated right whose grants the input object
+counts. The existing terminal hangup right uses the same accounting.
+
+- **Armed handle.** ARM_INTERRUPT on a handle with `CONSOLE_RIGHT_INTERRUPT`
+  returns a handle carrying only the armed right. `wait_many` observes the
+  interrupt on it. Closing the last armed grant, including at process exit,
+  disarms and clears the latch, so a shell that fails while armed disarms
+  automatically. Only one armed interval exists per input object: arming while
+  armed returns BUSY.
+- **Passthrough handle.** PASSTHROUGH on a READ handle returns a handle
+  carrying only the passthrough right. Passthrough is active while any such
+  grant exists. A copied or transferred passthrough handle extends it; that is
+  no new authority, because any reader can request passthrough.
+- **Where interrupt authority starts.** The kernel's initial per-space `input`
+  grant and the terminal-create `input` include `CONSOLE_RIGHT_INTERRUPT`.
+  Standard input stays exactly READ, so commands never receive it as a stream.
+  Session setup forwards it to the root shell's `input` resource in task 3.
+- An owner recorded per process and cleared at exit, like raw keyboard
+  acquisition, was rejected. It needs per-process state for each input and has
+  no answer for a handle passed to another process.
 
 ## Interrupt event contract
 
@@ -121,12 +155,17 @@ These are observable semantics, agreed after review:
   nothing. Process results stay immutable, so a job that finishes before its
   termination takes effect reports its real result. A latch set after the last
   stage completes is cleared by the disarm.
-- **Arming lifetime.** Closing the last interrupt-authorized grant on the input
-  object disarms and clears the latch.
+- **Arming lifetime.** Closing the last armed grant disarms and clears the
+  latch. Arming while armed returns BUSY.
 - **Unarmed input.** Byte 3 queued while unarmed keeps its normal meaning as
   data, including for the shell's own line editor.
-- **Passthrough.** An active passthrough request overrides arming for that
-  input object: byte 3 stays data and nothing is discarded.
+- **Passthrough.** Any passthrough grant overrides arming for that input
+  object: byte 3 stays data and nothing is discarded.
+- **Input loss and full queues.** Recognition happens before the local
+  console's input-loss check and before a terminal's capacity check, since the
+  Ctrl+C discards queued input anyway. In a terminal injection, bytes before the
+  Ctrl+C are discarded with the queue and count as accepted; bytes after it are
+  queued normally. A terminal hangup reports `WAIT_ERROR` on its armed handles.
 
 ## To verify during implementation
 
@@ -173,10 +212,37 @@ These are implementation checks, not open policy:
      - GDB saw each stop request reach the task, with a null group for local
        children. Every TERMINATED completion found the link already cleared.
      - Both remote sessions ended with a complete FINAL.
-2. [ ] **Interrupt arming and events.** Add the interrupt right, armed Ctrl+C
-   recognition on console and terminal text input, typeahead disposal, the
-   `wait_many` event and the passthrough request, including cleanup when the
-   arming grant or a passthrough handle closes.
+2. [x] **Interrupt arming and events.** Add the interrupt right, armed and
+   passthrough handles with their grant accounting, armed Ctrl+C recognition on
+   console and terminal text input, typeahead disposal and the `wait_many`
+   event. Grant the interrupt right on the kernel's initial console input and
+   terminal-create input. Add libpyxis wrappers.
+   - Implemented as described in
+     [interrupt arming and passthrough](../userland/terminal.md#interrupt-arming-and-passthrough).
+     Framebuffer consoles and terminal sessions share one interrupt state with
+     its own lock, taken inside the input lock. Existing session setup still
+     narrows `input` to READ, so behavior is unchanged until task 3.
+   - Evidence: four CPUs on nested KVM, with an uncommitted shell test command
+     and temporary forwarding of the interrupt right to the root shell.
+     - Local Development shell and a quiet remote session: the root shell's
+       input had READ|INTERRUPT. Arming succeeded, a second arm was BUSY and
+       arming standard input was DENIED.
+     - `abc`, Ctrl+C, `de` while armed set the latch, reported by repeated
+       polls without consuming it; a later read returned only `de`. Remotely
+       the same bytes arrived as one injection.
+     - A blocking `wait_many` woke with WAIT_INTERRUPT on Ctrl+C. Re-arming
+       after closing started with a clear latch.
+     - With passthrough, `x`, Ctrl+C, `y` read back as `78 03 79` with no latch.
+       Unarmed Ctrl+C at the prompt still cancelled the line.
+     - A remote shell that exited holding an armed handle released it (GDB:
+       armed 1 to 0, latch cleared), and the terminal was destroyed with zero
+       armed and passthrough counts.
+     - Terminal hangup reporting WAIT_ERROR was reviewed in source only.
+   - Found for task 3: when a terminal's input queue is full, the remote
+     server stops reading frames until its pending injection drains, so a
+     later Ctrl+C never reaches the kernel while the command does not read.
+     Local console input is unaffected because a full queue latches input loss
+     instead of blocking.
 3. [ ] **Shell interruption.** Add the root shell's interrupt grant in local and
    remote session setup, the foreground `wait_many` loop and terminate-on-interrupt.
    Add the libterm passthrough call and use it in the line editor. Update shell,

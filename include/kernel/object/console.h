@@ -9,9 +9,20 @@ struct tty;
 
 #define CONSOLE_INPUT_CAPACITY 4096
 
+/* Ctrl+C interruption state of one input object, shared by framebuffer
+ * consoles and terminal input. ARMED and PASSTHROUGH grants are counted here;
+ * arming reserves the single armed interval while its handle is installed.
+ * Lock order: owner input lock -> interrupt lock -> scheduler queues. */
+struct console_interrupt {
+  atomic_bool locked;
+  size_t armed, passthrough;
+  bool arming, latched;
+};
+
 struct console_object {
   struct kernel_object object;
   struct tty *tty;
+  struct console_interrupt interrupt;
   atomic_bool input_locked;
   char input[CONSOLE_INPUT_CAPACITY];
   size_t input_head, input_count;
@@ -39,6 +50,29 @@ struct console_object *console_create(struct tty *tty);
 /* IF=0, trusted kernel buffer. Uses the existing output lock. False means no
  * bytes were written (TTY unavailable or panic output has disabled drawing). */
 bool console_write(struct console_object *console, const char *bytes, size_t size);
+
+/* IF=0. Grant accounting for ARMED and PASSTHROUGH; other rights and other
+ * console objects are a successful no-op. Release precedes object_release. */
+bool console_authority_retain(struct kernel_object *object, uint64_t rights);
+void console_authority_release(struct kernel_object *object, uint64_t rights);
+
+/* Any CPU, IF=0. WAIT_INTERRUPT while the latch is set, otherwise zero. */
+uint64_t console_interrupt_ready(struct console_interrupt *interrupt);
+
+/* IF=0, under the owner's input lock. While armed without passthrough, returns
+ * the length of the prefix ending at the last byte 3 and sets the latch; the
+ * caller discards queued input and that prefix. Otherwise returns zero. */
+size_t console_interrupt_scan(struct console_interrupt *interrupt,
+    const void *bytes, size_t size);
+
+bool console_interrupt_retain(struct console_interrupt *interrupt, uint64_t rights);
+void console_interrupt_release(struct console_interrupt *interrupt, uint64_t rights);
+
+/* Current process, IF=0. ARM_INTERRUPT or PASSTHROUGH after the caller checked
+ * rights and the request size. The caller's handle keeps object alive. */
+struct syscall_result console_interrupt_call(struct kernel_object *object,
+    struct console_interrupt *interrupt, uint64_t operation,
+    uintptr_t reply_address, size_t reply_capacity);
 
 /* Current process, IF=0. The caller holds a live reference and supplies the
  * rights from its capability entry and operation from a checked protocol tag.
