@@ -116,6 +116,40 @@ This is a future direction, not a change to the first-shell milestone. Keep its
 current initrd tree and `app://` lookup while developing that milestone; no
 bundle format, namespace migration or packaging implementation is assigned here.
 
+### Signing, development spaces and requested grants
+
+Parked ideas, not a settled security design or implementation task:
+
+- Normal spaces would admit only signed application bundles. Official applications
+  and ports could use a Pyxis trust root with authorized CI signing keys; key
+  management and the trust mechanism remain undecided.
+- Explicit development spaces would allow local/self signing and more permissive
+  grant policy within their assigned authority. This would not relax other spaces
+  or automatically confer machine-wide privileges. The current Kilo/TCC
+  edit/build/run workflow would remain available there when signed admission arrives.
+- Locally built applications could also run outside development spaces through
+  explicit trust in their self-signed bundles. Time-limited approval/signing is an
+  idea; thirty days was an example, not a chosen duration or expiry contract.
+- A bundle manifest would declare requested capabilities, such as camera access,
+  and distinguish essential from optional requests. Sensitive grants would need
+  user approval, remembered for that user and application and revocable through
+  system settings. The application could report a missing essential grant or
+  continue with the affected optional feature disabled.
+- Sensitive approvals and signing-trust changes would require a trusted user
+  interaction that applications cannot forge or approve through synthetic input.
+  The confirmation mechanism remains undecided.
+
+A signature establishes provenance for admission; it does not grant capabilities.
+The launcher/policy broker still supplies bounded runtime authority. Stable
+application identity across updates is a shared open question for remembered
+consent and future credential-service scopes under the
+[users and authority direction](users-and-authority.md). Approval of newly
+requested grants and revocation of capabilities already held or delegated need
+later decisions; saved consent alone does not solve runtime revocation. How
+signed interpreters or compilers execute unsigned scripts or generated code also
+remains open. Bundle/manifest formats remain open; this note does not cover
+measurements or boot trust.
+
 ## Future compatibility subsystems
 
 Native Pyxis interfaces do not need POSIX semantics. In the distant future, a
