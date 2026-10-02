@@ -2,8 +2,9 @@
 
 Status: **owner direction, 2026-10-02.** This restarts writable filesystem
 work. It supersedes the pyxis-fs writer plans listed under
-[what stops](#what-stops). Only the [owner decisions](#owner-decisions) are
-accepted; the [first questions](#first-questions) and the
+[what stops](#what-stops). The [owner decisions](#owner-decisions) and
+[v1 answers](#v1-answers) are accepted. The [pool sketch](#proposed-pool-sketch),
+[next questions](#next-questions) and
 [proposed working method](#proposed-working-method) await the owner.
 
 ## Owner decisions
@@ -56,7 +57,9 @@ about as much as starting over.
   - [writable filesystem core](writable-filesystem-core.md);
   - [write efficiency](filesystem-write-efficiency.md);
   - [retirement debt](filesystem-retirement-debt.md);
-  - [overflow split](filesystem-overflow-split.md).
+  - [overflow split](filesystem-overflow-split.md);
+  - [native persistent volumes](native-persistent-volumes.md);
+  - [pool and persistent filesystem](persistent-storage.md).
 
   The owner decides separately whether to delete them now or when the
   replacement lands.
@@ -64,23 +67,72 @@ about as much as starting over.
 - The [native read-only mounts](../devices/native-readonly-filesystem.md) keep
   working on the current format until the new filesystem replaces them.
 
-## First questions
+## V1 answers
 
-At most three at a time, each with a proposed default. "Defer" is a valid
-answer.
+Accepted 2026-10-02.
 
-1. **What does a completed write promise?** Proposed default: data is durable
-   after an explicit sync or close. A crash may lose unsynced data but never leaves
-   inconsistent metadata. The alternative is every call durable, as before, which
-   costs a flush per call.
-2. **How are crashes handled?** Proposed default: a metadata journal with ordered
-   data, as in ext3/ext4. A journal record plus a commit is a few blocks per sync,
-   and nothing in it grows with the filesystem's size. The alternative is ext2's
-   approach: no journal, and run `fsck` after an unclean shutdown.
-3. **What is v1 for?** Proposed default: Pyxis boots from it as its root
-   filesystem on the ThinkPad. That needs regular files, directories, block
-   bitmaps and an inode table, and nothing else: no links, permissions, quotas,
-   snapshots or retained history.
+1. **A completed write is durable after an explicit sync or close.** A crash may
+   lose unsynced data, but never leaves inconsistent metadata.
+2. **Crashes are handled by a metadata journal with ordered data,** as in
+   ext3/ext4.
+3. **V1 is a native Pyxis installer.** It runs from a live image holding
+   Limine, Caelum, its boot archive and a RAM-backed scratch filesystem. The
+   image can be an ISO (burned or written to a disk), a thumbdrive or a QEMU
+   image; v1 does not depend on any one of them. Limine loads everything into RAM,
+   so the installer reads its source files from the boot archive and needs no
+   driver for the live medium. It contains or launches tools that:
+   - create a GPT on an empty target disk;
+   - create the Pyxis partition or partitions;
+   - install the files needed to boot Pyxis from that disk.
+
+   Afterwards the target boots on its own.
+4. **Storage is a pool with growable volumes.** A partition holds one pool, and
+   the allocation bitmap (or whatever replaces it) covers the whole pool. Volumes
+   are virtual and grow inside the pool; they are not partitions sized up front.
+
+## Proposed pool sketch
+
+Proposal only. A single-device pool stays ext2-simple, because what makes pools
+complex elsewhere (multiple devices, RAID, copy-on-write snapshots, dedup) is
+left out.
+
+- **Pool header** at a fixed location, with a backup copy at the end of the
+  partition. It holds block size, pool size, journal location, feature flags and
+  reserved bytes.
+- **One allocation bitmap for the whole pool.** That is one bit per 4 KiB block,
+  so 8 MiB for 256 GB. A volume owns no block range; it allocates from the
+  shared bitmap.
+- **A small volume table** of fixed-size records: name, ID, root inode, location
+  of the volume's inode file, blocks in use, an optional limit, flags and reserved
+  bytes. Deleting a volume frees its blocks; growing it needs no operation at all.
+- **Per-volume inode file.** Each volume's inodes live in a file that grows by
+  allocating from the pool, so there is no inode table fixed at format time.
+- **One pool-wide journal** of fixed size, chosen at format time.
+- **Directories as simple entry lists,** as in ext2. Hashing or trees can come
+  later behind a feature flag.
+
+Consequence: the installer formats the pool natively, so the format library
+links in Pyxis userspace too. That makes three symbol providers: the host,
+Caelum and Pyxis userspace.
+
+## Next questions
+
+1. **Who may write a raw disk?** Today raw-disk authority is
+   [kernel-only](../devices/block-storage.md). Proposed default: a new whole-disk
+   write capability, which the kernel gives only to trusted init, and which init
+   passes only to the installer when launched for installation.
+2. **Which target disks does v1 support?** Proposed default: whatever writable
+   disk driver Caelum has. Today that means a QEMU virtio-blk disk, which Caelum
+   already reads and writes. [USB mass storage](usb-installation.md) is developed
+   in parallel, and a USB target follows when it lands; it is not a prerequisite
+   for v1. NVMe comes later; Caelum has no NVMe driver.
+3. **What boots from where?** UEFI firmware boots from a FAT EFI system
+   partition, and Limine reads its files from FAT or ISO9660, never from a Pyxis
+   pool. Proposed default: the installer writes a fresh FAT32 ESP itself,
+   with a write-once layout and no general FAT driver. The ESP holds Limine, its
+   configuration, Caelum and the boot archive, exactly like the live image. The
+   pool holds persistent volumes that Caelum mounts after boot. Running programs
+   from the pool instead of the boot archive is a later step.
 
 ## Proposed working method
 
