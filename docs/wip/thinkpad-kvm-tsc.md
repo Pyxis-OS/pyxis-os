@@ -7,8 +7,8 @@ is included in this report.
 ## Recorded build and boot
 
 Pyxis booted under KVM on the ThinkPad T14 Gen 1 AMD running Fedora. All four
-CPUs reached preemptive userspace, display presentation and the network worker
-started, and a remote shell successfully ran `fastfetch`. No panic was observed
+CPUs came online; preemptive userspace, display presentation and the network
+worker started, and a remote shell successfully ran `fastfetch`. No panic was observed
 in the normal run. This establishes the configuration below, not native Caelum
 boot, TSC qualification or broad stress testing.
 
