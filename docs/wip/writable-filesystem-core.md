@@ -27,8 +27,9 @@ NVMe writes. Historical commands later in this document or in dependency docs
 are not permission to run them with their old backing paths.
 
 Before execution, verify every workload storage path is RAM-backed and cannot
-spill to swap, including the development VM's memory on its host. `/tmp`, tmpfs,
-guest swap settings and a RAM-sized image alone are not sufficient evidence.
+spill to swap within this development VM, which is the agreed safety boundary.
+Outer-hypervisor configuration is outside this requirement. `/tmp`, an ordinary
+tmpfs mount and a RAM-sized image alone are not sufficient evidence.
 Use an explicit memory budget, fail on exhaustion and permit no disk fallback.
 If the backing or host no-swap guarantee cannot be established, stop and report
 the missing evidence; do not run the workload speculatively. This applies to
@@ -1581,6 +1582,31 @@ case; a contract change updates its documented expectations in the same PR. Do n
 postpone the suite until milestone closure, preserve accidental behavior as a
 fixture requirement, or weaken an invariant assertion merely to pass a refactor.
 
+**Standing design constraint:** current configuration, authored or draft values,
+implementation structure, benchmark parameters, machine properties and convenient
+fixtures are not contracts without an explicit architectural reason. Before an
+assertion or validator is added, identify the deliberate contract that changing
+the value would violate. Keep one authority for each setting and mutable state;
+configure a chosen input and verify its propagation and behavior against independent
+expectations. Do not preserve duplicate ownership with copying and consistency
+tests, or transplant obsolete assumptions into a replacement implementation.
+Green checks, coverage and matching documentation do not establish architectural
+correctness. Exact format assertions and deliberate scenario expectations remain
+appropriate; incidental defaults do not define correctness for other inputs.
+
+The launcher budgets are operational profile choices, separate from filesystem
+invariants. The assigned focused correction removes the duplicate job-memory ceiling and
+workflow override: the local launcher or trusted CI runner provisions the budget,
+and guards verify a finite positive actual cap with zero swap. See
+[execution profiles](../../fs/docs/ram-validation.md#contracts-and-execution-profiles).
+The shared CI runner configuration owns the current budget and uses capacity
+one for exclusive scratch access. Validators require bounded resources without
+copying scratch byte/inode or memory amounts into independent ceilings.
+Local benchmark provisioning and historical measurements retain their recorded
+parameters. Compilation and quick/extended tests run unprivileged; only native
+loop/mount/tracing setup and supervision retain privileges. No automatic
+limit increases, allocator changes or broader cleanup are authorized.
+
 ### Agreed small host setup in pyxis-fs
 
 Use [Unity](https://www.throwtheswitch.org/unity) for assertions, per-case
@@ -2170,20 +2196,74 @@ this documentation update.
    This validates the exact recovery history, not all fragmentation or the larger
    profiles; task 7 remains unchecked.
 
-   **Remaining corrective steps (each may span multiple focused PRs):**
+   **Corrective steps (each may span multiple focused PRs):**
 
-   - [ ] **RAM-only validation and comparative baseline.** Audit images, recovery
+   - [x] **RAM-only validation and comparative baseline.** Audit images, recovery
      logs, temporary copies and extraction outputs before running write-heavy
      workloads. Back all payload storage with explicitly bounded RAM, prevent
-     swap at both guest and host levels, and fail on exhaustion without a disk
-     fallback. A tmpfs path alone does not establish this guarantee. If the host
-     guarantee cannot be established, stop and resolve it before running. Save
+     swap inside this VM (the agreed safety boundary), and fail on exhaustion
+     without a disk fallback. Outer-hypervisor verification is not required.
+     A tmpfs path alone does not establish this guarantee. Verify the scoped
+     scratch and process limits before running. Save
      only small result summaries/logs on persistent storage. Apply this boundary
      to local and CI write-heavy campaigns; infrastructure changes belong in this
      task, not this documentation update.
      Establish and record this evidence before the first run; pass the same
      storage boundary explicitly in any agent handoff. Ordinary benchmark
      approval does not waive the host-storage protection rule above.
+
+     **Accepted first corrective scope:** a scoped launcher with 2 GiB of
+     `tmpfs,noswap` scratch, a 4 GiB job memory limit and zero job swap allowance.
+     **Accepted quick-CI adjustment:** the 111-group PR suite may use ordinary
+     tmpfs with the same byte/inode caps when the actual job has the verified
+     zero-swap cgroup limit and all fixture files/pages are newly created after
+     entering that job. The launcher and runner reject this mode for heavier
+     suites; local extended/comparative runs retain mount-level `noswap`.
+     No system-wide swap change, automatic resource increase or disk fallback.
+     Include images, durable/volatile simulator planes, logs, copies, expected
+     payloads and extraction outputs in the storage audit. Bound diagnostics to
+     1 MiB and saved summaries to 64 KiB; bound streamed block traces to 16 MiB
+     per case and invalidate any loss, overflow or incomplete trace. Exclusively
+     own loop devices, verify their backing inode on RAM scratch, and clean up
+     on failure/interruption. The initial comparison uses populations of 32 and
+     256 files with write history, 64 4-KiB writes, 16 256-KiB writes, 32 small
+     partial overwrites, and 16 compiler-like create/write/close/rename/delete
+     sequences. Pyxis calls remain individually durable; native 16-mutation
+     batches are reported separately. Durable native creation synchronizes the
+     file and parent, replacement/rename synchronizes affected parents, and
+     deletion synchronizes the parent; final synchronization and clean unmount
+     remain in the counted native traffic. This assignment permits the launcher,
+     comparison and CI boundary, not allocator changes. The [initial RAM baseline](../../fs/docs/ram-baseline.md) records two
+     completed 40-case matrices, all 111 quick and six extended groups, verified
+     resource limits and forced-interruption cleanup. At 256 files, Pyxis submits
+     43.34375 total bytes per useful byte for the small-write case versus ext4
+     at 6.125; the deployment blocker remains. The proposed next bounded
+     investigation is combining final small orphan data cleanup and paired
+     object/orphan deletion when its full plan fits existing funded bounds.
+     This is a proposal, not approval to implement it or the allocator redesign.
+     The matching rootless setup passes the quick suite locally, and its
+     negative mode/storage checks preserve the heavier-suite boundary. The
+     filesystem jobs select the owner's `pyxis-fs-ram` runner label and
+     [pre-created named tmpfs volume](../../fs/docs/ram-validation.md#named-volume-provisioning).
+     The owner accepted exclusive runner ownership, capacity one and complete
+     teardown between jobs. [CI run 577](https://git.internal/PyxisOS/pyxis-os/actions/runs/577)
+     verified the provisioned boundary at parent `6a4525e` / filesystem `2d8ce96`:
+     all 111 groups passed with 2 GiB scratch, 65,536 inodes, a 4 GiB memory
+     limit, zero swap/max/OOM events and a 314,847,232-byte memory peak.
+     Every subsequent job still verifies its effective boundary before tests
+     execute. The owner subsequently selected one shared runner for both labels,
+     at capacity one, with budgets owned by its configuration. Both job types use its controls;
+     workflows no longer impose a competing memory setting. The guards require
+     a finite positive cap and zero swap, not the historical 4 GiB amount.
+     The combined review also binds native mutation targets to held RAM-image,
+     loop and root descriptors before writes; it rejects external ext4 journals
+     and multi-device Btrfs. Compilation and workloads run unprivileged, with
+     root retained only for scoped setup and native device/trace supervision.
+     A separate small `--suite safety` exercises two native cases and target
+     refusals. Historical auxiliary timing includes verification and handoff
+     through unmount, not isolated unmount time; the primary table is unchanged.
+     This completes the first corrective
+     step only; task 7 and the writable-deployment blocker remain open.
 
      Begin with small reproducible Pyxis/ext4/Btrfs workloads on RAM-backed
      storage: 4 KiB and 256 KiB sequential writes, small overwrites, and

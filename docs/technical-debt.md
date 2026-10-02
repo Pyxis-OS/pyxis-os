@@ -833,8 +833,11 @@ Measured small-write cost now makes its replacement a milestone-closure and
 writable-deployment blocker, not deferred optimization. Task 7 owns RAM-only
 baseline work, incremental-map design and revised bounds, implementation/recovery
 tests, and repeated acceptance measurements. Large disk-backed workloads are
-suspended pending the RAM-only validation boundary; this entry does not authorize
-benchmark execution. Partial large shrinks remain accepted.
+suspended. The [small RAM baseline](../fs/docs/ram-baseline.md) establishes the
+scoped 2 GiB scratch / 4 GiB job boundary within this VM and records two
+Pyxis/ext4/Btrfs matrices; it still misses the ext4 write-traffic target. The
+proposed bounded final-orphan cleanup combination needs its own assignment and
+proof before implementation. This entry does not authorize additional benchmarks. Partial large shrinks remain accepted.
 Tasks 2–4 implement the private whole-map planner, admitted publisher
 and synchronous funded drain; task 5 adds public file writes and large shrinks,
 and task 6 adds namespace mutation and orphan cleanup.

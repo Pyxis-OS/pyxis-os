@@ -10,11 +10,31 @@ env:
   BUILDER_IMAGE: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
 
 jobs:
+  filesystem:
+    name: filesystem
+    runs-on: pyxis-fs-ram
+    timeout-minutes: 5
+    container:
+      image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
+    steps:
+      - uses: https://data.forgejo.org/actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Verify RAM boundary and test pinned filesystem
+        run: python3 fs/tests/ram_run.py --inside --suite check --ci-quick
+
   build:
+    needs: filesystem
+    if: ${{ always() }}
     runs-on: pyxis
     container:
       image: git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
     steps:
+      - name: Require pinned filesystem validation
+        env:
+          FILESYSTEM_RESULT: ${{ needs.filesystem.result }}
+        run: test "$FILESYSTEM_RESULT" = success
       - uses: https://data.forgejo.org/actions/checkout@v4
         env:
           GIT_CONFIG_COUNT: '1'
@@ -23,10 +43,17 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
-      - name: Build and test pinned filesystem
-        run: make -C fs -j16 all check
       - name: Build image and component bundles
-        run: make -j16 image bundle-kernel bundle-sdk bundle-ports bundle-userspace
+        run: |
+          if [ "$(id -u)" -eq 0 ]; then
+            build_uid=$(id -u nobody)
+            build_gid=$(id -g nobody)
+            chown -hR "$build_uid:$build_gid" .
+            exec setpriv --reuid="$build_uid" --regid="$build_gid" --clear-groups \
+              --no-new-privs env HOME=/tmp \
+              make -j16 image bundle-kernel bundle-sdk bundle-ports bundle-userspace
+          fi
+          exec make -j16 image bundle-kernel bundle-sdk bundle-ports bundle-userspace
       - uses: https://data.forgejo.org/actions/upload-artifact@v3
         env:
           NODE_USE_SYSTEM_CA: '1'

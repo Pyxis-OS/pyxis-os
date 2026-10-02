@@ -110,11 +110,22 @@ lives in that repository, including accepted follow-up decisions. See the
 allocation-proof, traversal, policy, checking and lifetime contracts, and
 [host validation](../../fs/docs/host-tools.md#validation) for measured coverage.
 The filesystem repository also owns `make check`, a maintained Unity suite
-linking the real shared core; run `make -C fs check` from Pyxis. Its emitted
+linking the real shared core; run `sudo python3 fs/tests/ram_run.py --suite check`
+from Pyxis in the supported Linux/systemd environment. Workload storage requires
+the verified bounded RAM boundary; bare `make check` refuses unsafe scratch. Its emitted
 `Filesystem / host-contract (pull_request)` status must be required in **pyxis-fs**
-branch protection, configured by the owner. The parent workflow also runs
-`make -C fs -j16 all check` against the exact gitlink checked out for each PR,
-before building the image. Require `Build Pyxis / build (pull_request)` in Pyxis
+branch protection, configured by the owner. The parent workflow also builds and tests the exact gitlink in a separate
+`filesystem` job with bounded tmpfs scratch and a verified finite positive, zero-swap
+cgroup memory limit selected in trusted runner configuration. Its quick-only mode creates fresh fixture pages after joining
+that job; heavier suites still require mount-level `noswap`. Forgejo runner 13.2
+needs trusted runner configuration for the mount, swap and core limits; see
+[runner provisioning](../../fs/docs/ram-validation.md#runner-provisioning).
+The filesystem jobs select `pyxis-fs-ram` and verify actual controls before
+testing; ordinary image builds retain `pyxis`. Both labels may use the owner's
+shared runner at capacity one. Workflows do not override its memory setting.
+The launcher drops privileges before compilation and quick/extended tests; the
+ordinary image-build step also drops its root container identity before `make`.
+The image `build` job explicitly fails unless that job succeeds. Require `Build Pyxis / build (pull_request)` in Pyxis
 branch protection: a missing dependency commit, failed host build or failed
 filesystem suite then blocks that parent check. This runs the pinned tests locally
 in the job and needs no cross-repository status API or extra credentials.
