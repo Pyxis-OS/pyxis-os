@@ -651,9 +651,11 @@ and configuration for our own ext4 baseline, including a
 
 The [bounded write-efficiency investigation](filesystem-write-efficiency.md)
 compares XFS, F2FS and APFS mechanisms, traces current writes and separates safety
-requirements from proof inputs and reconsiderable policy. It recommends a narrow
-combined small-orphan cleanup as the first implementation candidate for review,
-with calculated opportunities rather than measured savings. Incremental map
+requirements from proof inputs and reconsiderable policy. Its narrow
+combined small-orphan cleanup candidate is now assigned and implemented within
+the unchanged funded bounds; the [complete proof](../../fs/docs/small-orphan-cleanup.md)
+and [matched RAM measurements](../../fs/docs/small-orphan-measurements.md)
+record that focused correction. Incremental map
 replacement remains necessary; its self-accounting mechanism and bounds are
 unresolved. Compact deltas or a hybrid publication scheme are alternatives for
 discussion, not approved implementation scope. Account for every major category
@@ -2309,6 +2311,28 @@ this documentation update.
      completing research does not accept its proposals or assign the next task.
      Task 7 and writable deployment remain open. Review discussion belongs on
      the documentation PR.
+
+   - [x] **Combine final cleanup of one-block regular orphans.** Apply only to a
+     parentless non-root regular orphan with one inline one-block mapping, no
+     remaining references and no object-specific grants. Establish the
+     [complete transaction proof](../../fs/docs/small-orphan-cleanup.md) before
+     implementation: at most 29 replacement volume nodes and 30 volume
+     retirements, including the payload, plus map/catalog/root closure,
+     accounting, generation funding and scratch. The old path remains for other
+     shapes; allocator placement, admission limits, memory ceiling and reserve
+     policy remain unchanged. Contract-focused coverage preserves independent
+     retained payloads during replacement writes, failure provenance, atomic
+     eligible deletion, recovery charging and allocation-free funded cleanup
+     under resource pressure. All 118 quick and six seed-1 extended groups pass
+     through the verified RAM-only launcher. Two unchanged 40-case matrices per
+     revision measure compiler-history totals, including all maintenance,
+     falling 7,744→6,528 KiB at 32 files and 15,708→12,756 KiB at 256. The
+     [measurement record](../../fs/docs/small-orphan-measurements.md) reports
+     preparation, phase counters, native contract differences and storage-safety
+     evidence. These are observations, not exact write/publication requirements.
+     Append/overwrite costs remain essentially unchanged; compiler totals still
+     exceed ext4. Task 7 and writable deployment remain open. Any next
+     implementation requires a separate assignment.
 
    - [ ] **Agree incremental allocation-map design and bounds.** Replace routine
      whole-map reconstruction with updates to affected paths and necessary

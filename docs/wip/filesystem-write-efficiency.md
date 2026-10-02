@@ -1,16 +1,18 @@
 # Filesystem write-efficiency investigation
 
-Status: research and proposals for review, 2026-10-02. No implementation,
-admission change or additional experiment is authorized by this document.
+Status: research recorded on 2026-10-02. The owner subsequently assigned only the
+narrow combined cleanup below, now implemented with unchanged admission and
+reserve policy. Other proposals remain unassigned; this document does not
+authorize further implementation or experiments.
 [Task 7 and writable deployment](writable-filesystem-core.md#focused-tasks)
 remain open. Preserve individually durable completed operations, both retained
 states and the existing failure/recovery contract in the baseline proposals.
 
 ## Evidence and comparison
 
-The code inspected is the current Pyxis pin, filesystem
+The research inspected the then-current Pyxis pin, filesystem
 [`dc63d62`](https://git.internal/PyxisOS/pyxis-fs/src/commit/dc63d62b81d7c6cca082eeb52842b84d8a1fa390),
-whose tree equals filesystem main `87d2f20`. Parent main is `2da3e5f`.
+whose tree equals filesystem main `87d2f20`. The research parent was `2da3e5f`.
 The production findings in `/shared/pyxis-fs-contract-audit.md` still apply;
 its older test findings were addressed by filesystem #18 / Pyxis #307.
 This investigation used read-only inspection and the existing
@@ -195,7 +197,23 @@ from the selected mechanism. The current two-drain / three-generation envelope
 is a linked proof assumption across preparation, admission and execution; change
 all of it coherently if the publication sequence changes.
 
-## Recommended first implementation candidate, pending assignment
+## Assigned first correction: combined small-orphan cleanup
+
+The owner accepted exactly the scope below. The
+[complete transaction proof](../../fs/docs/small-orphan-cleanup.md) was established
+before implementation, including tree repair, map/catalog/root closure,
+accounting, generation funding and scratch. It tightens the conservative path
+estimate below to 29 replacement volume nodes and 30 retirements including data;
+the full plan fits existing limits without changing allocator, admission,
+memory-ceiling or reserve policy. Other orphan shapes retain their existing path.
+
+The correction and contract-focused tests are now in the pinned dependency.
+[Matched RAM results](../../fs/docs/small-orphan-measurements.md) from two unchanged
+40-case matrices per revision measure compiler totals, through all maintenance,
+falling 7,744→6,528 KiB at 32 files (15.70%) and 15,708→12,756 KiB at 256 (18.79%).
+Append/overwrite costs remain essentially unchanged. Task 7 and writable
+deployment stay open. The original rationale, estimates and proof obligations
+below distinguish the investigation from those measured results.
 
 Combine final data cleanup with paired object/orphan deletion **only for an
 unreferenced regular orphan with one inline one-block mapping and no
@@ -251,9 +269,10 @@ Before implementing, prove:
   including replacement writes. Use healthy traces for fault cuts and independent
   expected contents; do not freeze physical placement or new incidental counts.
 
-## Delivery and proposed measurement
+## Delivery and follow-up choices
 
-Proposed sequence, each implementation requiring explicit assignment:
+The first correction above is assigned and delivered. Remaining implementations
+require explicit assignment; the original proposed sequence was:
 
 1. Review this candidate and the unresolved policy/mechanism choices on the PR.
 2. If assigned, land the narrow combined cleanup with maintained behavior,
@@ -265,7 +284,7 @@ Proposed sequence, each implementation requiring explicit assignment:
 4. Land separately measured map/maintenance corrections, then repeat acceptance
    against agreed budgets. Intermediate improvements do not clear the blocker.
 
-For the cleanup change, propose the **existing** RAM-only comparison, not a new
+The accepted cleanup assignment used the **existing** RAM-only comparison, not a new
 runner: two serial baseline samples per revision using
 `sudo python3 tests/ram_run.py --suite baseline` in the filesystem repository.
 It runs the unchanged two-population/four-case matrix and native operation/batch
@@ -273,8 +292,15 @@ modes; no compiler-only filter exists. Use configured budgets and no fallback or
 automatic increases. Match compiler, VM/tool versions, image/profile, prehistory,
 cache policy and concurrency; record any unavoidable difference from the old
 baseline. Run the maintained `check` and seed-1 `extended` suites for correctness.
-These additional runs are a proposal for a subsequent assignment, not performed
-or approved by this investigation.
+The owner approved these runs in the subsequent cleanup assignment; their
+results and verified storage boundary are recorded above. No additional campaign
+is assigned here.
+
+PR review also identified bounded carryover of retirement debt as an alternative
+to immediately draining every batch. It remains a design proposal: it would
+need revised debt, single-owner, workspace, generation and trailing/startup
+drain proofs. This cleanup changes none of those policies and does not select
+the next allocator or maintenance correction.
 
 Report total submitted block-write bytes through final synchronization and
 maintenance/unmount, preparation separately, Pyxis data/metadata and
