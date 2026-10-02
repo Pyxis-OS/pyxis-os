@@ -165,6 +165,7 @@ static bool descriptor(struct usb_device_record *device, uint8_t type, uint8_t i
 static bool known_class(uint8_t class)
 {
   switch (class) {
+  case USB_CLASS_INTERFACE: /* Null interface class */
   case 0x01: /* Audio */
   case 0x02: /* Communications */
   case 0x03: /* HID */
@@ -181,6 +182,10 @@ static bool known_class(uint8_t class)
   case 0x10: /* Audio/video */
   case 0x11: /* Billboard */
   case 0x12: /* Type-C bridge */
+  case 0x13: /* Bulk display */
+  case 0x14: /* MCTP */
+  case 0x3c: /* I3C */
+  case 0xdc: /* Diagnostic */
   case 0xe0: /* Wireless controller */
   case 0xef: /* Miscellaneous */
   case 0xfe: /* Application specific */
@@ -647,7 +652,7 @@ void usb_enumerate(uint64_t deadline)
     } else {
       device->classification = DEVICE_UNBOUND;
     }
-    klog("usb: port %u device %04x:%04x %s%s%s\n", index + 1,
+    klog("usb: port %u device %x:%x %s%s%s\n", index + 1,
          device->vendor, device->product, classification_name(device->classification),
          device->detail ? ": " : "", device->detail ? device->detail : "");
     if (discovery.hardware_failed) {
@@ -673,11 +678,11 @@ void usb_enumerate(uint64_t deadline)
     return;
   }
   struct usb_device_record *device = &discovery.devices[discovery.selected_port];
-  klog("usb: selected port %u device %04x:%04x configuration %u interface %u alternate %u\n",
+  klog("usb: selected port %u device %x:%x configuration %u interface %u alternate %u\n",
        discovery.selected_port + 1, device->vendor, device->product,
        device->bot.configuration, device->bot.interface, device->bot.alternate);
   for (unsigned i = 0; i < 2; ++i) {
-    klog("usb: bulk endpoint %02x packet %u burst %u\n", device->bot.endpoints[i].address,
+    klog("usb: bulk endpoint %x packet %u burst %u\n", device->bot.endpoints[i].address,
          device->bot.endpoints[i].max_packet, device->bot.endpoints[i].max_burst);
   }
   if (!configure_candidate(device, deadline)) {
