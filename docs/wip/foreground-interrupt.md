@@ -247,10 +247,34 @@ These are implementation checks, not open policy:
      later Ctrl+C never reaches the kernel while the command does not read.
      Local console input is unaffected because a full queue latches input loss
      instead of blocking.
-3. [ ] **Shell interruption.** Add the root shell's interrupt grant in local and
+3. [x] **Shell interruption.** Add the root shell's interrupt grant in local and
    remote session setup, the foreground `wait_many` loop and terminate-on-interrupt.
    Add the libterm passthrough call and use it in the line editor. Update shell,
    terminal, remote and execution-group docs and the technical-debt entry.
+   - Implemented as described in
+     [interrupting foreground commands](../userland/shell.md#interrupting-foreground-commands).
+     - `session` launches, the session program and the remote server forward
+       READ|INTERRUPT; every other launch narrows `input` to READ.
+     - The shell arms only SHELL_FOREGROUND jobs, and only with the right and
+       a clock.
+     - libterm's line helpers hold passthrough while editing and report
+       ERROR if they cannot withdraw it.
+   - Decided 2026-10-02: the remote full-queue case found in task 2 is recorded
+     as technical debt, not fixed here.
+   - Evidence: four CPUs on nested KVM, ordinary image, no test hooks.
+     - Local Development shell: a Lua CPU loop, a blocked `cat` and a Lua loop
+       piped to `cat` each reported `Process terminated` for every stage.
+       `lz` typed into the running loop was discarded. Ctrl+C at the prompt
+       still cancelled the line.
+     - Lua REPL: Ctrl+C cancelled a typed line and the REPL continued; a
+       running `while true do end` was terminated.
+     - Quiet remote machine session: the same loop, `cat` and a three-stage
+       pipeline reported `terminated` completions. Three presses coalesced.
+       `lz` injected with the Ctrl+C into a blocked `cat` was discarded.
+       Ctrl+C at the prompt cancelled the line, and the next commands
+       reported `exited 0`.
+     - The broader matrix (Ctrl+C during launch, completion races, Kilo, Doom,
+       background jobs, debugger inspection) is task 5.
 4. [ ] **Kilo passthrough.** A ports patch requests passthrough for the Kilo
    editing session. Kilo's own Ctrl+C handling is unchanged.
 5. [ ] **Validation.** QEMU, local and remote:
@@ -263,4 +287,6 @@ These are implementation checks, not open policy:
    - in the Lua REPL, Ctrl+C cancels a typed line but interrupts running code;
    - Doom with the raw keyboard is unaffected;
    - background jobs and other sessions unaffected;
+   - Ctrl+C during a startup script's foreground command, and whether the
+     script then stops or continues as intended;
    - debugger inspection of retirement and released waits.

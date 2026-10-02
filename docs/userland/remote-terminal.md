@@ -54,9 +54,11 @@ Do not give multiple init scripts network configuration ownership.
 
 Interactive mode uses a raw host terminal with fixed dimensions and restores its
 settings and cursor on normal exit and handled failures. Ctrl+C and Ctrl+D are
-forwarded to the guest; Ctrl+] requests session closure locally. Ctrl+C retains
-the shell's line-cancellation behavior and cannot interrupt a running foreground
-command. A recognized Ctrl+] request has a five-second acknowledgment deadline,
+forwarded to the guest; Ctrl+] requests session closure locally. Ctrl+C cancels
+the line at the prompt and [terminates a running foreground job](shell.md#interrupting-foreground-commands).
+After more than 4 KiB of typeahead that the running command does not read, the
+server stops reading the connection until its pending input is accepted. A
+Ctrl+C typed after that never arrives, so Ctrl+] is the fallback. A recognized Ctrl+] request has a five-second acknowledgment deadline,
 after which the client disconnects and reports incomplete closure. A saturated
 local outgoing queue pauses stdin, so an escape behind a long paste may itself
 be delayed. Sending the host client SIGINT/SIGTERM or closing its terminal
@@ -264,7 +266,7 @@ capacity, including pending handshakes and TIME_WAIT, can prevent admission even
 below that session count.
 
 SSH/Telnet compatibility, authentication/TLS, resize, reattachment, remote graphics,
-a multiplexer/navigator, foreground interruption, task migration and process
+a multiplexer/navigator, task migration and process
 threads remain separate work. Current costs and revisit points are recorded in
 [technical debt](../technical-debt.md#initial-independent-terminal-limits) and
 [execution-group shutdown](../technical-debt.md#execution-group-shutdown).

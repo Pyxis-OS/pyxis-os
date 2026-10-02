@@ -221,18 +221,29 @@ without serial.
 
 Process handles are non-owning observers; closing one does not stop execution.
 Launch grants their holder WAIT and TERMINATE, and TERMINATE stops just that
-process through the per-task safe stop. [Execution-group CONTROL](interfaces/execution-groups.md) now permits
-whole-group termination, including blocked-operation unwind. Local foreground
-commands and pipelines do not yet have separate interruption groups, so Ctrl-C
-cannot interrupt their execution.
+process through the per-task safe stop. [Execution-group CONTROL](interfaces/execution-groups.md) permits
+whole-group termination, including blocked-operation unwind.
 
-Revisit interactive cancellation with explicit foreground targeting and authority.
-The agreed [foreground interruption plan](wip/foreground-interrupt.md) records
-the chosen first slice: process-level termination and shell-armed Ctrl+C events.
-The group stop paths provide safe ownership return, including IPC caller cancellation.
-Console and terminal input can now recognize Ctrl+C on an armed handle, but the
-shell's arming, command/pipeline policy and passthrough use remain to be
-implemented. Native cancellation need not require general POSIX signals.
+The [shell terminates its foreground job on Ctrl+C](userland/shell.md#interrupting-foreground-commands),
+stage by stage, with immediate termination and no cooperative interrupt.
+Accepted limits of this first slice:
+- **Descendants.** Only the shell's direct children are terminated. Processes a
+  stage launched itself keep running. Today ordinary commands receive no
+  launcher, so none exist.
+- **Background jobs** cannot be interrupted, and there is no job control.
+- **Passthrough holders** cannot be interrupted while passthrough is held.
+  Locally that leaves no recovery short of ending the session.
+- **A nested interactive shell** cannot arm, so Ctrl+C in the outer shell ends
+  the whole inner shell.
+- **Remote typeahead.** After more than 4 KiB of typeahead that the command does
+  not read, the remote server stops reading frames until its pending injection
+  drains. A later Ctrl+C never reaches the kernel; Ctrl+] remains the fallback.
+
+The [foreground interruption plan](wip/foreground-interrupt.md) records the
+design. Revisit with cooperative interrupts or job control, or if pasting into
+hung remote commands matters. The remote case would need an out-of-band
+interrupt from the server. Native cancellation need not require general POSIX
+signals.
 
 ## Console input completion
 
@@ -267,7 +278,8 @@ Address changes invalidate the listener and are not automatically rebound.
 The interactive host renderer uses one `?` cell for
 non-ASCII bytes; machine mode preserves the original data. A full client input
 queue delays reading Ctrl+] behind a paste; once read, its close acknowledgment
-is bounded at five seconds. Host SIGINT/SIGTERM forces disconnect even under
+is bounded at five seconds. A full guest input queue likewise holds back a
+later Ctrl+C (see [process termination and Ctrl-C](#process-termination-and-ctrl-c)). Host SIGINT/SIGTERM forces disconnect even under
 backpressure. Revisit admission
 policy, authentication and presentation breadth with a concrete non-development
 deployment or text consumer. Resize and reconnect remain separate work.

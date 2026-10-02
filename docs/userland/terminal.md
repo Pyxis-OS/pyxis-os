@@ -17,6 +17,10 @@ buffer. Capacity includes the terminating NUL. Successful input excludes the
 newline; cancellation, EOF, input loss and errors clear the buffer and return zero
 length. Ctrl+C cancels this line locally, moves to a fresh line and returns
 `TERM_LINE_CANCELLED`; it is not a signal and does not terminate the process.
+Both line helpers hold a [passthrough handle](#interrupt-arming-and-passthrough)
+while editing, so an armed shell does not terminate a program for Ctrl+C typed
+at its prompt. `term_passthrough()` exposes the same request for other
+programs.
 Ctrl+D on an empty line returns `TERM_LINE_EOF`; on a nonempty line it is
 ignored. This is an editor result, not closure of the console input object.
 Actual terminal input EOF also returns TERM_LINE_EOF, discarding any unfinished
@@ -164,13 +168,14 @@ console lock before the task prepares another wait.
 
 Framebuffer console input and terminal-session input can recognize Ctrl+C as
 an interrupt instead of data. The [foreground interruption plan](../wip/foreground-interrupt.md)
-records the design; the shell does not use it yet.
+records the design, and the shell
+[arms it for foreground jobs](shell.md#interrupting-foreground-commands).
 
 Authority starts at the input object. The kernel's initial per-space `input`
 grant and the terminal-create input carry READ and `CONSOLE_RIGHT_INTERRUPT`.
 Standard input is validated as exactly READ, so a command never receives
-interrupt authority as a stream. Session setup currently narrows `input` to
-READ when it delegates it.
+interrupt authority as a stream. Session setup passes the right on to session
+successors and the remote root shell; every other launch narrows `input` to READ.
 
 - `console_arm_interrupt()` needs INTERRUPT. It returns an armed handle to the
   same input object, carrying only `CONSOLE_RIGHT_ARMED`. The input stays armed

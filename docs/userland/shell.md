@@ -55,7 +55,8 @@ cat "hello.txt"
 ```
 
 Unfinished quotes or escapes report an error without executing anything. An empty
-line does nothing. Ctrl+C cancels the current line, not a running child. Input
+line does nothing. Ctrl+C at the prompt cancels the current line; while a
+foreground command runs it [interrupts the command](#interrupting-foreground-commands). Input
 loss discards the line; a submitted line that hit the editor's buffer/display
 limit is also rejected. The command buffer has room for 1023 bytes plus NUL;
 libterm's visible-area limit may be smaller. History and scrolling input beyond
@@ -216,7 +217,8 @@ its transfer buffer. File operands and file-backed stdin keep bulk reads and
 normal EOF. Terminal input remains raw and blocking. Remote machine-client stdin
 EOF sends END_INPUT, which drains queued terminal bytes before EOF; the local
 framebuffer console has no input EOF operation. Ctrl+D is an input byte rather
-than a stream closure. Ctrl+C cancels shell editing, not a running cat. No options
+than a stream closure. Ctrl+C at the prompt cancels shell editing; during a
+running cat it terminates cat. No options
 or terminal line discipline are added.
 
 ## Bounded input with head
@@ -320,11 +322,52 @@ the next line. Wait, cleanup and diagnostic I/O errors remain fatal to the shell
 An unknown launch outcome is also fatal because terminal input cannot safely
 resume.
 
-There is no foreground cancellation or job control. Ctrl+C cannot interrupt a
-running pipeline. Remote terminal END_INPUT supplies EOF after queued input;
+There is no job control. Ctrl+C terminates a running foreground command or
+pipeline, as described below. Remote terminal END_INPUT supplies EOF after queued input;
 local framebuffer input has no EOF operation. A child that waits on live terminal
 input or ignores its pipe can keep the shell waiting even after its peers finish.
 Disconnecting a remote session terminates its entire execution group.
+
+## Interrupting foreground commands
+
+A root shell, or a session successor, can stop its foreground job with Ctrl+C.
+It receives the [interrupt right](terminal.md#interrupt-arming-and-passthrough)
+on its `input` grant: from the kernel's initial console input through init,
+`session` and the startup script locally, and from the terminal-create input
+remotely. `session` launches pass the right on, because the successor replaces
+the shell. Ordinary commands receive READ alone, so they cannot arm or observe
+interrupts. Scripts that hold the right arm their own foreground commands in
+the same way.
+
+For each foreground job, the shell:
+
+1. Arms Ctrl+C before launching any stage, so a press during startup never
+   reaches a stage as data.
+2. Waits for every stage's completion and the interrupt together, through
+   `wait_many` with 30-second deadlines from the shell's clock.
+3. On Ctrl+C, requests [TERMINATE](../interfaces/processes.md) for every stage
+   and stops watching the interrupt. It stays armed, so further presses are
+   discarded instead of reaching a stage.
+4. Collects results as before, then disarms before editing the next line.
+
+Diagnostics and typed completion are unchanged. Each interrupted stage reports
+`Process terminated`, and a pipeline's completion follows its last stage. A
+stage that finished before its termination took effect keeps its real result.
+
+Input typed before Ctrl+C is discarded, so text typed into a hung command never
+runs as the next shell command. Ctrl+C at the prompt still cancels the line,
+because the shell is not armed while editing.
+
+Programs that read lines through libterm hold passthrough only while editing a
+line. In the Lua REPL, Ctrl+C cancels a typed line, but running code is
+terminated.
+
+- **Background, service and session launches** are never armed.
+- **Without the right or a clock**, jobs wait without interruption, as before.
+- **If arming fails**, the shell prints one diagnostic and runs the job without
+  interruption.
+- **Raw-keyboard programs** such as Doom receive key events rather than text,
+  so they end through their own controls.
 
 ## Background commands
 
@@ -347,8 +390,8 @@ redraw. The shell closes its process observer immediately. Existing process
 cleanup reclaims the child's execution resources when it exits.
 
 There is no job table, completion notification, exit-status collection, `jobs`,
-`fg`/`bg`, signal delivery or termination command. Ctrl+C still cancels only the
-shell's current input line. Use programs with their own bounded exit policy.
+`fg`/`bg`, signal delivery or termination command. Ctrl+C interrupts only the
+foreground job, never a background command. Use programs with their own bounded exit policy.
 Background launch also works in scripts: launch failure stops the script, while
 successful launch lets it continue regardless of the child's eventual result.
 Ungrouped local children may outlive the shell. The remote server terminates all
