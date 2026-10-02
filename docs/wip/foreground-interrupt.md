@@ -275,8 +275,19 @@ These are implementation checks, not open policy:
        reported `exited 0`.
      - The broader matrix (Ctrl+C during launch, completion races, Kilo, Doom,
        background jobs, debugger inspection) is task 5.
-4. [ ] **Kilo passthrough.** A ports patch requests passthrough for the Kilo
+4. [x] **Kilo passthrough.** A ports patch requests passthrough for the Kilo
    editing session. Kilo's own Ctrl+C handling is unchanged.
+   - Implemented as ports patch `0006`: Kilo requests passthrough before
+     loading the file, exits with a diagnostic if that fails, and holds it
+     until process exit.
+   - Evidence: four CPUs on nested KVM.
+     - Local Development shell: in `kilo home://k.txt`, typing `hello`, two
+       Ctrl+C presses, then ` world` left Kilo running with `hello world`.
+       Ctrl-S and Ctrl-Q saved and quit, and `cat` showed `hello world`. A
+       following Lua loop was still terminated by Ctrl+C.
+     - Quiet remote machine session: the same sequence completed as `exited 0`
+       with `remote ok` saved, and a following Lua loop completed as
+       `terminated`.
 5. [ ] **Validation.** QEMU, local and remote:
    - a CPU loop, a blocked reader and a pipeline;
    - typed `terminated` completion;

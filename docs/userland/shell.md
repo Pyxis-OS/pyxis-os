@@ -360,7 +360,8 @@ because the shell is not armed while editing.
 
 Programs that read lines through libterm hold passthrough only while editing a
 line. In the Lua REPL, Ctrl+C cancels a typed line, but running code is
-terminated.
+terminated. Kilo holds passthrough for its whole session, so Ctrl+C never ends
+it or discards unsaved edits; quit with Ctrl-Q.
 
 - **Background, service and session launches** are never armed.
 - **Without the right or a clock**, jobs wait without interruption, as before.
