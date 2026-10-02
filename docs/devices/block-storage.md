@@ -8,6 +8,11 @@ partition map through a separate kernel interface.
 expose directory/file capabilities selected by trusted init, while raw-disk
 authority remains kernel-only.
 
+The [Phase B.1 USB contract](../wip/usb-installation.md#phase-b1-read-only-contract)
+defines the planned explicit backend selection and asynchronous preparation
+barrier needed for USB integration. The behavior below describes the implemented
+VirtIO backend.
+
 The block-storage foundation milestone is complete. Its implemented contracts
 live here, in [shared VirtIO queues](virtio-queues.md) for filesystem, entropy and
 block storage, and in [GPT discovery](gpt.md). The

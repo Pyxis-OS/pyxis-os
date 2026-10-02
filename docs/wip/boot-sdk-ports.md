@@ -251,7 +251,9 @@ add xHCI/Bulk-Only read-only access to a separate Pyxis pool, then integrate nat
 persistence and validate the ThinkPad. Real-device passthrough is an intermediate
 check, not validation of the laptop controller. Boot-image Phase A now provides
 an opt-in [raw image and emulated USB launch](../development/usb-image.md);
-kernel USB and writable stages remain
+Phase B.1 now defines explicit backend/unique-disk selection, controller resource
+preparation, bounded requests and failure ownership. Controller bring-up is the
+next focused task; kernel USB remains unimplemented and writable work is
 unassigned. Reusable controller/USB/class/block boundaries are required, without
 speculative driver frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.
