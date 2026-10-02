@@ -16,6 +16,10 @@ cost reporting; the owner accepted that package after #313 merged and assigned
 its implementation. The first implementation is recorded below; numerical
 deployment criteria remain proposals. Other proposals remain unassigned; this document does not
 authorize further implementation or experiments.
+After filesystem #24 / Pyxis #325 merged, the owner assigned the
+[bounded leaf-overflow split design](filesystem-overflow-split.md). Its fixed-surplus
+accounting and fallback package are proposed for review; no implementation is
+authorized by this design task.
 [Task 7 and writable deployment](writable-filesystem-core.md#focused-tasks)
 remain open. Preserve individually durable completed operations, both retained
 states and the existing failure/recovery contract in the baseline proposals.
@@ -718,7 +722,34 @@ ordinary host tools and the complete shared archive with Pyxis freestanding/kern
 ABI flags compile. Local unprivileged `make -j16` builds and links Caelum with
 this published pin through the existing read-only core subset; the writer remains
 excluded. Task 7 and writable deployment remain open; no further mechanism is
-assigned.
+assigned for implementation.
+
+## Bounded leaf-overflow split design
+
+The owner assigned a focused design task after the mixed neighbour-repair results.
+The [proposal](filesystem-overflow-split.md) uses the existing measurements and
+read-only publisher/encoder inspection; it runs no new mutation workload.
+Consider one extra leaf beneath an existing parent with room, with no internal
+split, root growth or merge. Retire `p` marked source nodes but emit `n=p+1`;
+final live map nodes become `J+1`, requiring `J+1<=m`. Existing H/S, debt,
+records/claims, scratch, deletion and generation envelopes can cover this narrow
+candidate under the derived guards. A fixed surplus avoids guessed-count search.
+
+Recommended choices remain unaccepted: a trial only when the first failing run is
+overflow, lowest-key eligible anchor, necessary-split rule and balanced run packing,
+one trial with seed restoration
+before current neighbour repair/bulk, and selecting a successful trial without an
+alternative-history cost gate. Restoring marks alone cannot restore a sealed
+candidate; rebuild accounting/claims/volume summaries from immutable inputs.
+The single reset gives a derived `2J-s+3` closure-evaluation bound. Shape/candidate
+misses may restore; I/O, integrity, invalid deltas and guaranteed-storage failure
+remain errors. The existing fixed-topology `n=p` proof still governs that path;
+its emitted/retired equality must not become a universal structural assertion.
+
+This targets submitted map writes, with unknown useful hit rate and potential
+extra planning cost. Implementation, tests and unchanged matched RAM measurements
+need separate assignment after design review. General structural solving,
+placement/fill policy, budgets, task 7 and writable deployment remain separate.
 
 ## Proposed deployment comparisons and acceptance
 
