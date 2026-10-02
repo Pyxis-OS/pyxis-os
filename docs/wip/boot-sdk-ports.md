@@ -158,7 +158,10 @@ dominates append/overwrite metadata traffic; the largest such histories exceed
 Btrfs totals. Compiler writes are non-monotonic with population while instrumented
 planning time grows. Native member-cgroup peaks are not complete RAM high-water
 measurements; independent scratch/trace bounds and conservative estimates remain.
-The proposed occupancy-aware neighbour repair needs a separate assignment.
+The subsequently assigned [occupancy-aware neighbour repair](../../fs/docs/neighbour-repair-measurements.md)
+compares complete expanded runs under the same funding/termination bounds.
+Matched results are mixed; this selector does not settle broad closure or planning
+costs, and no next optimization is assigned.
 Broader population/pressure and recovery qualification, deployment criteria and
 task 7 remain open. See
 the linked milestone for the corrective task list.

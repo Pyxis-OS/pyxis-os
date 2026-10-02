@@ -2469,7 +2469,8 @@ this documentation update.
        non-monotonic with population while instrumented planning time grows. Member-
        cgroup peaks do not measure all native backing/cache RAM; independent
        scratch/trace bounds and conservative native overhead remain documented.
-       The proposed occupancy-aware immediate-neighbour correction is unassigned.
+       The occupancy-aware immediate-neighbour correction was subsequently assigned
+       and delivered below.
        This evidence step does not settle broader deployment criteria, pressure,
        native integration or recovery qualification; task 7 remains unchecked.
 
@@ -2480,6 +2481,36 @@ this documentation update.
        ASan/UBSan, small comparison controls and native target-safety checks.
        Local `make -j16` builds and links Caelum with the existing read-only core
        subset; the writable core remains excluded. Merge the filesystem PR first.
+
+     - [x] **Compare immediate neighbours by complete expanded-run occupancy.**
+       After filesystem #23 / Pyxis #324 merged, implement the assigned fit/deficit
+       selector with left ties, including bridged marked runs. Evaluate both sides
+       before marking one clean leaf and ancestors, then renew accounting/seams.
+       Existing ascending eligible IDs, topology/packing, both retained states,
+       two-flush durability and funded bulk fallback remain. No reserve/admission,
+       memory-budget or runner changes. The existing monotone J growth and q/J/H
+       funding bounds still apply; fixed diagnostic counters fit existing scratch.
+       Six focused contract cases cover both failure directions, competing fit,
+       smaller deficit, ties and bridges without requiring current formatter
+       shapes, workload publication counts or physical placement.
+
+       The [matched RAM record](../../fs/docs/neighbour-repair-measurements.md)
+       includes the unchanged 54-case after matrix, recorded before matrix and
+       fresh largest-append control through all final maintenance. Results are
+       mixed: small overwrite traffic falls 6.141%, small append rises 0.645%, and
+       largest overwrite rises 1.934%. Largest append/compiler totals improve
+       1.343%/0.438% with window exceptions. Both largest write histories still
+       exceed Btrfs. Broad local replacement and population-dependent planning remain.
+       All 141 quick and six extended groups pass normally and with ASan/UBSan,
+       plus a small sanitized comparison. Ordinary host tools and the complete
+       freestanding shared archive compile; native writer stack work stays deferred.
+       This is not broader acceptance, pressure/native recovery qualification or
+       permission for another allocator change. Task 7 remains unchecked.
+       Delivery: [filesystem #24](https://git.internal/PyxisOS/pyxis-fs/pulls/24)
+       publishes `4b1e81dfbc71d46ca287a93c69b7b83917a84f87`, which this parent pins.
+       Local unprivileged `make -j16` builds and links Caelum with the existing
+       read-only core subset; the writable core remains excluded.
+       Merge the filesystem dependency first; the owner merges.
 
    - [ ] **Repeat measurements and complete acceptance.** Run matched RAM-only
      before/after workloads and remaining recovery/pressure coverage. Record the
