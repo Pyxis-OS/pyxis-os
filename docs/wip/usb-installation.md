@@ -1,12 +1,14 @@
 # USB boot and first physical installation
 
-Status: Phase A image assembly and USB boot implemented, 2026-10-02.
+Status: Phase A image assembly and USB boot implemented; Phase B.1 contracts
+prepared for implementation, 2026-10-02.
 The owner wants a replaceable USB drive as the first
 physical installation target, with QEMU development before laptop validation.
 Implemented image behavior lives in the [USB image reference](../development/usb-image.md).
-Kernel USB and writable
-installation stages remain unassigned; this document does not authorize physical
-writes or reorder the active filesystem, spaces/SMP and display work.
+Phase B starts with the read-only contracts below; kernel USB implementation
+remains pending. Writable installation is unassigned. This document does not
+authorize physical writes or reorder the active filesystem, spaces/SMP and
+display work.
 
 ## Intended result and layout
 
@@ -121,6 +123,186 @@ Native hardware-listing tools and their name databases are a separate
 [hardware-inspection proposal](hardware-inspection.md). `lsusb` will consume the
 USB inventory; neither tool nor its benchmark is a boot-image prerequisite.
 
+## Phase B.1 read-only contract
+
+The owner accepted unique supported-disk selection, failing on ambiguity. The
+following design is the implementation contract proposed by this task; it is
+not a claim of implemented kernel USB behavior. Its first consumer is the
+directly attached QEMU disk. Physical-controller qualification remains Phase C.
+
+### Selection and authority
+
+Add a kernel command-line setting `block.backend=virtio-blk|usb-bot`, parsed
+before device preparation. Omission selects the existing VirtIO profile. Invalid
+or duplicate settings fail configuration. One parsed setting owns selection for
+the boot; later init configuration must not parse a second copy of that state.
+Selecting USB never falls back to VirtIO after absence, unsupported hardware,
+ambiguity or failure. Inventory in the unselected backend does not choose the
+disk or make selected-backend discovery ambiguous.
+
+USB requires exactly one xHCI PCI function in a complete inventory, matched by
+class/subclass/programming interface rather than vendor/product identifiers.
+Inspect boot-present devices on its advertised supported root ports. Exactly one
+supported SCSI/Bulk-Only storage interface selects the disk; multiple candidates
+are ambiguous. Select the candidate before media-capacity setup, so a setup error
+cannot silently make another disk win. The initial storage profile accepts one
+non-composite interface and one logical unit, LUN 0. Multiple logical units or
+unsupported interface shapes produce an explicit unsupported result. Descriptor
+selection must allow the target's BOT/UAS alternate settings, selecting BOT.
+
+A positively identified unrelated class stays unbound. A mouse alongside the
+disk must work as that case. Per-device unsupported results do not automatically
+fail the backend. Keep these final selection outcomes distinct:
+
+| Completed discovery | Selected-backend outcome |
+| --- | --- |
+| One supported disk, with unrelated classes or fully classified unsupported storage | Select that disk; retain the other devices' unsupported/unbound diagnostics. |
+| Several supported disks | Ambiguous; select none. |
+| No supported disk, with recognized unsupported storage | Unsupported, not absent. |
+| No storage candidate, with all connected devices classified | Absent. |
+| A hub with uninspected downstream devices, unclassifiable descriptors or exhausted classification resources | Incomplete; a discovered supported disk cannot bypass this result. |
+
+The initial policy treats a connected unsupported hub as incomplete relevant
+inventory, because its downstream storage is unknown. Absence and uniqueness
+both require complete discovery. Setup failure after identifying the selected
+candidate remains setup failure; it cannot silently remove that candidate.
+
+The existing `mount.disk` GPT GUID verifies the selected disk after discovery;
+it does not select among several disks. Existing principal, partition, volume
+and binding checks remain with native mounting and trusted init. USB addresses,
+ports, serial numbers and GUID knowledge grant no filesystem authority. The
+selected backing stays fixed for the boot. Replacement media cannot inherit live
+tickets, GPT metadata or native pools through reconnection.
+
+### Controller resources and startup
+
+The current [PCI inventory](../devices/pci.md) retains class fields and exposes
+read-only indexed records after the native `lspci` integration. Reuse those
+fields for a narrow class-based selector that returns the unique claimable
+function and preserves unavailable/incomplete/ambiguous outcomes. The remaining
+resource gaps are initial MMIO access before BAR sizing and MSI-X mechanics
+currently coupled to VirtIO configuration.
+The initial controller profile is PCI xHCI 1.x with firmware-assigned memory
+BAR0, 64-bit DMA addressing, 4 KiB page support and MSI-X. Firmware must leave
+MSI/MSI-X disabled, as required by the current PCI claim. Support both advertised
+context strides. Controller port, slot and scratchpad requirements come from
+checked capability fields, with allocation failure reported explicitly.
+Other address widths, interrupt mechanisms and page sizes are unsupported in
+this first profile; these are deployment limits, not USB architectural rules.
+
+Current `pci_claim_device` immediately disables bus mastering. B.2 needs a
+staged claim for the first MMIO consumer: reserve exclusive software/configuration
+ownership while preserving firmware decoding and bus-master state, perform
+handoff and halt, then disable bus mastering/INTx and proceed to resource probing.
+Keep existing VirtIO preparation behavior unchanged. As
+[xHCI sections 4.21.2–4.22.1](https://cdrdv2-public.intel.com/625472/625472_xHCI_Rev1_2b.pdf)
+explain, clearing bus mastering on a running controller can cause a host-controller
+error, and firmware ownership must transfer before controller use.
+
+Use a narrow owned bootstrap mapping of BAR0's first 4 KiB for capability and
+operational registers. This is provisional access to an assigned BAR, not a claim
+that its size was probed. Validate the assigned base, arithmetic, alignment and
+existing boot/platform MMIO exclusions before access. Every bootstrap access,
+including complete extended-capability bodies, must fit that prefix. A chain
+that leaves it is unsupported in the initial profile. Do not access port, runtime
+or doorbell registers outside the prefix before sizing. No kernel DMA is
+published during this stage.
+
+If legacy ownership is advertised, request OS ownership and wait for firmware
+release; never force a stuck BIOS-owned controller into use. Disable legacy SMI
+sources only after handoff. Wait for `CNR=0` before operational writes, confirm
+halt before clearing bus mastering, then reset and wait for both reset completion
+and `CNR=0`. Disable decoding, size BARs and validate the bootstrap extent before
+preparing the remaining owned mappings.
+Preserve stop-before-probe and ordinary sized-BAR bounds. Partial preparation
+unwinds only while device access and interrupt delivery are demonstrably safe.
+The bootstrap mapping API and PCI MSI-X extraction belong in B.2 with their first
+real consumer; B.1 adds no placeholder interfaces.
+
+Prepare controller/device records, contexts, scratchpads, rings and transfer
+buffers under the current pre-AP allocation/VM contract. The existing coherent
+contiguous allocator supplies backing; checked structure placement, alignment,
+page/ring-segment boundaries and transfer-TRB splitting establish the additional
+xHCI layout requirements. Page alignment alone does not establish them. Keep CPU
+and physical addresses distinct. After scheduler setup, a worker activates the
+controller and performs bounded
+enumeration. IRQ handling acknowledges activity and wakes the worker; parsing,
+commands, recovery and logging remain worker work. Today's BSP affinity follows
+current APIs and is not a permanent USB ownership requirement.
+
+Publish a final block preparation result only after enumeration, disk selection
+and geometry setup finish or fail. Pending setup is not absence. GPT currently
+queries geometry immediately in `gpt_start()`; USB integration must introduce a
+bounded readiness wait before that query and before native mount authority is
+created. Preserve the immutable preparation reason separately from later I/O
+availability. Configured authority is omitted only for confirmed disk absence;
+present-but-unusable and incomplete discovery remain visible failures.
+
+The public block API is already transport-neutral in shape; its implementation
+currently lives entirely in `kernel/virtio/blk.c`. Move selected-backend dispatch
+into `kernel/storage/block.c` as USB becomes its first additional consumer. Keep
+request queues, tickets, DMA and recovery with each backend. Immutable selection
+allows the existing single-device tickets, GPT snapshot and native pool identities
+to remain sufficient; a driver registry or multi-disk interface is unnecessary.
+
+### Requests, deadlines and failure ownership
+
+Keep command and transfer tickets with their owning controller, device and
+endpoint. Small internal control/bulk interfaces capture outbound bytes and
+retain no caller read destination. A checked completion supplies actual bytes;
+the caller collects or abandons exactly once. Ticket generations and checked ring
+retirement must prevent a late completion from referring to a reused request; a
+software generation alone cannot identify a stale hardware event carrying a
+reused ring address. Class-specific expected lengths and short-transfer handling
+stay above xHCI.
+
+For the initial storage implementation, start with two admitted block-request
+slots, each with a reserved buffer and a 64 KiB maximum read. Queued, active and
+completed-but-uncollected work all count against this budget. BOT runs one
+command/data/status exchange at a time per interface, as required by
+[BOT section 3.4](https://www.usb.org/sites/default/files/usbmassbulk_10.pdf).
+Reserve control, command and status storage independently so recovery cannot
+depend on a client releasing a completed block slot. Derive other ring and
+descriptor budgets during controller implementation and document their limits;
+exhaustion must not silently skip ports or descriptors needed for selection.
+
+Initial deadline choices are one second for firmware handoff and controller
+halt/reset, five seconds for a controller command or control transfer and for
+an entire BOT exchange, and thirty seconds for enumeration/selected-media setup.
+Protocol-directed status retry shares the exchange deadline. Recovery has its
+own five-second absolute bound. Retries never restart a deadline. These values,
+slot count and buffer size are starting implementation choices, maintained in
+one place when coded; changing them does not change the ownership contract.
+Reassess them against measured QEMU/device behavior, without freezing them or
+image sizes in unit-test expectations.
+
+Preserve the [block ticket contract](../devices/block-storage.md#tickets-and-caller-ownership):
+caller wait timeout neither cancels nor consumes; successful read collection
+copies exactly the requested bytes, and failure leaves caller storage untouched.
+Set `submitted` when the BOT command first becomes device-visible. Report
+`writable=false` and `flush_supported=false`; writes and flushes return read-only.
+Media geometry must satisfy the existing block/GPT logical-block profile and
+checked range arithmetic, independent of image defaults or sampled drive sizes.
+
+Queued abandonment can cancel unpublished work. An active request, including
+worker preparation before publication, cannot be recycled merely because its
+client abandoned it; preparation may still publish. Published work retains its
+request, ring and DMA ownership until checked completion or confirmed safe
+retirement. Stopping an endpoint alone leaves queued transfer descriptors;
+establish safe dequeue/retirement before reuse or restart. Endpoint stall handling
+belongs to USB; required BOT reset and clear-halt ordering belongs to mass storage.
+A recovered channel does
+not turn the failed block read into success or authorize an automatic block retry.
+Unexpected removal, controller protocol corruption, device-work timeout or
+failed recovery stops the selected backing for the boot and fails pending work.
+Disabling PCI bus mastering or masking an interrupt alone is not proof that all
+device ownership returned. Unresolved DMA storage cannot be reused.
+
+Runtime claims, mappings and allocations remain retained until reboot under the
+current shared-VM contract, even after successful reset. Late IRQ state remains
+valid. Safe request reuse after ordinary completion is separate from runtime
+unmapping. No reset or recovery may substitute a new disk into existing authority.
+
 ## Staged milestones
 
 Each stage should be assigned separately and delivered in focused PRs. USB read
@@ -145,7 +327,7 @@ host tools and the later physical-preparation procedure.
 
 ### B. Native read-only USB storage
 
-1. [ ] **Settle controller, request and disk-selection contracts.** Inventory
+1. [x] **Settle controller, request and disk-selection contracts.** Inventory
    current PCI resource/interrupt/DMA facilities and block-interface coupling.
    Propose bounded request storage, timeouts, failure ownership and explicit disk
    selection. Follow the scheduler/allocation model current at implementation;
@@ -186,17 +368,16 @@ host tools and the later physical-preparation procedure.
    to read-only mounting and bounded persistence checks. Record device, firmware,
    topology and observed differences. An orderly reboot is not a power-loss test.
 
-## Decisions before assigning implementation
+## Remaining assignment and qualification decisions
 
-- Phase A is implemented independently. Assignment and ordering of later stages
-  relative to the existing roadmap remain open; Phase A does not implicitly
-  authorize kernel USB or writable integration.
-- Settle image preparation/update scope and the device-identity/authority mapping
-  as the block layer gains another backend. Never select a write target merely
-  because it was enumerated first; distinguish disk identity from USB identifiers.
-- Choose the initial xHCI hardware/profile and per-request resource/error contract
-  after inspection. If a real target requires hubs or unsupported controller
-  features, discuss that expansion rather than quietly adding them.
+- Phase A is implemented and Phase B.1 defines the first read-only contract.
+  Deliver B.2 controller bring-up separately, then enumeration, BOT/SCSI reads and
+  native integration. Writable work and its roadmap ordering remain unassigned.
+- Image update/preservation ownership remains open for persistent installation.
+  Read-only disk selection does not qualify a write target or authenticate media.
+- If the physical target requires hubs, firmware capabilities outside the
+  bootstrap prefix or another unsupported controller feature, inspect and discuss
+  that expansion before changing the initial hardware profile.
 - Agree the writable-device qualification and recovery evidence before physical
   writes. Replaceability limits the cost of failure; it proves no endurance or
   durability guarantee and does not remove the filesystem deployment gates.
@@ -209,5 +390,7 @@ host tools and the later physical-preparation procedure.
 - [QEMU USB emulation](https://www.qemu.org/docs/master/system/devices/usb.html)
   and [device boot ordering](https://www.qemu.org/docs/master/system/bootindex.html).
 - [USB-IF Bulk-Only Transport specification](https://www.usb.org/sites/default/files/usbmassbulk_10.pdf).
-- [Intel xHCI specification](https://www.intel.com/content/www/us/en/content-details/625472/extensible-host-controller-interface-for-universal-serial-bus-xhci-requirements-specification.html).
+- [Intel xHCI 1.2b specification](https://cdrdv2-public.intel.com/625472/625472_xHCI_Rev1_2b.pdf),
+  especially initialization (§4.2), BIOS/OS ownership (§4.22.1), register layout
+  (§5.2.1) and addressing/context capabilities (§5.3.6).
 - [Linux cache-control contract](https://docs.kernel.org/block/writeback_cache_control.html).
