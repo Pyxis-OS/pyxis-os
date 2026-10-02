@@ -20,6 +20,7 @@
 #include <kernel/virtio/net.h>
 #include <kernel/virtio/rng.h>
 #include <kernel/task.h>
+#include <kernel/usb/xhci.h>
 #include <kernel/service/request.h>
 #include <kernel/space.h>
 
@@ -38,6 +39,7 @@
   klog("initrd: newc archive=%zu bytes, mapped read-only\n", boot->initrd.size);
 
   pci_discover();
+  xhci_prepare(boot);
   virtio_fs_pci_prepare(boot);
   virtio_net_prepare(boot);
   virtio_rng_prepare(boot);
@@ -51,6 +53,8 @@
 
   task_init();
   bsp_requests_init();
+
+  xhci_start();
 
   virtio_fs_pci_start();
   virtio_rng_start();

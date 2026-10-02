@@ -11,6 +11,7 @@
 #include <kernel/virtio/pci.h>
 #include <kernel/virtio/net.h>
 #include <kernel/virtio/rng.h>
+#include <kernel/usb/xhci.h>
 #include <stddef.h>
 
 #define IDT_GATE_PRESENT (1u << 7)
@@ -87,6 +88,11 @@ static void finish_interrupt(const struct exception_frame *frame)
 
 void interrupt_handler(struct exception_frame *frame)
 {
+  if (frame->vector == APIC_XHCI_VECTOR) {
+    xhci_interrupt();
+    finish_interrupt(frame);
+    return;
+  }
   if (frame->vector == APIC_VIRTIO_BLK_VECTOR) {
     virtio_blk_interrupt();
     finish_interrupt(frame);
