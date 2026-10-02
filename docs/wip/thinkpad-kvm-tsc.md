@@ -8,9 +8,10 @@ is included in this report.
 
 Pyxis booted under KVM on the ThinkPad T14 Gen 1 AMD running Fedora. All four
 CPUs came online; preemptive userspace, display presentation and the network
-worker started, and a remote shell successfully ran `fastfetch`. No panic was observed
-in the normal run. This establishes the configuration below, not native Caelum
-boot, TSC qualification or broad stress testing.
+worker started, and a remote shell successfully ran `fastfetch`. No panic was
+observed in the normal run. This establishes the KVM configuration below, not
+successful native Caelum boot, TSC qualification or broad stress testing. The
+owner's separate native boot failure is recorded below.
 
 | Setting | Recorded value |
 | --- | --- |
@@ -35,10 +36,11 @@ The pinned dependency revisions were:
 
 The native cross toolchain was built with `JOBS=16` from pinned,
 checksum-verified archives: GCC 16.2.0 and binutils 2.47.20260726, installed at
-`/home/chronium/opt/pyxis-cross`. The image and ordinary boot commands were:
+`$HOME/opt/pyxis-cross` on the recording host. The image and ordinary boot
+commands were:
 
 ```sh
-export PATH=/home/chronium/opt/pyxis-cross/bin:$PATH
+export PATH="$HOME/opt/pyxis-cross/bin:$PATH"
 make -j16 image
 make run CPUS=4 MEMORY=256M ACCEL=kvm QEMU_DISPLAY=gtk \
   VIRTIO_NET=1 TCP_FORWARD=2323:2323 \
@@ -58,7 +60,7 @@ pyxis.iso   cf310b180c421b1e737595a99ac870398733e60e3239850b307f8d3051d81fb9
 This is a recorded baseline; subsequent main revisions were not booted for this
 report. Local artifacts at the time of recording were `build/image-build.log`,
 `build/thinkpad-kvm-boot.png`, `build/thinkpad-kvm-cpu-properties.json` and
-`/home/chronium/.cache/pyxis-toolchain-build/build.log`. They are untracked build
+`$HOME/.cache/pyxis-toolchain-build/build.log`. They are untracked build
 artifacts, not prerequisites for reading this report. All QEMU, remote-client
 and debugger processes created for the investigation were stopped.
 
@@ -115,9 +117,32 @@ library interfaces can remain unchanged.
 
 [Current clock initialization](../../arch/x86_64/clock.c) requires a valid,
 page-aligned ACPI HPET with a 64-bit main counter. It explicitly panics for a
-32-bit counter. The native inventory therefore predicts a clock-initialization
-failure on this ThinkPad, independently of the successful virtual boot. This
-is a code-inspection finding; Caelum was not booted natively.
+32-bit counter. That explains the native inventory limitation and the following
+owner-observed failure, independently of the successful virtual boot.
+
+### Owner-observed native USB boot
+
+During [PR #332 review](https://git.internal/PyxisOS/pyxis-os/pulls/332), the
+owner's native USB boot result was supplied and its revision confirmed as main
+`93a2ae4767203285e0b22c73a9fa040cc0fcdc60`. This is owner-observed evidence,
+not a native run repeated by this investigation. Its tree matches the recorded
+KVM build at `d06ecb1`, but the two runs and their evidence remain separate.
+
+The supplied early-console output records a 1920x1080 framebuffer, Limine base
+revision 6 and 75 memory regions. Caelum installed its GDT, IDT and double-fault
+IST, reported 48-bit physical addressing with NX and supervisor write protection,
+discovered PCI ECAM at `0xf8000000` for buses 0..63, and switched to its owned
+page-table root at `0x2000`. It then stopped with:
+
+```text
+Caelum panic: monotonic clock requires a 64-bit HPET counter
+```
+
+This confirms progress through Limine handoff, early architecture setup, ECAM
+discovery and the owned CR3 switch, followed by the HPET capability rejection.
+It does not establish successful native boot or execution beyond that point.
+
+### Clock and scheduler boundaries
 
 HPET supplies elapsed time only, with comparator interrupts and legacy
 replacement disabled. The scheduler uses the existing PIT-calibrated local
@@ -169,8 +194,16 @@ not accidentally introduce unavailable compiler-runtime division helpers.
 
 Plain `RDTSC` is insufficient. A conservative initial baseline is
 `CPUID; RDTSC; CPUID`, with compiler barriers, correct clobbers and preserved
-timestamp registers. This may be expensive, especially when CPUID exits under
-KVM; no performance benefit was measured in this investigation.
+timestamp registers. The relevant cost comparison is with today's HPET
+high/low/high sequence of uncached MMIO reads, not plain `RDTSC` alone. Native
+HPET MMIO can be sufficiently expensive that the conservative ordered TSC path
+is still cheaper. Under QEMU/KVM, HPET MMIO is handled by the QEMU device model,
+whereas ordinary CPUID exits are handled within KVM. That makes a lower cost
+plausible there too. These are unmeasured expectations, not measured timings or
+a performance result for this ThinkPad. See the
+[QEMU HPET implementation](https://github.com/qemu/qemu/blob/v10.2.2/hw/timer/hpet.c),
+[KVM CPUID implementation](https://github.com/torvalds/linux/blob/master/arch/x86/kvm/cpuid.c)
+and [KVM MMIO exit protocol](https://docs.kernel.org/virt/kvm/api.html#the-kvm-run-structure).
 
 A faster RDTSCP/fence path requires vendor-specific ordering guarantees.
 On AMD, LFENCE dispatch serialization must be established through advertised
@@ -191,26 +224,83 @@ invariance alone does not supply that guarantee. See
 
 The unresolved contract is whether supported-platform guarantees plus startup
 qualification suffice, or whether a shared atomic nondecreasing floor is needed
-to preserve existing cross-CPU ordering. Such a floor adds a shared write when
-time advances and cannot repair bad frequency or large drift. An arbitrary
-skew tolerance smaller than a scheduler tick would not justify weakening the
-existing timestamp-ordering contract. Independent per-CPU epochs are unsuitable.
+to preserve existing cross-CPU ordering. With nanosecond readings from a GHz
+counter, such a floor would normally update on almost every read, contending
+for a shared cache line across CPUs. It cannot repair bad frequency or large
+drift. An arbitrary skew tolerance smaller than a scheduler tick would not
+justify weakening the existing timestamp-ordering contract. Independent per-CPU
+epochs are unsuitable.
 
 ## Proposed bounded implementation and fallback
 
-Both scopes below preserve `arch_monotonic_ns()`, the public clock interfaces
-and the independent scheduler timer interrupts. They select the source at boot
-and make its parameters immutable before scheduler release.
+The options below preserve `arch_monotonic_ns()`, the public clock interfaces
+and the independent scheduler timer interrupts. Source selection occurs at boot;
+conversion parameters become immutable before scheduler release. No option has
+been chosen. Each native-enabling option addresses the observed clock blocker;
+none establishes that later native initialization will succeed.
 
-1. **Smallest TSC optimization:** retain mandatory 64-bit HPET initialization,
+1. **TSC optimization only:** retain mandatory 64-bit HPET initialization,
    qualify TSC across all CPUs, then switch while preserving the existing epoch.
    Rejection leaves HPET selected. Native 32-bit HPET remains unsupported.
-2. **Smallest scope addressing this native machine:** accept 32-bit HPET solely
+2. **Native-enabling TSC:** accept 32-bit HPET solely
    as a calibration reference, establish provisional BSP TSC before wall-clock
    anchoring and device deadlines, and qualify APs before scheduler release.
    Rejection uses 64-bit HPET where available, with a boot-only rebase preserving
    already-issued timestamps and deadlines. With only 32-bit HPET, rejection
    produces an explicit boot failure. This does not include counter extension.
+3. **Software-extended 32-bit HPET:** keep HPET as the source and extend its
+   main counter in software, without TSC qualification. Native 64-bit counters
+   retain today's direct path. Initialization and epoch establishment remain at
+   their current point, without a provisional source or boot-only rebase.
+   Correctness requires the sampling bound and concurrent-read discipline below.
+4. **TSC with extended-HPET fallback:** implement both TSC qualification and
+   software extension. Use TSC where it qualifies; rejection uses 64-bit HPET
+   or qualified software-extended 32-bit HPET. This avoids option 2's failure
+   solely for lacking 64-bit HPET, at the cost of implementing and qualifying
+   both paths. Failure to establish either source's requirements still prevents
+   admitting that source.
+
+If no supported source qualifies under the selected option, boot fails explicitly.
+
+### Software extension: sketch, costs and required bound
+
+Keep one shared 64-bit last-observed tick value. For each attempt, load that
+value before an ordered, fresh read of the 32-bit HPET counter. Compute the
+unsigned modular delta `(uint32_t)(now32 - (uint32_t)last)` and add it to the
+shared snapshot, with checked overflow behavior. Publish the candidate using
+compare-and-swap. On failure, retry with both a fresh shared snapshot and a
+fresh MMIO sample. Reusing a stale counter sample against a newer shared value
+can fabricate almost a whole wrap. Read ordering and atomic publication must
+preserve the existing cross-CPU monotonicity contract.
+
+The deliberate correctness condition is **strictly less than one full counter
+wrap between successfully incorporated HPET samples**, including initialization,
+early boot and every supported runtime state. At 14.318180 MHz this is roughly
+300 seconds. A longer gap can silently lose whole wraps; the 32-bit value alone
+cannot recover how many elapsed. A periodic maintainer needs an explicit owner
+and a stated bound that covers stalled execution and long interrupt-disabled
+sections. Suspend or debugger/VM pauses during which HPET advances also need
+an explicit support policy.
+
+The existing 120 Hz LAPIC interrupt is a possible maintenance trigger, but its
+rate alone is not a guarantee. The current
+[`timer interrupt path`](../../arch/x86_64/idt.c) does not unconditionally read
+the clock; scheduler reads are conditional on timed waits and sleepers. An
+implementation would need a deliberate bounded sampling path, including the
+interval before interrupts become available. A maintenance sample triggered by
+an existing tick would extend HPET elapsed time; it would not turn tick counts
+into the monotonic clock or change the scheduler interrupt rate.
+
+Each advancing read normally publishes to the shared cache line, with contention
+and possible retries across CPUs, similar to a TSC floor. Reads still incur
+uncached MMIO; under QEMU they still use the emulated HPET path. The advertised
+period remains the conversion authority. Native HPET ticks are about 69.8 ns,
+compared with the virtual HPET's 10 ns; this is counter quantization relevant to
+profiling and deadline readings, not a scheduler wakeup-precision guarantee.
+These costs and the sampling invariant must be considered alongside avoiding
+TSC calibration and synchronization work.
+
+### Boot ordering and scope limits
 
 The second scope needs careful boot ordering because
 [`kernel_init`](../../kernel/init.c) anchors wall time and prepares devices before
@@ -220,20 +310,25 @@ rebase are complete. Keep the HPET mapping rather than introducing remote
 page-table mutation during this selection.
 
 In the tested default KVM configuration, invariant TSC is not advertised, so
-the proposed policy selects the existing 64-bit HPET. No TSC-qualified guest
+the TSC options would retain the existing 64-bit HPET. No TSC-qualified guest
 configuration was validated here.
 
 Runtime clock switching, a clock framework, a runtime watchdog, suspend/resume,
-CPU hotplug, VM migration support and timer-interrupt changes are proposed
-outside the first change. KVM pvclock would be a separate clock-source decision:
+CPU hotplug, VM migration support and scheduler timer reprogramming are proposed
+outside these initial options. HPET extension would nevertheless require the
+bounded maintenance sampling described above. KVM pvclock would be a separate
+clock-source decision:
 its stable-clock flag governs converted pvclock readings, not unconditional
 agreement of raw TSC values. See
 [KVM clock MSRs](https://docs.kernel.org/virt/kvm/x86/msr.html).
 
 ## Decisions still open
 
-- Optimization-only scope or native-enabling scope, with explicit failure when
-  TSC is rejected and only 32-bit HPET is available.
+- TSC optimization only, native-enabling TSC with explicit rejection behavior,
+  software-extended 32-bit HPET alone, or TSC with extended-HPET fallback.
+- For HPET extension, maintenance ownership, the less-than-one-wrap sampling
+  guarantee through early boot and runtime, concurrent-read ordering, overflow
+  behavior and the policy for states where the bound cannot be established.
 - Platform acceptance criteria for strict SMP ordering, or a shared atomic floor.
 - Conservative ordered reads or qualified faster paths; policy for any MSR setup.
 - Calibration and SMP sampling, error and retry budgets.

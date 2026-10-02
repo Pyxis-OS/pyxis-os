@@ -280,9 +280,10 @@ speculative driver frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.
 
 The [ThinkPad KVM and invariant-TSC investigation](thinkpad-kvm-tsc.md) records
-a successful four-vCPU KVM boot, the native/guest timer differences and proposed
-clock-source qualification and fallback scopes. Its implementation and policy
-decisions remain open; the report does not establish native Caelum boot support.
+a successful four-vCPU KVM boot, an owner-observed native HPET panic, the
+native/guest timer differences and undecided TSC, extended-HPET and combined
+fallback scopes. Its implementation and policy decisions remain open; successful
+native Caelum boot remains unqualified.
 
 The separate [hardware-inspection proposal](hardware-inspection.md) adds native
 `lspci`/`lsusb` consumers of read-only inventory and pinned plain-text PCI/USB name
