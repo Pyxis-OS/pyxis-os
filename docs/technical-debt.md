@@ -881,6 +881,18 @@ and separates preparation/measurement diagnostics. Full source validation,
 quadratic source-load duplicate detection, vector/admission work and larger-map
 qualification remain; this does not establish a local worst-case planning bound.
 
+The assigned [sustained populated-map follow-up](../fs/docs/sustained-map-measurements.md)
+completes 54 RAM-only cases and reaches J=216. Allocation-map replacement accounts
+for about 70–84% of append/overwrite window metadata despite predominantly local
+publication; largest complete-history append/overwrite totals exceed Btrfs.
+Compiler window writes are non-monotonic with population while instrumented planning
+time grows. The proposed occupancy-aware immediate-neighbour correction needs a
+separate assignment; it is not implemented or deployment qualification.
+Native scratch/backing allocation exceeds the member-
+cgroup peak in a recorded case; do not treat that peak as whole-native-job RAM
+high-water evidence. Scratch/trace remain independently bounded with no swap or
+disk fallback; preserve conservative native cache/kernel estimates for later work.
+
 Tasks 2–6 implement planners, admitted publication, public file/namespace
 mutation, retained lifetime and orphan cleanup. The initial immediate-drain writer
 could rebuild the pool map three times and use six flushes per batch. Accepted

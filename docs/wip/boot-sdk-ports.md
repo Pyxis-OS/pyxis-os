@@ -150,9 +150,17 @@ remain open. The [incremental-map proposal](filesystem-write-efficiency.md#incre
 records the accepted topology-preserving intermediate path and explicit funded
 bulk/global-closure limitation. The first implementation is merged; the assigned
 focused planning follow-up adds indexed retirement membership and phase-separated
-diagnostics under the same budgets. Sustained/population/pressure comparisons and
-deployment criteria remain separate decisions; further experiments remain
-unassigned. See
+diagnostics under the same budgets. The subsequently assigned
+[bounded sustained follow-up](../../fs/docs/sustained-map-measurements.md)
+completes 54 independently verified cases on source maps up to J=216, with all
+setup, preparation, windows and final maintenance included. Broad local closure
+dominates append/overwrite metadata traffic; the largest such histories exceed
+Btrfs totals. Compiler writes are non-monotonic with population while instrumented
+planning time grows. Native member-cgroup peaks are not complete RAM high-water
+measurements; independent scratch/trace bounds and conservative estimates remain.
+The proposed occupancy-aware neighbour repair needs a separate assignment.
+Broader population/pressure and recovery qualification, deployment criteria and
+task 7 remain open. See
 the linked milestone for the corrective task list.
 FUSE and installation remain separate. These
 plans do not start implementation or displace explicitly assigned libc/remote work.

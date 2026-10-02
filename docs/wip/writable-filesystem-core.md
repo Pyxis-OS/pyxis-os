@@ -13,9 +13,9 @@ resizing, live directory continuations, and the corresponding healthy host comma
 Task 6 adds directory creation, removal, same-volume regular-file rename/replacement,
 retained object authority and funded orphan cleanup on final release and durable
 reopening. Combined extended validation remains task 7; native writable integration
-remains a separate milestone. Routine whole-map writes and missing sustained,
-population/pressure and recovery qualification still block milestone closure and
-writable deployment. The accepted initial performance direction is now matched
+remains a separate milestone. Unqualified closure/bulk costs and remaining
+sustained/population/pressure and recovery qualification still block milestone
+closure and writable deployment. The accepted initial performance direction is now matched
 Btrfs-comparable submitted-write cost; ext4 remains a comparison and longer-term
 aspiration. The short carryover histories alone do not satisfy that gate.
 Implementation proceeds one explicitly assigned task at a time.
@@ -2453,6 +2453,33 @@ this documentation update.
        [Filesystem #22](https://git.internal/PyxisOS/pyxis-fs/pulls/22) publishes
        `fbaf2fd`; the parent pins that revision. Local `make -j16` builds and links
        Caelum with the existing read-only subset; the writable core stays excluded.
+
+     - [x] **Qualify bounded sustained costs on populated allocation maps.**
+       Confirm merged filesystem #22 / Pyxis #316, discuss the matrix and whole-run
+       RAM estimate, then extend the existing comparison without allocator,
+       admission, reserve, durability or budget changes. The
+       [sustained record](../../fs/docs/sustained-map-measurements.md) includes
+       two repetitions of 64 background files with 1/8/20 MiB separately durable
+       write histories, three equal append/overwrite/compiler windows and final
+       maintenance, compared with individually durable ext4/Btrfs operations.
+       All 54 cases complete and independently verify names, lengths and bytes.
+       Source maps reach J=216; allocation-map replacements dominate append/
+       overwrite metadata, with broad local closure despite few window fallbacks.
+       Largest append/overwrite totals exceed Btrfs; compiler writes are
+       non-monotonic with population while instrumented planning time grows. Member-
+       cgroup peaks do not measure all native backing/cache RAM; independent
+       scratch/trace bounds and conservative native overhead remain documented.
+       The proposed occupancy-aware immediate-neighbour correction is unassigned.
+       This evidence step does not settle broader deployment criteria, pressure,
+       native integration or recovery qualification; task 7 remains unchecked.
+
+       Delivery: [filesystem #23](https://git.internal/PyxisOS/pyxis-fs/pulls/23)
+       publishes the comparison and bounded records at
+       `fff90d893435a2c66bea1f11b8533c64babbfcdb`, which this parent pins.
+       Local validation passes 135 quick and six extended groups, including
+       ASan/UBSan, small comparison controls and native target-safety checks.
+       Local `make -j16` builds and links Caelum with the existing read-only core
+       subset; the writable core remains excluded. Merge the filesystem PR first.
 
    - [ ] **Repeat measurements and complete acceptance.** Run matched RAM-only
      before/after workloads and remaining recovery/pressure coverage. Record the

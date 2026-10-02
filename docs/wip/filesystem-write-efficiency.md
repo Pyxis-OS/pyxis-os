@@ -615,6 +615,71 @@ accounts for 171 global fallbacks per case, versus zero or one in measurement
 including checkpoints. The index's calculated work reduction is separate from
 these observations and does not qualify larger populations or deployment.
 
+### Sustained populated-map follow-up
+
+After filesystem #22 and Pyxis #316 merged, the owner assigned a bounded
+comparison extension and approved its matrix/resource estimate before
+implementation. The extension uses the real shared core and the existing scoped
+RAM/no-swap launcher, with no allocator, admission, reserve, memory-budget or
+durability changes. This assignment qualifies observed costs for discussion;
+it does not close task 7 or the writable-deployment gate.
+
+The selected experiments hold 64 background files constant while varying their
+total separately durable 4 KiB append history across 256, 2048 and 5120 blocks.
+Fresh 1 GiB backends then receive three equal windows: 512 4 KiB appends, 512
+1 KiB overwrites in a pre-existing 4 MiB target (alternating contained and
+cross-block requests), or 128 create/write-4-KiB/close/rename/remove cycles.
+Two serial repetitions compare individually durable Pyxis, ext4 and Btrfs.
+These are configurable experiment parameters, not filesystem contracts or
+deployment thresholds. No checkpoint divides the windows; preparation and final
+fences remain explicit, and complete-history totals include setup and every
+maintenance/synchronization write, including native verification/handoff/unmount.
+
+The [sustained comparison contract](../../fs/docs/ram-validation.md#sustained-comparison)
+records resource accounting and configurable commands. Independent byte mirrors
+and namespace expectations verify confirmed results after the final boundary.
+Healthy capacity refusal produces an explicitly incomplete prefix; I/O, stopped
+health, OOM, lost tracing or exhausted execution budgets invalidate the case.
+The existing maintained recovery and retained-payload campaigns remain separate.
+
+The [sustained measurement record](../../fs/docs/sustained-map-measurements.md)
+reaches source maps of 216 nodes, rather than the earlier ten-node maximum.
+The largest append/overwrite histories submit about 867/887 MiB in Pyxis,
+versus about 852/853 MiB in Btrfs, through all setup and trailing maintenance.
+All 54 filesystem cases complete and verify, with identical Pyxis byte totals
+across both repetitions. Smaller histories and compiler totals remain below Btrfs;
+individual windows still expose exceptions. Append/overwrite allocation-map
+emissions account for about 70–84% of window metadata traffic. Bulk construction
+is uncommon in windows, and every observed local emission is cheaper than its
+calculated bulk reference. Broad local closure, not fallback frequency alone,
+remains the significant submitted-write cost.
+
+Costs depend on history: the largest equal append windows grow from about
+70 to 114 MiB, whereas overwrites can settle after earlier expansion. Compiler
+window writes are non-monotonic with background size while planning time rises
+substantially. Global validation/vector/admission work remains, and instrumented
+planning intervals include adapter reads and optional reference counting.
+These are RAM observations, not NVMe latency or a local worst-case theorem.
+
+**One proposed next bounded improvement, unassigned:** compare both immediate
+clean neighbours using validated expanded-run occupancy before repair, including
+any marked run bridged by the chosen neighbour. Keep a deterministic left tie
+break, monotone marks, the fixed eligible-ID prefix and renewed accounting/seam
+closure. Existing q/J/H resource and termination bounds can remain intact;
+structural splits/merges, new placement, budgets and reserve/admission policy
+stay outside the proposal. The measured redistribution marks justify investigating
+this choice but do not establish that left preference caused them or predict
+savings. A later assigned task should record bounded repair/alternative-capacity
+counters and repeat the unchanged matched histories through all maintenance.
+It would not remove global planning cost or qualify deployment by itself.
+
+Storage evidence separates member-cgroup peaks from independent tmpfs bounds.
+Native backing/scratch end allocation exceeds the member peak in a recorded
+case; native kernel/cache charging is not completely established. Do not use
+that peak as whole-native-job RAM high-water evidence. The existing bounded
+RAM/no-swap setup and configured budgets are unchanged, with conservative native
+cache accounting retained. No further implementation or campaign is assigned.
+
 ## Proposed deployment comparisons and acceptance
 
 **Agreed direction:** Btrfs-comparable total submitted-write costs on representative
@@ -624,7 +689,7 @@ ratio, numerical tolerance or new benchmark configuration is approved here.
 Correctness and remaining recovery qualification are independent requirements.
 
 The [carryover record](../../fs/docs/retirement-carryover-measurements.md) contains
-two unchanged samples per revision. All eight current individually durable Pyxis
+two unchanged samples per revision. All eight recorded carryover Pyxis
 rows are below recorded Btrfs totals, but exercise short histories and only
 54–405 selected allocation records:
 
@@ -685,16 +750,19 @@ them. Native integration remains its own milestone, including the recorded
 kernel-stack prerequisite. Task 7 and writable
 deployment stay open.
 
-No additional campaign is run or authorized by this design PR. Future work must
+The original design authorized no additional campaign. The bounded sustained
+follow-up above was subsequently assigned separately; further campaigns must
 use the existing verified RAM-only/no-swap boundary and configured budgets, no
 disk fallback or automatic increases. First account for RAM high-water backing
 pages, source copies, independent payloads/extractions, bounded volatile logs,
 build products, native preparation and traces. Filesystem frees do not release
 tmpfs image pages; small payload/sparse geometry does not bound write traffic.
-The current runner's two-population/four-case matrix does not supply these
-sustained cases; any necessary bounded workload extension needs a later explicit
-assignment. Trace loss/budget overflow, OOM or incomplete work invalidates a
-measurement. Saved summaries and diagnostics remain bounded.
+The original two-population/four-case matrix did not supply sustained cases.
+The assigned extension supplies bounded histories, leaving larger profiles and
+pressure campaigns for separate assignment. Trace loss/budget overflow or OOM
+invalidates a measurement; a verified healthy refusal remains incomplete rather
+than qualifying the requested history. Saved summaries and diagnostics remain
+bounded.
 
 **Review state:** the owner accepts the topology-preserving approach, explicit
 funded bulk fallback and global closure as an intermediate limitation. Fixed
