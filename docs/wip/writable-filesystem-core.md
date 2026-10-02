@@ -2419,13 +2419,17 @@ this documentation update.
        local/bulk costs and observed planning intervals. This delivers an
        intermediate implementation, not the broader task-7/deployment acceptance.
        [Filesystem #21](https://git.internal/PyxisOS/pyxis-fs/pulls/21) publishes
-       `d711232`; the parent pins that published revision. All 134 quick groups
+       `940fba8`; the parent pins that published revision. All 134 quick groups
        and six extended groups pass, including ASan/UBSan at the final production
        revision, and the shared archive cross-compiles with Pyxis kernel flags.
        Two unchanged before/after 40-case RAM matrices reduce measurement-window
        traffic by 7.68–40.41% at 256 files, but only 0–2.85% at 32; compiler traffic
        at 32 is unchanged. RAM elapsed times increase with source scans and optional
        diagnostic counting included. Global fallback and larger qualification remain.
+       Review corrections record the calculated worst-case retirement-lookup cost,
+       unresolved measurement-window fallback attribution and small-map coverage.
+       The [proposed planning follow-up](filesystem-write-efficiency.md#proposed-focused-planning-follow-up)
+       remains separate from this delivered step; task 7 and deployment stay open.
 
    - [ ] **Repeat measurements and complete acceptance.** Run matched RAM-only
      before/after workloads and remaining recovery/pressure coverage. Record the

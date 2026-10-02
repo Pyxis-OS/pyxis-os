@@ -428,9 +428,14 @@ arena. The proposed delta subregions use 720,712 of 1,139,712 reserved bytes.
 These are calculated examples, not new defaults, observed peaks or test constants.
 Opening still needs both checker states, their temporary vector copies, the arena
 and handles within the caller cap and current 1 GiB ceiling. Full source traversal,
-vector application and admission remain population-sized. A simple repeated-pass
-closure has a conservative `O(J(S+J))` planning bound and needs CPU/read measurement;
-the write reduction alone does not establish acceptable latency.
+vector application and admission remain population-sized. The implemented
+retirement-membership lookup scans `J` source nodes for each allocation-map claim
+in each accounting pass. That contributes `O(J²)` work per pass and `O(J³)` across
+at most `J` growth passes plus the final decision. Sealing adds an `O(J²)` lookup
+contribution during claim reconstruction. These are calculated worst-case lookup
+costs, not measured timings or a complete bound for all planning; source validation,
+canonical map editing and admission add other work. CPU/read measurement remains
+necessary; write reduction alone does not establish acceptable latency.
 
 ### Explicit bulk alternative
 
@@ -568,6 +573,26 @@ adapter/operator's durable-backing precondition, not cached validation plus flus
    evidence. If a global closure remains routine, propose the smallest justified
    placement/representation correction before promising a local worst-case bound.
    No later step is assigned automatically by accepting an intermediate PR.
+
+### Proposed focused planning follow-up
+
+Review of the first implementation identified two related follow-ups before larger
+qualification: separate preparation and measurement plan diagnostics, and replace
+repeated linear retirement-membership searches with a block-sorted source-node
+index. Prove that index storage and construction fit the existing reserved
+workspace; retain source topology and one authoritative set of replacement marks.
+Preserve placement, closure, funding, admission and durability policy. Diagnostics
+must remain within existing output budgets. This proposal is not implemented or
+assigned by the current PR.
+
+The [matched record](../../fs/docs/incremental-map-measurements.md) aggregates both
+phases, so it cannot establish the measurement-window local/bulk split. Nearly
+constant fallback totals suggest preparation may contribute most, but that is an
+unverified explanation. Its source maps reach only `J=10`: measured byte reductions
+and increased instrumented RAM elapsed times do not establish scaling. Larger
+populated maps and matched planning/latency measurements remain qualification
+work, with configuration and RAM feasibility proposed separately. Neither a
+proposed benchmark size nor a local-path hit becomes a correctness requirement.
 
 ## Proposed deployment comparisons and acceptance
 
