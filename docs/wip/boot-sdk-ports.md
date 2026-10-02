@@ -168,6 +168,10 @@ one seed restoration before ordinary repair/bulk. Its
 [implementation and matched record](../../fs/docs/overflow-split-measurements.md)
 retain existing admission/reserve/memory/runner policy. General structural editing
 and further optimisations require separate assignment.
+On 2026-10-02 the owner accepted the current write amplification for now and set
+[per-call latency](filesystem-latency.md) as the blocking problem: durable calls
+take 13–80 ms in RAM, growing with population, against about 0.1 ms for Btrfs.
+Write-efficiency work is paused.
 Broader population/pressure and recovery qualification, deployment criteria and
 task 7 remain open. See
 the linked milestone for the corrective task list.

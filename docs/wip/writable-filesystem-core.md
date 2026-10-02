@@ -2150,8 +2150,9 @@ this documentation update.
    workload commands; retain the already-required per-PR suite. Record coverage and limits;
    convert this document to an implemented reference and carry remaining work
    forward without claiming native mounting, FUSE or production-data safety.
-   Closure and subsequent writable native integration are blocked on the
-   write-amplification correction below, not merely on finishing larger runs.
+   Closure and subsequent writable native integration are blocked on
+   [per-call latency](filesystem-latency.md), not merely on finishing larger
+   runs. The owner accepts the current write amplification for now (2026-10-02).
 
    **Step 1:** [pyxis-fs #15](https://git.internal/PyxisOS/pyxis-fs/pulls/15)
    adds `make check-extended` and
