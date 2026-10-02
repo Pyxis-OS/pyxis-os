@@ -2277,6 +2277,20 @@ this documentation update.
      NAND amplification or real-device crash durability. Record revisions,
      settings, actual durability boundaries and measurement limitations.
 
+   - [x] **Decouple maintained tests before efficiency changes.** Healthy callback
+     traces identify publication-phase failure cuts; observed slot writes determine
+     retained-payload comparison coverage. Tests preserve the two-flush protocol,
+     independently expected contents, authority, corruption handling, sticky health
+     after real adapter failures, allocation-free funded cleanup and resource bounds.
+     Editor checks validate mappings, ordering, occupancy, reachability and bounded
+     changes instead of one repair shape. Configured fixture inputs supply summary
+     expectations. A safely refused recovery history still verifies its confirmed
+     contents and reports incomplete work with a nonzero exit; refusal is neither
+     corruption nor workload completion. Validation uses the existing RAM-only setup;
+     no large workload campaign is part of this cleanup. Production reserve and
+     admission policy is unchanged: the audit's formatter-floor concern needs a
+     separate proposal. Task 7 and the writable-deployment blocker remain open.
+
    - [ ] **Agree incremental allocation-map design and bounds.** Replace routine
      whole-map reconstruction with updates to affected paths and necessary
      balancing nodes. Address allocator self-accounting dependencies described
