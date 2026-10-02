@@ -244,6 +244,13 @@ complete. The [writable core](writable-filesystem-core.md) and
 FUSE is not a prerequisite.
 BSP request separation is complete.
 
+The [USB installation proposal](usb-installation.md) records a replaceable SanDisk
+target and QEMU-first stages: boot Limine/kernel/archive from a FAT32 EFI partition,
+add xHCI/Bulk-Only read-only access to a separate Pyxis pool, then integrate native
+persistence and validate the ThinkPad. Real-device passthrough is an intermediate
+check, not validation of the laptop controller. Stage ordering remains unassigned;
+this does not reorder filesystem core, spaces/SMP or the visible-work sequence.
+
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
 | SDL2 and graphical applications | A native software-rendered SDL2 backend supports a selected GrafX2 edit/save workflow. | Probe the pinned application first; settle input/presentation and image-library needs. zlib/libpng are useful shared candidates. Compositor and GPU support stay separate. |
