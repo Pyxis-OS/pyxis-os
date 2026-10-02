@@ -278,6 +278,27 @@ enum pci_selection pci_select_device(uint16_t vendor, uint16_t device,
   return match ? PCI_SELECTION_UNIQUE : PCI_SELECTION_ABSENT;
 }
 
+enum pci_selection pci_select_class(uint8_t base_class, uint8_t subclass,
+    uint8_t interface, struct pci_device **selected)
+{
+  *selected = NULL;
+  if (!inventory_complete) {
+    return PCI_SELECTION_INCOMPLETE;
+  }
+  struct pci_device *match = NULL;
+  for (struct pci_device *entry = devices; entry; entry = entry->next) {
+    if (entry->base_class == base_class && entry->subclass == subclass &&
+        entry->interface == interface) {
+      if (match) {
+        return PCI_SELECTION_AMBIGUOUS;
+      }
+      match = entry;
+    }
+  }
+  *selected = match;
+  return match ? PCI_SELECTION_UNIQUE : PCI_SELECTION_ABSENT;
+}
+
 enum pci_inventory_state pci_inventory_state(void)
 {
   if (!inventory_available) {

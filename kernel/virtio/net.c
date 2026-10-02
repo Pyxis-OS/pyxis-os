@@ -276,10 +276,6 @@ static void stop_network(const char *reason)
   network.prepared = false;
   network.config_unstable = false;
   network.stop_reason = reason;
-  volatile struct pci_msix_entry *table =
-    (volatile struct pci_msix_entry *)network.pci.msix_table.mapping.address;
-  table[VIRTIO_NET_MSIX_ENTRY].control |= PCI_MSIX_VECTOR_MASK;
-  (void)table[VIRTIO_NET_MSIX_ENTRY].control;
   network.interrupts_disabled = virtio_pci_disable_msix(&network.pci);
   struct pci_claim *claim = &network.pci.claim;
   uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
@@ -334,17 +330,7 @@ void virtio_net_start(void)
     ready = common->device_status == (VIRTIO_NET_READY | VIRTIO_STATUS_DRIVER_OK);
   }
   if (ready) {
-    volatile struct pci_msix_entry *table =
-      (volatile struct pci_msix_entry *)network.pci.msix_table.mapping.address;
-    table[VIRTIO_NET_MSIX_ENTRY].control &= ~PCI_MSIX_VECTOR_MASK;
-    ready = !(table[VIRTIO_NET_MSIX_ENTRY].control & PCI_MSIX_VECTOR_MASK);
-  }
-  if (ready) {
-    unsigned offset = network.pci.msix_capability + PCI_MSIX_CONTROL;
-    uint16_t control = pci_read16(claim->device->address, offset);
-    pci_write16(claim, offset, control & ~PCI_MSIX_FUNCTION_MASK);
-    ready = (pci_read16(claim->device->address, offset) &
-      (PCI_MSIX_ENABLE | PCI_MSIX_FUNCTION_MASK)) == PCI_MSIX_ENABLE;
+    ready = pci_msix_enable(&network.pci.msix);
   }
   network.active = ready;
   cpu_restore_interrupts(flags);

@@ -55,6 +55,7 @@ The cause remains unqualified. Pinned Limine's generic file-open error also
 covers failed firmware block reads while opening FAT paths; it does not establish
 that the file is absent. Source inspection found no static size cutoff for these
 two valid FAT32 configurations. Successful retries are observations, not a fix.
-Keep the pre-kernel failure distinct from native USB access, which is not yet
-implemented, and from the AHCI CD-ROM crash above. Revisit with repeatable
+The failure recurred on an unchanged baseline image and during
+[xHCI bring-up](xhci-bringup.md). Keep it distinct from native USB access and
+from the AHCI CD-ROM crash above. Revisit with repeatable
 firmware/USB I/O diagnosis before claiming reliable physical boot.
