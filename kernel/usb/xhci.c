@@ -99,9 +99,10 @@ static void set_interrupt_enable(bool enabled)
 {
   uintptr_t intr = interrupter();
   uint32_t management = read32(intr, XHCI_INTR_MANAGEMENT);
+  /* IP is W1C; changing IE must preserve pending notification. */
   write32(intr, XHCI_INTR_MANAGEMENT,
           (management & ~(XHCI_INTR_ENABLE | XHCI_INTR_PENDING)) |
-          (enabled ? XHCI_INTR_ENABLE : 0) | (management & XHCI_INTR_PENDING));
+          (enabled ? XHCI_INTR_ENABLE : 0));
 }
 
 static uintptr_t port_register(unsigned index)

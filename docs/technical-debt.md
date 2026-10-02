@@ -1139,14 +1139,31 @@ prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles, external hubs,
 power management and insertion after the startup snapshot are unsupported.
 QEMU advertises zero scratchpads and 32-byte contexts; nonzero scratchpads,
 64-byte device contexts and BIOS ownership handoff remain unmeasured paths.
-The startup connection snapshot can miss a physical USB 3 link still initializing
-after controller reset. Revisit topology, startup settling and firmware ownership
-with the ThinkPad before expanding the profile or claiming physical qualification.
+
+USB 2 port reset has no explicit connect-debounce interval. The startup snapshot
+waits 20 ms only after the driver powers a port; it has no separate link-settling
+wait when power was already on or the controller lacks port power control. It can
+miss a physical USB 3 link still initializing after controller reset, leaving that
+device unreserved until reboot. Revisit debounce and bounded startup settling with
+physical firmware/device evidence before claiming hardware qualification. A vendor
+reset-delay quirk also needs evidence from the selected controller.
+
+Legacy handoff timeout leaves the OS-owned request asserted. Firmware may release
+BIOS ownership asynchronously after preparation has failed; Pyxis does not retry
+or reclaim the controller during that boot. Settle the timeout rollback policy
+with firmware ownership evidence before changing the semaphore behavior. Revisit
+topology and the bootstrap profile with the ThinkPad before expanding support.
+BAR sizing saves/restores the assignment, but there is no explicit comparison
+with the original bootstrap physical base. Revisit that consistency check when
+extending PCI mapping/profile validation, keeping one authority for mapping identity.
 
 One worker admits controller commands serially and checks notifications/health at
-a ten-millisecond interval. Rings and polling/deadline budgets are initial choices,
-not machine/image requirements. Revisit costs when descriptor transfers and actual
-USB storage reads provide a workload; controller startup is not a storage benchmark.
+a ten-millisecond interval even when idle, scheduling up to 100 polling
+opportunities per second. Actual CPU wakeups and laptop power cost are unmeasured.
+Rings and polling/deadline budgets are initial choices, not machine/image
+requirements. Revisit event-driven waiting and health-poll costs when descriptor
+transfers and actual USB storage reads provide a workload; controller startup is
+not a storage benchmark.
 Runtime stop retains claims, mappings, slot/command records and DMA backing until
 reboot, even after confirmed halt. This follows current shared-VM ownership and
 prevents reuse while device ownership is uncertain. Runtime reclamation belongs

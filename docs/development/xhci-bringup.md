@@ -95,6 +95,29 @@ packets at inspection. This checks shared MSI-X mechanics with existing device
 sources and queue-vector indices. It does not expand the USB storage scope.
 All QEMU, GDB and private daemon processes were closed afterward.
 
+## Review follow-up
+
+The follow-up to reviewed revision `5df2bd5` makes interrupt enable/disable write
+zero to IMAN.IP, preserving that W1C pending bit. The IRQ acknowledgement path is
+unchanged. The [qualification debt](../technical-debt.md#xhci-hardware-profile-and-runtime-retention)
+records missing USB 2 debounce/startup settling, idle polling cost, the asserted
+OS-owned request after handoff timeout and the bootstrap-base consistency check.
+Timing, firmware rollback and BAR mapping policies are unchanged.
+
+`make -j16 image` passed with the existing compiler. One manual four-CPU ISO boot
+used the QEMU/controller/device configuration above with fresh OVMF variables.
+GDB stopped at the normal disable and enable calls: the generated writes masked
+both IP/IE and set only IE when enabling; IMAN read back `0`, then `2`. This startup
+began with IP clear. Preservation of an already-pending IP follows source/register
+semantics (xHCI 1.2b §5.5.2.1), rather than an observed pending-IP transition.
+
+The ordinary IRQ path delivered three interrupts. Both Enable Slot commands
+completed with matching physical TRB identities and separate disk/mouse slots.
+The worker consumed three events, left no command pending, advanced ERDP with EHB
+clear and observed USBSTS zero; the controller remained running without failure.
+QEMU and GDB were closed afterward. This recheck covers the controller startup
+change; physical firmware, debounce/settling and power cost remain unqualified.
+
 ## Startup cost and firmware limit
 
 Before controller implementation, an unchanged baseline image from `f0b97ed`

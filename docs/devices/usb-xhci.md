@@ -28,6 +28,8 @@ clearing bus mastering, reset, disable decoding and probe BAR sizes. Validate th
 bootstrap extent and sized register/MSI-X regions before mapping them. Initial
 handoff, halt and reset waits each have a one-second deadline. Unsafe failure
 retains the claim; safe boot failure unwinds unpublished resources.
+If BIOS release times out, the OS-owned request remains asserted; firmware may
+release ownership later, but this boot does not retry controller preparation.
 
 Preparation allocates port records, DCBAA, scratchpads when advertised, one
 command-ring page, one event-ring page and an ERST allocation. All backing and
@@ -46,6 +48,8 @@ validates cycle-owned events, matches command completions to the admitted physic
 TRB, advances dequeue and releases EHB after consumption. Empty polls do not
 rewrite an unchanged dequeue pointer. Payload stores precede cycle publication
 and the doorbell. Commands share an absolute five-second deadline.
+Changing IMAN interrupt enablement writes zero to the W1C pending bit to preserve
+notification; acknowledgement remains explicit in the IRQ path.
 
 ## Root-port and failure ownership
 
@@ -53,8 +57,11 @@ The worker powers controllable ports, allows 20 ms after a power change and take
 one startup connection snapshot. Recognized USB 2 ports are reset when required;
 USB 3 ports use their enabled link state. Setup shares a thirty-second deadline.
 Connected unknown protocol versions remain explicitly unsupported. This snapshot
-has only been qualified in QEMU: a physical USB 3 link can still be initializing
-after controller reset. See [qualification limits](../technical-debt.md#xhci-hardware-profile-and-runtime-retention).
+has only been qualified in QEMU. There is no explicit USB 2 connect debounce
+before reset or startup link-settling wait when no port-power write occurred,
+including on controllers without port power control. A physical USB 3 link can
+still be initializing after controller reset and miss reservation for this boot.
+See [qualification limits](../technical-debt.md#xhci-hardware-profile-and-runtime-retention).
 
 For each supported enabled port, Enable Slot uses its advertised Slot Type and
 retains the checked returned slot ID with that port. No input/output device
@@ -78,6 +85,8 @@ does not establish returned DMA ownership. The shared VM contract supplies no
 runtime unmapping or allocation path here.
 
 The worker uses a ten-millisecond notification/health polling interval today.
+Even when idle, it schedules up to 100 polling opportunities per second.
+Actual wakeups and laptop power cost are unmeasured.
 Deadlines and polling/ring budgets are implementation choices in
 `kernel/usb/xhci.c`, separate from image configuration. There are no unit-test
 constants for RAM, disk/ESP sizes, port numbering or controller capacities.
