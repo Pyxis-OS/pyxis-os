@@ -32,6 +32,26 @@ static inline void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx,
                    : "a"(leaf), "c"(0));
 }
 
+#define CPUID_VENDOR 0
+#define CPUID_X2APIC_TOPOLOGY 0xb
+#define CPUID_INITIAL_APIC_ID_SHIFT 24
+
+/* This CPU's APIC ID from CPUID; needs no GS, LAPIC mapping or memory. Uses
+ * the 32-bit x2APIC ID when leaf 0xb exists, otherwise the 8-bit initial ID. */
+static inline uint32_t cpu_initial_apic_id(void)
+{
+  uint32_t eax, ebx, ecx, edx;
+  cpuid(CPUID_VENDOR, &eax, &ebx, &ecx, &edx);
+  if (eax >= CPUID_X2APIC_TOPOLOGY) {
+    cpuid(CPUID_X2APIC_TOPOLOGY, &eax, &ebx, &ecx, &edx);
+    if (ebx) {
+      return edx;
+    }
+  }
+  cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
+  return ebx >> CPUID_INITIAL_APIC_ID_SHIFT;
+}
+
 static inline void cpu_disable_interrupts(void)
 {
   __asm__ volatile("cli" : : : "memory");

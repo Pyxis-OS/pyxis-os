@@ -368,7 +368,9 @@ Normal log calls save/disable interrupts while serializing serial and framebuffe
 output per format invocation, then restore the caller's interrupt state.
 Single-byte syscalls from different programs can still interleave their text.
 Fatal kernel diagnostics switch to unlocked serial-only output so an exception
-in the lock owner cannot deadlock reporting. Such output may interleave, and a
+in the lock owner cannot deadlock reporting. Before the presenter's first frame,
+the first panicking CPU also draws on the
+[early console](early-console.md#panic-ownership). Such output may interleave, and a
 kernel panic still halts only the faulting CPU. Shared TTY mutation still needs
 serialization; the low-level log lock interface requires interrupts disabled.
 

@@ -7,6 +7,7 @@
 #include <arch/layout.h>
 #include <arch/paging.h>
 #include <arch/pci.h>
+#include <kernel/fb/early_console.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/pmm.h>
@@ -434,6 +435,8 @@ void paging_init(struct boot_info *boot)
   klog("paging: switching CR3 from 0x%lx to owned root 0x%lx\n",
        read_cr3(), kernel_space.root);
   write_cr3(kernel_space.root);
+  /* The bootstrap direct map that the early console drew through is gone. */
+  early_console_rebind(boot->framebuffer.address);
   active = true;
   cpu_current()->active_space = &kernel_space;
   pmm_rebase((void *)PMM_METADATA_BASE);

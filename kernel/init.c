@@ -31,6 +31,7 @@
   if (!heap_init()) {
     panic("cannot initialize the TLSF heap");
   }
+  klog("mm: kernel VM and heap ready\n");
 
   enum initrd_result archive_result = initrd_init(&boot->initrd);
   if (archive_result != INITRD_OK) {
@@ -38,7 +39,9 @@
   }
   klog("initrd: newc archive=%zu bytes, mapped read-only\n", boot->initrd.size);
 
+  klog("PCI: discovery starting\n");
   pci_discover();
+  klog("PCI: discovery complete\n");
   xhci_prepare(boot);
   virtio_fs_pci_prepare(boot);
   virtio_net_prepare(boot);
@@ -53,14 +56,17 @@
 
   task_init();
   bsp_requests_init();
+  klog("tasks: scheduler and BSP request queues ready\n");
 
   xhci_start();
 
+  klog("devices: starting virtio, block and native filesystem workers\n");
   virtio_fs_pci_start();
   virtio_rng_start();
   virtio_blk_start();
   gpt_start();
   nativefs_start();
+  klog("devices: workers started\n");
 
   enum mm_result result = net_init();
   if (result != MM_OK) {

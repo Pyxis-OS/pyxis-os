@@ -6,6 +6,7 @@
 #include "arch/cpu.h"
 #include "kernel/fb/font.h"
 #include "kernel/fb/tty.h"
+#include <kernel/fb/early_console.h>
 #include <kernel/mm/types.h>
 #include <kernel/space.h>
 #include <kernel/defs.h>
@@ -217,8 +218,30 @@ static void draw_spaces_nav()
   }
 }
 
+/* Presenter-owned: set once the early console has handed over the screen. */
+static bool presenting;
+
+/* Take the screen from the early console before the first framebuffer write.
+ * A false log_begin means a panic is in progress, so the lock is not held. */
+static bool begin_presenting(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  bool locked = log_begin();
+  bool owned = locked && early_console_retire();
+  log_end(locked);
+  cpu_restore_interrupts(flags);
+  if (owned) {
+    presenting = true;
+    klog("display: presentation started; early console retired\n");
+  }
+  return owned;
+}
+
 void space_present()
 {
+  if (!presenting && !begin_presenting()) {
+    return;
+  }
   const size_t dst_offset = SPACES_NAV_HEIGHT * screen->pitch;
 
   draw_spaces_nav();
