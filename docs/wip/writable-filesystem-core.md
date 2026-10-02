@@ -2512,6 +2512,20 @@ this documentation update.
        read-only core subset; the writable core remains excluded.
        Merge the filesystem dependency first; the owner merges.
 
+     - [x] **Investigate bounded allocation-map leaf-overflow splitting.**
+       Confirm filesystem #24 / Pyxis #325 merged, then record the
+       [design proposal](filesystem-overflow-split.md) using code, existing
+       measurements and arithmetic. Proposed scope adds one leaf under an
+       existing parent with room, separates retired p from emitted n=p+1,
+       checks final live J+1<=m, renews self-accounting/seams and restores the
+       seed before ordinary repair on a trial miss. The fixed surplus and single
+       reset derive finite work; proposed descriptors fit existing scratch.
+       No code, dependency pin, reserves/admission, budgets or runner changes,
+       and no new mutation workloads. Anchor/packing, trial/fallback ordering
+       and selection policy await owner review. General structural implementation
+       and later matched validation require separate assignment. This design
+       step does not accept the policy or clear task 7/writable deployment.
+
    - [ ] **Repeat measurements and complete acceptance.** Run matched RAM-only
      before/after workloads and remaining recovery/pressure coverage. Record the
      measured costs against agreed budgets; explain any missing larger-profile
