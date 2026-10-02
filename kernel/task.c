@@ -648,9 +648,13 @@ static void reap_completed(void)
     struct execution_group *execution_group = NULL;
     struct process_result result = {0};
     if (task->kind == TASK_USER) {
-      /* Transfer the execution owner's reference before freeing the process. */
+      /* Transfer the execution owner's reference before freeing the process,
+       * and end the observer's task link before this task can be freed. */
       control = task->process->control;
       task->process->control = NULL;
+      if (control) {
+        process_control_detach_task(control);
+      }
       execution_group = task->process->execution_group;
       task->process->execution_group = NULL;
       if (execution_group) {

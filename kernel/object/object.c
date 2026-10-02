@@ -179,7 +179,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_MEMORY:
     return !(rights & ~MEMORY_RIGHT_MANAGE);
   case OBJECT_PROCESS_CONTROL:
-    return !(rights & ~PROCESS_RIGHT_WAIT);
+    return !(rights & ~PROCESS_RIGHTS);
   case OBJECT_KEYBOARD:
     return !(rights & ~KEYBOARD_RIGHT_INPUT);
   case OBJECT_MOUNT:

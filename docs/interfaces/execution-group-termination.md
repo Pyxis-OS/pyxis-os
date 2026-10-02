@@ -6,7 +6,8 @@ The public contract is in [execution groups](execution-groups.md).
 ## Stopping boundary
 
 A stop request prevents further userspace execution at the assigned scheduler's
-safe point. Running/runnable user state retires locally; an interrupted syscall
+safe point. The same per-task request also implements a process observer's
+[TERMINATE](processes.md) operation, for grouped and ungrouped tasks alike. Running/runnable user state retires locally; an interrupted syscall
 continues solely to detach waits, return loans and dispose owned results. Its stack
 stays alive through that unwind. Stop wakeups leave subsystem registration removal
 to the continuation, under the resource lock. Shared workers remain alive.

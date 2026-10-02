@@ -43,13 +43,30 @@ struct process_control *process_control_create(void)
   return control;
 }
 
+void process_control_attach_task(struct process_control *control, struct task *task)
+{
+  KASSERT(arch_cpu_index() == 0 && task);
+  lock_control(control);
+  KASSERT(!control->task && !control->complete);
+  control->task = task;
+  unlock_control(control);
+}
+
+void process_control_detach_task(struct process_control *control)
+{
+  KASSERT(arch_cpu_index() == 0);
+  lock_control(control);
+  control->task = NULL;
+  unlock_control(control);
+}
+
 void process_control_complete(struct process_control *control, struct process_result result)
 {
   KASSERT(arch_cpu_index() == 0);
   KASSERT(result.kind == PROCESS_EXITED || result.kind == PROCESS_FAULTED ||
       result.kind == PROCESS_TERMINATED);
   lock_control(control);
-  KASSERT(!control->complete);
+  KASSERT(!control->complete && !control->task);
   control->result = result;
   control->complete = true;
 
@@ -80,6 +97,22 @@ struct syscall_result process_control_call(struct process_control *control,
     uint64_t rights, uint64_t operation, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
+  if (operation == PROCESS_TERMINATE) {
+    if (!(rights & PROCESS_RIGHT_TERMINATE)) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    if (request_size) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    /* The link keeps the task's memory live until detached under this lock.
+     * A task that already exited keeps its committed result. */
+    lock_control(control);
+    if (control->task) {
+      task_request_stop(control->task);
+    }
+    unlock_control(control);
+    return (struct syscall_result){CALL_OK, 0};
+  }
   if (operation != PROCESS_WAIT) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
