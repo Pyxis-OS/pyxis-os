@@ -238,9 +238,14 @@ Accepted limits of this first slice:
 - **Remote typeahead.** After more than 4 KiB of typeahead that the command does
   not read, the remote server stops reading frames until its pending injection
   drains. A later Ctrl+C never reaches the kernel; Ctrl+] remains the fallback.
+- **Startup scripts.** A startup script holds the right, so Ctrl+C can terminate
+  its foreground command. The script then stops before starting its session,
+  which leaves that space with no shell until reboot. No current startup script
+  runs a foreground command. Revisit if one gains one, for example by not
+  arming scripts or by continuing past an interrupted command.
 
-The [foreground interruption plan](wip/foreground-interrupt.md) records the
-design. Revisit with cooperative interrupts or job control, or if pasting into
+[Foreground interruption](userland/foreground-interruption.md) records the
+design and validation. Revisit with cooperative interrupts or job control, or if pasting into
 hung remote commands matters. The remote case would need an out-of-band
 interrupt from the server. Native cancellation need not require general POSIX
 signals.
