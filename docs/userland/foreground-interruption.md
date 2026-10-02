@@ -66,7 +66,8 @@ foreground jobs.
 
 QEMU 10.2.2 under nested KVM, four CPUs, 256 MiB, VirtIO NET with loopback TCP
 forwarding. Tasks were validated as they landed. The final pass used Pyxis
-`af188ee` with userland `0c4743d` and ports `2f9d55d`, and ran with GDB attached
+`f364445`, the task 4 branch head and identical in content to the merged
+`af188ee`, with userland `0c4743d` and ports `2f9d55d`, and ran with GDB attached
 for the kernel traces.
 
 - **Termination** (temporary shell hook during task 1).
