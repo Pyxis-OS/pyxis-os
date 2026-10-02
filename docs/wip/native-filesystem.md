@@ -6,6 +6,7 @@ work. It supersedes the pyxis-fs writer plans listed under
 [v1 answers](#v1-answers) are accepted. The [pool sketch](#proposed-pool-sketch),
 [next questions](#next-questions) and
 [proposed working method](#proposed-working-method) await the owner.
+[Later ideas](#later-ideas) are not requirements.
 
 ## Owner decisions
 
@@ -105,6 +106,8 @@ left out.
 - **A small volume table** of fixed-size records: name, ID, root inode, location
   of the volume's inode file, blocks in use, an optional limit, flags and reserved
   bytes. Deleting a volume frees its blocks; growing it needs no operation at all.
+  One volume filling the pool and starving the others is explicitly deferred
+  (owner, 2026-10-02): working first, space policy later.
 - **Per-volume inode file.** Each volume's inodes live in a file that grows by
   allocating from the pool, so there is no inode table fixed at format time.
 - **One pool-wide journal** of fixed size, chosen at format time.
@@ -115,24 +118,56 @@ Consequence: the installer formats the pool natively, so the format library
 links in Pyxis userspace too. That makes three symbol providers: the host,
 Caelum and Pyxis userspace.
 
+## Installation and authority
+
+Accepted 2026-10-02.
+
+1. **Raw-disk authority.** The kernel grants a new whole-disk write capability
+   only to trusted init. Init passes it only to the installer, and only when the
+   installer is launched to install.
+2. **Target disks.** V1 supports whatever writable disk driver Caelum has. Today
+   that is a QEMU virtio-blk disk. [USB mass storage](usb-installation.md) is
+   developed in parallel, and a USB target follows when it lands; it is not a
+   prerequisite. NVMe comes later.
+3. **Installer steps.** On an empty target disk the installer:
+   1. creates a GPT;
+   2. creates the boot partition (a FAT32 EFI system partition, written fresh,
+      with no general FAT driver), because firmware boots from FAT and Limine never
+      reads a Pyxis pool;
+   3. copies Limine to it and writes its boot configuration;
+   4. copies Caelum and the boot archive to it;
+   5. creates the pool partition, formats the pool and creates its volumes.
+
+   V1 ships a fixed set of standard inits. Programs still run from the boot
+   archive; the pool holds persistent volumes mounted after boot.
+
 ## Next questions
 
-1. **Who may write a raw disk?** Today raw-disk authority is
-   [kernel-only](../devices/block-storage.md). Proposed default: a new whole-disk
-   write capability, which the kernel gives only to trusted init, and which init
-   passes only to the installer when launched for installation.
-2. **Which target disks does v1 support?** Proposed default: whatever writable
-   disk driver Caelum has. Today that means a QEMU virtio-blk disk, which Caelum
-   already reads and writes. [USB mass storage](usb-installation.md) is developed
-   in parallel, and a USB target follows when it lands; it is not a prerequisite
-   for v1. NVMe comes later; Caelum has no NVMe driver.
-3. **What boots from where?** UEFI firmware boots from a FAT EFI system
-   partition, and Limine reads its files from FAT or ISO9660, never from a Pyxis
-   pool. Proposed default: the installer writes a fresh FAT32 ESP itself,
-   with a write-once layout and no general FAT driver. The ESP holds Limine, its
-   configuration, Caelum and the boot archive, exactly like the live image. The
-   pool holds persistent volumes that Caelum mounts after boot. Running programs
-   from the pool instead of the boot archive is a later step.
+1. **Where does the new code live?** Proposed default: reuse the pyxis-fs
+   repository. The new format library starts beside the old core, and the old
+   core is deleted once the native read-only mounts move to the new format. Git
+   keeps the history. The alternative is a new repository, which the owner
+   creates.
+2. **How do files map to blocks?** Proposed default: extents. Up to a few are
+   stored inline in the inode, with one level of extent blocks when more are
+   needed. Large files such as the boot archive then need almost no metadata. The
+   alternative, ext2's direct and indirect block pointers, is even simpler but
+   costs one pointer per block.
+3. **In what order is it built?** Proposed default:
+   1. the format library, plus host `mkfs`, `fsck` and inspection, with link-time
+      symbols;
+   2. native read/write in Caelum on virtio-blk;
+   3. the installer tools: GPT, FAT32 boot partition, pool format and copying;
+   4. install and boot end to end in QEMU, then on the ThinkPad.
+
+## Later ideas
+
+Not requirements, and not v1. Recorded so they are not designed out:
+
+- **An interactive installer or launcher** that lets the user choose which inits
+  start which spaces.
+- **Filesystem overlays,** for example a volume overlaid on the boot archive.
+  "Root filesystem" was only an illustration; it is not a Pyxis name or design.
 
 ## Proposed working method
 
