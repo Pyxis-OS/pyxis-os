@@ -14,6 +14,11 @@ VIRTIO_NET ?= 0
 VIRTIO_RNG ?= 1
 VIRTIO_BLK_IMAGE ?=
 VIRTIO_BLK_READONLY ?= 0
+USB_IMAGE_MIB ?= 1024
+USB_ESP_MIB ?= 256
+USB_POOL_OWNER ?=
+USB_BOOT_IMAGE ?= build/pyxis-usb.img
+export USB_IMAGE_MIB USB_ESP_MIB USB_POOL_OWNER
 TCP_FORWARD ?=
 UDP_FORWARD ?=
 export VIRTIO_FS_SOCKET VIRTIO_NET TCP_FORWARD UDP_FORWARD VIRTIO_RNG VIRTIO_BLK_IMAGE VIRTIO_BLK_READONLY
@@ -61,7 +66,7 @@ OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM
 include kernel/net/lwip/build.mk
 include kernel/fs/build.mk
 
-.PHONY: all kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools fs-tools sdk sdk-headers userspace ports initrd image run debug clean check-toolchain FORCE
+.PHONY: all kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools fs-tools sdk sdk-headers userspace ports initrd image usb-image run debug run-usb debug-usb clean check-toolchain FORCE
 all: kernel
 
 ifneq ($(filter kernel,$(PREBUILT)),)
@@ -181,6 +186,10 @@ build/limine.conf: boot/limine/limine.conf scripts/configure-boot.sh FORCE
 
 image: build/pyxis.iso
 
+usb-image: build/caelum.elf build/initrd.cpio build/limine.conf fs-tools \
+           third_party/limine/BOOTX64.EFI | image-inputs
+	./scripts/make-usb-image.sh
+
 build/pyxis.iso: build/caelum.elf build/initrd.cpio \
                  build/limine.conf scripts/make-image.sh \
                  third_party/limine/BOOTX64.EFI third_party/limine/limine-uefi-cd.bin | image-inputs
@@ -194,6 +203,12 @@ image-inputs: kernel sdk
 run debug: image
 	QEMU="$(QEMU)" QEMU_DISPLAY="$(QEMU_DISPLAY)" MEMORY="$(MEMORY)" CPUS="$(CPUS)" ACCEL="$(ACCEL)" \
 	OVMF_CODE="$(OVMF_CODE)" OVMF_VARS="$(OVMF_VARS)" ./scripts/run-qemu.sh $@
+
+# Launch an existing image; rebuilding would replace its pool and identities.
+run-usb debug-usb:
+	QEMU="$(QEMU)" QEMU_DISPLAY="$(QEMU_DISPLAY)" MEMORY="$(MEMORY)" CPUS="$(CPUS)" ACCEL="$(ACCEL)" \
+	OVMF_CODE="$(OVMF_CODE)" OVMF_VARS="$(OVMF_VARS)" USB_BOOT_IMAGE="$(USB_BOOT_IMAGE)" \
+	./scripts/run-qemu.sh $@
 
 clean:
 	rm -rf build

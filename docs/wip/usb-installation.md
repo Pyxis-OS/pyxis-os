@@ -1,8 +1,10 @@
 # USB boot and first physical installation
 
-Status: proposal, 2026-10-02. The owner wants a replaceable USB drive as the first
+Status: Phase A image assembly and USB boot implemented, 2026-10-02.
+The owner wants a replaceable USB drive as the first
 physical installation target, with QEMU development before laptop validation.
-Phase A may be assigned independently to a parallel agent. Kernel USB and writable
+Implemented image behavior lives in the [USB image reference](../development/usb-image.md).
+Kernel USB and writable
 installation stages remain unassigned; this document does not authorize physical
 writes or reorder the active filesystem, spaces/SMP and display work.
 
@@ -10,7 +12,7 @@ writes or reorder the active filesystem, spaces/SMP and display work.
 
 Boot Pyxis independently from a USB drive, then read and eventually persist
 files on a Pyxis pool on that same drive. Keep the internal NVMe outside the
-initial storage scope. The proposed GPT layout is:
+initial storage scope. Phase A builds this GPT layout:
 
 - An EFI System Partition, FAT32, containing Limine, its configuration, the
   Caelum kernel and matching boot archive.
@@ -53,7 +55,9 @@ hub support; desktop topology does not establish laptop topology.
 
 The installed QEMU 10.2.2 advertises `qemu-xhci`, `usb-storage`, `usb-bot`,
 `usb-uas` and `usb-host`. QEMU documents image-backed Bulk-Only storage behind
-xHCI. Availability has been checked; no USB boot or driver experiment has run.
+xHCI. Phase A has booted the archive-backed shell through emulated USB;
+native USB driver experiments remain future work. See the
+[validation record](../development/usb-image.md#validation) and its firmware limit.
 
 1. **Emulated controller and drive.** Use Q35, xHCI and a directly attached
    `usb-storage` device backed by a raw GPT image. Verify that the selected OVMF
@@ -117,18 +121,25 @@ Native hardware-listing tools and their name databases are a separate
 [hardware-inspection proposal](hardware-inspection.md). `lsusb` will consume the
 USB inventory; neither tool nor its benchmark is a boot-image prerequisite.
 
-## Proposed staged milestones
+## Staged milestones
 
 Each stage should be assigned separately and delivered in focused PRs. USB read
 support does not require completion of native writable integration.
 
 ### A. Bootable USB image
 
-1. [ ] **Define and build an opt-in raw installation image.** Reuse existing
+Accepted scope: configurable image/ESP sizing (1 GiB / 256 MiB defaults), explicit
+sample-pool owner input, host-only assembly without root/mounts, fresh complete
+image rebuilds and separate launch of an existing read-only image. Sizes remain
+image configuration, not filesystem limits or fixed validation expectations.
+The [image and launch contract](../development/usb-image.md) documents layout,
+host tools and the later physical-preparation procedure.
+
+1. [x] **Define and build an opt-in raw installation image.** Reuse existing
    kernel/archive assembly and pinned Limine. Settle image sizing and host-tool
    requirements, and populate the EFI partition plus a read-only-test Pyxis pool.
    Do not add automatic host-disk discovery or formatting of attached drives.
-2. [ ] **Boot through emulated USB.** Add explicit QEMU options, verify the OVMF
+2. [x] **Boot through emulated USB.** Add explicit QEMU options, verify the OVMF
    USB boot path and exercise the archive-backed shell. Preserve ordinary ISO
    boot. Document preparing the eventual selected physical target separately.
 
@@ -177,9 +188,9 @@ support does not require completion of native writable integration.
 
 ## Decisions before assigning implementation
 
-- Phase A can proceed independently in a separate worktree. Confirm assignment
-  and ordering of later stages relative to the existing roadmap; Phase A does
-  not implicitly authorize kernel USB or writable integration.
+- Phase A is implemented independently. Assignment and ordering of later stages
+  relative to the existing roadmap remain open; Phase A does not implicitly
+  authorize kernel USB or writable integration.
 - Settle image preparation/update scope and the device-identity/authority mapping
   as the block layer gains another backend. Never select a write target merely
   because it was enumerated first; distinguish disk identity from USB identifiers.
