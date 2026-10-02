@@ -57,6 +57,13 @@
 - Use the installed Forgejo CLI, fj, for PRs, comments and existing CI status.
   Check its help for syntax when needed. If access fails, report the actual error;
   do not assume a missing comment means there was no review or expose credentials.
+- Put PR review findings directly in comments on the affected PR, including the
+  reviewed revision, code references, consequence and required correction. Read
+  existing comments first to avoid duplicate findings. Link dependency findings
+  from integration PRs when they affect readiness. Summarize the outcome in chat;
+  do not make the user relay review notes between agents. On re-review, record
+  which findings are resolved and which remain. If posting fails, give the user
+  the findings and the actual error.
 - Pyxis owns the kernel, public ABI, SDK export, toolchain integration and image
   assembly. userspace, ports and third_party/lwip are separately versioned
   repositories. Consult docs/development/sdk-and-repositories.md before crossing
