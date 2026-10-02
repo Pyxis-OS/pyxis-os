@@ -381,6 +381,12 @@ An operation result preserves three independent facts:
   remain available. Cleanup failure cannot erase confirmed progress or turn an
   already confirmed user transaction into an uncertain one.
 
+A healthy ordinary refusal after partial progress may report maintenance PENDING
+or NONE depending on the refusal stage. Planning can retain the earlier PENDING;
+commit-time admission can report NONE. Neither changes confirmed progress, and
+NONE does not establish debt absence. Writer status `drain_pending` reports
+last-confirmed selected volume debt separately.
+
 A large write stops at its first failed or uncertain transaction. Earlier
 transactions remain confirmed; later transactions are not attempted. An unknown
 outcome may include additional committed bytes beyond the confirmed prefix.
@@ -397,13 +403,19 @@ that candidate. It may leave unreachable bytes in previously free storage.
 
 | Failure point | Operation outcome | Pool access afterward |
 | --- | --- | --- |
-| Ordinary permission, quota, workspace or memory refusal before admission | Current transaction not committed; retain any earlier confirmed progress | Reads and later mutations remain available. |
+| Ordinary permission, quota, profile/capacity or memory refusal before admission | Current transaction not committed; retain any earlier confirmed progress | Reads and later mutations remain available. |
 | Replacement write or first flush fails before slot publication | Current transaction not committed; retain any earlier confirmed progress | Stop mutation until recovery. Reads, metadata, listing and lookup may use the last confirmed state while its integrity remains established. |
 | Slot write or final flush has an uncertain outcome | Current transaction unknown; retain any earlier confirmed progress | Stop all ordinary access until recovery, including reads, metadata, listing, lookup, new acquisition and derivation through existing handles. |
 | Cleanup replacement write or first flush fails before its own slot publication | User commit remains confirmed; report cleanup failure separately | A cleanup write/flush failure stops mutation until recovery. Reads may use the last confirmed state, including the confirmed user commit, while its integrity remains established. |
 | Any backing read fails during an ordinary operation, publication planning or maintenance | Current publication is not confirmed; retain all earlier confirmed user and cleanup progress | Enter `ACCESS_STOPPED` pool-wide, even for a transient read error. |
-| Unexpected resource exhaustion during an admitted drain | Preserve confirmed user and cleanup progress; report an admission/editor invariant failure | Enter `READABLE_STOPPED`; escalate to `ACCESS_STOPPED` if integrity is no longer established or publication is uncertain. No maintenance retry in this instance. |
+| Failure to obtain already-guaranteed publication workspace, or unexpected resource exhaustion during funded work | Preserve confirmed user and cleanup progress; report an admission/editor invariant failure | Enter `READABLE_STOPPED`; escalate to `ACCESS_STOPPED` if integrity is no longer established or publication is uncertain. No maintenance retry in this instance. |
 | Cleanup's own slot publication becomes uncertain | User commit remains confirmed; cleanup outcome is unknown | Stop all ordinary access until recovery, even if cleanup was intended to change only allocation bookkeeping. |
+
+Writable-state admission already guarantees reusable publication workspace.
+Failure to obtain it during preparation/planning stops mutation as an invariant
+failure, even before any device write; a `NO_SPACE` status does not make that a
+healthy refusal. Ordinary quota/profile/capacity admission refusals for a new
+candidate still leave the writer healthy.
 
 An ordinary mutation may be refused before admission. Once a batch is admitted,
 its reserved drain must finish without additional application mutations, absent
@@ -2318,7 +2330,7 @@ this documentation update.
 
    - [x] **Implement and validate bounded retirement carryover.** Published
      [filesystem #20](https://git.internal/PyxisOS/pyxis-fs/pulls/20) at
-     `19cbec62070fd1925d495b8c1b57b133cc2fa2d5` implements the coherent
+     `5e44d6feee5a91ee167412bc957c93ab8542ed08` implements the coherent
      publisher/admission/results correction, bounded catalog union, complete
      final orphan release and pool-wide/startup fences. All 125 quick and six
      seed-1 extended groups pass natively and under ASan/UBSan in the unchanged

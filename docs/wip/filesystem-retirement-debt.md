@@ -211,8 +211,11 @@ checking excludes older live allocations from selected free space; ended borrows
 make that free space reusable. Same-candidate frees contribute zero to selection.
 Consequently this conservative profile needs **no space-pressure pre-drain** in a
 healthy admitted state. Failure to select the proved storage is an admission/editor
-invariant failure; a defensive drain must not conceal it. Ordinary quota/profile
-refusal concerns the proposed new permanent result, not this funded scratch space.
+invariant failure and stops mutation with READABLE_STOPPED, escalating if integrity
+or publication certainty is lost. This applies during preparation/planning before
+any device write too; a defensive drain or retry must not conceal it. Ordinary
+quota/profile/capacity admission refusal concerns the proposed new result, leaves
+the writer healthy and is distinct from failing to obtain already-guaranteed workspace.
 
 With other occupied charges bounded by their own capacities and live permanent
 storage bounded by the reserved permanent promises, the free-space inequality is:
@@ -308,6 +311,12 @@ Do not overload COMPLETE to conceal pending work or PENDING to conceal failure.
 An accepted healthy mutation with no remaining volume debt reports NONE unless
 an explicit fence completed. No-op calls need not report a global debt snapshot.
 
+A healthy refusal after earlier batches confirmed partial progress may report
+PENDING or NONE depending on its stage: planning can retain the earlier PENDING,
+while commit-time admission can report NONE. Neither changes confirmed progress.
+NONE does not establish debt absence; `drain_pending` reports last-confirmed debt
+separately. PENDING describes outstanding work, not maintenance already completed.
+
 An ordinary successful mutation still reports COMPLETE and confirmed bytes/length/
 namespace regardless of healthy PENDING maintenance. Final orphan release still
 consumes the accepted handle; PENDING means deletion finished durably but its
@@ -318,12 +327,12 @@ Stopped instances cannot perform any final-release/checkpoint writes.
 
 | Failure | Result / health |
 | --- | --- |
-| Ordinary refusal before admission | No new user progress; healthy writer remains usable. Preserve any maintenance already confirmed before that refusal. |
+| Ordinary quota/profile/capacity refusal before admission | The refused batch adds no progress; retain earlier confirmed progress and leave the writer healthy. Maintenance may be PENDING or NONE depending on the refusal stage. |
 | Backing read error anywhere | ACCESS_STOPPED, including catalog union planning and checkpoint/startup reads. |
 | Replacement write or pre-slot flush error | READABLE_STOPPED when confirmed integrity remains established. |
 | Slot write or following flush error | UNKNOWN for that publication, ACCESS_STOPPED; do not retry the uncertain mutation. |
 | Integrity failure | ACCESS_STOPPED. |
-| Unexpected funded resource exhaustion | Invariant failure; READABLE_STOPPED, escalating if integrity is unestablished. No retry to health. |
+| Failure to obtain already-guaranteed publication workspace, or unexpected funded resource exhaustion | Invariant failure; READABLE_STOPPED, escalating if integrity is unestablished or publication uncertain. No retry to health. |
 
 If a user mutation confirms and subsequent required orphan maintenance
 fails, keep its confirmed progress and report the independent STOPPED/UNKNOWN
@@ -333,7 +342,8 @@ batch confirms no additional bytes/namespace. Preserve earlier call-prefix
 progress. The most recent failure/uncertainty takes precedence over earlier PENDING
 or COMPLETE maintenance information.
 
-If the next **user** publication fails, report its operation error/uncertainty and
+If the next **user** publication encounters I/O, integrity or funded invariant failure,
+report its operation error/uncertainty and
 sticky health; retain prior confirmed progress but do not invent a maintenance
 failure. When no maintenance failed, that stopped result reports maintenance NONE,
 not healthy PENDING. Diagnostic debt remains visible independently. Actual failed
@@ -529,7 +539,7 @@ sensitive cost. Writable deployment remains blocked.
 
 ## Implementation and matched validation
 
-The integration pins published filesystem `19cbec62070fd1925d495b8c1b57b133cc2fa2d5`
+The integration pins published filesystem `5e44d6feee5a91ee167412bc957c93ab8542ed08`
 from #20. Merge the filesystem PR before the Pyxis integration; the owner merges.
 The publisher, candidate/opening admission, plan limits, checkpoint/final-release
 results, host reporting and active-publication counters change together. The
