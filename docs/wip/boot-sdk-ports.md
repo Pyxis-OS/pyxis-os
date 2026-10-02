@@ -147,9 +147,11 @@ publications and lowers matched compiler totals by a further 53.19–58.95%.
 All eight short Pyxis cases beat recorded Btrfs totals; sustained writes, larger
 populations/fragmentation, namespace churn, pressure and recovery qualification
 remain open. The [incremental-map proposal](filesystem-write-efficiency.md#incremental-allocation-map-proposal)
-derives a local topology-preserving first path and explicit funded bulk exceptions.
-Mechanism and concrete acceptance criteria need owner review; implementation and
-new experiments remain unassigned. See
+records the accepted topology-preserving intermediate path and explicit funded
+bulk/global-closure limitation. Refined fixed ascending IDs, neighbouring-leaf
+redistribution and local/bulk cost/planning reports await review. Deployment
+criteria remain separate decisions; implementation and new experiments remain
+unassigned. See
 the linked milestone for the corrective task list.
 FUSE and installation remain separate. These
 plans do not start implementation or displace explicitly assigned libc/remote work.

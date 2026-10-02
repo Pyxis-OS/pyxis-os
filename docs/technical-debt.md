@@ -845,9 +845,11 @@ Carryover lowers compiler totals by a further 53.19–58.95%; all eight short
 Pyxis cases now beat recorded Btrfs totals, but qualify neither sustained writes
 nor large fragmented populations/resource pressure. This entry authorizes no
 additional benchmark. The [incremental-map proposal](wip/filesystem-write-efficiency.md#incremental-allocation-map-proposal)
-recommends topology-preserving replacement with finite source-node accounting
-closure and explicit funded structural/global bulk triggers. Mechanism, fallback
-acceptance and deployment comparisons need review before code or new campaigns.
+records the accepted topology-preserving intermediate approach with finite
+source-node accounting closure and explicit funded bulk/global-closure limitation.
+Refined fixed ascending IDs, neighbouring-leaf redistribution and local/bulk
+cost/planning reports await design review before code; deployment comparisons
+remain separate decisions, not a prerequisite to this intermediate optimisation.
 All existing floors, memory limits, reservations and retained-state guarantees
 remain unchanged in that proposed first scope.
 

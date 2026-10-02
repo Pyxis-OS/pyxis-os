@@ -514,10 +514,11 @@ The historical 826.1075 metadata bytes per useful byte for small appends predate
 retirement carryover; it is not a current sustained-write result. Task 7 must
 replace routine whole-map rebuilding and re-establish admission and funded-drain
 bounds. The [incremental proposal](filesystem-write-efficiency.md#incremental-allocation-map-proposal)
-recommends topology-preserving local replacement first, with explicit funded
-bulk triggers for structural changes/global closure. That mechanism and its
-exceptions need owner review; the existing proof alone does not make the write
-cost acceptable. Current short Btrfs comparisons do not qualify deployment.
+records the accepted topology-preserving intermediate approach with explicit
+funded bulk fallback/global closure. The revised fixed ascending IDs, bounded
+neighbour redistribution and cost reporting await review before implementation;
+the existing proof alone does not make the write cost acceptable. Current short
+Btrfs comparisons do not qualify deployment.
 
 The initial contract provided a bounded whole-allocation-map rebuild when
 incremental map edits could not close within their admitted bound. A tree-depth
@@ -2371,6 +2372,14 @@ this documentation update.
      comparisons, tolerance and exception criteria remain proposals.
      Read-only inspection and arithmetic only; no implementation/new workloads.
 
+     The owner subsequently accepts the topology-preserving first approach,
+     explicit funded bulk fallback and global closure as an intermediate
+     limitation. Review refinements fix the existing ascending eligible-ID order
+     before closure, add neighbouring-leaf redistribution with renewed accounting
+     and seam closure, and require closure/fallback/full-write/planning reports
+     comparing local node cost with current bulk construction. These refinements
+     await review; no implementation is assigned.
+
    - [ ] **Agree incremental allocation-map design and bounds.** Replace routine
      whole-map reconstruction with updates to affected paths and necessary
      balancing nodes. Address allocator self-accounting dependencies described
@@ -2378,8 +2387,11 @@ this documentation update.
      admission, retirement, planning-memory and funded-drain bounds against the
      actual design, including maintenance publications and any proposed fallback.
      Preserve both retained states, publication ordering and recovery semantics.
-     Review the topology-preserving first scope, worst-case closure and stated
-     funded bulk triggers before coding. Agree representative comparison windows,
+     The intermediate first scope and global-closure limitation are accepted.
+     Review the refined ordering/redistribution algorithm, termination/funding
+     and cost-reporting details before coding. General splits/merges, bulk
+     fill-policy changes and new placement schemes remain outside this step.
+     Agree representative comparison windows,
      numerical write-cost criteria and exception policy before deployment acceptance;
      intermediate PRs may precede that final qualification.
      Use the [write-efficiency target and research direction](#write-efficiency-target-and-research-direction)

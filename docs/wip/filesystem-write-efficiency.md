@@ -9,8 +9,11 @@ in [filesystem #20](https://git.internal/PyxisOS/pyxis-fs/pulls/20) and
 The incremental-map investigation below uses that merged baseline: Pyxis
 `b13ecec`, published filesystem pin `5e44d6f` (the same tree as merged `e5b76c5`).
 The owner accepts Btrfs-comparable matched submitted-write costs as the initial
-deployment direction; the mechanism and numerical acceptance criteria below
-are proposals for review. Other proposals remain unassigned; this document does not
+deployment direction, and the topology-preserving approach with explicit funded
+bulk fallback/global closure as an intermediate optimisation. This revision
+specifies the requested fixed ID ordering, neighbouring-leaf redistribution and
+cost reporting; those details await review before implementation. Numerical
+deployment criteria remain proposals. Other proposals remain unassigned; this document does not
 authorize further implementation or experiments.
 [Task 7 and writable deployment](writable-filesystem-core.md#focused-tasks)
 remain open. Preserve individually durable completed operations, both retained
@@ -21,8 +24,11 @@ states and the existing failure/recovery contract in the baseline proposals.
 The research inspected the then-current Pyxis pin, filesystem
 [`dc63d62`](https://git.internal/PyxisOS/pyxis-fs/src/commit/dc63d62b81d7c6cca082eeb52842b84d8a1fa390),
 whose tree equals filesystem main `87d2f20`. The research parent was `2da3e5f`.
-The policy findings in `/shared/pyxis-fs-contract-audit.md` are revisited below;
-its older test findings were addressed by filesystem #18 / Pyxis #307. Carryover
+The contract-audit findings on coalescing, memory ceilings, formatter floors and
+object/extent limits are summarised inline below against their current sources.
+Its older test findings were addressed by
+[filesystem #18](https://git.internal/PyxisOS/pyxis-fs/pulls/18) /
+[Pyxis #307](https://git.internal/PyxisOS/pyxis-os/pulls/307). Carryover
 changes the historical immediate-drain observations, not the memory/floor/limit
 policies discussed here.
 This investigation used read-only inspection and the existing
@@ -186,7 +192,9 @@ disk writes proves full-profile opening capacity.
 
 ## Incremental allocation-map proposal
 
-This section is a design proposal, not an implementation assignment. Inspection
+The owner accepts this first approach and its funded bulk/global-closure limitation
+as intermediate work. The refined design below awaits review; it is not an
+implementation assignment or deployment qualification. Inspection
 of the merged [planner](../../fs/core/plan.c), [publisher](../../fs/core/writer.c)
 and [admission](../../fs/core/admit.c) confirms that every publication still
 rebuilds the entire map. The catalog already replaces only its changed paths.
@@ -225,10 +233,13 @@ this allocation-range operation.
 
 The smallest proposed first PR avoids structural changes. It replaces a closed
 set of leaves and ancestors **one for one in the source topology**, redistributing
-canonical records within each contiguous dirty leaf run. Actual splits, merges
-and root-height changes use the explicit funded bulk path below. This is a
+canonical records within each contiguous dirty leaf run and extending a run into
+neighbouring source leaves when needed. Failure to fit after bounded expansion
+uses the explicit funded bulk path below. This is a
 candidate intermediate improvement, not the final local structural editor;
 useful locality and fallback frequency still require measurement.
+General splits/merges, bulk fill-policy changes and new placement preferences or
+restrictions are outside this first implementation.
 
 ### Self-accounting with fixed topology
 
@@ -238,8 +249,11 @@ replacement write:
 
 1. Stage volume deltas, eligible input retirement frees and old pool-root/catalog
    retirements. Discover source leaves covering these changes and their ancestors.
-   Reserve an ordered list of `H` already-reusable input block IDs, excluding the
-   batch's at most `V` new volume blocks. Reservation does not allocate the list.
+   Reserve the first `H` already-reusable input block IDs in **ascending physical
+   block order**, exactly the existing `select_free` ordering, excluding the
+   batch's at most `V` new volume blocks. Fix this list before closure begins:
+   neither newly declared frees nor changes to `P` may replace or reorder it.
+   Reservation does not allocate the list. New placement heuristics are deferred.
 2. In a scratch pass, claim exactly the first `q+c+1` IDs, where `q = |P|`:
    `q` new map nodes, `c` catalog nodes and one pool root. Retire exactly `P` and
    the old root/catalog union, keeping unmarked source map claims live. All new
@@ -249,9 +263,20 @@ replacement write:
    an adjacent source leaf whenever a final canonical record **straddles an
    original dirty-run coverage endpoint**. Equality at the current seam alone is
    not a sufficient repair test. Repeat only when the source set grows.
-4. Never remove a marked node. At stable closure, each connected dirty run of
-   `l` source leaves must have `r` final canonical records satisfying
-   `l <= r <= 46l`. Its endpoints now align with canonical record boundaries.
+4. At stable accounting/seam closure, scan maximal contiguous dirty leaf runs in
+   ascending source-key order. For the first run whose `r` final canonical records
+   fail `l <= r <= 46l`, add its immediately adjacent unmarked predecessor source
+   leaf if present, otherwise its unmarked successor, and every ancestor. This
+   fixed traversal convention applies to overflow **and underflow**, crosses
+   parent boundaries, and does not filter source leaves by free-block eligibility.
+   Merge touching dirty runs. Recompute the complete deltas from the immutable
+   source with the larger `q+c+1` prefix and renewed retirement accounting and
+   canonical seam closure, then reconsider all runs. Do not estimate neighbour
+   slack once and skip the changes caused by its replacement.
+5. Never remove a marked node or undo an expansion. If no adjacent unmarked leaf
+   remains for a failing run, or closure reaches all `J` nodes, use the explicit
+   funded bulk path. Expansion does not guarantee a fit. Otherwise, once every
+   run satisfies `l <= r <= 46l`, its endpoints align with canonical boundaries.
    Partition those records into exactly `l` nonempty leaves in source order
    (for example, ceil remaining records / remaining leaves); update minima and
    references in exactly the marked ancestors, preserving internal levels and
@@ -260,8 +285,11 @@ replacement write:
 The live map still has exactly `J` nodes. Every marked source position has exactly
 one reachable replacement, so emitted map nodes equal `q` independently of record
 count. Prefix size grows with `P`; provisional node roles may change without
-changing their identical allocation records. There are at most `J` strict source
-set additions and one final pass. This is a finite source-identity proof, not an
+changing their identical allocation records. Accounting, seam repair and
+redistribution all add source identities to the same set; each unsuccessful
+growth round adds at least one previously unmarked node. There are at most `J`
+strict growth rounds and one final decision pass, not separate iteration budgets
+for each phase. This is a finite source-identity proof, not an
 arbitrary iteration cap, assumed contraction or retry for space. The canonical
 map and allocation claims must be checked against the sealed node inventory
 before publication; unused live padding is prohibited.
@@ -271,8 +299,12 @@ three-node path claims six pool blocks. Accounting for its old nodes may add
 another leaf and ancestor, giving five replacements and eight pool blocks. If
 that closure fits the run guards, 15 source map nodes remain shared. This is an
 illustrative layout, not measured locality. Two dirty leaves can hold 92 canonical
-records; 93 requires a split, while one record requires a merge. Both are stated
-bulk-path triggers in the first PR, not resource failures. Local closure size and
+records; 93 or one record requests neighbour expansion before structural fallback.
+For example, adding a third leaf with ten unchanged records would give 103 or 11
+records, each within the three-leaf range, **only if** renewed accounting and seam
+closure do not change those counts. New retirements/claims can invalidate that
+arithmetic, expand other runs or reach global closure. Failure to pack then uses
+funded bulk construction, not an unfunded resource retry. Local closure size and
 fixed-topology hit rate remain unmeasured: selective retirement can split an old
 contiguous pool-allocation record where bulk retirement would coalesce it.
 
@@ -331,6 +363,15 @@ debt and live-node guards before using that storage guarantee. General structura
 trials must check total live nodes and these coupled guards too; a trial count
 alone does not prove that its candidate fits.
 
+Neighbour expansion does not add tree positions: final live map nodes remain `J`,
+and newly marked leaves/ancestors still give `q+c+1 <= J+Cmax+1 <= H` in every
+scratch round. The same retirement/debt bound, raw-delta bound and `m` source/run
+descriptor slots cover accounting, seam repair and redistribution together.
+No extra publication, generation, allocator reservation or workspace allocation
+is needed. These bounds fund the attempt and the bulk path, not successful local
+packing; unexpected failure to obtain guaranteed resources remains an invariant
+failure.
+
 Use the existing arena, retaining both input states and the third candidate:
 
 ```
@@ -375,11 +416,12 @@ vector application and admission remain population-sized. A simple repeated-pass
 closure has a conservative `O(J(S+J))` planning bound and needs CPU/read measurement;
 the write reduction alone does not establish acceptable latency.
 
-### Explicit bulk alternative and structural follow-up
+### Explicit bulk alternative
 
 Before replacement writes, choose the current funded bulk construction when:
 
-- Stable canonical dirty runs fail `l <= r <= 46l` (split/merge required).
+- A run still fails `l <= r <= 46l` after neighbour expansion is exhausted
+  (report overflow/underflow and the last `l/r`, not a premature split/merge).
 - Closure marks all `J` source nodes, giving no map-write locality benefit.
 - The exact local candidate fails the required record, node, charge or next-step
   resource guard, while the original admitted logical work has a valid bulk plan.
@@ -392,11 +434,56 @@ not a second publication or a retry after failed I/O. A malformed source, invali
 delta, I/O failure or inability to obtain already-guaranteed storage is not an
 optimization miss and must not be hidden by fallback.
 
-Record each chosen path, trigger, source/replaced node counts and submitted bytes
-using the existing measurement boundary. Do not silently treat the bulk path as
-routine incremental success. Frequent bulk work in representative steady-state
-cases would leave the deployment problem unresolved, even if the first PR is
-correct and useful. There is no proposed arbitrary dirty-node threshold or timer.
+Global closure can also exhaust redistribution; record both conditions when they
+coincide. The existing bulk shape/fill policy is unchanged. Additional slack might
+improve the local hit rate but changes `F(S)` and funding inputs; that is a separate
+proposal, not part of this step. There is no new placement scheme or arbitrary
+dirty-node threshold/timer.
+
+### Cost and planning measurements
+
+Report per-publication source node count `J`, final closure size `q`, growth-pass
+count, largest node addition in one pass and redistribution additions. Report the
+chosen path and fallback reason(s), and their frequency over the completed
+workload. Include map replacement nodes/bytes and total submitted data/metadata
+bytes across user, orphan and maintenance publications through final checkpoints.
+Maintain active-publication classification; debt presence is not a phase.
+Report per-publication planning elapsed time alongside full operation elapsed
+time, with map-closure, bulk and diagnostic counting time distinguished where
+instrumented. Full map scans and neighbour expansions are real planning work.
+Use existing host measurement tooling; no production clock dependency or new
+benchmark framework is required by this reporting contract.
+
+For a local plan, compare `q` with `Nb`, the map-node count of the **existing bulk
+construction for the same immutable input and logical work**. Its preclaim base
+must independently apply those logical edits, eligible input frees and retirement
+of the full source map/root/catalog union. If that canonical base has `Rb` records,
+the current builder emits `Nb = F(ceil(23*(Rb+2c+4)/21))`, not `F` of the local
+or bulk final record count. Preserve current conservative sizing and balanced
+nonempty packing; do not substitute a new fill policy. Its exact pool prefix has
+`Nb+c+1` IDs from the same fixed input list.
+
+Compute this reference count without backing writes or heap allocation, keeping
+both retained inputs, the sealed incremental candidate and its descriptor inventory
+intact within existing scratch lifetimes. A counting pass can reuse no-longer-
+needed raw-delta storage and stream canonical output into a count; invoking the
+current destructive bulk builder on the incremental buffers is not this diagnostic.
+Include diagnostic overhead in instrumented planning totals and identify it
+separately from normal/uninstrumented observations. This is a calculated reference,
+not a second mutation workload or automatic cost-based path selection.
+
+The signed immediate map-byte difference is `4096*(Nb-q)`. A local-path hit can
+have `q == Nb` or `q > Nb`, particularly with a sparse source tree; report zero or
+negative savings rather than calling every hit a win. Catalog/root/slot and
+volume writes remain, while changed later histories/reclamation can alter net
+savings. Only matched full-workload totals establish improvement. Frequent bulk
+work or expensive planning can leave the deployment problem unresolved despite
+a correct intermediate implementation. Do not freeze incidental node/publication
+counts, hit rates, proposed benchmark settings or machine properties into tests,
+or invent numerical performance thresholds. Deliberate format/topology/resource
+invariants, including emitted map nodes equal to `q = |P|`, remain valid assertions.
+
+### Structural follow-up outside the first step
 
 General splits/merges need another self-accounting proof: claiming additional
 metadata IDs can consume/coalesce a free suffix and **decrease** final record/node
@@ -416,9 +503,10 @@ this a proof reference, **not the recommended routine structural algorithm**.
 Review a more efficient constructive split/merge solver before assigning that
 follow-up; source topology preservation avoids this search in the first PR.
 
-An allocation-placement restriction or separate allocator-metadata ledger could
-address global accounting closure, but changes writable admission/reimport or
-representation and needs its own proposal. Neither is selected here. Relaxed
+Placement preferences could improve locality without changing aggregate-capacity
+admission, but need a fixed-order eligibility proof and are deferred. A placement
+restriction or separate allocator-metadata ledger changes writable admission/
+reimport or representation and needs its own proposal. Neither is selected here. Relaxed
 coalescing also needs explicit boundary-debt and funded-drain revisions; it is
 not a shortcut around self-accounting.
 
@@ -435,13 +523,15 @@ cannot retry itself to health. Unexpected exhaustion during funded work is an
 invariant failure, never successful safe refusal. Recovery still requires the
 adapter/operator's durable-backing precondition, not cached validation plus flush.
 
-1. After owner approval, implement topology-preserving map splicing and the
-   source-closure planner, selective claim retirement, explicit bulk reasons and
+1. After review of these refinements and separate owner assignment, implement
+   topology-preserving map splicing with fixed ascending input IDs, bounded
+   neighbouring-leaf redistribution, selective claim retirement, explicit bulk reasons and
    sealed candidate checks together. Use the unchanged admission envelope and
    publisher protocol for user batches, orphan work, startup and terminal fences.
    Publish filesystem code/tests first, then the Pyxis pin and matched results.
 2. Add contract-focused coverage in that same PR: independent canonical interval
-   expectations; shared-subtree preservation; seam coalescing; structural fallback;
+   expectations; shared-subtree preservation; seam coalescing; redistribution
+   across parent boundaries, renewed accounting and exhausted expansion; structural fallback;
    cross-volume/cohort histories; orphan/final-release/checkpoint/startup behavior;
    maximal reachable funded pressure; and adapter failures at healthy-trace cuts.
    Compare both retained payloads after replacement writes and before every slot
@@ -451,7 +541,8 @@ adapter/operator's durable-backing precondition, not cached validation plus flus
    because this is the deliberately proposed optimization contract.
 3. Capture the existing unchanged matched RAM comparison before code changes and
    repeat afterward, including every tail fence and final checkpoint. Report
-   fallback costs, reads/planning time and full submitted bytes, with active
+   closure/redistribution size, fallback reasons/frequency, local versus bulk-node
+   cost, reads/planning time and full submitted bytes, with active
    publication phase classification. For a fixed source, replacing `q` map nodes
    instead of a bulk plan's `Nb` estimates `4096(Nb-q)` fewer map-write bytes;
    catalog/root/slot and volume writes remain. Different resulting histories and
@@ -543,11 +634,15 @@ sustained cases; any necessary bounded workload extension needs a later explicit
 assignment. Trace loss/budget overflow, OOM or incomplete work invalidates a
 measurement. Saved summaries and diagnostics remain bounded.
 
-**Decisions requested on the design PR:** accept or revise the fixed-topology
-first scope and stated bulk triggers; decide whether its worst-case global closure
-is acceptable as intermediate work; and select the deployment comparisons and
-meaning of Btrfs-comparable. Full structural editing needs a separately reviewed
-efficient self-accounting proof. No implementation starts before owner decisions.
+**Review state:** the owner accepts the topology-preserving approach, explicit
+funded bulk fallback and global closure as an intermediate limitation. Fixed
+ascending IDs, neighbouring-leaf redistribution and cost/planning reporting are
+specified here for renewed design review; no implementation is assigned.
+Deployment comparisons and the meaning of Btrfs-comparable still need separate
+decisions and need not be settled to accept this intermediate optimisation.
+General structural editing, bulk fill-policy changes and new placement schemes
+remain outside the first step. Full structural editing needs its own reviewed
+efficient self-accounting proof. Stop for review before implementation.
 
 ## Assigned first correction: combined small-orphan cleanup
 
