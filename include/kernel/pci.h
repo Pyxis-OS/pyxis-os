@@ -39,11 +39,14 @@ enum pci_selection { PCI_SELECTION_ABSENT, PCI_SELECTION_UNIQUE,
 /* Clears output unless exactly one match exists in a complete inventory. */
 enum pci_selection pci_select_device(uint16_t vendor, uint16_t device,
     struct pci_device **selected);
+enum pci_selection pci_select_class(uint8_t base_class, uint8_t subclass,
+    uint8_t interface, struct pci_device **selected);
 
 /* Six BAR registers and at most 48 aligned capability headers are hardware
  * layout limits, not limits on the number of devices the kernel can own. */
 #define PCI_BAR_COUNT 6
 #define PCI_CAP_COUNT 48
+#define PCI_BOOTSTRAP_BAR0_BYTES 4096
 
 struct pci_bar {
   phys_addr_t physical;
@@ -56,6 +59,12 @@ struct pci_mapping {
   struct pci_mapping *next;
 };
 
+struct pci_region {
+  unsigned bar;
+  uint32_t offset, length;
+  struct pci_mapping mapping;
+};
+
 struct pci_claim {
   struct pci_device *device;
   uint16_t saved_command;
@@ -63,7 +72,26 @@ struct pci_claim {
   unsigned capability_count;
   struct pci_bar bars[PCI_BAR_COUNT];
   struct pci_mapping *mappings;
+  bool reserved, dma_started;
 };
+
+/* BSP/IF=0 before AP startup, stable zeroed claim/mapping records. Reserve
+ * an endpoint with MSI/MSI-X disabled. Software/configuration ownership leaves
+ * firmware command state unchanged.
+ * Complete only after driver-confirmed ownership handoff and halt: disable DMA
+ * and INTx, checking readback. A failed completion retains an ordinary claim;
+ * release only if quiescence is confirmed, otherwise retain it until reboot.
+ * Cancel an uncompleted reservation without command writes. No driver DMA or
+ * interrupt delivery may have been published, and firmware BME is preserved. */
+bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim);
+bool pci_complete_claim(struct pci_claim *claim);
+void pci_cancel_reservation(struct pci_claim *claim);
+/* Assigned, page-aligned BAR0 prefix only, before completion/sizing. Requires
+ * firmware memory decoding enabled; maps exactly PCI_BOOTSTRAP_BAR0_BYTES.
+ * Caller checks every access/body against this provisional extent and validates
+ * the extent against the sized BAR after reset. This does not publish BAR size. */
+enum mm_result pci_map_bootstrap_bar0(struct pci_claim *claim,
+    const struct boot_info *boot, struct pci_mapping *mapping);
 
 /* BSP/IF=0 before AP startup. Caller keeps claim/mapping records at stable
  * addresses, initially zeroed. Endpoint functions with MSI/MSI-X disabled only.
@@ -80,7 +108,9 @@ enum mm_result pci_map_bar(struct pci_claim *claim, unsigned bar, uint64_t offse
                            size_t bytes, const struct boot_info *boot,
                            struct pci_mapping *mapping);
 /* Established owner, BSP/IF=0, including activation after AP startup. Does not
- * change mappings; claim/release and BAR preparation remain boot-only. */
+ * change mappings; claim/release and BAR preparation remain boot-only. Command
+ * writes are 16-bit and require a completed claim. Any later BME-enable write
+ * permanently excludes boot release, even after BME is disabled again. */
 void pci_write8(struct pci_claim *claim, unsigned offset, uint8_t value);
 void pci_write16(struct pci_claim *claim, unsigned offset, uint16_t value);
 void pci_write32(struct pci_claim *claim, unsigned offset, uint32_t value);

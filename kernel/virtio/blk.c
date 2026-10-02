@@ -274,17 +274,7 @@ static bool activate_transport(void)
     ready = common->device_status == (expected | VIRTIO_STATUS_DRIVER_OK);
   }
   if (ready) {
-    volatile struct pci_msix_entry *table =
-      (volatile struct pci_msix_entry *)disk.pci.msix_table.mapping.address;
-    table[VIRTIO_BLK_MSIX_ENTRY].control &= ~PCI_MSIX_VECTOR_MASK;
-    ready = !(table[VIRTIO_BLK_MSIX_ENTRY].control & PCI_MSIX_VECTOR_MASK);
-  }
-  if (ready) {
-    unsigned offset = disk.pci.msix_capability + PCI_MSIX_CONTROL;
-    uint16_t control = pci_read16(claim->device->address, offset);
-    pci_write16(claim, offset, control & ~PCI_MSIX_FUNCTION_MASK);
-    control = pci_read16(claim->device->address, offset);
-    ready = (control & (PCI_MSIX_ENABLE | PCI_MSIX_FUNCTION_MASK)) == PCI_MSIX_ENABLE;
+    ready = pci_msix_enable(&disk.pci.msix);
   }
   disk.active = ready;
   cpu_restore_interrupts(flags);

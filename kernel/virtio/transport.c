@@ -28,45 +28,14 @@
 
 bool virtio_pci_disable_msix(struct virtio_pci_transport *pci)
 {
-  struct pci_claim *claim = &pci->claim;
-  unsigned offset = pci->msix_capability + PCI_MSIX_CONTROL;
-  uint16_t control = pci_read16(claim->device->address, offset);
-  pci_write16(claim, offset, (control | PCI_MSIX_FUNCTION_MASK) & ~PCI_MSIX_ENABLE);
-  control = pci_read16(claim->device->address, offset);
-  return (control & (PCI_MSIX_ENABLE | PCI_MSIX_FUNCTION_MASK)) == PCI_MSIX_FUNCTION_MASK;
+  return pci_msix_disable(&pci->msix);
 }
 
 bool virtio_pci_prepare_msix(struct virtio_pci_transport *pci, uint8_t vector)
 {
-  struct pci_claim *claim = &pci->claim;
-  unsigned offset = pci->msix_capability + PCI_MSIX_CONTROL;
-  uint16_t control = pci_read16(claim->device->address, offset);
-  unsigned masked_enable = PCI_MSIX_ENABLE | PCI_MSIX_FUNCTION_MASK;
-  /* VirtIO only accepts vector mappings while MSI-X is enabled. Keep the
-   * function mask set throughout setup, including all failure paths. */
-  pci_write16(claim, offset, control | masked_enable);
-  if ((pci_read16(claim->device->address, offset) & masked_enable) != masked_enable) {
-    return false;
-  }
-
-  volatile struct pci_msix_entry *table =
-    (volatile struct pci_msix_entry *)pci->msix_table.mapping.address;
-  for (unsigned i = 0; i < pci->msix_entries; ++i) {
-    table[i].control |= PCI_MSIX_VECTOR_MASK;
-    if (!(table[i].control & PCI_MSIX_VECTOR_MASK)) {
-      return false;
-    }
-  }
-
-  struct apic_msi_message message = apic_bsp_msi_message(vector);
-  volatile struct pci_msix_entry *entry = &table[VIRTIO_MSIX_ENTRY];
-  entry->address_low = message.address_low;
-  entry->address_high = message.address_high;
-  entry->data = message.data;
-  /* Read back device writes before relying on the route. All register mappings
-   * are uncached; table accesses use individual aligned 32-bit transactions. */
-  if (entry->address_low != message.address_low || entry->address_high != message.address_high ||
-      entry->data != message.data || !(entry->control & PCI_MSIX_VECTOR_MASK)) {
+  /* VirtIO accepts vector indices only with MSI-X enabled. Shared setup leaves
+   * the function and every entry masked through the driver-specific writes. */
+  if (!pci_msix_prepare(&pci->msix, vector)) {
     return false;
   }
 
@@ -218,7 +187,7 @@ static bool reset_before_probe(struct virtio_pci_transport *pci)
 }
 
 static bool region_fits(const struct virtio_pci_transport *pci,
-                        const struct virtio_pci_region *region)
+                        const struct pci_region *region)
 {
   return region->bar < PCI_BAR_COUNT && region->length &&
     region->offset <= pci->claim.bars[region->bar].bytes &&
@@ -234,7 +203,7 @@ static bool read_virtio_capability(struct virtio_pci_transport *pci, unsigned of
     return false;
   }
   unsigned type = pci_read8(address, offset + VIRTIO_CAP_TYPE);
-  struct virtio_pci_region *region;
+  struct pci_region *region;
   size_t minimum;
   unsigned alignment;
   switch (type) {
@@ -277,7 +246,7 @@ static bool read_virtio_capability(struct virtio_pci_transport *pci, unsigned of
   if (bar >= PCI_BAR_COUNT) {
     return true; /* Reserved BAR values must be ignored. */
   }
-  *region = (struct virtio_pci_region){
+  *region = (struct pci_region){
     .bar = bar,
     .offset = pci_read32(address, offset + VIRTIO_CAP_OFFSET),
     .length = pci_read32(address, offset + VIRTIO_CAP_REGION_LENGTH),
@@ -294,38 +263,14 @@ static bool read_virtio_capability(struct virtio_pci_transport *pci, unsigned of
   return true;
 }
 
-static bool read_msix_capability(struct virtio_pci_transport *pci, unsigned offset)
-{
-  struct pci_claim *claim = &pci->claim;
-  if (pci->msix_capability || !pci_capability_fits(claim, offset, PCI_MSIX_BYTES)) {
-    return false;
-  }
-  struct pci_address address = claim->device->address;
-  unsigned control = pci_read16(address, offset + PCI_MSIX_CONTROL);
-  unsigned entries = (control & PCI_MSIX_SIZE_MASK) + 1;
-  uint32_t table = pci_read32(address, offset + PCI_MSIX_TABLE);
-  uint32_t pba = pci_read32(address, offset + PCI_MSIX_PBA);
-  pci->msix_table = (struct virtio_pci_region){
-    .bar = table & PCI_MSIX_BAR_MASK, .offset = table & PCI_MSIX_OFFSET_MASK,
-    .length = entries * PCI_MSIX_ENTRY_BYTES,
-  };
-  pci->msix_pba = (struct virtio_pci_region){
-    .bar = pba & PCI_MSIX_BAR_MASK, .offset = pba & PCI_MSIX_OFFSET_MASK,
-    .length = ((entries + PCI_MSIX_PBA_BITS - 1) / PCI_MSIX_PBA_BITS) * PCI_MSIX_PBA_WORD_BYTES,
-  };
-  pci->msix_capability = offset;
-  pci->msix_entries = entries;
-  return region_fits(pci, &pci->msix_table) && region_fits(pci, &pci->msix_pba);
-}
-
 static bool regions_disjoint(const struct virtio_pci_transport *pci, bool device_config)
 {
-  const struct virtio_pci_region *regions[] = {
+  const struct pci_region *regions[] = {
     &pci->common, &pci->notify, &pci->isr, &pci->device,
-    &pci->msix_table, &pci->msix_pba,
+    &pci->msix.table, &pci->msix.pba,
   };
   for (size_t i = 0; i < sizeof(regions) / sizeof(regions[0]); ++i) {
-    const struct virtio_pci_region *a = regions[i];
+    const struct pci_region *a = regions[i];
     if (a == &pci->device && !device_config) {
       continue;
     }
@@ -333,7 +278,7 @@ static bool regions_disjoint(const struct virtio_pci_transport *pci, bool device
       return false;
     }
     for (size_t j = 0; j < i; ++j) {
-      const struct virtio_pci_region *b = regions[j];
+      const struct pci_region *b = regions[j];
       if (!b->length) {
         continue;
       }
@@ -347,7 +292,7 @@ static bool regions_disjoint(const struct virtio_pci_transport *pci, bool device
 }
 
 static bool map_region(struct virtio_pci_transport *pci, const char *name,
-                       struct virtio_pci_region *region, size_t needed,
+                       struct pci_region *region, size_t needed,
                        const struct boot_info *boot)
 {
   if (!region_fits(pci, region)) {
@@ -369,7 +314,11 @@ bool virtio_pci_prepare(struct virtio_pci_transport *pci, struct pci_device *dev
 {
   struct pci_claim *claim = &pci->claim;
   if (!pci_claim_device(device, claim)) {
-    klog("%s PCI: function busy or unsupported; resources not claimed\n", pci->name);
+    if (claim->device) {
+      klog("%s PCI: cannot confirm DMA/INTx disable; claim retained until reboot\n", pci->name);
+    } else {
+      klog("%s PCI: function busy or unsupported; resources not claimed\n", pci->name);
+    }
     return false;
   }
   const char *failure = "cannot confirm initial reset";
@@ -388,12 +337,11 @@ bool virtio_pci_prepare(struct virtio_pci_transport *pci, struct pci_device *dev
   for (unsigned i = 0; i < claim->capability_count; ++i) {
     unsigned offset = claim->capabilities[i];
     unsigned id = pci_read8(device->address, offset);
-    if ((id == PCI_CAP_VENDOR && !read_virtio_capability(pci, offset, device_bytes, device_alignment)) ||
-        (id == PCI_CAP_MSIX && !read_msix_capability(pci, offset))) {
+    if (id == PCI_CAP_VENDOR && !read_virtio_capability(pci, offset, device_bytes, device_alignment)) {
       goto fail;
     }
   }
-  if (!pci->msix_capability || !regions_disjoint(pci, device_bytes != 0)) {
+  if (!pci_msix_discover(claim, &pci->msix) || !regions_disjoint(pci, device_bytes != 0)) {
     goto fail;
   }
 
@@ -402,8 +350,7 @@ bool virtio_pci_prepare(struct virtio_pci_transport *pci, struct pci_device *dev
       !map_region(pci, "notify", &pci->notify, pci->notify.length, boot) ||
       !map_region(pci, "ISR", &pci->isr, VIRTIO_ISR_BYTES, boot) ||
       (device_bytes && !map_region(pci, "device", &pci->device, pci->device.length, boot)) ||
-      !map_region(pci, "MSI-X table", &pci->msix_table, pci->msix_table.length, boot) ||
-      !map_region(pci, "MSI-X pending bits", &pci->msix_pba, pci->msix_pba.length, boot)) {
+      pci_msix_map(&pci->msix, boot) != MM_OK) {
     goto fail;
   }
 
@@ -417,7 +364,7 @@ bool virtio_pci_prepare(struct virtio_pci_transport *pci, struct pci_device *dev
     goto fail;
   }
   klog("%s PCI: register resources owned; %u MSI-X entries, DMA and interrupts disabled\n",
-       pci->name, pci->msix_entries);
+       pci->name, pci->msix.entries);
 
   return true;
 

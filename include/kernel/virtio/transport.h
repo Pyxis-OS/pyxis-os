@@ -2,7 +2,7 @@
 #define KERNEL_VIRTIO_TRANSPORT_H
 
 #include <kernel/pci.h>
-#include <kernel/pci/registers.h>
+#include <kernel/pci/msix.h>
 #include <stddef.h>
 
 #define VIRTIO_VENDOR_ID 0x1af4
@@ -17,13 +17,6 @@
 #define VIRTIO_STATUS_DRIVER_OK 4u
 #define VIRTIO_STATUS_FEATURES_OK 8u
 #define VIRTIO_STATUS_FAILED 128u
-
-struct pci_msix_entry {
-  uint32_t address_low, address_high, data, control;
-};
-
-_Static_assert(sizeof(struct pci_msix_entry) == PCI_MSIX_ENTRY_BYTES,
-               "PCI MSI-X table entry layout");
 
 /* Naturally aligned, little-endian registers. Queue addresses are written as
  * low/high 32-bit halves while the queue is disabled, then queue_enable last. */
@@ -47,12 +40,6 @@ _Static_assert(sizeof(struct virtio_pci_common) == VIRTIO_COMMON_BYTES &&
                offsetof(struct virtio_pci_common, queue_device_low) == 48,
                "VirtIO PCI queue address layout");
 
-struct virtio_pci_region {
-  unsigned bar;
-  uint32_t offset, length;
-  struct pci_mapping mapping;
-};
-
 struct virtio_queue_info {
   uint16_t max_size;
   uintptr_t notify_address;
@@ -63,9 +50,8 @@ struct virtio_queue_info {
 struct virtio_pci_transport {
   const char *name;
   struct pci_claim claim;
-  struct virtio_pci_region common, notify, isr, device;
-  struct virtio_pci_region msix_table, msix_pba;
-  unsigned msix_capability, msix_entries;
+  struct pci_region common, notify, isr, device;
+  struct pci_msix msix;
   uint32_t notify_multiplier;
 };
 
