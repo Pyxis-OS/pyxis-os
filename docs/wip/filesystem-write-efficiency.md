@@ -395,12 +395,13 @@ Use the existing arena, retaining both input states and the third candidate:
   + 4096(H+V) + 1024(H+V+D) + 8 MiB
 ```
 
-A concrete proposed layout of the existing delta region is:
+A concrete implemented layout of the existing delta region is:
 
 | Region | Reserved bytes |
 | --- | ---: |
 | Complete raw before/after deltas | `128(4H+3D+V)` |
 | Source topology (reference, parent, level, child count, order, coverage, marks) | `128m` |
+| Block-sorted source descriptor index | `8m` |
 | Source worklist | `8m` |
 | Dirty-run descriptors | `32m` |
 | Replacement/role descriptors | `128H` |
@@ -408,9 +409,9 @@ A concrete proposed layout of the existing delta region is:
 
 The raw-delta count follows from at most `2H+2D` eligible frees, `H` old pool
 retirements, `D` new volume retirements, `V` new volume claims and `H` new pool
-claims. Total proposed bytes are `664H+168m+384D+128V`, at most
-`832H+384D+128V`, below the existing `1024(H+V+D)` region. Slots include alignment;
-implementation must verify descriptor sizes, checked offsets and nonoverlapping
+claims. Total partitioned bytes are `664H+176m+384D+128V`, at most
+`840H+384D+128V`, below the existing `1024(H+V+D)` region. Slots include alignment;
+the implementation verifies descriptor sizes, checked offsets and nonoverlapping
 lifetimes. A source descriptor can hold a 24-byte reference, parent/order and
 coverage indices, counts/flags and replacement index within 128 bytes; it does
 not cache all child blocks. Encode with depth-bounded buffers and rereads.
@@ -424,18 +425,22 @@ planning, but never destroys either input summary or the batch's logical edits.
 This layout adds no heap allocation to admitted work and no memory-budget increase.
 For the illustrative existing profile `E=8192, M=4096, N=1`, current arithmetic
 gives `H=729`, `S=32843`, `m=726`, 2,827 recovery blocks and a 30,372,016-byte
-arena. The proposed delta subregions use 720,712 of 1,139,712 reserved bytes.
+arena. The delta subregions use 726,520 of 1,139,712 reserved bytes, including
+5,808 bytes for the source index within the same arena allocation.
 These are calculated examples, not new defaults, observed peaks or test constants.
 Opening still needs both checker states, their temporary vector copies, the arena
 and handles within the caller cap and current 1 GiB ceiling. Full source traversal,
 vector application and admission remain population-sized. The implemented
-retirement-membership lookup scans `J` source nodes for each allocation-map claim
-in each accounting pass. That contributes `O(J²)` work per pass and `O(J³)` across
-at most `J` growth passes plus the final decision. Sealing adds an `O(J²)` lookup
-contribution during claim reconstruction. These are calculated worst-case lookup
-costs, not measured timings or a complete bound for all planning; source validation,
-canonical map editing and admission add other work. CPU/read measurement remains
-necessary; write reduction alone does not establish acceptable latency.
+retirement-membership lookup uses binary search over a block-sorted descriptor
+index constructed once with an in-place heapsort after full source validation.
+Descriptor topology and authoritative marks stay in place. Index construction is
+`O(J log J)`; membership contributes `O(J log J)` per accounting pass and
+`O(J² log J)` across bounded closure growth, plus `O(J log J)` during sealing.
+This replaces the prior `O(J³)` repeated-lookup contribution. Source-load duplicate
+detection remains `O(J²)` once. These are calculated component costs, not measured
+timings or a complete bound for all planning; source validation, canonical map
+editing and admission add other work. CPU/read measurement remains necessary;
+write reduction alone does not establish acceptable latency.
 
 ### Explicit bulk alternative
 
@@ -574,25 +579,41 @@ adapter/operator's durable-backing precondition, not cached validation plus flus
    placement/representation correction before promising a local worst-case bound.
    No later step is assigned automatically by accepting an intermediate PR.
 
-### Proposed focused planning follow-up
+### Focused planning follow-up
 
-Review of the first implementation identified two related follow-ups before larger
-qualification: separate preparation and measurement plan diagnostics, and replace
-repeated linear retirement-membership searches with a block-sorted source-node
-index. Prove that index storage and construction fit the existing reserved
-workspace; retain source topology and one authoritative set of replacement marks.
-Preserve placement, closure, funding, admission and durability policy. Diagnostics
-must remain within existing output budgets. This proposal is not implemented or
-assigned by the current PR.
+After filesystem #21 and Pyxis #314 merged, the owner assigned phase-separated
+diagnostics and indexed retirement membership. The focused implementation keeps
+both within existing workspace and output budgets, retaining placement, topology,
+authoritative marks, closure, funding, admission and durability policy. It changes
+lookup work and visibility, not the allocation-map representation or fallback.
 
-The [matched record](../../fs/docs/incremental-map-measurements.md) aggregates both
-phases, so it cannot establish the measurement-window local/bulk split. Nearly
+The [first matched record](../../fs/docs/incremental-map-measurements.md) aggregates
+both phases, so it cannot establish the measurement-window local/bulk split. Nearly
 constant fallback totals suggest preparation may contribute most, but that is an
 unverified explanation. Its source maps reach only `J=10`: measured byte reductions
 and increased instrumented RAM elapsed times do not establish scaling. Larger
 populated maps and matched planning/latency measurements remain qualification
 work, with configuration and RAM feasibility proposed separately. Neither a
 proposed benchmark size nor a local-path hit becomes a correctness requirement.
+
+New comparison records use one `map_plans` object whose `phase_order` is
+`["preparation", "measurement"]`. Every scalar field is a phase pair; existing
+array fields are pairs of arrays. This retains all cost, closure, fallback and
+timing diagnostics without duplicating names or serializing another total. Each
+phase includes its tail checkpoints/maintenance; verification disables observers.
+Actual slot writes, the two-flush protocol and monotonic adapter flush counts
+independently check attribution without fixing publication counts. Historical
+combined records remain historical; new measurements do not retroactively split
+them or qualify larger maps.
+
+The [focused matched record](../../fs/docs/map-planning-measurements.md) preserves
+two unchanged 40-case matrices before and after this follow-up. Pyxis submitted
+bytes and reconstructed aggregate map counters agree across all samples; no write
+savings are attributed to the lookup change. Mean primary RAM elapsed times are
+0.06–1.35% higher, establishing no small-map speedup. At 256 files, preparation
+accounts for 171 global fallbacks per case, versus zero or one in measurement
+including checkpoints. The index's calculated work reduction is separate from
+these observations and does not qualify larger populations or deployment.
 
 ## Proposed deployment comparisons and acceptance
 

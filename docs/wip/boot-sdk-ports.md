@@ -148,9 +148,10 @@ All eight short Pyxis cases beat recorded Btrfs totals; sustained writes, larger
 populations/fragmentation, namespace churn, pressure and recovery qualification
 remain open. The [incremental-map proposal](filesystem-write-efficiency.md#incremental-allocation-map-proposal)
 records the accepted topology-preserving intermediate path and explicit funded
-bulk/global-closure limitation. Refined fixed ascending IDs, neighbouring-leaf
-redistribution and local/bulk cost/planning reports await review. Deployment
-criteria remain separate decisions; implementation and new experiments remain
+bulk/global-closure limitation. The first implementation is merged; the assigned
+focused planning follow-up adds indexed retirement membership and phase-separated
+diagnostics under the same budgets. Sustained/population/pressure comparisons and
+deployment criteria remain separate decisions; further experiments remain
 unassigned. See
 the linked milestone for the corrective task list.
 FUSE and installation remain separate. These

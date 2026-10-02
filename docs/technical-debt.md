@@ -855,9 +855,11 @@ All existing floors, memory limits, reservations and retained-state guarantees
 remain unchanged in that first implementation. Full source scans, global closure
 and funded bulk fallback remain intermediate limitations; matched measurements
 do not replace sustained/population/pressure and real-host recovery qualification.
-The [proposed planning follow-up](wip/filesystem-write-efficiency.md#proposed-focused-planning-follow-up)
-records repeated linear retirement-lookup costs and preparation/measurement
-diagnostic separation before larger-map qualification; it is not implemented here.
+The [focused planning follow-up](wip/filesystem-write-efficiency.md#focused-planning-follow-up)
+replaces repeated linear retirement membership with a bounded source-node index
+and separates preparation/measurement diagnostics. Full source validation,
+quadratic source-load duplicate detection, vector/admission work and larger-map
+qualification remain; this does not establish a local worst-case planning bound.
 
 Tasks 2–6 implement planners, admitted publication, public file/namespace
 mutation, retained lifetime and orphan cleanup. The initial immediate-drain writer
