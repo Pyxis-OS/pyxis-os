@@ -170,8 +170,9 @@ retain existing admission/reserve/memory/runner policy. General structural editi
 and further optimisations require separate assignment.
 On 2026-10-02 the owner superseded this writable track with a
 [simple native filesystem](native-filesystem.md): ext2-class structures, native
-to Caelum, with a format-only shared library. The pyxis-fs writer reached
-13–80 ms per durable call in RAM, growing with population. Native read-only
+to Caelum, with a format-only shared library. The pyxis-fs writer's measured
+workload time reached 13–80 ms per logical operation in RAM, growing with
+population. Native read-only
 mounts keep working until the replacement lands.
 Broader population/pressure and recovery qualification, deployment criteria and
 task 7 remain open. See

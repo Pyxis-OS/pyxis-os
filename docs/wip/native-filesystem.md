@@ -40,8 +40,10 @@ and [proposed working method](#proposed-working-method) await the owner.
 
 The pyxis-fs writer was designed as a portable, stateless library. Each
 publication reloads and validates the whole allocation map, then regenerates the
-complete candidate. In the matched RAM matrix, a durable 4 KiB call took 13–80 ms,
-against 0.12–0.16 ms for Btrfs, and grew 3–5x from 1 MiB to 20 MiB of stored data.
+complete candidate. In the instrumented RAM matrix, measured workload time per
+logical operation was 13–80 ms, against 0.12–0.16 ms for Btrfs, and grew 3–5x from
+1 MiB to 20 MiB of stored data. That figure is window time divided by operations,
+including the host failure simulator, not a per-call latency distribution.
 That is the [overflow-split record](../../fs/docs/overflow-split-measurements.md)
 at filesystem `a250731`. Write volume was already below Btrfs, but at that
 latency every synchronous write would stall the system.
@@ -72,8 +74,9 @@ about as much as starting over.
 
 Accepted 2026-10-02.
 
-1. **A completed write is durable after an explicit sync or close.** A crash may
-   lose unsynced data, but never leaves inconsistent metadata.
+1. **A successful sync or close establishes durability.** After a crash,
+   journal recovery restores metadata consistency; data that was never synced may
+   be lost.
 2. **Crashes are handled by a metadata journal with ordered data,** as in
    ext3/ext4.
 3. **V1 is a native Pyxis installer.** It runs from a live image holding
