@@ -13,6 +13,7 @@
 #define WAIT_CLOSED (UINT64_C(1) << 5)
 #define WAIT_ERROR (UINT64_C(1) << 6) /* Output only; automatic for every interest. */
 #define WAIT_COMPLETE (UINT64_C(1) << 7)
+#define WAIT_INTERRUPT (UINT64_C(1) << 8)
 
 struct wait_interest {
   handle_t handle;
@@ -42,12 +43,13 @@ struct wait_interest {
  * Terminal attachment READABLE/PEER_FIN require DRAIN (output records/EOF);
  * WRITABLE/WRITE_CLOSED require INJECT (input capacity/closure). Ordinary
  * interests include their respective closure flag; hangup reports ERROR.
- * Terminal application handles and framebuffer consoles are not wait targets.
+ * Console and terminal input accept only INTERRUPT, on an ARMED handle; other
+ * console and terminal application handles are not wait targets.
  * Process observers and execution groups accept only COMPLETE, requiring their
  * WAIT right. Completion is immutable and reports finished cleanup, not program
  * success. PROCESS_WAIT retrieves the observer's immutable result; group
  * completion additionally observes attributed deferred cleanup.
- * Process/group/terminal/TCP interests may be mixed; waits without TCP need no
+ * Process/group/terminal/console/TCP interests may be mixed; waits without TCP need no
  * network device.
  * Poll and try operations may park for the BSP worker handoff, never for I/O
  * readiness. */

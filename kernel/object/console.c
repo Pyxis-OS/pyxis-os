@@ -3,7 +3,10 @@
 #include <arch/cpu.h>
 #include <kernel/keyboard.h>
 #include <kernel/task.h>
+#include <kernel/object/capability.h>
 #include <kernel/object/console.h>
+#include <kernel/process.h>
+#include <kernel/user/wait.h>
 #include <kernel/user_memory.h>
 #include <kernel/fb/tty.h>
 #include <kernel/log.h>
@@ -12,12 +15,14 @@
 
 #define CONSOLE_WRITE_CHUNK 256
 #define CONSOLE_READ_CHUNK 256
+#define CONSOLE_INTERRUPT_BYTE 3
 
 static void destroy_console(struct kernel_object *object)
 {
   /* The reference header is the first member; only the wrapper is owned. */
   struct console_object *console = (struct console_object *)object;
   KASSERT(!console->reader_active && !console->first_reader && !console->input_wait);
+  KASSERT(!console->interrupt.armed && !console->interrupt.passthrough);
   kfree(console);
 }
 
@@ -29,9 +34,165 @@ struct console_object *console_create(struct tty *tty)
     return NULL;
   }
   *console = (struct console_object){.tty = tty};
+  atomic_init(&console->interrupt.locked, false);
   atomic_init(&console->input_locked, false);
   object_init(&console->object, OBJECT_CONSOLE, destroy_console);
   return console;
+}
+
+static void lock_interrupt(struct console_interrupt *interrupt)
+{
+  while (atomic_exchange_explicit(&interrupt->locked, true, memory_order_acquire)) {
+    __asm__ volatile("pause");
+  }
+}
+
+static void unlock_interrupt(struct console_interrupt *interrupt)
+{
+  atomic_store_explicit(&interrupt->locked, false, memory_order_release);
+}
+
+static size_t *interrupt_counter(struct console_interrupt *interrupt, uint64_t rights)
+{
+  /* Authority validation keeps ARMED and PASSTHROUGH alone on their handles. */
+  if (rights == CONSOLE_RIGHT_ARMED) {
+    return &interrupt->armed;
+  }
+  if (rights == CONSOLE_RIGHT_PASSTHROUGH) {
+    return &interrupt->passthrough;
+  }
+  return NULL;
+}
+
+bool console_interrupt_retain(struct console_interrupt *interrupt, uint64_t rights)
+{
+  size_t *counter = interrupt_counter(interrupt, rights);
+  if (!counter) {
+    return true;
+  }
+  lock_interrupt(interrupt);
+  bool retained = *counter != SIZE_MAX;
+  if (retained) {
+    ++*counter;
+  }
+  unlock_interrupt(interrupt);
+  return retained;
+}
+
+void console_interrupt_release(struct console_interrupt *interrupt, uint64_t rights)
+{
+  size_t *counter = interrupt_counter(interrupt, rights);
+  if (!counter) {
+    return;
+  }
+  lock_interrupt(interrupt);
+  KASSERT(*counter);
+  --*counter;
+  if (!interrupt->armed) {
+    /* Nothing recognized in one armed interval reaches a later one. */
+    interrupt->latched = false;
+  }
+  unlock_interrupt(interrupt);
+}
+
+bool console_authority_retain(struct kernel_object *object, uint64_t rights)
+{
+  if (object->type != OBJECT_CONSOLE) {
+    return true;
+  }
+  return console_interrupt_retain(&((struct console_object *)object)->interrupt, rights);
+}
+
+void console_authority_release(struct kernel_object *object, uint64_t rights)
+{
+  if (object->type == OBJECT_CONSOLE) {
+    console_interrupt_release(&((struct console_object *)object)->interrupt, rights);
+  }
+}
+
+uint64_t console_interrupt_ready(struct console_interrupt *interrupt)
+{
+  /* The readiness worker runs preemptibly; keyboard routing takes this lock
+   * with IF=0, so a preempted holder would never get the CPU back. */
+  uint64_t flags = cpu_save_interrupts();
+  lock_interrupt(interrupt);
+  bool latched = interrupt->latched;
+  unlock_interrupt(interrupt);
+  cpu_restore_interrupts(flags);
+  return latched ? WAIT_INTERRUPT : 0;
+}
+
+size_t console_interrupt_scan(struct console_interrupt *interrupt,
+    const void *bytes, size_t size)
+{
+  const unsigned char *input = bytes;
+  size_t consumed = 0;
+  lock_interrupt(interrupt);
+  if (interrupt->armed && !interrupt->passthrough) {
+    for (size_t i = size; i > 0; --i) {
+      if (input[i - 1] == CONSOLE_INTERRUPT_BYTE) {
+        consumed = i;
+        interrupt->latched = true;
+        break;
+      }
+    }
+  }
+  unlock_interrupt(interrupt);
+  return consumed;
+}
+
+struct syscall_result console_interrupt_call(struct kernel_object *object,
+    struct console_interrupt *interrupt, uint64_t operation,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  struct console_handle_reply reply;
+  if (reply_capacity < sizeof(reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  bool arm = operation == CONSOLE_ARM_INTERRUPT;
+  if (arm) {
+    /* Reserve the interval so a concurrent ARM cannot also install from zero. */
+    lock_interrupt(interrupt);
+    bool busy = interrupt->armed || interrupt->arming;
+    if (!busy) {
+      interrupt->arming = true;
+      interrupt->latched = false;
+    }
+    unlock_interrupt(interrupt);
+    if (busy) {
+      return (struct syscall_result){CALL_BUSY, 0};
+    }
+  }
+
+  /* The caller's handle keeps object alive across a BSP table-growth loan. */
+  uint64_t rights = arm ? CONSOLE_RIGHT_ARMED : CONSOLE_RIGHT_PASSTHROUGH;
+  enum capability_result result;
+  for (;;) {
+    result = capability_insert(&process_current()->capabilities, object, rights, 0,
+        &reply.handle);
+    if (result != CAP_FULL) {
+      break;
+    }
+    result = capability_request_growth();
+    if (result != CAP_OK) {
+      break;
+    }
+  }
+  if (arm) {
+    lock_interrupt(interrupt);
+    interrupt->arming = false;
+    unlock_interrupt(interrupt);
+  }
+  if (result != CAP_OK) {
+    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
+    return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+  }
+  /* Private mappings stay stable while the sole user task is blocked. */
+  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
 bool console_write(struct console_object *console, const char *bytes, size_t size)
@@ -141,6 +302,15 @@ void console_input(struct console_object *console, const char *bytes, size_t siz
   KASSERT(arch_cpu_index() == 0);
   uint64_t flags = cpu_save_interrupts();
   lock_input(console);
+  /* Recognized before input loss. The interrupt discards everything a pending
+   * loss described, so later bytes start a fresh stream. */
+  size_t consumed = console_interrupt_scan(&console->interrupt, bytes, size);
+  if (consumed) {
+    console->input_head = console->input_count = 0;
+    console->input_lost = false;
+    bytes += consumed;
+    size -= consumed;
+  }
   if (!console->input_lost) {
     if (size > CONSOLE_INPUT_CAPACITY - console->input_count) {
       lose_input(console);
@@ -156,6 +326,9 @@ void console_input(struct console_object *console, const char *bytes, size_t siz
     }
   }
   unlock_input(console);
+  if (consumed) {
+    readiness_notify();
+  }
   cpu_restore_interrupts(flags);
 }
 
@@ -357,6 +530,12 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   case CONSOLE_SIZE:
     required = CONSOLE_RIGHTS;
     break;
+  case CONSOLE_ARM_INTERRUPT:
+    required = CONSOLE_RIGHT_INTERRUPT;
+    break;
+  case CONSOLE_PASSTHROUGH:
+    required = CONSOLE_RIGHT_READ;
+    break;
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
@@ -379,6 +558,10 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
   }
   if (operation == CONSOLE_SET_TAB_WIDTH) {
     return set_tab_width(console, &request.tab_width);
+  }
+  if (operation == CONSOLE_ARM_INTERRUPT || operation == CONSOLE_PASSTHROUGH) {
+    return console_interrupt_call(&console->object, &console->interrupt, operation,
+        reply_address, reply_capacity);
   }
 
   if (operation == CONSOLE_FRESH_LINE) {

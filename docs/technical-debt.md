@@ -218,8 +218,9 @@ cannot interrupt their execution.
 Revisit interactive cancellation with explicit foreground targeting and authority.
 The agreed [foreground interruption plan](wip/foreground-interrupt.md) records
 the chosen first slice: process-level termination and shell-armed Ctrl+C events.
-The group stop paths provide safe ownership return, including IPC caller cancellation,
-but terminal Ctrl-C routing and the shell's command/pipeline policy remain to be
+The group stop paths provide safe ownership return, including IPC caller cancellation.
+Console and terminal input can now recognize Ctrl+C on an armed handle, but the
+shell's arming, command/pipeline policy and passthrough use remain to be
 implemented. Native cancellation need not require general POSIX signals.
 
 ## Console input completion

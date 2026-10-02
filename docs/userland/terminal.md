@@ -159,3 +159,46 @@ clock or an elapsed-host-time guarantee under VM pauses.
 The scheduler retains its wake-before-park rule: timeout cannot enqueue a task
 until its stack has been saved. Resource wait pointers are detached under the
 console lock before the task prepares another wait.
+
+## Interrupt arming and passthrough
+
+Framebuffer console input and terminal-session input can recognize Ctrl+C as
+an interrupt instead of data. The [foreground interruption plan](../wip/foreground-interrupt.md)
+records the design; the shell does not use it yet.
+
+Authority starts at the input object. The kernel's initial per-space `input`
+grant and the terminal-create input carry READ and `CONSOLE_RIGHT_INTERRUPT`.
+Standard input is validated as exactly READ, so a command never receives
+interrupt authority as a stream. Session setup currently narrows `input` to
+READ when it delegates it.
+
+- `console_arm_interrupt()` needs INTERRUPT. It returns an armed handle to the
+  same input object, carrying only `CONSOLE_RIGHT_ARMED`. The input stays armed
+  while any armed grant exists. Closing the last one, including at process
+  exit, disarms and clears the latch. Arming while armed returns `CALL_BUSY`,
+  and each armed interval starts with a clear latch. BUSY can also be
+  transient while another arm request is installing its handle.
+- `console_passthrough()` needs READ. It returns a handle carrying only
+  `CONSOLE_RIGHT_PASSTHROUGH`. While any such grant exists, Ctrl+C stays
+  ordinary input. Closing it withdraws the request.
+
+Both returned handles support no other console operation. Their rights are
+never combined with READ, WRITE or INTERRUPT, so the input object counts each
+kind of grant separately, as terminal attachments count HANGUP grants.
+
+While armed without passthrough, each byte 3 from keyboard text or terminal
+injection is removed from input and sets one latch, and input queued before it
+is discarded. Bytes after the last Ctrl+C in the same keyboard sequence or
+injection are kept. Recognition runs before the console's input-loss check and
+before a terminal's capacity check, so a full queue cannot hide the interrupt.
+On the console it also clears a pending input loss, since that loss described
+input the interrupt discards; later bytes start a fresh stream.
+The discarded prefix of an injection counts as accepted. Unarmed byte 3 is data,
+as before. Raw keyboard owners receive key events that never become console
+text, so they are unaffected.
+
+`wait_many` accepts `WAIT_INTERRUPT` on an armed handle, and no other event on
+console or terminal application handles. It reports the latch level-triggered
+and does not consume it; there is no acknowledgement operation. A terminal
+hangup also reports `WAIT_ERROR`. The latch is set on the BSP under the input
+lock and published through the ordinary readiness notification.

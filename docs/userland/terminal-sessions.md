@@ -15,7 +15,8 @@ handle, or no handles on failure. The normal session launcher does not delegate
 the service. Creation accepts 1–512 columns and 1–256 rows, immutable for that session. Allocation and
 failure unwinding remain BSP-owned.
 
-The application input handle permits CONSOLE READ and SIZE; the output handle
+The application input handle permits CONSOLE READ and SIZE, plus
+[interrupt arming](terminal.md#interrupt-arming-and-passthrough); the output handle
 permits WRITE, SIZE, FRESH_LINE and SET_TAB_WIDTH. Application grants cannot
 inject input, intercept output or hang up the terminal. Attachment rights are
 separate: INJECT permits input injection and END_INPUT; DRAIN permits output
@@ -124,8 +125,9 @@ output producers respectively; ordinary READABLE includes closure. INJECT author
 WRITABLE and WRITE_CLOSED, meaning input capacity and input closure; ordinary
 WRITABLE includes closure. Either direction automatically reports ERROR on
 hangup. Output closure can coexist with queued records, which must be drained
-before zero-byte EOF. Application handles and framebuffer consoles are not
-readiness targets.
+before zero-byte EOF. Application handles and framebuffer consoles are
+readiness targets only for `WAIT_INTERRUPT` on an
+[armed handle](terminal.md#interrupt-arming-and-passthrough).
 
 Readiness remains advisory, with the [wait_many contract](../devices/tcp.md#readiness-and-transfer-attempts)
 for deadline/poll precedence and removal of all registrations/references before

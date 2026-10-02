@@ -24,6 +24,7 @@
 #include <abi/console.h>
 #include <abi/endpoint.h>
 #include <arch/smp.h>
+#include <kernel/object/console.h>
 #include <kernel/object/object.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/panic.h>
@@ -127,6 +128,13 @@ bool object_stream_valid(const struct kernel_object *object, uint64_t protocol,
       (protocol == PROTOCOL_PIPE && object->type == OBJECT_PIPE);
 }
 
+/* Armed and passthrough handles carry exactly one right, so their grant
+ * accounting never shares a handle with READ or INTERRUPT authority. */
+static bool console_hold_rights(uint64_t rights)
+{
+  return rights == CONSOLE_RIGHT_ARMED || rights == CONSOLE_RIGHT_PASSTHROUGH;
+}
+
 bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
                             uint64_t transport)
 {
@@ -167,11 +175,13 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_TERMINAL_EVENTS:
     return !(rights & ~TERMINAL_EVENTS_RIGHT_EMIT);
   case OBJECT_TERMINAL_INPUT:
-    return !(rights & ~CONSOLE_RIGHT_READ);
+    return console_hold_rights(rights) ||
+        !(rights & ~(CONSOLE_RIGHT_READ | CONSOLE_RIGHT_INTERRUPT));
   case OBJECT_TERMINAL_OUTPUT:
     return !(rights & ~CONSOLE_RIGHT_WRITE);
   case OBJECT_CONSOLE:
-    return !(rights & ~CONSOLE_RIGHTS);
+    return console_hold_rights(rights) ||
+        !(rights & ~(CONSOLE_RIGHTS | CONSOLE_RIGHT_INTERRUPT));
   case OBJECT_FILE:
     return !(rights & ~FILE_RIGHTS);
   case OBJECT_DIRECTORY:
@@ -310,8 +320,14 @@ bool object_grant_retain(struct kernel_object *object, uint64_t rights)
   if (!object_retain(object)) {
     return false;
   }
-  bool retained = object->type == OBJECT_EXECUTION_GROUP ?
-      execution_group_authority_retain(object, rights) : terminal_authority_retain(object, rights);
+  bool retained;
+  if (object->type == OBJECT_EXECUTION_GROUP) {
+    retained = execution_group_authority_retain(object, rights);
+  } else if (object->type == OBJECT_CONSOLE) {
+    retained = console_authority_retain(object, rights);
+  } else {
+    retained = terminal_authority_retain(object, rights);
+  }
   if (!retained) {
     object_release(object);
     return false;
@@ -323,6 +339,8 @@ void object_grant_release(struct kernel_object *object, uint64_t rights)
 {
   if (object->type == OBJECT_EXECUTION_GROUP) {
     execution_group_authority_release(object, rights);
+  } else if (object->type == OBJECT_CONSOLE) {
+    console_authority_release(object, rights);
   } else {
     terminal_authority_release(object, rights);
   }
