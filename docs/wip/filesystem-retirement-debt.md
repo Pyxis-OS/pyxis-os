@@ -1,9 +1,13 @@
 # Bounded retirement-debt carryover
 
-Status: **proposal for review**, 2026-10-02. This assignment authorizes investigation
-and documentation only. It does not change the accepted synchronous-drain policy,
-authorize implementation or clear task 7 / writable deployment.
-
+Status: **policy accepted; implementation and bounded validation delivered**, 2026-10-02, after
+[Pyxis #311](https://git.internal/PyxisOS/pyxis-os/pulls/311) merged. The owner accepted
+the two-cohort cross-volume profile including orphan batches, derived funding,
+healthy PENDING, complete final-release deletion, pool-wide checkpoint fencing,
+bounded idle debt, I/O-free disposal and startup fencing. The pinned implementation
+is published in [filesystem #20](https://git.internal/PyxisOS/pyxis-fs/pulls/20);
+its contracts follow the proof and recovery guarantees below. Task 7 / writable deployment
+remain open; incremental allocation-map replacement is not authorized.
 Confirmed merged: [filesystem #19](https://git.internal/PyxisOS/pyxis-fs/pulls/19)
 and [Pyxis #310](https://git.internal/PyxisOS/pyxis-os/pulls/310). Baseline parent
 `d5e92be` pins filesystem `fb8eec1`; filesystem merge `73a4885` has that same tree.
@@ -15,7 +19,7 @@ No additional workloads were run for this investigation.
 ## Requirements preserved
 
 Completed mutations remain individually durable after their replacement flush,
-older-slot write and second flush. This proposal defers **reclamation**, never
+older-slot write and second flush. This policy defers **reclamation**, never
 acknowledgment durability. Both retained states, live operation references and
 outstanding I/O still protect physical storage. Every allocation uses the input
 durable pair's already-reusable space; a candidate cannot allocate its own frees.
@@ -40,7 +44,7 @@ write requests, not NAND amplification or NVMe performance. They do not establis
 that this entire share can be removed.
 
 [`build_publication`](https://git.internal/PyxisOS/pyxis-fs/src/commit/fb8eec1a609db8f4fbcc8f18581c6071c1d15b3d/core/writer.c#L387)
-already frees eligible old retirements while constructing any publication.
+in the pinned immediate-drain baseline already frees eligible old retirements while constructing any publication.
 However, admission allows only D volume retirement blocks owned by one volume;
 preparation refuses pending debt; every committed batch immediately drains it.
 The publisher also rejects freeing another volume's debt while changing a volume.
@@ -56,7 +60,7 @@ The remaining publications can become larger: additional retired-map boundaries,
 free deltas and a second catalog path cost writes. A final checkpoint still pays
 the tail; moving it outside the measured interval would be misleading.
 
-## Proposed debt model
+## Accepted debt model
 
 Use the existing allocation records as the durable authority: physical range,
 owner, allocation birth, retirement generation and workspace charge. No persistent
@@ -135,7 +139,7 @@ intermediate root never becomes a retained state. Merely enlarging the current
 single-path arrays, or independently building two catalog roots, is insufficient.
 No general multi-volume mutation/editor framework is proposed.
 
-## Proposed admission and funding
+## Accepted admission and funding
 
 Re-derive the whole-map closure; do not keep today's H/S while merely removing
 drains. Canonical coalescing, E/M, object limits, namespace occupancy/deletion
@@ -166,7 +170,7 @@ Both opening and candidate admission require map_nodes≤H−C−1, replacing H�
 and live_pool≤Pmax. Imported canonical maps need this explicit old-node cap;
 they need not have the planner's compact shape. No unfunded normalization occurs.
 
-| Resource | Proposed sufficient envelope |
+| Resource | Accepted sufficient envelope |
 | --- | --- |
 | Volume replacements / new claims | V per mutation or orphan batch; none for a pure fence |
 | Volume retirement | D per batch; 2D selected aggregate |
@@ -183,7 +187,7 @@ bound also covers startup. Delta storage is reused after interval application fo
 H map descriptors/IDs/ranges (56H bytes under current layouts). It does not need
 a second owner-dependent arena. Remove old live claims before adding replacements.
 
-Proposed persisted-capacity requirements:
+Accepted persisted-capacity requirements:
 
 ```
 ordinary >= max(existing formatter floor 1024, 2D + V) = 1024
@@ -196,7 +200,7 @@ Aeff_i <= Q_i
 Ordinary debt retains ordinary charges; orphan debt retains recovery charges;
 pool retirements remain recovery-charged. Mixed cohorts cannot exceed total 2D,
 but enforce each occupied-charge limit independently. No reclassification or
-borrowing migration/volume guarantees funds the proposal.
+borrowing migration/volume guarantees funds the accepted profile.
 
 At most 2H+2D recovery occupation leaves H+V in the recovery envelope. Ordinary
 occupation is at most 2D. The permanent-promise inequality and supported-pair
@@ -218,8 +222,8 @@ already_reusable >= recovery.capacity - recovery.occupied
                  >= (3H + 2D + V) - (2H + 2D) = H + V
 ```
 
-The recovery minimum **increases** from 3H+D+V. That is a necessary proposal for
-carrying orphan cleanup debt too, not an approved reserve-policy change. Existing
+The recovery minimum **increases** from 3H+D+V. That increase is accepted to
+carry orphan cleanup debt too; no other reserve policy change is authorized. Existing
 image capacities are never edited automatically. Images that fail the new computed
 requirements are refused before writes, with diagnostics; no unfunded normalization
 or reserve migration is assumed. Formatter defaults/floors and runner budgets are
@@ -245,7 +249,7 @@ growth alongside the arena. No core cap increase or kernel-stack refactor follow
 Calculated examples, E=8192/M=4096 (the recorded comparison profile), with N varied
 only to illustrate the bound; bytes below are arena storage, not measured peaks:
 
-| N | H current → proposed | S current → proposed | Recovery blocks current → proposed | Arena bytes current → proposed |
+| N | H immediate → carryover | S immediate → carryover | Recovery blocks immediate → carryover | Arena bytes immediate → carryover |
 | ---: | ---: | ---: | ---: | ---: |
 | 1 (recorded comparison) | 723 → 729 | 32,256 → 32,843 | 2,553 → 2,827 | 30,198,688 → 30,372,016 |
 | 2 | 723 → 736 | 32,265 → 32,907 | 2,553 → 2,848 | 30,202,000 → 30,426,384 |
@@ -272,12 +276,12 @@ and 3T_projected from the current confirmed generation. An ordinary request refu
 before admission leaves the writer usable. Exact increments of one remain; no wrap or
 assumption that a later application write will fund completion.
 
-## Proposed drain triggers and caller results
+## Accepted drain triggers and caller results
 
-| Trigger | Proposed behavior / reason |
+| Trigger | Accepted behavior / reason |
 | --- | --- |
 | Next mutation, including another chunk or volume | Carry bounded debt; include eligible frees in the mutation publication. No mandatory standalone drain between healthy batches. |
-| Resource pressure before staging | Refuse an ordinary request that cannot preserve quota/profile/record/generation promises, leaving the writer usable. The proposed workspace envelope guarantees H+V reusable input blocks; an unexpected selection failure is an invariant failure, not a reason to retry through a drain. |
+| Resource pressure before staging | Refuse an ordinary request that cannot preserve quota/profile/record/generation promises, leaving the writer usable. The accepted workspace envelope guarantees H+V reusable input blocks; an unexpected selection failure is an invariant failure, not a reason to retry through a drain. |
 | Funded orphan/fence resource failure | Stop under the invariant-failure rule. Do not count refusal as success or advance roots endlessly trying to reach zero pool retirement. |
 | Held file/dir checkpoint | Establish the existing durability boundary and additionally settle selected **pool-wide volume debt**, with at most two pure publications. Success leaves only bounded pool-metadata retirement. |
 | Final orphan handle release / unheld-victim cleanup | Finish the admitted orphan deletion, including data, grants and paired records, without requiring another application mutation. Permit resulting retirement debt to carry; named-object close creates no cleanup obligation. |
@@ -293,7 +297,7 @@ object authority or promise zero retired pool metadata. I/O-free disposal is
 already the close contract; adding fallible close I/O would require a wider result
 and lifetime decision and is not recommended here.
 
-Propose an explicit `PFS_MAINTENANCE_PENDING` result for a successful healthy
+Use the accepted `PFS_MAINTENANCE_PENDING` result for a successful healthy
 mutation/cleanup returning with funded volume debt, maintenance_status=OK and
 health=READY. COMPLETE means a requested retirement fence settled volume debt.
 NONE means this call reports no maintenance outcome; it does **not** certify debt
@@ -336,13 +340,14 @@ not healthy PENDING. Diagnostic debt remains visible independently. Actual faile
 or required-but-blocked cleanup reports STOPPED/UNKNOWN in maintenance fields;
 stopped release-only close performs no such attempt and may report NONE.
 
-For checkpoint itself, propose COMPLETE only when its fence is confirmed;
+For checkpoint itself, report COMPLETE only when its fence is confirmed;
 STOPPED/UNKNOWN plus the corresponding operation and maintenance error when the
 fence fails. It has zero byte/namespace progress. A no-publication checkpoint
-still completes the fence. Preserve phase provenance: the current
+still completes the fence. Preserve phase provenance: the immediate-drain baseline's
 [`access.c` checkpoint wrapper](https://git.internal/PyxisOS/pyxis-fs/src/commit/fb8eec1a609db8f4fbcc8f18581c6071c1d15b3d/core/access.c#L1037)
-passes status through a generic read-error stop helper. A new replacement/pre-slot
-maintenance failure must not be converted to ACCESS_STOPPED by that wrapper.
+passed status through a generic read-error stop helper. The implementation lets
+the fence classify its errors; replacement/pre-slot maintenance failure must not
+be converted to ACCESS_STOPPED by that wrapper.
 
 Reopening recomputes debt from the explicitly durable retained image; there is
 no in-memory credit to reconstruct or assume. Sticky failure ends only with a fresh
@@ -354,7 +359,7 @@ orphan recovery remains unsupported where healthy backing history is unestablish
 Pool status after uncertainty describes last-confirmed debt only; it cannot
 certify the actual post-error durable debt until fresh validation.
 
-Startup must distinguish checked media from runtime pipeline shape. Proposed
+Startup must distinguish checked media from runtime pipeline shape. Accepted
 opening profile: each retained state has at most 2D volume debt and at most two
 volume owners, with the existing pool/protection and computed capacity checks.
 Volume debt must be ordinary/recovery-charged; migration stays unused and pool
@@ -433,7 +438,7 @@ or may remain retired in the selected image. Neither outcome permits allocation
 from the failed instance. Fresh recovery distinguishes them from the durable maps;
 the caller's confirmed unlink/release remains confirmed in both outcomes.
 
-## Implementation boundary after design approval
+## Authorized coherent implementation boundary
 
 One coherent filesystem PR is preferable to temporarily exposing unfunded carryover:
 
@@ -443,22 +448,22 @@ One coherent filesystem PR is preferable to temporarily exposing unfunded carryo
   Propagate cleanup/debt maintenance results through file/namespace/multi-batch
   callers and keep resource admission distinct from funded invariant failure.
 - Implement the agreed checkpoint fence and startup trailing fence; keep complete
-  orphan deletion/final-release behavior and I/O-free disposal as proposed.
+  orphan deletion/final-release behavior and I/O-free disposal under the accepted policy.
 - Add pending result/status formatting and update shared-core/host-tool contracts
   and maintained tests alongside the behavior. Publish dependency PR before the
   Pyxis pin. No allocator redesign, logging/replay, runner or budget changes.
 
-Assumptions that must change together: `plan.c`'s D record term, one-path +9/+20
+Baseline assumptions replaced together: `plan.c`'s D record term, one-path +9/+20
 closure and recovery minimum; `admit.c`'s H−9 map-node cap, one-owner/D checks and
 remaining-generation logic; the map builder's eight-catalog-ID validation/output
 array in `plan.c`/`plan.h`; `writer.c`'s single catalog index/path, uniform
-volume-debt comment, pending
-prepare refusal and unconditional drain; checkpoint's current no-op and its failure
+volume-debt comment, pending prepare refusal and unconditional drain;
+checkpoint's former no-op and its failure
 wrapper; cleanup result aggregation/final returns and startup trailing behavior.
-The milestone's synchronous-maintenance, map-closure, reserve, generation, health/
-result and validation sections and `fs/docs/core.md` need the same accepted change.
-The 29/30 small-cleanup volume-edit proof remains; its no-incoming-debt assumption
-and D-based sequence/accounting envelope must use this new proof. Format fields,
+The milestone's maintenance, map-closure, reserve, generation, health/result and
+validation sections and `fs/docs/core.md` reflect the same accepted change.
+The 29/30 small-cleanup volume-edit proof remains; its former no-incoming-debt
+assumption and D-based sequence/accounting envelope now use this proof. Format fields,
 coalescing, namespace occupancy/deletion bounds and public authority stay unchanged.
 
 Behavioral validation uses the real core and existing bounded failure adapter:
@@ -475,7 +480,7 @@ health/provenance and independently confirmed prefixes, not private-field assign
 Do not require exact publication counts, generations, tree shapes or allocations;
 the two-flush protocol and proved resource upper bounds remain deliberate assertions.
 
-After a separately assigned implementation, run the existing quick/seed-1 extended
+For the authorized implementation, run the existing quick/seed-1 extended
 checks and required exact-head CI. Repeat two serial unchanged RAM baseline matrices
 per revision with the existing commands/configured limits. Preserve history, oracle,
 native operation/batch synchronization and final checkpoint; count total writes
@@ -484,9 +489,9 @@ debt and final state, total data/metadata and user/orphan/standalone-maintenance
 traffic, extent/record counts and RAM timing variation. Compare byte totals with
 immediate draining, not just a phase that received fewer writes.
 
-The existing comparison observer uses `drain_pending` to classify callbacks
-(`tests/comparison.c:156`); that becomes incorrect when user publications carry
-debt. Change classification to the **active publication**, not debt presence, using
+The immediate-drain baseline's comparison observer used `drain_pending` to classify
+callbacks (`tests/comparison.c:156`); that is incorrect when user publications carry
+debt. Classification now follows the **active publication**, not debt presence, using
 the existing sealed candidate/ordinary bookkeeping at the callback boundary.
 Keep this a focused accounting correction in the existing tools, without new test
 controls in production or new benchmark infrastructure. Workload inputs, independent
@@ -494,13 +499,14 @@ ledger and commands stay unchanged. A bounded retirement result is neither corru
 nor completion of a refused workload. No automatic resource-limit increase or disk
 fallback; use the existing verified RAM/no-swap setup for any later execution.
 
-## Choices for PR discussion
+## Accepted package and unselected alternatives
 
 The recommendation is rolling two-cohort, cross-volume carryover for user **and**
 orphan batches, with the derived larger recovery minimum; explicit healthy PENDING;
 pool-wide checkpoint fences under existing grants; complete final orphan deletion
 with possibly pending retirement; I/O-free writer disposal and startup fences.
-These observable policies require owner acceptance before implementation.
+The owner accepted these observable policies and assigned the coherent implementation
+after merging #311. The alternatives below remain unselected.
 
 Immediate draining remains simplest, minimizes outstanding volume debt and has
 predictable close/checkpoint behavior, at the recorded write cost. Keeping one
@@ -515,8 +521,43 @@ debt without evidence it is needed; neither is recommended.
 No proposal removes necessary final/startup
 fences, permits same-publication reuse or promises the whole 54–59% drain share.
 
-Accept or revise the pending/final-release/checkpoint/close policy and the supported
-writable resource profile on this PR, then assign implementation explicitly.
+Any further change to authority, lifetime, durability or supported resource policy
+requires separate discussion. This assignment does not authorize allocator redesign.
 Incremental allocation-map self-accounting remains a separate unresolved design;
-this proposal reduces the number of whole-map publications, not their population-
+this correction reduces the number of whole-map publications, not their population-
 sensitive cost. Writable deployment remains blocked.
+
+## Implementation and matched validation
+
+The integration pins published filesystem `19cbec62070fd1925d495b8c1b57b133cc2fa2d5`
+from #20. Merge the filesystem PR before the Pyxis integration; the owner merges.
+The publisher, candidate/opening admission, plan limits, checkpoint/final-release
+results, host reporting and active-publication counters change together. The
+read-only kernel mode bridge dispatches fences through the existing private writer
+boundary; the kernel still excludes the writable publisher.
+
+All 125 quick groups and six seed-1 extended groups pass natively and under
+ASan/UBSan using the existing strict bounded RAM/no-swap launcher. The complete
+core archive cross-compiles with Pyxis GCC/kernel flags; the kernel's read-only
+subset links with its existing memory primitives and no publisher dependency.
+Tests independently verify retained payloads after replacement writes, durable
+free transitions, cross-volume histories, nonadjacent opening, interrupted startup
+and fences, checkpoint-only authority, complete final release and funded progress.
+They preserve contract bounds and the two-flush protocol without requiring
+incidental publication counts or placement. Near-minimum fixtures exercise small
+reachable images, not every maximal profile/debt population.
+
+Two serial unchanged 40-case RAM matrices before and after include terminal
+checkpoints and all maintenance. Compiler totals fall 6,528→3,056 KiB at 32 files
+(53.19%) and 12,756→5,236 KiB at 256 (58.95%). The
+[measurement record](../../fs/docs/retirement-carryover-measurements.md) reports all
+cases, preparation, phases, native durability differences, elapsed observations,
+bounded backing and trace/teardown evidence. No swap/max/OOM event, trace loss,
+fallback or resource increase occurred. ASan/UBSan runtimes were installed with
+owner authorization after measurements; no runner configuration changed.
+
+Pyxis still exceeds matched ext4 compiler totals; whole-map representation costs,
+larger pressure/profile qualification, real-host post-error recovery and native
+writable integration remain unresolved. This corrective step does not close task 7
+or writable deployment or assign another efficiency implementation. Exact-head
+filesystem and parent CI are reported on their PRs.

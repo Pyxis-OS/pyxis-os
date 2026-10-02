@@ -2,9 +2,10 @@
 
 Status: research recorded on 2026-10-02. The narrow combined cleanup below is
 implemented with unchanged admission and reserve policy. The owner subsequently
-assigned the [retirement-debt design investigation](filesystem-retirement-debt.md),
-now proposed for review; no carryover implementation is assigned. Other proposals
-remain unassigned; this document does not
+accepted the [retirement-debt policy and bounds](filesystem-retirement-debt.md)
+after Pyxis #311; its coherent implementation and matched validation are published
+in [filesystem #20](https://git.internal/PyxisOS/pyxis-fs/pulls/20) and pinned here.
+Other proposals remain unassigned; this document does not
 authorize further implementation or experiments.
 [Task 7 and writable deployment](writable-filesystem-core.md#focused-tasks)
 remain open. Preserve individually durable completed operations, both retained
@@ -70,6 +71,8 @@ The following is inspection of
 [`file.c`](https://git.internal/PyxisOS/pyxis-fs/src/commit/dc63d62b81d7c6cca082eeb52842b84d8a1fa390/core/file.c),
 [`mutate.c`](https://git.internal/PyxisOS/pyxis-fs/src/commit/dc63d62b81d7c6cca082eeb52842b84d8a1fa390/core/mutate.c)
 and [`writer.c`](https://git.internal/PyxisOS/pyxis-fs/src/commit/dc63d62b81d7c6cca082eeb52842b84d8a1fa390/core/writer.c).
+These inspected revisions precede the two delivered corrections below; carryover
+changes reclamation scheduling, preserving each operation's durable publication.
 Each row describes a committed batch; a larger request can commit bounded
 prefixes. Compatible slices within a request are already combined when they fit.
 
@@ -123,9 +126,9 @@ and [namespace proof](writable-filesystem-core.md#agreed-removable-namespace-pro
 
 | Topic | Genuine requirement / current proof dependency | Reconsiderable policy and proposal |
 | --- | --- | --- |
-| Map coalescing | Exact ordered partition; valid ownership, birth, retirement and charges; protected-state exclusion. Canonical records support `K = 1 + 2(E+M+D)` and the resulting `S(H)` record/workspace closure. | Maximal coalescing is a format policy. Preserve it in the first candidate. Compare a canonical incremental editor with an explicitly debt-bounded relaxed representation before choosing the map design. |
+| Map coalescing | Exact ordered partition; valid ownership, birth, retirement and charges; protected-state exclusion. Canonical records support `K = 1 + 2(E+M+2D)` under accepted carryover and the resulting `S(H)` record/workspace closure. | Maximal coalescing is a format policy. Preserve it in the first candidate. Compare a canonical incremental editor with an explicitly debt-bounded relaxed representation before choosing the map design. |
 | Core memory | Finite caller-owned cap, checked arithmetic, charged allocations, refusal before admission; funded drains require no new allocations. | The enforced core-wide 1 GiB ceiling originated as tool policy, not a disk-format safety property. Propose caller-configured caps; keep host default and any host maximum separate. No default or budget increase is made here. |
-| Reserve floors | Ordinary workspace must cover the proved batch envelope; recovery must cover the whole funded sequence. Persisted reservations still count against pool capacity. | Current admission inherits formatter floors of 1024 ordinary and 1024 unused migration blocks. Propose deriving admission from `V+D` and `3H+V+D`, without a minimum for unused migration. Do not borrow existing migration reservations. |
+| Reserve floors | Ordinary workspace must cover the proved batch envelope; recovery must cover the whole funded sequence. Persisted reservations still count against pool capacity. | Current admission inherits formatter floors of 1024 ordinary and 1024 unused migration blocks. Any separate proposal to remove these floors must retain carryover funding of `V+2D` and `3H+V+2D`, without borrowing existing migration reservations. It is not assigned here. |
 | Object/extent limits | Namespace occupancy/depth and permanent deletion promise; bounded map/claims/checker memory and integer arithmetic. | The shared 1,048,576 cap couples different populations. Separate namespace proof limits from extent product capacity before proposing new values from actual histories. Larger disks alone do not justify them. |
 
 Coalescing is enforced by ordinary node decode, cross-leaf checking and the
@@ -195,9 +198,10 @@ Compare these mechanisms before assigning the map replacement:
 
 Canonical versus deferred coalescing is a second choice, not a solution to this
 cycle. Re-derive sequence-wide `H`, `S`, retirement, generation and memory funding
-from the selected mechanism. The current two-drain / three-generation envelope
-is a linked proof assumption across preparation, admission and execution; change
-all of it coherently if the publication sequence changes.
+from the selected mechanism. The accepted two-cohort carryover envelope and terminal-fence/generation funding
+are linked proof assumptions across preparation, admission and execution. The
+retirement-debt correction changes those boundaries coherently; an incremental
+map replacement must re-derive them rather than inheriting a depth-only proof.
 
 ## Assigned first correction: combined small-orphan cleanup
 
@@ -298,18 +302,26 @@ The owner approved these runs in the subsequent cleanup assignment; their
 results and verified storage boundary are recorded above. No additional campaign
 is assigned here.
 
-The next assigned investigation is [bounded retirement-debt carryover](filesystem-retirement-debt.md).
-It proposes two derived retirement cohorts, multi-volume debt and a bounded union
-of catalog paths, with revised map/workspace/memory/generation proofs and worked
+The accepted [bounded retirement-debt correction](filesystem-retirement-debt.md)
+uses two derived retirement cohorts, multi-volume debt and a bounded union of
+catalog paths, with revised map/workspace/memory/generation proofs and worked
 recovery traces. The larger computed recovery minimum funds H+V already-reusable
-blocks, so this conservative profile needs no pressure pre-drain. Proposed healthy
-PENDING results, final orphan release with pending retirement, pool-wide checkpoint
-fences, I/O-free disposal and startup fences need acceptance on the design PR.
+blocks, so this conservative profile needs no pressure pre-drain. Healthy PENDING,
+complete final orphan release with pending retirement, pool-wide checkpoint
+fences under existing rights, I/O-free disposal and startup fences are accepted.
 Individually durable completed operations, both retained states and the prohibition
-on allocating same-publication frees remain requirements. No new measurement was
-run for this design; the observed compiler drain share is 53.92–59.11%, not a
-guaranteed removable fraction. No allocator mechanism or follow-on implementation
-is selected by publishing this proposal.
+on allocating same-publication frees remain requirements.
+
+Two unchanged matched RAM matrices per revision measure compiler-history totals
+through final checkpoints falling 6,528→3,056 KiB at 32 files (53.19%) and
+12,756→5,236 KiB at 256 (58.95%). The
+[measurement record](../../fs/docs/retirement-carryover-measurements.md) separates
+preparation and active-publication phases, reports native contracts and bounded
+RAM/no-swap evidence, and includes all eight Pyxis cases. Reclamation absorbed
+into user/orphan metadata is still counted; the totals establish the savings.
+Pyxis remains above the matched ext4 compiler totals of 1,772/1,848 KiB.
+Task 7 and writable deployment stay open. No allocator mechanism or subsequent
+implementation is assigned by this correction.
 
 Report total submitted block-write bytes through final synchronization and
 maintenance/unmount, preparation separately, Pyxis data/metadata and
