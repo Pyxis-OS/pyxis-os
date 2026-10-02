@@ -194,6 +194,10 @@ Kilo and machine-readable command completion; framebuffer screenshots remain for
 graphical work. See [terminal sessions](../userland/terminal-sessions.md) and
 [execution groups](../interfaces/execution-groups.md) for the underlying contracts.
 Authentication, a multiplexer and process threads remain separate work.
+The agreed [foreground interruption plan](foreground-interrupt.md) lets Ctrl+C
+terminate a running foreground command or pipeline through process-level
+termination, shell-armed interrupt events and a minimal application
+passthrough for programs such as Kilo; implementation is unassigned.
 
 The parked [VirtIO GPU presentation direction](desktop-graphics.md#virtio-gpu-presentation-and-display-resizing)
 groups software framebuffer presentation, live display resizing and terminal
