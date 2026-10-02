@@ -12,7 +12,8 @@ The owner accepts Btrfs-comparable matched submitted-write costs as the initial
 deployment direction, and the topology-preserving approach with explicit funded
 bulk fallback/global closure as an intermediate optimisation. This revision
 specifies the requested fixed ID ordering, neighbouring-leaf redistribution and
-cost reporting; those details await review before implementation. Numerical
+cost reporting; the owner accepted that package after #313 merged and assigned
+its implementation. The first implementation is recorded below; numerical
 deployment criteria remain proposals. Other proposals remain unassigned; this document does not
 authorize further implementation or experiments.
 [Task 7 and writable deployment](writable-filesystem-core.md#focused-tasks)
@@ -202,6 +203,21 @@ Carryover reduces standalone fences without reducing the map work in each
 remaining publication. Full map/claim summaries and candidate validation also
 remain population-sized in memory and CPU; this first proposal reduces submitted
 map writes, not all reads or planning costs.
+
+The first implementation uses the [shared core's closed-path publisher](../../fs/docs/incremental-map.md).
+It validates immutable source topology, regenerates selective retirement and fixed-prefix
+claims on every growth pass, and preserves canonical seams and source fanout.
+The existing physical E/M guards are established before relying on guaranteed
+map storage; unexpected exhaustion of that storage stops mutation. Final
+candidate admission retains ordinary profile/quota/capacity refusal. No admission,
+reserve, memory-budget or runner policy changes are part of this delivery.
+The [matched implementation record](../../fs/docs/incremental-map-measurements.md)
+reports total traffic, local/bulk cost, fallback frequency, planning observations
+and remaining coverage limits. [Filesystem #21](https://git.internal/PyxisOS/pyxis-fs/pulls/21)
+publishes the implementation; this parent pins its published revision. Two unchanged
+matched before/after matrices reduce submitted measurement-window writes by
+7.68–40.41% at 256 files and 0–2.85% at 32, with 32-file compiler traffic unchanged.
+RAM elapsed times increase with scans and optional diagnostic counting included. General structural editing is still unassigned.
 
 ### Format and local editing
 
@@ -523,7 +539,7 @@ cannot retry itself to health. Unexpected exhaustion during funded work is an
 invariant failure, never successful safe refusal. Recovery still requires the
 adapter/operator's durable-backing precondition, not cached validation plus flush.
 
-1. After review of these refinements and separate owner assignment, implement
+1. The owner assigned the first implementation after #313 merged: implement
    topology-preserving map splicing with fixed ascending input IDs, bounded
    neighbouring-leaf redistribution, selective claim retirement, explicit bulk reasons and
    sealed candidate checks together. Use the unchanged admission envelope and
@@ -637,12 +653,12 @@ measurement. Saved summaries and diagnostics remain bounded.
 **Review state:** the owner accepts the topology-preserving approach, explicit
 funded bulk fallback and global closure as an intermediate limitation. Fixed
 ascending IDs, neighbouring-leaf redistribution and cost/planning reporting are
-specified here for renewed design review; no implementation is assigned.
+accepted after #313 merged and assigned for this first implementation.
 Deployment comparisons and the meaning of Btrfs-comparable still need separate
 decisions and need not be settled to accept this intermediate optimisation.
 General structural editing, bulk fill-policy changes and new placement schemes
 remain outside the first step. Full structural editing needs its own reviewed
-efficient self-accounting proof. Stop for review before implementation.
+efficient self-accounting proof and separate implementation assignment.
 
 ## Assigned first correction: combined small-orphan cleanup
 

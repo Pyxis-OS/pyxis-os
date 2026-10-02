@@ -502,9 +502,9 @@ debt describes only the last confirmed state after an uncertain publication.
 
 Replacing maintenance metadata can introduce new pool retirement; fences settle
 volume debt, not all retired blocks. Every eligible old pool retirement is freed
-subject to both-state checks and ended physical borrows. Whole-map rebuilding
-still scales poorly; this correction does not resolve allocation-map
-self-accounting or establish the write-efficiency target.
+subject to both-state checks and ended physical borrows. The first incremental
+map correction preserves this carryover policy; source scans and global bulk
+fallback remain costly and do not establish the deployment target.
 
 ## Agreed whole-map fallback
 
@@ -515,8 +515,8 @@ retirement carryover; it is not a current sustained-write result. Task 7 must
 replace routine whole-map rebuilding and re-establish admission and funded-drain
 bounds. The [incremental proposal](filesystem-write-efficiency.md#incremental-allocation-map-proposal)
 records the accepted topology-preserving intermediate approach with explicit
-funded bulk fallback/global closure. The revised fixed ascending IDs, bounded
-neighbour redistribution and cost reporting await review before implementation;
+funded bulk fallback/global closure. The owner accepted fixed ascending IDs, bounded neighbour redistribution and
+cost reporting after #313 merged; the first implementation preserves these bounds;
 the existing proof alone does not make the write cost acceptable. Current short
 Btrfs comparisons do not qualify deployment.
 
@@ -643,8 +643,9 @@ and do not establish sustained writes, larger populations or resource pressure.
 The [incremental design and proposed acceptance coverage](filesystem-write-efficiency.md#incremental-allocation-map-proposal)
 derive a source-node closure, unchanged conservative funding and explicit bulk
 exceptions, then propose sustained small writes, population/fragmentation,
-namespace churn and pressure comparisons for owner discussion. No implementation
-or new campaign is assigned. Account for every major category
+namespace churn and pressure comparisons for owner discussion. The bounded
+topology-preserving implementation is delivered by the dependency below; no new
+qualification campaign or structural-editor implementation is assigned. Account for every major category
 of writes and explain recovery, memory and eventual reclamation obligations.
 Keep data COW and retained-generation payload protection in the current contract;
 neither in-place data overwrite nor new snapshot/reflink features follow from
@@ -2378,24 +2379,18 @@ this documentation update.
      before closure, add neighbouring-leaf redistribution with renewed accounting
      and seam closure, and require closure/fallback/full-write/planning reports
      comparing local node cost with current bulk construction. These refinements
-     await review; no implementation is assigned.
+     were accepted after #313 merged, with the bounded implementation assigned.
 
-   - [ ] **Agree incremental allocation-map design and bounds.** Replace routine
-     whole-map reconstruction with updates to affected paths and necessary
-     balancing nodes. Address allocator self-accounting dependencies described
-     above rather than assuming a tree-depth bound solves them. Re-derive
-     admission, retirement, planning-memory and funded-drain bounds against the
-     actual design, including maintenance publications and any proposed fallback.
-     Preserve both retained states, publication ordering and recovery semantics.
-     The intermediate first scope and global-closure limitation are accepted.
-     Review the refined ordering/redistribution algorithm, termination/funding
-     and cost-reporting details before coding. General splits/merges, bulk
-     fill-policy changes and new placement schemes remain outside this step.
-     Agree representative comparison windows,
-     numerical write-cost criteria and exception policy before deployment acceptance;
-     intermediate PRs may precede that final qualification.
-     Use the [write-efficiency target and research direction](#write-efficiency-target-and-research-direction)
-     to compare mechanisms rather than assuming path copying alone meets the target.
+   - [x] **Agree the first incremental allocation-map design and bounds.**
+     After #313 merged, the owner assigned topology-preserving replacement with
+     fixed ascending eligible input IDs, monotone accounting/seam/redistribution
+     closure, unchanged funding and explicit bulk fallback. Source topology and
+     general/global closure remain accepted intermediate limits. The first
+     implementation preserves both retained states and individually durable
+     operations. General splits/merges, bulk fill-policy changes and new placement
+     schemes need separately reviewed bounds and assignment. Representative
+     comparison windows, numerical write-cost criteria and exception policy still
+     require agreement before deployment acceptance.
 
    - [ ] **Implement and validate the correction.** Land incremental publication
      and maintenance with contract-focused host tests. Retain older-state payload
@@ -2409,6 +2404,28 @@ this documentation update.
      improvements may precede the full map replacement where their bounds and
      recovery obligations are established. Each PR records what cost remains;
      merging it does not imply that the deployment blocker is resolved.
+
+     - [x] **Deliver the first topology-preserving map correction.** The
+       [implemented contract](../../fs/docs/incremental-map.md) records selective
+       retirement, canonical seam repair, neighbouring redistribution, renewed
+       prefix accounting and funded bulk construction. Existing physical E/M
+       guards precede guaranteed map storage; final admission and all reserve,
+       memory and generation policies remain unchanged. Host tests include
+       independent canonical expectations, shared-subtree and reachable-inventory
+       checks, and trace-derived failure cuts; existing funded, cross-volume,
+       retained-payload, orphan/checkpoint/startup recovery coverage is retained.
+       The [matched RAM record](../../fs/docs/incremental-map-measurements.md)
+       includes all maintenance and final checkpoints, closure/fallback frequency,
+       local/bulk costs and observed planning intervals. This delivers an
+       intermediate implementation, not the broader task-7/deployment acceptance.
+       [Filesystem #21](https://git.internal/PyxisOS/pyxis-fs/pulls/21) publishes
+       `d711232`; the parent pins that published revision. All 134 quick groups
+       and six extended groups pass, including ASan/UBSan at the final production
+       revision, and the shared archive cross-compiles with Pyxis kernel flags.
+       Two unchanged before/after 40-case RAM matrices reduce measurement-window
+       traffic by 7.68–40.41% at 256 files, but only 0–2.85% at 32; compiler traffic
+       at 32 is unchanged. RAM elapsed times increase with source scans and optional
+       diagnostic counting included. Global fallback and larger qualification remain.
 
    - [ ] **Repeat measurements and complete acceptance.** Run matched RAM-only
      before/after workloads and remaining recovery/pressure coverage. Record the
