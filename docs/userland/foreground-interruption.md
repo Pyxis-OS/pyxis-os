@@ -53,9 +53,11 @@ Accepted limits are recorded in
 - A nested interactive shell is ended as a whole.
 - Remote Ctrl+C can be held back behind more than 4 KiB of unread typeahead.
 
-Startup scripts also hold the right. A terminated foreground command in a script
-is a failed last stage, so the script stops. No current startup script runs a
-foreground command.
+Startup scripts also hold the right. When Ctrl+C terminates the last stage of a
+script's foreground command, that stage has failed, so the script stops. An
+earlier pipeline stage that is terminated after the last stage has already
+succeeded does not stop it; the existing last-stage rule governs. No current
+startup script runs a foreground command.
 
 Deferred: cooperative interrupts (for example, a first Ctrl+C delivered to a
 reading program and a second escalating to termination), job control and
