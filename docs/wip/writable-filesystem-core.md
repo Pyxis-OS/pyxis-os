@@ -649,11 +649,15 @@ historical workload results, not current acceptance thresholds. Record versions
 and configuration for our own ext4 baseline, including a
 [fast-commit configuration](https://www.kernel.org/doc/html/latest/filesystems/ext4/journal.html).
 
-Incremental path replacement is the first candidate, but calculate whether its
-publication and maintenance costs can meet the target before committing to it.
-Compact deltas or a hybrid publication scheme are alternatives for discussion,
-not approved implementation scope. A proposal must account for every major
-category of writes and explain its recovery, memory and reclamation obligations.
+The [bounded write-efficiency investigation](filesystem-write-efficiency.md)
+compares XFS, F2FS and APFS mechanisms, traces current writes and separates safety
+requirements from proof inputs and reconsiderable policy. It recommends a narrow
+combined small-orphan cleanup as the first implementation candidate for review,
+with calculated opportunities rather than measured savings. Incremental map
+replacement remains necessary; its self-accounting mechanism and bounds are
+unresolved. Compact deltas or a hybrid publication scheme are alternatives for
+discussion, not approved implementation scope. Account for every major category
+of writes and explain recovery, memory and eventual reclamation obligations.
 Keep data COW and retained-generation payload protection in the current contract;
 neither in-place data overwrite nor new snapshot/reflink features follow from
 this investigation. Changes to durability batching require separate agreement.
@@ -1294,7 +1298,9 @@ requirements from the actual N at opening:
 The arena calculation is itemized below and excludes opening-check scratch and
 live handles; all share the selected cap. These validation caps leave room to
 investigate that additional cost, not proof that every profile-limit population
-passes complete validation. The existing 1 GiB maximum is not increased. If
+passes complete validation. The current core-wide 1 GiB implementation ceiling
+is unchanged; the [investigation](filesystem-write-efficiency.md#contract-audit-safety-proof-inputs-and-policy)
+proposes caller-owned caps for separate review. If
 validation does not fit, lower the admitted population or return to review with
 measured memory/layout evidence; do not skip checks or claim the table guarantees
 full occupancy. Views cannot spend the arena reserved for drain. Raising the
@@ -1336,9 +1342,11 @@ a formatter-created contiguous file of the same size can start with one.
 
 At N = 16, even E = 1048576 and M = 262144 would reserve about 1568.36 MiB before
 opening scratch, exceeding the existing 1 GiB cap. More RAM or a larger empty
-image does not bypass that contract. Consider higher caps or a more compact
+image does not bypass the current implementation ceiling; it is not an immutable
+filesystem safety requirement. Consider caller-owned caps or a more compact
 summary/allocation strategy only with workload evidence and a focused subsequent
-proposal; neither is silently required to implement this first writer. The E/M profiles and their memory/workspace ceilings remain unchanged despite the
+proposal; neither is silently required to implement this first writer. The E/M
+profiles and their memory/workspace ceilings remain unchanged despite the
 tighter namespace promise; those are conservative configured capacities. Record
 actual object/directory/mapping/metadata counts and peak memory after the stated histories.
 
@@ -2290,6 +2298,17 @@ this documentation update.
      no large workload campaign is part of this cleanup. Production reserve and
      admission policy is unchanged: the audit's formatter-floor concern needs a
      separate proposal. Task 7 and the writable-deployment blocker remain open.
+
+   - [x] **Bounded write-efficiency investigation and design proposal.** The
+     [research report](filesystem-write-efficiency.md) compares primary XFS, F2FS
+     and APFS sources, traces current user/maintenance writes, and addresses the
+     contract audit against current production code. It proposes a narrow combined
+     cleanup, estimates its opportunity from existing measurements, and identifies
+     the self-accounting, coalescing, memory, reserve and population decisions
+     still needing review. No new workload or implementation was performed;
+     completing research does not accept its proposals or assign the next task.
+     Task 7 and writable deployment remain open. Review discussion belongs on
+     the documentation PR.
 
    - [ ] **Agree incremental allocation-map design and bounds.** Replace routine
      whole-map reconstruction with updates to affected paths and necessary
