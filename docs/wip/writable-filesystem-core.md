@@ -1,5 +1,8 @@
 # Writable filesystem core and recovery
 
+**Superseded 2026-10-02** by the [simple native filesystem](native-filesystem.md)
+restart. Kept as history; no further work on this plan is assigned.
+
 Status: task-1 design accepted, 2026-10-01, against `pyxis-fs` commit
 `82cc242b3d9773d21c0f7e7a71ec9ca9ccb937ed`. The policy, concrete mechanisms,
 bounds and validation plan below record the initial implementation contract,
@@ -2150,9 +2153,8 @@ this documentation update.
    workload commands; retain the already-required per-PR suite. Record coverage and limits;
    convert this document to an implemented reference and carry remaining work
    forward without claiming native mounting, FUSE or production-data safety.
-   Closure and subsequent writable native integration are blocked on
-   [per-call latency](filesystem-latency.md), not merely on finishing larger
-   runs. The owner accepts the current write amplification for now (2026-10-02).
+   Superseded 2026-10-02 by the [simple native filesystem](native-filesystem.md)
+   restart; this task will not be completed.
 
    **Step 1:** [pyxis-fs #15](https://git.internal/PyxisOS/pyxis-fs/pulls/15)
    adds `make check-extended` and

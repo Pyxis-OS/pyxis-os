@@ -1,9 +1,7 @@
 # Filesystem write-efficiency investigation
 
-**Paused 2026-10-02.** The owner accepts the write amplification at filesystem
-`a250731` for now, and no further write-efficiency work is assigned. Per-call
-latency is the blocking problem; see [per-call latency](filesystem-latency.md).
-The record below is unchanged and its remaining proposals stay unassigned.
+**Superseded 2026-10-02** by the [simple native filesystem](native-filesystem.md)
+restart. Kept as history; no further work on this plan is assigned.
 
 Status: research recorded on 2026-10-02. The narrow combined cleanup below is
 implemented with unchanged admission and reserve policy. The owner subsequently

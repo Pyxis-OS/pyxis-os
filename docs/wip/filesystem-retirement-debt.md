@@ -1,5 +1,8 @@
 # Bounded retirement-debt carryover
 
+**Superseded 2026-10-02** by the [simple native filesystem](native-filesystem.md)
+restart. Kept as history; no further work on this plan is assigned.
+
 Status: **policy accepted; implementation and bounded validation delivered**, 2026-10-02, after
 [Pyxis #311](https://git.internal/PyxisOS/pyxis-os/pulls/311) merged. The owner accepted
 the two-cohort cross-volume profile including orphan batches, derived funding,
