@@ -85,8 +85,9 @@ indefinitely. No group/member quota is introduced. Group storage is reclaimed af
 the final member, launcher, observation/supervision grant, endpoint-policy reference,
 launch reservation and cleanup token is released. An outside endpoint reference can
 retain the immutable receiver policy after receiver exit without retaining CONTROL.
-Nested groups, foreground Ctrl+C targeting, migration and space teardown remain out
-of scope.
+Nested groups, migration and space teardown remain out of scope. Foreground
+Ctrl+C terminates the job's processes individually and does not involve the
+group; see [interrupting foreground commands](../userland/shell.md#interrupting-foreground-commands).
 
 ## Launch publication and ownership
 

@@ -66,7 +66,8 @@ maintenance after native-wrapper release, are excluded. A stalled published HOST
 can delay completion indefinitely; no bounded cleanup deadline is promised. Ordinary
 process observers retain their earlier reclamation boundary.
 
-Foreground Ctrl+C cancellation, nested groups, migration and space teardown are
-outside this implementation. Runtime evidence and unexercised paths are recorded in the
+Nested groups, migration and space teardown are outside this implementation.
+Foreground Ctrl+C uses process TERMINATE on each stage, through the same stop
+path. Runtime evidence and unexercised paths are recorded in the
 [remote-terminal validation notes](../userland/remote-terminal.md#validation-evidence); this matrix records ownership
 review, not a claim that every race has been measured.
