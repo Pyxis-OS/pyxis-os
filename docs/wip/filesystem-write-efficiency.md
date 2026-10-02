@@ -1,8 +1,10 @@
 # Filesystem write-efficiency investigation
 
-Status: research recorded on 2026-10-02. The owner subsequently assigned only the
-narrow combined cleanup below, now implemented with unchanged admission and
-reserve policy. Other proposals remain unassigned; this document does not
+Status: research recorded on 2026-10-02. The narrow combined cleanup below is
+implemented with unchanged admission and reserve policy. The owner subsequently
+assigned the [retirement-debt design investigation](filesystem-retirement-debt.md),
+now proposed for review; no carryover implementation is assigned. Other proposals
+remain unassigned; this document does not
 authorize further implementation or experiments.
 [Task 7 and writable deployment](writable-filesystem-core.md#focused-tasks)
 remain open. Preserve individually durable completed operations, both retained
@@ -296,11 +298,18 @@ The owner approved these runs in the subsequent cleanup assignment; their
 results and verified storage boundary are recorded above. No additional campaign
 is assigned here.
 
-PR review also identified bounded carryover of retirement debt as an alternative
-to immediately draining every batch. It remains a design proposal: it would
-need revised debt, single-owner, workspace, generation and trailing/startup
-drain proofs. This cleanup changes none of those policies and does not select
-the next allocator or maintenance correction.
+The next assigned investigation is [bounded retirement-debt carryover](filesystem-retirement-debt.md).
+It proposes two derived retirement cohorts, multi-volume debt and a bounded union
+of catalog paths, with revised map/workspace/memory/generation proofs and worked
+recovery traces. The larger computed recovery minimum funds H+V already-reusable
+blocks, so this conservative profile needs no pressure pre-drain. Proposed healthy
+PENDING results, final orphan release with pending retirement, pool-wide checkpoint
+fences, I/O-free disposal and startup fences need acceptance on the design PR.
+Individually durable completed operations, both retained states and the prohibition
+on allocating same-publication frees remain requirements. No new measurement was
+run for this design; the observed compiler drain share is 53.92–59.11%, not a
+guaranteed removable fraction. No allocator mechanism or follow-on implementation
+is selected by publishing this proposal.
 
 Report total submitted block-write bytes through final synchronization and
 maintenance/unmount, preparation separately, Pyxis data/metadata and

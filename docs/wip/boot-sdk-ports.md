@@ -137,9 +137,12 @@ need a bounded RAM-only execution plan. The placement fix remains useful but doe
 not resolve this blocker. The first corrective step adds the scoped
 2 GiB RAM / 4 GiB job launcher and a small Pyxis/ext4/Btrfs baseline; this VM is
 the agreed safety boundary. Two 40-case matrices and the maintained suites pass;
-write traffic still misses the ext4 target. A small final-orphan cleanup
-combination is proposed for investigation; implementation and allocator changes
-require a later assignment. See
+write traffic still misses the ext4 target. The delivered narrow final-orphan
+cleanup reduces compiler-history totals by 15.70–18.79% through maintenance.
+The [bounded retirement-debt design](filesystem-retirement-debt.md) now proposes
+reclamation in subsequent individually durable publications; its resource and
+caller policies need review before implementation. Allocator changes remain
+unassigned. See
 the linked milestone for the corrective task list.
 FUSE and installation remain separate. These
 plans do not start implementation or displace explicitly assigned libc/remote work.
