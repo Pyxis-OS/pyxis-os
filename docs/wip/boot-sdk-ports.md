@@ -128,8 +128,8 @@ qualification is deferred. Tasks 1–6 are complete, including public file/names
 mutation, retained-handle lifetime, funded orphan cleanup and their maintained
 tests. Task 7 has shared extended campaigns and the populated 4 GiB recovery
 workload, with a focused contiguous-volume-selection correction for the observed
-fragmentation limit. Its measured 826.1075 metadata bytes per useful byte for small
-appends blocks milestone closure and writable deployment. Task 7 now requires
+fragmentation limit. Whole-map write costs and remaining qualification still
+block milestone closure and writable deployment. Task 7 now requires
 RAM-only validation/baselines, incremental allocation-map design with revised
 admission and cleanup bounds, implementation/recovery tests, and repeated write-cost
 acceptance measurements. Large disk-backed runs are suspended; larger profiles
@@ -137,11 +137,20 @@ need a bounded RAM-only execution plan. The placement fix remains useful but doe
 not resolve this blocker. The first corrective step adds the scoped
 2 GiB RAM / 4 GiB job launcher and a small Pyxis/ext4/Btrfs baseline; this VM is
 the agreed safety boundary. Two 40-case matrices and the maintained suites pass;
-write traffic still misses the ext4 target. The delivered narrow final-orphan
+the initial target is now Btrfs-comparable submitted-write costs on representative
+matched workloads, with ext4 retained as a comparison and longer-term goal.
+The delivered narrow final-orphan
 cleanup reduces compiler-history totals by 15.70–18.79% through maintenance.
-The [bounded retirement-debt design](filesystem-retirement-debt.md) now proposes
-reclamation in subsequent individually durable publications; its resource and
-caller policies need review before implementation. Allocator changes remain
+The merged [bounded retirement-debt correction](filesystem-retirement-debt.md)
+(filesystem #20 / Pyxis #312) carries reclamation across individually durable
+publications and lowers matched compiler totals by a further 53.19–58.95%.
+All eight short Pyxis cases beat recorded Btrfs totals; sustained writes, larger
+populations/fragmentation, namespace churn, pressure and recovery qualification
+remain open. The [incremental-map proposal](filesystem-write-efficiency.md#incremental-allocation-map-proposal)
+records the accepted topology-preserving intermediate path and explicit funded
+bulk/global-closure limitation. Refined fixed ascending IDs, neighbouring-leaf
+redistribution and local/bulk cost/planning reports await review. Deployment
+criteria remain separate decisions; implementation and new experiments remain
 unassigned. See
 the linked milestone for the corrective task list.
 FUSE and installation remain separate. These

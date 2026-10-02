@@ -829,38 +829,45 @@ adapter paths. No fault injection or physical-hardware validation was performed.
 
 The [writable-core milestone](wip/writable-filesystem-core.md) used whole-map
 rebuilding for every publication as the first correctness implementation.
-Measured small-write cost now makes its replacement a milestone-closure and
-writable-deployment blocker, not deferred optimization. Task 7 owns RAM-only
-baseline work, incremental-map design and revised bounds, implementation/recovery
-tests, and repeated acceptance measurements. Large disk-backed workloads are
-suspended. The [small RAM baseline](../fs/docs/ram-baseline.md) establishes the
-scoped 2 GiB scratch / 4 GiB job boundary within this VM and records two
-Pyxis/ext4/Btrfs matrices; it still misses the ext4 write-traffic target. The
-proposed bounded final-orphan cleanup combination needs its own assignment and
-proof before implementation. This entry does not authorize additional benchmarks. Partial large shrinks remain accepted.
-Tasks 2–4 implement the private whole-map planner, admitted publisher
-and synchronous funded drain; task 5 adds public file writes and large shrinks,
-and task 6 adds namespace mutation and orphan cleanup.
-Rebuilding can write a pool-wide metadata map
-three times per small user batch, causing substantial write amplification. Measure
-metadata bytes written per useful data byte, latency and throughput on populated
-source trees and recorded write histories; calculated envelopes are not measured
-costs. Re-derive admission and funded-cleanup bounds for incremental allocation/map
-editing within this milestone. Large shrinks may stop or crash at an intermediate
-committed length, so callers must reconcile confirmed progress and uncertain
-outcomes. Atomic large shrinks would require a separately agreed persistent
-tail-retention design.
+Routine whole-map writes and missing sustained/population/pressure qualification
+remain milestone-closure and writable-deployment blockers. Task 7 owns RAM-only
+comparisons, incremental-map design and revised bounds, implementation/recovery
+tests, and repeated acceptance measurements. Large disk-backed workloads remain
+suspended. The accepted initial performance direction is now Btrfs-comparable
+submitted-write cost on representative matched workloads; lower costs, including
+beating ext4, remain longer-term goals. Numerical criteria and exceptions still
+need owner agreement, independently of correctness and recovery acceptance.
 
-The first writer drains each bounded batch's retired volume storage before
-admitting another batch, including between chunks of one large operation. A
-batch needing retained-root advancement and separate free-map publication uses
-six flushes in total. This accepts extra synchronous I/O to bound cleanup debt;
-revisit combining batches only after the admission proof and workload measurements
-support an equivalent bound. The [task-5 host workload](../fs/docs/testing.md#task-5-file-mutation-validation)
-now measures small populated/history cases: 64 separately committed 4 KiB appends
-wrote 25.625 metadata bytes per useful byte including maintenance, versus 0.286
-for sixteen 256 KiB sequential requests in that particular history. These are
-simulator-backed host observations, not device or guest latency guarantees.
+The [small RAM baseline](../fs/docs/ram-baseline.md), narrow combined final-orphan
+cleanup and [merged retirement carryover](wip/filesystem-retirement-debt.md) record
+successive matched improvements under the existing scoped RAM/no-swap setup.
+Carryover lowers compiler totals by a further 53.19–58.95%; all eight short
+Pyxis cases now beat recorded Btrfs totals, but qualify neither sustained writes
+nor large fragmented populations/resource pressure. This entry authorizes no
+additional benchmark. The [incremental-map proposal](wip/filesystem-write-efficiency.md#incremental-allocation-map-proposal)
+records the accepted topology-preserving intermediate approach with finite
+source-node accounting closure and explicit funded bulk/global-closure limitation.
+Refined fixed ascending IDs, neighbouring-leaf redistribution and local/bulk
+cost/planning reports await design review before code; deployment comparisons
+remain separate decisions, not a prerequisite to this intermediate optimisation.
+All existing floors, memory limits, reservations and retained-state guarantees
+remain unchanged in that proposed first scope.
+
+Tasks 2–6 implement planners, admitted publication, public file/namespace
+mutation, retained lifetime and orphan cleanup. The initial immediate-drain writer
+could rebuild the pool map three times and use six flushes per batch. Accepted
+two-cohort carryover now reclaims eligible debt in subsequent individually durable
+publications, with startup/checkpoint fences, complete final orphan deletion and
+bounded healthy PENDING. It reduces publications, not the population cost of
+those remaining. Include every phase and final checkpoint when comparing writes;
+calculated envelopes are not measured costs.
+
+Partial large shrinks remain accepted. A caller must reconcile intermediate
+confirmed length and uncertain outcomes; atomic large shrinks need a separately
+agreed persistent tail-retention design. Historical task-5 small populated cases
+measured 25.625 metadata bytes per useful byte for separate 4 KiB appends versus
+0.286 for 256 KiB requests under immediate draining. These are version/history-
+specific simulator observations, not present carryover or device guarantees.
 The [task-7 allocation investigation](../fs/docs/testing.md#contiguous-volume-selection-follow-up)
 proved the original 4 GiB recovery refusal was E=8194 against 8192 after
 314.25 MiB, despite sufficient contiguous eligible storage. Lowest-eligible-first
@@ -870,12 +877,13 @@ the original fragmented fallback and both-state protection. Pool-metadata select
 policy, reservations and admission limits are unchanged. This addresses that
 placement cause; it does not guarantee contiguity or eliminate extent growth from
 separately committed birth generations. Whole-map rebuilding and small-write
-metadata amplification remain blocking costs: the completed populated history
-measures 826.1075 metadata bytes per useful byte for 2000 separate 4 KiB appends,
+metadata amplification still need qualification. The completed historical
+pre-carryover populated history measured 826.1075 metadata bytes per useful byte
+for 2000 separate 4 KiB appends,
 including maintenance. This is about 6.3 GiB of metadata write requests for
 7.8125 MiB of application writes, not permanent metadata occupancy or measured
-NAND traffic. The placement improvement does not make this acceptable. Larger
-64/256 GiB validation and
+NAND traffic. It does not establish current sustained costs or initial deployment
+acceptance. Larger populated/profile qualification and
 milestone closure remain pending; no profile increase or general allocator redesign
 follows from this correction.
 The file planner also scans admitted claims and copies a staging checkpoint
