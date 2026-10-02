@@ -1,0 +1,2587 @@
+
+===== Report =====
+Generated 2026-10-02T20:57:52+03:00 on 6.19.10-300.fc44.x86_64
+VERSION_ID=44
+PRETTY_NAME="Fedora Linux 44 (KDE Plasma Desktop Edition)"
+Serials redacted: yes
+
+===== Firmware and platform (DMI) =====
+$ dmidecode -t bios -t system -t baseboard
+# dmidecode 3.6
+Getting SMBIOS data from sysfs.
+SMBIOS 3.2.0 present.
+
+Handle 0x000E, DMI type 0, 26 bytes
+BIOS Information
+	Vendor: LENOVO
+	Version: R1BET87W(1.56 )
+	Release Date: 06/04/2026
+	Address: 0xE0000
+	Runtime Size: 128 kB
+	ROM Size: 32 MB
+	Characteristics:
+		PCI is supported
+		PNP is supported
+		BIOS is upgradeable
+		BIOS shadowing is allowed
+		Boot from CD is supported
+		Selectable boot is supported
+		EDD is supported
+		3.5"/720 kB floppy services are supported (int 13h)
+		Print screen service is supported (int 5h)
+		8042 keyboard services are supported (int 9h)
+		Serial services are supported (int 14h)
+		Printer services are supported (int 17h)
+		CGA/mono video services are supported (int 10h)
+		ACPI is supported
+		USB legacy is supported
+		BIOS boot specification is supported
+		Targeted content distribution is supported
+		UEFI is supported
+	BIOS Revision: 1.56
+	Firmware Revision: 1.56
+
+Handle 0x000F, DMI type 1, 27 bytes
+System Information
+	Manufacturer: LENOVO
+	Product Name: 20UES1YD34
+	Version: ThinkPad T14 Gen 1
+	Serial Number: <redacted>
+	UUID: <redacted>
+	Wake-up Type: Power Switch
+	SKU Number: LENOVO_MT_20UE_BU_Think_FM_ThinkPad T14 Gen 1
+	Family: ThinkPad T14 Gen 1
+
+Handle 0x0010, DMI type 2, 15 bytes
+Base Board Information
+	Manufacturer: LENOVO
+	Product Name: 20UES1YD34
+	Version: SDK0J40697 WIN
+	Serial Number: <redacted>
+	Asset Tag: <redacted>
+	Features:
+		Board is a hosting board
+		Board is replaceable
+	Location In Chassis: Not Available
+	Chassis Handle: 0x0000
+	Type: Motherboard
+	Contained Object Handles: 0
+
+Handle 0x0027, DMI type 10, 6 bytes
+On Board Device Information
+	Type: Video
+	Status: Enabled
+	Description: AMD Carrizo FP4 GPU
+
+Handle 0x0028, DMI type 10, 6 bytes
+On Board Device Information
+	Type: Sound
+	Status: Enabled
+	Description: AZALIA HD Audio
+
+Handle 0x0029, DMI type 10, 6 bytes
+On Board Device Information
+	Type: SATA Controller
+	Status: Enabled
+	Description: AMD Carrizo FP4
+
+Handle 0x002A, DMI type 10, 6 bytes
+On Board Device Information
+	Type: Unknown
+	Status: Enabled
+	Description: ST TPM ST33TPMF12SPI
+
+Handle 0x002B, DMI type 13, 22 bytes
+BIOS Language Information
+	Language Description Format: Abbreviated
+	Installable Languages: 6
+		en-US
+		fr-FR
+		ja-JP
+		ko-KR
+		zh-CHT
+		zh-CHS
+	Currently Installed Language: en-US
+
+Handle 0x0038, DMI type 15, 31 bytes
+System Event Log
+	Area Length: 3970 bytes
+	Header Start Offset: 0x0000
+	Header Length: 16 bytes
+	Data Start Offset: 0x0010
+	Access Method: General-purpose non-volatile data functions
+	Access Address: 0x00F0
+	Status: Valid, Full
+	Change Token: 0x000000F7
+	Header Format: Type 1
+	Supported Log Type Descriptors: 4
+	Descriptor 1: POST error
+	Data Format 1: POST results bitmap
+	Descriptor 2: PCI system error
+	Data Format 2: None
+	Descriptor 3: System reconfigured
+	Data Format 3: None
+	Descriptor 4: Log area reset/cleared
+	Data Format 4: None
+
+
+===== Boot mode and Secure Boot =====
+Booted via UEFI
+/sys/firmware/efi/fw_platform_size: 64
+$ mokutil --sb-state
+SecureBoot disabled
+$ efibootmgr
+BootCurrent: 0001
+Timeout: 2 seconds
+BootOrder: 0001,001B,0017,0018,001A,0019,001C,0000
+Boot0000* Windows Boot Manager	HD(1,GPT,<guid>,0x800,0x64000)/\EFI\Microsoft\Boot\bootmgfw.efi57494e444f5753000100000088000000780000004200430044004f0042004a004500430054003d007b00390064006500610038003600320063002d0035006300640064002d0034006500370030002d0061006300630031002d006600330032006200330034003400640034003700390035007d00000074000100000010000000040000007fff0400
+Boot0001* Fedora	HD(1,GPT,<guid>,0x800,0x12c000)/\EFI\fedora\shimx64.efi
+Boot0010  Setup	FvFile(<guid>)
+Boot0011  Boot Menu	FvFile(<guid>)
+Boot0012  Diagnostic Splash Screen	FvFile(<guid>)
+Boot0013  Lenovo Diagnostics	FvFile(<guid>)
+Boot0014  ThinkShield secure wipe	FvFile(<guid>)
+Boot0015  Startup Interrupt Menu	FvFile(<guid>)
+Boot0016  Rescue and Recovery	FvFile(<guid>)
+Boot0017* USB CD	VenMsg(<guid>,86701296aa5a7848b66cd49dd3ba6a55)
+Boot0018* USB FDD	VenMsg(<guid>,6ff015a28830b543a8b8641009461e49)
+Boot0019* NVMe0	VenMsg(<guid>,001c199932d94c4eae9aa0b6e98eb8a400)
+Boot001A* ATA HDD0	VenMsg(<guid>,91af625956449f41a7b91f4f892ab0f600)
+Boot001B* USB HDD	VenMsg(<guid>,33e821aaaf33bc4789bd419f88c50803)
+Boot001C* PXE BOOT	VenMsg(<guid>,78a84aaf2b2afc4ea79cf5cc8f3d3803)
+Boot001D  Regulatory Information	FvFile(<guid>)
+Boot001E* Boot Next Boot Option	VenMsg(<guid>,a7ca6d35b2c2684783721826a7404894)
+
+===== TPM =====
+/sys/class/tpm/tpm0/tpm_version_major: 2
+/sys/class/tpm/tpm0/device/description: (unavailable)
+total 0
+lrwxrwxrwx. 1 root root 0 Oct  2  2026 tpm0 -> ../../devices/platform/NTC0702:00/tpm/tpm0
+$ tpm2_getcap properties-fixed
+TPM2_PT_FAMILY_INDICATOR:
+  raw: 0x322E3000
+  value: "2.0"
+TPM2_PT_LEVEL:
+  raw: 0
+TPM2_PT_REVISION:
+  raw: 0x8A
+  value: 1.38
+TPM2_PT_DAY_OF_YEAR:
+  raw: 0x12F
+TPM2_PT_YEAR:
+  raw: 0x7E3
+TPM2_PT_MANUFACTURER:
+  raw: 0x4E544300
+  value: "NTC"
+TPM2_PT_VENDOR_STRING_1:
+  raw: 0x4E504354
+  value: "NPCT"
+TPM2_PT_VENDOR_STRING_2:
+  raw: 0x37357800
+  value: "75x"
+TPM2_PT_VENDOR_STRING_3:
+  raw: 0x22212134
+  value: ""!!4"
+TPM2_PT_VENDOR_STRING_4:
+  raw: 0x726C7300
+  value: "rls"
+TPM2_PT_VENDOR_TPM_TYPE:
+  raw: 0x0
+TPM2_PT_FIRMWARE_VERSION_1:
+  raw: 0x70002
+TPM2_PT_FIRMWARE_VERSION_2:
+  raw: 0x20000
+TPM2_PT_INPUT_BUFFER:
+  raw: 0x400
+TPM2_PT_HR_TRANSIENT_MIN:
+  raw: 0x5
+TPM2_PT_HR_PERSISTENT_MIN:
+  raw: 0x7
+TPM2_PT_HR_LOADED_MIN:
+  raw: 0x5
+TPM2_PT_ACTIVE_SESSIONS_MAX:
+  raw: 0x40
+TPM2_PT_PCR_COUNT:
+  raw: 0x18
+TPM2_PT_PCR_SELECT_MIN:
+  raw: 0x3
+TPM2_PT_CONTEXT_GAP_MAX:
+  raw: 0xFF
+TPM2_PT_NV_COUNTERS_MAX:
+  raw: 0x0
+TPM2_PT_NV_INDEX_MAX:
+  raw: 0x800
+TPM2_PT_MEMORY:
+  raw: 0x6
+TPM2_PT_CLOCK_UPDATE:
+  raw: 0x400000
+TPM2_PT_CONTEXT_HASH:
+  raw: 0xC
+TPM2_PT_CONTEXT_SYM:
+  raw: 0x6
+TPM2_PT_CONTEXT_SYM_SIZE:
+  raw: 0x100
+TPM2_PT_ORDERLY_COUNT:
+  raw: 0xFF
+TPM2_PT_MAX_COMMAND_SIZE:
+  raw: 0x800
+TPM2_PT_MAX_RESPONSE_SIZE:
+  raw: 0x800
+TPM2_PT_MAX_DIGEST:
+  raw: 0x30
+TPM2_PT_MAX_OBJECT_CONTEXT:
+  raw: 0x714
+TPM2_PT_MAX_SESSION_CONTEXT:
+  raw: 0x148
+TPM2_PT_PS_FAMILY_INDICATOR:
+  raw: 0x1
+TPM2_PT_PS_LEVEL:
+  raw: 0x0
+TPM2_PT_PS_REVISION:
+  raw: 0x104
+TPM2_PT_PS_DAY_OF_YEAR:
+  raw: 0x0
+TPM2_PT_PS_YEAR:
+  raw: 0x0
+TPM2_PT_SPLIT_MAX:
+  raw: 0x80
+TPM2_PT_TOTAL_COMMANDS:
+  raw: 0x71
+TPM2_PT_LIBRARY_COMMANDS:
+  raw: 0x68
+TPM2_PT_VENDOR_COMMANDS:
+  raw: 0x9
+TPM2_PT_NV_BUFFER_MAX:
+  raw: 0x400
+TPM2_PT_MODES:
+  raw: 0x1
+  value: TPMA_MODES_FIPS_140_2
+
+===== CPU =====
+$ lscpu
+Architecture:                            x86_64
+CPU op-mode(s):                          32-bit, 64-bit
+Address sizes:                           48 bits physical, 48 bits virtual
+Byte Order:                              Little Endian
+CPU(s):                                  12
+On-line CPU(s) list:                     0-11
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD Ryzen 5 PRO 4650U with Radeon Graphics
+CPU family:                              23
+Model:                                   96
+Thread(s) per core:                      2
+Core(s) per socket:                      6
+Socket(s):                               1
+Stepping:                                1
+Frequency boost:                         enabled
+CPU(s) scaling MHz:                      108%
+CPU max MHz:                             2100.0000
+CPU min MHz:                             1400.0000
+BogoMIPS:                                4192.33
+Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 cqm rdt_a rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local clzero irperf xsaveerptr rdpru wbnoinvd arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif v_spec_ctrl umip rdpid overflow_recov succor smca
+Virtualization:                          AMD-V
+L1d cache:                               192 KiB (6 instances)
+L1i cache:                               192 KiB (6 instances)
+L2 cache:                                3 MiB (6 instances)
+L3 cache:                                8 MiB (2 instances)
+NUMA node(s):                            1
+NUMA node0 CPU(s):                       0-11
+Vulnerability Gather data sampling:      Not affected
+Vulnerability Ghostwrite:                Not affected
+Vulnerability Indirect target selection: Not affected
+Vulnerability Itlb multihit:             Not affected
+Vulnerability L1tf:                      Not affected
+Vulnerability Mds:                       Not affected
+Vulnerability Meltdown:                  Not affected
+Vulnerability Mmio stale data:           Not affected
+Vulnerability Old microcode:             Not affected
+Vulnerability Reg file data sampling:    Not affected
+Vulnerability Retbleed:                  Mitigation; untrained return thunk; SMT enabled with STIBP protection
+Vulnerability Spec rstack overflow:      Mitigation; Safe RET
+Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+Vulnerability Spectre v2:                Mitigation; Retpolines; IBPB conditional; STIBP always-on; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected
+Vulnerability Srbds:                     Not affected
+Vulnerability Tsa:                       Not affected
+Vulnerability Tsx async abort:           Not affected
+Vulnerability Vmscape:                   Mitigation; IBPB before exit to userspace
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 cqm rdt_a rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local clzero irperf xsaveerptr rdpru wbnoinvd arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif v_spec_ctrl umip rdpid overflow_recov succor smca
+
+===== Memory =====
+$ free -h
+               total        used        free      shared  buff/cache   available
+Mem:            30Gi       5.5Gi        15Gi       209Mi       9.5Gi        25Gi
+Swap:          8.0Gi          0B       8.0Gi
+$ dmidecode -t memory
+# dmidecode 3.6
+Getting SMBIOS data from sysfs.
+SMBIOS 3.2.0 present.
+
+Handle 0x0001, DMI type 16, 23 bytes
+Physical Memory Array
+	Location: System Board Or Motherboard
+	Use: System Memory
+	Error Correction Type: None
+	Maximum Capacity: 64 GB
+	Error Information Handle: 0x0000
+	Number Of Devices: 2
+
+Handle 0x0008, DMI type 17, 84 bytes
+Memory Device
+	Array Handle: 0x0001
+	Error Information Handle: 0x0007
+	Total Width: 64 bits
+	Data Width: 64 bits
+	Size: 16 GB
+	Form Factor: SODIMM
+	Set: None
+	Locator: DIMM 0
+	Bank Locator: P0 CHANNEL A
+	Type: DDR4
+	Type Detail: Synchronous Unbuffered (Unregistered)
+	Speed: 2667 MT/s
+	Manufacturer: Hynix
+	Serial Number: <redacted>
+	Asset Tag: <redacted>
+	Part Number: HMAB2GS6AMR6N-XN    
+	Rank: 1
+	Configured Memory Speed: 2667 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: DRAM
+	Memory Operating Mode Capability: Volatile memory
+	Firmware Version: Unknown
+	Module Manufacturer ID: Bank 1, Hex 0xAD
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: 16 GB
+	Cache Size: None
+	Logical Size: None
+
+Handle 0x000B, DMI type 17, 84 bytes
+Memory Device
+	Array Handle: 0x0001
+	Error Information Handle: 0x000A
+	Total Width: 64 bits
+	Data Width: 64 bits
+	Size: 16 GB
+	Form Factor: SODIMM
+	Set: None
+	Locator: DIMM 0
+	Bank Locator: P0 CHANNEL B
+	Type: DDR4
+	Type Detail: Synchronous Unbuffered (Unregistered)
+	Speed: 2667 MT/s
+	Manufacturer: Hynix
+	Serial Number: <redacted>
+	Asset Tag: <redacted>
+	Part Number: HMA82GS6CJR8N-VK    
+	Rank: 2
+	Configured Memory Speed: 2667 MT/s
+	Minimum Voltage: 1.2 V
+	Maximum Voltage: 1.2 V
+	Configured Voltage: 1.2 V
+	Memory Technology: DRAM
+	Memory Operating Mode Capability: Volatile memory
+	Firmware Version: Unknown
+	Module Manufacturer ID: Bank 1, Hex 0xAD
+	Module Product ID: Unknown
+	Memory Subsystem Controller Manufacturer ID: Unknown
+	Memory Subsystem Controller Product ID: Unknown
+	Non-Volatile Size: None
+	Volatile Size: 16 GB
+	Cache Size: None
+	Logical Size: None
+
+
+===== IOMMU and DMA protection =====
+IOMMU groups: 17
+[    0.160482] AMD-Vi: ivrs, add hid:AMDI0020, uid:\_SB.FUR0, rdevid:0xa0
+[    0.160483] AMD-Vi: ivrs, add hid:AMDI0020, uid:\_SB.FUR1, rdevid:0xa0
+[    0.160484] AMD-Vi: ivrs, add hid:AMDI0020, uid:\_SB.FUR2, rdevid:0xa0
+[    0.160485] AMD-Vi: ivrs, add hid:AMDI0020, uid:\_SB.FUR3, rdevid:0xa0
+[    0.160486] AMD-Vi: Using global IVHD EFR:0x206d73ef22254ade, EFR2:0x0
+[    0.432294] iommu: Default domain type: Translated
+[    0.432294] iommu: DMA domain TLB invalidation policy: lazy mode
+[    0.472361] pci 0000:00:00.2: AMD-Vi: IOMMU performance counters supported
+[    0.472460] pci 0000:00:01.0: Adding to iommu group 0
+[    0.472540] pci 0000:00:02.0: Adding to iommu group 1
+[    0.472562] pci 0000:00:02.1: Adding to iommu group 2
+[    0.472582] pci 0000:00:02.2: Adding to iommu group 3
+[    0.472606] pci 0000:00:02.3: Adding to iommu group 4
+[    0.472627] pci 0000:00:02.4: Adding to iommu group 5
+[    0.472649] pci 0000:00:02.6: Adding to iommu group 6
+[    0.472670] pci 0000:00:02.7: Adding to iommu group 7
+[    0.472705] pci 0000:00:08.0: Adding to iommu group 8
+[    0.472723] pci 0000:00:08.1: Adding to iommu group 8
+[    0.472760] pci 0000:00:14.0: Adding to iommu group 9
+[    0.472778] pci 0000:00:14.3: Adding to iommu group 9
+[    0.472869] pci 0000:00:18.0: Adding to iommu group 10
+[    0.472888] pci 0000:00:18.1: Adding to iommu group 10
+[    0.472907] pci 0000:00:18.2: Adding to iommu group 10
+[    0.472926] pci 0000:00:18.3: Adding to iommu group 10
+[    0.472945] pci 0000:00:18.4: Adding to iommu group 10
+[    0.472966] pci 0000:00:18.5: Adding to iommu group 10
+[    0.472985] pci 0000:00:18.6: Adding to iommu group 10
+[    0.473005] pci 0000:00:18.7: Adding to iommu group 10
+[    0.473025] pci 0000:01:00.0: Adding to iommu group 11
+[    0.473085] pci 0000:02:00.0: Adding to iommu group 12
+[    0.473108] pci 0000:02:00.1: Adding to iommu group 12
+[    0.473129] pci 0000:02:00.2: Adding to iommu group 12
+[    0.473149] pci 0000:02:00.3: Adding to iommu group 12
+[    0.473169] pci 0000:02:00.4: Adding to iommu group 12
+[    0.473188] pci 0000:03:00.0: Adding to iommu group 13
+[    0.473210] pci 0000:04:00.0: Adding to iommu group 14
+[    0.473232] pci 0000:05:00.0: Adding to iommu group 15
+[    0.473252] pci 0000:06:00.0: Adding to iommu group 16
+[    0.473266] pci 0000:07:00.0: Adding to iommu group 8
+[    0.473273] pci 0000:07:00.1: Adding to iommu group 8
+
+===== ACPI tables =====
+APIC
+BATB
+BGRT
+CDIT
+CRAT
+data
+DSDT
+dynamic
+FACP
+FACS
+FPDT
+HPET
+IVRS
+MCFG
+MSDM
+SBST
+SSDT1
+SSDT10
+SSDT11
+SSDT12
+SSDT13
+SSDT2
+SSDT3
+SSDT4
+SSDT5
+SSDT6
+SSDT7
+SSDT8
+SSDT9
+TPM2
+UEFI
+VFCT
+WSMT
+HPET:
+000000 48 50 45 54 38 00 00 00 01 36 4c 45 4e 4f 56 4f  >HPET8....6LENOVO<
+000010 54 50 2d 52 31 42 20 20 60 15 00 00 50 54 45 43  >TP-R1B  `...PTEC<
+000020 02 00 00 00 10 82 53 43 00 08 00 00 00 00 d0 fe  >......SC........<
+000030 00 00 00 00 02 14 00 00                          >........<
+000038
+APIC:
+000000 41 50 49 43 38 01 00 00 02 43 4c 45 4e 4f 56 4f  >APIC8....CLENOVO<
+000010 54 50 2d 52 31 42 20 20 60 15 00 00 50 54 45 43  >TP-R1B  `...PTEC<
+000020 02 00 00 00 00 00 e0 fe 01 00 00 00 00 08 00 00  >................<
+000030 01 00 00 00 00 08 01 01 01 00 00 00 00 08 02 02  >................<
+000040 01 00 00 00 00 08 03 03 01 00 00 00 00 08 04 04  >................<
+000050 01 00 00 00 00 08 05 05 01 00 00 00 00 08 06 08  >................<
+000060 01 00 00 00 00 08 07 09 01 00 00 00 00 08 08 0a  >................<
+000070 01 00 00 00 00 08 09 0b 01 00 00 00 00 08 0a 0c  >................<
+000080 01 00 00 00 00 08 0b 0d 01 00 00 00 00 08 0c 0c  >................<
+000090 00 00 00 00 00 08 0d 0d 00 00 00 00 00 08 0e 0e  >................<
+0000a0 00 00 00 00 00 08 0f 0f 00 00 00 00 01 0c 20 00  >.............. .<
+0000b0 00 00 c0 fe 00 00 00 00 01 0c 21 00 00 10 c0 fe  >..........!.....<
+0000c0 18 00 00 00 02 0a 00 00 02 00 00 00 00 00 02 0a  >................<
+0000d0 00 09 09 00 00 00 0f 00 04 06 00 05 00 01 04 06  >................<
+0000e0 01 05 00 01 04 06 02 05 00 01 04 06 03 05 00 01  >................<
+0000f0 04 06 04 05 00 01 04 06 05 05 00 01 04 06 06 05  >................<
+000100 00 01 04 06 07 05 00 01 04 06 08 05 00 01 04 06  >................<
+000110 09 05 00 01 04 06 0a 05 00 01 04 06 0b 05 00 01  >................<
+000120 04 06 0c 05 00 01 04 06 0d 05 00 01 04 06 0e 05  >................<
+000130 00 01 04 06 0f 05 00 01                          >........<
+000138
+MCFG:
+000000 4d 43 46 47 3c 00 00 00 01 23 4c 45 4e 4f 56 4f  >MCFG<....#LENOVO<
+000010 54 50 2d 52 31 42 20 20 60 15 00 00 50 54 45 43  >TP-R1B  `...PTEC<
+000020 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 f8  >................<
+000030 00 00 00 00 00 00 00 3f 00 00 00 00              >.......?....<
+00003c
+
+===== Early boot hazards (Pyxis black screen) =====
+[    0.000000] tsc: Fast TSC calibration using PIT
+[    0.000000] tsc: Detected 2096.167 MHz processor
+[    0.004498] ACPI: HPET 0x00000000BE496000 000038 (v01 LENOVO TP-R1B   00001560 PTEC 00000002)
+[    0.004542] ACPI: Reserving HPET table memory at [mem 0xbe496000-0xbe496037]
+[    0.055145] ACPI: HPET id: 0x43538210 base: 0xfed00000
+[    0.055207] clocksource: refined-jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1910969940391419 ns
+[    0.160044] clocksource: hpet: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 133484873504 ns
+[    0.166069] clocksource: tsc-early: mask: 0xffffffffffffffff max_cycles: 0x1e370bb546f, max_idle_ns: 440795256759 ns
+[    0.336360] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1911260446275000 ns
+[    0.438387] hpet0: at MMIO 0xfed00000, IRQs 2, 8, 0
+[    0.438387] hpet0: 3 comparators, 32-bit 14.318180 MHz counter
+[    0.440135] clocksource: Switched to clocksource tsc-early
+[    0.448302] clocksource: acpi_pm: mask: 0xffffff max_cycles: 0xffffff, max_idle_ns: 2085701024 ns
+[    0.475075] AMD-Vi: Extended features (0x206d73ef22254ade, 0x0): PPR X2APIC NX GT IA GA PC GA_vAPIC
+[    0.475094] AMD-Vi: X2APIC enabled
+[    0.623870] Serial: 8250/16550 driver, 32 ports, IRQ sharing enabled
+[    0.627071] serial 0000:02:00.1: enabling device (0001 -> 0003)
+[    0.627370] 0000:02:00.1: ttyS4 at I/O 0x3200 (irq = 35, base_baud = 115200) is a 16550A
+[    0.627462] serial 0000:02:00.2: enabling device (0001 -> 0003)
+[    0.627724] 0000:02:00.2: ttyS5 at I/O 0x3100 (irq = 36, base_baud = 115200) is a 16550A
+[    0.745424] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    0.745432] usb usb1: SerialNumber: 0000:07:00.3
+[    0.746047] usb usb3: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    0.746053] usb usb3: SerialNumber: 0000:07:00.3
+[    0.751958] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    0.751977] usb usb2: SerialNumber: 0000:02:00.4
+[    0.753505] usb usb4: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    0.753512] usb usb4: SerialNumber: 0000:07:00.4
+[    0.754083] usb usb5: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    0.754089] usb usb5: SerialNumber: 0000:07:00.4
+[    0.849876] usb usb6: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    0.849882] usb usb6: SerialNumber: 0000:06:00.0
+[    0.850248] usb usb7: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    0.850254] usb usb7: SerialNumber: 0000:06:00.0
+[    0.850625] usbcore: registered new interface driver usbserial_generic
+[    0.850633] usbserial: USB Serial support registered for generic
+[    0.858174] simple-framebuffer simple-framebuffer.0: [drm] Registered 1 planes with drm panic
+[    0.858254] [drm] Initialized simpledrm 1.0.0 for simple-framebuffer.0 on minor 0
+[    0.861488] simple-framebuffer simple-framebuffer.0: [drm] fb0: simpledrmdrmfb frame buffer device
+[    1.137535] usb 4-3: New USB device strings: Mfr=0, Product=0, SerialNumber=1
+[    1.137543] usb 4-3: SerialNumber: <redacted>
+[    1.230941] usb 6-2: New USB device strings: Mfr=1, Product=2, SerialNumber=0
+[    1.415874] usb 4-4: New USB device strings: Mfr=0, Product=0, SerialNumber=0
+[    1.599425] tsc: Refined TSC clocksource calibration: 2096.061 MHz
+[    1.599435] clocksource: tsc: mask: 0xffffffffffffffff max_cycles: 0x1e36a769ed4, max_idle_ns: 440795206585 ns
+[    1.599468] clocksource: Switched to clocksource tsc
+[    9.305914] platform simple-framebuffer.0: [drm] drm_WARN_ON(refcount_read(&shmem->vmap_use_count))
+[    9.306017]  drm_framebuffer_cleanup+0x6f/0x100
+[    9.306581] platform simple-framebuffer.0: [drm] drm_WARN_ON(refcount_read(&shmem->pages_pin_count))
+[    9.306682]  drm_framebuffer_cleanup+0x6f/0x100
+[   12.577155] Serial bus multi instantiate pseudo device driver INT3515:00: error -ENXIO: IRQ index 1 not found
+[   12.577169] Serial bus multi instantiate pseudo device driver INT3515:00: error -ENXIO: Error requesting irq at index 1
+[   59.864421] usb 4-1: New USB device strings: Mfr=1, Product=2, SerialNumber=0
+[   60.216526] usb 5-1: New USB device strings: Mfr=1, Product=2, SerialNumber=0
+[   60.724497] usb 1-1: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+[   60.724517] usb 1-1: SerialNumber: <redacted>
+[   60.845372] usb 4-1.2: New USB device strings: Mfr=1, Product=2, SerialNumber=0
+[   60.927470] usb 5-1.2: New USB device strings: Mfr=1, Product=2, SerialNumber=0
+[   61.224036] usb 4-1.5: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+[   61.224055] usb 4-1.5: SerialNumber: <redacted>
+/sys/devices/system/clocksource/clocksource0/available_clocksource: tsc hpet acpi_pm 
+/sys/devices/system/clocksource/clocksource0/current_clocksource: tsc
+  0040-0043 : timer0
+  0060-0060 : keyboard
+  0064-0064 : keyboard
+      3100-3107 : serial
+      3200-3207 : serial
+fed00000-fed003ff : HPET 2
+  fed00000-fed003ff : pnp 00:03
+serinfo:1.0 driver revision:
+0: uart:unknown port:000003F8 irq:4
+1: uart:unknown port:000002F8 irq:3
+2: uart:unknown port:000003E8 irq:4
+3: uart:unknown port:000002E8 irq:3
+4: uart:16550A port:00003200 irq:35 tx:0 rx:0
+5: uart:16550A port:00003100 irq:36 tx:0 rx:0
+6: uart:unknown port:00000000 irq:0
+7: uart:unknown port:00000000 irq:0
+8: uart:unknown port:00000000 irq:0
+9: uart:unknown port:00000000 irq:0
+10: uart:unknown port:00000000 irq:0
+11: uart:unknown port:00000000 irq:0
+12: uart:unknown port:00000000 irq:0
+13: uart:unknown port:00000000 irq:0
+14: uart:unknown port:00000000 irq:0
+15: uart:unknown port:00000000 irq:0
+16: uart:unknown port:00000000 irq:0
+17: uart:unknown port:00000000 irq:0
+18: uart:unknown port:00000000 irq:0
+19: uart:unknown port:00000000 irq:0
+20: uart:unknown port:00000000 irq:0
+21: uart:unknown port:00000000 irq:0
+22: uart:unknown port:00000000 irq:0
+23: uart:unknown port:00000000 irq:0
+24: uart:unknown port:00000000 irq:0
+25: uart:unknown port:00000000 irq:0
+26: uart:unknown port:00000000 irq:0
+27: uart:unknown port:00000000 irq:0
+28: uart:unknown port:00000000 irq:0
+29: uart:unknown port:00000000 irq:0
+30: uart:unknown port:00000000 irq:0
+31: uart:unknown port:00000000 irq:0
+/sys/class/graphics/fbcon/name: (unavailable)
+/sys/class/graphics/fbcon/virtual_size: (unavailable)
+/sys/class/graphics/fbcon/bits_per_pixel: (unavailable)
+/sys/class/graphics/fbcon/stride: (unavailable)
+
+===== PCI (all functions) =====
+$ lspci -nn
+00:00.0 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne Root Complex [1022:1630]
+00:00.2 IOMMU [0806]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne IOMMU [1022:1631]
+00:01.0 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir PCIe Dummy Host Bridge [1022:1632]
+00:02.0 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir PCIe Dummy Host Bridge [1022:1632]
+00:02.1 PCI bridge [0604]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne PCIe GPP Bridge [1022:1634]
+00:02.2 PCI bridge [0604]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne PCIe GPP Bridge [1022:1634]
+00:02.3 PCI bridge [0604]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne PCIe GPP Bridge [1022:1634]
+00:02.4 PCI bridge [0604]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne PCIe GPP Bridge [1022:1634]
+00:02.6 PCI bridge [0604]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne PCIe GPP Bridge [1022:1634]
+00:02.7 PCI bridge [0604]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne PCIe GPP Bridge [1022:1634]
+00:08.0 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir PCIe Dummy Host Bridge [1022:1632]
+00:08.1 PCI bridge [0604]: Advanced Micro Devices, Inc. [AMD] Renoir Internal PCIe GPP Bridge to Bus [1022:1635]
+00:14.0 SMBus [0c05]: Advanced Micro Devices, Inc. [AMD] FCH SMBus Controller [1022:790b] (rev 51)
+00:14.3 ISA bridge [0601]: Advanced Micro Devices, Inc. [AMD] FCH LPC Bridge [1022:790e] (rev 51)
+00:18.0 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 0 [1022:1448]
+00:18.1 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 1 [1022:1449]
+00:18.2 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 2 [1022:144a]
+00:18.3 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 3 [1022:144b]
+00:18.4 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 4 [1022:144c]
+00:18.5 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 5 [1022:144d]
+00:18.6 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 6 [1022:144e]
+00:18.7 Host bridge [0600]: Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 7 [1022:144f]
+01:00.0 Non-Volatile memory controller [0108]: SK hynix PC611 NVMe Solid State Drive [1c5c:1639]
+02:00.0 Ethernet controller [0200]: Realtek Semiconductor Co., Ltd. RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller [10ec:8168] (rev 0e)
+02:00.1 Serial controller [0700]: Realtek Semiconductor Co., Ltd. RTL8111xP UART #1 [10ec:816a] (rev 0e)
+02:00.2 Serial controller [0700]: Realtek Semiconductor Co., Ltd. RTL8111xP UART #2 [10ec:816b] (rev 0e)
+02:00.3 IPMI Interface [0c07]: Realtek Semiconductor Co., Ltd. RTL8111xP IPMI interface [10ec:816c] (rev 0e)
+02:00.4 USB controller [0c03]: Realtek Semiconductor Co., Ltd. RTL811x EHCI host controller [10ec:816d] (rev 0e)
+03:00.0 Network controller [0280]: Intel Corporation Wi-Fi 6 AX200 [8086:2723] (rev 1a)
+04:00.0 Unassigned class [ff00]: Realtek Semiconductor Co., Ltd. RTS522A PCI Express Card Reader [10ec:522a] (rev 01)
+05:00.0 Ethernet controller [0200]: Realtek Semiconductor Co., Ltd. RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller [10ec:8168] (rev 15)
+06:00.0 USB controller [0c03]: Renesas Electronics Corp. uPD720202 USB 3.0 Host Controller [1912:0015] (rev 02)
+07:00.0 VGA compatible controller [0300]: Advanced Micro Devices, Inc. [AMD/ATI] Renoir [Radeon Vega Series / Radeon Vega Mobile Series] [1002:1636] (rev d3)
+07:00.1 Audio device [0403]: Advanced Micro Devices, Inc. [AMD/ATI] Renoir/Cezanne HDMI/DP Audio Controller [1002:1637]
+07:00.2 Encryption controller [1080]: Advanced Micro Devices, Inc. [AMD] Raven/Raven2/FireFlight/Renoir/Cezanne Platform Security Processor [1022:15df]
+07:00.3 USB controller [0c03]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne USB 3.1 [1022:1639]
+07:00.4 USB controller [0c03]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne USB 3.1 [1022:1639]
+07:00.5 Multimedia controller [0480]: Advanced Micro Devices, Inc. [AMD] Audio Coprocessor [1022:15e2] (rev 01)
+07:00.6 Audio device [0403]: Advanced Micro Devices, Inc. [AMD] Ryzen HD Audio Controller [1022:15e3]
+$ lspci -tv
+-[0000:00]-+-00.0  Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne Root Complex
+           +-00.2  Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne IOMMU
+           +-01.0  Advanced Micro Devices, Inc. [AMD] Renoir PCIe Dummy Host Bridge
+           +-02.0  Advanced Micro Devices, Inc. [AMD] Renoir PCIe Dummy Host Bridge
+           +-02.1-[01]----00.0  SK hynix PC611 NVMe Solid State Drive
+           +-02.2-[02]--+-00.0  Realtek Semiconductor Co., Ltd. RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller
+           |            +-00.1  Realtek Semiconductor Co., Ltd. RTL8111xP UART #1
+           |            +-00.2  Realtek Semiconductor Co., Ltd. RTL8111xP UART #2
+           |            +-00.3  Realtek Semiconductor Co., Ltd. RTL8111xP IPMI interface
+           |            \-00.4  Realtek Semiconductor Co., Ltd. RTL811x EHCI host controller
+           +-02.3-[03]----00.0  Intel Corporation Wi-Fi 6 AX200
+           +-02.4-[04]----00.0  Realtek Semiconductor Co., Ltd. RTS522A PCI Express Card Reader
+           +-02.6-[05]----00.0  Realtek Semiconductor Co., Ltd. RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller
+           +-02.7-[06]----00.0  Renesas Electronics Corp. uPD720202 USB 3.0 Host Controller
+           +-08.0  Advanced Micro Devices, Inc. [AMD] Renoir PCIe Dummy Host Bridge
+           +-08.1-[07]--+-00.0  Advanced Micro Devices, Inc. [AMD/ATI] Renoir [Radeon Vega Series / Radeon Vega Mobile Series]
+           |            +-00.1  Advanced Micro Devices, Inc. [AMD/ATI] Renoir/Cezanne HDMI/DP Audio Controller
+           |            +-00.2  Advanced Micro Devices, Inc. [AMD] Raven/Raven2/FireFlight/Renoir/Cezanne Platform Security Processor
+           |            +-00.3  Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne USB 3.1
+           |            +-00.4  Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne USB 3.1
+           |            +-00.5  Advanced Micro Devices, Inc. [AMD] Audio Coprocessor
+           |            \-00.6  Advanced Micro Devices, Inc. [AMD] Ryzen HD Audio Controller
+           +-14.0  Advanced Micro Devices, Inc. [AMD] FCH SMBus Controller
+           +-14.3  Advanced Micro Devices, Inc. [AMD] FCH LPC Bridge
+           +-18.0  Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 0
+           +-18.1  Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 1
+           +-18.2  Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 2
+           +-18.3  Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 3
+           +-18.4  Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 4
+           +-18.5  Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 5
+           +-18.6  Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 6
+           \-18.7  Advanced Micro Devices, Inc. [AMD] Renoir Device 24: Function 7
+
+===== USB controllers (inputs for Pyxis #319) =====
+$ lspci -nn -d ::0c03
+02:00.4 USB controller [0c03]: Realtek Semiconductor Co., Ltd. RTL811x EHCI host controller [10ec:816d] (rev 0e)
+06:00.0 USB controller [0c03]: Renesas Electronics Corp. uPD720202 USB 3.0 Host Controller [1912:0015] (rev 02)
+07:00.3 USB controller [0c03]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne USB 3.1 [1022:1639]
+07:00.4 USB controller [0c03]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne USB 3.1 [1022:1639]
+$ lspci -vv -nn -d ::0c03
+02:00.4 USB controller [0c03]: Realtek Semiconductor Co., Ltd. RTL811x EHCI host controller [10ec:816d] (rev 0e) (prog-if 20 [EHCI])
+	Subsystem: Lenovo Device [17aa:5081]
+	Control: I/O- Mem+ BusMaster+ SpecCycle- MemWINV- VGASnoop- ParErr- Stepping- SERR- FastB2B- DisINTx+
+	Status: Cap+ 66MHz- UDF- FastB2B- ParErr- DEVSEL=fast >TAbort- <TAbort- <MAbort- >SERR- <PERR- INTx-
+	Latency: 0, Cache Line Size: 32 bytes
+	Interrupt: pin D routed to IRQ 39
+	IOMMU group: 12
+	Region 0: Memory at fd818000 (32-bit, non-prefetchable) [size=4K]
+	Region 2: Memory at fd810000 (64-bit, non-prefetchable) [size=16K]
+	Capabilities: [40] Power Management version 3
+		Flags: PMEClk- DSI- D1+ D2+ AuxCurrent=375mA PME(D0+,D1+,D2+,D3hot+,D3cold+)
+		Status: D0 NoSoftRst+ PME-Enable- DSel=0 DScale=0 PME-
+	Capabilities: [50] MSI: Enable+ Count=1/1 Maskable- 64bit+
+		Address: 00000000fee00000  Data: 0000
+	Capabilities: [70] Express (v2) Endpoint, IntMsgNum 1
+		DevCap:	MaxPayload 128 bytes, PhantFunc 0, Latency L0s unlimited, L1 <64us
+			ExtTag- AttnBtn- AttnInd- PwrInd- RBE+ FLReset- SlotPowerLimit 0W TEE-IO-
+		DevCtl:	CorrErr+ NonFatalErr+ FatalErr+ UnsupReq+
+			RlxdOrd+ ExtTag- PhantFunc- AuxPwr- NoSnoop-
+			MaxPayload 128 bytes, MaxReadReq 512 bytes
+		DevSta:	CorrErr+ NonFatalErr- FatalErr- UnsupReq+ AuxPwr+ TransPend-
+		LnkCap:	Port #0, Speed 2.5GT/s, Width x1, ASPM L0s L1, Exit Latency L0s unlimited, L1 <64us
+			ClockPM+ Surprise- LLActRep- BwNot- ASPMOptComp+
+		LnkCtl:	ASPM L1 Enabled; RCB 64 bytes, LnkDisable- CommClk+
+			ExtSynch- ClockPM+ AutWidDis- BWInt- AutBWInt- FltModeDis-
+		LnkSta:	Speed 2.5GT/s, Width x1
+			TrErr- Train- SlotClk+ DLActive- BWMgmt- ABWMgmt-
+		DevCap2: Completion Timeout: Range ABCD, TimeoutDis+ NROPrPrP- LTR+
+			 10BitTagComp- 10BitTagReq- OBFF Via message/WAKE#, ExtFmt- EETLPPrefix-
+			 EmergencyPowerReduction Not Supported, EmergencyPowerReductionInit-
+			 FRS- TPHComp- ExtTPHComp-
+			 AtomicOpsCap: 32bit- 64bit- 128bitCAS-
+		DevCtl2: Completion Timeout: 50us to 50ms, TimeoutDis-
+			 AtomicOpsCtl: ReqEn-
+			 IDOReq- IDOCompl- LTR- EmergencyPowerReductionReq-
+			 10BitTagReq- OBFF Disabled, EETLPPrefixBlk-
+		LnkSta2: Current De-emphasis Level: -6dB, EqualizationComplete- EqualizationPhase1-
+			 EqualizationPhase2- EqualizationPhase3- LinkEqualizationRequest-
+			 Retimer- 2Retimers- CrosslinkRes: unsupported, FltMode-
+	Capabilities: [b0] MSI-X: Enable- Count=4 Masked-
+		Vector table: BAR=2 offset=00000000
+		PBA: BAR=2 offset=00000800
+	Capabilities: [d0] Vital Product Data
+		Not readable
+	Capabilities: [100 v2] Advanced Error Reporting
+		UESta:	DLP- SDES- TLP- FCP- CmpltTO- CmpltAbrt- UnxCmplt- RxOF- MalfTLP-
+			ECRC- UnsupReq- ACSViol- UncorrIntErr- BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+			PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+		UEMsk:	DLP- SDES- TLP- FCP- CmpltTO- CmpltAbrt- UnxCmplt- RxOF- MalfTLP-
+			ECRC- UnsupReq- ACSViol- UncorrIntErr+ BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+			PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+		UESvrt:	DLP+ SDES+ TLP- FCP+ CmpltTO- CmpltAbrt- UnxCmplt- RxOF+ MalfTLP+
+			ECRC- UnsupReq- ACSViol- UncorrIntErr+ BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+			PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+		CESta:	RxErr- BadTLP- BadDLLP- Rollover- Timeout- AdvNonFatalErr+ CorrIntErr- HeaderOF-
+		CEMsk:	RxErr- BadTLP- BadDLLP- Rollover- Timeout- AdvNonFatalErr+ CorrIntErr+ HeaderOF-
+		AERCap:	First Error Pointer: 00, ECRCGenCap+ ECRCGenEn- ECRCChkCap+ ECRCChkEn-
+			MultHdrRecCap- MultHdrRecEn- TLPPfxPres- HdrLogCap-
+		HeaderLog: 00000000 00000000 00000000 00000000
+	Capabilities: [160 v1] Device Serial Number  <redacted>
+	Capabilities: [170 v1] Latency Tolerance Reporting
+		Max snoop latency: 1048576ns
+		Max no snoop latency: 1048576ns
+	Capabilities: [178 v1] L1 PM Substates
+		L1SubCap: PCI-PM_L1.2+ PCI-PM_L1.1+ ASPM_L1.2+ ASPM_L1.1+ L1_PM_Substates+
+			  PortCommonModeRestoreTime=150us PortTPowerOnTime=150us
+		L1SubCtl1: PCI-PM_L1.2+ PCI-PM_L1.1+ ASPM_L1.2+ ASPM_L1.1+
+			   T_CommonMode=0us LTR1.2_Threshold=306176ns
+		L1SubCtl2: T_PwrOn=150us
+	Kernel driver in use: ehci-pci
+	Kernel modules: ehci_pci
+
+06:00.0 USB controller [0c03]: Renesas Electronics Corp. uPD720202 USB 3.0 Host Controller [1912:0015] (rev 02) (prog-if 30 [XHCI])
+	Control: I/O- Mem+ BusMaster+ SpecCycle- MemWINV- VGASnoop- ParErr- Stepping- SERR- FastB2B- DisINTx+
+	Status: Cap+ 66MHz- UDF- FastB2B- ParErr- DEVSEL=fast >TAbort- <TAbort- <MAbort- >SERR- <PERR- INTx-
+	Latency: 0, Cache Line Size: 32 bytes
+	Interrupt: pin A routed to IRQ 36
+	IOMMU group: 16
+	Region 0: Memory at fd400000 (64-bit, non-prefetchable) [size=8K]
+	Capabilities: [50] Power Management version 3
+		Flags: PMEClk- DSI- D1- D2- AuxCurrent=375mA PME(D0+,D1-,D2-,D3hot+,D3cold+)
+		Status: D0 NoSoftRst+ PME-Enable- DSel=0 DScale=0 PME-
+	Capabilities: [70] MSI: Enable- Count=1/8 Maskable- 64bit+
+		Address: 0000000000000000  Data: 0000
+	Capabilities: [90] MSI-X: Enable+ Count=8 Masked-
+		Vector table: BAR=0 offset=00001000
+		PBA: BAR=0 offset=00001080
+	Capabilities: [a0] Express (v2) Endpoint, IntMsgNum 0
+		DevCap:	MaxPayload 128 bytes, PhantFunc 0, Latency L0s unlimited, L1 unlimited
+			ExtTag- AttnBtn- AttnInd- PwrInd- RBE+ FLReset- SlotPowerLimit 0W TEE-IO-
+		DevCtl:	CorrErr+ NonFatalErr+ FatalErr+ UnsupReq+
+			RlxdOrd- ExtTag- PhantFunc- AuxPwr- NoSnoop+
+			MaxPayload 128 bytes, MaxReadReq 512 bytes
+		DevSta:	CorrErr+ NonFatalErr- FatalErr- UnsupReq+ AuxPwr+ TransPend-
+		LnkCap:	Port #0, Speed 5GT/s, Width x1, ASPM L0s L1, Exit Latency L0s <4us, L1 unlimited
+			ClockPM+ Surprise- LLActRep- BwNot- ASPMOptComp-
+		LnkCtl:	ASPM L0s Enabled; RCB 64 bytes, LnkDisable- CommClk+
+			ExtSynch- ClockPM+ AutWidDis- BWInt- AutBWInt- FltModeDis-
+		LnkSta:	Speed 5GT/s, Width x1
+			TrErr- Train- SlotClk+ DLActive- BWMgmt- ABWMgmt-
+		DevCap2: Completion Timeout: Not Supported, TimeoutDis+ NROPrPrP- LTR+
+			 10BitTagComp- 10BitTagReq- OBFF Not Supported, ExtFmt- EETLPPrefix-
+			 EmergencyPowerReduction Not Supported, EmergencyPowerReductionInit-
+			 FRS- TPHComp- ExtTPHComp-
+			 AtomicOpsCap: 32bit- 64bit- 128bitCAS-
+		DevCtl2: Completion Timeout: 50us to 50ms, TimeoutDis-
+			 AtomicOpsCtl: ReqEn-
+			 IDOReq- IDOCompl- LTR- EmergencyPowerReductionReq-
+			 10BitTagReq- OBFF Disabled, EETLPPrefixBlk-
+		LnkCtl2: Target Link Speed: 5GT/s, EnterCompliance- SpeedDis-
+			 Transmit Margin: Normal Operating Range, EnterModifiedCompliance- ComplianceSOS-
+			 Compliance Preset/De-emphasis: -6dB de-emphasis, 0dB preshoot
+		LnkSta2: Current De-emphasis Level: -3.5dB, EqualizationComplete- EqualizationPhase1-
+			 EqualizationPhase2- EqualizationPhase3- LinkEqualizationRequest-
+			 Retimer- 2Retimers- CrosslinkRes: unsupported, FltMode-
+	Capabilities: [100 v1] Advanced Error Reporting
+		UESta:	DLP- SDES- TLP- FCP- CmpltTO- CmpltAbrt- UnxCmplt- RxOF- MalfTLP-
+			ECRC- UnsupReq- ACSViol- UncorrIntErr- BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+			PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+		UEMsk:	DLP- SDES- TLP- FCP- CmpltTO- CmpltAbrt- UnxCmplt- RxOF- MalfTLP-
+			ECRC- UnsupReq- ACSViol- UncorrIntErr- BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+			PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+		UESvrt:	DLP+ SDES+ TLP- FCP+ CmpltTO- CmpltAbrt- UnxCmplt- RxOF+ MalfTLP+
+			ECRC- UnsupReq- ACSViol- UncorrIntErr- BlockedTLP- AtomicOpBlocked- TLPBlockedErr-
+			PoisonTLPBlocked- DMWrReqBlocked- IDECheck- MisIDETLP- PCRC_CHECK- TLPXlatBlocked-
+		CESta:	RxErr- BadTLP- BadDLLP- Rollover- Timeout- AdvNonFatalErr- CorrIntErr- HeaderOF-
+		CEMsk:	RxErr- BadTLP- BadDLLP- Rollover- Timeout- AdvNonFatalErr+ CorrIntErr- HeaderOF-
+		AERCap:	First Error Pointer: 00, ECRCGenCap- ECRCGenEn- ECRCChkCap- ECRCChkEn-
+			MultHdrRecCap- MultHdrRecEn- TLPPfxPres- HdrLogCap-
+		HeaderLog: 00000000 00000000 00000000 00000000
+	Capabilities: [150 v1] Latency Tolerance Reporting
+		Max snoop latency: 0ns
+		Max no snoop latency: 0ns
+	Kernel driver in use: xhci-pci-renesas
+	Kernel modules: xhci_pci_renesas, xhci_pci
+
+07:00.3 USB controller [0c03]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne USB 3.1 [1022:1639] (prog-if 30 [XHCI])
+	Subsystem: Lenovo Device [17aa:5081]
+	Control: I/O+ Mem+ BusMaster+ SpecCycle- MemWINV- VGASnoop- ParErr- Stepping- SERR- FastB2B- DisINTx+
+	Status: Cap+ 66MHz- UDF- FastB2B- ParErr- DEVSEL=fast >TAbort- <TAbort- <MAbort- >SERR- <PERR- INTx-
+	Latency: 0, Cache Line Size: 32 bytes
+	Interrupt: pin D routed to IRQ 38
+	IOMMU group: 8
+	Region 0: Memory at fd000000 (64-bit, non-prefetchable) [size=1M]
+	Capabilities: [48] Vendor Specific Information: Len=08 <?>
+	Capabilities: [50] Power Management version 3
+		Flags: PMEClk- DSI- D1- D2- AuxCurrent=0mA PME(D0+,D1-,D2-,D3hot+,D3cold+)
+		Status: D0 NoSoftRst- PME-Enable- DSel=0 DScale=0 PME-
+	Capabilities: [64] Express (v2) Endpoint, IntMsgNum 0
+		DevCap:	MaxPayload 256 bytes, PhantFunc 0, Latency L0s <4us, L1 unlimited
+			ExtTag+ AttnBtn- AttnInd- PwrInd- RBE+ FLReset- SlotPowerLimit 0W TEE-IO-
+		DevCtl:	CorrErr- NonFatalErr- FatalErr- UnsupReq-
+			RlxdOrd+ ExtTag+ PhantFunc- AuxPwr- NoSnoop+
+			MaxPayload 128 bytes, MaxReadReq 512 bytes
+		DevSta:	CorrErr- NonFatalErr- FatalErr- UnsupReq- AuxPwr- TransPend-
+		LnkCap:	Port #0, Speed 8GT/s, Width x16, ASPM L0s L1, Exit Latency L0s <64ns, L1 <1us
+			ClockPM- Surprise- LLActRep- BwNot- ASPMOptComp+
+		LnkCtl:	ASPM Disabled; RCB 64 bytes, LnkDisable- CommClk+
+			ExtSynch- ClockPM- AutWidDis- BWInt- AutBWInt- FltModeDis-
+		LnkSta:	Speed 8GT/s, Width x16
+			TrErr- Train- SlotClk+ DLActive- BWMgmt- ABWMgmt-
+		DevCap2: Completion Timeout: Range ABCD, TimeoutDis+ NROPrPrP- LTR-
+			 10BitTagComp+ 10BitTagReq- OBFF Not Supported, ExtFmt+ EETLPPrefix+, MaxEETLPPrefixes 1
+			 EmergencyPowerReduction Not Supported, EmergencyPowerReductionInit-
+			 FRS- TPHComp- ExtTPHComp-
+			 AtomicOpsCap: 32bit- 64bit- 128bitCAS-
+		DevCtl2: Completion Timeout: 50us to 50ms, TimeoutDis-
+			 AtomicOpsCtl: ReqEn-
+			 IDOReq- IDOCompl- LTR- EmergencyPowerReductionReq-
+			 10BitTagReq- OBFF Disabled, EETLPPrefixBlk-
+		LnkSta2: Current De-emphasis Level: -3.5dB, EqualizationComplete- EqualizationPhase1-
+			 EqualizationPhase2- EqualizationPhase3- LinkEqualizationRequest-
+			 Retimer- 2Retimers- CrosslinkRes: unsupported, FltMode-
+	Capabilities: [a0] MSI: Enable- Count=1/8 Maskable- 64bit+
+		Address: 0000000000000000  Data: 0000
+	Capabilities: [c0] MSI-X: Enable+ Count=8 Masked-
+		Vector table: BAR=0 offset=000fe000
+		PBA: BAR=0 offset=000ff000
+	Capabilities: [100 v1] Vendor Specific Information: ID=0001 Rev=1 Len=010 <?>
+	Kernel driver in use: xhci_hcd
+	Kernel modules: xhci_pci
+
+07:00.4 USB controller [0c03]: Advanced Micro Devices, Inc. [AMD] Renoir/Cezanne USB 3.1 [1022:1639] (prog-if 30 [XHCI])
+	Subsystem: Lenovo Device [17aa:5081]
+	Control: I/O+ Mem+ BusMaster+ SpecCycle- MemWINV- VGASnoop- ParErr- Stepping- SERR- FastB2B- DisINTx+
+	Status: Cap+ 66MHz- UDF- FastB2B- ParErr- DEVSEL=fast >TAbort- <TAbort- <MAbort- >SERR- <PERR- INTx-
+	Latency: 0, Cache Line Size: 32 bytes
+	Interrupt: pin A routed to IRQ 48
+	IOMMU group: 8
+	Region 0: Memory at fd100000 (64-bit, non-prefetchable) [size=1M]
+	Capabilities: [48] Vendor Specific Information: Len=08 <?>
+	Capabilities: [50] Power Management version 3
+		Flags: PMEClk- DSI- D1- D2- AuxCurrent=0mA PME(D0+,D1-,D2-,D3hot+,D3cold+)
+		Status: D0 NoSoftRst- PME-Enable- DSel=0 DScale=0 PME-
+	Capabilities: [64] Express (v2) Endpoint, IntMsgNum 0
+		DevCap:	MaxPayload 256 bytes, PhantFunc 0, Latency L0s <4us, L1 unlimited
+			ExtTag+ AttnBtn- AttnInd- PwrInd- RBE+ FLReset- SlotPowerLimit 0W TEE-IO-
+		DevCtl:	CorrErr- NonFatalErr- FatalErr- UnsupReq-
+			RlxdOrd+ ExtTag+ PhantFunc- AuxPwr- NoSnoop+
+			MaxPayload 128 bytes, MaxReadReq 512 bytes
+		DevSta:	CorrErr- NonFatalErr- FatalErr- UnsupReq- AuxPwr- TransPend-
+		LnkCap:	Port #0, Speed 8GT/s, Width x16, ASPM L0s L1, Exit Latency L0s <64ns, L1 <1us
+			ClockPM- Surprise- LLActRep- BwNot- ASPMOptComp+
+		LnkCtl:	ASPM Disabled; RCB 64 bytes, LnkDisable- CommClk+
+			ExtSynch- ClockPM- AutWidDis- BWInt- AutBWInt- FltModeDis-
+		LnkSta:	Speed 8GT/s, Width x16
+			TrErr- Train- SlotClk+ DLActive- BWMgmt- ABWMgmt-
+		DevCap2: Completion Timeout: Range ABCD, TimeoutDis+ NROPrPrP- LTR-
+			 10BitTagComp+ 10BitTagReq- OBFF Not Supported, ExtFmt+ EETLPPrefix+, MaxEETLPPrefixes 1
+			 EmergencyPowerReduction Not Supported, EmergencyPowerReductionInit-
+			 FRS- TPHComp- ExtTPHComp-
+			 AtomicOpsCap: 32bit- 64bit- 128bitCAS-
+		DevCtl2: Completion Timeout: 50us to 50ms, TimeoutDis-
+			 AtomicOpsCtl: ReqEn-
+			 IDOReq- IDOCompl- LTR- EmergencyPowerReductionReq-
+			 10BitTagReq- OBFF Disabled, EETLPPrefixBlk-
+		LnkSta2: Current De-emphasis Level: -3.5dB, EqualizationComplete- EqualizationPhase1-
+			 EqualizationPhase2- EqualizationPhase3- LinkEqualizationRequest-
+			 Retimer- 2Retimers- CrosslinkRes: unsupported, FltMode-
+	Capabilities: [a0] MSI: Enable- Count=1/8 Maskable- 64bit+
+		Address: 0000000000000000  Data: 0000
+	Capabilities: [c0] MSI-X: Enable+ Count=8 Masked-
+		Vector table: BAR=0 offset=000fe000
+		PBA: BAR=0 offset=000ff000
+	Capabilities: [100 v1] Vendor Specific Information: ID=0001 Rev=1 Len=010 <?>
+	Kernel driver in use: xhci_hcd
+	Kernel modules: xhci_pci
+
+[    0.744200] xhci_hcd 0000:07:00.3: xHCI Host Controller
+[    0.744324] xhci_hcd 0000:07:00.3: new USB bus registered, assigned bus number 1
+[    0.744628] xhci_hcd 0000:07:00.3: hcc params 0x0268ffe5 hci version 0x110 quirks 0x0000020000000010
+[    0.745275] xhci_hcd 0000:07:00.3: xHCI Host Controller
+[    0.745329] xhci_hcd 0000:07:00.3: new USB bus registered, assigned bus number 3
+[    0.745333] xhci_hcd 0000:07:00.3: Host supports USB 3.1 Enhanced SuperSpeed
+[    0.745427] usb usb1: Product: xHCI Host Controller
+[    0.745429] usb usb1: Manufacturer: Linux 6.19.10-300.fc44.x86_64 xhci-hcd
+[    0.746049] usb usb3: Product: xHCI Host Controller
+[    0.746051] usb usb3: Manufacturer: Linux 6.19.10-300.fc44.x86_64 xhci-hcd
+[    0.752746] xhci_hcd 0000:07:00.4: xHCI Host Controller
+[    0.752916] xhci_hcd 0000:07:00.4: new USB bus registered, assigned bus number 4
+[    0.753010] xhci_hcd 0000:07:00.4: hcc params 0x0268ffe5 hci version 0x110 quirks 0x0000020000000010
+[    0.753369] xhci_hcd 0000:07:00.4: xHCI Host Controller
+[    0.753441] xhci_hcd 0000:07:00.4: new USB bus registered, assigned bus number 5
+[    0.753444] xhci_hcd 0000:07:00.4: Host supports USB 3.1 Enhanced SuperSpeed
+[    0.753508] usb usb4: Product: xHCI Host Controller
+[    0.753510] usb usb4: Manufacturer: Linux 6.19.10-300.fc44.x86_64 xhci-hcd
+[    0.754085] usb usb5: Product: xHCI Host Controller
+[    0.754087] usb usb5: Manufacturer: Linux 6.19.10-300.fc44.x86_64 xhci-hcd
+[    0.754574] xhci-pci-renesas 0000:06:00.0: failed to load firmware renesas_usb_fw.mem, fallback to ROM
+[    0.754664] xhci-pci-renesas 0000:06:00.0: xHCI Host Controller
+[    0.754741] xhci-pci-renesas 0000:06:00.0: new USB bus registered, assigned bus number 6
+[    0.754759] xhci-pci-renesas 0000:06:00.0: Zeroing 64bit base registers, expecting fault
+[    0.846300] xhci-pci-renesas 0000:06:00.0: hcc params 0x014051cf hci version 0x100 quirks 0x0000000100000090
+[    0.846682] xhci-pci-renesas 0000:06:00.0: xHCI Host Controller
+[    0.846742] xhci-pci-renesas 0000:06:00.0: new USB bus registered, assigned bus number 7
+[    0.846746] xhci-pci-renesas 0000:06:00.0: Host supports USB 3.0 SuperSpeed
+[    0.849878] usb usb6: Product: xHCI Host Controller
+[    0.849880] usb usb6: Manufacturer: Linux 6.19.10-300.fc44.x86_64 xhci-hcd
+[    0.850250] usb usb7: Product: xHCI Host Controller
+[    0.850252] usb usb7: Manufacturer: Linux 6.19.10-300.fc44.x86_64 xhci-hcd
+[    0.991522] usb 4-3: new full-speed USB device number 2 using xhci_hcd
+[    1.088834] usb 6-2: new high-speed USB device number 2 using xhci-pci-renesas
+[    1.258455] usb 4-4: new full-speed USB device number 3 using xhci_hcd
+[   59.736999] usb 4-1: new high-speed USB device number 4 using xhci_hcd
+[   60.201592] usb 5-1: new SuperSpeed Plus Gen 2x1 USB device number 2 using xhci_hcd
+[   60.569046] usb 1-1: new full-speed USB device number 2 using xhci_hcd
+[   60.703963] usb 4-1.2: new high-speed USB device number 5 using xhci_hcd
+[   60.913629] usb 5-1.2: new SuperSpeed USB device number 3 using xhci_hcd
+[   61.146189] usb 4-1.5: new high-speed USB device number 6 using xhci_hcd
+[   61.672067] usb 4-1.2.4: new high-speed USB device number 7 using xhci_hcd
+[  433.299599] usb 1-2: new full-speed USB device number 3 using xhci_hcd
+[ 1264.330847] usb 4-3: reset full-speed USB device number 2 using xhci_hcd
+[ 2297.927312] usb 4-3: reset full-speed USB device number 2 using xhci_hcd
+[ 2564.651391] usb 4-3: reset full-speed USB device number 2 using xhci_hcd
+[ 2724.599824] usb 4-3: reset full-speed USB device number 2 using xhci_hcd
+[ 2865.271735] usb 4-3: reset full-speed USB device number 2 using xhci_hcd
+[ 4063.852606] usb 4-3: reset full-speed USB device number 2 using xhci_hcd
+[ 4916.585312] usb 4-3: reset full-speed USB device number 2 using xhci_hcd
+
+===== USB topology (no stick inserted) =====
+
+===== USB snapshot: baseline, 2026-10-02T20:57:52+03:00 =====
+$ lsusb -t
+/:  Bus 001.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 480M
+/:  Bus 002.Port 001: Dev 001, Class=root_hub, Driver=ehci-pci/1p, 480M
+/:  Bus 003.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/2p, 10000M
+/:  Bus 004.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 480M
+    |__ Port 003: Dev 002, If 0, Class=Vendor Specific Class, Driver=[none], 12M
+    |__ Port 004: Dev 003, If 0, Class=Wireless, Driver=btusb, 12M
+    |__ Port 004: Dev 003, If 1, Class=Wireless, Driver=btusb, 12M
+/:  Bus 005.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/2p, 10000M
+/:  Bus 006.Port 001: Dev 001, Class=root_hub, Driver=xhci-pci-renesas/2p, 480M
+    |__ Port 002: Dev 002, If 0, Class=Video, Driver=uvcvideo, 480M
+    |__ Port 002: Dev 002, If 1, Class=Video, Driver=uvcvideo, 480M
+/:  Bus 007.Port 001: Dev 001, Class=root_hub, Driver=xhci-pci-renesas/2p, 5000M
+$ lsusb
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 002 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 003 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 004 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 004 Device 002: ID 06cb:00bd Synaptics, Inc. Prometheus MIS Touch Fingerprint Reader
+Bus 004 Device 003: ID 8087:0029 Intel Corp. AX200 Bluetooth
+Bus 005 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 006 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 006 Device 002: ID 5986:2130 Bison Electronics Inc. Integrated Camera
+Bus 007 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+$ lsblk -o NAME,TRAN,SIZE,LOG-SEC,PHY-SEC,MODEL
+NAME        TRAN     SIZE LOG-SEC PHY-SEC MODEL
+zram0                  8G    4096    4096 
+nvme0n1     nvme   238.5G     512     512 SKHynix_HFS256GD9TNI-L2B0B
+├─nvme0n1p1 nvme     600M     512     512 
+├─nvme0n1p2 nvme       2G     512     512 
+└─nvme0n1p3 nvme   235.9G     512     512 
+
+===== Storage =====
+$ lsblk -o NAME,TRAN,TYPE,SIZE,LOG-SEC,PHY-SEC,MODEL
+NAME        TRAN   TYPE   SIZE LOG-SEC PHY-SEC MODEL
+zram0              disk     8G    4096    4096 
+nvme0n1     nvme   disk 238.5G     512     512 SKHynix_HFS256GD9TNI-L2B0B
+├─nvme0n1p1 nvme   part   600M     512     512 
+├─nvme0n1p2 nvme   part     2G     512     512 
+└─nvme0n1p3 nvme   part 235.9G     512     512 
+$ nvme list -o json
+{
+  "Devices":[
+    {
+      "NameSpace":1,
+      "DevicePath":"/dev/nvme0n1",
+      "GenericPath":"/dev/ng0n1",
+      "Firmware":"11710C10",
+      "ModelNumber":"SKHynix_HFS256GD9TNI-L2B0B",
+      "SerialNumber":"<redacted>",
+      "UsedBytes":256060514304,
+      "MaximumLBA":500118192,
+      "PhysicalSize":256060514304,
+      "SectorSize":512
+    }
+  ]
+}
+$ nvme id-ctrl /dev/nvme0
+NVME Identify Controller:
+vid       : 0x1c5c
+ssvid     : 0x1c5c
+sn        : <redacted>
+mn        : SKHynix_HFS256GD9TNI-L2B0B              
+fr        : 11710C10
+rab       : 4
+ieee      : ace42e
+cmic      : 0
+mdts      : 6
+cntlid    : 0x1
+ver       : 0x10300
+rtd3r     : 0x7a120
+rtd3e     : 0x1e8480
+oaes      : 0x200
+ctratt    : 0
+rrls      : 0
+bpcap     : 0
+nssl      : 0
+plsi      : 0
+cntrltype : 0
+fguid     : <guid>
+crdt1     : 0
+crdt2     : 0
+crdt3     : 0
+crcap     : 0
+nvmsr     : 0
+vwci      : 0
+mec       : 0
+oacs      : 0x17
+acl       : 3
+aerl      : 7
+frmw      : 0x16
+lpa       : 0xa
+elpe      : 255
+npss      : 4
+avscc     : 0x1
+apsta     : 0x1
+wctemp    : 358
+cctemp    : 359
+mtfa      : 0
+hmpre     : 0
+hmmin     : 0
+tnvmcap   : 0
+unvmcap   : 0
+rpmbs     : 0
+edstt     : 15
+dsto      : 1
+fwug      : 0
+kas       : 0
+hctma     : 0x1
+mntmt     : 273
+mxtmt     : 357
+sanicap   : 0x3
+hmminds   : 0
+hmmaxd    : 0
+nsetidmax : 0
+endgidmax : 0
+anatt     : 0
+anacap    : 0
+anagrpmax : 0
+nanagrpid : 0
+pels      : 0
+domainid  : 0
+kpioc     : 0
+mptfawr   : 0
+megcap    : 0
+tmpthha   : 0
+cqt       : 0
+sqes      : 0x66
+cqes      : 0x44
+maxcmd    : 0
+nn        : 1
+oncs      : 0x5e
+fuses     : 0
+fna       : 0x4
+vwc       : 0x1
+awun      : 0
+awupf     : 0
+icsvscc   : 1
+nwpc      : 0
+acwu      : 0
+ocfs      : 0
+sgls      : 0
+mnan      : 0
+maxdna    : 0
+maxcna    : 0
+oaqd      : 0
+rhiri     : 0
+hirt      : 0
+cmmrtd    : 0
+nmmrtd    : 0
+minmrtg   : 0
+maxmrtg   : 0
+trattr    : 0
+mcudmq    : 0
+mnsudmq   : 0
+mcmr      : 0
+nmcmr     : 0
+mcdqpc    : 0
+subnqn    : 
+ioccsz    : 0
+iorcsz    : 0
+icdoff    : 0
+fcatt     : 0
+msdbd     : 0
+ofcs      : 0
+ps      0 : mp:6.3000W operational enlat:5 exlat:5 rrt:0 rrl:0
+            rwt:0 rwl:0 idle_power:- active_power:-
+            active_power_workload:-
+            emergency power fail recovery time: -
+            forced quiescence vault time: -
+            emergency power fail vault time: -
+ps      1 : mp:2.4000W operational enlat:30 exlat:30 rrt:1 rrl:1
+            rwt:1 rwl:1 idle_power:- active_power:-
+            active_power_workload:-
+            emergency power fail recovery time: -
+            forced quiescence vault time: -
+            emergency power fail vault time: -
+ps      2 : mp:1.9000W operational enlat:100 exlat:100 rrt:2 rrl:2
+            rwt:2 rwl:2 idle_power:- active_power:-
+            active_power_workload:-
+            emergency power fail recovery time: -
+            forced quiescence vault time: -
+            emergency power fail vault time: -
+ps      3 : mp:0.0500W non-operational enlat:1000 exlat:1000 rrt:3 rrl:3
+            rwt:3 rwl:3 idle_power:- active_power:-
+            active_power_workload:-
+            emergency power fail recovery time: -
+            forced quiescence vault time: -
+            emergency power fail vault time: -
+ps      4 : mp:0.0040W non-operational enlat:1000 exlat:9000 rrt:3 rrl:3
+            rwt:3 rwl:3 idle_power:- active_power:-
+            active_power_workload:-
+            emergency power fail recovery time: -
+            forced quiescence vault time: -
+            emergency power fail vault time: -
+$ nvme smart-log /dev/nvme0
+Smart Log for NVME device:nvme0 namespace-id:ffffffff
+critical_warning			: 0
+temperature				: 40 °C (313 K, 104 °F)
+available_spare				: 100%
+available_spare_threshold		: 10%
+percentage_used				: 2%
+endurance group critical warning summary: 0
+Data Units Read				: 23068177 (11.81 TB)
+Data Units Written			: 33953423 (17.38 TB)
+host_read_commands			: 266583973
+host_write_commands			: 861862096
+controller_busy_time			: 853
+power_cycles				: 854277
+power_on_hours				: 7868
+unsafe_shutdowns			: 86
+media_errors				: 0
+num_err_log_entries			: 0
+Warning Temperature Time		: 0
+Critical Composite Temperature Time	: 0
+Temperature Sensor 1			: 40 °C (313 K, 104 °F)
+Temperature Sensor 2			: 45 °C (318 K, 113 °F)
+Thermal Management T1 Trans Count	: 0
+Thermal Management T2 Trans Count	: 0
+Thermal Management T1 Total Time	: 0
+Thermal Management T2 Total Time	: 0
+$ nvme error-log /dev/nvme0
+Error Log Entries for device:nvme0 entries:64
+.................
+ Entry[ 0]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[ 1]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[ 2]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[ 3]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[ 4]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[ 5]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[ 6]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[ 7]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[ 8]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[ 9]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[10]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[11]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[12]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[13]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[14]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[15]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[16]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[17]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[18]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[19]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[20]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[21]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[22]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[23]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[24]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[25]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[26]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[27]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[28]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[29]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[30]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[31]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[32]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[33]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[34]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[35]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[36]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[37]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[38]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[39]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[40]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[41]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[42]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[43]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[44]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[45]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[46]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[47]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[48]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[49]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[50]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[51]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[52]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[53]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[54]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[55]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[56]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[57]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[58]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[59]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[60]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[61]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[62]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+ Entry[63]
+.................
+error_count	: 0
+sqid		: 0
+cmdid		: 0
+status_field	: 0 (Successful Completion: The command completed without error)
+phase_tag	: 0
+parm_err_loc	: 0
+lba		: 0
+nsid		: 0
+vs		: 0
+trtype		: 0 (The transport type is not indicated or the error is not transport related)
+csi		: 0
+opcode		: 0
+cs		: 0
+trtype_spec_info: 0
+log_page_version: 0
+.................
+$ smartctl -a /dev/nvme0n1
+smartctl 7.5 2025-04-30 r5714 [x86_64-linux-6.19.10-300.fc44.x86_64] (local build)
+Copyright (C) 2002-25, Bruce Allen, Christian Franke, www.smartmontools.org
+
+=== START OF INFORMATION SECTION ===
+Model Number:                       SKHynix_HFS256GD9TNI-L2B0B
+Serial Number: <redacted>
+Firmware Version:                   11710C10
+PCI Vendor/Subsystem ID:            0x1c5c
+IEEE OUI Identifier:                0xace42e
+Controller ID:                      1
+NVMe Version:                       1.3
+Number of Namespaces:               1
+Namespace 1 Size/Capacity:          256,060,514,304 [256 GB]
+Namespace 1 Formatted LBA Size:     512
+Namespace 1 IEEE EUI-64:            <redacted>
+Local Time is:                      Fri Oct  2 20:57:53 2026 EEST
+Firmware Updates (0x16):            3 Slots, no Reset required
+Optional Admin Commands (0x0017):   Security Format Frmw_DL Self_Test
+Optional NVM Commands (0x005e):     Wr_Unc DS_Mngmt Wr_Zero Sav/Sel_Feat Timestmp
+Log Page Attributes (0x0a):         Cmd_Eff_Lg Telmtry_Lg
+Maximum Data Transfer Size:         64 Pages
+Warning  Comp. Temp. Threshold:     85 Celsius
+Critical Comp. Temp. Threshold:     86 Celsius
+
+Supported Power States
+St Op     Max   Active     Idle   RL RT WL WT  Ent_Lat  Ex_Lat
+ 0 +   6.3000W       -        -    0  0  0  0        5       5
+ 1 +   2.4000W       -        -    1  1  1  1       30      30
+ 2 +   1.9000W       -        -    2  2  2  2      100     100
+ 3 -   0.0500W       -        -    3  3  3  3     1000    1000
+ 4 -   0.0040W       -        -    3  3  3  3     1000    9000
+
+Supported LBA Sizes (NSID 0x1)
+Id Fmt  Data  Metadt  Rel_Perf
+ 0 +     512       0         0
+
+=== START OF SMART DATA SECTION ===
+SMART overall-health self-assessment test result: PASSED
+
+SMART/Health Information (NVMe Log 0x02, NSID 0xffffffff)
+Critical Warning:                   0x00
+Temperature:                        40 Celsius
+Available Spare:                    100%
+Available Spare Threshold:          10%
+Percentage Used:                    2%
+Data Units Read:                    23,068,177 [11.8 TB]
+Data Units Written:                 33,953,423 [17.3 TB]
+Host Read Commands:                 266,583,973
+Host Write Commands:                861,862,096
+Controller Busy Time:               853
+Power Cycles:                       854,277
+Power On Hours:                     7,868
+Unsafe Shutdowns:                   86
+Media and Data Integrity Errors:    0
+Error Information Log Entries:      0
+Warning  Comp. Temperature Time:    0
+Critical Comp. Temperature Time:    0
+Temperature Sensor 1:               40 Celsius
+Temperature Sensor 2:               45 Celsius
+
+Error Information (NVMe Log 0x01, 16 of 256 entries)
+No Errors Logged
+
+Self-test Log (NVMe Log 0x06, NSID 0xffffffff)
+Self-test status: No self-test in progress
+No Self-tests Logged
+
+
+===== Network and wireless devices =====
+$ lspci -nn -d ::0200
+02:00.0 Ethernet controller [0200]: Realtek Semiconductor Co., Ltd. RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller [10ec:8168] (rev 0e)
+05:00.0 Ethernet controller [0200]: Realtek Semiconductor Co., Ltd. RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller [10ec:8168] (rev 15)
+$ lspci -nn -d ::0280
+03:00.0 Network controller [0280]: Intel Corporation Wi-Fi 6 AX200 [8086:2723] (rev 1a)
+
+===== Graphics, audio and input =====
+$ lspci -nn -d ::0300
+07:00.0 VGA compatible controller [0300]: Advanced Micro Devices, Inc. [AMD/ATI] Renoir [Radeon Vega Series / Radeon Vega Mobile Series] [1002:1636] (rev d3)
+$ lspci -nn -d ::0403
+07:00.1 Audio device [0403]: Advanced Micro Devices, Inc. [AMD/ATI] Renoir/Cezanne HDMI/DP Audio Controller [1002:1637]
+07:00.6 Audio device [0403]: Advanced Micro Devices, Inc. [AMD] Ryzen HD Audio Controller [1022:15e3]
+N: Name="Power Button"
+H: Handlers=kbd event0 
+N: Name="Lid Switch"
+H: Handlers=event1 
+N: Name="Sleep Button"
+H: Handlers=kbd event2 
+N: Name="Power Button"
+H: Handlers=kbd event3 
+N: Name="AT Translated Set 2 keyboard"
+H: Handlers=sysrq kbd leds event4 
+N: Name="SynPS/2 Synaptics TouchPad"
+H: Handlers=mouse0 event5 
+N: Name="Video Bus"
+H: Handlers=kbd event6 
+N: Name="TPPS/2 Elan TrackPoint"
+H: Handlers=mouse1 event7 
+N: Name="PC Speaker"
+H: Handlers=kbd event8 
+N: Name="ThinkPad Extra Buttons"
+H: Handlers=kbd event9 rfkill 
+N: Name="HD-Audio Generic HDMI/DP,pcm=3"
+H: Handlers=event10 
+N: Name="HD-Audio Generic HDMI/DP,pcm=7"
+H: Handlers=event11 
+N: Name="HD-Audio Generic HDMI/DP,pcm=8"
+H: Handlers=event12 
+N: Name="HD-Audio Generic Mic"
+H: Handlers=event13 
+N: Name="HD-Audio Generic Headphone"
+H: Handlers=event14 
+N: Name="Logitech MX Master 3S"
+H: Handlers=mouse2 event15 
+
+===== USB snapshot: USB-A Right, 2026-10-02T21:00:05+03:00 =====
+$ lsusb -t
+/:  Bus 001.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 480M
+/:  Bus 002.Port 001: Dev 001, Class=root_hub, Driver=ehci-pci/1p, 480M
+/:  Bus 003.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/2p, 10000M
+    |__ Port 002: Dev 002, If 0, Class=Mass Storage, Driver=uas, 5000M
+/:  Bus 004.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 480M
+    |__ Port 003: Dev 002, If 0, Class=Vendor Specific Class, Driver=[none], 12M
+    |__ Port 004: Dev 003, If 0, Class=Wireless, Driver=btusb, 12M
+    |__ Port 004: Dev 003, If 1, Class=Wireless, Driver=btusb, 12M
+/:  Bus 005.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/2p, 10000M
+/:  Bus 006.Port 001: Dev 001, Class=root_hub, Driver=xhci-pci-renesas/2p, 480M
+    |__ Port 002: Dev 002, If 0, Class=Video, Driver=uvcvideo, 480M
+    |__ Port 002: Dev 002, If 1, Class=Video, Driver=uvcvideo, 480M
+/:  Bus 007.Port 001: Dev 001, Class=root_hub, Driver=xhci-pci-renesas/2p, 5000M
+$ lsusb
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 002 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 003 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 003 Device 002: ID 0781:55a9 SanDisk Corp.  SanDisk 3.2Gen1
+Bus 004 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 004 Device 002: ID 06cb:00bd Synaptics, Inc. Prometheus MIS Touch Fingerprint Reader
+Bus 004 Device 003: ID 8087:0029 Intel Corp. AX200 Bluetooth
+Bus 005 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 006 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 006 Device 002: ID 5986:2130 Bison Electronics Inc. Integrated Camera
+Bus 007 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+$ lsblk -o NAME,TRAN,SIZE,LOG-SEC,PHY-SEC,MODEL
+NAME        TRAN     SIZE LOG-SEC PHY-SEC MODEL
+sda         usb    114.6G     512     512 SanDisk 3.2Gen1
+└─sda1             114.6G     512     512 
+zram0                  8G    4096    4096 
+nvme0n1     nvme   238.5G     512     512 SKHynix_HFS256GD9TNI-L2B0B
+├─nvme0n1p1 nvme     600M     512     512 
+├─nvme0n1p2 nvme       2G     512     512 
+└─nvme0n1p3 nvme   235.9G     512     512 
+sda -> /sys/devices/pci0000:00/0000:00:08.1/0000:07:00.3/usb3/3-2/3-2:1.0/host0/target0:0:0/0:0:0:0
+
+===== USB snapshot: USB-A Left, 2026-10-02T21:00:27+03:00 =====
+$ lsusb -t
+/:  Bus 001.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 480M
+/:  Bus 002.Port 001: Dev 001, Class=root_hub, Driver=ehci-pci/1p, 480M
+/:  Bus 003.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/2p, 10000M
+/:  Bus 004.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 480M
+    |__ Port 003: Dev 002, If 0, Class=Vendor Specific Class, Driver=[none], 12M
+    |__ Port 004: Dev 003, If 0, Class=Wireless, Driver=btusb, 12M
+    |__ Port 004: Dev 003, If 1, Class=Wireless, Driver=btusb, 12M
+/:  Bus 005.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/2p, 10000M
+    |__ Port 002: Dev 004, If 0, Class=Mass Storage, Driver=uas, 5000M
+/:  Bus 006.Port 001: Dev 001, Class=root_hub, Driver=xhci-pci-renesas/2p, 480M
+    |__ Port 002: Dev 002, If 0, Class=Video, Driver=uvcvideo, 480M
+    |__ Port 002: Dev 002, If 1, Class=Video, Driver=uvcvideo, 480M
+/:  Bus 007.Port 001: Dev 001, Class=root_hub, Driver=xhci-pci-renesas/2p, 5000M
+$ lsusb
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 002 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 003 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 004 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 004 Device 002: ID 06cb:00bd Synaptics, Inc. Prometheus MIS Touch Fingerprint Reader
+Bus 004 Device 003: ID 8087:0029 Intel Corp. AX200 Bluetooth
+Bus 005 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 005 Device 004: ID 0781:55a9 SanDisk Corp.  SanDisk 3.2Gen1
+Bus 006 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 006 Device 002: ID 5986:2130 Bison Electronics Inc. Integrated Camera
+Bus 007 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+$ lsblk -o NAME,TRAN,SIZE,LOG-SEC,PHY-SEC,MODEL
+NAME        TRAN     SIZE LOG-SEC PHY-SEC MODEL
+sda         usb    114.6G     512     512 SanDisk 3.2Gen1
+└─sda1             114.6G     512     512 
+zram0                  8G    4096    4096 
+nvme0n1     nvme   238.5G     512     512 SKHynix_HFS256GD9TNI-L2B0B
+├─nvme0n1p1 nvme     600M     512     512 
+├─nvme0n1p2 nvme       2G     512     512 
+└─nvme0n1p3 nvme   235.9G     512     512 
+sda -> /sys/devices/pci0000:00/0000:00:08.1/0000:07:00.4/usb5/5-2/5-2:1.0/host0/target0:0:0/0:0:0:0
+
+===== USB snapshot: USB-C Left (Power), 2026-10-02T21:03:20+03:00 =====
+$ lsusb -t
+/:  Bus 001.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 480M
+/:  Bus 002.Port 001: Dev 001, Class=root_hub, Driver=ehci-pci/1p, 480M
+/:  Bus 003.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/2p, 10000M
+    |__ Port 001: Dev 003, If 0, Class=Mass Storage, Driver=uas, 5000M
+/:  Bus 004.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 480M
+    |__ Port 003: Dev 002, If 0, Class=Vendor Specific Class, Driver=[none], 12M
+    |__ Port 004: Dev 003, If 0, Class=Wireless, Driver=btusb, 12M
+    |__ Port 004: Dev 003, If 1, Class=Wireless, Driver=btusb, 12M
+/:  Bus 005.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/2p, 10000M
+/:  Bus 006.Port 001: Dev 001, Class=root_hub, Driver=xhci-pci-renesas/2p, 480M
+    |__ Port 002: Dev 002, If 0, Class=Video, Driver=uvcvideo, 480M
+    |__ Port 002: Dev 002, If 1, Class=Video, Driver=uvcvideo, 480M
+/:  Bus 007.Port 001: Dev 001, Class=root_hub, Driver=xhci-pci-renesas/2p, 5000M
+$ lsusb
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 002 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 003 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 003 Device 003: ID 0781:55a9 SanDisk Corp.  SanDisk 3.2Gen1
+Bus 004 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 004 Device 002: ID 06cb:00bd Synaptics, Inc. Prometheus MIS Touch Fingerprint Reader
+Bus 004 Device 003: ID 8087:0029 Intel Corp. AX200 Bluetooth
+Bus 005 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 006 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 006 Device 002: ID 5986:2130 Bison Electronics Inc. Integrated Camera
+Bus 007 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+$ lsblk -o NAME,TRAN,SIZE,LOG-SEC,PHY-SEC,MODEL
+NAME        TRAN     SIZE LOG-SEC PHY-SEC MODEL
+sda         usb    114.6G     512     512 SanDisk 3.2Gen1
+└─sda1             114.6G     512     512 
+zram0                  8G    4096    4096 
+nvme0n1     nvme   238.5G     512     512 SKHynix_HFS256GD9TNI-L2B0B
+├─nvme0n1p1 nvme     600M     512     512 
+├─nvme0n1p2 nvme       2G     512     512 
+└─nvme0n1p3 nvme   235.9G     512     512 
+sda -> /sys/devices/pci0000:00/0000:00:08.1/0000:07:00.3/usb3/3-1/3-1:1.0/host0/target0:0:0/0:0:0:0
