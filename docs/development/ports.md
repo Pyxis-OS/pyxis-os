@@ -56,6 +56,21 @@ allocation and TCP integration lives in userland's `libtls`.
 Only licenses and provenance from the TLS library recipe enter the boot archive.
 The base/guest SDK stays independent of TLS.
 
+## PCI ID database
+
+The `pciids` data recipe stages `pci.ids` from the PCI ID Project unchanged at
+`app://share/hwdata/pci.ids`. The pinned upstream commit is recorded in
+[its metadata](../../ports/pciids/metadata.lua), and the source, commit and
+database version are written to `app://share/pciids/source.txt`. Pyxis uses the
+3-clause BSD option of the database's GPL-2.0-or-later or BSD-3-Clause license.
+The upstream repository has no separate license file, so the recipe supplies the
+BSD text with the copyright holders named in the database header. It and a
+notice explaining that choice are installed under `app://share/licenses/pciids/`.
+[lspci](../userland/lspci.md) reads the file, and so can ordinary text tools.
+Updating means picking a new commit and rebuilding; nothing should depend on
+fixed line counts or particular entries. See the
+[recipe notes](../../ports/pciids/README.md).
+
 ## Public CA roots
 
 The `ca-certificates` data recipe installs curl's Mozilla-derived 2026-09-25

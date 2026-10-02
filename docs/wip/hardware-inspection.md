@@ -1,7 +1,8 @@
 # Native hardware inspection and text databases
 
-Status: agreed direction, 2026-10-02; implementation remains unassigned.
-Inventory authority and lifetime details need discussion before code.
+Status: agreed direction, 2026-10-02. The PCI database and `lspci` are
+implemented. `usb.ids` packaging and `lsusb` remain unassigned, and USB
+inventory authority needs discussion before code.
 
 Provide native `lspci` and `lsusb` tools with packaged, plain-text name databases.
 PCI discovery already exists, so `lspci` can be assigned independently; `lsusb`
@@ -24,6 +25,27 @@ delegation contract before adding an ABI; reuse existing observation facilities
 where appropriate. Userland owns name lookup and formatting. Device strings and
 database labels are descriptive data, never authentication, grants or driver
 selection policy; escape device text for terminal output.
+
+### Agreed PCI observation
+
+Agreed and implemented on 2026-10-02:
+
+- PCI inventory uses two new queries under the existing `system_info` READ
+  right. There is no new right or grant, so local and remote commands that
+  already receive READ can list PCI devices.
+- One query reports the inventory state (unavailable, incomplete or complete)
+  and the count. The other returns one function by index, with address, IDs,
+  class, programming interface, revision and header type. The kernel keeps these
+  values from discovery and never re-reads configuration space for them.
+- Subsystem IDs and a kernel-driver-claimed flag are deferred. The kernel keeps
+  only a claim pointer, not a driver name.
+- `lspci` exit policy: a missing database gives numeric output and status 0, an
+  incomplete inventory lists functions with status 1, and an unavailable
+  inventory is an error with status 1. Options are `-n` and `-i FILE`.
+
+See [system information](../interfaces/system-information.md#pci-inventory) and
+[lspci](../userland/lspci.md). USB serial strings may justify a separate right;
+decide that with `lsusb`.
 
 ## Packaged databases
 
@@ -57,7 +79,9 @@ tools and USB implementation.
 1. [ ] **Package the two text databases.** Choose immutable upstream revisions,
    preserve BSD notices and stage through existing asset assembly. Keep the
    files readable by ordinary text tools; no compiled database is needed initially.
-2. [ ] **Expose PCI inventory and implement native `lspci`.** Settle observation
+   `pci.ids` is packaged by the [pciids recipe](../development/ports.md#pci-id-database);
+   `usb.ids` remains.
+2. [x] **Expose PCI inventory and implement native `lspci`.** Settle observation
    authority first, then use existing enumeration without rescanning hardware
    from userland. Exercise known and unknown IDs and missing name data.
 3. [ ] **Expose USB inventory and implement native `lsusb`.** Follow enumeration,

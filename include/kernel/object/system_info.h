@@ -17,7 +17,8 @@ void system_info_init(void);
 /* BSP, IF=0. Returns one owned reference to stateless observation authority. */
 struct kernel_object *system_info_create(void);
 struct syscall_result system_info_call(uint64_t rights, uint64_t operation,
-    size_t request_size, uintptr_t reply_address, size_t reply_capacity);
+    uintptr_t request_address, size_t request_size, uintptr_t reply_address,
+    size_t reply_capacity);
 /* Executor only, BSP, IF=0. Never touches caller mappings or remote counters. */
 void system_info_memory_execute(struct system_info_memory_request *request);
 

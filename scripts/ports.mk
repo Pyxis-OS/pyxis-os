@@ -44,6 +44,10 @@ CA_CERTIFICATES_OUTPUTS := $(addprefix build/ports/ca-certificates/stage/,\
   share/ca-certificates/source.txt share/licenses/ca-certificates/LICENSE \
   share/licenses/ca-certificates/NOTICE)
 
+PCIIDS_INPUTS := $(wildcard ports/pciids/*) ports/ports.lua ports/build.lua
+PCIIDS_OUTPUTS := $(addprefix build/ports/pciids/stage/,share/hwdata/pci.ids \
+  share/pciids/source.txt share/licenses/pciids/LICENSE share/licenses/pciids/NOTICE)
+
 SBASE_INPUTS := $(wildcard ports/sbase/*.lua ports/sbase/Makefile \
                           ports/sbase/patches/*.patch) ports/ports.lua ports/build.lua
 SBASE_OUTPUTS := $(addprefix build/ports/sbase/stage/,bin/cksum.pxe bin/tee.pxe \
@@ -68,7 +72,7 @@ MBEDTLS_OUTPUTS := $(addprefix build/ports/mbedtls/stage/,dev/lib/libmbedtls.a \
 .PHONY: all
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
      $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) \
-     $(CA_CERTIFICATES_OUTPUTS) $(FASTFETCH_OUTPUTS)
+     $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.
@@ -109,6 +113,11 @@ $(TZDATA_OUTPUTS) &: $(TZDATA_INPUTS) scripts/ports.mk
 $(CA_CERTIFICATES_OUTPUTS) &: $(CA_CERTIFICATES_INPUTS) scripts/ports.mk
 	rm -rf build/ports/ca-certificates
 	$(LUA) ports/build.lua ca-certificates --sdk $(abspath build/sdk) --work $(abspath build/ports/ca-certificates)
+
+# The pinned PCI ID text is independent of target SDK contents.
+$(PCIIDS_OUTPUTS) &: $(PCIIDS_INPUTS) scripts/ports.mk
+	rm -rf build/ports/pciids
+	$(LUA) ports/build.lua pciids --sdk $(abspath build/sdk) --work $(abspath build/ports/pciids)
 
 $(SBASE_OUTPUTS) &: $(SBASE_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	@command -v $(LUA) >/dev/null 2>&1 || { \

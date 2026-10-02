@@ -5,6 +5,8 @@
 #include <kernel/pci/registers.h>
 
 static struct pci_device *devices;
+static size_t device_count;
+static bool inventory_available;
 static bool inventory_complete;
 
 struct pci_bus {
@@ -173,10 +175,11 @@ static void discover_function(struct pci_scan *scan, struct pci_address address,
   unsigned class = pci_read8(address, PCI_CLASS);
   unsigned subclass = pci_read8(address, PCI_SUBCLASS);
   unsigned interface = pci_read8(address, PCI_INTERFACE);
+  unsigned revision = pci_read8(address, PCI_REVISION);
   unsigned header = pci_read8(address, PCI_HEADER_TYPE) & PCI_HEADER_TYPE_MASK;
   klog("PCI 0:%x:%x.%u: vendor=0x%x device=0x%x class=%x:%x:%x revision=0x%x header=%u\n",
        address.bus, address.device, address.function, vendor, device,
-       class, subclass, interface, pci_read8(address, PCI_REVISION), header);
+       class, subclass, interface, revision, header);
   ++scan->functions;
 
   struct pci_device *record = kmalloc(sizeof(*record));
@@ -185,9 +188,11 @@ static void discover_function(struct pci_scan *scan, struct pci_address address,
   } else {
     *record = (struct pci_device){
       .address = address, .vendor_id = vendor, .device_id = device,
-      .header_type = header, .next = devices,
+      .base_class = class, .subclass = subclass, .interface = interface,
+      .revision = revision, .header_type = header, .next = devices,
     };
     devices = record;
+    ++device_count;
   }
 
   if (header != PCI_HEADER_ENDPOINT && header != PCI_HEADER_BRIDGE) {
@@ -211,6 +216,7 @@ void pci_discover(void)
 {
   inventory_complete = false;
   unsigned buses = arch_pci_bus_count();
+  inventory_available = buses != 0;
   if (!buses) {
     return;
   }
@@ -270,4 +276,26 @@ enum pci_selection pci_select_device(uint16_t vendor, uint16_t device,
   }
   *selected = match;
   return match ? PCI_SELECTION_UNIQUE : PCI_SELECTION_ABSENT;
+}
+
+enum pci_inventory_state pci_inventory_state(void)
+{
+  if (!inventory_available) {
+    return PCI_INVENTORY_UNAVAILABLE;
+  }
+  return inventory_complete ? PCI_INVENTORY_COMPLETE : PCI_INVENTORY_INCOMPLETE;
+}
+
+size_t pci_device_count(void)
+{
+  return device_count;
+}
+
+const struct pci_device *pci_device_at(size_t index)
+{
+  const struct pci_device *entry = devices;
+  for (; entry && index; --index) {
+    entry = entry->next;
+  }
+  return entry;
 }

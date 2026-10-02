@@ -36,7 +36,13 @@ and the MCFG aperture. Repeated buses and overlapping sibling bridge ranges
 are diagnosed. The work queue is bounded by PCI's 256 possible bus numbers;
 there is no fixed device-count registry or recursive traversal stack.
 Device records live for the boot; allocation failure is reported as an incomplete
-inventory while enumeration continues.
+inventory while enumeration continues. Each record keeps the address, vendor and
+device ID, class, subclass, programming interface, revision and header type that
+discovery read. The inventory state is unavailable when there is no supported
+configuration access, and otherwise complete or incomplete. The records and
+state are fixed before user tasks start. The
+[system-information PCI queries](../interfaces/system-information.md#pci-inventory)
+expose them read-only for [lspci](../userland/lspci.md).
 
 Each function reports its address as `segment:bus:device.function`, identity,
 class/subclass/programming interface, revision and header type. Bus and device
