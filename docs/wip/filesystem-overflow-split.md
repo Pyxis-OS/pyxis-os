@@ -1,12 +1,16 @@
 # Bounded allocation-map overflow split
 
-Status: **design proposal for owner review**, 2026-10-02. The owner assigned this
-investigation after [filesystem #24](https://git.internal/PyxisOS/pyxis-fs/pulls/24)
-and [Pyxis #325](https://git.internal/PyxisOS/pyxis-os/pulls/325) merged. Baseline
-Pyxis `fcfe1b7` pins published filesystem `4b1e81d`; filesystem merge `8ddcdb7`
-contains that production code. This task authorizes documentation and arithmetic,
-not implementation or new mutation workloads. The proposed choices below are
-not accepted merely because they are specified precisely.
+Status: **accepted and implemented bounded correction**, 2026-10-02. After
+[Pyxis #327](https://git.internal/PyxisOS/pyxis-os/pulls/327) merged, the owner
+accepted this package and assigned implementation with focused tests and the
+unchanged matched RAM-only comparison. The before baseline is published
+filesystem `4b1e81d`, contained in merge `8ddcdb7`; Pyxis `9efe4a5` includes the
+accepted design. See the [implemented interfaces/proof](../../fs/docs/incremental-map.md)
+and [matched results](../../fs/docs/overflow-split-measurements.md).
+Published [filesystem #25](https://git.internal/PyxisOS/pyxis-fs/pulls/25) at
+`a250731` carries the implementation and records; this integration pins it.
+General structural editing and further optimisations require separate assignment.
+Task 7 and writable deployment remain open.
 
 ## Evidence and purpose
 
@@ -19,13 +23,13 @@ a later window with no new repair selections. Largest append window redistributi
 adds 47,340 source identities against closure sum 54,295; additions include
 ancestors and discarded attempts, not just leaves.
 
-The current editor holds leaf count fixed, so overflow can consume neighbouring
+The before-baseline editor held leaf count fixed, so overflow could consume neighbouring
 leaves and paths even when a single extra leaf could supply capacity. This
 motivates a bounded structural trial; it does not establish its hit rate or
 complete-history savings. Local runs are already packed evenly. Further neighbour
 scoring, a new fill policy or a CPU-only scan correction is not selected here.
 
-**Recommended scope for review:** permit one additional leaf in one dirty run,
+**Accepted scope:** permit one additional leaf in one dirty run,
 beneath an existing parent with a spare child slot. Every node keeps its level;
 only that parent gains a child. Share untouched subtrees. No internal split, new root, root-height
 change, leaf removal or merge. The single surplus is a deliberate first-solver
@@ -44,9 +48,9 @@ Preserved agreed requirements include individually durable completed calls,
 both retained states and payloads, no same-publication reuse, existing authority
 and handle lifetimes, confirmed progress independent of maintenance/health, and
 resource-complete admitted cleanup. No new public right, grant widening, on-disk
-feature or version is proposed.
+feature or version changes.
 
-## Proposed selection and fallback order
+## Accepted selection and fallback order
 
 1. Validate source topology and retained inputs, discover the actual catalog union
    `c`, and reserve the same ascending list of H eligible input IDs before closure.
@@ -90,7 +94,7 @@ alternative history. Comparing it with the calculated bulk reference remains
 diagnostic, not an automatic cost gate.
 That comparison alone does not include the different retirement histories or
 later costs of an extra live leaf. A selection gate would be a separate policy
-choice; the proposed trial keeps the current structurally defined local-path
+choice; the accepted trial keeps the current structurally defined local-path
 selection and exposes those costs for matched measurement.
 
 ## Emission, reachability and seams
@@ -118,10 +122,10 @@ placement heuristic.
 Catalog IDs start at prefix offset `n`; the pool root uses offset `n+c`.
 The allocation stream must describe exactly those emitted nodes, catalog nodes
 and root, with no unused live prefix IDs or references to marked source nodes.
-The current [publisher](../../fs/core/writer.c) and
-[encoder](../../fs/core/incremental_map.c) use marked count for both retirement
-and output offsets. The implementation must change those consumers together;
-incrementing a fanout without changing claim/offset accounting is insufficient.
+The [publisher](../../fs/core/writer.c) and
+[encoder](../../fs/core/incremental_map.c) now distinguish marked source count
+from emitted count in claims, encoding and catalog/root offsets. Incrementing a
+fanout without changing claim/offset accounting would be insufficient.
 
 Complete-record comparison still marks both sides when a final canonical record
 straddles an original seam. Stable outer run endpoints protect neighbouring shared
@@ -149,7 +153,7 @@ For seed size `s`, initial closure has at most `s` growth evaluations, the trial
 at most `J-s`, and restored split-disabled repair at most `J-s`. Include one
 terminal evaluation per phase: at most `2J-s+3` closure evaluations, plus one
 bounded snapshot and restore. This derives a finite bound from source identities
-and a single proposed attempt; it is not an arbitrary retry cap. The two post-seed
+and the single accepted attempt; it is not an arbitrary retry cap. The two post-seed
 phases are separately monotone. Source marks may shrink only at that deliberate
 scratch restoration, so the old whole-publication monotonicity statement needs
 mode-specific wording.
@@ -191,7 +195,7 @@ disk space.
 
 Each successful trial increases live map inventory by one. Repeated successes
 can fill parents or reach m; they also change later allocation and retirement
-costs. The proposed termination bound covers planning evaluations, not a local
+costs. The termination bound covers planning evaluations, not a local
 replacement-size guarantee. Allocation self-accounting can still produce global
 closure. With calculated bulk map size `Nb`, immediate map-write difference is
 `4096*(Nb-n)` bytes; that comparison omits later histories and is not a measured
@@ -199,8 +203,8 @@ benefit. Complete-history measurements must include the additional leaf's later
 replacement/reclamation cost as well as any avoided neighbour expansion.
 
 Keep current raw deltas, source descriptors/index/leaf list, runs, H output
-descriptors and H IDs/ranges in their existing delta subregions. A concrete
-proposed extension appends `8m` bytes for seed marks, a split descriptor within
+descriptors and H IDs/ranges in their existing delta subregions. The implemented
+extension appends `8m` bytes for seed marks, a split descriptor within
 128 bytes and one planner rollback header within 256 bytes:
 
 ```
@@ -211,8 +215,8 @@ proposed extension appends `8m` bytes for seed marks, a split descriptor within
 
 Computed profiles have `H>=Cmax+2>=4`, establishing the last inequality. The split
 descriptor can hold anchor/parent/insertion/output identities and bounded trial
-observations. The header stores one authoritative planner snapshot (eight existing
-size counters, repair diagnostics and flags); it does not duplicate a full writer
+observations. The header stores one authoritative planner snapshot (bounded size
+counters, repair diagnostics and flags); it does not duplicate a full writer
 snapshot. Restore derived fields by regeneration. Existing output descriptors
 represent the virtual leaf; no second map, topology or emitted inventory is needed.
 Bulk may reuse the dead front of this region while IDs/ranges remain disjoint.
@@ -221,7 +225,7 @@ check must establish actual implementation fit; failure of those proofs requires
 review, not an automatic budget increase or post-admission heap allocation.
 
 For the existing illustrative `E=8192,M=4096,N=1` profile, computed
-`H=729,m=726` gives 732,712 proposed delta bytes within 1,139,712 reserved bytes.
+`H=729,m=726` gives 732,712 calculated delta bytes within 1,139,712 reserved bytes.
 These are calculated examples, not defaults, measured peaks or test expectations.
 The overall arena and caller/current core ceilings remain unchanged.
 
@@ -238,7 +242,7 @@ that renewed canonicalization produces particular record counts.
 | Healthy-trace read error during trial encoding/catalog sealing | Stop access with existing read-error provenance. No restoration back to health or hidden fallback. |
 | Replacement-write/pre-slot error or uncertain slot publication after selection | Existing READABLE_STOPPED/ACCESS_STOPPED distinctions apply. If maintenance follows a confirmed user commit, preserve that progress independently. Durable simulator restart protects both retained histories under existing recovery preconditions. |
 
-## Failure contract, implementation and review choices
+## Failure contract and validation
 
 Only specified topology misses and the baseline exact candidate-local
 `PFS_LIMIT`/`PFS_NO_SPACE` admission-miss class can abandon a trial. Malformed source,
@@ -253,16 +257,15 @@ remain. Recovery retains the adapter/operator durable-backing precondition;
 real-host post-error qualification stays deferred and uncertain mutations are
 not automatically retryable.
 
-After owner approval, the smallest coherent implementation PR would update
-publisher emission/retirement accounting, the one-leaf virtual encoder, seed
-restoration and diagnostics together. Replace global assumptions that emitted
-nodes equal marked nodes with mode-specific invariants: baseline `n=p`, trial
-`n=p+1`. Keep source retirement membership distinct from output allocation and
-move catalog/root offsets to n in every consumer. Bulk sizing/fill and all public
-mutation/result/recovery interfaces remain unchanged. Publish filesystem code
-and tests first, then its published Pyxis pin and milestone/results.
+The coherent implementation updates publisher emission/retirement accounting,
+the one-leaf virtual encoder, seed restoration and diagnostics together. It
+replaces assumptions that emitted nodes equal marked nodes with mode-specific
+invariants: baseline `n=p`, trial `n=p+1`. Source retirement membership remains
+distinct from output allocation; every catalog/root offset uses n. Bulk
+sizing/fill and all public mutation/result/recovery interfaces remain unchanged.
+Publish filesystem code and tests first, then its published Pyxis pin and results.
 
-Tests land with that behavior: independent canonical interval expectations,
+Tests landed with that behavior: independent canonical interval expectations,
 cross-parent minima/coverage and retained sharing; necessary/sufficient split,
 coalescing-induced miss, full parent, one-leaf root and live-node cap; exact
 reachability/prefix eligibility; failed-trial restoration compared with fresh
@@ -274,8 +277,9 @@ slot attempt during maintenance. Refusal is incomplete, not corruption or comple
 No physical IDs, incidental publication counts, source fixture shape, machine
 properties or benchmark parameters become correctness requirements.
 
-Use current recorded histories first. Later approved implementation measurements
-repeat the unchanged matched RAM matrix through all final maintenance, reporting
+The before baseline uses the recorded histories and a fresh control before
+production edits. Implementation measurements repeat the unchanged matched RAM
+matrix through all final maintenance, reporting
 source/retired/emitted counts separately, total/user/orphan/drain/data/metadata
 writes, trial opportunity/success/miss reasons, discarded trial work, chosen-path
 closure, local versus calculated bulk cost and planning/full elapsed time. Savings
@@ -283,11 +287,12 @@ use emitted n, not retired p. Include failed trials and baseline repair in plann
 time and classify callbacks by the active publication. Use existing infrastructure
 and configured RAM/no-swap/trace budgets; no new framework, fallback or campaign.
 
-**Owner decisions before implementation:** the fixed one-leaf surplus; a trial
+**Accepted owner choices:** the fixed one-leaf surplus; a trial
 only when the first failing run is overflow; lowest-key eligible anchor and
 insertion order; necessary-split rule and balanced
 packing; one trial with seed restoration before existing repair/bulk; selecting a
-successful trial without an alternative-history cost gate. These are the recommended
-package, with unknown useful hit rate and possible planning/write regressions.
+successful trial without an alternative-history cost gate. These form the
+accepted first-solver package. Hit rates and possible
+planning/write regressions must be assessed in the matched measurements.
 General structural solving, new placement/coalescing policy and budgets are separate.
 Task 7 and writable deployment remain open independently of design approval.

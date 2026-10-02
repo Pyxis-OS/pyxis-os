@@ -161,10 +161,13 @@ measurements; independent scratch/trace bounds and conservative estimates remain
 The subsequently assigned [occupancy-aware neighbour repair](../../fs/docs/neighbour-repair-measurements.md)
 compares complete expanded runs under the same funding/termination bounds.
 Matched results are mixed; this selector does not settle broad closure or planning
-costs. The owner assigned the [bounded leaf-overflow split design](filesystem-overflow-split.md),
-separating retired/emitted nodes and deriving fixed-surplus funding/restoration.
-Its anchor, one-trial and fallback choices remain proposals; no implementation
-or new workload is authorized by that documentation task.
+costs. After #327 merged, the owner accepted and assigned the
+[bounded leaf-overflow split](filesystem-overflow-split.md): one extra leaf under
+an existing parent, distinct retired/emitted counts, renewed self-accounting and
+one seed restoration before ordinary repair/bulk. Its
+[implementation and matched record](../../fs/docs/overflow-split-measurements.md)
+retain existing admission/reserve/memory/runner policy. General structural editing
+and further optimisations require separate assignment.
 Broader population/pressure and recovery qualification, deployment criteria and
 task 7 remain open. See
 the linked milestone for the corrective task list.
