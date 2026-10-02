@@ -287,4 +287,6 @@ These are implementation checks, not open policy:
    - in the Lua REPL, Ctrl+C cancels a typed line but interrupts running code;
    - Doom with the raw keyboard is unaffected;
    - background jobs and other sessions unaffected;
+   - Ctrl+C during a startup script's foreground command, and whether the
+     script then stops or continues as intended;
    - debugger inspection of retirement and released waits.
