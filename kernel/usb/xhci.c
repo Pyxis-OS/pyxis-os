@@ -4,7 +4,9 @@
 #include <arch/cpu_local.h>
 #include <arch/dma.h>
 #include <arch/pci.h>
+#include <arch/smp.h>
 #include <kernel/log.h>
+#include <kernel/memory.h>
 #include <kernel/mm/dma.h>
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
@@ -13,13 +15,10 @@
 #include <kernel/task.h>
 #include <kernel/usb/xhci.h>
 #include "registers.h"
+#include "host.h"
+#include "core.h"
+#include "settings.h"
 
-/* Initial scheduling/deadline choices, independent of image or machine size. */
-#define XHCI_STATE_TIMEOUT_MS 1000
-#define XHCI_COMMAND_TIMEOUT_MS 5000
-#define XHCI_PORT_SETUP_TIMEOUT_MS 30000
-#define XHCI_PORT_POWER_DELAY_MS 20
-#define XHCI_WORKER_POLL_MS 10
 #define XHCI_RING_TRBS (PAGE_SIZE / XHCI_TRB_BYTES)
 
 struct xhci_trb {
@@ -34,11 +33,36 @@ _Static_assert(sizeof(struct xhci_trb) == XHCI_TRB_BYTES, "xHCI TRB hardware lay
 _Static_assert(sizeof(struct xhci_erst_entry) == XHCI_ERST_BYTES, "xHCI ERST hardware layout");
 
 enum port_state { PORT_ABSENT, PORT_UNSUPPORTED, PORT_CONNECTED, PORT_RESERVED, PORT_REMOVED };
+enum control_state { CONTROL_IDLE, CONTROL_ACTIVE, CONTROL_DONE, CONTROL_HELD };
+struct usb_host_device {
+  struct dma_buffer input, output, control_ring, data, bulk[USB_NONCONTROL_ENDPOINTS];
+  uintptr_t data_address;
+  phys_addr_t data_physical;
+  unsigned port, slot, enqueue;
+  uint16_t packet;
+  uint8_t configuration, interface, alternate;
+  enum usb_speed speed;
+  bool cycle, addressed, configured;
+  struct {
+    enum control_state state;
+    uint64_t generation, deadline;
+    phys_addr_t setup, data, status;
+    size_t requested, actual;
+    enum usb_result result;
+    bool client, inbound, short_packet;
+    struct usb_setup setup_packet;
+  } request;
+};
 struct xhci_port {
   enum port_state state;
   uint8_t major, minor, slot_type, speed, slot;
-  bool protocol, dirty;
+  enum usb_speed speeds[XHCI_PORT_SPEED_MASK + 1];
+  bool protocol, dirty, boot_present;
+  struct usb_host_device device;
 };
+
+static void controller_worker(void *argument);
+static void stop_controller(void);
 
 /* A single selected controller owns these records. Only its BSP worker parses
  * events and mutates ports/commands. IF=0 protects notification/wait publication
@@ -117,7 +141,7 @@ static bool bootstrap_fits(unsigned offset, size_t bytes)
 
 static bool wait_boot_bits(uintptr_t base, unsigned offset, uint32_t mask, uint32_t value)
 {
-  uint64_t deadline = task_deadline_after_ms(XHCI_STATE_TIMEOUT_MS);
+  uint64_t deadline = task_deadline_after_ms(USB_STATE_TIMEOUT_MS);
   do {
     if ((read32(base, offset) & mask) == value) {
       return true;
@@ -172,7 +196,7 @@ static bool legacy_handoff(unsigned offset)
   volatile uint8_t *os_owned = (volatile uint8_t *)(base + XHCI_LEGACY_OS_BYTE);
   /* Byte access avoids writing the independently changing BIOS semaphore. */
   *os_owned |= XHCI_LEGACY_OWNED;
-  uint64_t deadline = task_deadline_after_ms(XHCI_STATE_TIMEOUT_MS);
+  uint64_t deadline = task_deadline_after_ms(USB_STATE_TIMEOUT_MS);
   while (*(volatile uint8_t *)(base + XHCI_LEGACY_BIOS_BYTE) & XHCI_LEGACY_OWNED) {
     if (task_deadline_expired(deadline)) {
       return false;
@@ -187,6 +211,63 @@ static bool legacy_handoff(unsigned offset)
   write32(base, XHCI_LEGACY_CONTROL,
           control & ~(XHCI_LEGACY_SMI_ENABLES | XHCI_LEGACY_RESERVED_ZERO));
   return !(read32(base, XHCI_LEGACY_CONTROL) & XHCI_LEGACY_SMI_ENABLES);
+}
+
+static bool protocol_speeds(uintptr_t base, unsigned offset, unsigned count,
+                            unsigned major, enum usb_speed *speeds)
+{
+  if (!count) {
+    if (major == 2) {
+      speeds[1] = USB_SPEED_FULL;
+      speeds[2] = USB_SPEED_LOW;
+      speeds[3] = USB_SPEED_HIGH;
+    } else if (major == 3) {
+      speeds[4] = USB_SPEED_SUPER;
+    }
+    return true;
+  }
+  unsigned seen = 0;
+  for (unsigned i = 0; i < count; ++i) {
+    uint32_t psi = read32(base, offset + XHCI_PROTOCOL_BYTES + i * sizeof(uint32_t));
+    unsigned id = psi & XHCI_PSI_ID_MASK;
+    unsigned link = (psi >> XHCI_PSI_LINK_TYPE_SHIFT) & XHCI_PSI_LINK_TYPE_MASK;
+    unsigned protocol = (psi >> XHCI_PSI_PROTOCOL_SHIFT) & XHCI_PSI_PROTOCOL_MASK;
+    if (!id || (seen & (1u << id))) {
+      return false;
+    }
+    seen |= 1u << id;
+    /* Valid asymmetric pairs may describe an unused link profile. Keep their
+     * shared speed ID unknown without rejecting unrelated supported ports. */
+    if (link == XHCI_PSI_ASYMMETRIC_RX) {
+      if (++i == count) {
+        return false;
+      }
+      uint32_t transmit = read32(base, offset + XHCI_PROTOCOL_BYTES + i * sizeof(uint32_t));
+      if ((transmit & XHCI_PSI_ID_MASK) != id ||
+          ((transmit >> XHCI_PSI_LINK_TYPE_SHIFT) & XHCI_PSI_LINK_TYPE_MASK) != XHCI_PSI_ASYMMETRIC_TX) {
+        return false;
+      }
+      continue;
+    }
+    if (link != XHCI_PSI_SYMMETRIC) {
+      return false;
+    }
+    if (protocol) {
+      continue;
+    }
+    uint64_t rate = psi >> XHCI_PSI_MANTISSA_SHIFT;
+    unsigned exponent = (psi >> XHCI_PSI_EXPONENT_SHIFT) & XHCI_PSI_EXPONENT_MASK;
+    while (exponent--) {
+      rate *= 1000;
+    }
+    if (major == 2) {
+      speeds[id] = rate == 1500000 ? USB_SPEED_LOW : rate == 12000000 ? USB_SPEED_FULL :
+        rate == 480000000 ? USB_SPEED_HIGH : USB_SPEED_UNKNOWN;
+    } else if (major == 3 && rate == 5000000000ULL) {
+      speeds[id] = USB_SPEED_SUPER;
+    }
+  }
+  return true;
 }
 
 static bool extended_capabilities(void)
@@ -225,6 +306,11 @@ static bool extended_capabilities(void)
         return false;
       }
       unsigned slot_type = read32(base, offset + 12) & XHCI_PROTOCOL_SLOT_TYPE_MASK;
+      enum usb_speed speed_map[XHCI_PORT_SPEED_MASK + 1] = {0};
+      if (!bootstrap_fits(offset, bytes) ||
+          !protocol_speeds(base, offset, speeds, header >> XHCI_PROTOCOL_MAJOR_SHIFT, speed_map)) {
+        return false;
+      }
       for (unsigned i = first - 1; i < first - 1 + count; ++i) {
         struct xhci_port *port = &controller.ports[i];
         if (port->protocol) {
@@ -234,6 +320,7 @@ static bool extended_capabilities(void)
         port->major = header >> XHCI_PROTOCOL_MAJOR_SHIFT;
         port->minor = header >> XHCI_PROTOCOL_MINOR_SHIFT;
         port->slot_type = slot_type;
+        memcpy(port->speeds, speed_map, sizeof(speed_map));
       }
     }
     if (!bootstrap_fits(offset, bytes) || (next && next < bytes)) {
@@ -335,6 +422,53 @@ static bool ring_layout(const struct dma_buffer *ring)
     (ring->physical & (XHCI_RING_BOUNDARY - 1)) <= XHCI_RING_BOUNDARY - ring->bytes;
 }
 
+static void initialize_transfer_ring(const struct dma_buffer *ring)
+{
+  volatile struct xhci_trb *trbs = (volatile struct xhci_trb *)ring->address;
+  trbs[XHCI_RING_TRBS - 1] = (struct xhci_trb){
+    .parameter = ring->physical,
+    .control = (XHCI_TRB_LINK << XHCI_TRB_TYPE_SHIFT) | XHCI_TRB_TOGGLE_CYCLE | XHCI_TRB_CYCLE,
+  };
+}
+
+static bool allocate_devices(void)
+{
+  size_t capacity = USB_CONTROL_BYTES;
+  if (!capacity || capacity > UINT16_MAX) {
+    return false;
+  }
+  /* A single Data Stage TRB cannot cross a 64 KiB boundary. Larger configured
+   * buffers retain their full allocation while selecting an aligned interior. */
+  size_t padding = capacity > PAGE_SIZE ? XHCI_RING_BOUNDARY - PAGE_SIZE : 0;
+  for (unsigned i = 0; i < controller.port_count; ++i) {
+    struct usb_host_device *device = &controller.ports[i].device;
+    device->port = i;
+    device->cycle = true;
+    if (dma_buffer_allocate(&device->input, XHCI_INPUT_CONTEXT_COUNT * controller.context_bytes) != MM_OK ||
+        dma_buffer_allocate(&device->output, XHCI_CONTEXT_COUNT * controller.context_bytes) != MM_OK ||
+        dma_buffer_allocate(&device->control_ring, PAGE_SIZE) != MM_OK ||
+        dma_buffer_allocate(&device->data, capacity + padding) != MM_OK ||
+        !ring_layout(&device->control_ring)) {
+      return false;
+    }
+    size_t offset = padding ? (-device->data.physical & (XHCI_RING_BOUNDARY - 1)) : 0;
+    if (offset > device->data.bytes || capacity > device->data.bytes - offset ||
+        ((device->data.physical + offset) & (XHCI_RING_BOUNDARY - 1)) > XHCI_RING_BOUNDARY - capacity) {
+      return false;
+    }
+    device->data_address = device->data.address + offset;
+    device->data_physical = device->data.physical + offset;
+    initialize_transfer_ring(&device->control_ring);
+    for (unsigned j = 0; j < USB_NONCONTROL_ENDPOINTS; ++j) {
+      if (dma_buffer_allocate(&device->bulk[j], PAGE_SIZE) != MM_OK || !ring_layout(&device->bulk[j])) {
+        return false;
+      }
+      initialize_transfer_ring(&device->bulk[j]);
+    }
+  }
+  return usb_prepare();
+}
+
 static bool allocate_dma(void)
 {
   if (dma_buffer_allocate(&controller.dcbaa, (controller.slot_count + 1) * sizeof(uint64_t)) != MM_OK ||
@@ -368,11 +502,24 @@ static bool allocate_dma(void)
   volatile struct xhci_erst_entry *erst = (volatile struct xhci_erst_entry *)controller.erst.address;
   *erst = (struct xhci_erst_entry){.base = controller.event_ring.physical, .size = XHCI_RING_TRBS};
   controller.command_cycle = controller.event_cycle = true;
-  return true;
+  return allocate_devices();
 }
 
 static void release_boot_resources(void)
 {
+  usb_release_prepared();
+  if (controller.ports) {
+    for (unsigned i = 0; i < controller.port_count; ++i) {
+      struct usb_host_device *device = &controller.ports[i].device;
+      for (unsigned j = 0; j < USB_NONCONTROL_ENDPOINTS; ++j) {
+        dma_buffer_release(&device->bulk[j]);
+      }
+      dma_buffer_release(&device->data);
+      dma_buffer_release(&device->control_ring);
+      dma_buffer_release(&device->output);
+      dma_buffer_release(&device->input);
+    }
+  }
   dma_buffer_release(&controller.scratchpads);
   dma_buffer_release(&controller.scratchpad_array);
   dma_buffer_release(&controller.erst);
@@ -508,7 +655,7 @@ static bool consume_command(const struct xhci_trb *event)
       }
     }
   } else if (slot != controller.command.slot) {
-    controller.failure = "Disable Slot completion changed slot identity";
+    controller.failure = "command completion changed slot identity";
     return false;
   }
   controller.command.slot = slot;
@@ -516,6 +663,45 @@ static bool consume_command(const struct xhci_trb *event)
   controller.command.pending = false;
   ++controller.commands_completed;
   return true;
+}
+
+static bool consume_transfer(const struct xhci_trb *event)
+{
+  unsigned slot = event->control >> XHCI_TRB_SLOT_SHIFT;
+  unsigned endpoint = (event->control >> XHCI_EVENT_ENDPOINT_SHIFT) & XHCI_EVENT_ENDPOINT_MASK;
+  struct usb_host_device *device = NULL;
+  for (unsigned i = 0; i < controller.port_count; ++i) {
+    if (controller.ports[i].device.slot == slot && slot) {
+      device = &controller.ports[i].device;
+      break;
+    }
+  }
+  if (!device || endpoint != XHCI_ENDPOINT_ZERO || (event->control & XHCI_EVENT_DATA) ||
+      device->request.state != CONTROL_ACTIVE ||
+      (event->parameter != device->request.setup && event->parameter != device->request.status &&
+       (!device->request.requested || event->parameter != device->request.data))) {
+    controller.failure = "unowned control transfer event";
+    return false;
+  }
+  unsigned completion = event->status >> XHCI_EVENT_COMPLETION_SHIFT;
+  size_t residue = event->status & XHCI_EVENT_RESIDUE_MASK;
+  if (completion == XHCI_EVENT_SHORT_PACKET && event->parameter == device->request.data &&
+      device->request.inbound && !device->request.short_packet && residue <= device->request.requested) {
+    device->request.actual = device->request.requested - residue;
+    device->request.short_packet = true;
+    return true;
+  }
+  if (completion == XHCI_EVENT_SUCCESS && event->parameter == device->request.status && !residue) {
+    dma_read_barrier();
+    device->request.result = USB_OK;
+    device->request.state = device->request.client ? CONTROL_DONE : CONTROL_IDLE;
+    return true;
+  }
+  /* An early error does not retire the rest of the control TD sequence. */
+  device->request.result = USB_IO;
+  device->request.state = CONTROL_HELD;
+  controller.failure = "failed or invalid control transfer completion";
+  return false;
 }
 
 static bool drain_events(void)
@@ -533,6 +719,10 @@ static bool drain_events(void)
     unsigned type = (control >> XHCI_TRB_TYPE_SHIFT) & XHCI_TRB_TYPE_MASK;
     if (type == XHCI_EVENT_COMMAND) {
       if (!consume_command(&event)) {
+        return false;
+      }
+    } else if (type == XHCI_EVENT_TRANSFER) {
+      if (!consume_transfer(&event)) {
         return false;
       }
     } else if (type == XHCI_EVENT_PORT) {
@@ -575,9 +765,13 @@ static bool controller_healthy(void)
   return true;
 }
 
-static bool run_command(unsigned type, unsigned argument)
+static bool run_command(unsigned type, unsigned argument, phys_addr_t parameter, uint64_t deadline)
 {
   KASSERT(!controller.command.pending);
+  if (task_deadline_expired(deadline)) {
+    controller.failure = "controller command deadline expired before admission";
+    return false;
+  }
   volatile struct xhci_trb *ring = (volatile struct xhci_trb *)controller.command_ring.address;
   unsigned index = controller.command_enqueue;
   volatile struct xhci_trb *entry = &ring[index];
@@ -585,10 +779,10 @@ static bool run_command(unsigned type, unsigned argument)
   control |= argument << (type == XHCI_TRB_ENABLE_SLOT ? XHCI_TRB_SLOT_TYPE_SHIFT : XHCI_TRB_SLOT_SHIFT);
   controller.command.physical = controller.command_ring.physical + index * XHCI_TRB_BYTES;
   controller.command.type = type;
-  controller.command.slot = type == XHCI_TRB_DISABLE_SLOT ? argument : 0;
+  controller.command.slot = type == XHCI_TRB_ENABLE_SLOT ? 0 : argument;
   controller.command.completion = 0;
   controller.command.pending = true;
-  entry->parameter = 0;
+  entry->parameter = parameter;
   entry->status = 0;
   dma_write_barrier();
   entry->control = control | (controller.command_cycle ? XHCI_TRB_CYCLE : 0);
@@ -599,7 +793,10 @@ static bool run_command(unsigned type, unsigned argument)
     controller.command_cycle = !controller.command_cycle;
   }
   dma_write_barrier();
-  uint64_t deadline = task_deadline_after_ms(XHCI_COMMAND_TIMEOUT_MS);
+  uint64_t command_deadline = task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS);
+  if (deadline > command_deadline) {
+    deadline = command_deadline;
+  }
   write32(controller.registers.address, controller.doorbells, 0);
   while (controller.command.pending) {
     if (!controller_healthy() || !drain_events()) {
@@ -612,7 +809,7 @@ static bool run_command(unsigned type, unsigned argument)
       controller.failure = "controller command deadline expired";
       return false;
     }
-    uint64_t poll = task_deadline_after_ms(XHCI_WORKER_POLL_MS);
+    uint64_t poll = task_deadline_after_ms(USB_WORKER_POLL_MS);
     wait_activity(poll < deadline ? poll : deadline);
   }
   return true;
@@ -627,7 +824,7 @@ static uint32_t observe_port(unsigned index)
   return status;
 }
 
-static bool prepare_ports(void)
+static bool prepare_ports(uint64_t deadline)
 {
   bool powered = false;
   if (controller.port_power) {
@@ -640,7 +837,7 @@ static bool prepare_ports(void)
     }
   }
   if (powered) {
-    kernel_task_sleep_until(task_deadline_after_ms(XHCI_PORT_POWER_DELAY_MS));
+    kernel_task_sleep_until(task_deadline_after_ms(USB_PORT_POWER_DELAY_MS));
   }
   /* One startup snapshot. Later insertion cannot acquire a device reservation. */
   for (unsigned i = 0; i < controller.port_count; ++i) {
@@ -649,10 +846,10 @@ static bool prepare_ports(void)
     if (!(status & XHCI_PORT_CONNECTED)) {
       continue;
     }
+    port->boot_present = true;
     port->state = port->protocol && (port->major == 2 || port->major == 3) ?
       PORT_CONNECTED : PORT_UNSUPPORTED;
   }
-  uint64_t deadline = task_deadline_after_ms(XHCI_PORT_SETUP_TIMEOUT_MS);
   for (unsigned i = 0; i < controller.port_count; ++i) {
     struct xhci_port *port = &controller.ports[i];
     if (port->state != PORT_CONNECTED) {
@@ -679,7 +876,7 @@ static bool prepare_ports(void)
         controller.failure = "root-port setup deadline expired";
         return false;
       }
-      wait_activity(task_deadline_after_ms(XHCI_WORKER_POLL_MS));
+      wait_activity(task_deadline_after_ms(USB_WORKER_POLL_MS));
       status = observe_port(i);
     }
     if (!(status & XHCI_PORT_CONNECTED) || (status & XHCI_PORT_CONNECT_CHANGE)) {
@@ -691,13 +888,15 @@ static bool prepare_ports(void)
       return false;
     }
     port->speed = (status >> XHCI_PORT_SPEED_SHIFT) & XHCI_PORT_SPEED_MASK;
-    if (!port->speed || !run_command(XHCI_TRB_ENABLE_SLOT, port->slot_type)) {
+    if (!port->speed || !run_command(XHCI_TRB_ENABLE_SLOT, port->slot_type, 0, deadline)) {
       if (!controller.failure) {
         controller.failure = "root port has no speed identity";
       }
       return false;
     }
     port->slot = controller.command.slot;
+    port->device.slot = port->slot;
+    port->device.speed = port->speeds[port->speed];
     port->state = PORT_RESERVED;
     klog("xHCI: root port %u USB %u.%u speed-id=%u slot=%u enabled; addressing pending\n",
          i + 1, port->major, port->minor, port->speed, port->slot);
@@ -716,7 +915,8 @@ static bool update_ports(void)
     if (port->state == PORT_RESERVED &&
         (!(status & XHCI_PORT_CONNECTED) || !(status & XHCI_PORT_ENABLED) ||
          (status & (XHCI_PORT_OVER_CURRENT | XHCI_PORT_CONNECT_CHANGE)))) {
-      if (!run_command(XHCI_TRB_DISABLE_SLOT, port->slot)) {
+      if (!run_command(XHCI_TRB_DISABLE_SLOT, port->slot, 0,
+                       task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS))) {
         return false;
       }
       port->slot = 0;
@@ -747,7 +947,7 @@ static void stop_controller(void)
     uint32_t command = read32(op, XHCI_OP_COMMAND);
     write32(op, XHCI_OP_COMMAND, command & ~(XHCI_COMMAND_RUN | XHCI_COMMAND_INTERRUPT));
   }
-  uint64_t deadline = task_deadline_after_ms(XHCI_STATE_TIMEOUT_MS);
+  uint64_t deadline = task_deadline_after_ms(USB_STATE_TIMEOUT_MS);
   while (ready && !(read32(op, XHCI_OP_STATUS) & XHCI_STATUS_HALTED) &&
          !task_deadline_expired(deadline)) {
     kernel_task_sleep_until(task_deadline_after_ms(1));
@@ -759,8 +959,406 @@ static void stop_controller(void)
   cpu_restore_interrupts(flags);
   controller.running = false;
   controller.failed = true;
+  for (unsigned i = 0; i < controller.port_count; ++i) {
+    struct usb_host_device *device = &controller.ports[i].device;
+    if (device->request.state == CONTROL_ACTIVE) {
+      device->request.state = CONTROL_HELD;
+      device->request.result = USB_IO;
+    }
+  }
   klog("xHCI: %s; halt=%u interrupts-disabled=%u, all resources retained until reboot\n",
        controller.failure, halted, interrupts_disabled);
+}
+
+static void assert_device_owner(const struct usb_host_device *device)
+{
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(arch_cpu_index() == 0 && kernel_task_is_current(controller_worker));
+  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
+  cpu_restore_interrupts(flags);
+  bool owned = false;
+  for (unsigned i = 0; i < controller.port_count; ++i) {
+    owned |= device == &controller.ports[i].device;
+  }
+  KASSERT(owned);
+}
+
+unsigned usb_host_port_count(void)
+{
+  return controller.port_count;
+}
+
+size_t usb_host_control_capacity(void)
+{
+  return USB_CONTROL_BYTES;
+}
+
+bool usb_host_inventory_complete(void)
+{
+  if (!controller.running || controller.failed) {
+    return false;
+  }
+  for (unsigned i = 0; i < controller.port_count; ++i) {
+    struct xhci_port *port = &controller.ports[i];
+    if (port->boot_present && (port->state != PORT_RESERVED || port->device.speed == USB_SPEED_UNKNOWN)) {
+      return false;
+    }
+    if (port->boot_present) {
+      uint32_t status = read32(port_register(i), 0);
+      if (!(status & XHCI_PORT_CONNECTED) || !(status & XHCI_PORT_ENABLED) ||
+          (status & (XHCI_PORT_OVER_CURRENT | XHCI_PORT_CONNECT_CHANGE))) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+struct usb_host_device *usb_host_device_at(unsigned index)
+{
+  if (index >= controller.port_count || controller.ports[index].state != PORT_RESERVED) {
+    return NULL;
+  }
+  return &controller.ports[index].device;
+}
+
+enum usb_speed usb_host_device_speed(const struct usb_host_device *device)
+{
+  return device->speed;
+}
+
+static bool device_present(const struct usb_host_device *device)
+{
+  uint32_t status = read32(port_register(device->port), 0);
+  return controller.ports[device->port].state == PORT_RESERVED &&
+    (status & (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED)) == (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED) &&
+    !(status & (XHCI_PORT_OVER_CURRENT | XHCI_PORT_CONNECT_CHANGE));
+}
+
+static bool device_ready(const struct usb_host_device *device)
+{
+  return controller.running && !controller.failed && device_present(device);
+}
+
+static uint32_t *input_slot(const struct usb_host_device *device)
+{
+  return (uint32_t *)(device->input.address + controller.context_bytes);
+}
+
+static uint32_t *input_endpoint(const struct usb_host_device *device, unsigned dci)
+{
+  return (uint32_t *)(device->input.address + (dci + 1) * controller.context_bytes);
+}
+
+static void set_endpoint(uint32_t *context, unsigned type, unsigned packet,
+                         unsigned burst, phys_addr_t ring, unsigned average)
+{
+  context[1] = (packet << XHCI_ENDPOINT_PACKET_SHIFT) | (burst << XHCI_ENDPOINT_BURST_SHIFT) |
+    (type << XHCI_ENDPOINT_TYPE_SHIFT) | XHCI_ENDPOINT_ERRORS;
+  context[2] = (uint32_t)ring | XHCI_TRB_CYCLE;
+  context[3] = ring >> 32;
+  context[4] = average;
+}
+
+static enum usb_result context_command(struct usb_host_device *device, unsigned type, uint64_t deadline)
+{
+  dma_write_barrier();
+  if (!run_command(type, device->slot, device->input.physical, deadline)) {
+    stop_controller();
+    return USB_IO;
+  }
+  return USB_OK;
+}
+
+enum usb_result usb_host_address(struct usb_host_device *device, uint64_t deadline)
+{
+  assert_device_owner(device);
+  if (!device_ready(device)) {
+    return USB_IO;
+  }
+  if (device->addressed || device->request.state != CONTROL_IDLE) {
+    return USB_BUSY;
+  }
+  if (device->speed == USB_SPEED_UNKNOWN) {
+    return USB_UNSUPPORTED;
+  }
+  device->packet = device->speed == USB_SPEED_SUPER ? 512 : device->speed == USB_SPEED_HIGH ? 64 : 8;
+  memset((void *)device->input.address, 0, device->input.bytes);
+  uint32_t *input = (uint32_t *)device->input.address;
+  input[1] = 3; /* Slot and EP0 only. */
+  uint32_t *slot = input_slot(device);
+  slot[0] = (1u << XHCI_SLOT_ENTRIES_SHIFT) |
+    ((unsigned)controller.ports[device->port].speed << XHCI_SLOT_SPEED_SHIFT);
+  slot[1] = (device->port + 1) << XHCI_SLOT_ROOT_PORT_SHIFT;
+  set_endpoint(input_endpoint(device, XHCI_ENDPOINT_ZERO), XHCI_ENDPOINT_CONTROL,
+               device->packet, 0, device->control_ring.physical, XHCI_CONTROL_AVERAGE_TRB);
+  volatile uint64_t *dcbaa = (volatile uint64_t *)controller.dcbaa.address;
+  dcbaa[device->slot] = device->output.physical;
+  enum usb_result result = context_command(device, XHCI_TRB_ADDRESS_DEVICE, deadline);
+  if (result == USB_OK) {
+    device->addressed = true;
+  }
+  return result;
+}
+
+enum usb_result usb_host_update_packet(struct usb_host_device *device, uint16_t packet, uint64_t deadline)
+{
+  assert_device_owner(device);
+  if (!device_ready(device) || !device->addressed) {
+    return USB_IO;
+  }
+  if (device->request.state != CONTROL_IDLE) {
+    return USB_BUSY;
+  }
+  if (device->speed != USB_SPEED_FULL || (packet != 8 && packet != 16 && packet != 32 && packet != 64)) {
+    return USB_INVALID;
+  }
+  if (packet == device->packet) {
+    return USB_OK;
+  }
+  memset((void *)device->input.address, 0, device->input.bytes);
+  ((uint32_t *)device->input.address)[1] = 1u << XHCI_ENDPOINT_ZERO;
+  input_endpoint(device, XHCI_ENDPOINT_ZERO)[1] = (unsigned)packet << XHCI_ENDPOINT_PACKET_SHIFT;
+  enum usb_result result = context_command(device, XHCI_TRB_EVALUATE_CONTEXT, deadline);
+  if (result == USB_OK) {
+    device->packet = packet;
+  }
+  return result;
+}
+
+static bool ticket_owned(const struct usb_host_device *device, struct usb_ticket ticket)
+{
+  return ticket.generation && device->request.client && device->request.generation == ticket.generation;
+}
+
+static void publish_control(struct usb_host_device *device, const struct xhci_trb *stages, unsigned count)
+{
+  volatile struct xhci_trb *ring = (volatile struct xhci_trb *)device->control_ring.address;
+  unsigned first = device->enqueue;
+  bool first_cycle = device->cycle;
+  phys_addr_t positions[3];
+  for (unsigned i = 0; i < count; ++i) {
+    unsigned index = device->enqueue;
+    bool cycle = device->cycle;
+    positions[i] = device->control_ring.physical + index * XHCI_TRB_BYTES;
+    ring[index].parameter = stages[i].parameter;
+    ring[index].status = stages[i].status;
+    /* The first stage stays invisible until every later stage is ready. */
+    ring[index].control = stages[i].control | ((i ? cycle : !cycle) ? XHCI_TRB_CYCLE : 0);
+    if (++device->enqueue == XHCI_RING_TRBS - 1) {
+      ring[XHCI_RING_TRBS - 1].control = (XHCI_TRB_LINK << XHCI_TRB_TYPE_SHIFT) |
+        XHCI_TRB_TOGGLE_CYCLE | (cycle ? XHCI_TRB_CYCLE : 0);
+      device->enqueue = 0;
+      device->cycle = !cycle;
+    }
+  }
+  device->request.setup = positions[0];
+  device->request.data = count == 3 ? positions[1] : 0;
+  device->request.status = positions[count - 1];
+  dma_write_barrier();
+  ring[first].control = stages[0].control | (first_cycle ? XHCI_TRB_CYCLE : 0);
+  dma_write_barrier();
+}
+
+enum usb_result usb_host_control_submit(struct usb_host_device *device, const struct usb_setup *setup,
+                                        const void *outbound, uint64_t deadline, struct usb_ticket *ticket)
+{
+  assert_device_owner(device);
+  if (!device_ready(device) || !device->addressed) {
+    return USB_IO;
+  }
+  if (device->request.state != CONTROL_IDLE || device->request.client) {
+    return USB_BUSY;
+  }
+  if (!setup || !ticket || setup->length > usb_host_control_capacity() ||
+      (setup->length && !(setup->request_type & 0x80) && !outbound) ||
+      device->request.generation == UINT64_MAX) {
+    return USB_INVALID;
+  }
+  if (task_deadline_expired(deadline)) {
+    return USB_TIMEOUT;
+  }
+  bool inbound = (setup->request_type & 0x80) != 0;
+  uint64_t generation = device->request.generation + 1;
+  device->request = (typeof(device->request)){
+    .state = CONTROL_ACTIVE, .generation = generation, .deadline = deadline,
+    .requested = setup->length, .actual = setup->length, .result = USB_BUSY,
+    .client = true, .inbound = inbound, .setup_packet = *setup,
+  };
+  if (setup->length && !inbound) {
+    memcpy((void *)device->data_address, outbound, setup->length);
+  }
+  uint64_t immediate = setup->request_type | ((uint64_t)setup->request << 8) |
+    ((uint64_t)setup->value << 16) | ((uint64_t)setup->index << 32) | ((uint64_t)setup->length << 48);
+  unsigned transfer = !setup->length ? XHCI_SETUP_NO_DATA : inbound ? XHCI_SETUP_IN : XHCI_SETUP_OUT;
+  struct xhci_trb stages[3] = {{
+    .parameter = immediate, .status = XHCI_CONTROL_AVERAGE_TRB,
+    .control = (XHCI_TRB_SETUP << XHCI_TRB_TYPE_SHIFT) | XHCI_TRB_IMMEDIATE |
+      (transfer << XHCI_TRB_SETUP_TRANSFER_SHIFT),
+  }};
+  unsigned count = 1;
+  if (setup->length) {
+    stages[count++] = (struct xhci_trb){
+      .parameter = device->data_physical, .status = setup->length,
+      .control = (XHCI_TRB_DATA << XHCI_TRB_TYPE_SHIFT) | XHCI_TRB_SHORT_INTERRUPT |
+        (inbound ? XHCI_TRB_DIRECTION_IN : 0),
+    };
+  }
+  stages[count++] = (struct xhci_trb){
+    .control = (XHCI_TRB_STATUS << XHCI_TRB_TYPE_SHIFT) | XHCI_TRB_COMPLETION_INTERRUPT |
+      ((!setup->length || !inbound) ? XHCI_TRB_DIRECTION_IN : 0),
+  };
+  publish_control(device, stages, count);
+  *ticket = (struct usb_ticket){.generation = generation};
+  write32(controller.registers.address, controller.doorbells + device->slot * XHCI_DOORBELL_BYTES,
+          XHCI_ENDPOINT_ZERO);
+  return USB_OK;
+}
+
+static bool control_deadlines(void)
+{
+  for (unsigned i = 0; i < controller.port_count; ++i) {
+    struct usb_host_device *device = &controller.ports[i].device;
+    if (device->request.state == CONTROL_ACTIVE &&
+        (task_deadline_expired(device->request.deadline) || !device_present(device))) {
+      bool expired = task_deadline_expired(device->request.deadline);
+      device->request.state = CONTROL_HELD;
+      device->request.result = expired ? USB_TIMEOUT : USB_IO;
+      controller.failure = expired ? "control transfer deadline expired" : "device disappeared during control transfer";
+      return false;
+    }
+  }
+  return true;
+}
+
+enum usb_result usb_host_control_wait(struct usb_host_device *device, struct usb_ticket ticket, uint64_t deadline)
+{
+  assert_device_owner(device);
+  for (;;) {
+    if (!ticket_owned(device, ticket)) {
+      return USB_STALE;
+    }
+    if (device->request.state == CONTROL_DONE || device->request.state == CONTROL_HELD) {
+      return USB_OK;
+    }
+    if (!controller_healthy() || !drain_events() || !control_deadlines()) {
+      stop_controller();
+      return USB_OK; /* The retained ticket now carries the failure. */
+    }
+    if (device->request.state != CONTROL_ACTIVE) {
+      continue;
+    }
+    if (task_deadline_expired(deadline)) {
+      return USB_TIMEOUT;
+    }
+    uint64_t poll = task_deadline_after_ms(USB_WORKER_POLL_MS);
+    if (poll > deadline) {
+      poll = deadline;
+    }
+    if (poll > device->request.deadline) {
+      poll = device->request.deadline;
+    }
+    wait_activity(poll);
+  }
+}
+
+enum usb_result usb_host_control_take(struct usb_host_device *device, struct usb_ticket ticket,
+                                      void *destination, size_t capacity, struct usb_completion *completion)
+{
+  assert_device_owner(device);
+  if (!ticket_owned(device, ticket)) {
+    return USB_STALE;
+  }
+  if (device->request.state == CONTROL_ACTIVE) {
+    return USB_BUSY;
+  }
+  if (!completion || (device->request.result == USB_OK && device->request.inbound &&
+      device->request.actual && (!destination || capacity < device->request.actual))) {
+    return USB_INVALID;
+  }
+  if (device->request.result == USB_OK && device->request.inbound && device->request.actual) {
+    dma_read_barrier();
+    memcpy(destination, (const void *)device->data_address, device->request.actual);
+  }
+  *completion = (struct usb_completion){
+    .result = device->request.result,
+    .bytes = device->request.result == USB_OK ? device->request.actual : 0,
+  };
+  device->request.client = false;
+  if (device->request.state == CONTROL_DONE) {
+    device->request.state = CONTROL_IDLE;
+  }
+  return USB_OK;
+}
+
+void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket ticket)
+{
+  assert_device_owner(device);
+  if (ticket_owned(device, ticket)) {
+    device->request.client = false;
+    if (device->request.state == CONTROL_DONE) {
+      device->request.state = CONTROL_IDLE;
+    }
+  }
+}
+
+enum usb_result usb_host_configure_bulk(struct usb_host_device *device, uint8_t configuration,
+                                       uint8_t interface, uint8_t alternate,
+                                       const struct usb_bulk_endpoint *endpoints, unsigned count,
+                                       uint64_t deadline)
+{
+  assert_device_owner(device);
+  if (!device_ready(device) || !device->addressed) {
+    return USB_IO;
+  }
+  if (device->configured || device->request.state != CONTROL_IDLE) {
+    return USB_BUSY;
+  }
+  if (!configuration || !endpoints || !count || count > USB_NONCONTROL_ENDPOINTS) {
+    return USB_INVALID;
+  }
+  unsigned adds = 1, highest = XHCI_ENDPOINT_ZERO;
+  for (unsigned i = 0; i < count; ++i) {
+    const struct usb_bulk_endpoint *endpoint = &endpoints[i];
+    unsigned number = endpoint->address & 0x0f;
+    unsigned dci = number * 2 + ((endpoint->address & 0x80) != 0);
+    bool packet = device->speed == USB_SPEED_FULL ?
+      endpoint->max_packet == 8 || endpoint->max_packet == 16 || endpoint->max_packet == 32 || endpoint->max_packet == 64 :
+      device->speed == USB_SPEED_HIGH ? endpoint->max_packet == 512 :
+      device->speed == USB_SPEED_SUPER && endpoint->max_packet == 1024;
+    if (!number || (endpoint->address & 0x70) || (adds & (1u << dci)) || !packet ||
+        endpoint->max_burst > 15 || (device->speed != USB_SPEED_SUPER && endpoint->max_burst)) {
+      return USB_INVALID;
+    }
+    adds |= 1u << dci;
+    if (highest < dci) {
+      highest = dci;
+    }
+  }
+  memset((void *)device->input.address, 0, device->input.bytes);
+  ((uint32_t *)device->input.address)[1] = adds;
+  /* Output Slot contains hardware state and reserved bytes, which are zero in
+   * an Input Slot. Reconstruct this direct-root topology explicitly. */
+  input_slot(device)[0] = (highest << XHCI_SLOT_ENTRIES_SHIFT) |
+    ((unsigned)controller.ports[device->port].speed << XHCI_SLOT_SPEED_SHIFT);
+  input_slot(device)[1] = (device->port + 1) << XHCI_SLOT_ROOT_PORT_SHIFT;
+  for (unsigned i = 0; i < count; ++i) {
+    const struct usb_bulk_endpoint *endpoint = &endpoints[i];
+    bool inbound = (endpoint->address & 0x80) != 0;
+    unsigned dci = (endpoint->address & 0x0f) * 2 + inbound;
+    set_endpoint(input_endpoint(device, dci), inbound ? XHCI_ENDPOINT_BULK_IN : XHCI_ENDPOINT_BULK_OUT,
+                 endpoint->max_packet, endpoint->max_burst, device->bulk[i].physical, endpoint->max_packet);
+  }
+  /* CIE is disabled: CIC configuration/interface/alternate fields stay zero.
+   * The USB core has already sent the actual values to the device. */
+  enum usb_result result = context_command(device, XHCI_TRB_CONFIGURE_ENDPOINT, deadline);
+  if (result == USB_OK) {
+    device->configured = true;
+    device->configuration = configuration;
+    device->interface = interface;
+    device->alternate = alternate;
+  }
+  return result;
 }
 
 static void program_rings(void)
@@ -812,7 +1410,7 @@ static void controller_worker(void *argument)
     stop_controller();
     return;
   }
-  uint64_t deadline = task_deadline_after_ms(XHCI_STATE_TIMEOUT_MS);
+  uint64_t deadline = task_deadline_after_ms(USB_STATE_TIMEOUT_MS);
   while (read32(operational(), XHCI_OP_STATUS) & XHCI_STATUS_HALTED) {
     if (task_deadline_expired(deadline)) {
       controller.failure = "controller run deadline expired";
@@ -822,17 +1420,22 @@ static void controller_worker(void *argument)
     kernel_task_sleep_until(task_deadline_after_ms(1));
   }
   controller.running = true;
-  if (!controller_healthy() || !prepare_ports()) {
+  uint64_t enumeration_deadline = task_deadline_after_ms(USB_ENUMERATION_TIMEOUT_MS);
+  if (!controller_healthy() || !prepare_ports(enumeration_deadline)) {
     stop_controller();
     return;
   }
-  klog("xHCI: boot root-port scan complete; USB descriptors and classes pending\n");
+  usb_enumerate(enumeration_deadline);
+  if (!controller.running || controller.failed) {
+    return;
+  }
+  klog("xHCI: boot USB enumeration complete\n");
   for (;;) {
-    if (!controller_healthy() || !drain_events() || !update_ports()) {
+    if (!controller_healthy() || !drain_events() || !control_deadlines() || !update_ports()) {
       stop_controller();
       return;
     }
-    wait_activity(task_deadline_after_ms(XHCI_WORKER_POLL_MS));
+    wait_activity(task_deadline_after_ms(USB_WORKER_POLL_MS));
   }
 }
 

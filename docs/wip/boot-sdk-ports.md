@@ -269,8 +269,10 @@ an opt-in [raw image and emulated USB launch](../development/usb-image.md);
 Phase B.1 now defines explicit backend/unique-disk selection, controller resource
 preparation, bounded requests and failure ownership. Phase B.2 adds
 [controller ownership, rings, MSI-X and root-port slot reservations](../devices/usb-xhci.md).
-Enumeration/transfers are the next focused task; native USB storage and writable work are
-unassigned. Reusable controller/USB/class/block boundaries are required, without
+Phase B.3 adds [checked enumeration, control requests and provisional BOT endpoint
+setup](../devices/usb-enumeration.md). BOT/SCSI reads and native block integration
+remain pending; writable work is unassigned. Reusable controller/USB/class/block
+boundaries are required, without
 speculative driver frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.
 The separate [hardware-inspection proposal](hardware-inspection.md) adds native
