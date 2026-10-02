@@ -278,6 +278,12 @@ remain pending; writable work is unassigned. Reusable controller/USB/class/block
 boundaries are required, without
 speculative driver frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.
+
+The [ThinkPad KVM and invariant-TSC investigation](thinkpad-kvm-tsc.md) records
+a successful four-vCPU KVM boot, the native/guest timer differences and proposed
+clock-source qualification and fallback scopes. Its implementation and policy
+decisions remain open; the report does not establish native Caelum boot support.
+
 The separate [hardware-inspection proposal](hardware-inspection.md) adds native
 `lspci`/`lsusb` consumers of read-only inventory and pinned plain-text PCI/USB name
 databases. `lspci` can precede USB support; these tasks do not expand boot-image
