@@ -292,6 +292,8 @@ Multiple users with restricted permissions are a requirement. The
 policy-based acquisition, runtime capabilities and prospective permission changes.
 They retain the unresolved enforcement and lifecycle decisions before persistent
 ownership is implemented. External login and account UI are separate work.
+The [credentials and biometric unlock direction](credentials-and-biometrics.md)
+is parked after local users; it adds no tasks to current milestones.
 
 ## Shell follow-ups
 
