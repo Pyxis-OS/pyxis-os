@@ -248,8 +248,11 @@ The [USB installation proposal](usb-installation.md) records a replaceable SanDi
 target and QEMU-first stages: boot Limine/kernel/archive from a FAT32 EFI partition,
 add xHCI/Bulk-Only read-only access to a separate Pyxis pool, then integrate native
 persistence and validate the ThinkPad. Real-device passthrough is an intermediate
-check, not validation of the laptop controller. Stage ordering remains unassigned;
-this does not reorder filesystem core, spaces/SMP or the visible-work sequence.
+check, not validation of the laptop controller. Boot-image Phase A may proceed
+independently in a parallel worktree; kernel USB and writable stages remain
+unassigned. Reusable controller/USB/class/block boundaries are required, without
+speculative driver frameworks. This does not reorder filesystem core, spaces/SMP
+or the visible-work sequence.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

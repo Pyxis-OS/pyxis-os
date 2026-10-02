@@ -2,9 +2,9 @@
 
 Status: proposal, 2026-10-02. The owner wants a replaceable USB drive as the first
 physical installation target, with QEMU development before laptop validation.
-This records that direction and proposes focused stages; it does not assign
-implementation, authorize physical writes or reorder the active filesystem,
-spaces/SMP and display work.
+Phase A may be assigned independently to a parallel agent. Kernel USB and writable
+installation stages remain unassigned; this document does not authorize physical
+writes or reorder the active filesystem, spaces/SMP and display work.
 
 ## Intended result and layout
 
@@ -73,6 +73,46 @@ file is not inherently RAM-backed. Reuse those controls without adding fixed
 machine, memory or image-size requirements. Physical media is for explicit,
 bounded installation and persistence checks, not amplification campaigns.
 
+## Reusable layers, bounded first consumer
+
+The owner requires reusable subsystem boundaries. Storage is the first supported
+USB class, not the definition of a USB device. Adding a later mouse or keyboard
+driver must not require replacing enumeration, controller ownership or the
+transfer-completion machinery.
+
+- **xHCI** owns controller registers, rings, DMA, endpoint scheduling and completion.
+  It does not interpret storage commands or assume every endpoint belongs to a disk.
+- **USB core** owns device/configuration/interface/endpoint descriptions,
+  enumeration and transfer/lifetime contracts. Class matching uses the relevant
+  interface descriptors, not a blanket assumption that an attached device is storage.
+- **Mass storage** owns Bulk-Only command/data/status handling and SCSI operations,
+  translating them into the block contract. Transport-specific recovery remains
+  here, using USB endpoint/reset operations below it.
+- **Block, GPT and filesystem layers** consume their existing contracts without
+  knowing USB endpoint numbers or xHCI rings. Boot-image assembly is independent
+  of the kernel transport that later reads the image.
+
+Unknown classes, unsupported interfaces and unsupported topologies must produce
+an explicit unsupported/unbound result without entering storage code or crashing
+the controller. A directly attached unsupported mouse alongside the supported
+drive must not prevent the drive from operating. Parse descriptors defensively;
+do not assume one interface, two endpoints or a particular vendor outside the
+specific class driver that requires that shape. Composite-device support may
+remain limited, but its rejection must be explicit and safe.
+
+Keep state owned by the actual controller/device/interface/request where it
+belongs. A bounded initial selection policy must not leak into globals that
+implicitly make every transfer belong to one storage device. Settle reset,
+disconnect, cancellation and DMA lifetime at the layer owning them, so class
+drivers can rely on the same completion rules.
+
+This does not require a generic driver framework, dynamic plugin registry or
+unused transfer APIs. Implement the concrete control/bulk path first through
+small internal interfaces; later HID support can add interrupt transfers and
+class parsing without rewriting the working storage path. Phase B validation
+should include an unrelated unsupported USB device as well as the chosen disk.
+Phase A itself needs no kernel USB abstractions or placeholder drivers.
+
 ## Proposed staged milestones
 
 Each stage should be assigned separately and delivered in focused PRs. USB read
@@ -133,8 +173,9 @@ support does not require completion of native writable integration.
 
 ## Decisions before assigning implementation
 
-- Confirm stage ordering relative to the existing roadmap; this proposal does
-  not insert a parallel implementation track.
+- Phase A can proceed independently in a separate worktree. Confirm assignment
+  and ordering of later stages relative to the existing roadmap; Phase A does
+  not implicitly authorize kernel USB or writable integration.
 - Settle image preparation/update scope and the device-identity/authority mapping
   as the block layer gains another backend. Never select a write target merely
   because it was enumerated first; distinguish disk identity from USB identifiers.
