@@ -829,8 +829,8 @@ adapter paths. No fault injection or physical-hardware validation was performed.
 
 The [writable-core milestone](wip/writable-filesystem-core.md) used whole-map
 rebuilding for every publication as the first correctness implementation.
-Routine whole-map writes and missing sustained/population/pressure qualification
-remain milestone-closure and writable-deployment blockers. Task 7 owns RAM-only
+Unqualified global-closure/bulk costs and missing sustained/population/pressure
+qualification remain milestone-closure and writable-deployment blockers. Task 7 owns RAM-only
 comparisons, incremental-map design and revised bounds, implementation/recovery
 tests, and repeated acceptance measurements. Large disk-backed workloads remain
 suspended. The accepted initial performance direction is now Btrfs-comparable
@@ -847,11 +847,17 @@ nor large fragmented populations/resource pressure. This entry authorizes no
 additional benchmark. The [incremental-map proposal](wip/filesystem-write-efficiency.md#incremental-allocation-map-proposal)
 records the accepted topology-preserving intermediate approach with finite
 source-node accounting closure and explicit funded bulk/global-closure limitation.
-Refined fixed ascending IDs, neighbouring-leaf redistribution and local/bulk
-cost/planning reports await design review before code; deployment comparisons
+Fixed ascending IDs, neighbouring-leaf redistribution and local/bulk cost/planning
+reports were accepted after #313 merged and assigned for the
+[first implementation](../fs/docs/incremental-map.md); deployment comparisons
 remain separate decisions, not a prerequisite to this intermediate optimisation.
 All existing floors, memory limits, reservations and retained-state guarantees
-remain unchanged in that proposed first scope.
+remain unchanged in that first implementation. Full source scans, global closure
+and funded bulk fallback remain intermediate limitations; matched measurements
+do not replace sustained/population/pressure and real-host recovery qualification.
+The [proposed planning follow-up](wip/filesystem-write-efficiency.md#proposed-focused-planning-follow-up)
+records repeated linear retirement-lookup costs and preparation/measurement
+diagnostic separation before larger-map qualification; it is not implemented here.
 
 Tasks 2–6 implement planners, admitted publication, public file/namespace
 mutation, retained lifetime and orphan cleanup. The initial immediate-drain writer
