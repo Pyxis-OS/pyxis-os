@@ -2418,8 +2418,8 @@ this documentation update.
        includes all maintenance and final checkpoints, closure/fallback frequency,
        local/bulk costs and observed planning intervals. This delivers an
        intermediate implementation, not the broader task-7/deployment acceptance.
-       [Filesystem #21](https://git.internal/PyxisOS/pyxis-fs/pulls/21) publishes
-       `940fba8`; the parent pins that published revision. All 134 quick groups
+       [Filesystem #21](https://git.internal/PyxisOS/pyxis-fs/pulls/21) published
+       `940fba8`; the first integration pinned that revision. All 134 quick groups
        and six extended groups pass, including ASan/UBSan at the final production
        revision, and the shared archive cross-compiles with Pyxis kernel flags.
        Two unchanged before/after 40-case RAM matrices reduce measurement-window
@@ -2428,8 +2428,31 @@ this documentation update.
        diagnostic counting included. Global fallback and larger qualification remain.
        Review corrections record the calculated worst-case retirement-lookup cost,
        unresolved measurement-window fallback attribution and small-map coverage.
-       The [proposed planning follow-up](filesystem-write-efficiency.md#proposed-focused-planning-follow-up)
+       The [focused planning follow-up](filesystem-write-efficiency.md#focused-planning-follow-up)
        remains separate from this delivered step; task 7 and deployment stay open.
+
+     - [x] **Index source membership and separate phase diagnostics.** After
+       filesystem #21 / Pyxis #314 merged, the owner assigned the focused
+       [planning follow-up](filesystem-write-efficiency.md#focused-planning-follow-up).
+       A block-sorted descriptor index keeps topology and marks authoritative,
+       fits the existing delta reservation and reduces repeated membership work.
+       The unchanged comparison reports every existing map metric separately for
+       preparation and measurement within the same bounded summary. Actual slot
+       writes and the two-flush protocol check attribution without prescribed
+       publication counts. Tests add shuffled-ID/shared-topology and incomplete
+       load coverage. Allocation, admission, reserve, memory and durability policies
+       remain unchanged; larger qualification is still separate.
+       The [matched RAM record](../../fs/docs/map-planning-measurements.md)
+       includes two unchanged matrices per revision with every trailing fence.
+       Pyxis submitted bytes and aggregate map counters remain unchanged;
+       mean instrumented RAM times increase by 0.06–1.35%, establishing no speedup.
+       At 256 files, 171 global fallbacks occur in preparation versus zero or one
+       in measurement. Source maps remain at most ten nodes, so this does not
+       resolve larger-map/deployment acceptance. All 135 quick/six extended groups
+       pass, including ASan/UBSan; the complete shared archive cross-compiles.
+       [Filesystem #22](https://git.internal/PyxisOS/pyxis-fs/pulls/22) publishes
+       `fbaf2fd`; the parent pins that revision. Local `make -j16` builds and links
+       Caelum with the existing read-only subset; the writable core stays excluded.
 
    - [ ] **Repeat measurements and complete acceptance.** Run matched RAM-only
      before/after workloads and remaining recovery/pressure coverage. Record the
