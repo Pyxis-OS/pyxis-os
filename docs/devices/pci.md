@@ -2,8 +2,8 @@
 
 Caelum reads the firmware-configured PCI topology during BSP initialization,
 before starting APs. Discovery produces a serial inventory and retains heap-backed
-device records for driver lookup. A separate resource path claims the first
-modern virtio-fs and virtio-net functions when present. Boot needs neither device.
+device records for driver lookup. Drivers claim their selected functions through
+a separate resource path; ordinary boot does not require an optional device.
 
 ## Configuration access
 
@@ -68,6 +68,20 @@ MSI/MSI-X, disables bus mastering and disables INTx. Configuration writes requir
 that claim. Command changes use 16-bit writes so the adjacent status register's
 write-one-to-clear bits are not accidentally acknowledged.
 
+The class selector, like the vendor/device selector, returns a device only for
+one match in a complete inventory. It distinguishes absence, ambiguity and
+incomplete discovery. [xHCI](usb-xhci.md) uses class/subclass/interface matching.
+
+MMIO controllers can first call `pci_reserve_device`, preserving firmware
+decoding and bus-master state while reserving software/configuration ownership.
+`pci_map_bootstrap_bar0` maps a checked, assigned, page-aligned 4 KiB BAR0 prefix
+with firmware memory decoding already enabled. This provisional mapping does not
+establish BAR size. Its consumer bounds every access and confirms firmware
+handoff/halt before `pci_complete_claim` disables DMA/INTx. Cancellation of an
+uncompleted reservation unmaps CPU access without command writes or restoring
+bus mastering. Failed completion retains ownership until safe quiescence is
+confirmed. VirtIO keeps its immediate-claim reset path.
+
 The driver must confirm the device is stopped and disable address decoding before
 calling `pci_size_bars`. Sizing handles firmware-assigned 32-bit and paired 64-bit
 memory BARs. Each probe restores both original halves before returning, including
@@ -90,6 +104,14 @@ It never frees MMIO through the PMM. Empty page tables may remain for reuse unde
 the existing VM policy. This is not runtime teardown or hot-unplug: it must not
 be used after starting DMA, and a device reset cannot be undone. A driver that
 enabled MSI-X must disable it before releasing the claim or table mappings.
+Any later bus-master-enable write permanently excludes boot release, even after
+the bit is cleared again; runtime resources remain retained until reboot.
+
+`kernel/pci/msix.c` discovers one disabled MSI-X capability, validates disjoint
+sized table/PBA extents, maps them and prepares entry zero under function/entry
+masks. It routes a static BSP vector, enables with readback and masks before
+disabling. Owning drivers check overlap against their register regions before
+mapping and retain responsibility for device-specific source/vector-index setup.
 
 ## Initial virtio-fs consumer
 
@@ -114,8 +136,9 @@ must still read zero. The ISR is not read merely for diagnostics because that
 would acknowledge interrupts. Preparation failures log a diagnostic and unwind
 without preventing the existing OS from booting.
 
-The shared reset, capability validation, mappings, queue inspection and masked
-MSI-X mechanics live in `kernel/virtio/transport.c`. Each driver keeps its own
+Shared VirtIO reset, capability validation, mappings and queue inspection live
+in `kernel/virtio/transport.c`; generic MSI-X mechanics live in `kernel/pci/msix.c`.
+Each driver keeps its own
 `virtio_pci_transport` at a stable address for the claim's lifetime. Feature
 policy, queue storage, activation and workers remain driver-owned. The
 [network transport](networking.md#virtio-net-transport) uses these same

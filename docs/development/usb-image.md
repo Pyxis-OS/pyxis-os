@@ -95,7 +95,7 @@ support. `debug-usb` pauses with GDB on `127.0.0.1:1234`, as described in the
 [debugger guide](gdb.md). Ordinary `make run` and `make debug` retain ISO boot.
 
 After firmware boot, exercise `app://` programs and RAM-backed `home://` in the
-shell. The kernel has no USB storage driver yet, so the sample pool is not
+shell. The kernel prepares xHCI but has no USB storage driver yet, so the sample pool is not
 mounted and absence of a block backend is expected. USB boot demonstrates
 firmware image loading; it does not demonstrate native USB I/O.
 

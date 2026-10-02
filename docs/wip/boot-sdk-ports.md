@@ -252,8 +252,9 @@ persistence and validate the ThinkPad. Real-device passthrough is an intermediat
 check, not validation of the laptop controller. Boot-image Phase A now provides
 an opt-in [raw image and emulated USB launch](../development/usb-image.md);
 Phase B.1 now defines explicit backend/unique-disk selection, controller resource
-preparation, bounded requests and failure ownership. Controller bring-up is the
-next focused task; kernel USB remains unimplemented and writable work is
+preparation, bounded requests and failure ownership. Phase B.2 adds
+[controller ownership, rings, MSI-X and root-port slot reservations](../devices/usb-xhci.md).
+Enumeration/transfers are the next focused task; native USB storage and writable work are
 unassigned. Reusable controller/USB/class/block boundaries are required, without
 speculative driver frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.

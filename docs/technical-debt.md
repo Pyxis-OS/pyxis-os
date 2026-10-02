@@ -505,7 +505,7 @@ The manual copy procedure relocates backup GPT on larger media but does not
 expand the pool. Revisit image preparation and update ownership before the
 persistent-installation phase stores user data.
 
-Emulated USB boot has reached the shell, but one
+Emulated USB boot has reached the shell, but an intermittent
 [pre-kernel Limine file-open failure](development/qemu.md#usb-firmware-file-open-failure-before-kernel-entry)
 remains unexplained. Successful unchanged-image retries do not qualify firmware
 boot reliability or physical-controller behavior. Revisit with firmware/USB I/O
@@ -1129,3 +1129,25 @@ calendar boot-time/age placeholders are unset and render empty, so configuration
 that need those observations require editing. Revisit this only if Pyxis gains an authoritative boot epoch
 and agrees its meaning across wall-clock changes; do not infer one by subtracting
 monotonic duration from the current wall clock.
+
+## xHCI hardware profile and runtime retention
+
+The [initial controller](devices/usb-xhci.md) is qualified only against QEMU's
+single PCI xHCI profile. It requires firmware memory decoding enabled for a
+page-aligned BAR0 prefix, interpreted extended capabilities within that 4 KiB
+prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles, external hubs,
+power management and insertion after the startup snapshot are unsupported.
+QEMU advertises zero scratchpads and 32-byte contexts; nonzero scratchpads,
+64-byte device contexts and BIOS ownership handoff remain unmeasured paths.
+The startup connection snapshot can miss a physical USB 3 link still initializing
+after controller reset. Revisit topology, startup settling and firmware ownership
+with the ThinkPad before expanding the profile or claiming physical qualification.
+
+One worker admits controller commands serially and checks notifications/health at
+a ten-millisecond interval. Rings and polling/deadline budgets are initial choices,
+not machine/image requirements. Revisit costs when descriptor transfers and actual
+USB storage reads provide a workload; controller startup is not a storage benchmark.
+Runtime stop retains claims, mappings, slot/command records and DMA backing until
+reboot, even after confirmed halt. This follows current shared-VM ownership and
+prevents reuse while device ownership is uncertain. Runtime reclamation belongs
+with the VM/device lifetime work, not a local allocator-lock workaround.

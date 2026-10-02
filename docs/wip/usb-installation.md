@@ -1,12 +1,13 @@
 # USB boot and first physical installation
 
-Status: Phase A image assembly and USB boot implemented; Phase B.1 contracts
-prepared for implementation, 2026-10-02.
+Status: Phase A image assembly/USB boot and Phase B.2 controller bring-up
+implemented, 2026-10-02; USB enumeration, transfers and storage remain pending.
 The owner wants a replaceable USB drive as the first
 physical installation target, with QEMU development before laptop validation.
 Implemented image behavior lives in the [USB image reference](../development/usb-image.md).
-Phase B starts with the read-only contracts below; kernel USB implementation
-remains pending. Writable installation is unassigned. This document does not
+Phase B follows the read-only contracts below. Implemented controller behavior
+lives in the [xHCI reference](../devices/usb-xhci.md). Writable installation is
+unassigned. This document does not
 authorize physical writes or reorder the active filesystem, spaces/SMP and
 display work.
 
@@ -58,7 +59,7 @@ hub support; desktop topology does not establish laptop topology.
 The installed QEMU 10.2.2 advertises `qemu-xhci`, `usb-storage`, `usb-bot`,
 `usb-uas` and `usb-host`. QEMU documents image-backed Bulk-Only storage behind
 xHCI. Phase A has booted the archive-backed shell through emulated USB;
-native USB driver experiments remain future work. See the
+Phase B.2 has exercised native controller commands and interrupts in QEMU. See the
 [validation record](../development/usb-image.md#validation) and its firmware limit.
 
 1. **Emulated controller and drive.** Use Q35, xHCI and a directly attached
@@ -126,8 +127,9 @@ USB inventory; neither tool nor its benchmark is a boot-image prerequisite.
 ## Phase B.1 read-only contract
 
 The owner accepted unique supported-disk selection, failing on ambiguity. The
-following design is the implementation contract proposed by this task; it is
-not a claim of implemented kernel USB behavior. Its first consumer is the
+following design is the accepted implementation contract for the read-only
+milestone. B.2 implements its controller slice; the rest remains pending.
+Its first consumer is the
 directly attached QEMU disk. Physical-controller qualification remains Phase C.
 
 ### Selection and authority
@@ -180,8 +182,8 @@ The current [PCI inventory](../devices/pci.md) retains class fields and exposes
 read-only indexed records after the native `lspci` integration. Reuse those
 fields for a narrow class-based selector that returns the unique claimable
 function and preserves unavailable/incomplete/ambiguous outcomes. The remaining
-resource gaps are initial MMIO access before BAR sizing and MSI-X mechanics
-currently coupled to VirtIO configuration.
+resource requirements are initial MMIO access before BAR sizing and shared
+MSI-X mechanics. B.2 now provides these with the xHCI consumer.
 The initial controller profile is PCI xHCI 1.x with firmware-assigned memory
 BAR0, 64-bit DMA addressing, 4 KiB page support and MSI-X. Firmware must leave
 MSI/MSI-X disabled, as required by the current PCI claim. Support both advertised
@@ -216,8 +218,8 @@ and `CNR=0`. Disable decoding, size BARs and validate the bootstrap extent befor
 preparing the remaining owned mappings.
 Preserve stop-before-probe and ordinary sized-BAR bounds. Partial preparation
 unwinds only while device access and interrupt delivery are demonstrably safe.
-The bootstrap mapping API and PCI MSI-X extraction belong in B.2 with their first
-real consumer; B.1 adds no placeholder interfaces.
+The bootstrap mapping API and PCI MSI-X extraction were implemented in B.2 with
+their first real consumer; B.1 added no placeholder interfaces.
 
 Prepare controller/device records, contexts, scratchpads, rings and transfer
 buffers under the current pre-AP allocation/VM contract. The existing coherent
@@ -332,7 +334,7 @@ host tools and the later physical-preparation procedure.
    Propose bounded request storage, timeouts, failure ownership and explicit disk
    selection. Follow the scheduler/allocation model current at implementation;
    do not preserve today's BSP placement as a new USB requirement.
-2. [ ] **Bring up one xHCI controller.** Handle ownership/reset, DMA command/event
+2. [x] **Bring up one xHCI controller.** Handle ownership/reset, DMA command/event
    rings, interrupt delivery and root-port state. Start with one directly attached
    supported storage device present at boot. Leave UAS, external hubs, insertion
    after boot, legacy UHCI/OHCI/EHCI and power management outside this first slice.
@@ -370,8 +372,9 @@ host tools and the later physical-preparation procedure.
 
 ## Remaining assignment and qualification decisions
 
-- Phase A is implemented and Phase B.1 defines the first read-only contract.
-  Deliver B.2 controller bring-up separately, then enumeration, BOT/SCSI reads and
+- Phase A and B.2 controller bring-up are implemented; B.1 defines the read-only
+  contract.
+  Deliver enumeration next, then BOT/SCSI reads and
   native integration. Writable work and its roadmap ordering remain unassigned.
 - Image update/preservation ownership remains open for persistent installation.
   Read-only disk selection does not qualify a write target or authenticate media.
