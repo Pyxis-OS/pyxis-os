@@ -51,9 +51,11 @@ not become driver matching rules or test invariants.
 
 These observations do not prove cache-flush support or power-loss durability.
 Explicit cache synchronization needs validation before writable use; lack of FUA
-alone does not exclude that path. The ThinkPad T14 Gen 1 AMD controller, firmware
-handoff and external-port topology remain uninspected. Its chosen port may require
-hub support; desktop topology does not establish laptop topology.
+alone does not exclude that path. The [ThinkPad T14 Gen 1 AMD inventories](../targets/t14-gen1-amd/notes.md)
+now record three xHCI functions, directly attached laptop routes and hub-backed
+dock routes under Fedora. Current unique-controller selection does not admit
+that observed inventory. Native controller qualification and firmware handoff
+remain unverified; Linux topology does not establish Pyxis support.
 
 ## QEMU-first development
 
