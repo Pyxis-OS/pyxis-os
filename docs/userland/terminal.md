@@ -167,7 +167,7 @@ console lock before the task prepares another wait.
 ## Interrupt arming and passthrough
 
 Framebuffer console input and terminal-session input can recognize Ctrl+C as
-an interrupt instead of data. The [foreground interruption plan](../wip/foreground-interrupt.md)
+an interrupt instead of data. [Foreground interruption](foreground-interruption.md)
 records the design, and the shell
 [arms it for foreground jobs](shell.md#interrupting-foreground-commands).
 

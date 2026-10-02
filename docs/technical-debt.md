@@ -239,8 +239,8 @@ Accepted limits of this first slice:
   not read, the remote server stops reading frames until its pending injection
   drains. A later Ctrl+C never reaches the kernel; Ctrl+] remains the fallback.
 
-The [foreground interruption plan](wip/foreground-interrupt.md) records the
-design. Revisit with cooperative interrupts or job control, or if pasting into
+[Foreground interruption](userland/foreground-interruption.md) records the
+design and validation. Revisit with cooperative interrupts or job control, or if pasting into
 hung remote commands matters. The remote case would need an out-of-band
 interrupt from the server. Native cancellation need not require general POSIX
 signals.
