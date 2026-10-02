@@ -13,7 +13,7 @@
 #define EARLY_CONSOLE_FOREGROUND 0xc8ccd4
 #define EARLY_CONSOLE_BACKGROUND 0x101216
 /* No clock is assumed. Ample for another CPU to finish one glyph and notice
- * the panic; an interrupted renderer on the owner's CPU never finishes. */
+ * the panic. Expiry leaves the panic serial-only. */
 #define EARLY_CONSOLE_DRAW_WAIT_LIMIT 1000000
 #define EARLY_CONSOLE_NO_OWNER UINT32_MAX
 
@@ -25,9 +25,10 @@ enum early_console_state {
 };
 
 static _Atomic enum early_console_state state = EARLY_CONSOLE_OFF;
-/* An ordinary renderer sets this before checking state, and the panic owner
- * stores PANIC before reading it, so one always observes the other. */
-static atomic_bool drawing;
+/* APIC ID of the CPU inside an ordinary render step. The renderer stores it
+ * before checking state and the panic claimant stores PANIC before reading
+ * it, so one always observes the other. Cleared after the store fence. */
+static _Atomic uint32_t drawing_cpu = EARLY_CONSOLE_NO_OWNER;
 static _Atomic uint32_t panic_owner = EARLY_CONSOLE_NO_OWNER;
 /* Owner-only: set while the panic owner draws, to recognize a fault raised by
  * drawing itself. */
@@ -184,13 +185,16 @@ void early_console_rebind(uintptr_t mapped)
 
 void early_console_putc(char character)
 {
-  atomic_store(&drawing, true);
+  if (atomic_load(&state) != EARLY_CONSOLE_ACTIVE) {
+    return;
+  }
+  atomic_store(&drawing_cpu, cpu_initial_apic_id());
   if (atomic_load(&state) == EARLY_CONSOLE_ACTIVE) {
     render(character, false);
   }
   /* Drain write-combining stores before a panic owner may start drawing. */
   cpu_store_fence();
-  atomic_store(&drawing, false);
+  atomic_store(&drawing_cpu, EARLY_CONSOLE_NO_OWNER);
 }
 
 void early_console_panic_begin(void)
@@ -201,13 +205,24 @@ void early_console_panic_begin(void)
     /* The owner re-enters through panic() after an exception report. A fault
      * raised while it was drawing may come from the mapping itself, so stop
      * drawing rather than recurse. Other CPUs never owned the console. */
-    if (panic_rendering && atomic_load(&panic_owner) == self) {
+    if (atomic_load(&panic_owner) == self && panic_rendering) {
       atomic_store(&panic_owner, EARLY_CONSOLE_NO_OWNER);
     }
     return;
   }
-  for (unsigned i = 0; i < EARLY_CONSOLE_DRAW_WAIT_LIMIT && atomic_load(&drawing); ++i) {
-    __asm__ volatile("pause");
+  /* A render step interrupted on this CPU never resumes, so take over at once.
+   * A step on another CPU may only be delayed: require its completion, and
+   * stay serial-only rather than share the state if it does not finish. */
+  uint32_t renderer = atomic_load(&drawing_cpu);
+  if (renderer != self) {
+    unsigned polls = 0;
+    while (renderer != EARLY_CONSOLE_NO_OWNER) {
+      if (++polls > EARLY_CONSOLE_DRAW_WAIT_LIMIT) {
+        return;
+      }
+      __asm__ volatile("pause");
+      renderer = atomic_load(&drawing_cpu);
+    }
   }
   /* An interrupted renderer may have left a cursor update half done. */
   if (row >= rows) {

@@ -43,21 +43,27 @@ One atomic state leaves `ACTIVE` exactly once, by compare-exchange:
 | `PANIC` | Only the first panicking CPU |
 | `RETIRED` | Nothing; the presenter owns the screen |
 
-- **Ordinary output** sets a `drawing` flag, then rechecks the state. Both
-  steps are sequentially consistent, so a CPU that claims a panic either sees
-  the flag or is seen by the renderer.
+- **Ordinary output.** Each character's render step records the drawing CPU
+  in `drawing_cpu`, then rechecks the state. Both steps are sequentially
+  consistent, so a CPU that claims a panic either sees the record or is seen
+  by the renderer.
+  - CPUs are identified by their CPUID APIC ID, which needs no GS, LAPIC
+    mapping or memory.
   - Long operations such as scrolling recheck the state per cell and abandon
     work once the console has left `ACTIVE`.
-  - The renderer drains write-combining stores before clearing the flag.
+  - The renderer drains write-combining stores before clearing the record.
+  - After the handoff, the step returns before identifying the CPU.
 - **Panic claim.** `klog_panic_begin` claims the console for the first
-  panicking CPU, which is identified by its CPUID APIC ID. This needs no GS,
-  LAPIC mapping or memory.
-  - The owner waits a bounded number of polls for another CPU's glyph to
-    finish. The bound matters when it interrupted its own renderer, which
-    never resumes.
-  - It then clamps the cursor and draws without the lock, as the only writer.
-  - A half-finished update can leave stale characters, but never out-of-range
-    writes.
+  panicking CPU, then checks for a render step in progress.
+  - **On this CPU.** The step was interrupted and never resumes, so the owner
+    takes over at once.
+  - **On another CPU.** That CPU may only be delayed, so the owner requires the
+    step to finish, including its store fence, before touching the shared
+    state. If the bounded wait expires, the panic stays serial-only and no
+    owner is recorded.
+  - Once it owns the console, the owner clamps the cursor and draws without
+    the lock, as the only writer. A half-finished update on its own CPU can
+    leave stale characters, but never out-of-range writes.
 - **Other panics.** Panics on other CPUs are serial-only. The owner re-enters
   through `panic()` after an exception report and keeps drawing. A fault raised
   while the owner is drawing stops its drawing, because the fault may come from
@@ -115,5 +121,18 @@ selected from GDB.
 - **No serial device** (`-serial none`): the loopback test marked serial
   unavailable, no kernel text reached the host, and boot and the handoff
   completed normally.
-- **Not exercised:** concurrent panics racing an ordinary renderer on another
-  CPU. That was reviewed in source only.
+- **Render step in progress when a panic is claimed** (after review). GDB
+  stops all CPUs together, so it cannot pause one renderer while another CPU
+  panics. Instead, at the claim, GDB set `drawing_cpu` to the value such a
+  renderer leaves behind.
+  - Another CPU (APIC 1) that never finishes: the wait expired, no owner was
+    recorded, no `draw_cell` call occurred, and the panic appeared on serial
+    only.
+  - Another CPU that finishes during the wait: the claim was observed inside
+    the wait loop. After the record cleared, the panic was drawn.
+  - The panicking CPU itself (APIC 0): the wait loop was not entered, the owner
+    was APIC 0 and the panic was drawn.
+  - The fault-while-drawing case and a normal boot and handoff were rerun with
+    the same results as above.
+- **Not exercised:** a real concurrent race between CPUs. Only the recorded
+  states were simulated.
