@@ -452,6 +452,13 @@ unqualified healthy success.
 
 ## Agreed synchronous maintenance and stopping condition
 
+**Pending design, not an accepted policy change:** the
+[bounded retirement-debt proposal](filesystem-retirement-debt.md) investigates
+using later individually durable publications to reclaim older debt. It derives
+revised multi-volume/catalog, workspace and generation bounds and proposes
+checkpoint/final-release/close results for review. The synchronous baseline below
+remains implemented until that design is accepted and implementation is assigned.
+
 Use the [format publication/reclamation envelope](../../fs/docs/format.md#future-publication-and-reclamation-envelope).
 Reclamation must progress without another application write. Internal
 maintenance commits may advance the older retained slot while preserving the
@@ -2333,6 +2340,26 @@ this documentation update.
      Append/overwrite costs remain essentially unchanged; compiler totals still
      exceed ext4. Task 7 and writable deployment remain open. Any next
      implementation requires a separate assignment.
+
+   - [x] **Investigate bounded retirement-debt carryover.** The
+     [design proposal](filesystem-retirement-debt.md) uses merged filesystem #19 /
+     Pyxis #310 as its baseline and existing measurements only. It derives
+     two-cohort multi-volume debt, a two-record catalog union, revised H/S,
+     workspace/arena and generation funding, and startup/tail-fence proofs.
+     Worked traces distinguish live, protected, retired, free and reusable space.
+     It compares immediate draining, records affected implementation assumptions
+     and proposes contract-focused validation and unchanged RAM comparisons.
+     No mechanism, new workload, runner or budget change is implemented.
+
+   - [ ] **Accept retirement-debt policy and assign implementation.** Review the
+     supported writable resource profile and higher computed recovery minimum,
+     healthy pending maintenance, final orphan deletion with pending retirement,
+     pool-wide checkpoint fencing under existing grants, idle debt and I/O-free
+     writer disposal/startup recovery. These are proposals, not accepted behavior.
+     After acceptance, explicitly assign the coherent publisher/admission/results
+     correction with tests and matched RAM measurements. Task 7 and writable
+     deployment remain blocked; carryover does not resolve allocation-map
+     self-accounting or establish the write-efficiency target.
 
    - [ ] **Agree incremental allocation-map design and bounds.** Replace routine
      whole-map reconstruction with updates to affected paths and necessary
