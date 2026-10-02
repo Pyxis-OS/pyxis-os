@@ -17,6 +17,7 @@ struct pci_claim;
 struct pci_device {
   struct pci_address address;
   uint16_t vendor_id, device_id;
+  uint8_t base_class, subclass, interface, revision;
   uint8_t header_type;
   struct pci_claim *owner;
   struct pci_device *next;
@@ -25,6 +26,14 @@ struct pci_device {
 /* BSP boot inventory, retained for driver lookup. Records live for the boot. */
 void pci_discover(void);
 struct pci_device *pci_find_device(uint16_t vendor, uint16_t device);
+
+enum pci_inventory_state { PCI_INVENTORY_UNAVAILABLE, PCI_INVENTORY_INCOMPLETE,
+                           PCI_INVENTORY_COMPLETE };
+/* Immutable once discovery returns, before user tasks run; any CPU may read.
+ * Count and indices cover retained records in a stable, unspecified order. */
+enum pci_inventory_state pci_inventory_state(void);
+size_t pci_device_count(void);
+const struct pci_device *pci_device_at(size_t index);
 enum pci_selection { PCI_SELECTION_ABSENT, PCI_SELECTION_UNIQUE,
                      PCI_SELECTION_AMBIGUOUS, PCI_SELECTION_INCOMPLETE };
 /* Clears output unless exactly one match exists in a complete inventory. */
