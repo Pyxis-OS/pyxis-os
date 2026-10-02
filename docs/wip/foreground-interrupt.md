@@ -1,8 +1,8 @@
 # Foreground command interruption
 
-Status: direction and first-slice decisions agreed 2026-10-02. Review added the
-interrupt event contract below and found two policy questions still open:
-unsaved Kilo edits and raw-keyboard commands. Implementation is not started.
+Status: direction, first-slice decisions and the interrupt event contract
+agreed 2026-10-02, including the review follow-ups: minimal passthrough,
+raw-keyboard exemption and typeahead disposal. Implementation is not started.
 
 Ctrl+C currently only cancels the shell's line being edited. It cannot stop a
 running foreground command, locally or through the
@@ -47,8 +47,8 @@ general signal mechanism.
    - A new `CONSOLE_RIGHT_INTERRUPT` on the existing console input object can
      arm and disarm interruption.
    - While armed, an input byte 3 is removed from the input stream and becomes
-     an interrupt event, observable through `wait_many`. Applications never
-     receive that byte.
+     an interrupt event, observable through `wait_many`. Applications do not
+     receive that byte unless they hold passthrough (decision 5).
    - Both input producers apply the same rule: local console keyboard text and
      terminal injection, which carries remote input. The remote client already
      forwards Ctrl+C as byte 3 and needs no change.
@@ -67,46 +67,40 @@ general signal mechanism.
      diagnostics, FRESH_LINE and typed completion. Pipelines still report the
      last stage.
    - Background jobs are unaffected.
-4. **Immediate termination, without opt-out, in the first slice.** While
-   armed, Ctrl+C typed as console or terminal text terminates the foreground
-   job.
+4. **Immediate termination, with application passthrough.** While armed,
+   Ctrl+C typed as console or terminal text terminates the foreground job,
+   unless the reading application has requested passthrough.
    - Without signals or threads, a cooperative interrupt could only reach a
      program that is reading input. The main need is stopping CPU loops,
      blocked readers and hung commands.
-   - The Lua REPL changes: Ctrl+C ends Lua instead of cancelling the line.
    - A nested interactive `shell` gets READ-only input and cannot arm, so Ctrl+C
      in the outer shell ends the whole inner shell.
-   - A per-application passthrough mode is part of the deferred cooperative
-     interrupt decision below. The two open questions that follow may pull a
-     minimal form of it into this slice.
-
-### Open: unsaved Kilo edits
-
-Kilo deliberately ignores Ctrl+C so that unsaved edits cannot be lost by
-accident (pinned upstream `kilo.c`, the `CTRL_C` case). The first-slice rule
-would terminate Kilo and discard unsaved work. Choose one:
-
-- Accept and document the data-loss risk, and validate it explicitly.
-- Add a minimal passthrough to this slice, for example an application request
-  on its own input handle. Kilo, and libterm's line editor for the Lua REPL,
-  would then receive byte 3 as data. This needs a Kilo port patch and
-  settles part of the deferred passthrough question now.
-
-### Open: raw-keyboard commands
-
-A local foreground command that acquires the raw keyboard, such as Doom,
-receives key events directly. Those events never become console text, so
-armed recognition does not see Ctrl+C. Choose one:
-
-- Intercept an armed Ctrl+C in keyboard routing before raw delivery, and
-  define how the matching press and release events are suppressed. Doom uses
-  Ctrl as fire.
-- Exempt raw-keyboard owners: they already own every key event, as passthrough
-  would. Remote terminals have no raw keyboard.
+5. **Minimal passthrough, in this slice.** An application can ask, on its own
+   READ-authorized input handle, to receive Ctrl+C as data.
+   - While a passthrough request is active, an armed Ctrl+C byte is delivered
+     as input: no latch is set and no typeahead is discarded.
+   - The request lasts until the application withdraws it or its handle
+     closes, including at process exit. It never affects other input objects.
+   - libterm exposes the request. Its line editor holds passthrough only while
+     reading a line, so in the Lua REPL Ctrl+C cancels the typed line as before,
+     while running Lua code can still be interrupted.
+   - Kilo deliberately ignores Ctrl+C to protect unsaved edits (pinned upstream
+     `kilo.c`, the `CTRL_C` case). A Kilo port patch requests passthrough for
+     the editing session, so Ctrl+C cannot discard unsaved work.
+   - Accepted cost: a program holding passthrough cannot be interrupted with
+     Ctrl+C. Remote sessions keep Ctrl+] and group termination as the fallback;
+     a local program stuck in passthrough still has no recovery short of ending
+     its session.
+6. **Raw-keyboard owners are exempt.** A local command that acquires the raw
+   keyboard, such as Doom, receives key events directly, and those never become
+   console text. Armed recognition applies only to text input, so these
+   programs end through their own controls. Remote terminals have no raw
+   keyboard. Intercepting raw events was rejected, because Doom uses Ctrl as
+   fire and the matching press and release would need suppression.
 
 ## Interrupt event contract
 
-These are observable semantics, proposed in review:
+These are observable semantics, agreed after review:
 
 - **Armed interval.** Arming starts with a clear latch. Disarming clears it, so
   nothing recognized during one interval can affect a later job.
@@ -130,6 +124,8 @@ These are observable semantics, proposed in review:
   object disarms and clears the latch.
 - **Unarmed input.** Byte 3 queued while unarmed keeps its normal meaning as
   data, including for the shell's own line editor.
+- **Passthrough.** An active passthrough request overrides arming for that
+  input object: byte 3 stays data and nothing is discarded.
 
 ## To verify during implementation
 
@@ -147,8 +143,8 @@ These are implementation checks, not open policy:
 
 - **Cooperative interrupts.** For example, an interrupt delivered as the result
   of the next console read, with a second Ctrl+C escalating to termination.
-  Decide this together with an application passthrough mode, the Lua REPL and
-  other raw-input programs.
+  This would build on the first-slice passthrough request, and could give
+  programs holding passthrough a way to be interrupted safely.
 - Interrupting background jobs, job control, suspend/resume and a separate
   process-control tool.
 - Nested execution groups and descendants of foreground jobs. These need
@@ -159,18 +155,23 @@ These are implementation checks, not open policy:
 1. [ ] **Process termination.** Add the terminate right and operation, the
    process-to-task link and its lifetime. Verify the ungrouped stop path.
 2. [ ] **Interrupt arming and events.** Add the interrupt right, armed Ctrl+C
-   recognition on console and terminal input, and the `wait_many` event,
-   including cleanup when the arming grant closes.
+   recognition on console and terminal text input, typeahead disposal, the
+   `wait_many` event and the passthrough request, including cleanup when the
+   arming grant or a passthrough handle closes.
 3. [ ] **Shell interruption.** Add the root shell's interrupt grant in local and
    remote session setup, the foreground `wait_many` loop and terminate-on-interrupt.
-   Update shell, terminal, remote and execution-group docs and the
-   technical-debt entry.
-4. [ ] **Validation.** QEMU, local and remote:
+   Add the libterm passthrough call and use it in the line editor. Update shell,
+   terminal, remote and execution-group docs and the technical-debt entry.
+4. [ ] **Kilo passthrough.** A ports patch requests passthrough for the Kilo
+   editing session. Kilo's own Ctrl+C handling is unchanged.
+5. [ ] **Validation.** QEMU, local and remote:
    - a CPU loop, a blocked reader and a pipeline;
    - typed `terminated` completion;
    - Ctrl+C at the prompt still cancels the line;
    - Ctrl+C during launch, repeated Ctrl+C and typeahead disposal;
    - Ctrl+C as a job finishes, without affecting the next job;
-   - Lua REPL, Kilo and raw-keyboard behavior, as decided above;
+   - Kilo keeps unsaved edits on Ctrl+C;
+   - in the Lua REPL, Ctrl+C cancels a typed line but interrupts running code;
+   - Doom with the raw keyboard is unaffected;
    - background jobs and other sessions unaffected;
    - debugger inspection of retirement and released waits.
