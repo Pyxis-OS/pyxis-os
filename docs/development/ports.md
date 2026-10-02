@@ -194,7 +194,8 @@ Ctrl-F searches; arrows select matches, Enter accepts and Escape cancels.
 Arrows, Home/End, Page Up/Down, Backspace and Delete provide normal editing.
 Kilo uses the inherited working directory and terminal grants, libterm for
 input/output and size, and libc streams for files. It retains C syntax
-highlighting. See the [recipe notes](../../ports/kilo/README.md) for the source pin
+highlighting. It keeps Ctrl+C as editor input for its whole session, so an armed
+shell cannot terminate it; Ctrl-Q quits. See the [recipe notes](../../ports/kilo/README.md) for the source pin
 and local patches, and [terminal behavior](../userland/terminal.md) for shared facilities.
 
 The current editor is ASCII, uses fixed terminal dimensions, accepts LF/CRLF
