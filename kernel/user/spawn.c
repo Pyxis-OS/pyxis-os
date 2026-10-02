@@ -81,6 +81,7 @@ static void launcher_batch_abort(struct launch_preparation *group)
   for (size_t i = group->count; i > 0; --i) {
     struct launch_prepared *stage = &group->stages[i - 1];
     KASSERT(capability_close(&group->parent->capabilities, stage->observer) == CAP_OK);
+    process_control_detach_task(stage->process->control);
     user_task_discard_prepared(stage->task);
     KASSERT(process_destroy(stage->process) == MM_OK);
   }
@@ -157,12 +158,13 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
 
   handle_t observer;
   enum capability_result installed = capability_install(&parent->capabilities,
-      &child->control->object, PROCESS_RIGHT_WAIT, 0, &observer);
+      &child->control->object, PROCESS_RIGHTS, 0, &observer);
   if (installed != CAP_OK) {
     user_task_discard_prepared(task);
     status = capability_status(installed);
     goto fail;
   }
+  process_control_attach_task(child->control, task);
   group->stages[group->count++] = (struct launch_prepared){child, task, observer};
   return CALL_OK;
 

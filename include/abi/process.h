@@ -4,7 +4,10 @@
 #include <abi/message.h>
 
 #define PROCESS_RIGHT_WAIT (UINT64_C(1) << 0)
+#define PROCESS_RIGHT_TERMINATE (UINT64_C(1) << 1)
+#define PROCESS_RIGHTS (PROCESS_RIGHT_WAIT | PROCESS_RIGHT_TERMINATE)
 #define PROCESS_WAIT UINT64_C(1)
+#define PROCESS_TERMINATE UINT64_C(2)
 
 #define PROCESS_EXITED UINT64_C(1)
 #define PROCESS_FAULTED UINT64_C(2)
@@ -20,6 +23,13 @@ struct process_result {
   uint64_t kind;
   int64_t exit_status;
 };
+
+/* TERMINATE sends only a message_header, requires TERMINATE and has no reply.
+ * It requests that the observed process stop, using the same safe-stop path as
+ * execution-group termination, and returns without waiting. It is idempotent
+ * and succeeds after completion too: an exit or fault already committed keeps
+ * its result; otherwise the result becomes TERMINATED. It affects only that
+ * process, not processes it launched. Observe completion with WAIT. */
 
 _Static_assert(sizeof(struct process_result) == 16, "process completion layout");
 

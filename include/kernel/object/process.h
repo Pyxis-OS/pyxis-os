@@ -6,18 +6,28 @@
 #include <kernel/object/object.h>
 #include <kernel/wait.h>
 
-/* Retains only a result and waiters, never the process or its address space. */
+struct task;
+
+/* Retains a result and waiters, never the process or its address space. The
+ * task link is borrowed: it is set while the task's memory is live and cleared
+ * under this lock before the task can be freed. */
 struct process_control {
   struct kernel_object object;
   atomic_bool locked;
   bool complete;
   struct process_result result;
   struct task_wait_link *waiters;
+  struct task *task;
 };
 
 /* BSP, IF=0. Returns one owned reference or NULL. An unsubmitted process may
  * release this without completing it; no observer may be running at that point. */
 struct process_control *process_control_create(void);
+
+/* BSP, IF=0. Attach a prepared task before its observer can be used, and
+ * detach it before the task is freed, including discarded preparations. */
+void process_control_attach_task(struct process_control *control, struct task *task);
+void process_control_detach_task(struct process_control *control);
 
 /* BSP, IF=0, with an owned reference. Publish once, only after execution
  * resources are reclaimed. Detaches and wakes every waiter. */

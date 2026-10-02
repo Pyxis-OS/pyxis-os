@@ -208,8 +208,9 @@ on screen. History, Unicode widths and larger-line viewports are not implemented
 
 ## Process termination and Ctrl-C
 
-Process handles remain non-owning WAIT observers; closing one does not stop
-execution. [Execution-group CONTROL](interfaces/execution-groups.md) now permits
+Process handles are non-owning observers; closing one does not stop execution.
+Launch grants their holder WAIT and TERMINATE, and TERMINATE stops just that
+process through the per-task safe stop. [Execution-group CONTROL](interfaces/execution-groups.md) now permits
 whole-group termination, including blocked-operation unwind. Local foreground
 commands and pipelines do not yet have separate interruption groups, so Ctrl-C
 cannot interrupt their execution.

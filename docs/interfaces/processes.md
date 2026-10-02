@@ -517,10 +517,11 @@ syscalls remain unchanged and do not yet use these helpers.
 ## Implemented process completion
 
 A process-control capability exposes WAIT through a tagged native CALL. Its
-[protocol](../../include/abi/process.h) has one right, WAIT, and a header-only request.
+[protocol](../../include/abi/process.h) has two rights, WAIT and TERMINATE, each
+for a header-only request.
 The [libpyxis wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/process.h) preserves native errors and
 returns EXITED with a signed exit status, FAULTED, or TERMINATED after an execution
-group stop. Fault and termination results carry zero exit_status; architecture fault
+group stop or a process TERMINATE request. Fault and termination results carry zero exit_status; architecture fault
 diagnostics remain in the kernel log. Group completion additionally observes deferred
 cleanup; see [execution groups](execution-groups.md).
 
@@ -549,8 +550,24 @@ The control object contains no process pointer, so retaining a handle preserves
 only completion state, not execution memory. Closing the last observer before
 exit leaves execution alone. Unsubmitted preparation failures release their
 control object without a result; launch must not expose a live observer until
-preparation succeeds. There is no termination operation. The launcher below returns this same
-completion capability.
+preparation succeeds. The launcher below returns this same completion
+capability, with both WAIT and TERMINATE, to the launching process.
+
+TERMINATE requests that the observed process stop and returns without waiting
+or a reply payload. It uses the same per-task safe stop as execution-group
+termination, including blocked-operation unwind, whether or not the process
+belongs to a group. It is idempotent and also succeeds after completion: an exit
+or fault already committed keeps its result, otherwise the result is TERMINATED.
+Only that process stops; processes it launched are unaffected, and its group's
+admission is not sealed. A handle restricted to WAIT is denied.
+
+For TERMINATE, the control object borrows a task link. Launch preparation sets it
+after installing the observer, and the BSP clears it under the completion lock
+before discarding an unpublished preparation or reaping the task. The reaper
+clears it before freeing the task, then publishes completion. A request holds
+the completion lock while it calls the stop request, so the task memory stays
+live; this follows the existing completion-then-queues lock order. Libpyxis
+`process_terminate()` wraps the request.
 
 Wait records live in permanent task metadata, never remote task stacks. The
 completion lock serializes registration and publication, with the lock order
