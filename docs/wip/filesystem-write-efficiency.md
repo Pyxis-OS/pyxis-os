@@ -3,9 +3,14 @@
 Status: research recorded on 2026-10-02. The narrow combined cleanup below is
 implemented with unchanged admission and reserve policy. The owner subsequently
 accepted the [retirement-debt policy and bounds](filesystem-retirement-debt.md)
-after Pyxis #311; its coherent implementation and matched validation are published
-in [filesystem #20](https://git.internal/PyxisOS/pyxis-fs/pulls/20) and pinned here.
-Other proposals remain unassigned; this document does not
+after Pyxis #311; its coherent implementation and matched validation are merged
+in [filesystem #20](https://git.internal/PyxisOS/pyxis-fs/pulls/20) and
+[Pyxis #312](https://git.internal/PyxisOS/pyxis-os/pulls/312).
+The incremental-map investigation below uses that merged baseline: Pyxis
+`b13ecec`, published filesystem pin `5e44d6f` (the same tree as merged `e5b76c5`).
+The owner accepts Btrfs-comparable matched submitted-write costs as the initial
+deployment direction; the mechanism and numerical acceptance criteria below
+are proposals for review. Other proposals remain unassigned; this document does not
 authorize further implementation or experiments.
 [Task 7 and writable deployment](writable-filesystem-core.md#focused-tasks)
 remain open. Preserve individually durable completed operations, both retained
@@ -16,8 +21,10 @@ states and the existing failure/recovery contract in the baseline proposals.
 The research inspected the then-current Pyxis pin, filesystem
 [`dc63d62`](https://git.internal/PyxisOS/pyxis-fs/src/commit/dc63d62b81d7c6cca082eeb52842b84d8a1fa390),
 whose tree equals filesystem main `87d2f20`. The research parent was `2da3e5f`.
-The production findings in `/shared/pyxis-fs-contract-audit.md` still apply;
-its older test findings were addressed by filesystem #18 / Pyxis #307.
+The policy findings in `/shared/pyxis-fs-contract-audit.md` are revisited below;
+its older test findings were addressed by filesystem #18 / Pyxis #307. Carryover
+changes the historical immediate-drain observations, not the memory/floor/limit
+policies discussed here.
 This investigation used read-only inspection and the existing
 [small RAM baseline](../../fs/docs/ram-baseline.md) and
 [bounded counters](../../fs/docs/measurements/ram-baseline.json), not new workloads.
@@ -65,7 +72,7 @@ paper numbers in the [milestone](writable-filesystem-core.md#write-efficiency-ta
 are specific to their versions, hardware and workloads, not current comparative
 results or acceptance thresholds.
 
-## Current Pyxis writes
+## Publication costs before carryover
 
 The following is inspection of
 [`file.c`](https://git.internal/PyxisOS/pyxis-fs/src/commit/dc63d62b81d7c6cca082eeb52842b84d8a1fa390/core/file.c),
@@ -120,13 +127,13 @@ durability and must remain separate.
 Changing a bound requires the affected proof, not preservation of its current
 number merely because earlier documentation calls it a contract.
 The relevant current sources are the [format](../../fs/docs/format.md),
-[`plan.c` closure and arena](https://git.internal/PyxisOS/pyxis-fs/src/commit/dc63d62b81d7c6cca082eeb52842b84d8a1fa390/core/plan.c),
-[`admit.c` capacity checks](https://git.internal/PyxisOS/pyxis-fs/src/commit/dc63d62b81d7c6cca082eeb52842b84d8a1fa390/core/admit.c)
+[`plan.c` closure and arena](../../fs/core/plan.c),
+[`admit.c` capacity checks](../../fs/core/admit.c)
 and [namespace proof](writable-filesystem-core.md#agreed-removable-namespace-profile-byte-and-repair-proof).
 
 | Topic | Genuine requirement / current proof dependency | Reconsiderable policy and proposal |
 | --- | --- | --- |
-| Map coalescing | Exact ordered partition; valid ownership, birth, retirement and charges; protected-state exclusion. Canonical records support `K = 1 + 2(E+M+2D)` under accepted carryover and the resulting `S(H)` record/workspace closure. | Maximal coalescing is a format policy. Preserve it in the first candidate. Compare a canonical incremental editor with an explicitly debt-bounded relaxed representation before choosing the map design. |
+| Map coalescing | Exact ordered partition; valid ownership, birth, retirement and charges; protected-state exclusion. Canonical records support `K = 1 + 2(E+M+2D)` under accepted carryover and the resulting `S(H)` record/workspace closure. | Maximal coalescing is a format policy. The incremental proposal preserves it. Relaxation would require a separate format/record-debt/funding proposal; it is not needed for this first candidate. |
 | Core memory | Finite caller-owned cap, checked arithmetic, charged allocations, refusal before admission; funded drains require no new allocations. | The enforced core-wide 1 GiB ceiling originated as tool policy, not a disk-format safety property. Propose caller-configured caps; keep host default and any host maximum separate. No default or budget increase is made here. |
 | Reserve floors | Ordinary workspace must cover the proved batch envelope; recovery must cover the whole funded sequence. Persisted reservations still count against pool capacity. | Current admission inherits formatter floors of 1024 ordinary and 1024 unused migration blocks. Any separate proposal to remove these floors must retain carryover funding of `V+2D` and `3H+V+2D`, without borrowing existing migration reservations. It is not assigned here. |
 | Object/extent limits | Namespace occupancy/depth and permanent deletion promise; bounded map/claims/checker memory and integer arithmetic. | The shared 1,048,576 cap couples different populations. Separate namespace proof limits from extent product capacity before proposing new values from actual histories. Larger disks alone do not justify them. |
@@ -147,8 +154,9 @@ itself be funded. Reader/planner acceptance must change coherently; review the
 format consequences explicitly rather than assuming either compatibility or a
 version increment.
 
-Under the current proof `V=128`, `D=256`, hence ordinary workspace needs 384
-blocks and recovery needs `3H+384`. These are proof results for this publisher,
+Under the accepted carryover proof `V=128`, `D=256`, hence ordinary workspace
+needs `V+2D = 640` blocks and recovery needs `3H+V+2D = 3H+640`, before
+the ordinary formatter floor. These are proof results for this publisher,
 not proposed universal minima. The formatter's 256-block recovery floor is
 already dominated. Reducing admission floors is a separate policy decision; the
 first cleanup candidate leaves all floors, reservations and admission unchanged.
@@ -176,32 +184,370 @@ temporary copies, and handles need headroom. An incremental disk editor may
 still retain O(S) in-memory summaries. Neither a larger caller cap nor fewer
 disk writes proves full-profile opening capacity.
 
-## Allocator self-accounting: unresolved design choice
+## Incremental allocation-map proposal
 
-Retiring an old map node changes its allocation record, which can be in another
-leaf. Replacing that leaf retires another node. This dependency can span the
-whole map despite each path's depth bound. Contiguous **new** map storage does
-not constrain old-node accounting placement.
+This section is a design proposal, not an implementation assignment. Inspection
+of the merged [planner](../../fs/core/plan.c), [publisher](../../fs/core/writer.c)
+and [admission](../../fs/core/admit.c) confirms that every publication still
+rebuilds the entire map. The catalog already replaces only its changed paths.
+Carryover reduces standalone fences without reducing the map work in each
+remaining publication. Full map/claim summaries and candidate validation also
+remain population-sized in memory and CPU; this first proposal reduces submitted
+map writes, not all reads or planning costs.
 
-Compare these mechanisms before assigning the map replacement:
+### Format and local editing
 
-1. Compute incremental closure with an explicitly bounded and pre-funded
-   fallback. This can reduce common-case writes, but permits population-sized
-   worst cases; decide whether and when that fallback is acceptable.
-2. Restrict allocator-metadata placement to an accounting region whose own
-   accounting closes within a proved bound. Mere contiguity is insufficient;
-   explain admission/reimport of incompatible layouts.
-3. Separately manage allocator-metadata storage with a concrete ledger/bitmap
-   and retained-generation publication protocol. A COW ledger allocated through
-   itself only moves the cycle. Account for spare capacity, pins and recovery;
-   no new logging or storage architecture is selected here.
+Preserve the current format: an exact partition of `[1, B-1)`, maximally coalesced
+adjacent allocation records with equal state/owner/birth/retirement/charge,
+80-byte encoded records (46 per leaf), and fixed numeric separators (65 children
+per internal node). Leaves must be nonempty; all internal nodes, including an
+internal root, have at least two children. No new half-full occupancy rule is
+proposed. Refer to the
+[format](../../fs/docs/format.md), rather than treating these derived capacities
+as new independent constants.
 
-Canonical versus deferred coalescing is a second choice, not a solution to this
-cycle. Re-derive sequence-wide `H`, `S`, retirement, generation and memory funding
-from the selected mechanism. The accepted two-cohort carryover envelope and terminal-fence/generation funding
-are linked proof assumptions across preparation, admission and execution. The
-retirement-debt correction changes those boundaries coherently; an incremental
-map replacement must re-derive them rather than inheriting a depth-only proof.
+Logical interval changes are applied together to the immutable selected map,
+checking their expected before-states. Canonicalize the resulting ordered stream
+before packing, including predecessor/successor records across leaves. A changed
+leaf requires new references along its ancestor path; an unchanged subtree keeps
+its reference and birth. New records cannot be placed in an older unchanged
+leaf: its containing birth must still bound every record's birth and retirement.
+
+The eventual structural editor would split overflowing leaves, partition children
+on internal overflow, remove empty leaves, and redistribute/merge when internal
+occupancy would fall below two. Separator minima and all consumed sibling paths
+must be replaced together; a singleton root collapses and growth stays within the
+existing depth bound. Each consumed source node is retired once, while superseded
+private nodes are scratch, never committed retirements. Canonical coalescing can
+both remove a record in the next leaf and change its separator. Point insertion
+alone is therefore insufficient; the current generic editor does not yet supply
+this allocation-range operation.
+
+The smallest proposed first PR avoids structural changes. It replaces a closed
+set of leaves and ancestors **one for one in the source topology**, redistributing
+canonical records within each contiguous dirty leaf run. Actual splits, merges
+and root-height changes use the explicit funded bulk path below. This is a
+candidate intermediate improvement, not the final local structural editor;
+useful locality and fallback frequency still require measurement.
+
+### Self-accounting with fixed topology
+
+Let `J` be the selected map's node count, `c` the actual changed catalog-path union,
+and `P` a set of immutable source map nodes marked for replacement. Before any
+replacement write:
+
+1. Stage volume deltas, eligible input retirement frees and old pool-root/catalog
+   retirements. Discover source leaves covering these changes and their ancestors.
+   Reserve an ordered list of `H` already-reusable input block IDs, excluding the
+   batch's at most `V` new volume blocks. Reservation does not allocate the list.
+2. In a scratch pass, claim exactly the first `q+c+1` IDs, where `q = |P|`:
+   `q` new map nodes, `c` catalog nodes and one pool root. Retire exactly `P` and
+   the old root/catalog union, keeping unmarked source map claims live. All new
+   pool claims have the same owner, candidate birth and permanent charge.
+3. Apply the complete disjoint deltas to the original map, canonicalize, and add
+   to `P` every source leaf needed for those changes and every ancestor. Include
+   an adjacent source leaf whenever a final canonical record **straddles an
+   original dirty-run coverage endpoint**. Equality at the current seam alone is
+   not a sufficient repair test. Repeat only when the source set grows.
+4. Never remove a marked node. At stable closure, each connected dirty run of
+   `l` source leaves must have `r` final canonical records satisfying
+   `l <= r <= 46l`. Its endpoints now align with canonical record boundaries.
+   Partition those records into exactly `l` nonempty leaves in source order
+   (for example, ceil remaining records / remaining leaves); update minima and
+   references in exactly the marked ancestors, preserving internal levels and
+   child counts. Assign final prefix IDs to nodes and seal only this final plan.
+
+The live map still has exactly `J` nodes. Every marked source position has exactly
+one reachable replacement, so emitted map nodes equal `q` independently of record
+count. Prefix size grows with `P`; provisional node roles may change without
+changing their identical allocation records. There are at most `J` strict source
+set additions and one final pass. This is a finite source-identity proof, not an
+arbitrary iteration cap, assumed contraction or retry for space. The canonical
+map and allocation claims must be checked against the sealed node inventory
+before publication; unused live padding is prohibited.
+
+For example, with 20 source map nodes and two catalog replacements, an initial
+three-node path claims six pool blocks. Accounting for its old nodes may add
+another leaf and ancestor, giving five replacements and eight pool blocks. If
+that closure fits the run guards, 15 source map nodes remain shared. This is an
+illustrative layout, not measured locality. Two dirty leaves can hold 92 canonical
+records; 93 requires a split, while one record requires a merge. Both are stated
+bulk-path triggers in the first PR, not resource failures. Local closure size and
+fixed-topology hit rate remain unmeasured: selective retirement can split an old
+contiguous pool-allocation record where bulk retirement would coalesce it.
+
+Self-accounting can still reach the whole tree: place each old leaf's physical
+allocation record in the next leaf, closing a cycle. Retiring one leaf then
+requires replacing every leaf and ancestor. Contiguous new allocation does not
+constrain these old dependencies. No proposal preserving arbitrary current
+layouts can infer a population-independent write bound from tree depth alone.
+
+### Resource and sequence bounds
+
+Retain the accepted carryover envelope and all existing policy in the first PR:
+
+```
+V = 128; D = 256; Pcat = 4N-2; Cmax = min(Pcat,16)
+K = 1 + 2(E+M+2D)
+Rbase = K + 2Pcat + 6H
+S = ceil(23 * (Rbase + 2Cmax + 4) / 21)
+F(S) + Cmax + 1 <= H; m = H-Cmax-1
+Pmax = Pcat+H
+ordinary >= max(1024, V+2D)
+recovery >= max(256, 3H+V+2D)
+migration >= 1024 (unused)
+```
+
+`H` is the current computed solution, not a new chosen limit; `F` is the current
+bulk map shape function. Its computation, namespace/deletion proof, E/M limits,
+record/depth maxima, memory ceiling, formatter floors and pool reservations do
+not change. The inputs are current proof assumptions, not universal filesystem
+requirements immune to later review. The source and every sealed candidate must
+satisfy `J <= m`, independently of `S`: arbitrary sparse incremental trees need
+not have the bulk shape `F(S)`.
+
+| Resource | Bound and reason |
+| --- | --- |
+| Replacement / retired pool metadata | Each is `q+c+1 <= J+Cmax+1 <= H`; the bulk alternative also fits `H`. Shared map nodes stay live. Final live pool metadata fits `Pmax`. |
+| Records and claims | Stream canonical deltas into the existing `S`-record vector. Unchanged pool nodes plus retired and replacement nodes remain within the existing `Rbase`/`S` closure; claims fit `E+M+Pmax`. Do not pack a transient uncoalesced vector and assume final coalescing will rescue overflow. |
+| Retirement debt | Selected pool debt at most `2H`, protected pool debt at most `H`; selected volume debt at most `2D`, normally protected volume debt at most `D`. Opening/fences retain the broader `2D` protected-volume bound. Retire only marked map nodes, with recovery charge. Orphan volume retirements also retain recovery charge. |
+| Catalog / cross-volume work | A new batch owner plus the eligible older volume cohort changes at most two catalog records; opening/fences can reclaim two owners. Their path union costs `c <= Cmax`. Pool-only self-accounting cannot add a third volume owner or catalog edit. |
+| Reusable input and output | Reserve `H+V` eligible input blocks against both maps/claims and ended physical borrows. Newly declared frees are unavailable to this publication. Recheck the output admission guarantee of `H+V` for the next funded step; reduced retirement does not permit weakening it. |
+| Generations | Opening retains `g+a+3T <= MAX`, with `a` the derived zero/one/two initial fences. User admission retains `g+3+3T_projected <= MAX`. Each orphan step decreases work and fits one publication plus two tail fences. A scratch rejection/bulk alternative uses the same publication generation, not an extra normalization commit. |
+
+Recovery capacity still covers at most `2H` previously retired pool blocks, `2D`
+recovery-charged volume blocks and `H+V` reusable replacement capacity. Ordinary
+capacity covers the two `D` ordinary cohorts plus `V`. Permanent admission retains
+`Aeff = A-Z+B` deletion headroom and the existing pool-capacity inequality; ordinary
+growth cannot spend these reservations. None of this reserves physical host
+space for a sparse image.
+
+The record bound has a direct counting proof, rather than assuming the bulk
+packing function applies to a sparse incremental tree. Removing pool storage
+temporarily leaves at most `K` canonical volume/free records. Restoring at most
+`Pcat+H` live pool blocks and `2H` retired pool blocks adds at most two boundaries
+per block, so `Rfinal <= K+2Pcat+6H = Rbase <= S`. Establish the projected E/M,
+debt and live-node guards before using that storage guarantee. General structural
+trials must check total live nodes and these coupled guards too; a trial count
+alone does not prove that its candidate fits.
+
+Use the existing arena, retaining both input states and the third candidate:
+
+```
+240S + 288(E+M+Pcat+H) + 48objects
+  + 4096(H+V) + 1024(H+V+D) + 8 MiB
+```
+
+A concrete proposed layout of the existing delta region is:
+
+| Region | Reserved bytes |
+| --- | ---: |
+| Complete raw before/after deltas | `128(4H+3D+V)` |
+| Source topology (reference, parent, level, child count, order, coverage, marks) | `128m` |
+| Source worklist | `8m` |
+| Dirty-run descriptors | `32m` |
+| Replacement/role descriptors | `128H` |
+| Reusable input IDs and ranges | `8H + 16H` |
+
+The raw-delta count follows from at most `2H+2D` eligible frees, `H` old pool
+retirements, `D` new volume retirements, `V` new volume claims and `H` new pool
+claims. Total proposed bytes are `664H+168m+384D+128V`, at most
+`832H+384D+128V`, below the existing `1024(H+V+D)` region. Slots include alignment;
+implementation must verify descriptor sizes, checked offsets and nonoverlapping
+lifetimes. A source descriptor can hold a 24-byte reference, parent/order and
+coverage indices, counts/flags and replacement index within 128 bytes; it does
+not cache all child blocks. Encode with depth-bounded buffers and rereads.
+Output blocks fit `4096(H+V)`. Keep the existing scratch partition: lower half
+for admission, third quarter for publication, final quarter for mutation staging.
+The walker/encoder reuses publication editor/record buffers before catalog
+encoding; it must not overwrite borrowed mutation or admission storage.
+Abandoning the optimization releases its descriptor regions for bulk
+planning, but never destroys either input summary or the batch's logical edits.
+
+This layout adds no heap allocation to admitted work and no memory-budget increase.
+For the illustrative existing profile `E=8192, M=4096, N=1`, current arithmetic
+gives `H=729`, `S=32843`, `m=726`, 2,827 recovery blocks and a 30,372,016-byte
+arena. The proposed delta subregions use 720,712 of 1,139,712 reserved bytes.
+These are calculated examples, not new defaults, observed peaks or test constants.
+Opening still needs both checker states, their temporary vector copies, the arena
+and handles within the caller cap and current 1 GiB ceiling. Full source traversal,
+vector application and admission remain population-sized. A simple repeated-pass
+closure has a conservative `O(J(S+J))` planning bound and needs CPU/read measurement;
+the write reduction alone does not establish acceptable latency.
+
+### Explicit bulk alternative and structural follow-up
+
+Before replacement writes, choose the current funded bulk construction when:
+
+- Stable canonical dirty runs fail `l <= r <= 46l` (split/merge required).
+- Closure marks all `J` source nodes, giving no map-write locality benefit.
+- The exact local candidate fails the required record, node, charge or next-step
+  resource guard, while the original admitted logical work has a valid bulk plan.
+
+Reset to original inputs and logical edits, retire the whole source map, and
+construct one bulk candidate with the existing proof. Its explicit cost is all
+new map nodes (at most `m`), changed catalog nodes, pool root and slot, plus later
+retirement/fence work; all are funded by the same `H`/workspace envelope. This is
+not a second publication or a retry after failed I/O. A malformed source, invalid
+delta, I/O failure or inability to obtain already-guaranteed storage is not an
+optimization miss and must not be hidden by fallback.
+
+Record each chosen path, trigger, source/replaced node counts and submitted bytes
+using the existing measurement boundary. Do not silently treat the bulk path as
+routine incremental success. Frequent bulk work in representative steady-state
+cases would leave the deployment problem unresolved, even if the first PR is
+correct and useful. There is no proposed arbitrary dirty-node threshold or timer.
+
+General splits/merges need another self-accounting proof: claiming additional
+metadata IDs can consume/coalesce a free suffix and **decrease** final record/node
+counts. Iterating an estimated node count until it appears stable is not proven
+to terminate. One finite reference construction enumerates exact new-map counts
+`q = 1..m`. For each fixed prefix `q+c+1`, compute monotone source-retirement/seam
+closure and dry-run a deterministic structural splice afresh from immutable
+source. Every marked node must be replaced or removed and marks never shrink;
+consumed balancing siblings and ancestors join the set. Accepted output references
+none of those source nodes. Accept only if exactly `q` reachable new map nodes
+and total live map nodes at most `m` result, with the record/resource guards.
+Trials outside those bounds publish nothing. Otherwise
+try the next exact count, then use the funded bulk construction. At most
+`m(J+1)` closure passes are considered; arbitrary iteration caps, padding and
+unfunded retry are unnecessary. Its potentially very high CPU/read cost makes
+this a proof reference, **not the recommended routine structural algorithm**.
+Review a more efficient constructive split/merge solver before assigning that
+follow-up; source topology preservation avoids this search in the first PR.
+
+An allocation-placement restriction or separate allocator-metadata ledger could
+address global accounting closure, but changes writable admission/reimport or
+representation and needs its own proposal. Neither is selected here. Relaxed
+coalescing also needs explicit boundary-debt and funded-drain revisions; it is
+not a shortcut around self-accounting.
+
+### Preserved guarantees and implementation sequence
+
+The sealed candidate is published through the same replacement writes, pre-slot
+flush, older-slot write and final flush. Completed calls remain individually
+durable. Both retained maps and payloads stay protected during replacement writes;
+only input-proven eligible blocks are allocated. Confirmed progress, healthy
+PENDING/NONE and `drain_pending` keep their independent meanings. Pool-wide
+read failures stop all access; replacement/pre-slot failures stop mutation with
+readability preserved; uncertain publication stops access. A failed instance
+cannot retry itself to health. Unexpected exhaustion during funded work is an
+invariant failure, never successful safe refusal. Recovery still requires the
+adapter/operator's durable-backing precondition, not cached validation plus flush.
+
+1. After owner approval, implement topology-preserving map splicing and the
+   source-closure planner, selective claim retirement, explicit bulk reasons and
+   sealed candidate checks together. Use the unchanged admission envelope and
+   publisher protocol for user batches, orphan work, startup and terminal fences.
+   Publish filesystem code/tests first, then the Pyxis pin and matched results.
+2. Add contract-focused coverage in that same PR: independent canonical interval
+   expectations; shared-subtree preservation; seam coalescing; structural fallback;
+   cross-volume/cohort histories; orphan/final-release/checkpoint/startup behavior;
+   maximal reachable funded pressure; and adapter failures at healthy-trace cuts.
+   Compare both retained payloads after replacement writes and before every slot
+   attempt. Tests assert contents, eligibility, reachability, bounds and sticky
+   outcomes, not physical IDs, incidental publication counts or packing choices.
+   Local replacement tests can require untouched source subtrees to remain shared
+   because this is the deliberately proposed optimization contract.
+3. Capture the existing unchanged matched RAM comparison before code changes and
+   repeat afterward, including every tail fence and final checkpoint. Report
+   fallback costs, reads/planning time and full submitted bytes, with active
+   publication phase classification. For a fixed source, replacing `q` map nodes
+   instead of a bulk plan's `Nb` estimates `4096(Nb-q)` fewer map-write bytes;
+   catalog/root/slot and volume writes remain. Different resulting histories and
+   later reclamation can change net savings, so this is not a measured percentage
+   or exact test expectation.
+4. Review structural split/merge accounting separately using first-PR fallback
+   evidence. If a global closure remains routine, propose the smallest justified
+   placement/representation correction before promising a local worst-case bound.
+   No later step is assigned automatically by accepting an intermediate PR.
+
+## Proposed deployment comparisons and acceptance
+
+**Agreed direction:** Btrfs-comparable total submitted-write costs on representative
+matched workloads are an acceptable initial disk-deployment target. Lower costs,
+including beating ext4, remain a longer-term goal. No universal amplification
+ratio, numerical tolerance or new benchmark configuration is approved here.
+Correctness and remaining recovery qualification are independent requirements.
+
+The [carryover record](../../fs/docs/retirement-carryover-measurements.md) contains
+two unchanged samples per revision. All eight current individually durable Pyxis
+rows are below recorded Btrfs totals, but exercise short histories and only
+54–405 selected allocation records:
+
+| Population | Case | Pyxis KiB | ext4 KiB | Btrfs KiB |
+| ---: | --- | ---: | ---: | ---: |
+| 32 | 64 × 4 KiB appends | 2,944 | 1,564 | 4,904 |
+| 32 | 16 × 256 KiB appends | 4,732 | 4,444 | 5,708 |
+| 32 | 32 small overwrites | 1,520 | 248–260 | 2,720 |
+| 32 | 16 compiler histories | 3,056 | 1,772 | 5,864 |
+| 256 | 64 × 4 KiB appends | 4,564 | 1,568 | 5,000 |
+| 256 | 16 × 256 KiB appends | 5,208 | 4,448 | 5,804 |
+| 256 | 32 small overwrites | 2,428 | 264 | 2,816 |
+| 256 | 16 compiler histories | 5,236 | 1,776–1,848 | 5,896 |
+
+Native columns show ranges across both after samples from the
+[raw counters](../../fs/docs/measurements/retirement-carryover.json); Pyxis and
+Btrfs reproduce these rows, while those two ext4 cases vary. The range is retained
+rather than adopting the measurement narrative's abbreviated point totals.
+
+Totals exclude preparation, include terminal Pyxis checkpoints/all maintenance
+and native final synchronization/clean teardown. Native batch mode has weaker
+intermediate durability and is separate. Pyxis preparation excludes formatter
+traffic while native preparation includes it; their combined preparation totals
+are not an equivalent operation comparison. Native recovery contracts differ;
+RAM requests/timings do not establish NAND wear or NVMe performance.
+
+Proposed later coverage, subject to owner agreement and RAM feasibility:
+
+| Gap | Concrete comparison proposal |
+| --- | --- |
+| Sustained small writes | Fixed 256/512/1024-operation windows of individually durable 4 KiB appends and aligned/cross-block 1 KiB overwrites; at least two successive populated windows plus terminal fences. Report each window as well as totals. |
+| Unrelated population and fragmentation | Proposed populations 32/256/1024 with matched target-file operations; vary unrelated population independently. Prepare matched create/delete/overwrite histories and report actual map records/nodes, extents and free-space fragmentation, not merely sparse image size. |
+| Namespace churn and lifetime | Separate create, rename, requested replacement and unlink histories, larger directories, retained victims and final release. Match application observer lifetimes and include orphan cleanup, checkpoints and startup work. |
+| Resource pressure | Near computed quota/reserve/profile/memory/generation boundaries, two maximum derived debt cohorts and cross-volume unions, including startup and terminal fences. Separate expected admission-refusal tests from comparisons that must complete. |
+
+These proposed starting sizes do not establish representative scale by themselves.
+Select populated source-tree and write-history cases from actual map/extent/node
+populations, including cases approaching the admitted profile, after calculating
+RAM feasibility. A large empty 64/256 GiB image is not population qualification.
+
+The owner must choose the representative case set, steady-state windows,
+interpretation/tolerance of “comparable,” exception policy and any read/latency/
+space guardrails. A compiler aggregate win cannot hide a sustained-write loss.
+Report each ratio and exception with matched operations/durability; report every
+bulk trigger, frequency and byte cost. The proposed locality criterion is that
+unrelated population must not cause routine linear map-write growth in those
+representative steady-state cases. This criterion and its allowable exceptions
+need review; it is not an already-approved threshold or worst-case theorem.
+
+The existing small near-minimum fixtures do not qualify maximal debt/population.
+Correctness acceptance additionally requires independently defined payloads and
+namespace results, both retained payloads throughout replacement, no same-
+publication reuse, corruption and sticky failure handling, and completion of
+funded work. Safe ordinary refusal can pass its behavior test without completing
+a requested comparison. Remaining core recovery coverage and later native writable
+integration/host qualification are separate gates; performance cannot replace
+them. Native integration remains its own milestone, including the recorded
+kernel-stack prerequisite. Task 7 and writable
+deployment stay open.
+
+No additional campaign is run or authorized by this design PR. Future work must
+use the existing verified RAM-only/no-swap boundary and configured budgets, no
+disk fallback or automatic increases. First account for RAM high-water backing
+pages, source copies, independent payloads/extractions, bounded volatile logs,
+build products, native preparation and traces. Filesystem frees do not release
+tmpfs image pages; small payload/sparse geometry does not bound write traffic.
+The current runner's two-population/four-case matrix does not supply these
+sustained cases; any necessary bounded workload extension needs a later explicit
+assignment. Trace loss/budget overflow, OOM or incomplete work invalidates a
+measurement. Saved summaries and diagnostics remain bounded.
+
+**Decisions requested on the design PR:** accept or revise the fixed-topology
+first scope and stated bulk triggers; decide whether its worst-case global closure
+is acceptable as intermediate work; and select the deployment comparisons and
+meaning of Btrfs-comparable. Full structural editing needs a separately reviewed
+efficient self-accounting proof. No implementation starts before owner decisions.
 
 ## Assigned first correction: combined small-orphan cleanup
 
@@ -233,7 +579,8 @@ transaction without changing durable public-call boundaries or the publisher.
 Partial-block data COW is needed for preserved bytes; even hypothetically removing
 all 184 KiB of overwrite data excess would address only 3.27% of the 256-file
 total. Catalog paths are already incremental. Map replacement addresses the
-larger population-sensitive cost, but lacks the self-accounting proof above.
+larger population-sensitive cost; the incremental proposal above supplies a
+first bounded self-accounting path, still requiring owner review.
 
 The compiler counters contain 64 user, 32 orphan and 192 drain publications,
 288 total, inferred from the two-flush protocol. Combining each final pair
@@ -248,8 +595,9 @@ opportunity, not a correctness assertion about every workload.
 
 These are **proxies, not measured or guaranteed net savings**. They assume removed
 publications cost their phase average; combined paths, repairs, allocation and
-later map history can also change the remaining writes. This improvement alone
-would still miss ext4 and leave append/overwrite map costs unresolved.
+later map history can also change the remaining writes. This historical estimate
+still exceeds ext4 and leaves append/overwrite map costs unresolved. Exceeding
+ext4 is no longer an initial deployment rejection criterion.
 
 Before implementing, prove:
 
@@ -277,18 +625,11 @@ Before implementing, prove:
 
 ## Delivery and follow-up choices
 
-The first correction above is assigned and delivered. Remaining implementations
-require explicit assignment; the original proposed sequence was:
-
-1. Review this candidate and the unresolved policy/mechanism choices on the PR.
-2. If assigned, land the narrow combined cleanup with maintained behavior,
-   failure, older-payload and near-minimum-resource coverage; no admission changes.
-3. Review self-accounting and canonical/debt-bounded coalescing alternatives with
-   revised proofs and write-cost budgets before assigning incremental-map code.
-   Caller memory policy, formatter/admission floors and separated population
-   limits can be independent focused proposals; none is silently changed here.
-4. Land separately measured map/maintenance corrections, then repeat acceptance
-   against agreed budgets. Intermediate improvements do not clear the blocker.
+The combined cleanup and retirement carryover are delivered. The proposed next
+sequence and owner decisions are in the incremental section above. Caller memory
+policy, formatter/admission floors and separated population limits can be
+independent focused proposals; none is changed here. Intermediate improvements
+do not clear the deployment blocker.
 
 The accepted cleanup assignment used the **existing** RAM-only comparison, not a new
 runner: two serial baseline samples per revision using
@@ -319,8 +660,10 @@ through final checkpoints falling 6,528→3,056 KiB at 32 files (53.19%) and
 preparation and active-publication phases, reports native contracts and bounded
 RAM/no-swap evidence, and includes all eight Pyxis cases. Reclamation absorbed
 into user/orphan metadata is still counted; the totals establish the savings.
-Pyxis remains above the matched ext4 compiler totals of 1,772/1,848 KiB.
-Task 7 and writable deployment stay open. No allocator mechanism or subsequent
+Pyxis remains above the matched ext4 compiler totals of 1,772 and 1,776–1,848 KiB.
+That comparison remains useful evidence, not the initial deployment gate.
+Task 7 and writable deployment stay open pending the broader qualification above.
+No allocator mechanism or subsequent
 implementation is assigned by this correction.
 
 Report total submitted block-write bytes through final synchronization and

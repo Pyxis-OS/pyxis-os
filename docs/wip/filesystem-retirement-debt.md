@@ -5,7 +5,8 @@ Status: **policy accepted; implementation and bounded validation delivered**, 20
 the two-cohort cross-volume profile including orphan batches, derived funding,
 healthy PENDING, complete final-release deletion, pool-wide checkpoint fencing,
 bounded idle debt, I/O-free disposal and startup fencing. The pinned implementation
-is published in [filesystem #20](https://git.internal/PyxisOS/pyxis-fs/pulls/20);
+is merged in [filesystem #20](https://git.internal/PyxisOS/pyxis-fs/pulls/20) /
+[Pyxis #312](https://git.internal/PyxisOS/pyxis-os/pulls/312);
 its contracts follow the proof and recovery guarantees below. Task 7 / writable deployment
 remain open; incremental allocation-map replacement is not authorized.
 Confirmed merged: [filesystem #19](https://git.internal/PyxisOS/pyxis-fs/pulls/19)
@@ -533,14 +534,14 @@ fences, permits same-publication reuse or promises the whole 54–59% drain shar
 
 Any further change to authority, lifetime, durability or supported resource policy
 requires separate discussion. This assignment does not authorize allocator redesign.
-Incremental allocation-map self-accounting remains a separate unresolved design;
+Incremental allocation-map self-accounting requires separate design acceptance;
 this correction reduces the number of whole-map publications, not their population-
 sensitive cost. Writable deployment remains blocked.
 
 ## Implementation and matched validation
 
-The integration pins published filesystem `5e44d6feee5a91ee167412bc957c93ab8542ed08`
-from #20. Merge the filesystem PR before the Pyxis integration; the owner merges.
+The merged integration #312 pins published filesystem
+`5e44d6feee5a91ee167412bc957c93ab8542ed08` from merged #20.
 The publisher, candidate/opening admission, plan limits, checkpoint/final-release
 results, host reporting and active-publication counters change together. The
 read-only kernel mode bridge dispatches fences through the existing private writer
@@ -566,8 +567,13 @@ bounded backing and trace/teardown evidence. No swap/max/OOM event, trace loss,
 fallback or resource increase occurred. ASan/UBSan runtimes were installed with
 owner authorization after measurements; no runner configuration changed.
 
-Pyxis still exceeds matched ext4 compiler totals; whole-map representation costs,
-larger pressure/profile qualification, real-host post-error recovery and native
+Pyxis still exceeds matched ext4 compiler totals, a longer-term comparison rather
+than the revised initial deployment gate. All eight short cases beat recorded
+Btrfs totals, but do not qualify the accepted Btrfs-comparable direction on
+representative sustained/populated/pressure workloads. Whole-map representation
+costs, larger pressure/profile qualification, real-host post-error recovery and native
 writable integration remain unresolved. This corrective step does not close task 7
 or writable deployment or assign another efficiency implementation. Exact-head
 filesystem and parent CI are reported on their PRs.
+The next [incremental-map design proposal](filesystem-write-efficiency.md#incremental-allocation-map-proposal)
+records its separate mechanism and acceptance decisions; it does not authorize code.

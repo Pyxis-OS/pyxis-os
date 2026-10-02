@@ -13,9 +13,11 @@ resizing, live directory continuations, and the corresponding healthy host comma
 Task 6 adds directory creation, removal, same-volume regular-file rename/replacement,
 retained object authority and funded orphan cleanup on final release and durable
 reopening. Combined extended validation remains task 7; native writable integration
-remains a separate milestone. The measured small-write amplification now blocks
-both milestone closure and writable deployment. The contiguous-placement fix is
-useful independently but does not satisfy that acceptance gate.
+remains a separate milestone. Routine whole-map writes and missing sustained,
+population/pressure and recovery qualification still block milestone closure and
+writable deployment. The accepted initial performance direction is now matched
+Btrfs-comparable submitted-write cost; ext4 remains a comparison and longer-term
+aspiration. The short carryover histories alone do not satisfy that gate.
 Implementation proceeds one explicitly assigned task at a time.
 
 **Host-storage protection is mandatory during this work.** Do not run write-heavy
@@ -508,11 +510,14 @@ self-accounting or establish the write-efficiency target.
 
 **Acceptance update:** this section and its dependent numerical bounds describe
 the implemented correctness baseline, not an approved final allocation strategy.
-The measured 826.1075 metadata bytes per useful byte for small appends is
-unacceptable for writable deployment. Task 7 must replace routine whole-map
-rebuilding and re-establish admission and funded-drain bounds. Whether a bounded
-whole-map fallback remains, and when it may run, requires explicit design review;
-the existing proof does not by itself make its write cost acceptable.
+The historical 826.1075 metadata bytes per useful byte for small appends predates
+retirement carryover; it is not a current sustained-write result. Task 7 must
+replace routine whole-map rebuilding and re-establish admission and funded-drain
+bounds. The [incremental proposal](filesystem-write-efficiency.md#incremental-allocation-map-proposal)
+recommends topology-preserving local replacement first, with explicit funded
+bulk triggers for structural changes/global closure. That mechanism and its
+exceptions need owner review; the existing proof alone does not make the write
+cost acceptable. Current short Btrfs comparisons do not qualify deployment.
 
 The initial contract provided a bounded whole-allocation-map rebuild when
 incremental map edits could not close within their admitted bound. A tree-depth
@@ -581,16 +586,18 @@ performance debt or resume large disk-backed workloads to gather more evidence.
 
 ## Write-efficiency target and research direction
 
-The engineering target is fewer total device-write bytes than contemporary ext4
-on representative development workloads, while preserving Pyxis's documented
-recovery guarantees. This is a target to investigate and measure, not a claim
-that the current writer meets it or a promise to win every operation. Establish
-workload-specific acceptance budgets during the corrective design task.
+**Accepted direction:** Btrfs-comparable total submitted-write costs on
+representative matched workloads are an acceptable initial disk-deployment
+target, while preserving Pyxis's documented recovery guarantees. Lower
+amplification, including beating contemporary ext4, remains a longer-term goal.
+Neither filesystem supplies a universal ratio; compare equivalent operations and
+durability boundaries, report exceptions and keep correctness/recovery acceptance
+independent. No numerical tolerance or benchmark parameter becomes a filesystem
+invariant. The owner must agree the representative cases, steady-state windows,
+meaning of comparable and exception policy before final performance acceptance.
 
 Efficiency work may land through several small, independently useful PRs; no
-single change must reach the final target. A measured reduction from roughly
-826 to 413 metadata bytes per useful byte would be worthwhile progress even
-though the remaining cost still blocks deployment. Select bounded changes from
+single change must reach the final target. Select bounded changes from
 the measured breakdown, validate the affected correctness/admission obligations,
 and record matched before/after results for each. Retain cumulative measurements
 so improvements are not lost or credited twice. Final milestone acceptance is
@@ -629,9 +636,14 @@ combined small-orphan cleanup candidate is now assigned and implemented within
 the unchanged funded bounds; the [complete proof](../../fs/docs/small-orphan-cleanup.md)
 and [matched RAM measurements](../../fs/docs/small-orphan-measurements.md)
 record that focused correction. Incremental map
-replacement remains necessary; its self-accounting mechanism and bounds are
-unresolved. Compact deltas or a hybrid publication scheme are alternatives for
-discussion, not approved implementation scope. Account for every major category
+replacement remains necessary. The merged carryover results beat recorded Btrfs
+totals in all eight short cases, but contain only a few hundred allocation records
+and do not establish sustained writes, larger populations or resource pressure.
+The [incremental design and proposed acceptance coverage](filesystem-write-efficiency.md#incremental-allocation-map-proposal)
+derive a source-node closure, unchanged conservative funding and explicit bulk
+exceptions, then propose sustained small writes, population/fragmentation,
+namespace churn and pressure comparisons for owner discussion. No implementation
+or new campaign is assigned. Account for every major category
 of writes and explain recovery, memory and eventual reclamation obligations.
 Keep data COW and retained-generation payload protection in the current contract;
 neither in-place data overwrite nor new snapshot/reflink features follow from
@@ -2309,7 +2321,8 @@ this documentation update.
      preparation, phase counters, native contract differences and storage-safety
      evidence. These are observations, not exact write/publication requirements.
      Append/overwrite costs remain essentially unchanged; compiler totals still
-     exceed ext4. Task 7 and writable deployment remain open. Any next
+     exceed ext4, which is now a longer-term comparison rather than the initial
+     deployment requirement. Task 7 and writable deployment remain open. Any next
      implementation requires a separate assignment.
 
    - [x] **Investigate bounded retirement-debt carryover.** The
@@ -2347,6 +2360,17 @@ this documentation update.
      Task 7 and writable deployment remain blocked; carryover does not resolve
      allocation-map self-accounting or establish the write-efficiency target.
 
+   - [x] **Investigate and propose incremental allocation-map updates.** The
+     [design proposal](filesystem-write-efficiency.md#incremental-allocation-map-proposal)
+     confirms merged filesystem #20 / Pyxis #312, inspects the publisher/planner
+     and recorded matched results, and derives a topology-preserving first path,
+     finite self-accounting closure, scratch layout and sequence-wide funding.
+     It specifies canonical seam repair, structural/global bulk triggers and
+     follow-up split/merge proof obligations. The accepted Btrfs-comparable
+     initial direction replaces the ext4 deployment requirement; concrete
+     comparisons, tolerance and exception criteria remain proposals.
+     Read-only inspection and arithmetic only; no implementation/new workloads.
+
    - [ ] **Agree incremental allocation-map design and bounds.** Replace routine
      whole-map reconstruction with updates to affected paths and necessary
      balancing nodes. Address allocator self-accounting dependencies described
@@ -2354,8 +2378,10 @@ this documentation update.
      admission, retirement, planning-memory and funded-drain bounds against the
      actual design, including maintenance publications and any proposed fallback.
      Preserve both retained states, publication ordering and recovery semantics.
-     Set numerical write-cost budgets from the baseline and algorithm before
-     implementation acceptance; discuss unresolved design choices before coding.
+     Review the topology-preserving first scope, worst-case closure and stated
+     funded bulk triggers before coding. Agree representative comparison windows,
+     numerical write-cost criteria and exception policy before deployment acceptance;
+     intermediate PRs may precede that final qualification.
      Use the [write-efficiency target and research direction](#write-efficiency-target-and-research-direction)
      to compare mechanisms rather than assuming path copying alone meets the target.
 
