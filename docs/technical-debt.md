@@ -917,14 +917,17 @@ regression. Largest append/overwrite histories still exceed Btrfs. It does not
 establish deployment readiness or remove broad
 local replacement and population-dependent planning. Further mechanisms need
 their own assignment.
-The assigned [bounded leaf-overflow split design](wip/filesystem-overflow-split.md)
-proposes one extra leaf under a parent with room, within existing funding, plus
-seed restoration before ordinary repair on a miss. It separates retired source
-count from emitted/live inventory and proves a fixed-surplus attempt bound.
-This is not an implemented correction or accepted policy; usefulness, planning
-cost and matched full-history write benefit remain unknown. Review precedes
-any implementation assignment. General split/merge solving and deployment
-qualification remain open.
+The accepted [bounded leaf-overflow split](wip/filesystem-overflow-split.md)
+is implemented after #327: one extra leaf under an existing parent, distinct
+retired/emitted/live counts, renewed closure and seed restoration before ordinary
+repair on a miss. Its proof fits existing funding/scratch; the
+[matched record](../fs/docs/overflow-split-measurements.md) includes later
+replacement/reclamation costs and discarded planning. Each success adds a live
+node and can fill parents or reach the existing cap. Eight measured histories
+improve 20.373–41.378%, while small compiler regresses 7.098%; largest write
+windows still spend about 80–82% of metadata bytes on map replacement. Global
+closure, full source validation and funded bulk remain; no uniform saving or
+local worst-case bound is established. General split/merge solving and deployment qualification remain open.
 Native scratch/backing allocation exceeds the member-
 cgroup peak in a recorded case; do not treat that peak as whole-native-job RAM
 high-water evidence. Scratch/trace remain independently bounded with no swap or

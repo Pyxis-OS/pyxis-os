@@ -17,9 +17,9 @@ its implementation. The first implementation is recorded below; numerical
 deployment criteria remain proposals. Other proposals remain unassigned; this document does not
 authorize further implementation or experiments.
 After filesystem #24 / Pyxis #325 merged, the owner assigned the
-[bounded leaf-overflow split design](filesystem-overflow-split.md). Its fixed-surplus
-accounting and fallback package are proposed for review; no implementation is
-authorized by this design task.
+[bounded leaf-overflow split design](filesystem-overflow-split.md). After #327
+merged, the owner accepted its fixed-surplus accounting/fallback package and
+assigned the implementation and unchanged matched RAM-only validation below.
 [Task 7 and writable deployment](writable-filesystem-core.md#focused-tasks)
 remain open. Preserve individually durable completed operations, both retained
 states and the existing failure/recovery contract in the baseline proposals.
@@ -197,15 +197,17 @@ disk writes proves full-profile opening capacity.
 
 ## Incremental allocation-map proposal
 
-The owner accepts this first approach and its funded bulk/global-closure limitation
-as intermediate work. The refined design below awaits review; it is not an
-implementation assignment or deployment qualification. Inspection
-of the merged [planner](../../fs/core/plan.c), [publisher](../../fs/core/writer.c)
-and [admission](../../fs/core/admit.c) confirms that every publication still
-rebuilds the entire map. The catalog already replaces only its changed paths.
-Carryover reduces standalone fences without reducing the map work in each
-remaining publication. Full map/claim summaries and candidate validation also
-remain population-sized in memory and CPU; this first proposal reduces submitted
+The owner accepted this first approach and its funded bulk/global-closure limitation
+as intermediate work after #313, then assigned its implementation. Delivered
+follow-ups, including the one-leaf overflow extension, are recorded below;
+deployment qualification and further structural work remain separate.
+At the carryover baseline used for this investigation, the
+[planner](../../fs/core/plan.c), [publisher](../../fs/core/writer.c)
+and [admission](../../fs/core/admit.c) still rebuilt the entire map for every
+publication, while the catalog replaced only changed paths. Carryover reduced
+standalone fences without reducing each remaining publication's map work.
+Full map/claim summaries and candidate validation remain population-sized in
+memory and CPU in the implemented incremental path; this design reduces submitted
 map writes, not all reads or planning costs.
 
 The first implementation uses the [shared core's closed-path publisher](../../fs/docs/incremental-map.md).
@@ -724,32 +726,51 @@ this published pin through the existing read-only core subset; the writer remain
 excluded. Task 7 and writable deployment remain open; no further mechanism is
 assigned for implementation.
 
-## Bounded leaf-overflow split design
+## Implemented bounded leaf-overflow split
 
-The owner assigned a focused design task after the mixed neighbour-repair results.
-The [proposal](filesystem-overflow-split.md) uses the existing measurements and
-read-only publisher/encoder inspection; it runs no new mutation workload.
-Consider one extra leaf beneath an existing parent with room, with no internal
-split, root growth or merge. Retire `p` marked source nodes but emit `n=p+1`;
-final live map nodes become `J+1`, requiring `J+1<=m`. Existing H/S, debt,
-records/claims, scratch, deletion and generation envelopes can cover this narrow
-candidate under the derived guards. A fixed surplus avoids guessed-count search.
+After #327 merged, the owner accepted and assigned the
+[bounded package](filesystem-overflow-split.md). Published
+[filesystem #25](https://git.internal/PyxisOS/pyxis-fs/pulls/25), pinned at
+`a250731`, implements it. The implementation offers one
+extra leaf under an existing parent with room, only for the first failing run
+when it overflows. It freezes the lowest-key eligible anchor, requires the
+surplus to remain necessary/sufficient, packs evenly and renews self-accounting
+and seams. There is no internal split, root growth, merge or cost gate.
 
-Recommended choices remain unaccepted: a trial only when the first failing run is
-overflow, lowest-key eligible anchor, necessary-split rule and balanced run packing,
-one trial with seed restoration
-before current neighbour repair/bulk, and selecting a successful trial without an
-alternative-history cost gate. Restoring marks alone cannot restore a sealed
-candidate; rebuild accounting/claims/volume summaries from immutable inputs.
-The single reset gives a derived `2J-s+3` closure-evaluation bound. Shape/candidate
-misses may restore; I/O, integrity, invalid deltas and guaranteed-storage failure
-remain errors. The existing fixed-topology `n=p` proof still governs that path;
-its emitted/retired equality must not become a universal structural assertion.
+Retired source count p remains separate from emitted n=p+1; the virtual node
+uses output index p and catalog/root offsets use n. Final live J+1 must fit m.
+The single seed restoration regenerates mutable accounting, claims, volume and
+catalog state before split-disabled neighbour repair and explicit funded bulk.
+The derived 2J-s+3 work bound and checked scratch layout fit existing envelopes.
+Read, integrity, invalid-delta and guaranteed-storage failures remain errors;
+ordinary refusal leaves the writer usable. Admission, reserves, placement, bulk
+fill, memory ceilings and runner configuration are unchanged.
 
-This targets submitted map writes, with unknown useful hit rate and potential
-extra planning cost. Implementation, tests and unchanged matched RAM measurements
-need separate assignment after design review. General structural solving,
-placement/fill policy, budgets, task 7 and writable deployment remain separate.
+The [implemented proof](../../fs/docs/incremental-map.md) and
+[matched measurements](../../fs/docs/overflow-split-measurements.md) record
+source/retired/emitted inventory, selected/discarded trials, closure and fallback,
+planning and complete-history writes through final maintenance. Tests preserve
+independent retained payloads through replacement writes and slot attempts,
+healthy-trace failure provenance and discarded-candidate catalog replay.
+General structural solving, further improvements and deployment qualification
+remain separate assignments; task 7 and writable deployment stay open.
+
+All 54 unchanged after cases complete and independently verify. Complete-history
+submitted bytes improve 20.373–41.378% in eight histories; the small compiler
+history regresses 7.098%, exactly 1,579 extra map-node writes. Largest append,
+overwrite and compiler totals fall 32.278%, 32.257% and 35.207%. Every Pyxis total
+is below matched Btrfs in these samples, without implying a universal ratio or
+broader acceptance. Preparation savings can hide more expensive windows; all
+phase results and both repetitions remain in the record.
+
+Largest append/overwrite map writes still account for 81.55%/80.30% of window
+metadata, while planning occupies most elapsed RAM time. Full-parent skips and
+history propagation limit this first solver; an immediate local-node win does
+not establish a complete-history win. All 153 quick/six extended groups pass
+normally and with ASan/UBSan. Unprivileged host builds and the complete Pyxis
+freestanding archive compile. Strict RAM/no-swap/trace protection, unchanged
+configured budgets and no fallback remain; no owned loops survive the matrix.
+No further mechanism or campaign is assigned by these results.
 
 ## Proposed deployment comparisons and acceptance
 

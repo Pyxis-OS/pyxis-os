@@ -519,6 +519,10 @@ funded bulk fallback/global closure. The owner accepted fixed ascending IDs, bou
 cost reporting after #313 merged; the first implementation preserves these bounds;
 the existing proof alone does not make the write cost acceptable. Current short
 Btrfs comparisons do not qualify deployment.
+The subsequently accepted [one-leaf overflow extension](filesystem-overflow-split.md)
+adds distinct retired p/emitted n=p+1 accounting, a final J+1<=m guard and one seed
+restoration. Its checked scratch and work bounds preserve this funded envelope;
+the [implementation proof](../../fs/docs/incremental-map.md) governs the extension.
 
 The initial contract provided a bounded whole-allocation-map rebuild when
 incremental map edits could not close within their admitted bound. A tree-depth
@@ -644,8 +648,9 @@ The [incremental design and proposed acceptance coverage](filesystem-write-effic
 derive a source-node closure, unchanged conservative funding and explicit bulk
 exceptions, then propose sustained small writes, population/fragmentation,
 namespace churn and pressure comparisons for owner discussion. The bounded
-topology-preserving implementation is delivered by the dependency below; no new
-qualification campaign or structural-editor implementation is assigned. Account for every major category
+topology-preserving implementation and subsequently accepted one-leaf overflow
+extension are delivered by the dependency below. General structural editing and
+further qualification campaigns require separate assignment. Account for every major category
 of writes and explain recovery, memory and eventual reclamation obligations.
 Keep data COW and retained-generation payload protection in the current contract;
 neither in-place data overwrite nor new snapshot/reflink features follow from
@@ -1090,15 +1095,16 @@ limits preclude a profile. The loose bound follows from
 `F(S) <= ceil(S/23) <= S/23 + 1` and the ceiling in `S`; `Hclosed` satisfies the
 size inequality absent other limits. Use checked arithmetic throughout.
 
-The baseline publisher uses the whole-map construction for every publication.
+The original correctness publisher used whole-map construction for every publication.
 Use the actual base record count and changed catalog path to choose that
 publication's shape and block count; S(H) and H are ceilings, not padding to
 allocate. Every planned leaf must be nonempty and every new node reachable.
 This makes both new and old map-node bounds explicit: each admitted retained map
 has at most `H - C - 1` nodes. Adding the root and the catalog-path union gives at most `H`
 new and `H` retired pool blocks per publication. These are baseline bounds for the
-implemented conservative path. Task 7 must justify the incremental replacement's
-bounds before implementation acceptance; this derivation does not establish them.
+implemented conservative path. The incremental and one-leaf extension bounds are
+established separately in the [implemented proof](../../fs/docs/incremental-map.md);
+this bulk derivation alone does not establish them or deployment acceptance.
 
 Every user candidate must preserve `E`, `M`, global record limits and this pool
 bound. Cleanup cannot increase E or M; the two-cohort bound and catalog union
@@ -2521,10 +2527,47 @@ this documentation update.
        seed before ordinary repair on a trial miss. The fixed surplus and single
        reset derive finite work; proposed descriptors fit existing scratch.
        No code, dependency pin, reserves/admission, budgets or runner changes,
-       and no new mutation workloads. Anchor/packing, trial/fallback ordering
-       and selection policy await owner review. General structural implementation
-       and later matched validation require separate assignment. This design
-       step does not accept the policy or clear task 7/writable deployment.
+       and no new mutation workloads in the design PR. The owner accepted the
+       anchor/packing, one-trial/fallback and selection package after #327 merged
+       and assigned the implementation below. General structural editing remains
+       separate. Design approval does not clear task 7/writable deployment.
+
+     - [x] **Implement the accepted bounded one-leaf overflow trial.**
+       Published in [filesystem #25](https://git.internal/PyxisOS/pyxis-fs/pulls/25)
+       at `a250731`, pinned by this integration. Merge the filesystem dependency
+       first; the owner merges.
+       Offer the fixed surplus before neighbour expansion, freeze the lowest-key
+       eligible anchor under an existing parent with room, and require necessary/
+       sufficient capacity after renewed accounting/seam closure. Retire p source
+       nodes while emitting n=p+1; final J+1 must fit m. The virtual node stays out
+       of source retirement membership and all catalog/root offsets use n.
+       A miss restores seed marks and mutable candidate/claims/catalog accounting
+       once, then resumes existing repair/bulk. The derived 2J-s+3 work and
+       checked delta layout fit existing scratch, reserves and admission bounds.
+       No internal split, root growth, merge, placement/fill, memory or runner change.
+
+       Focused independent interval/tree and public-history tests cover selected
+       and discarded trials, cross-parent minima/sharing, coalescing, resource/shape
+       misses, healthy refusal usability and real adapter failures. Both retained
+       payloads are independently checked after replacement writes and before slot
+       attempts, including maintenance and explicitly durable simulator recovery.
+       Existing funded orphan/cross-volume/checkpoint/startup coverage remains.
+       The [matched record](../../fs/docs/overflow-split-measurements.md) repeats
+       unchanged histories through all final maintenance, after a fresh before
+       control, with selected/discarded work and active-publication accounting.
+       All 54 cases complete and independently verify. Eight histories reduce
+       total submitted writes 20.373–41.378%; small compiler increases 7.098%.
+       Largest append/overwrite/compiler reduce 32.278%/32.257%/35.207%, with
+       more expensive window exceptions. All totals beat matched Btrfs in these
+       bounded samples; this does not define broader acceptance. Largest write
+       windows still spend about 80–82% of metadata bytes on map replacements.
+       All 153 quick and six extended groups pass normally and with ASan/UBSan;
+       host tools and the complete freestanding shared archive compile.
+       Unprivileged Pyxis `make -j16` builds and links the read-only kernel subset;
+       the writable core remains excluded.
+       This intermediate correction does not satisfy broader population/pressure,
+       native runtime/recovery qualification or task 7 acceptance. The kernel-stack
+       prerequisite and writable-deployment blocker remain open.
 
    - [ ] **Repeat measurements and complete acceptance.** Run matched RAM-only
      before/after workloads and remaining recovery/pressure coverage. Record the
