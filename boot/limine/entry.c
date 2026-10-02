@@ -4,6 +4,7 @@
 #include <kernel/boot.h>
 #include <kernel/init.h>
 #include <kernel/log.h>
+#include <kernel/fb/early_console.h>
 #include <kernel/panic.h>
 #include "mp.h"
 
@@ -316,12 +317,15 @@ static void copy_command_line(void)
   early_init();
 
   validate_responses();
-  copy_command_line();
   copy_executable_placement();
   copy_memory_map();
+  /* Validation needs the memory map; start the screen before other checks. */
+  copy_framebuffer();
+  early_console_start(&boot.framebuffer, boot.bootstrap_direct_offset + boot.framebuffer.physical);
+  klog("early console: %zux%zu framebuffer\n", boot.framebuffer.width, boot.framebuffer.height);
+  copy_command_line();
   copy_acpi_address();
   copy_initrd();
-  copy_framebuffer();
   if (date_request.response) {
     boot.utc_seconds = date_request.response->timestamp;
     boot.utc_available = true;

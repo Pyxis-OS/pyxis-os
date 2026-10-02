@@ -206,6 +206,17 @@ needed before treating that fallback as a normal interactive environment.
 The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
 on screen. History, Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](userland/terminal.md).
 
+## Early console and post-handoff panics
+
+The [early boot console](kernel/early-console.md) shows boot progress and
+panics only until the display presenter's first frame. Panics after that remain
+serial-only, as before. Showing them would mean taking the screen back from a
+presenter that may still be running on the BSP, so a machine without serial
+shows no panic text once userspace has started. A serial port that stops
+accepting output is latched off for the rest of boot and not retried.
+Revisit with real-hardware bring-up, if post-boot panics need to be visible
+without serial.
+
 ## Process termination and Ctrl-C
 
 Process handles are non-owning observers; closing one does not stop execution.

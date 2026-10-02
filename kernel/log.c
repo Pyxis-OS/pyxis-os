@@ -2,6 +2,7 @@
 #include <arch/console.h>
 #include <arch/cpu.h>
 #include <stdatomic.h>
+#include <kernel/fb/early_console.h>
 #include <kernel/fb/tty.h>
 
 static atomic_bool log_locked;
@@ -17,6 +18,7 @@ void klog_panic_begin(void)
 {
   /* A fatal exception may interrupt the lock owner before GS is usable. */
   atomic_store_explicit(&panic_output, true, memory_order_relaxed);
+  early_console_panic_begin();
 }
 
 bool log_begin(void)
@@ -50,7 +52,12 @@ void klog(const char *format, ...)
 void log_putc(char c)
 {
   console_putc(c);
-  if (!atomic_load_explicit(&panic_output, memory_order_relaxed) &&
-      log_tty && log_tty->initialized)
+  if (atomic_load_explicit(&panic_output, memory_order_relaxed)) {
+    early_console_panic_putc(c);
+    return;
+  }
+  /* Ordinary output holds the log lock here. */
+  early_console_putc(c);
+  if (log_tty && log_tty->initialized)
     tty_put_char(log_tty, c);
 }

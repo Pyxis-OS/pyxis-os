@@ -5,8 +5,8 @@
 
 struct tty;
 
-/* Select the log TTY on the BSP before releasing AP schedulers.
- * Logging is serial-only until a TTY is assigned. */
+/* Select the log TTY on the BSP before releasing AP schedulers. Until the
+ * presenter's first frame, logging also draws on the early console. */
 void log_set_tty(struct tty *tty);
 
 /* Formatting subset is documented in <kernel/format.h>.
@@ -31,6 +31,8 @@ void log_end(bool locked);
 /* Low-level routing used inside a log_begin()/log_end() section. */
 void log_putc(char c);
 /* Irreversibly select unlocked serial-only output for fatal diagnostics.
- * Safe without GS, heap or a functioning lock owner; lines may interleave. */
+ * Safe without GS, heap or a functioning lock owner; lines may interleave.
+ * Before the presenter's handoff, the first panicking CPU also owns the
+ * early framebuffer console. */
 void klog_panic_begin(void);
 #endif
