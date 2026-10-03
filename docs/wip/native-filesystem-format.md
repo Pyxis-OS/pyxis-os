@@ -298,4 +298,34 @@ and delayed allocation remain unaccepted; resolve them before the writer task.
 Implementation must measure latency and bytes written from the start, including
 large shrink stalls and journal batching. The [design limits](../technical-debt.md#native-filesystem-design-limits)
 distinguish accepted constraints from agent proposals. Task 1 delivers this
-proposal; task 2 requires assignment and resolution of its remaining policy choices.
+proposal; task 2 requires assignment and answers to the
+[open owner questions](#open-owner-questions) that precede it.
+
+## Open owner questions
+
+Each question has a proposed default, and "defer" is a valid answer. They are
+grouped so that no round asks more than three.
+
+**Before task 2 (format library and host tools):**
+
+1. **Checksums on home metadata.** Today only headers and journal records carry
+   CRC32C ([pool layout](#pool-layout)). Proposed default: none in v1, matching
+   ext2, with `fsck` structural checks as the safeguard. Note that bitmap,
+   indirect and directory blocks are raw arrays with no spare space. Adding
+   checksums later therefore means a separate checksum region or a reinterpretation
+   behind a required or read-only-compatible feature, not a field to fill in.
+2. **Read-only opening with a committed journal.** Proposed default: refuse, as
+   in [journal and recovery](#journal-and-recovery). Replay needs write authority,
+   for example host `fsck` with the image writable. The alternative is replaying
+   into an in-memory overlay for read-only access, at the cost of more reader code.
+
+**Before task 3 (native writer),** the milestone's
+[proposed writeback details](native-filesystem.md#proposed-writeback-details):
+
+1. **Periodic flush:** one task every T = 30 s, as a nominal interval, not a
+   crash-loss bound.
+2. **Whole-transaction `fsync`:** a file's size, mapping and directory entry
+   become durable together; the commit satisfies every ordered-data dependency in
+   the transaction.
+3. **Delayed allocation:** blocks are assigned at writeback. This can be deferred
+   if it complicates the first writer.
