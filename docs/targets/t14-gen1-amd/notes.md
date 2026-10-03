@@ -7,8 +7,8 @@ Reviewed Linux observations collected on 2026-10-02 with Fedora 44 and kernel
 - [Docked inventory](thinkpad-inventory-docked.txt), starting at 21:08:38 +03:00.
 
 These are Fedora enumeration snapshots, not Pyxis hardware qualification or
-storage-integrity measurements. Pyxis implementation comparisons below refer to
-main revision `9efe4a5`.
+storage-integrity measurements. The original comparison used main `9efe4a5`;
+the support notes below include the later multi-controller/USB 2 hub work.
 
 ## Platform and docking
 
@@ -63,25 +63,24 @@ interface) at `4-3`, AX200 Bluetooth at `4-4`, and the camera at `6-2`.
 
 ## Consequences for current Pyxis USB support
 
-- [Controller selection](../../../kernel/usb/xhci.c) requires a unique PCI xHCI
-  function before checking controller capabilities. The three observed xHCI
-  functions would produce an ambiguous selection if Caelum discovers the same
-  inventory. Moving the stick alone does not resolve that limitation.
+- [Controller discovery](../../../kernel/usb/xhci.c) now inspects each discovered
+  xHCI independently. The three observed functions are no longer an ambiguous
+  inventory selection; their capabilities and native firmware state remain unqualified.
 - [Current enumeration](../../devices/usb-enumeration.md) handles directly
-  attached root-port devices. Dock storage needs unsupported hub traversal;
-  connected hubs make inventory incomplete even if a directly attached disk is
-  also found on the selected controller.
-- The vendor-specific fingerprint interface on `07:00.4` is another potential
-  incompleteness source under current classification policy. The undocked
+  attached root-port devices and supported USB 2 hub descendants. The observed
+  SuperSpeed dock storage routes still need unsupported SuperSpeed hub traversal;
+  uninspected descendants make inventory incomplete even if a directly attached
+  disk is also observed.
+- Vendor-specific fingerprint interfaces are valid unbound observations. The undocked
   baseline on `07:00.3` has no attached peripheral, making undocked USB-A Right
-  a useful proposed first qualification route once controller selection is
-  addressed. This is a recommendation, not an agreed controller-selection policy.
+  a useful proposed first native qualification route. This is a validation
+  recommendation, not a controller-selection policy or baked-in port map.
 - Linux choosing UAS does not by itself prove BOT availability. The separate
   [SanDisk target observation](../../wip/usb-installation.md#known-target-and-missing-evidence)
   records BOT alternate 0 and UAS alternate 1 for the owner's `0781:55a9` target.
   These inventories contain no full stick configuration/endpoint descriptors.
 - [Native USB block access](../../devices/usb-enumeration.md) remains pending.
-  Fedora enumeration and the provisional Pyxis BOT endpoint setup do not
+  Fedora enumeration and Pyxis descriptor inspection do not
   establish readable media under Pyxis.
 
 ## Device condition and evidence limits

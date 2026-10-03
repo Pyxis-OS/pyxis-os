@@ -119,23 +119,29 @@ struct system_info_usb_controller {
   uint32_t root_port_count; /* Zero means unknown/not inspected, not zero ports. */
 };
 
+#define SYSTEM_INFO_USB_NO_PARENT UINT64_MAX
+
 /* Unidentified connected ports have zero descriptor fields and IDENTIFIED clear.
  * root_port is the controller's one-based physical port, not a Linux bus/address.
+ * Direct devices have NO_PARENT and parent_port zero. Descendants name an
+ * earlier hub record on the same controller/root port and its one-based port.
  * interface_first/count select the contiguous validated interface records. */
 struct system_info_usb_device {
   uint64_t controller_index;
   uint64_t interface_first;
   uint64_t interface_count;
+  uint64_t parent_index;
   uint16_t root_port;
   uint16_t vendor_id;
   uint16_t product_id;
+  uint16_t parent_port;
   uint8_t speed;
   uint8_t device_class;
   uint8_t device_subclass;
   uint8_t device_protocol;
   uint8_t configuration_count;
   uint8_t flags;
-  uint32_t reserved;
+  uint16_t reserved;
 };
 
 /* Each advertised configuration and alternate setting is described; no claim
@@ -155,7 +161,7 @@ struct system_info_usb_interface {
 _Static_assert(sizeof(struct system_info_usb) == 32, "USB inventory layout");
 _Static_assert(sizeof(struct system_info_usb_request) == 24, "USB index request layout");
 _Static_assert(sizeof(struct system_info_usb_controller) == 24, "USB controller layout");
-_Static_assert(sizeof(struct system_info_usb_device) == 40, "USB device layout");
+_Static_assert(sizeof(struct system_info_usb_device) == 48, "USB device layout");
 _Static_assert(sizeof(struct system_info_usb_interface) == 16, "USB interface layout");
 
 _Static_assert(sizeof(struct system_info_identity) == 128, "system identity layout");

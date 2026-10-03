@@ -20,6 +20,7 @@ struct usb_completion { enum usb_result result; size_t bytes; };
 /* Private BSP controller-worker interfaces. Records and buffers are prepared
  * before AP startup and retained at runtime. Indices cover advertised root ports;
  * an empty index is not evidence that discovery was complete. */
+unsigned usb_host_descendant_capacity(const struct usb_host_controller *controller);
 unsigned usb_host_port_count(const struct usb_host_controller *controller);
 bool usb_host_inventory_complete(const struct usb_host_controller *controller);
 struct usb_host_device *usb_host_device_at(struct usb_host_controller *controller, unsigned index);
@@ -27,6 +28,16 @@ bool usb_host_port_present(const struct usb_host_controller *controller, unsigne
 enum usb_speed usb_host_device_speed(const struct usb_host_device *device);
 size_t usb_host_control_capacity(void);
 enum usb_result usb_host_address(struct usb_host_device *device, uint64_t deadline);
+
+/* Boot-only hub metadata and retained child reservation. Attach returns an
+ * unaddressed device; the ordinary address/inspection path configures EP0.
+ * Ports are one-based. TT think time is the descriptor's encoded value (0-3).
+ * Multi-TT requires the core to have selected that interface beforehand. */
+enum usb_result usb_host_configure_hub(struct usb_host_device *device, unsigned ports,
+                                       unsigned tt_think_time, bool multi_tt, uint64_t deadline);
+enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned port,
+                                      enum usb_speed speed, uint64_t deadline,
+                                      struct usb_host_device **child);
 enum usb_result usb_host_update_packet(struct usb_host_device *device, uint16_t packet, uint64_t deadline);
 
 /* Submission captures setup/outbound data, never a read destination. One client

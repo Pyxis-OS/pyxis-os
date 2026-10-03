@@ -2,8 +2,9 @@
 
 Status: Phase A image assembly/USB boot and Phase B.3 enumeration/control
 transfers implemented, 2026-10-02; BOT/SCSI media and block access remain pending.
-Native xHCI initialization and Phase B development are paused for ThinkPad
-qualification. The [build-time switch](../devices/usb-xhci.md) defaults to disabled;
+Native xHCI hardware qualification and storage remain pending. Inspection-first
+work now includes [USB 2 hub traversal](../devices/usb-hubs.md), accepted by the
+owner on 2026-10-03. The [build-time switch](../devices/usb-xhci.md) defaults to disabled;
 firmware USB boot and archive-backed programs remain available.
 The owner wants a replaceable USB drive as the first
 physical installation target, with QEMU development before laptop validation.
@@ -363,6 +364,12 @@ host tools and the later physical-preparation procedure.
 3. [x] **Enumerate and transfer.** Implement bounded control transfers, checked
    descriptor parsing and addressing. Publish root-device and interface observations
    independently of class binding; unsupported inspection remains explicit.
+   - [x] Extend the inspection snapshot through USB 2 hubs with low/full/high-speed
+     descendants, discovered parent/port paths, full-path boot diagnostics and
+     bounded pre-AP resources. Capture follows power-good and attachment settling;
+     unused compatibility padding does not reject an otherwise bounded descriptor.
+     SuperSpeed hubs, hotplug and storage remain deferred; high-speed TT and
+     physical hardware remain unqualified. See the [hub reference](../devices/usb-hubs.md).
    The initial BOT matcher/endpoint setup was removed for the inspection-only
    slice; reintroduce class transfers with their first consumer and an explicit
    pre-AP resource policy in B.4.
@@ -397,8 +404,8 @@ host tools and the later physical-preparation procedure.
 ## Remaining assignment and qualification decisions
 
 - Phase A and B.3 enumeration/control transfers are implemented; B.1 defines the
-  read-only contract. Inspection-first enumeration now publishes root devices
-  without configuring a transport. Multi-controller disk selection must be settled
+  read-only contract. Inspection-first enumeration now publishes root devices and USB 2 hub descendants
+  without configuring a storage transport. Multi-controller disk selection must be settled
   before B.4 establishes LUN/media support. BOT/SCSI reads and native integration
   remain pending. Writable
   work and its roadmap ordering remain unassigned.
