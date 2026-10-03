@@ -1,7 +1,7 @@
 # Networking: IPv4, ICMP echo and UDP
 
 The kernel has one system-wide networking worker and a boot-lifetime interface
-named `lo`, plus `net0` when a supported VirtIO NIC is present. Interfaces,
+named `lo`, plus a configuration-bound `net0`. Interfaces,
 addresses and routes are shared across spaces;
 capability-mediated access will not by itself provide network isolation.
 The implementation is in `kernel/net`, with kernel interfaces in
@@ -253,8 +253,9 @@ suppresses QEMU's implicit NIC; loopback still works. Values other than `0` or
 `1` are rejected. The network option can be combined with
 `VIRTIO_FS_SOCKET=...` using the [usual filesystem setup](virtio-fs.md).
 
-Before AP startup, `virtio_net_prepare` claims the first modern network PCI
-function (`1af4:1041`), confirms reset before BAR probing, maps its registers
+Before AP startup, `virtio_net_prepare` enumerates every modern network PCI
+function (`1af4:1041`) into independent retained controller state, confirms reset
+before BAR probing, maps its registers
 uncached and negotiates `VIRTIO_F_VERSION_1` and `VIRTIO_NET_F_MAC`.
 `VIRTIO_NET_F_STATUS` is accepted when offered; otherwise the link is assumed up.
 The MAC must be nonzero and unicast. MAC and link status are sampled between
@@ -269,9 +270,10 @@ No packed queues, indirect descriptors, offloads, merged RX buffers, control
 queue or multiple queue pairs are negotiated.
 
 Boot prepares the queues and posts all receive buffers, with PCI bus mastering
-and `DRIVER_OK` clear and MSI-X delivery masked. At the start of the existing
-BSP network worker, `virtio_net_start` enables DMA, sets `DRIVER_OK`, unmasks
-MSI-X and notifies RX. Worker creation failure leaves the NIC inactive. Table
+and `DRIVER_OK` clear and MSI-X delivery masked. Configuration binding in the
+BSP network worker activates only the selected controller: `virtio_net_start`
+enables DMA, sets `DRIVER_OK`, unmasks MSI-X and notifies RX. Unbound controllers
+and worker creation failure leave hardware inactive. Table
 entry zero routes configuration and both queues to `APIC_VIRTIO_NET_VECTOR`
 (35), independently of virtio-fs (34). The IRQ handler only records activity and
 wakes the worker; arch acknowledges the APIC. It never touches ring ownership.
@@ -396,21 +398,37 @@ References: [ARP](https://www.rfc-editor.org/rfc/rfc826.html),
 
 ## Native configuration capability
 
+The worker owns one external binding, `net0`. Ethernet, ARP, IPv4 and worker
+dispatch use `include/kernel/net/driver.h`; VirtIO is its only implementation.
+Drivers retain controller state and buffer ownership. A binding lasts until
+reboot, including after link loss or transport failure; there is no automatic
+fallback. IPv4 settings remain a separate authority-owned state.
+
 Init receives `net_config` authority for the single `net0` interface, even if no
 NIC is present. The object selects the interface; names in configuration do not
 grant authority. [The tagged protocol](../../include/abi/net_config.h) uses CALL:
 
-- `NET_CONFIG_QUERY` requires READ and returns a snapshot of presence, transport
-  readiness, usable link, assigned address/prefix/gateway, MTU and MAC. Absence is
-  a successful snapshot, distinct from a discovered but failed device.
-- `NET_CONFIG_REPLACE` requires WRITE and supplies the complete address, prefix
+- `NET_CONFIG_QUERY` requires READ and inspects the current binding. An unbound
+  snapshot has zero flags, MAC and IPv4 settings. A bound snapshot reports
+  presence, transport readiness, usable link, assigned address/prefix/gateway,
+  MTU and MAC.
+- `NET_CONFIG_LOOKUP` requires READ and resolves a `net_selector` without binding
+  or activating hardware. `NET_CONFIG_BIND` requires WRITE and binds the unique
+  match, then attempts activation; both return a snapshot. `NET_SELECT_VIRTIO`
+  matches all discovered VirtIO controllers; `NET_SELECT_MAC` matches a stable
+  identity. `CALL_NOT_FOUND` means absent, `CALL_BUSY` means ambiguous or a
+  different controller is already bound, and `CALL_UNAVAILABLE` means incomplete
+  discovery/identity. Failed matching preserves the binding. Rebinding the same
+  controller is idempotent; a unique failed controller can be bound and reports
+  PRESENT without READY. `NET_CONFIG_BOUND` identifies the bound controller.
+- `NET_CONFIG_REPLACE` requires WRITE and an existing binding, and supplies the complete address, prefix
   and optional gateway. Invalid fields return `CALL_BAD_REQUEST` without mutation;
   an unusable device returns `CALL_UNAVAILABLE`. A link-down prepared device can
   still be configured.
-- `NET_CONFIG_CLEAR` requires WRITE and removes settings and ARP state. It works
-  without a NIC and returns no data, as does replacement.
+- `NET_CONFIG_CLEAR` requires WRITE and removes settings and ARP state, retaining
+  the binding. It works without a NIC and returns no data, as does replacement.
 
-Libpyxis exposes `net_config_query`, `net_config_replace` and `net_config_clear`.
+Libpyxis exposes query, lookup, bind, replace and clear helpers.
 Query clears caller output on failure. Scalar requests are captured and reply
 storage checked before parking the user task. Eight shared slots bound calls;
 exhaustion returns `CALL_QUEUE_FULL`. The worker processes each finite operation
@@ -437,6 +455,7 @@ The session launcher reads `app://config/network.lua`, installed from
 return {
   dns = { server = "1.1.1.1" },
   net0 = {
+    driver = "virtio",
     optional = true,
     address = "10.0.2.15",
     prefix = 24,
@@ -445,14 +464,22 @@ return {
 }
 ```
 
+Every `net0` table requires exactly one of `driver = "virtio"` or `mac`, a locally
+supplied nonzero unicast address written as six colon-separated hex pairs.
+Driver selection must be unique; use a MAC selector when multiple VirtIO
+controllers exist. No real MAC bytes belong in committed profiles or captures.
+RTL8111 is prepared independently but has no selection-layer I/O implementation
+yet, so its MAC cannot bind `net0` in this milestone task.
+
 This is manual static configuration, not DHCP. The kernel and driver contain no
 QEMU address defaults. An omitted gateway means no default route. Addresses use
 four decimal octets; no DNS, shorthand or embedded NUL bytes. Unknown keys,
 incorrect types and prefixes outside 1..32 are errors. The kernel validates subnet
 and gateway relationships when applying replacement.
 
-A missing file or missing `net0` leaves existing NIC settings alone (unconfigured on
-fresh boot). `net0 = false` explicitly clears them. `optional` defaults to false;
+A missing file or missing `net0` leaves existing binding/settings alone (unbound on
+fresh boot). `net0 = false` explicitly clears IPv4 settings, retaining the binding.
+`optional` defaults to false;
 true permits an absent NIC, but does not hide transport failure. A required absent
 device or invalid configuration prevents shell launch. A present but unavailable
 device or other runtime setup failure is diagnosed and the shell remains available

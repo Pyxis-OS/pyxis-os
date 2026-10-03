@@ -9,7 +9,7 @@
 #include <kernel/net/lwip.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
-#include <kernel/virtio/net.h>
+#include <kernel/net/driver.h>
 #include "wire.h"
 
 #define IPV4_VERSION 4
@@ -99,7 +99,7 @@ enum net_result net_ipv4_configure(uint32_t address, unsigned prefix, uint32_t g
        (gateway & mask) != (address & mask) || !is_subnet_host(gateway, mask, prefix)))) {
     return NET_INVALID;
   }
-  if (!virtio_net_mac()) {
+  if (!net_driver_mac()) {
     return NET_UNAVAILABLE;
   }
 
@@ -153,7 +153,7 @@ enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
       } else {
         return NET_NO_ROUTE;
       }
-      if (!virtio_net_available()) {
+      if (!net_driver_available()) {
         return NET_UNAVAILABLE;
       }
     }
@@ -320,21 +320,9 @@ void net_ipv4_snapshot(struct net_config_reply *reply)
     .address = configuration.address, .prefix = configuration.prefix,
     .gateway = configuration.gateway, .mtu = net_ethernet.mtu,
   };
-  if (virtio_net_present()) {
-    reply->flags |= NET_CONFIG_PRESENT;
-  }
-  if (virtio_net_ready()) {
-    reply->flags |= NET_CONFIG_READY;
-  }
-  if (virtio_net_available()) {
-    reply->flags |= NET_CONFIG_LINK_UP;
-  }
+  net_driver_snapshot(reply);
   if (configuration.address) {
     reply->flags |= NET_CONFIG_ASSIGNED;
-  }
-  const uint8_t *mac = virtio_net_mac();
-  if (mac) {
-    memcpy(reply->mac, mac, sizeof(reply->mac));
   }
 }
 

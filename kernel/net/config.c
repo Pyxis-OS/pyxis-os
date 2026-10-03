@@ -1,5 +1,6 @@
 #include <arch/cpu.h>
 #include <kernel/net/config.h>
+#include <kernel/net/driver.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
@@ -12,6 +13,7 @@ struct config_call {
   enum config_state state;
   uint64_t operation;
   struct net_config_request request;
+  struct net_selector selector;
   struct net_config_reply reply;
   enum call_status status;
   struct task_wait *wait;
@@ -34,7 +36,8 @@ static void unlock_pending(void)
 }
 
 enum call_status net_config_exchange(uint64_t operation,
-    const struct net_config_request *request, struct net_config_reply *reply)
+    const struct net_config_request *request, const struct net_selector *selector,
+    struct net_config_reply *reply)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!net_worker_available()) {
@@ -54,7 +57,8 @@ enum call_status net_config_exchange(uint64_t operation,
   }
   struct task_wait *wait = task_wait_prepare();
   *call = (struct config_call){
-    .state = CONFIG_QUEUED, .operation = operation, .request = *request, .wait = wait,
+    .state = CONFIG_QUEUED, .operation = operation, .request = *request,
+    .selector = *selector, .wait = wait,
   };
   unlock_pending();
   net_worker_notify();
@@ -74,7 +78,8 @@ enum call_status net_config_exchange(uint64_t operation,
   }
   KASSERT(!call->wait);
   enum call_status status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : call->status;
-  if (status == CALL_OK && operation == NET_CONFIG_QUERY) {
+  if (status == CALL_OK && (operation == NET_CONFIG_QUERY ||
+      operation == NET_CONFIG_BIND || operation == NET_CONFIG_LOOKUP)) {
     *reply = call->reply;
   }
   call->state = CONFIG_FREE;
@@ -88,6 +93,20 @@ static enum call_status configure(struct config_call *call)
   case NET_CONFIG_QUERY:
     net_ipv4_snapshot(&call->reply);
     return CALL_OK;
+  case NET_CONFIG_BIND: {
+    enum call_status status = net_driver_bind(&call->selector);
+    if (status == CALL_OK) {
+      net_ipv4_snapshot(&call->reply);
+    }
+    return status;
+  }
+  case NET_CONFIG_LOOKUP: {
+    enum call_status status = net_driver_lookup(&call->selector, &call->reply);
+    if (status == CALL_OK && (call->reply.flags & NET_CONFIG_BOUND)) {
+      net_ipv4_snapshot(&call->reply);
+    }
+    return status;
+  }
   case NET_CONFIG_CLEAR:
     net_ipv4_clear();
     return CALL_OK;

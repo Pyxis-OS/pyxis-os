@@ -271,8 +271,9 @@ The owner accepted the [RTL8111 plan](thinkpad-rtl8111.md).
 [Hardware identification](../devices/rtl8111-hardware.md) is complete from the
 owner's Fedora capture and Caelum-side confirmation. Configuration chooses the
 interface. Controller preparation is implemented with bounded waits and
-firmware-free PHY setup; DMA and delivery remain disabled. The VirtIO selection
-refactor is task 3, followed by RTL8111 Ethernet I/O and native qualification.
+firmware-free PHY setup; RTL DMA and delivery remain disabled. Explicit selector
+ABI/configuration and driver-neutral dispatch are implemented with VirtIO as the
+only connected driver. RTL8111 Ethernet I/O and native qualification remain.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

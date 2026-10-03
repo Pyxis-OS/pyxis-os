@@ -1,8 +1,7 @@
 # ThinkPad RTL8111 hardware profile
 
 Hardware identified in task 1 of the [RTL8111 milestone](../wip/thinkpad-rtl8111.md),
-recorded
-2026-10-03. Caelum prepares the identified built-in controller with RX/TX, DMA
+recorded 2026-10-03. Caelum prepares the identified built-in controller with RX/TX, DMA
 and delivery disabled; Ethernet I/O is pending. Full and partial MAC bytes are
 omitted.
 
@@ -25,6 +24,8 @@ omitted.
 Linux reported that it could not disable ASPM because the OS lacked ASPM control.
 
 The dock's `0000:02:00.0` reported `RTL8168ep/8111ep`, XID `502`, link down.
+This DASH controller is on the motherboard even when undocked; the dock/adapter
+provides its RJ45 jack.
 It is a separate variant; this capture does not qualify its preparation or I/O.
 
 ## Caelum-side identification before driver preparation
@@ -148,7 +149,10 @@ may be revised by the owner:
   a reset could discard firmware BAR assignments. PME/wake and variant-specific
   policy changes occur only after XID `541` is confirmed.
 
-These choices do not establish successful firmware-free operation or native
-handoff. Task 2 was explicitly authorized after PR #359 merged. Native
-initial-state transitions and cold-start firmware-free traffic remain unqualified; task 4
-measures I/O and task 5 includes owner-run native qualification.
+The owner subsequently reported native UEFI/PXE preparation success in
+[PR #362](https://git.internal/PyxisOS/pyxis-os/pulls/362): XID `541` reached the
+prepared state and XID `502`, with DASH enabled, was identified and released
+without variant-specific writes. This is owner-reported evidence of that
+firmware handoff, not a measurement of every initial power/decode state.
+Link and cold-start firmware-free traffic remain unqualified; task 4 measures
+I/O and task 5 includes owner-run native qualification.

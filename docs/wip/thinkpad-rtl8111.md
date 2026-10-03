@@ -5,8 +5,8 @@ the review note “read and accepted the proposal”, then explicitly authorized
 task 1. [Hardware identification](../devices/rtl8111-hardware.md) is complete;
 controller preparation is implemented. [NIC passthrough](../development/thinkpad-nic-passthrough.md)
 is complete. The owner accepted task 2's firmware/power/initial-state defaults
-in PR #359, then authorized task 2 after merging it. Tasks 1 and 2 are complete;
-network selection and Ethernet I/O remain pending.
+in PR #359, then authorized task 2 after merging it. Tasks 1–3 are complete;
+Ethernet I/O remains pending.
 
 ## Goal and machine configuration
 
@@ -33,8 +33,9 @@ parent pin, following [SDK and repository integration](../development/sdk-and-re
 
 The built-in function is host `0000:05:00.0`, `10ec:8168`, PCI revision `0x15`.
 The qualified guest assigned it `00:03.0`; driver selection must not depend on
-that guest address. Dock Ethernet is another `10ec:8168` at host `02:00.0`, PCI
-revision `0x0e`. Its different revision and shared IOMMU group are recorded in
+that guest address. The dock-facing RJ45 uses another onboard `10ec:8168`
+at host `02:00.0`, PCI revision `0x0e`. Its different revision and shared IOMMU
+group are recorded in
 [ThinkPad next steps](thinkpad-next-steps.md#2-ethernet-passthrough-to-qemu-then-a-driver).
 
 **Owner decision: configuration chooses the interface.** The built-in port
@@ -55,16 +56,25 @@ Accepted controller model:
   hardware profile and qualification; it does not justify an exactly-one-NIC
   restriction.
 
-The current stack has one external interface, `net0`, and direct VirtIO calls.
-Integration keeps per-controller state distinct from the selected
-interface. Exposing multiple active interfaces also needs address, ARP and routing
+The stack keeps one external interface, `net0`, with per-controller state distinct
+from its binding. Exposing multiple active interfaces also needs address, ARP and routing
 ownership work; its scope remains a decision before implementation.
+
+**Accepted task 3 expansion, 2026-10-04:** include explicit selector ABI and
+userspace configuration now. A `net0` table requires exactly one of
+`driver = "virtio"` or a locally supplied `mac`; matching must be unique.
+The first binding lasts until reboot, without fallback. Reapplying settings
+to the same controller is allowed; clearing removes IPv4 settings only.
+Absent/ambiguous matching preserves the binding, and switching controllers
+is rejected. The [network reference](../devices/networking.md#native-configuration-capability)
+records binding and read-only lookup authority. VirtIO is the only connected
+driver in task 3; task 4 connects RTL8111 I/O.
 
 ## Tasks
 
 The five-task outline and planning constraints are accepted. The
 [hardware profile](../devices/rtl8111-hardware.md#controller-preparation)
-records implemented preparation and accepted choices. Task 3 has not started.
+records implemented preparation and accepted choices. Task 4 has not started.
 
 - [x] **1. Identify the hardware.** Begin with the owner's Fedora r8169
   `dmesg`/`ethtool`/`lspci` output, with MAC bytes removed. Record the chip name,
@@ -78,10 +88,12 @@ records implemented preparation and accepted choices. Task 3 has not started.
   native PXE firmware state as well as VFIO. Leave DMA and delivery disabled
   until worker activation. Finish with a known stopped/prepared state; missing
   or failed hardware leaves ordinary boot usable.
-- [ ] **3. Integrate networking.** Replace direct VirtIO dependencies in Ethernet,
+- [x] **3. Integrate networking.** Replace direct VirtIO dependencies in Ethernet,
   ARP, IPv4 configuration/status and worker dispatch with a small driver-selection
-  layer as a pure refactor, with VirtIO as its only implementation. Configuration
-  chooses the interface. Finish with existing QEMU ping, UDP and TCP workloads
+  layer with VirtIO as its only implementation. The owner expanded the planned
+  pure refactor to include explicit selector ABI and userspace configuration.
+  Configuration chooses the interface. Finish with existing QEMU ping, UDP and
+  TCP workloads
   preserving VirtIO behavior; capture matched runs before and after the refactor.
 - [ ] **4. Implement Ethernet I/O.** Add owned RX/TX rings, coherent DMA ordering,
   validated completions and interrupts serviced through the existing BSP network
