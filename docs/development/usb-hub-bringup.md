@@ -131,9 +131,11 @@ The default-disabled full image also built and booted with an attached hub.
 GDB showed UNAVAILABLE and no xHCI controller contexts; `lsusb -n` returned 1
 while `lspci -n` returned 0. The shell remained usable.
 
-QEMU's built-in hub exposes full-speed links; low-speed descendants and
-high-speed transaction translation follow reviewed USB 2/xHCI rules but are
-unmeasured hardware paths. The ThinkPad's SuperSpeed dock and 10 Gb/s links remain
+QEMU's built-in hub exposes full-speed links. A subsequent
+[owner-reported native ThinkPad run](../targets/t14-gen1-amd/usb-bringup.md)
+observed full-speed enumeration behind nested high-speed hubs, 64-byte contexts
+and nonzero scratchpads. Low-speed descendants, recovery and delayed physical
+attachment remain unqualified. The ThinkPad's SuperSpeed dock and 10 Gb/s links remain
 unsupported, alongside the existing firmware/controller profile limits.
 Hotplug, idle downstream removal monitoring, endpoint-local recovery and USB
 storage remain deferred. See [implemented hub behavior](../devices/usb-hubs.md)

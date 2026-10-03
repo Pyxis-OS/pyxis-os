@@ -12,6 +12,7 @@ set -eu
 : "${VIRTIO_RNG:=1}"
 : "${VIRTIO_BLK_IMAGE:=}"
 : "${VIRTIO_BLK_READONLY:=0}"
+: "${VFIO_PCI:=}"
 : "${USB_BOOT_IMAGE:=}"
 : "${UDP_FORWARD:=}"
 : "${TCP_FORWARD:=}"
@@ -155,6 +156,53 @@ if [ -n "$VIRTIO_FS_SOCKET" ]; then
     -object "memory-backend-memfd,id=pyxis_mem,size=$MEMORY,share=on" \
     -chardev "socket,id=pyxis_fs,path=$VIRTIO_FS_SOCKET" \
     -device vhost-user-fs-pci,chardev=pyxis_fs,tag=pyxis-host
+fi
+if [ -n "$VFIO_PCI" ]; then
+  case "$VFIO_PCI" in
+    [0-9a-f][0-9a-f][0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f].[0-7]) ;;
+    *) echo 'VFIO_PCI must be a full lowercase PCI address DDDD:BB:DD.F (function 0..7).' >&2; exit 1 ;;
+  esac
+  vfio_device="/sys/bus/pci/devices/$VFIO_PCI"
+  [ -d "$vfio_device" ] || {
+    echo "VFIO_PCI device $VFIO_PCI does not exist on this host." >&2
+    exit 1
+  }
+  vfio_driver=$(readlink -f "$vfio_device/driver") || vfio_driver=
+  [ "$vfio_driver" = /sys/bus/pci/drivers/vfio-pci ] || {
+    echo "VFIO_PCI device $VFIO_PCI must be bound to vfio-pci; see docs/development/thinkpad-nic-passthrough.md host setup." >&2
+    exit 1
+  }
+  vfio_group_path=$(readlink -f "$vfio_device/iommu_group") || vfio_group_path=
+  [ -d "$vfio_group_path" ] || {
+    echo "VFIO_PCI device $VFIO_PCI has no resolved IOMMU group; check the host IOMMU setup." >&2
+    exit 1
+  }
+  vfio_group=${vfio_group_path##*/}
+  [ -r "/dev/vfio/$vfio_group" ] && [ -w "/dev/vfio/$vfio_group" ] || {
+    echo "VFIO_PCI requires read/write access to /dev/vfio/$vfio_group; see docs/development/thinkpad-nic-passthrough.md host setup." >&2
+    exit 1
+  }
+  vfio_memlock=$(ulimit -l)
+  if [ "$vfio_memlock" != unlimited ]; then
+    case "$MEMORY" in
+      *[Kk]) vfio_size=${MEMORY%?}; vfio_unit_kib=1 ;;
+      *[Mm]) vfio_size=${MEMORY%?}; vfio_unit_kib=1024 ;;
+      *[Gg]) vfio_size=${MEMORY%?}; vfio_unit_kib=1048576 ;;
+      *) vfio_size=$MEMORY; vfio_unit_kib=1024 ;;
+    esac
+    case "$vfio_size" in
+      ''|*[!0-9]*)
+        echo 'Finite VFIO memlock checking requires integer MEMORY in MiB or with a K/M/G suffix.' >&2
+        exit 1 ;;
+    esac
+    # QEMU rounds RAM up to 8 KiB. Divide the limit to avoid size overflow.
+    vfio_max_size=$((vfio_memlock / 8 * 8 / vfio_unit_kib))
+    [ "$vfio_size" -gt 0 ] 2>/dev/null && [ "$vfio_size" -le "$vfio_max_size" ] 2>/dev/null || {
+      echo "VFIO_PCI needs positive MEMORY=$MEMORY covered by memlock; current limit is $vfio_memlock KiB. Try MEMORY=2G if it fits, or raise the limit as in docs/development/thinkpad-nic-passthrough.md host setup." >&2
+      exit 1
+    }
+  fi
+  set -- "$@" -device "vfio-pci,host=$VFIO_PCI"
 fi
 exec "$QEMU" -machine "$machine" -accel "$ACCEL" -cpu max \
   -rtc base=utc \

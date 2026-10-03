@@ -2,9 +2,11 @@
 
 Caelum traverses boot-present USB 2 hubs on every prepared xHCI controller for
 the immutable [USB inventory](usb-enumeration.md), including nested hubs and
-low/full/high-speed children. SuperSpeed hubs, newer link speeds, hotplug,
-power management and storage binding remain outside this slice. Native hardware
-and high-speed transaction translation remain unqualified.
+low/full/high-speed children. SuperSpeed/SuperSpeedPlus hub traversal, hotplug,
+power management and storage binding remain outside this slice. The first
+[owner-reported ThinkPad run](../targets/t14-gen1-amd/usb-bringup.md) exercised
+full-speed descendants behind high-speed hubs; broader native qualification
+remains pending.
 
 The core activates the first fully checked ordinary hub configuration in
 descriptor order, with one interface and a hub interrupt IN endpoint. Multi-TT

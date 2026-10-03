@@ -310,11 +310,11 @@ static bool valid_endpoint(enum usb_speed speed, const uint8_t *endpoint)
   if (type == USB_ENDPOINT_INTERRUPT) {
     unsigned usage = endpoint[3] >> USB_ENDPOINT_USAGE_SHIFT;
     if ((endpoint[3] & USB_ENDPOINT_INTERRUPT_RESERVED) ||
-        (speed == USB_SPEED_SUPER ? usage > 1 : usage != 0)) {
+        (usb_speed_is_enhanced(speed) ? usage > 1 : usage != 0)) {
       return false;
     }
-    if (!endpoint[6] || ((speed == USB_SPEED_SUPER || speed == USB_SPEED_HIGH) && endpoint[6] > 16) ||
-        (speed == USB_SPEED_SUPER && usage == 1 && endpoint[6] < 8)) {
+    if (!endpoint[6] || ((usb_speed_is_enhanced(speed) || speed == USB_SPEED_HIGH) && endpoint[6] > 16) ||
+        (usb_speed_is_enhanced(speed) && usage == 1 && endpoint[6] < 8)) {
       return false;
     }
   }
@@ -339,6 +339,7 @@ static bool valid_endpoint(enum usb_speed speed, const uint8_t *endpoint)
     }
     return packet <= 1024;
   case USB_SPEED_SUPER:
+  case USB_SPEED_SUPER_PLUS:
     if (type == USB_ENDPOINT_BULK || type == USB_ENDPOINT_CONTROL) {
       return packet == (type == USB_ENDPOINT_BULK ? 1024 : 512);
     }
@@ -444,7 +445,7 @@ static bool parse_configuration(struct usb_device_record *device, size_t total)
       }
       ++endpoints;
       last_endpoint = part;
-      companion_pending = device->speed == USB_SPEED_SUPER ? USB_DESCRIPTOR_SUPER_COMPANION : 0;
+      companion_pending = usb_speed_is_enhanced(device->speed) ? USB_DESCRIPTOR_SUPER_COMPANION : 0;
       break;
     }
     case USB_DESCRIPTOR_SUPER_COMPANION:
@@ -498,6 +499,7 @@ static bool valid_packet(enum usb_speed speed, uint8_t wire, uint16_t *packet)
     *packet = 64;
     return wire == 64;
   case USB_SPEED_SUPER:
+  case USB_SPEED_SUPER_PLUS:
     *packet = 512;
     return wire == 9;
   default:
@@ -508,7 +510,13 @@ static bool valid_packet(enum usb_speed speed, uint8_t wire, uint16_t *packet)
 static void inspect_device(struct usb_device_record *device, uint64_t deadline)
 {
   device->speed = usb_host_device_speed(device->host);
-  if (!request_ok(device, usb_host_address(device->host, deadline)) ||
+  enum usb_result address = usb_host_address(device->host, deadline);
+  if (address == USB_UNSUPPORTED && device->speed == USB_SPEED_UNKNOWN) {
+    device->incomplete = true;
+    device->detail = "unsupported device speed";
+    return;
+  }
+  if (!request_ok(device, address) ||
       !descriptor(device, USB_DESCRIPTOR_DEVICE, 0, USB_DEVICE_PREFIX_BYTES, deadline)) {
     return;
   }
@@ -784,6 +792,7 @@ static uint8_t observation_speed(enum usb_speed speed)
   case USB_SPEED_FULL: return SYSTEM_INFO_USB_SPEED_FULL;
   case USB_SPEED_HIGH: return SYSTEM_INFO_USB_SPEED_HIGH;
   case USB_SPEED_SUPER: return SYSTEM_INFO_USB_SPEED_SUPER;
+  case USB_SPEED_SUPER_PLUS: return SYSTEM_INFO_USB_SPEED_SUPER_PLUS;
   default: return SYSTEM_INFO_USB_SPEED_UNKNOWN;
   }
 }

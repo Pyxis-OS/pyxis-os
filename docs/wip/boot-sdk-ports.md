@@ -223,7 +223,8 @@ an opt-in [raw image and emulated USB launch](../development/usb-image.md);
 Phase B.1 now defines explicit backend/unique-disk selection, controller resource
 preparation, bounded requests and failure ownership. Phase B.2 adds
 [controller ownership, rings, MSI-X and root-port slot reservations](../devices/usb-xhci.md).
-Phase B.3 adds [checked enumeration and control requests](../devices/usb-enumeration.md).
+Phase B.3 adds [checked enumeration and control requests](../devices/usb-enumeration.md),
+including SuperSpeedPlus root link recognition.
 The later inspection-first slice discovers controllers independently and publishes
 root-device observations and [USB 2 hub descendants](../devices/usb-hubs.md)
 without selecting/configuring a storage transport. BOT/SCSI reads and native block integration
@@ -263,7 +264,10 @@ records their use as text-tool input without assigning a port or benchmark campa
 The ThinkPad's [next bring-up steps](thinkpad-next-steps.md) record the owner's
 order after the native shell: the assigned CPU entropy task first (virtio-rng
 when present, RDSEED with RDRAND fallback otherwise, ChaCha20 later), then
-Ethernet through VFIO passthrough to QEMU and a driver.
+Ethernet through VFIO passthrough to QEMU and a driver. The
+[NIC passthrough reference](../development/thinkpad-nic-passthrough.md) records
+the implemented launcher, host setup and successful owner/agent hardware boots.
+The RTL8111 driver remains a proposed follow-up.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

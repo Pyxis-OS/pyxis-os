@@ -279,29 +279,22 @@ The router now reserves a fixed address for the built-in port. A static Pyxis
 configuration can use it once the driver exists. MAC addresses and the reserved
 address are intentionally omitted here.
 
-**Host setup on the ThinkPad's Fedora** (*proposed* steps, owner-run):
+**Passthrough completed (2026-10-03).** The
+[NIC passthrough reference](../development/thinkpad-nic-passthrough.md) records
+the implemented `VFIO_PCI` launcher, Fedora host setup and successful owner/agent
+boots. Pyxis inventories `10ec:8168`, revision `0x15`, without claiming it.
 
-- Fedora enables the AMD IOMMU by default; the inventory shows AMD-Vi active.
-- Bind the chosen function to `vfio-pci`, for example
-  `sudo driverctl set-override 0000:05:00.0 vfio-pci`. Undo with
-  `driverctl unset-override`.
-- While it is passed through, Fedora loses that NIC. Use the AX200 Wi-Fi or the
-  dock's Ethernet (`02:00.0`) for host networking.
-- VFIO pins all guest RAM. Either raise the memory-lock limit or run with
-  `MEMORY=2G` for driver work; the default is now 8 GiB.
+**Follow-up milestone: RTL8111 driver (proposed, unassigned).**
 
-**Launcher change (*proposed*):** `scripts/run-qemu.sh` has no passthrough option.
-Add one explicit option, for example `VFIO_PCI=0000:05:00.0`, which adds
-`-device vfio-pci,host=…`. It stays off by default, like the other device options.
-
-**Driver scope (*proposed*), a later task after the setup works:**
-
-- A Caelum driver for the RTL8111 revision behind the chosen port, exposed as
-  `net0` beside the existing VirtIO NIC path in [networking](../devices/networking.md).
-- Reuse the existing [PCI](../devices/pci.md) claim, BAR mapping and MSI-X
-  handling from the xHCI work.
-- Develop in QEMU with VFIO, then run natively. Native success also brings the
-  remote terminal to the ThinkPad.
+- A Caelum driver for the built-in `05:00.0`, revision `0x15`, exposed as `net0`
+  beside the existing VirtIO NIC path in [networking](../devices/networking.md).
+  Reuse [PCI](../devices/pci.md) claims, BAR mapping and MSI-X handling from xHCI.
+- Static IPv4 using the router's reserved address and gateway. DHCP stays
+  separate, together with broadcast reception and section 3's later ideas.
+- Completion goal: reach Pyxis's remote terminal through the real card in QEMU,
+  then through the same port on a native ThinkPad boot.
+- Dock `02:00.0` support comes later: it has a different revision and shares an
+  IOMMU group with the management chip's other functions.
 
 ## 3. Later idea: reverse remote terminal with broadcast discovery
 

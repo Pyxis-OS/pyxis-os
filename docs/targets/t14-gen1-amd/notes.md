@@ -109,5 +109,9 @@ running Linux driver, not firmware settings presented to Caelum.
 
 ## Next bring-up steps
 
+The first owner-reported Caelum [native USB inventory](usb-bringup.md) records
+three xHCI controllers, the USB 2 dock subtree and a directly attached second
+stick. It includes partial-branch causes and the remaining qualification limits.
+
 The owner's order after reaching a native shell (2026-10-03) is recorded in
 [ThinkPad next steps](../../wip/thinkpad-next-steps.md): entropy, then Ethernet.
