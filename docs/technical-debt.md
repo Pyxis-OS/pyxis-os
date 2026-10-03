@@ -1269,14 +1269,14 @@ Caelum USB enumeration is unavailable. Revisit the default after the physical ha
 The [initial controller](devices/usb-xhci.md) is qualified only against QEMU's
 PCI xHCI profile, now with multiple independently discovered controllers. It requires firmware memory decoding enabled for a
 page-aligned BAR0 prefix, interpreted extended capabilities within that 4 KiB
-prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles, external hubs,
+prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles, SuperSpeed hubs,
 power management and insertion after the startup snapshot are unsupported.
 QEMU advertises zero scratchpads and 32-byte contexts; nonzero scratchpads,
 64-byte device contexts, nondefault PSI mappings and BIOS ownership handoff remain
-unmeasured paths. Enumeration now publishes direct root-device observations; hub descendants,
-LUN/media support and USB block access remain pending.
+unmeasured paths. Enumeration publishes root devices and bounded USB 2 hub descendants;
+SuperSpeed hubs, LUN/media support and USB block access remain pending.
 
-USB 2 port reset has no explicit connect-debounce interval. The startup snapshot
+USB 2 root-port reset has no explicit connect-debounce interval. The startup snapshot
 waits 20 ms only after the driver powers a port; it has no separate link-settling
 wait when power was already on or the controller lacks port power control. It can
 miss a physical USB 3 link still initializing after controller reset, leaving that
@@ -1312,8 +1312,7 @@ with the VM/device lifetime work, not a local allocator-lock workaround.
 using an initial 4 KiB descriptor/control budget. A larger configuration makes
 inventory incomplete. The initial arena retains up to 512 validated interface
 records per controller; overflow is partial. Unknown/vendor classes are valid
-unbound observations; external hub descendants remain uninspected. Revisit these
-bounds and hub traversal with concrete descriptor/topology requirements. Storage
+unbound observations. Revisit these bounds with concrete descriptor/topology requirements. Storage
 selection across controllers must be settled separately before class/media work.
 
 All advertised ports receive input/output contexts and an EP0 ring/control buffer
@@ -1327,10 +1326,27 @@ requires the VM ownership work rather than allocator locks. Reintroduce class
 transfers with a concrete consumer and an explicit pre-AP resource policy, rather
 than restoring unused reservations for future work.
 
+USB 2 hub discovery adds a pre-AP descendant pool, initially 32 per controller,
+capped by advertised Slot capacity after reserving possible roots. One owned DMA
+arena avoids multiplying VM range records but retains all reserved backing even
+when no hub is attached; the current 32-entry/4 KiB profile adds 512 KiB per
+controller. Pool allocation failure can fail that controller's preparation.
+Revisit the budget and root reservation policy with actual topology/resource
+requirements, without runtime mapping or allocation outside the VM contract.
+The shared startup deadline can expire on large trees; exhausted branches are
+partial. SuperSpeed hubs and low-speed/high-speed-TT hardware paths remain
+unqualified; QEMU's built-in hub exercises full-speed descendants only. It also
+returns a malformed descriptor at its default eight-port setting, which is
+reported partial rather than receiving an emulator-specific exception.
+Hub descendants are not monitored after publication; idle downstream removal
+retains their slots/backing until reboot. Revisit this with separately scoped
+hotplug/lifetime work. Root removal still retires the retained subtree, and
+active request errors quarantine the controller.
+
 The first implementation bounds each device to one active control request. Early
 errors, deadlines or removal during active work stop the whole controller and
 retain unresolved DMA until reboot. There is no endpoint-local recovery yet.
-The current inventory client reads complete descriptors without configuration requests;
+The inventory client configures supported USB 2 hubs but leaves other classes unbound;
 short packets, active abandonment, early errors, ring wrap and nonzero alternate
 selection follow reviewed source/spec rules but have no synthetic validation.
 Revisit with an actual class-transfer workload in BOT/SCSI work, keeping hardware

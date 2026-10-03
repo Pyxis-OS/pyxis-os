@@ -16,11 +16,11 @@ Each controller shows its PCI address, IDs, inspection state and advertised phys
 root-port count, or `root ports unknown` when that count was not inspected.
 Controller presentation follows boot registry order, which is stable within the
 boot but otherwise unspecified; no address sorting is guaranteed.
-Root devices show their physical port, speed and checked VID/PID,
+Devices show their physical root/downstream port path, speed and checked VID/PID,
 with vendor/product labels from `app://share/hwdata/usb.ids` when available. Checked
 interfaces show their configuration, number, alternate, class/subclass/protocol and
 endpoint count. These descriptors do not imply an active configuration or binding.
-Unidentified connected ports are labeled explicitly. Hubs have uninspected descendants.
+Unidentified connected ports are labeled explicitly. Supported USB 2 hubs expose observed descendants; unsupported or failed branches are partial.
 
 `-n` skips names; `-i FILE` chooses another database. The bounded streaming parser
 reads vendor and one-tab product labels, ignoring nested interface and class sections.
@@ -33,8 +33,8 @@ name database. A database error discards partial names and prints numeric IDs wi
 a diagnostic. Partial inventories print retained records and exit 1. Disabled USB,
 initializing snapshots, query/authority failures, bad usage and output failures exit 1.
 
-This slice covers direct root-port devices. It has no strings or serials, hub
-traversal, rescan or hotplug. Later removal or failure leaves the boot observation
+This slice covers root devices and [USB 2 hub descendants](../devices/usb-hubs.md).
+It has no strings or serials, SuperSpeed hub traversal, rescan or hotplug. Later removal or failure leaves the boot observation
 unchanged. `CONFIG_XHCI=n` remains the default; enable it explicitly to qualify
 hardware. The [controller profile](../devices/usb-xhci.md) still has limits, and the
 ThinkPad native clock prerequisite remains separate.

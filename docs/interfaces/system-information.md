@@ -24,7 +24,7 @@ and zeroed unused bytes.
 | `SYSTEM_INFO_PCI_FUNCTION` | `system_info_pci_function` | One retained PCI function's address and identity |
 | `SYSTEM_INFO_USB` | `system_info_usb` | Boot snapshot state and controller/device/interface counts |
 | `SYSTEM_INFO_USB_CONTROLLER` | `system_info_usb_controller` | PCI identity, inspection state and advertised root-port count |
-| `SYSTEM_INFO_USB_DEVICE` | `system_info_usb_device` | Root-port identity, speed and checked device descriptor fields |
+| `SYSTEM_INFO_USB_DEVICE` | `system_info_usb_device` | Root/parent port identity, speed and checked device descriptor fields |
 | `SYSTEM_INFO_USB_INTERFACE` | `system_info_usb_interface` | Checked configuration/alternate interface classes |
 
 Empty build-revision or CPU-brand strings explicitly mean unavailable fields;
@@ -82,7 +82,7 @@ Otherwise publication uses release/acquire ordering; indexed queries copy only
 immutable final records and need no BSP service request.
 
 `SYSTEM_INFO_USB_COMPLETE` means every discovered USB host controller was inspected
-within the supported profile, and all its boot-present direct root devices and
+within the supported profile, and all its boot-present root devices, supported USB 2 hub descendants and
 advertised configurations were checked. `SYSTEM_INFO_USB_INCOMPLETE` retains
 usable observations when a controller is unsupported/failed, PCI discovery is
 incomplete, descriptors exceed retained budgets or a hub has uninspected descendants.
@@ -96,13 +96,16 @@ records include the PCI identity and inspection state, including unsupported hos
 interfaces. A zero root-port count means unknown/not inspected, not a measured
 zero-port controller. A failed controller can retain a count inspected before failure.
 Device records use a controller index and one-based physical root-port number;
-they are not Linux bus/address identifiers. `IDENTIFIED` distinguishes a checked
+direct roots use `SYSTEM_INFO_USB_NO_PARENT` and zero parent port. Descendants
+name an earlier hub record on the same controller/root port and its one-based
+physical downstream port. These relations supply the full path, independently
+of Linux bus/address identifiers. `IDENTIFIED` distinguishes a checked
 VID/PID from a connected port whose descriptors could not be inspected. Interfaces
 have global device indices and configuration/interface/alternate identities. They
 are descriptive observations, not assertions that a configuration or driver is active.
 
 The snapshot does not update after runtime removal or controller failure. Device
-strings, serials, hub descendants, raw descriptors, endpoint addresses, physical
+strings, serials, raw descriptors, endpoint addresses, physical
 addresses and kernel pointers are absent. READ grants no USB transfer or reset
 access. Names are resolved in [lsusb](../userland/lsusb.md) from packaged data.
 

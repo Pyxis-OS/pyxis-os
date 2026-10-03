@@ -1,6 +1,6 @@
 # USB enumeration and control transfers
 
-Caelum addresses boot-present devices directly attached to every prepared xHCI
+Caelum addresses boot-present root devices and supported USB 2 hub descendants on every prepared xHCI
 controller and publishes an immutable read-only boot snapshot for native
 [lsusb](../userland/lsusb.md). It does not configure a storage transport or expose
 USB block access. [The installation milestone](../wip/usb-installation.md#b-native-read-only-usb-storage)
@@ -13,15 +13,16 @@ transfer-event interpretation. `core.c` owns USB requests, descriptor traversal,
 inventory completeness and immutable observation publication. There is no BOT
 matcher or class-transfer path in the inventory slice. No class is selected
 from a vendor ID.
-All standard classes and opaque vendor classes remain unbound. Their standard
+Classes other than supported hubs remain unbound. Their standard
 descriptor structure is checked without configuring endpoints or interpreting
-class reports. Hubs are listed, but uninspected descendants make inventory partial.
+class reports. [USB 2 hubs](usb-hubs.md) are configured for boot traversal;
+unsupported hubs or uninspected descendants make inventory partial.
 
-`usb_prepare()` allocates retained per-port discovery records, one reusable
+`usb_prepare()` allocates retained root/descendant discovery records, one reusable
 scratch descriptor buffer and a bounded interface-record arena per controller
 before AP startup. xHCI prepares input/output contexts,
 an EP0 ring and control-data storage for every advertised root port at the same
-stage. The runtime worker allocates or maps nothing.
+stage, plus a bounded descendant pool in one retained DMA arena. The runtime worker allocates or maps nothing.
 Resource exhaustion fails preparation or discovery explicitly; it cannot silently
 skip a configuration or connected port while claiming complete observation.
 
@@ -58,8 +59,8 @@ its interface records while retaining checked device identity. The current inter
 arena holds 512 records per controller; exceeding it gives partial inventory. This
 is a resource choice in `settings.h`, not a hardware or database requirement.
 
-There is no automatic SET_CONFIGURATION, SET_INTERFACE, endpoint configuration
-or BOT device selection on this path. The unused matcher, bulk-endpoint setup
+Only supported hubs receive SET_CONFIGURATION and xHCI Slot hub metadata.
+There is no SET_INTERFACE, non-control endpoint binding or BOT device selection. The unused matcher, bulk-endpoint setup
 and bulk-ring allocations were removed. Class transfers belong with their first
 consumer and an explicit resource-preparation policy. Selection across multiple
 controllers needs its own storage contract; observation does not choose a disk.
@@ -71,7 +72,7 @@ host interfaces and failed xHCI preparation remain controller records. Every
 connected startup root port observed by a running controller is retained, including
 unidentified ports when inspection fails. No zero VID/PID is presented as a checked
 identity unless IDENTIFIED is set. Unreadable descriptors, exceeded budgets,
-unsupported speeds and hub descendants make the aggregate observation incomplete.
+unsupported speeds and uninspected hub descendants make the aggregate observation incomplete.
 
 Each controller finishes within its startup deadline. Only after all entries finish
 does the BSP compute global controller/device/interface indices and publish the
