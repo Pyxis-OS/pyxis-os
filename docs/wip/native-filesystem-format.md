@@ -22,11 +22,25 @@ Owner accepted these three choices on 2026-10-03:
    metadata blocks. One transaction is committed and checkpointed at a time:
    required file data becomes durable before commit, then committed metadata is
    copied to its final locations before the journal space is reused. This
-   serializes commits. Journal sizing and large-operation splitting remain open.
+   serializes commits. Journal configuration is recorded below; large-operation
+   splitting remains open.
 
 These supplement the milestone's accepted capability-only authority, block-pointer
 mapping and explicit `fsync`/`sync` durability. They do not accept its proposed
 30-second flush policy, whole-transaction `fsync` semantics or delayed allocation.
+
+### Accepted journal capacity
+
+On 2026-10-03 the owner chose a configurable journal size and **at least 128 MiB
+for the 256 GB target**, replacing the proposed 16 MiB default for that target.
+Use 128 MiB as the starting target value. This reserves about 0.052% of a 256 GB
+disk and provides 32,768 filesystem blocks before control/descriptor overhead.
+The journal holds metadata images, not file contents, and a commit writes only
+its used records. Capacity does not require every transaction to fill the journal.
+
+The installer/formatter chooses the size per pool; this is not a build setting.
+This decision does not settle defaults for small images or authorize journal
+resizing on an existing pool. The recovery and cleanup proposals below remain open.
 
 ## Structures to specify
 
@@ -117,7 +131,8 @@ Proposals only. Each can be changed or deferred independently.
    including read-only mounts; reserve space for finer compatibility rules later.
    Other record types also retain explicit reserved bytes. Checksums detect
    accidental damage, not malicious media, and do not replace bounds checks.
-2. **One reusable journal area, sized at format time (default 16 MiB).** Two
+2. **One reusable journal area, with the accepted target capacity above.** The
+   chosen capacity is stored when the pool is formatted and stays fixed in v1. Two
    alternating, checksummed control blocks record a sequence number and EMPTY or
    COMMITTED state; formatting initializes both. A checksum-valid unknown state
    is rejected, never treated as a torn copy. Descriptors name destination blocks;
@@ -178,5 +193,7 @@ policy into an on-disk format requirement.
 
 Branch: `docs/native-filesystem-format`, based on Pyxis `d9b88e4`. This work changes
 only Pyxis design documents and no dependency revisions. Rounds 1 and 2 are
-accepted; round 3 above awaits the owner. Task 1 remains unchecked. No build, boot or
-filesystem implementation has been attempted; no validation processes are running.
+accepted, as are per-pool installer/formatter configuration and the 128 MiB minimum
+for the 256 GB target. The remaining round 3 proposals await the owner. Task 1
+remains unchecked. No build, boot or filesystem implementation has been attempted;
+no local validation processes are running.
