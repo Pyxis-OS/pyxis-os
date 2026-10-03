@@ -867,7 +867,11 @@ has a 1 MiB/1,024-wrapper limit; pool metadata, the free-inode list and caches a
 separate. Each pool can retain 4 MiB of cached file payload plus entry metadata,
 and a writable pool reserves up to 520 KiB for 128 journal images and encoding
 buffers. These are implementation bounds, not format limits or aggregate memory
-admission. Mount scans the selected volume's inode file and builds its free list;
+admission. The retained allocation bitmap needs one bit per pool block, rounded
+to 4 KiB: 32 KiB for a 1 GiB pool, about 8 MiB for 256 GiB. Mount reads and
+validates it after replay; both mount modes retain it and pressure cannot evict it.
+Allocation and mapping checks use this memory plus current journal overlays.
+Mount scans the selected volume's inode file and builds its free list;
 reclaimed slots retain their inode allocation as a list node until reuse.
 Large inode files can therefore exhaust memory or take too long to mount. Revisit
 compact free-slot storage or an explicit pool budget if representative workloads
@@ -881,6 +885,9 @@ and admission only with measured pressure workloads and BSP ownership intact.
 
 All native reads and writes traverse the BSP worker, including cache hits.
 Metadata lookup remains linear and is not generally cached. The
+data, journal payload and checkpoint paths still wait for single-block transfers.
+Revisit contiguous transfer batching with a concrete latency budget and measured
+consumer workload. The
 [task-3 measurements](development/experiments/native-filesystem-task3/README.md)
 distinguish this scheduling/I/O cost from RAM file calls. Revisit only when an
 actual consumer needs lower latency. Executable capture permits one image of up
@@ -889,8 +896,10 @@ aggregate staging budget and can fail allocation below that per-image limit.
 The userspace root selection remains bounded to 16 entries within existing
 64 KiB startup/capture storage, independently of format volume/name limits.
 
-Actual backing failure, deadline exhaustion, allocation pressure and crash recovery
-retain source-review coverage. No fault injection or physical-media validation
+Uncertain backing failure, allocation pressure and crash recovery retain
+source-review coverage. The [populated-pool review](development/experiments/native-filesystem-task3/populated-pool-review.md)
+reproduced the old allocation timeout and validated the retained-bitmap correction.
+No fault injection or physical-media validation
 is claimed by the native writer's ordinary QEMU workflow.
 
 ## Native filesystem design limits

@@ -1,5 +1,9 @@
 # Native filesystem task-3 measurements
 
+The [populated-pool review](populated-pool-review.md) records the allocation bitmap
+blocker found after the initial measurements, its fix and the matched populated
+case. The historical intervals below retain their original revisions/configuration.
+
 ## Before implementation, 2026-10-03
 
 The kernel is main `132aef1`, with filesystem `810d2af66d`, userspace

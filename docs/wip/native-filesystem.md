@@ -251,6 +251,14 @@ comparison passed. Exact submitted-revision CI is reported with the PR. Runtime
 crash injection and physical-media qualification were not assigned. All task
 validation clients, QEMU and debugger processes have been stopped.
 
+PR review found per-candidate disk bitmap reads that caused writeback timeout on
+a populated 1 GiB pool. The kernel now retains the full bitmap with staged journal
+overlays, scans free words and folds changes only after durable EMPTY. The
+[populated-pool review](../development/experiments/native-filesystem-task3/populated-pool-review.md)
+records the reproduction, ordinary corrected workloads and memory cost. The six
+superseded portable-writer plans and their active references were removed as
+directed by the owner.
+
 ## Later ideas
 
 Not requirements, and not v1. Recorded so they are not designed out:

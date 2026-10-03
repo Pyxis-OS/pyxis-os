@@ -1,0 +1,70 @@
+Submitted commands (output echo disabled):
+1: date > data://t1.txt
+2: sync data://t1.txt
+3: date > data://t2.txt
+4: iobench write data://grown.bin --buffer 4080 --rounds 3 --sync
+5: iobench write data://prepared.bin --prepared --buffer 4080 --rounds 3 --sync
+6: sync data://
+7: exit
+
+Decoded remote output and completions:
+
+REMOTE {"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://grown.bin buffer=4080 rounds=3 warmup=1 fixture=1048576 bytes
+Clock-call loop: 38496 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=194494710 ns (194.495 ms); 5.142 MiB/s
+  file_sync=198852050 ns (198.852 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=204628300 ns (204.628 ms); 4.887 MiB/s
+  file_sync=195487210 ns (195.487 ms)
+sample 3: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=202833290 ns (202.833 ms); 4.930 MiB/s
+  file_sync=197891630 ns (197.892 ms)
+Output retained: data://grown.bin
+Transfer summary: 3 verified samples; elapsed median=202.833 ms range=194.495..204.628 ms; throughput at median elapsed=4.930 MiB/s
+File sync summary: 3 verified samples; elapsed median=197.892 ms range=195.487..198.852 ms
+
+REMOTE {"type": "command_complete", "command": 4, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://prepared.bin buffer=4080 rounds=3 warmup=1 fixture=1048576 bytes
+Clock-call loop: 35450 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=prepared overwrite sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=144108520 ns (144.109 ms); 6.939 MiB/s
+  file_sync=189426450 ns (189.426 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=144187250 ns (144.187 ms); 6.935 MiB/s
+  file_sync=187599710 ns (187.600 ms)
+sample 3: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=149545950 ns (149.546 ms); 6.687 MiB/s
+  file_sync=186519290 ns (186.519 ms)
+Output retained: data://prepared.bin
+Transfer summary: 3 verified samples; elapsed median=144.187 ms range=144.109..149.546 ms; throughput at median elapsed=6.935 MiB/s
+File sync summary: 3 verified samples; elapsed median=187.600 ms range=186.519..189.426 ms
+
+REMOTE {"type": "command_complete", "command": 5, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 6, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 7, "kind": "builtin", "status": 0}
+
+REMOTE {"type": "final", "cause": "shell_exit", "process_reason": 1, "process_reason_name": "exited", "exit_status": 0, "drain": "complete"}

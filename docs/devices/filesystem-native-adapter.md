@@ -66,6 +66,14 @@ mount OBSERVE; requesting mutation bits independently requires mount WRITE.
 
 ## Writeback, recovery and errors
 
+Mount reads and validates the full allocation bitmap after recovery, retaining
+one bit per pool block in BSP-owned VM storage. Mapping checks and allocation
+read memory; allocation skips full 64-bit words and starts at the first free
+block found during mount. Journal bitmap images overlay the checkpointed copy.
+Only checkpoint completion through durable EMPTY folds them into that copy;
+healthy abort drops the overlay, preserving the checkpointed bits. Pressure
+cannot evict the bitmap, and read-only mounts retain it for later writable upgrade.
+
 The worker maintains dirty data and one pool-wide metadata redo transaction.
 File/directory synchronization commits the whole current pool transaction after
 ordered data; mount synchronization covers pools on its configured disk. Durable

@@ -1,0 +1,16 @@
+Submitted commands (output echo disabled):
+1: date > data://t1.txt
+2: sync data://t1.txt
+3: exit
+
+Decoded remote output and completions:
+
+REMOTE {"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+sync: data://t1.txt: Native call failed (status 17)
+shell: sync: Exited with status 1
+
+REMOTE {"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 1}
+
+REMOTE {"type": "command_complete", "command": 3, "kind": "builtin", "status": 0}
+
+REMOTE {"type": "final", "cause": "shell_exit", "process_reason": 1, "process_reason_name": "exited", "exit_status": 0, "drain": "complete"}
