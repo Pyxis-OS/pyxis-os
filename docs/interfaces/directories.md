@@ -36,7 +36,7 @@ content-operation bits, used for non-native grants.
 
 | Field | Meaning and evidence |
 | --- | --- |
-| `type` | `FILESYSTEM_TYPE_PYXIS` |
+| `type` | `FILESYSTEM_TYPE_NPFS` |
 | `flags` | READ_ONLY, plus independent GPT_DEGRADED and filesystem DEGRADED opening flags |
 | `pool_id`, `volume_id` | Opaque 16-byte identities from retained selected metadata |
 | `generation` | Current retained pool journal sequence |

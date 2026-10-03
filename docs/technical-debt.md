@@ -908,7 +908,7 @@ is claimed by the native writer's ordinary QEMU workflow.
 ## Native filesystem design limits
 
 The [native format decisions](wip/native-filesystem-format.md#decision-status)
-now have [implemented codecs and host tools](../fs/docs/native-host-tools.md).
+now have [implemented codecs and host tools](../fs/docs/npfs-host-tools.md).
 Caelum owns the mounted inode/cache/writer state. Accepted limits include 64 volume slots, roughly 513 GiB per-file block-pointer capacity, and linear directory lookup.
 Revisit only when a concrete workload exceeds those bounds or lookup becomes costly;
 reserved bytes and feature flags provide extension points. Volumes can exhaust the

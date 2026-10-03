@@ -187,7 +187,7 @@ boundary leaves open. [Space titles](../userland/init.md#space-titles) are also 
 Keep three choices separate: Pyxis file/directory capability requests, a backend
 operation interface, and the disk format. A FUSE-inspired backend need not force
 Linux FUSE's complete wire ABI, Unix permissions or path semantics on applications.
-The selected [native format](../../fs/docs/native-format.md) has shared freestanding
+The selected [native format](../../fs/docs/npfs-format.md) has shared freestanding
 codecs and host tools; Caelum owns its implemented cache/writer and I/O/allocation
 policy. A future Linux FUSE adapter could consume the same codecs with its own
 runtime state. Host mounting requires a separate assignment and does not require

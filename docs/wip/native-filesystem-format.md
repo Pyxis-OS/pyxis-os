@@ -1,8 +1,8 @@
-# Native filesystem format decisions
+# npfs format decisions
 
 Task 1 proposed the format; task 2 implements its codecs and host tools in the
-filesystem repository. The authoritative [encoding contract](../../fs/docs/native-format.md)
-and [host-tool guide](../../fs/docs/native-host-tools.md) live there. Caelum now
+filesystem repository. The authoritative [encoding contract](../../fs/docs/npfs-format.md)
+and [host-tool guide](../../fs/docs/npfs-host-tools.md) live there. Caelum now
 uses these codecs for the [native pool writer](../devices/filesystem-native-adapter.md);
 its caching and allocation policy belong to the kernel.
 

@@ -49,14 +49,16 @@ pool_type=1a8194a3-8a07-4dff-830e-4cb4ed7aac00
 
 mkdir -p "$staging/source/bin"
 cat > "$staging/source/README.txt" <<'EOF'
-Pyxis USB read-only sample volume
+Pyxis USB npfs sample volume
 
 This usb-test volume contains known text and bin/cat.pxe captured from the matching
 boot archive. Firmware loads the EFI kernel/archive pair; native USB reads
 require the separate kernel USB milestone. This is not a persistent home volume.
+SAFE_TO_WIPE marks this generated volume as disposable for the installer.
 EOF
+: > "$staging/source/SAFE_TO_WIPE"
 cp build/initrd-root/cat.pxe "$staging/source/bin/cat.pxe"
-build/fs-tools/mkpyxisfs-native --image "$staging/pool.img" \
+build/fs-tools/mkfs.npfs --image "$staging/pool.img" \
   --size "$((pool_mib * mib_bytes))" --journal "$USB_POOL_JOURNAL" \
   --volume usb-test --source "$staging/source"
 

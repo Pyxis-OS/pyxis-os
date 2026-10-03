@@ -124,7 +124,7 @@ struct directory_enumerate_reply {
   uint64_t name_size; /* Includes NUL. Zero for END/CHANGED. */
 };
 
-#define FILESYSTEM_TYPE_PYXIS UINT64_C(1)
+#define FILESYSTEM_TYPE_NPFS UINT64_C(1)
 #define FILESYSTEM_FLAG_READ_ONLY (UINT64_C(1) << 0)
 #define FILESYSTEM_FLAG_GPT_DEGRADED (UINT64_C(1) << 1)
 #define FILESYSTEM_FLAG_DEGRADED (UINT64_C(1) << 2)

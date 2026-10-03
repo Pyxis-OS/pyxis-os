@@ -112,7 +112,7 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
   struct process *child;
   uintptr_t entry;
   bool external = capture->image->backing == FILE_HOST ||
-      capture->image->backing == FILE_NATIVE;
+      capture->image->backing == FILE_NPFS;
   const void *bytes = external ? capture->external_image : capture->image->data;
   size_t size = external ? capture->external_image_size : capture->image->size;
   enum call_status status = execution_group_check(execution_group, parent->space, cpu_index);

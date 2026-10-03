@@ -37,7 +37,7 @@ make menuconfig
 The options are under **Pyxis Configuration → Caelum**.
 
 **Native filesystem background flush interval (seconds)** sets
-`CONFIG_NATIVEFS_FLUSH_SECONDS`, default 30. The worker flushes all dirty pool
+`CONFIG_NPFS_FLUSH_SECONDS`, default 30. The worker flushes all dirty pool
 data at each interval, without per-page ages. This is nominal: I/O can take longer
 under load, and only explicit file/directory/mount sync guarantees durability.
 The positive interval fits the scheduler's 32-bit millisecond deadline input.

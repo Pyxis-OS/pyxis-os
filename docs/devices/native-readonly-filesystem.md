@@ -1,12 +1,12 @@
-# Native filesystem mounts
+# npfs mounts
 
 Trusted init selects a GPT partition and native volume, then delegates ordinary
-file and directory capabilities. Caelum uses the native format-only library and
+file and directory capabilities. Caelum uses the npfs format-only library and
 its kernel inode/cache/writer engine. The old principal-based format is not the
 mounted format. Default boot requires no disk or mount configuration.
 
-The authoritative [encoding](../../fs/docs/native-format.md) and
-[host tools](../../fs/docs/native-host-tools.md) live in pyxis-fs. The
+The authoritative [encoding](../../fs/docs/npfs-format.md) and
+[host tools](../../fs/docs/npfs-host-tools.md) live in pyxis-fs. The
 [kernel adapter](filesystem-native-adapter.md),
 [directory interface](../interfaces/directories.md) and
 [mutation contract](../interfaces/filesystem-mutations.md) describe kernel use.

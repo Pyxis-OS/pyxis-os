@@ -1,15 +1,15 @@
 # Native filesystem format and host tools
 
-The pinned filesystem repository supplies native format-only codecs and Linux
+The pinned filesystem repository supplies npfs format-only codecs and Linux
 formatter/checker/inspector tools. Caelum owns the running inode/cache/writer engine
 through the [kernel adapter](filesystem-native-adapter.md). The former persistent
 principal/COW format and its shared traversal core are superseded for mounting.
 
-The authoritative [encoding contract](../../fs/docs/native-format.md) and
-[host-tool guide](../../fs/docs/native-host-tools.md) define record offsets,
+The authoritative [encoding contract](../../fs/docs/npfs-format.md) and
+[host-tool guide](../../fs/docs/npfs-host-tools.md) define record offsets,
 compatibility, recovery and commands. Initialize `fs` and run `make -j16 fs-tools`
-to build `libpyxis-fs-format.a`, `mkpyxisfs-native`, `pyxisfs-native-fsck` and
-`pyxisfs-native-inspect` in `build/fs-tools/`. No compiler rebuild is required.
+to build `libnpfs-format.a`, `mkfs.npfs`, `fsck.npfs` and
+`npfs-inspect` in `build/fs-tools/`. No compiler rebuild is required.
 
 ## Repository and platform boundary
 

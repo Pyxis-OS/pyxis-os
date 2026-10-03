@@ -2,12 +2,12 @@ mainmenu "Pyxis Configuration"
 
 menu "Caelum"
 
-config NATIVEFS_FLUSH_SECONDS
-  int "Native filesystem background flush interval (seconds)"
+config NPFS_FLUSH_SECONDS
+  int "npfs background flush interval (seconds)"
   range 1 4294967
   default 30
   help
-    Flush all dirty native filesystem data periodically. This interval is
+    Flush all dirty npfs data periodically. This interval is
     nominal: a flush can take longer under load. File, directory and mount
     synchronization operations provide the explicit durability guarantees.
 

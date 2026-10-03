@@ -17,7 +17,7 @@ git submodule update --init fs userspace ports third_party/lwip
 make -j16 usb-image
 ```
 
-The sample pool uses the [native format](../../fs/docs/native-format.md), with
+The sample pool uses the [npfs format](../../fs/docs/npfs-format.md), with
 fresh pool, volume, disk and partition IDs on each build. It has no on-disk
 principal. Knowing an ID grants no authority. The formatter chooses its journal
 from the image builder's `USB_POOL_JOURNAL` configuration; the default is 8 MiB
@@ -27,7 +27,7 @@ for this small development pool. Choose at least 128 MiB for a 256 GB pool.
 | --- | --- | --- |
 | `USB_IMAGE_MIB` | `1024` | Total raw disk size in MiB |
 | `USB_ESP_MIB` | `256` | FAT32 EFI System Partition size in MiB |
-| `USB_POOL_JOURNAL` | `8MiB` | Journal size passed to the native formatter |
+| `USB_POOL_JOURNAL` | `8MiB` | Journal size passed to mkfs.npfs |
 | `USB_BOOT_IMAGE` | `build/pyxis-usb.img` | Existing raw file used by the USB launcher |
 
 Image sizes are positive decimal MiB counts without leading zeros. They are
@@ -48,13 +48,16 @@ space after the ESP. Thus its size is `USB_IMAGE_MIB - USB_ESP_MIB - 2` MiB.
 | GPT entry | Type | Contents |
 | --- | --- | --- |
 | 1, `Pyxis EFI` | Standard EFI System Partition | `EFI/BOOT/BOOTX64.EFI`, `boot/caelum.elf`, `boot/initrd.cpio`, `boot/limine/limine.conf` |
-| 2, `Pyxis pool` | Pyxis pool, `1a8194a3-8a07-4dff-830e-4cb4ed7aac00` | One `usb-test` volume containing `README.txt` and `bin/cat.pxe` captured from the matching archive |
+| 2, `Pyxis pool` | Pyxis pool, `1a8194a3-8a07-4dff-830e-4cb4ed7aac00` | One `usb-test` npfs volume containing `README.txt`, `SAFE_TO_WIPE` and `bin/cat.pxe` captured from the matching archive |
 
 The pool type is an image metadata convention introduced by this builder.
 [GPT discovery](../devices/gpt.md) preserves type GUIDs without inferring
 authority; [native mounts](../devices/native-readonly-filesystem.md) still select
 an explicit disk identity, partition entry and volume. The sample is intended
-for later read-only validation, not a persistent home volume.
+for later read-only validation, not a persistent home volume. `SAFE_TO_WIPE` is
+a regular empty file in the volume root, marking every volume this builder creates
+as disposable for the installer. Removing the marker makes the volume final;
+see the [installer consent rules](../wip/native-filesystem.md#target-consent).
 
 `usb-image` reuses ordinary kernel, SDK, ports, archive and Limine configuration
 assembly, including its interface checks and `INIT` selections. Explicit

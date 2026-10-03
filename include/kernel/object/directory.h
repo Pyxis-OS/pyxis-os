@@ -5,13 +5,13 @@
 #include <kernel/object/object.h>
 
 struct hostfs_node;
-struct nativefs_node;
+struct npfs_node;
 
 enum directory_backing {
   DIRECTORY_INITRD,
   DIRECTORY_RAM,
   DIRECTORY_HOST,
-  DIRECTORY_NATIVE,
+  DIRECTORY_NPFS,
 };
 
 struct directory_entry {
@@ -31,7 +31,7 @@ struct directory_object {
   struct kernel_object object;
   enum directory_backing backing;
   struct hostfs_node *host; /* Owned by the deferred host worker destructor. */
-  struct nativefs_node *native; /* Worker owns this wrapper and its core view. */
+  struct npfs_node *npfs; /* Worker owns this wrapper and its core view. */
   atomic_bool locked;
   bool detached;
   struct directory_entry *first, *last;
@@ -46,7 +46,7 @@ struct directory_object *directory_create(enum directory_backing backing);
 
 /* BSP worker, IF=0. Initialize embedded storage without allocating. Final
  * destruction retires the node; it does not free the directory separately. */
-void directory_init_native(struct directory_object *directory, struct nativefs_node *node);
+void directory_init_npfs(struct directory_object *directory, struct npfs_node *node);
 
 /* Current user task, IF=0, with a live reference and stable private mappings.
  * Native operations forward actual rights and copied names to the worker;

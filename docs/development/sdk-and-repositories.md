@@ -24,11 +24,11 @@ starting work. Local uncommitted source edits are usable for development;
 the exported SDK manifest records dirty userland inputs.
 
 Kernel source builds require the pinned native filesystem format library.
-`make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs-format.a`,
-`mkpyxisfs-native`, `pyxisfs-native-fsck` and `pyxisfs-native-inspect`.
+`make -j16 fs-tools` builds `build/fs-tools/libnpfs-format.a`,
+`mkfs.npfs`, `fsck.npfs` and `npfs-inspect`.
 Caelum owns the native cache and writer; the shared library owns codecs only.
 SDK builds do not require this submodule. See the
-[native host-tool guide](../../fs/docs/native-host-tools.md) for source import,
+[native host-tool guide](../../fs/docs/npfs-host-tools.md) for source import,
 inspection, extraction and structural checking.
 
 The relative URL in `.gitmodules` resolves beside the Pyxis repository, using
@@ -100,8 +100,8 @@ writer/tools and Unity tests were retired when Caelum moved to the native format
 Its obsolete documents and measurements were also removed; Git retains their
 history. They do not describe current interfaces or assign further writer work.
 
-The authoritative [format](../../fs/docs/native-format.md) and
-[host tools](../../fs/docs/native-host-tools.md) describe the codecs, source-importing
+The authoritative [format](../../fs/docs/npfs-format.md) and
+[host tools](../../fs/docs/npfs-host-tools.md) describe the codecs, source-importing
 formatter, journal replay and structural checker. Pyxis owns capabilities,
 namespace integration, the cache, writeback and kernel recovery. The library has
 no allocator, I/O or callback tables; the host and Caelum provide its two memory

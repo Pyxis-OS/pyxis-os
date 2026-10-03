@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MPL-2.0 */
-#include "native_store.h"
+#include "npfs_store.h"
 
 #include <arch/cpu.h>
 #include <arch/smp.h>
@@ -18,7 +18,7 @@
 #define STORE_CLEANUP_MAPPINGS 64u
 #define STORE_BITMAP_READ_BLOCKS 128u
 
-_Static_assert(STORE_IMAGES_MAX <= PNF_DESCRIPTORS_PER_BLOCK,
+_Static_assert(STORE_IMAGES_MAX <= NPFS_DESCRIPTORS_PER_BLOCK,
   "native journal writes one descriptor block");
 
 struct store_free_slot {
@@ -27,19 +27,19 @@ struct store_free_slot {
   bool heap_owned;
 };
 
-struct native_store_volume {
-  struct native_store_volume *next;
-  struct native_store_pool *pool;
-  struct pnf_volume record;
+struct npfs_store_volume {
+  struct npfs_store_volume *next;
+  struct npfs_store_pool *pool;
+  struct npfs_volume record;
   unsigned slot;
   struct store_free_slot *free_slots;
-  struct native_store_inode *inodes;
+  struct npfs_store_inode *inodes;
 };
 
-struct native_store_inode {
-  struct native_store_inode *next;
-  struct native_store_volume *volume;
-  struct pnf_inode record, durable;
+struct npfs_store_inode {
+  struct npfs_store_inode *next;
+  struct npfs_store_volume *volume;
+  struct npfs_inode record, durable;
   uint64_t number, generation, durable_size;
   size_t references;
   bool size_dirty;
@@ -47,10 +47,10 @@ struct native_store_inode {
 };
 
 struct store_cache_entry {
-  struct native_store_inode *inode;
+  struct npfs_store_inode *inode;
   uint64_t logical;
   bool dirty;
-  uint8_t bytes[PNF_BLOCK_SIZE];
+  uint8_t bytes[NPFS_BLOCK_SIZE];
 };
 
 struct store_cache_chunk {
@@ -62,18 +62,18 @@ struct store_image {
   uint32_t kind;
 };
 
-struct native_store_pool {
-  struct native_store_pool *next;
+struct npfs_store_pool {
+  struct npfs_store_pool *next;
   struct gpt_partition partition;
   struct block_info device;
-  struct pnf_header header;
-  struct pnf_control control;
+  struct npfs_header header;
+  struct npfs_control control;
   unsigned control_slot;
   bool writable, degraded, failed;
   enum call_status writeback_error;
   uint64_t free_blocks, next_free;
-  struct pnf_volume catalog[PNF_VOLUME_COUNT];
-  struct native_store_volume *volumes;
+  struct npfs_volume catalog[NPFS_VOLUME_COUNT];
+  struct npfs_store_volume *volumes;
   struct store_cache_chunk *cache[STORE_CACHE_CHUNKS];
   struct store_image images[STORE_IMAGES_MAX];
   uint32_t image_count, image_capacity;
@@ -84,23 +84,23 @@ struct native_store_pool {
   uintptr_t bitmap;
   size_t bitmap_bytes;
   bool bitmap_loaded;
-  uint8_t io[2][PNF_BLOCK_SIZE];
+  uint8_t io[2][NPFS_BLOCK_SIZE];
 };
 
-extern void nativefs_require_worker(void);
+extern void npfs_require_worker(void);
 
-static struct native_store_pool *opened_pools;
+static struct npfs_store_pool *opened_pools;
 static uint64_t next_generation;
 
-static enum call_status checkpoint(struct native_store_context *, struct native_store_pool *);
-static enum call_status flush_files(struct native_store_context *, struct native_store_pool *);
-static enum call_status cleanup_one(struct native_store_context *, struct native_store_volume *);
-static enum call_status zero_growth_tail(struct native_store_context *, struct native_store_inode *);
-static void discard_idle_inode(struct native_store_inode *, bool);
+static enum call_status checkpoint(struct npfs_store_context *, struct npfs_store_pool *);
+static enum call_status flush_files(struct npfs_store_context *, struct npfs_store_pool *);
+static enum call_status cleanup_one(struct npfs_store_context *, struct npfs_store_volume *);
+static enum call_status zero_growth_tail(struct npfs_store_context *, struct npfs_store_inode *);
+static void discard_idle_inode(struct npfs_store_inode *, bool);
 
 static void require_owner(void)
 {
-  nativefs_require_worker();
+  npfs_require_worker();
 }
 
 static void *store_allocate(size_t bytes)
@@ -139,30 +139,30 @@ static void store_vm_free(uintptr_t address, size_t bytes)
   cpu_restore_interrupts(flags);
 }
 
-static enum call_status format_failure(struct native_store_context *context, enum pnf_status status)
+static enum call_status format_failure(struct npfs_store_context *context, enum npfs_status status)
 {
-  if (context->format_error == PNF_OK) {
+  if (context->format_error == NPFS_OK) {
     context->format_error = status;
   }
   switch (status) {
-    case PNF_OK: return CALL_OK;
-    case PNF_INVALID: return CALL_BAD_REQUEST;
-    case PNF_NOT_FOUND: return CALL_NOT_FOUND;
-    case PNF_EXISTS: return CALL_ALREADY_EXISTS;
-    case PNF_NO_MEMORY: return CALL_NO_MEMORY;
-    case PNF_NO_SPACE: return CALL_NO_SPACE;
-    case PNF_UNSUPPORTED: return CALL_UNAVAILABLE;
-    case PNF_RECOVERY_REQUIRED: return CALL_READ_ONLY;
+    case NPFS_OK: return CALL_OK;
+    case NPFS_INVALID: return CALL_BAD_REQUEST;
+    case NPFS_NOT_FOUND: return CALL_NOT_FOUND;
+    case NPFS_EXISTS: return CALL_ALREADY_EXISTS;
+    case NPFS_NO_MEMORY: return CALL_NO_MEMORY;
+    case NPFS_NO_SPACE: return CALL_NO_SPACE;
+    case NPFS_UNSUPPORTED: return CALL_UNAVAILABLE;
+    case NPFS_RECOVERY_REQUIRED: return CALL_READ_ONLY;
     default: return CALL_IO;
   }
 }
 
-static enum call_status corrupt(struct native_store_context *context)
+static enum call_status corrupt(struct npfs_store_context *context)
 {
-  return format_failure(context, PNF_CORRUPT);
+  return format_failure(context, NPFS_CORRUPT);
 }
 
-static enum call_status backing_failure(struct native_store_context *context, enum block_result result)
+static enum call_status backing_failure(struct npfs_store_context *context, enum block_result result)
 {
   if (context->backing_error == BLOCK_OK) {
     context->backing_error = result;
@@ -170,11 +170,11 @@ static enum call_status backing_failure(struct native_store_context *context, en
   return result == BLOCK_TIMED_OUT ? CALL_TIMED_OUT : CALL_IO;
 }
 
-static enum call_status transport(struct native_store_context *context, struct native_store_pool *pool,
+static enum call_status transport(struct npfs_store_context *context, struct npfs_store_pool *pool,
   enum block_operation operation, uint64_t first, uint32_t count, void *bytes)
 {
   require_owner();
-  uint64_t ratio = PNF_BLOCK_SIZE / pool->device.block_size;
+  uint64_t ratio = NPFS_BLOCK_SIZE / pool->device.block_size;
   if (operation != BLOCK_FLUSH && (!count || first >= pool->header.pool_blocks ||
     count > pool->header.pool_blocks - first)) {
     return corrupt(context);
@@ -236,12 +236,12 @@ static enum call_status transport(struct native_store_context *context, struct n
   return CALL_OK;
 }
 
-static uint8_t *image_bytes(struct native_store_pool *pool, unsigned index)
+static uint8_t *image_bytes(struct npfs_store_pool *pool, unsigned index)
 {
-  return (uint8_t *)pool->scratch + (size_t)index * PNF_BLOCK_SIZE;
+  return (uint8_t *)pool->scratch + (size_t)index * NPFS_BLOCK_SIZE;
 }
 
-static const uint8_t *bitmap_page(struct native_store_pool *pool, uint64_t page)
+static const uint8_t *bitmap_page(struct npfs_store_pool *pool, uint64_t page)
 {
   KASSERT(pool->bitmap_loaded && page < pool->header.bitmap_blocks);
   uint64_t home = pool->header.bitmap_start + page;
@@ -250,28 +250,28 @@ static const uint8_t *bitmap_page(struct native_store_pool *pool, uint64_t page)
       return image_bytes(pool, i);
     }
   }
-  return (const uint8_t *)pool->bitmap + (size_t)page * PNF_BLOCK_SIZE;
+  return (const uint8_t *)pool->bitmap + (size_t)page * NPFS_BLOCK_SIZE;
 }
 
-static enum call_status read_block(struct native_store_context *context, struct native_store_pool *pool,
+static enum call_status read_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
   uint64_t home, void *bytes)
 {
   for (unsigned i = 0; i < pool->image_count; i++) {
     if (pool->images[i].home == home) {
-      memcpy(bytes, image_bytes(pool, i), PNF_BLOCK_SIZE);
+      memcpy(bytes, image_bytes(pool, i), NPFS_BLOCK_SIZE);
       return CALL_OK;
     }
   }
   if (pool->bitmap_loaded && home >= pool->header.bitmap_start &&
     home - pool->header.bitmap_start < pool->header.bitmap_blocks) {
     memcpy(bytes, (const uint8_t *)pool->bitmap +
-      (size_t)(home - pool->header.bitmap_start) * PNF_BLOCK_SIZE, PNF_BLOCK_SIZE);
+      (size_t)(home - pool->header.bitmap_start) * NPFS_BLOCK_SIZE, NPFS_BLOCK_SIZE);
     return CALL_OK;
   }
   return transport(context, pool, BLOCK_READ, home, 1, bytes);
 }
 
-static enum call_status edit_block(struct native_store_context *context, struct native_store_pool *pool,
+static enum call_status edit_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
   uint64_t home, uint32_t kind, bool fresh, uint8_t **out)
 {
   for (unsigned i = 0; i < pool->image_count; i++) {
@@ -290,7 +290,7 @@ static enum call_status edit_block(struct native_store_context *context, struct 
   uint8_t *bytes = image_bytes(pool, index);
   enum call_status status = CALL_OK;
   if (fresh) {
-    memset(bytes, 0, PNF_BLOCK_SIZE);
+    memset(bytes, 0, NPFS_BLOCK_SIZE);
   }
   else {
     status = read_block(context, pool, home, bytes);
@@ -320,22 +320,22 @@ static void bit_set(uint8_t *bytes, uint64_t bit, bool value)
   }
 }
 
-static enum call_status allocated_block(struct native_store_context *context, struct native_store_pool *pool,
+static enum call_status allocated_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
   uint64_t block)
 {
-  if (!pnf_data_block_valid(&pool->header, block)) {
+  if (!npfs_data_block_valid(&pool->header, block)) {
     return corrupt(context);
   }
-  const uint8_t *bytes = bitmap_page(pool, block / PNF_BITMAP_BITS);
-  return bit_get(bytes, block % PNF_BITMAP_BITS) ? CALL_OK : corrupt(context);
+  const uint8_t *bytes = bitmap_page(pool, block / NPFS_BITMAP_BITS);
+  return bit_get(bytes, block % NPFS_BITMAP_BITS) ? CALL_OK : corrupt(context);
 }
 
-static enum call_status map_read(struct native_store_context *context, struct native_store_pool *pool,
-  const uint64_t pointers[PNF_POINTER_COUNT], uint64_t logical, uint64_t *physical)
+static enum call_status map_read(struct npfs_store_context *context, struct npfs_store_pool *pool,
+  const uint64_t pointers[NPFS_POINTER_COUNT], uint64_t logical, uint64_t *physical)
 {
-  struct pnf_map_path path;
-  enum pnf_status result = pnf_map_path(logical, &path);
-  if (result != PNF_OK) {
+  struct npfs_map_path path;
+  enum npfs_status result = npfs_map_path(logical, &path);
+  if (result != NPFS_OK) {
     return format_failure(context, result);
   }
   uint64_t block = pointers[path.slot];
@@ -348,7 +348,7 @@ static enum call_status map_read(struct native_store_context *context, struct na
     if (status != CALL_OK) {
       return status;
     }
-    block = pnf_get_u64(pool->io[0] + path.index[level] * 8);
+    block = npfs_get_u64(pool->io[0] + path.index[level] * 8);
   }
   if (block) {
     enum call_status status = allocated_block(context, pool, block);
@@ -360,19 +360,19 @@ static enum call_status map_read(struct native_store_context *context, struct na
   return CALL_OK;
 }
 
-static enum call_status bitmap_change(struct native_store_context *context, struct native_store_pool *pool,
+static enum call_status bitmap_change(struct npfs_store_context *context, struct npfs_store_pool *pool,
   uint64_t block, bool allocated)
 {
-  if (!pnf_data_block_valid(&pool->header, block)) {
+  if (!npfs_data_block_valid(&pool->header, block)) {
     return corrupt(context);
   }
   uint8_t *bytes;
   enum call_status status = edit_block(context, pool,
-    pool->header.bitmap_start + block / PNF_BITMAP_BITS, PNF_METADATA_BITMAP, false, &bytes);
+    pool->header.bitmap_start + block / NPFS_BITMAP_BITS, NPFS_METADATA_BITMAP, false, &bytes);
   if (status != CALL_OK) {
     return status;
   }
-  uint64_t bit = block % PNF_BITMAP_BITS;
+  uint64_t bit = block % NPFS_BITMAP_BITS;
   if (bit_get(bytes, bit) == allocated) {
     return corrupt(context);
   }
@@ -389,7 +389,7 @@ static enum call_status bitmap_change(struct native_store_context *context, stru
   return CALL_OK;
 }
 
-static enum call_status allocate_block(struct native_store_context *context, struct native_store_pool *pool,
+static enum call_status allocate_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
   uint64_t *physical)
 {
   /* Bitmap overlays may expose frees that are not yet safe to reuse. */
@@ -405,9 +405,9 @@ static enum call_status allocate_block(struct native_store_context *context, str
       if (task_deadline_expired(context->deadline)) {
         return backing_failure(context, BLOCK_TIMED_OUT);
       }
-      uint64_t page = block / PNF_BITMAP_BITS;
-      uint64_t page_base = page * PNF_BITMAP_BITS;
-      uint64_t end = page_base + PNF_BITMAP_BITS;
+      uint64_t page = block / NPFS_BITMAP_BITS;
+      uint64_t page_base = page * NPFS_BITMAP_BITS;
+      uint64_t end = page_base + NPFS_BITMAP_BITS;
       if (end > ends[range]) {
         end = ends[range];
       }
@@ -415,7 +415,7 @@ static enum call_status allocate_block(struct native_store_context *context, str
       while (block < end) {
         unsigned bit = (unsigned)(block % 64);
         uint64_t word_base = block - bit;
-        uint64_t available = ~pnf_get_u64(bytes + (size_t)(word_base - page_base) / 8);
+        uint64_t available = ~npfs_get_u64(bytes + (size_t)(word_base - page_base) / 8);
         available &= UINT64_MAX << bit;
         unsigned count = end - word_base < 64 ? (unsigned)(end - word_base) : 64;
         if (count < 64) {
@@ -441,12 +441,12 @@ static enum call_status allocate_block(struct native_store_context *context, str
   return CALL_NO_SPACE;
 }
 
-static enum call_status map_ensure(struct native_store_context *context, struct native_store_pool *pool,
-  uint64_t pointers[PNF_POINTER_COUNT], uint64_t logical, uint32_t kind,
+static enum call_status map_ensure(struct npfs_store_context *context, struct npfs_store_pool *pool,
+  uint64_t pointers[NPFS_POINTER_COUNT], uint64_t logical, uint32_t kind,
   uint64_t *physical)
 {
-  struct pnf_map_path path;
-  if (pnf_map_path(logical, &path) != PNF_OK) {
+  struct npfs_map_path path;
+  if (npfs_map_path(logical, &path) != NPFS_OK) {
     return CALL_FILE_TOO_LARGE;
   }
   uint64_t *root = &pointers[path.slot];
@@ -460,7 +460,7 @@ static enum call_status map_ensure(struct native_store_context *context, struct 
         return status;
       }
       if (parent) {
-        pnf_put_u64(parent + parent_offset, block);
+        npfs_put_u64(parent + parent_offset, block);
       }
       else {
         *root = block;
@@ -468,7 +468,7 @@ static enum call_status map_ensure(struct native_store_context *context, struct 
       if (level < path.depth || kind != 0) {
         uint8_t *fresh;
         status = edit_block(context, pool, block,
-          level < path.depth ? PNF_METADATA_INDIRECT : kind, true, &fresh);
+          level < path.depth ? NPFS_METADATA_INDIRECT : kind, true, &fresh);
         if (status != CALL_OK) {
           return status;
         }
@@ -485,38 +485,38 @@ static enum call_status map_ensure(struct native_store_context *context, struct 
     if (status != CALL_OK) {
       return status;
     }
-    status = edit_block(context, pool, block, PNF_METADATA_INDIRECT, false, &parent);
+    status = edit_block(context, pool, block, NPFS_METADATA_INDIRECT, false, &parent);
     if (status != CALL_OK) {
       return status;
     }
     parent_offset = path.index[level] * 8;
-    block = pnf_get_u64(parent + parent_offset);
+    block = npfs_get_u64(parent + parent_offset);
   }
   *physical = block;
   return CALL_OK;
 }
 
-static enum call_status stage_volume(struct native_store_context *context, struct native_store_volume *volume)
+static enum call_status stage_volume(struct npfs_store_context *context, struct npfs_store_volume *volume)
 {
   uint8_t *bytes;
   enum call_status status = edit_block(context, volume->pool,
-    volume->pool->header.volume_start + volume->slot / 8, PNF_METADATA_VOLUMES, false, &bytes);
+    volume->pool->header.volume_start + volume->slot / 8, NPFS_METADATA_VOLUMES, false, &bytes);
   if (status != CALL_OK) {
     return status;
   }
-  return format_failure(context, pnf_volume_encode(&volume->pool->header, &volume->record,
-    bytes + (volume->slot % 8) * PNF_VOLUME_SIZE));
+  return format_failure(context, npfs_volume_encode(&volume->pool->header, &volume->record,
+    bytes + (volume->slot % 8) * NPFS_VOLUME_SIZE));
 }
 
-static enum call_status stage_inode_record(struct native_store_context *context, struct native_store_inode *inode,
-  const struct pnf_inode *record)
+static enum call_status stage_inode_record(struct npfs_store_context *context, struct npfs_store_inode *inode,
+  const struct npfs_inode *record)
 {
-  struct native_store_volume *volume = inode->volume;
-  struct native_store_pool *pool = volume->pool;
-  uint64_t offset = inode->number * PNF_INODE_SIZE;
+  struct npfs_store_volume *volume = inode->volume;
+  struct npfs_store_pool *pool = volume->pool;
+  uint64_t offset = inode->number * NPFS_INODE_SIZE;
   uint64_t block;
   enum call_status status = map_read(context, pool, volume->record.pointers,
-    offset / PNF_BLOCK_SIZE, &block);
+    offset / NPFS_BLOCK_SIZE, &block);
   if (status != CALL_OK) {
     return status;
   }
@@ -524,38 +524,38 @@ static enum call_status stage_inode_record(struct native_store_context *context,
     return corrupt(context);
   }
   uint8_t *bytes;
-  status = edit_block(context, pool, block, PNF_METADATA_INODES, false, &bytes);
+  status = edit_block(context, pool, block, NPFS_METADATA_INODES, false, &bytes);
   if (status != CALL_OK) {
     return status;
   }
-  return format_failure(context, pnf_inode_encode(&pool->header, record,
-    bytes + offset % PNF_BLOCK_SIZE));
+  return format_failure(context, npfs_inode_encode(&pool->header, record,
+    bytes + offset % NPFS_BLOCK_SIZE));
 }
 
-static enum call_status stage_inode(struct native_store_context *context, struct native_store_inode *inode)
+static enum call_status stage_inode(struct npfs_store_context *context, struct npfs_store_inode *inode)
 {
   return stage_inode_record(context, inode, &inode->record);
 }
 
-static void touch_inode(struct native_store_context *context, struct pnf_inode *inode, bool created)
+static void touch_inode(struct npfs_store_context *context, struct npfs_inode *inode, bool created)
 {
-  inode->flags &= ~PNF_TIME_MODIFIED_VALID;
+  inode->flags &= ~NPFS_TIME_MODIFIED_VALID;
   inode->modified_ns = 0;
   if (context->time_valid) {
-    inode->flags |= PNF_TIME_MODIFIED_VALID;
+    inode->flags |= NPFS_TIME_MODIFIED_VALID;
     inode->modified_ns = context->time_ns;
   }
   if (created) {
-    inode->flags &= ~PNF_TIME_CREATED_VALID;
+    inode->flags &= ~NPFS_TIME_CREATED_VALID;
     inode->created_ns = 0;
     if (context->time_valid) {
-      inode->flags |= PNF_TIME_CREATED_VALID;
+      inode->flags |= NPFS_TIME_CREATED_VALID;
       inode->created_ns = context->time_ns;
     }
   }
 }
 
-static enum call_status writable(struct native_store_pool *pool)
+static enum call_status writable(struct npfs_store_pool *pool)
 {
   if (pool->failed) {
     return pool->writeback_error;
@@ -563,7 +563,7 @@ static enum call_status writable(struct native_store_pool *pool)
   return pool->writable ? CALL_OK : CALL_READ_ONLY;
 }
 
-static enum call_status latch_failure(struct native_store_pool *pool, enum call_status status)
+static enum call_status latch_failure(struct npfs_store_pool *pool, enum call_status status)
 {
   /* A terminal failure supersedes a retained recoverable error. */
   if (!pool->failed) {
@@ -573,7 +573,7 @@ static enum call_status latch_failure(struct native_store_pool *pool, enum call_
   return status;
 }
 
-static enum call_status commit(struct native_store_context *context, struct native_store_pool *pool)
+static enum call_status commit(struct npfs_store_context *context, struct npfs_store_pool *pool)
 {
   if (!pool->image_count) {
     return CALL_OK;
@@ -581,29 +581,29 @@ static enum call_status commit(struct native_store_context *context, struct nati
   if (pool->control.sequence > UINT64_MAX - 2) {
     return CALL_LIMIT;
   }
-  struct pnf_control control = pool->control;
+  struct npfs_control control = pool->control;
   control.sequence++;
-  control.state = PNF_JOURNAL_COMMITTED;
+  control.state = NPFS_JOURNAL_COMMITTED;
   control.image_count = pool->image_count;
-  control.descriptor_blocks = (pool->image_count + PNF_DESCRIPTORS_PER_BLOCK - 1) /
-  PNF_DESCRIPTORS_PER_BLOCK;
+  control.descriptor_blocks = (pool->image_count + NPFS_DESCRIPTORS_PER_BLOCK - 1) /
+  NPFS_DESCRIPTORS_PER_BLOCK;
   uint8_t *descriptor_bytes = image_bytes(pool, pool->image_capacity);
-  memset(descriptor_bytes, 0, PNF_BLOCK_SIZE);
+  memset(descriptor_bytes, 0, NPFS_BLOCK_SIZE);
   for (unsigned i = 0; i < pool->image_count; i++) {
-    struct pnf_descriptor descriptor = { .home = pool->images[i].home,
+    struct npfs_descriptor descriptor = { .home = pool->images[i].home,
       .kind = pool->images[i].kind };
-    enum pnf_status result = pnf_descriptor_encode(&pool->header, &descriptor,
-      descriptor_bytes + i * PNF_DESCRIPTOR_SIZE);
-    if (result != PNF_OK) {
+    enum npfs_status result = npfs_descriptor_encode(&pool->header, &descriptor,
+      descriptor_bytes + i * NPFS_DESCRIPTOR_SIZE);
+    if (result != NPFS_OK) {
       return format_failure(context, result);
     }
   }
-  uint32_t crc = pnf_payload_begin(&control);
-  crc = pnf_crc_update(crc, descriptor_bytes, PNF_BLOCK_SIZE);
+  uint32_t crc = npfs_payload_begin(&control);
+  crc = npfs_crc_update(crc, descriptor_bytes, NPFS_BLOCK_SIZE);
   for (unsigned i = 0; i < pool->image_count; i++) {
-    crc = pnf_crc_update(crc, image_bytes(pool, i), PNF_BLOCK_SIZE);
+    crc = npfs_crc_update(crc, image_bytes(pool, i), NPFS_BLOCK_SIZE);
   }
-  control.payload_crc = pnf_crc_finish(crc);
+  control.payload_crc = npfs_crc_finish(crc);
   enum call_status status = transport(context, pool, BLOCK_WRITE,
     pool->header.journal_start + 2, 1, descriptor_bytes);
   for (unsigned i = 0; status == CALL_OK && i < pool->image_count; i++) {
@@ -617,8 +617,8 @@ static enum call_status commit(struct native_store_context *context, struct nati
     return latch_failure(pool, status);
   }
   uint8_t *control_bytes = image_bytes(pool, pool->image_capacity + 1);
-  enum pnf_status result = pnf_control_encode(&pool->header, &control, control_bytes);
-  if (result != PNF_OK) {
+  enum npfs_status result = npfs_control_encode(&pool->header, &control, control_bytes);
+  if (result != NPFS_OK) {
     return format_failure(context, result);
   }
   unsigned slot = pool->control_slot ^ 1;
@@ -634,9 +634,9 @@ static enum call_status commit(struct native_store_context *context, struct nati
   return CALL_OK;
 }
 
-static enum call_status checkpoint(struct native_store_context *context, struct native_store_pool *pool)
+static enum call_status checkpoint(struct npfs_store_context *context, struct npfs_store_pool *pool)
 {
-  if (pool->control.state == PNF_JOURNAL_EMPTY) {
+  if (pool->control.state == NPFS_JOURNAL_EMPTY) {
     return CALL_OK;
   }
   if (pool->failed) {
@@ -656,11 +656,11 @@ static enum call_status checkpoint(struct native_store_context *context, struct 
   if (status != CALL_OK) {
     return latch_failure(pool, status);
   }
-  struct pnf_control empty = pool->control;
+  struct npfs_control empty = pool->control;
   empty.sequence++;
-  empty.state = PNF_JOURNAL_EMPTY;
+  empty.state = NPFS_JOURNAL_EMPTY;
   empty.image_count = empty.descriptor_blocks = empty.payload_crc = 0;
-  if (pnf_control_encode(&pool->header, &empty, pool->io[0]) != PNF_OK) {
+  if (npfs_control_encode(&pool->header, &empty, pool->io[0]) != NPFS_OK) {
     return corrupt(context);
   }
   unsigned slot = pool->control_slot ^ 1;
@@ -675,11 +675,11 @@ static enum call_status checkpoint(struct native_store_context *context, struct 
   pool->control_slot = slot;
   /* Reuse becomes safe only after the newer EMPTY control is durable. */
   for (unsigned i = 0; i < pool->image_count; i++) {
-    if (pool->images[i].kind == PNF_METADATA_BITMAP) {
+    if (pool->images[i].kind == NPFS_METADATA_BITMAP) {
       KASSERT(pool->bitmap_loaded);
       memcpy((uint8_t *)pool->bitmap +
-        (size_t)(pool->images[i].home - pool->header.bitmap_start) * PNF_BLOCK_SIZE,
-        image_bytes(pool, i), PNF_BLOCK_SIZE);
+        (size_t)(pool->images[i].home - pool->header.bitmap_start) * NPFS_BLOCK_SIZE,
+        image_bytes(pool, i), NPFS_BLOCK_SIZE);
     }
   }
   pool->image_count = 0;
@@ -687,49 +687,49 @@ static enum call_status checkpoint(struct native_store_context *context, struct 
   return CALL_OK;
 }
 
-static enum call_status validate_log_image(struct native_store_context *context, struct native_store_pool *pool,
-  const struct pnf_descriptor *descriptor, const uint8_t *bytes)
+static enum call_status validate_log_image(struct npfs_store_context *context, struct npfs_store_pool *pool,
+  const struct npfs_descriptor *descriptor, const uint8_t *bytes)
 {
-  if (descriptor->kind == PNF_METADATA_BITMAP) {
-    uint64_t base = (descriptor->home - pool->header.bitmap_start) * PNF_BITMAP_BITS;
-    for (unsigned bit = 0; bit < PNF_BITMAP_BITS; bit++) {
+  if (descriptor->kind == NPFS_METADATA_BITMAP) {
+    uint64_t base = (descriptor->home - pool->header.bitmap_start) * NPFS_BITMAP_BITS;
+    for (unsigned bit = 0; bit < NPFS_BITMAP_BITS; bit++) {
       uint64_t number = base + bit;
-      if ((number >= pool->header.pool_blocks || !pnf_data_block_valid(&pool->header, number)) &&
+      if ((number >= pool->header.pool_blocks || !npfs_data_block_valid(&pool->header, number)) &&
         !bit_get(bytes, bit)) {
         return corrupt(context);
       }
     }
-  } else if (descriptor->kind == PNF_METADATA_VOLUMES) {
+  } else if (descriptor->kind == NPFS_METADATA_VOLUMES) {
     for (unsigned i = 0; i < 8; i++) {
-      struct pnf_volume volume;
-      enum pnf_status status = pnf_volume_decode(&pool->header, bytes + i * PNF_VOLUME_SIZE, &volume);
-      if (status != PNF_OK) {
+      struct npfs_volume volume;
+      enum npfs_status status = npfs_volume_decode(&pool->header, bytes + i * NPFS_VOLUME_SIZE, &volume);
+      if (status != NPFS_OK) {
         return format_failure(context, status);
       }
     }
-  } else if (descriptor->kind == PNF_METADATA_INODES) {
+  } else if (descriptor->kind == NPFS_METADATA_INODES) {
     for (unsigned i = 0; i < 16; i++) {
-      struct pnf_inode inode;
-      enum pnf_status status = pnf_inode_decode(&pool->header, bytes + i * PNF_INODE_SIZE, &inode);
-      if (status != PNF_OK) {
+      struct npfs_inode inode;
+      enum npfs_status status = npfs_inode_decode(&pool->header, bytes + i * NPFS_INODE_SIZE, &inode);
+      if (status != NPFS_OK) {
         return format_failure(context, status);
       }
     }
-  } else if (descriptor->kind == PNF_METADATA_DIRECTORY) {
+  } else if (descriptor->kind == NPFS_METADATA_DIRECTORY) {
     size_t offset = 0;
-    while (offset < PNF_BLOCK_SIZE) {
-      struct pnf_dirent entry;
-      enum pnf_status status = pnf_dirent_decode(&pool->header, bytes + offset,
-        PNF_BLOCK_SIZE - offset, &entry);
-      if (status != PNF_OK) {
+    while (offset < NPFS_BLOCK_SIZE) {
+      struct npfs_dirent entry;
+      enum npfs_status status = npfs_dirent_decode(&pool->header, bytes + offset,
+        NPFS_BLOCK_SIZE - offset, &entry);
+      if (status != NPFS_OK) {
         return format_failure(context, status);
       }
       offset += entry.record_length;
     }
-  } else if (descriptor->kind == PNF_METADATA_INDIRECT) {
-    for (unsigned i = 0; i < PNF_INDIRECT_COUNT; i++) {
-      uint64_t pointer = pnf_get_u64(bytes + i * 8);
-      if (pointer && !pnf_data_block_valid(&pool->header, pointer)) {
+  } else if (descriptor->kind == NPFS_METADATA_INDIRECT) {
+    for (unsigned i = 0; i < NPFS_INDIRECT_COUNT; i++) {
+      uint64_t pointer = npfs_get_u64(bytes + i * 8);
+      if (pointer && !npfs_data_block_valid(&pool->header, pointer)) {
         return corrupt(context);
       }
     }
@@ -737,23 +737,23 @@ static enum call_status validate_log_image(struct native_store_context *context,
   return CALL_OK;
 }
 
-static enum call_status replay(struct native_store_context *context, struct native_store_pool *pool)
+static enum call_status replay(struct npfs_store_context *context, struct npfs_store_pool *pool)
 {
-  if (pool->control.state == PNF_JOURNAL_EMPTY) {
+  if (pool->control.state == NPFS_JOURNAL_EMPTY) {
     return CALL_OK;
   }
   if (!pool->writable) {
-    klog("nativefs: journal replay required; mount read-write once to recover\n");
-    return format_failure(context, PNF_RECOVERY_REQUIRED);
+    klog("npfs: journal replay required; mount read-write once to recover\n");
+    return format_failure(context, NPFS_RECOVERY_REQUIRED);
   }
   if (pool->control.sequence == UINT64_MAX) {
     return CALL_LIMIT;
   }
   uint64_t payload_blocks = (uint64_t)pool->control.descriptor_blocks + pool->control.image_count;
-  if (payload_blocks > SIZE_MAX / PNF_BLOCK_SIZE) {
+  if (payload_blocks > SIZE_MAX / NPFS_BLOCK_SIZE) {
     return CALL_NO_MEMORY;
   }
-  size_t payload_bytes = (size_t)payload_blocks * PNF_BLOCK_SIZE;
+  size_t payload_bytes = (size_t)payload_blocks * NPFS_BLOCK_SIZE;
   size_t target_bytes = (size_t)(pool->header.pool_blocks / 8 + (pool->header.pool_blocks % 8 != 0));
   uintptr_t payload_address = 0, targets_address = 0;
   enum call_status status = store_vm_allocate(payload_bytes, &payload_address);
@@ -766,25 +766,25 @@ static enum call_status replay(struct native_store_context *context, struct nati
   }
   uint8_t *payload = (void *)payload_address;
   uint8_t *targets = (void *)targets_address;
-  uint32_t crc = pnf_payload_begin(&pool->control);
+  uint32_t crc = npfs_payload_begin(&pool->control);
   for (uint64_t i = 0; i < payload_blocks; i++) {
     status = transport(context, pool, BLOCK_READ, pool->header.journal_start + 2 + i,
-      1, payload + i * PNF_BLOCK_SIZE);
+      1, payload + i * NPFS_BLOCK_SIZE);
     if (status != CALL_OK) {
       goto done;
     }
-    crc = pnf_crc_update(crc, payload + i * PNF_BLOCK_SIZE, PNF_BLOCK_SIZE);
+    crc = npfs_crc_update(crc, payload + i * NPFS_BLOCK_SIZE, NPFS_BLOCK_SIZE);
   }
-  if (pnf_crc_finish(crc) != pool->control.payload_crc) {
+  if (npfs_crc_finish(crc) != pool->control.payload_crc) {
     status = corrupt(context);
     goto done;
   }
-  size_t descriptors_bytes = (size_t)pool->control.descriptor_blocks * PNF_BLOCK_SIZE;
+  size_t descriptors_bytes = (size_t)pool->control.descriptor_blocks * NPFS_BLOCK_SIZE;
   for (unsigned i = 0; i < pool->control.image_count; i++) {
-    struct pnf_descriptor descriptor;
-    enum pnf_status result = pnf_descriptor_decode(&pool->header,
-      payload + (size_t)i * PNF_DESCRIPTOR_SIZE, &descriptor);
-    if (result != PNF_OK) {
+    struct npfs_descriptor descriptor;
+    enum npfs_status result = npfs_descriptor_decode(&pool->header,
+      payload + (size_t)i * NPFS_DESCRIPTOR_SIZE, &descriptor);
+    if (result != NPFS_OK) {
       status = format_failure(context, result);
       goto done;
     }
@@ -794,12 +794,12 @@ static enum call_status replay(struct native_store_context *context, struct nati
     }
     bit_set(targets, descriptor.home, true);
     status = validate_log_image(context, pool, &descriptor,
-      payload + descriptors_bytes + (size_t)i * PNF_BLOCK_SIZE);
+      payload + descriptors_bytes + (size_t)i * NPFS_BLOCK_SIZE);
     if (status != CALL_OK) {
       goto done;
     }
   }
-  for (size_t i = (size_t)pool->control.image_count * PNF_DESCRIPTOR_SIZE;
+  for (size_t i = (size_t)pool->control.image_count * NPFS_DESCRIPTOR_SIZE;
     i < descriptors_bytes; i++) {
     if (payload[i]) {
       status = corrupt(context);
@@ -807,9 +807,9 @@ static enum call_status replay(struct native_store_context *context, struct nati
     }
   }
   for (unsigned i = 0; i < pool->control.image_count; i++) {
-    uint64_t home = pnf_get_u64(payload + (size_t)i * PNF_DESCRIPTOR_SIZE);
+    uint64_t home = npfs_get_u64(payload + (size_t)i * NPFS_DESCRIPTOR_SIZE);
     status = transport(context, pool, BLOCK_WRITE, home, 1,
-      payload + descriptors_bytes + (size_t)i * PNF_BLOCK_SIZE);
+      payload + descriptors_bytes + (size_t)i * NPFS_BLOCK_SIZE);
     if (status != CALL_OK) {
       goto done;
     }
@@ -818,11 +818,11 @@ static enum call_status replay(struct native_store_context *context, struct nati
   if (status != CALL_OK) {
     goto done;
   }
-  struct pnf_control empty = pool->control;
-  empty.state = PNF_JOURNAL_EMPTY;
+  struct npfs_control empty = pool->control;
+  empty.state = NPFS_JOURNAL_EMPTY;
   empty.sequence++;
   empty.image_count = empty.descriptor_blocks = empty.payload_crc = 0;
-  if (pnf_control_encode(&pool->header, &empty, pool->io[0]) != PNF_OK) {
+  if (npfs_control_encode(&pool->header, &empty, pool->io[0]) != NPFS_OK) {
     status = corrupt(context);
     goto done;
   }
@@ -832,7 +832,7 @@ static enum call_status replay(struct native_store_context *context, struct nati
     status = transport(context, pool, BLOCK_FLUSH, 0, 0, NULL);
   }
   if (status == CALL_OK) {
-    klog("nativefs: replayed journal sequence %llu (%u blocks)\n",
+    klog("npfs: replayed journal sequence %llu (%u blocks)\n",
       (unsigned long long)pool->control.sequence, pool->control.image_count);
     pool->control = empty;
     pool->control_slot = slot;
@@ -843,21 +843,21 @@ static enum call_status replay(struct native_store_context *context, struct nati
   return status;
 }
 
-static enum call_status prepare_writable(struct native_store_context *context, struct native_store_pool *pool)
+static enum call_status prepare_writable(struct npfs_store_context *context, struct npfs_store_pool *pool)
 {
-  enum call_status status = format_failure(context, pnf_features_check(&pool->header, true));
+  enum call_status status = format_failure(context, npfs_features_check(&pool->header, true));
   if (status != CALL_OK) {
     return status;
   }
   if (!pool->device.writable || !pool->device.flush_supported || pool->device.write_failed) {
     return CALL_READ_ONLY;
   }
-  uint64_t capacity = pnf_journal_capacity(pool->header.journal_blocks);
+  uint64_t capacity = npfs_journal_capacity(pool->header.journal_blocks);
   if (capacity < STORE_NAMESPACE_IMAGES) {
     return CALL_LIMIT;
   }
   pool->image_capacity = capacity < STORE_IMAGES_MAX ? (unsigned)capacity : STORE_IMAGES_MAX;
-  pool->scratch_bytes = ((size_t)pool->image_capacity + 2) * PNF_BLOCK_SIZE;
+  pool->scratch_bytes = ((size_t)pool->image_capacity + 2) * NPFS_BLOCK_SIZE;
   status = store_vm_allocate(pool->scratch_bytes, &pool->scratch);
   if (status == CALL_OK) {
     pool->writable = true;
@@ -865,28 +865,28 @@ static enum call_status prepare_writable(struct native_store_context *context, s
   return status;
 }
 
-enum call_status native_store_open(struct native_store_context *context,
+enum call_status npfs_store_open(struct npfs_store_context *context,
   const struct gpt_partition *partition, const struct block_info *device,
-  bool write, struct native_store_pool **out)
+  bool write, struct npfs_store_pool **out)
 {
   require_owner();
   *out = NULL;
-  if ((device->block_size != 512 && device->block_size != PNF_BLOCK_SIZE) ||
+  if ((device->block_size != 512 && device->block_size != NPFS_BLOCK_SIZE) ||
     device->max_transfer < device->block_size || !partition->block_count ||
     partition->first_block >= device->block_count ||
     partition->block_count > device->block_count - partition->first_block) {
     return CALL_UNAVAILABLE;
   }
-  struct native_store_pool *pool = store_allocate(sizeof(*pool));
+  struct npfs_store_pool *pool = store_allocate(sizeof(*pool));
   if (!pool) {
     return CALL_NO_MEMORY;
   }
   pool->partition = *partition;
   pool->device = *device;
   pool->next_free = 1;
-  pool->header.pool_blocks = partition->block_count / (PNF_BLOCK_SIZE / device->block_size);
+  pool->header.pool_blocks = partition->block_count / (NPFS_BLOCK_SIZE / device->block_size);
   enum call_status status = CALL_IO;
-  if (pool->header.pool_blocks < 2 || pool->header.pool_blocks > UINT64_MAX / PNF_BLOCK_SIZE) {
+  if (pool->header.pool_blocks < 2 || pool->header.pool_blocks > UINT64_MAX / NPFS_BLOCK_SIZE) {
     goto fail;
   }
   uint64_t blocks = pool->header.pool_blocks;
@@ -898,58 +898,58 @@ enum call_status native_store_open(struct native_store_context *context,
   if (status != CALL_OK) {
     goto fail;
   }
-  struct pnf_header headers[2];
-  enum pnf_status states[2] = {
-    pnf_header_decode(pool->io[0], &headers[0]),
-    pnf_header_decode(pool->io[1], &headers[1]),
+  struct npfs_header headers[2];
+  enum npfs_status states[2] = {
+    npfs_header_decode(pool->io[0], &headers[0]),
+    npfs_header_decode(pool->io[1], &headers[1]),
   };
   for (unsigned i = 0; i < 2; i++) {
-    if (states[i] == PNF_UNSUPPORTED) {
+    if (states[i] == NPFS_UNSUPPORTED) {
       status = format_failure(context, states[i]);
       goto fail;
     }
-    if (states[i] == PNF_OK && headers[i].pool_blocks != blocks) {
-      states[i] = PNF_CORRUPT;
+    if (states[i] == NPFS_OK && headers[i].pool_blocks != blocks) {
+      states[i] = NPFS_CORRUPT;
     }
   }
-  if ((states[0] != PNF_OK && states[1] != PNF_OK) ||
-    (states[0] == PNF_OK && states[1] == PNF_OK &&
-    memcmp(pool->io[0], pool->io[1], PNF_BLOCK_SIZE))) {
+  if ((states[0] != NPFS_OK && states[1] != NPFS_OK) ||
+    (states[0] == NPFS_OK && states[1] == NPFS_OK &&
+    memcmp(pool->io[0], pool->io[1], NPFS_BLOCK_SIZE))) {
     status = corrupt(context);
     goto fail;
   }
-  pool->header = headers[states[0] == PNF_OK ? 0 : 1];
-  pool->degraded = states[0] != PNF_OK || states[1] != PNF_OK;
-  status = format_failure(context, pnf_features_check(&pool->header, write));
+  pool->header = headers[states[0] == NPFS_OK ? 0 : 1];
+  pool->degraded = states[0] != NPFS_OK || states[1] != NPFS_OK;
+  status = format_failure(context, npfs_features_check(&pool->header, write));
   if (status != CALL_OK) {
     goto fail;
   }
-  for (struct native_store_pool *other = opened_pools; other; other = other->next) {
-    if (!memcmp(pool->header.pool_id, other->header.pool_id, PNF_ID_SIZE)) {
+  for (struct npfs_store_pool *other = opened_pools; other; other = other->next) {
+    if (!memcmp(pool->header.pool_id, other->header.pool_id, NPFS_ID_SIZE)) {
       status = CALL_ALREADY_EXISTS;
       goto fail;
     }
   }
-  struct pnf_control controls[2];
+  struct npfs_control controls[2];
   for (unsigned i = 0; i < 2; i++) {
     status = transport(context, pool, BLOCK_READ, pool->header.journal_start + i, 1, pool->io[i]);
     if (status != CALL_OK) {
       goto fail;
     }
-    states[i] = pnf_control_decode(&pool->header, pool->io[i], &controls[i]);
-    if (states[i] != PNF_OK && pnf_control_checksum_valid(pool->io[i])) {
+    states[i] = npfs_control_decode(&pool->header, pool->io[i], &controls[i]);
+    if (states[i] != NPFS_OK && npfs_control_checksum_valid(pool->io[i])) {
       status = format_failure(context, states[i]);
       goto fail;
     }
   }
-  if ((states[0] != PNF_OK && states[1] != PNF_OK) ||
-    (states[0] == PNF_OK && states[1] == PNF_OK && controls[0].sequence == controls[1].sequence &&
-    memcmp(pool->io[0], pool->io[1], PNF_BLOCK_SIZE))) {
+  if ((states[0] != NPFS_OK && states[1] != NPFS_OK) ||
+    (states[0] == NPFS_OK && states[1] == NPFS_OK && controls[0].sequence == controls[1].sequence &&
+    memcmp(pool->io[0], pool->io[1], NPFS_BLOCK_SIZE))) {
     status = corrupt(context);
     goto fail;
   }
-  pool->control_slot = states[0] != PNF_OK ? 1 :
-  states[1] != PNF_OK ? 0 : controls[1].sequence > controls[0].sequence ? 1 : 0;
+  pool->control_slot = states[0] != NPFS_OK ? 1 :
+  states[1] != NPFS_OK ? 0 : controls[1].sequence > controls[0].sequence ? 1 : 0;
   pool->control = controls[pool->control_slot];
   if (write) {
     status = prepare_writable(context, pool);
@@ -961,25 +961,25 @@ enum call_status native_store_open(struct native_store_context *context,
   if (status != CALL_OK) {
     goto fail;
   }
-  for (unsigned page = 0; page < PNF_VOLUME_TABLE_BLOCKS; page++) {
+  for (unsigned page = 0; page < NPFS_VOLUME_TABLE_BLOCKS; page++) {
     status = read_block(context, pool, pool->header.volume_start + page, pool->io[0]);
     if (status != CALL_OK) {
       goto fail;
     }
     for (unsigned i = 0; i < 8; i++) {
       unsigned slot = page * 8 + i;
-      enum pnf_status result = pnf_volume_decode(&pool->header,
-        pool->io[0] + i * PNF_VOLUME_SIZE, &pool->catalog[slot]);
-      if (result != PNF_OK) {
+      enum npfs_status result = npfs_volume_decode(&pool->header,
+        pool->io[0] + i * NPFS_VOLUME_SIZE, &pool->catalog[slot]);
+      if (result != NPFS_OK) {
         status = format_failure(context, result);
         goto fail;
       }
-      if (pool->catalog[slot].state != PNF_VOLUME_LIVE) {
+      if (pool->catalog[slot].state != NPFS_VOLUME_LIVE) {
         continue;
       }
       for (unsigned j = 0; j < slot; j++) {
-        struct pnf_volume *a = &pool->catalog[slot], *b = &pool->catalog[j];
-        if (b->state == PNF_VOLUME_LIVE && (!memcmp(a->id, b->id, PNF_ID_SIZE) ||
+        struct npfs_volume *a = &pool->catalog[slot], *b = &pool->catalog[j];
+        if (b->state == NPFS_VOLUME_LIVE && (!memcmp(a->id, b->id, NPFS_ID_SIZE) ||
           (a->name_length == b->name_length && !memcmp(a->name, b->name, a->name_length)))) {
           status = corrupt(context);
           goto fail;
@@ -987,11 +987,11 @@ enum call_status native_store_open(struct native_store_context *context,
       }
     }
   }
-  if (pool->header.bitmap_blocks > SIZE_MAX / PNF_BLOCK_SIZE) {
+  if (pool->header.bitmap_blocks > SIZE_MAX / NPFS_BLOCK_SIZE) {
     status = CALL_LIMIT;
     goto fail;
   }
-  pool->bitmap_bytes = (size_t)pool->header.bitmap_blocks * PNF_BLOCK_SIZE;
+  pool->bitmap_bytes = (size_t)pool->header.bitmap_blocks * NPFS_BLOCK_SIZE;
   status = store_vm_allocate(pool->bitmap_bytes, &pool->bitmap);
   if (status != CALL_OK) {
     goto fail;
@@ -1001,7 +1001,7 @@ enum call_status native_store_open(struct native_store_context *context,
     uint32_t count = remaining < STORE_BITMAP_READ_BLOCKS ? (uint32_t)remaining :
       STORE_BITMAP_READ_BLOCKS;
     status = transport(context, pool, BLOCK_READ, pool->header.bitmap_start + page,
-      count, (uint8_t *)pool->bitmap + (size_t)page * PNF_BLOCK_SIZE);
+      count, (uint8_t *)pool->bitmap + (size_t)page * NPFS_BLOCK_SIZE);
     if (status != CALL_OK) {
       goto fail;
     }
@@ -1012,10 +1012,10 @@ enum call_status native_store_open(struct native_store_context *context,
       status = backing_failure(context, BLOCK_TIMED_OUT);
       goto fail;
     }
-    const uint8_t *bytes = (const uint8_t *)pool->bitmap + (size_t)page * PNF_BLOCK_SIZE;
-    for (unsigned bit = 0; bit < PNF_BITMAP_BITS; bit++) {
-      uint64_t number = page * PNF_BITMAP_BITS + bit;
-      bool fixed = number >= pool->header.pool_blocks || !pnf_data_block_valid(&pool->header, number);
+    const uint8_t *bytes = (const uint8_t *)pool->bitmap + (size_t)page * NPFS_BLOCK_SIZE;
+    for (unsigned bit = 0; bit < NPFS_BITMAP_BITS; bit++) {
+      uint64_t number = page * NPFS_BITMAP_BITS + bit;
+      bool fixed = number >= pool->header.pool_blocks || !npfs_data_block_valid(&pool->header, number);
       bool allocated = bit_get(bytes, bit);
       if (fixed && !allocated) {
         status = corrupt(context);
@@ -1041,7 +1041,7 @@ enum call_status native_store_open(struct native_store_context *context,
   return status;
 }
 
-enum call_status native_store_upgrade(struct native_store_context *context, struct native_store_pool *pool)
+enum call_status npfs_store_upgrade(struct npfs_store_context *context, struct npfs_store_pool *pool)
 {
   require_owner();
   if (pool->writable) {
@@ -1050,26 +1050,26 @@ enum call_status native_store_upgrade(struct native_store_context *context, stru
   return prepare_writable(context, pool);
 }
 
-const uint8_t *native_store_pool_id(const struct native_store_pool *pool)
+const uint8_t *npfs_store_pool_id(const struct npfs_store_pool *pool)
 {
   return pool->header.pool_id;
 }
 
-bool native_store_writable(const struct native_store_pool *pool)
+bool npfs_store_writable(const struct npfs_store_pool *pool)
 {
   return pool->writable && !pool->failed;
 }
 
-static enum call_status inode_record_read(struct native_store_context *context, struct native_store_volume *volume,
-  uint64_t number, struct pnf_inode *record)
+static enum call_status inode_record_read(struct npfs_store_context *context, struct npfs_store_volume *volume,
+  uint64_t number, struct npfs_inode *record)
 {
-  if (number >= volume->record.inode_bytes / PNF_INODE_SIZE) {
+  if (number >= volume->record.inode_bytes / NPFS_INODE_SIZE) {
     return corrupt(context);
   }
-  uint64_t offset = number * PNF_INODE_SIZE;
+  uint64_t offset = number * NPFS_INODE_SIZE;
   uint64_t block;
   enum call_status status = map_read(context, volume->pool, volume->record.pointers,
-    offset / PNF_BLOCK_SIZE, &block);
+    offset / NPFS_BLOCK_SIZE, &block);
   if (status != CALL_OK) {
     return status;
   }
@@ -1080,20 +1080,20 @@ static enum call_status inode_record_read(struct native_store_context *context, 
   if (status != CALL_OK) {
     return status;
   }
-  return format_failure(context, pnf_inode_decode(&volume->pool->header,
-    volume->pool->io[0] + offset % PNF_BLOCK_SIZE, record));
+  return format_failure(context, npfs_inode_decode(&volume->pool->header,
+    volume->pool->io[0] + offset % NPFS_BLOCK_SIZE, record));
 }
 
-static enum call_status inode_get(struct native_store_context *context, struct native_store_volume *volume,
-  uint64_t number, struct native_store_inode **out)
+static enum call_status inode_get(struct npfs_store_context *context, struct npfs_store_volume *volume,
+  uint64_t number, struct npfs_store_inode **out)
 {
-  for (struct native_store_inode *inode = volume->inodes; inode; inode = inode->next) {
+  for (struct npfs_store_inode *inode = volume->inodes; inode; inode = inode->next) {
     if (inode->number == number) {
       *out = inode;
       return CALL_OK;
     }
   }
-  struct native_store_inode *inode = store_allocate(sizeof(*inode));
+  struct npfs_store_inode *inode = store_allocate(sizeof(*inode));
   if (!inode) {
     return CALL_NO_MEMORY;
   }
@@ -1117,7 +1117,7 @@ static enum call_status inode_get(struct native_store_context *context, struct n
   return CALL_OK;
 }
 
-static void free_volume_storage(struct native_store_volume *volume)
+static void free_volume_storage(struct npfs_store_volume *volume)
 {
   while (volume->free_slots) {
     struct store_free_slot *next = volume->free_slots->next;
@@ -1127,23 +1127,23 @@ static void free_volume_storage(struct native_store_volume *volume)
     volume->free_slots = next;
   }
   while (volume->inodes) {
-    struct native_store_inode *next = volume->inodes->next;
+    struct npfs_store_inode *next = volume->inodes->next;
     store_free(volume->inodes);
     volume->inodes = next;
   }
   store_free(volume);
 }
 
-static enum call_status volume_mount(struct native_store_context *context, struct native_store_pool *pool,
-  unsigned slot, struct native_store_volume **out)
+static enum call_status volume_mount(struct npfs_store_context *context, struct npfs_store_pool *pool,
+  unsigned slot, struct npfs_store_volume **out)
 {
-  for (struct native_store_volume *volume = pool->volumes; volume; volume = volume->next) {
+  for (struct npfs_store_volume *volume = pool->volumes; volume; volume = volume->next) {
     if (volume->slot == slot) {
       *out = volume;
       return CALL_OK;
     }
   }
-  struct native_store_volume *volume = store_allocate(sizeof(*volume));
+  struct npfs_store_volume *volume = store_allocate(sizeof(*volume));
   if (!volume) {
     return CALL_NO_MEMORY;
   }
@@ -1151,23 +1151,23 @@ static enum call_status volume_mount(struct native_store_context *context, struc
   volume->slot = slot;
   volume->record = pool->catalog[slot];
   enum call_status status = CALL_OK;
-  uint64_t count = volume->record.inode_bytes / PNF_INODE_SIZE;
+  uint64_t count = volume->record.inode_bytes / NPFS_INODE_SIZE;
   uint64_t cleanup_count = 0;
   for (uint64_t number = 0; number < count; number++) {
-    struct pnf_inode record;
+    struct npfs_inode record;
     status = inode_record_read(context, volume, number, &record);
     if (status != CALL_OK) {
       goto fail;
     }
-    if ((!number && record.kind != PNF_INODE_FREE) ||
-      (number == 1 && (record.kind != PNF_INODE_DIRECTORY || record.parent != 1 || (record.cleanup & PNF_CLEANUP_DETACHED)))) {
+    if ((!number && record.kind != NPFS_INODE_FREE) ||
+      (number == 1 && (record.kind != NPFS_INODE_DIRECTORY || record.parent != 1 || (record.cleanup & NPFS_CLEANUP_DETACHED)))) {
       status = corrupt(context);
       goto fail;
     }
     if (record.cleanup) {
       cleanup_count++;
     }
-    if (number && record.kind == PNF_INODE_FREE) {
+    if (number && record.kind == NPFS_INODE_FREE) {
       struct store_free_slot *free_slot = store_allocate(sizeof(*free_slot));
       if (!free_slot) {
         status = CALL_NO_MEMORY;
@@ -1182,7 +1182,7 @@ static enum call_status volume_mount(struct native_store_context *context, struc
   uint64_t cleanup = volume->record.cleanup_head;
   uint64_t walked = 0;
   while (cleanup) {
-    struct native_store_inode *inode;
+    struct npfs_store_inode *inode;
     if (++walked >= count) {
       status = corrupt(context);
       goto fail;
@@ -1210,39 +1210,39 @@ static enum call_status volume_mount(struct native_store_context *context, struc
   return status;
 }
 
-enum call_status native_store_root(struct native_store_context *context, struct native_store_pool *pool,
-  const char *name, size_t length, struct native_store_inode **out)
+enum call_status npfs_store_root(struct npfs_store_context *context, struct npfs_store_pool *pool,
+  const char *name, size_t length, struct npfs_store_inode **out)
 {
   require_owner();
   *out = NULL;
-  for (unsigned slot = 0; slot < PNF_VOLUME_COUNT; slot++) {
-    struct pnf_volume *record = &pool->catalog[slot];
-    if (record->state != PNF_VOLUME_LIVE || record->name_length != length ||
+  for (unsigned slot = 0; slot < NPFS_VOLUME_COUNT; slot++) {
+    struct npfs_volume *record = &pool->catalog[slot];
+    if (record->state != NPFS_VOLUME_LIVE || record->name_length != length ||
       memcmp(record->name, name, length)) {
       continue;
     }
-    struct native_store_volume *volume;
+    struct npfs_store_volume *volume;
     enum call_status status = volume_mount(context, pool, slot, &volume);
     if (status != CALL_OK) {
       return status;
     }
     status = inode_get(context, volume, 1, out);
     if (status == CALL_OK) {
-      native_store_retain(*out);
+      npfs_store_retain(*out);
     }
     return status;
   }
   return CALL_NOT_FOUND;
 }
 
-void native_store_retain(struct native_store_inode *inode)
+void npfs_store_retain(struct npfs_store_inode *inode)
 {
   require_owner();
   KASSERT(inode->references != SIZE_MAX);
   inode->references++;
 }
 
-void native_store_release(struct native_store_inode *inode)
+void npfs_store_release(struct npfs_store_inode *inode)
 {
   require_owner();
   KASSERT(inode->references);
@@ -1250,33 +1250,33 @@ void native_store_release(struct native_store_inode *inode)
   discard_idle_inode(inode, false);
 }
 
-uint64_t native_store_kind(const struct native_store_inode *inode)
+uint64_t npfs_store_kind(const struct npfs_store_inode *inode)
 {
-  return inode->record.kind == PNF_INODE_DIRECTORY ? DIRECTORY_KIND_DIRECTORY : DIRECTORY_KIND_FILE;
+  return inode->record.kind == NPFS_INODE_DIRECTORY ? DIRECTORY_KIND_DIRECTORY : DIRECTORY_KIND_FILE;
 }
 
-uint64_t native_store_size(const struct native_store_inode *inode)
+uint64_t npfs_store_size(const struct npfs_store_inode *inode)
 {
   return inode->record.size;
 }
 
-bool native_store_same_volume(const struct native_store_inode *a, const struct native_store_inode *b)
+bool npfs_store_same_volume(const struct npfs_store_inode *a, const struct npfs_store_inode *b)
 {
   return a->volume == b->volume;
 }
 
-struct native_store_pool *native_store_inode_pool(struct native_store_inode *inode)
+struct npfs_store_pool *npfs_store_inode_pool(struct npfs_store_inode *inode)
 {
   return inode->volume->pool;
 }
 
-static enum call_status directory_record(struct native_store_context *context, struct native_store_inode *directory,
-  uint64_t position, struct pnf_dirent *entry)
+static enum call_status directory_record(struct npfs_store_context *context, struct npfs_store_inode *directory,
+  uint64_t position, struct npfs_dirent *entry)
 {
-  struct native_store_pool *pool = directory->volume->pool;
+  struct npfs_store_pool *pool = directory->volume->pool;
   uint64_t physical;
   enum call_status status = map_read(context, pool, directory->record.pointers,
-    position / PNF_BLOCK_SIZE, &physical);
+    position / NPFS_BLOCK_SIZE, &physical);
   if (status != CALL_OK) {
     return status;
   }
@@ -1287,24 +1287,24 @@ static enum call_status directory_record(struct native_store_context *context, s
   if (status != CALL_OK) {
     return status;
   }
-  unsigned offset = (unsigned)(position % PNF_BLOCK_SIZE);
-  return format_failure(context, pnf_dirent_decode(&pool->header, pool->io[0] + offset,
-    PNF_BLOCK_SIZE - offset, entry));
+  unsigned offset = (unsigned)(position % NPFS_BLOCK_SIZE);
+  return format_failure(context, npfs_dirent_decode(&pool->header, pool->io[0] + offset,
+    NPFS_BLOCK_SIZE - offset, entry));
 }
 
-static enum call_status directory_find(struct native_store_context *context, struct native_store_inode *directory,
-  const char *name, size_t length, struct pnf_dirent *found, uint64_t *position)
+static enum call_status directory_find(struct npfs_store_context *context, struct npfs_store_inode *directory,
+  const char *name, size_t length, struct npfs_dirent *found, uint64_t *position)
 {
-  if (directory->record.kind != PNF_INODE_DIRECTORY) {
+  if (directory->record.kind != NPFS_INODE_DIRECTORY) {
     return CALL_WRONG_TYPE;
   }
-  if (!pnf_name_valid((const uint8_t *)name, length)) {
+  if (!npfs_name_valid((const uint8_t *)name, length)) {
     return CALL_BAD_REQUEST;
   }
   bool match = false;
   uint64_t offset = 0;
   while (offset < directory->record.size) {
-    struct pnf_dirent entry;
+    struct npfs_dirent entry;
     enum call_status status = directory_record(context, directory, offset, &entry);
     if (status != CALL_OK) {
       return status;
@@ -1322,20 +1322,20 @@ static enum call_status directory_find(struct native_store_context *context, str
   return match ? CALL_OK : CALL_NOT_FOUND;
 }
 
-static bool valid_child(const struct native_store_inode *directory,
-  const struct native_store_inode *child)
+static bool valid_child(const struct npfs_store_inode *directory,
+  const struct npfs_store_inode *child)
 {
-  return child->number != 1 && child->record.kind != PNF_INODE_FREE &&
-    !(child->record.cleanup & PNF_CLEANUP_DETACHED) &&
-    (child->record.kind != PNF_INODE_DIRECTORY || child->record.parent == directory->number);
+  return child->number != 1 && child->record.kind != NPFS_INODE_FREE &&
+    !(child->record.cleanup & NPFS_CLEANUP_DETACHED) &&
+    (child->record.kind != NPFS_INODE_DIRECTORY || child->record.parent == directory->number);
 }
 
-enum call_status native_store_lookup(struct native_store_context *context, struct native_store_inode *directory,
-  const char *name, size_t length, struct native_store_inode **out)
+enum call_status npfs_store_lookup(struct npfs_store_context *context, struct npfs_store_inode *directory,
+  const char *name, size_t length, struct npfs_store_inode **out)
 {
   require_owner();
   *out = NULL;
-  struct pnf_dirent entry;
+  struct npfs_dirent entry;
   uint64_t position;
   enum call_status status = directory_find(context, directory, name, length, &entry, &position);
   if (status != CALL_OK) {
@@ -1350,19 +1350,19 @@ enum call_status native_store_lookup(struct native_store_context *context, struc
     *out = NULL;
     return corrupt(context);
   }
-  native_store_retain(*out);
+  npfs_store_retain(*out);
   return CALL_OK;
 }
 
-enum call_status native_store_enumerate(struct native_store_context *context, struct native_store_inode *directory,
-  uint64_t generation, uint64_t position, struct pnf_dirent *entry,
+enum call_status npfs_store_enumerate(struct npfs_store_context *context, struct npfs_store_inode *directory,
+  uint64_t generation, uint64_t position, struct npfs_dirent *entry,
   uint64_t *next_position, uint64_t *current_generation)
 {
   require_owner();
   memset(entry, 0, sizeof(*entry));
   *current_generation = directory->generation;
   *next_position = position;
-  if (directory->record.kind != PNF_INODE_DIRECTORY) {
+  if (directory->record.kind != NPFS_INODE_DIRECTORY) {
     return CALL_WRONG_TYPE;
   }
   if (generation && generation != directory->generation) {
@@ -1372,9 +1372,9 @@ enum call_status native_store_enumerate(struct native_store_context *context, st
     return CALL_BAD_REQUEST;
   }
   if (position < directory->record.size) {
-    uint64_t boundary = position - position % PNF_BLOCK_SIZE;
+    uint64_t boundary = position - position % NPFS_BLOCK_SIZE;
     while (boundary < position) {
-      struct pnf_dirent previous;
+      struct npfs_dirent previous;
       enum call_status status = directory_record(context, directory, boundary, &previous);
       if (status != CALL_OK) {
         return status;
@@ -1392,7 +1392,7 @@ enum call_status native_store_enumerate(struct native_store_context *context, st
     }
     position += entry->record_length;
     if (entry->inode) {
-      struct native_store_inode *target;
+      struct npfs_store_inode *target;
       status = inode_get(context, directory->volume, entry->inode, &target);
       if (status != CALL_OK) {
         return status;
@@ -1411,9 +1411,9 @@ enum call_status native_store_enumerate(struct native_store_context *context, st
   return CALL_OK;
 }
 
-static struct store_cache_entry *cache_find(struct native_store_inode *inode, uint64_t logical)
+static struct store_cache_entry *cache_find(struct npfs_store_inode *inode, uint64_t logical)
 {
-  struct native_store_pool *pool = inode->volume->pool;
+  struct npfs_store_pool *pool = inode->volume->pool;
   for (unsigned chunk = 0; chunk < STORE_CACHE_CHUNKS; chunk++) {
     if (!pool->cache[chunk]) {
       continue;
@@ -1428,14 +1428,14 @@ static struct store_cache_entry *cache_find(struct native_store_inode *inode, ui
   return NULL;
 }
 
-static enum call_status cache_get(struct native_store_context *context, struct native_store_inode *inode,
+static enum call_status cache_get(struct npfs_store_context *context, struct npfs_store_inode *inode,
   uint64_t logical, struct store_cache_entry **out)
 {
   *out = cache_find(inode, logical);
   if (*out) {
     return CALL_OK;
   }
-  struct native_store_pool *pool = inode->volume->pool;
+  struct npfs_store_pool *pool = inode->volume->pool;
   struct store_cache_entry *slot = NULL;
   for (unsigned chunk = 0; chunk < STORE_CACHE_CHUNKS && !slot; chunk++) {
     if (!pool->cache[chunk]) {
@@ -1486,7 +1486,7 @@ static enum call_status cache_get(struct native_store_context *context, struct n
   if (!slot) {
     return CALL_NO_MEMORY;
   }
-  struct native_store_inode *previous_owner = slot->inode;
+  struct npfs_store_inode *previous_owner = slot->inode;
   slot->inode = NULL;
   slot->dirty = false;
   if (previous_owner && previous_owner != inode) {
@@ -1501,7 +1501,7 @@ static enum call_status cache_get(struct native_store_context *context, struct n
     status = read_block(context, pool, physical, slot->bytes);
   }
   else {
-    memset(slot->bytes, 0, PNF_BLOCK_SIZE);
+    memset(slot->bytes, 0, NPFS_BLOCK_SIZE);
   }
   if (status != CALL_OK) {
     return status;
@@ -1513,12 +1513,12 @@ static enum call_status cache_get(struct native_store_context *context, struct n
   return CALL_OK;
 }
 
-enum call_status native_store_read(struct native_store_context *context, struct native_store_inode *inode,
+enum call_status npfs_store_read(struct npfs_store_context *context, struct npfs_store_inode *inode,
   uint64_t offset, void *bytes, size_t capacity, size_t *read)
 {
   require_owner();
   *read = 0;
-  if (inode->record.kind != PNF_INODE_FILE) {
+  if (inode->record.kind != NPFS_INODE_FILE) {
     return CALL_WRONG_TYPE;
   }
   if (offset >= inode->record.size) {
@@ -1528,13 +1528,13 @@ enum call_status native_store_read(struct native_store_context *context, struct 
   size_t length = remaining < capacity ? (size_t)remaining : capacity;
   uint8_t *destination = bytes;
   while (length) {
-    unsigned within = (unsigned)(offset % PNF_BLOCK_SIZE);
-    size_t count = PNF_BLOCK_SIZE - within;
+    unsigned within = (unsigned)(offset % NPFS_BLOCK_SIZE);
+    size_t count = NPFS_BLOCK_SIZE - within;
     if (count > length) {
       count = length;
     }
     struct store_cache_entry *entry;
-    enum call_status status = cache_get(context, inode, offset / PNF_BLOCK_SIZE, &entry);
+    enum call_status status = cache_get(context, inode, offset / NPFS_BLOCK_SIZE, &entry);
     if (status != CALL_OK) {
       return status;
     }
@@ -1547,9 +1547,9 @@ enum call_status native_store_read(struct native_store_context *context, struct 
   return CALL_OK;
 }
 
-static struct store_cache_entry *next_dirty(struct native_store_inode *inode)
+static struct store_cache_entry *next_dirty(struct npfs_store_inode *inode)
 {
-  struct native_store_pool *pool = inode->volume->pool;
+  struct npfs_store_pool *pool = inode->volume->pool;
   struct store_cache_entry *result = NULL;
   for (unsigned chunk = 0; chunk < STORE_CACHE_CHUNKS; chunk++) {
     if (!pool->cache[chunk]) {
@@ -1565,9 +1565,9 @@ static struct store_cache_entry *next_dirty(struct native_store_inode *inode)
   return result;
 }
 
-static enum call_status flush_inode(struct native_store_context *context, struct native_store_inode *inode)
+static enum call_status flush_inode(struct npfs_store_context *context, struct npfs_store_inode *inode)
 {
-  struct native_store_pool *pool = inode->volume->pool;
+  struct npfs_store_pool *pool = inode->volume->pool;
   enum call_status status = writable(pool);
   if (status != CALL_OK) {
     return status;
@@ -1577,7 +1577,7 @@ static enum call_status flush_inode(struct native_store_context *context, struct
     if (status != CALL_OK) {
       return status;
     }
-    struct pnf_inode previous = inode->record;
+    struct npfs_inode previous = inode->record;
     uint64_t previous_free = pool->free_blocks;
     struct store_cache_entry *written[STORE_IMAGES_MAX];
     unsigned written_count = 0;
@@ -1598,13 +1598,13 @@ static enum call_status flush_inode(struct native_store_context *context, struct
       entry = next_dirty(inode);
     }
     if (status == CALL_OK) {
-      struct pnf_inode durable = inode->record;
-      uint64_t prefix = entry ? entry->logical * PNF_BLOCK_SIZE : inode->record.size;
+      struct npfs_inode durable = inode->record;
+      uint64_t prefix = entry ? entry->logical * NPFS_BLOCK_SIZE : inode->record.size;
       if (prefix < inode->durable_size) {
         prefix = inode->durable_size;
       }
       durable.size = prefix;
-      if (durable.cleanup & PNF_CLEANUP_SHRINK) {
+      if (durable.cleanup & NPFS_CLEANUP_SHRINK) {
         durable.shrink_target = prefix;
       }
       status = stage_inode_record(context, inode, &durable);
@@ -1623,7 +1623,7 @@ static enum call_status flush_inode(struct native_store_context *context, struct
       }
       inode->record = previous;
       pool->free_blocks = previous_free;
-      if (!pool->failed && pool->control.state == PNF_JOURNAL_EMPTY) {
+      if (!pool->failed && pool->control.state == NPFS_JOURNAL_EMPTY) {
         pool->image_count = 0;
         pool->freed_in_transaction = false;
       }
@@ -1637,15 +1637,15 @@ static enum call_status flush_inode(struct native_store_context *context, struct
   return CALL_OK;
 }
 
-static enum call_status flush_files(struct native_store_context *context, struct native_store_pool *pool)
+static enum call_status flush_files(struct npfs_store_context *context, struct npfs_store_pool *pool)
 {
   if (pool->failed) {
     return pool->writeback_error;
   }
-  for (struct native_store_volume *volume = pool->volumes; volume; volume = volume->next) {
-    for (struct native_store_inode *inode = volume->inodes; inode; inode = inode->next) {
-      if (inode->record.kind != PNF_INODE_FILE ||
-        (!inode->references && inode->record.cleanup & PNF_CLEANUP_DETACHED)) {
+  for (struct npfs_store_volume *volume = pool->volumes; volume; volume = volume->next) {
+    for (struct npfs_store_inode *inode = volume->inodes; inode; inode = inode->next) {
+      if (inode->record.kind != NPFS_INODE_FILE ||
+        (!inode->references && inode->record.cleanup & NPFS_CLEANUP_DETACHED)) {
         continue;
       }
       if (inode->size_dirty || next_dirty(inode)) {
@@ -1659,9 +1659,9 @@ static enum call_status flush_files(struct native_store_context *context, struct
   return CALL_OK;
 }
 
-static enum call_status finish_shrink(struct native_store_context *context, struct native_store_inode *inode)
+static enum call_status finish_shrink(struct npfs_store_context *context, struct npfs_store_inode *inode)
 {
-  while (inode->record.cleanup & PNF_CLEANUP_SHRINK) {
+  while (inode->record.cleanup & NPFS_CLEANUP_SHRINK) {
     enum call_status status = cleanup_one(context, inode->volume);
     if (status != CALL_OK) {
       return status;
@@ -1671,7 +1671,7 @@ static enum call_status finish_shrink(struct native_store_context *context, stru
   return CALL_OK;
 }
 
-enum call_status native_store_write(struct native_store_context *context, struct native_store_inode *inode,
+enum call_status npfs_store_write(struct npfs_store_context *context, struct npfs_store_inode *inode,
   uint64_t offset, const void *bytes, size_t length, size_t *written)
 {
   require_owner();
@@ -1680,10 +1680,10 @@ enum call_status native_store_write(struct native_store_context *context, struct
   if (status != CALL_OK) {
     return status;
   }
-  if (inode->record.kind != PNF_INODE_FILE) {
+  if (inode->record.kind != NPFS_INODE_FILE) {
     return CALL_WRONG_TYPE;
   }
-  if (offset > PNF_FILE_SIZE_MAX || length > PNF_FILE_SIZE_MAX - offset) {
+  if (offset > NPFS_FILE_SIZE_MAX || length > NPFS_FILE_SIZE_MAX - offset) {
     return CALL_FILE_TOO_LARGE;
   }
   if (!length) {
@@ -1701,21 +1701,21 @@ enum call_status native_store_write(struct native_store_context *context, struct
   }
   const uint8_t *source = bytes;
   while (length) {
-    unsigned within = (unsigned)(offset % PNF_BLOCK_SIZE);
-    size_t count = PNF_BLOCK_SIZE - within;
+    unsigned within = (unsigned)(offset % NPFS_BLOCK_SIZE);
+    size_t count = NPFS_BLOCK_SIZE - within;
     if (count > length) {
       count = length;
     }
     struct store_cache_entry *entry;
-    status = cache_get(context, inode, offset / PNF_BLOCK_SIZE, &entry);
+    status = cache_get(context, inode, offset / NPFS_BLOCK_SIZE, &entry);
     if (status != CALL_OK) {
       return *written ? CALL_OK : status;
     }
     uint64_t old_size = inode->record.size;
     uint64_t base = offset - within;
-    if (old_size < base + PNF_BLOCK_SIZE) {
+    if (old_size < base + NPFS_BLOCK_SIZE) {
       size_t start = old_size > base ? (size_t)(old_size - base) : 0;
-      memset(entry->bytes + start, 0, PNF_BLOCK_SIZE - start);
+      memset(entry->bytes + start, 0, NPFS_BLOCK_SIZE - start);
     }
     memcpy(entry->bytes + within, source, count);
     entry->dirty = true;
@@ -1732,7 +1732,7 @@ enum call_status native_store_write(struct native_store_context *context, struct
   return CALL_OK;
 }
 
-enum call_status native_store_sync(struct native_store_context *context, struct native_store_pool *pool)
+enum call_status npfs_store_sync(struct npfs_store_context *context, struct npfs_store_pool *pool)
 {
   require_owner();
   enum call_status status = writable(pool);
@@ -1749,7 +1749,7 @@ enum call_status native_store_sync(struct native_store_context *context, struct 
   return status;
 }
 
-static enum call_status begin_namespace(struct native_store_context *context, struct native_store_pool *pool, bool flush)
+static enum call_status begin_namespace(struct npfs_store_context *context, struct npfs_store_pool *pool, bool flush)
 {
   enum call_status status = writable(pool);
   if (status == CALL_OK && flush) {
@@ -1764,22 +1764,22 @@ static enum call_status begin_namespace(struct native_store_context *context, st
   return status;
 }
 
-static enum call_status directory_edit(struct native_store_context *context, struct native_store_inode *directory,
+static enum call_status directory_edit(struct npfs_store_context *context, struct npfs_store_inode *directory,
   uint64_t position, uint8_t **bytes)
 {
   uint64_t physical;
   enum call_status status = map_read(context, directory->volume->pool, directory->record.pointers,
-    position / PNF_BLOCK_SIZE, &physical);
+    position / NPFS_BLOCK_SIZE, &physical);
   if (status != CALL_OK) {
     return status;
   }
   if (!physical) {
     return corrupt(context);
   }
-  return edit_block(context, directory->volume->pool, physical, PNF_METADATA_DIRECTORY, false, bytes);
+  return edit_block(context, directory->volume->pool, physical, NPFS_METADATA_DIRECTORY, false, bytes);
 }
 
-static enum call_status directory_clear(struct native_store_context *context, struct native_store_inode *directory,
+static enum call_status directory_clear(struct npfs_store_context *context, struct npfs_store_inode *directory,
   uint64_t position, uint16_t record_length)
 {
   uint8_t *bytes;
@@ -1787,20 +1787,20 @@ static enum call_status directory_clear(struct native_store_context *context, st
   if (status != CALL_OK) {
     return status;
   }
-  struct pnf_dirent free_entry = { .record_length = record_length };
-  return format_failure(context, pnf_dirent_encode(&directory->volume->pool->header,
-    &free_entry, bytes + position % PNF_BLOCK_SIZE));
+  struct npfs_dirent free_entry = { .record_length = record_length };
+  return format_failure(context, npfs_dirent_encode(&directory->volume->pool->header,
+    &free_entry, bytes + position % NPFS_BLOCK_SIZE));
 }
 
-static enum call_status directory_insert(struct native_store_context *context, struct native_store_inode *directory,
+static enum call_status directory_insert(struct npfs_store_context *context, struct npfs_store_inode *directory,
   const char *name, size_t length, uint64_t number)
 {
-  if (directory->record.cleanup & PNF_CLEANUP_DETACHED) {
+  if (directory->record.cleanup & NPFS_CLEANUP_DETACHED) {
     return CALL_NOT_FOUND;
   }
-  uint16_t needed = (uint16_t)((PNF_DIRENT_HEADER_SIZE + length + 7) & ~7u);
+  uint16_t needed = (uint16_t)((NPFS_DIRENT_HEADER_SIZE + length + 7) & ~7u);
   uint64_t position = 0;
-  struct pnf_dirent free_entry = {0};
+  struct npfs_dirent free_entry = {0};
   bool available = false;
   while (position < directory->record.size) {
     enum call_status status = directory_record(context, directory, position, &free_entry);
@@ -1813,26 +1813,26 @@ static enum call_status directory_insert(struct native_store_context *context, s
     }
     position += free_entry.record_length;
   }
-  struct native_store_pool *pool = directory->volume->pool;
+  struct npfs_store_pool *pool = directory->volume->pool;
   uint8_t *bytes;
   enum call_status status;
   if (!available) {
-    if (directory->record.size > PNF_FILE_SIZE_MAX - PNF_BLOCK_SIZE) {
+    if (directory->record.size > NPFS_FILE_SIZE_MAX - NPFS_BLOCK_SIZE) {
       return CALL_FILE_TOO_LARGE;
     }
     uint64_t physical;
     position = directory->record.size;
     status = map_ensure(context, pool, directory->record.pointers,
-      position / PNF_BLOCK_SIZE, PNF_METADATA_DIRECTORY, &physical);
+      position / NPFS_BLOCK_SIZE, NPFS_METADATA_DIRECTORY, &physical);
     if (status != CALL_OK) {
       return status;
     }
-    status = edit_block(context, pool, physical, PNF_METADATA_DIRECTORY, false, &bytes);
+    status = edit_block(context, pool, physical, NPFS_METADATA_DIRECTORY, false, &bytes);
     if (status != CALL_OK) {
       return status;
     }
-    free_entry.record_length = PNF_BLOCK_SIZE;
-    directory->record.size += PNF_BLOCK_SIZE;
+    free_entry.record_length = NPFS_BLOCK_SIZE;
+    directory->record.size += NPFS_BLOCK_SIZE;
   } else {
     status = directory_edit(context, directory, position, &bytes);
     if (status != CALL_OK) {
@@ -1840,25 +1840,25 @@ static enum call_status directory_insert(struct native_store_context *context, s
     }
   }
   uint16_t remaining = free_entry.record_length - needed;
-  struct pnf_dirent entry = {
+  struct npfs_dirent entry = {
     .inode = number,
-    .record_length = remaining >= PNF_DIRENT_HEADER_SIZE ? needed : free_entry.record_length,
+    .record_length = remaining >= NPFS_DIRENT_HEADER_SIZE ? needed : free_entry.record_length,
     .name_length = (uint16_t)length,
   };
   memcpy(entry.name, name, length);
-  unsigned offset = (unsigned)(position % PNF_BLOCK_SIZE);
-  status = format_failure(context, pnf_dirent_encode(&pool->header, &entry, bytes + offset));
-  if (status == CALL_OK && remaining >= PNF_DIRENT_HEADER_SIZE) {
-    struct pnf_dirent tail = { .record_length = remaining };
-    status = format_failure(context, pnf_dirent_encode(&pool->header, &tail, bytes + offset + needed));
+  unsigned offset = (unsigned)(position % NPFS_BLOCK_SIZE);
+  status = format_failure(context, npfs_dirent_encode(&pool->header, &entry, bytes + offset));
+  if (status == CALL_OK && remaining >= NPFS_DIRENT_HEADER_SIZE) {
+    struct npfs_dirent tail = { .record_length = remaining };
+    status = format_failure(context, npfs_dirent_encode(&pool->header, &tail, bytes + offset + needed));
   }
   return status;
 }
 
-static enum call_status directory_empty(struct native_store_context *context, struct native_store_inode *directory)
+static enum call_status directory_empty(struct npfs_store_context *context, struct npfs_store_inode *directory)
 {
   for (uint64_t position = 0; position < directory->record.size;) {
-    struct pnf_dirent entry;
+    struct npfs_dirent entry;
     enum call_status status = directory_record(context, directory, position, &entry);
     if (status != CALL_OK) {
       return status;
@@ -1871,58 +1871,58 @@ static enum call_status directory_empty(struct native_store_context *context, st
   return CALL_OK;
 }
 
-static enum call_status cleanup_link(struct native_store_context *context, struct native_store_inode *inode, uint32_t flag)
+static enum call_status cleanup_link(struct npfs_store_context *context, struct npfs_store_inode *inode, uint32_t flag)
 {
-  struct native_store_volume *volume = inode->volume;
+  struct npfs_store_volume *volume = inode->volume;
   if (!inode->record.cleanup) {
     inode->record.cleanup_next = volume->record.cleanup_head;
     volume->record.cleanup_head = inode->number;
   }
   inode->record.cleanup |= flag;
-  if (flag & PNF_CLEANUP_DETACHED) {
+  if (flag & NPFS_CLEANUP_DETACHED) {
     inode->record.parent = 0;
   }
   return stage_volume(context, volume);
 }
 
-static void namespace_abort(struct native_store_pool *pool, uint64_t free_blocks)
+static void namespace_abort(struct npfs_store_pool *pool, uint64_t free_blocks)
 {
-  if (!pool->failed && pool->control.state == PNF_JOURNAL_EMPTY) {
+  if (!pool->failed && pool->control.state == NPFS_JOURNAL_EMPTY) {
     pool->image_count = 0;
     pool->freed_in_transaction = false;
     pool->free_blocks = free_blocks;
   }
 }
 
-enum call_status native_store_create(struct native_store_context *context, struct native_store_inode *directory,
-  const char *name, size_t length, uint64_t kind, struct native_store_inode **out)
+enum call_status npfs_store_create(struct npfs_store_context *context, struct npfs_store_inode *directory,
+  const char *name, size_t length, uint64_t kind, struct npfs_store_inode **out)
 {
   require_owner();
   *out = NULL;
-  if (directory->record.kind != PNF_INODE_DIRECTORY) {
+  if (directory->record.kind != NPFS_INODE_DIRECTORY) {
     return CALL_WRONG_TYPE;
   }
-  if (!pnf_name_valid((const uint8_t *)name, length) ||
+  if (!npfs_name_valid((const uint8_t *)name, length) ||
     (kind != DIRECTORY_KIND_FILE && kind != DIRECTORY_KIND_DIRECTORY)) {
     return CALL_BAD_REQUEST;
   }
-  if (directory->record.cleanup & PNF_CLEANUP_DETACHED) {
+  if (directory->record.cleanup & NPFS_CLEANUP_DETACHED) {
     return CALL_NOT_FOUND;
   }
-  struct native_store_volume *volume = directory->volume;
-  struct native_store_pool *pool = volume->pool;
+  struct npfs_store_volume *volume = directory->volume;
+  struct npfs_store_pool *pool = volume->pool;
   enum call_status status = begin_namespace(context, pool, true);
   if (status != CALL_OK) {
     return status;
   }
-  struct pnf_dirent existing;
+  struct npfs_dirent existing;
   uint64_t position;
   status = directory_find(context, directory, name, length, &existing, &position);
   if (status != CALL_NOT_FOUND) {
     return status == CALL_OK ? CALL_ALREADY_EXISTS : status;
   }
-  struct pnf_inode parent_previous = directory->record;
-  struct pnf_volume volume_previous = volume->record;
+  struct npfs_inode parent_previous = directory->record;
+  struct npfs_volume volume_previous = volume->record;
   uint64_t free_previous = pool->free_blocks;
   struct store_free_slot *prepared_slots = NULL;
   struct store_free_slot *selected = volume->free_slots;
@@ -1931,12 +1931,12 @@ enum call_status native_store_create(struct native_store_context *context, struc
     number = selected->number;
   } else {
     uint64_t old_bytes = volume->record.inode_bytes;
-    uint64_t new_bytes = (old_bytes + PNF_BLOCK_SIZE) & ~(uint64_t)(PNF_BLOCK_SIZE - 1);
-    if (new_bytes > PNF_FILE_SIZE_MAX) {
+    uint64_t new_bytes = (old_bytes + NPFS_BLOCK_SIZE) & ~(uint64_t)(NPFS_BLOCK_SIZE - 1);
+    if (new_bytes > NPFS_FILE_SIZE_MAX) {
       return CALL_FILE_TOO_LARGE;
     }
-    number = old_bytes / PNF_INODE_SIZE;
-    for (uint64_t slot = number + 1; slot < new_bytes / PNF_INODE_SIZE; slot++) {
+    number = old_bytes / NPFS_INODE_SIZE;
+    for (uint64_t slot = number + 1; slot < new_bytes / NPFS_INODE_SIZE; slot++) {
       struct store_free_slot *free_slot = store_allocate(sizeof(*free_slot));
       if (!free_slot) {
         status = CALL_NO_MEMORY;
@@ -1949,34 +1949,34 @@ enum call_status native_store_create(struct native_store_context *context, struc
     }
     uint64_t physical;
     status = map_ensure(context, pool, volume->record.pointers,
-      old_bytes / PNF_BLOCK_SIZE, PNF_METADATA_INODES, &physical);
+      old_bytes / NPFS_BLOCK_SIZE, NPFS_METADATA_INODES, &physical);
     if (status != CALL_OK) {
       goto fail;
     }
     uint8_t *bytes;
-    status = edit_block(context, pool, physical, PNF_METADATA_INODES, false, &bytes);
+    status = edit_block(context, pool, physical, NPFS_METADATA_INODES, false, &bytes);
     if (status != CALL_OK) {
       goto fail;
     }
-    memset(bytes + old_bytes % PNF_BLOCK_SIZE, 0, PNF_BLOCK_SIZE - old_bytes % PNF_BLOCK_SIZE);
+    memset(bytes + old_bytes % NPFS_BLOCK_SIZE, 0, NPFS_BLOCK_SIZE - old_bytes % NPFS_BLOCK_SIZE);
     volume->record.inode_bytes = new_bytes;
     status = stage_volume(context, volume);
     if (status != CALL_OK) {
       goto fail;
     }
   }
-  struct native_store_inode *child;
+  struct npfs_store_inode *child;
   status = inode_get(context, volume, number, &child);
   if (status != CALL_OK) {
     goto fail;
   }
-  if (child->record.kind != PNF_INODE_FREE || child->references) {
+  if (child->record.kind != NPFS_INODE_FREE || child->references) {
     status = corrupt(context);
     goto fail;
   }
-  child->record = (struct pnf_inode){
-    .kind = kind == DIRECTORY_KIND_DIRECTORY ? PNF_INODE_DIRECTORY : PNF_INODE_FILE,
-    .mapping = PNF_MAPPING_POINTERS,
+  child->record = (struct npfs_inode){
+    .kind = kind == DIRECTORY_KIND_DIRECTORY ? NPFS_INODE_DIRECTORY : NPFS_INODE_FILE,
+    .mapping = NPFS_MAPPING_POINTERS,
     .parent = kind == DIRECTORY_KIND_DIRECTORY ? directory->number : 0,
   };
   touch_inode(context, &child->record, true);
@@ -2012,7 +2012,7 @@ enum call_status native_store_create(struct native_store_context *context, struc
   directory->durable = directory->record;
   directory->durable_size = directory->record.size;
   directory->generation = ++next_generation;
-  native_store_retain(child);
+  npfs_store_retain(child);
   *out = child;
   return CALL_OK;
   fail:
@@ -2029,25 +2029,25 @@ enum call_status native_store_create(struct native_store_context *context, struc
   return status;
 }
 
-enum call_status native_store_remove(struct native_store_context *context, struct native_store_inode *directory,
+enum call_status npfs_store_remove(struct npfs_store_context *context, struct npfs_store_inode *directory,
   const char *name, size_t length, uint64_t kind)
 {
   require_owner();
-  if (directory->record.cleanup & PNF_CLEANUP_DETACHED) {
+  if (directory->record.cleanup & NPFS_CLEANUP_DETACHED) {
     return CALL_NOT_FOUND;
   }
-  struct native_store_pool *pool = directory->volume->pool;
+  struct npfs_store_pool *pool = directory->volume->pool;
   enum call_status status = begin_namespace(context, pool, false);
   if (status != CALL_OK) {
     return status;
   }
-  struct pnf_dirent entry;
+  struct npfs_dirent entry;
   uint64_t position;
   status = directory_find(context, directory, name, length, &entry, &position);
   if (status != CALL_OK) {
     return status;
   }
-  struct native_store_inode *target;
+  struct npfs_store_inode *target;
   status = inode_get(context, directory->volume, entry.inode, &target);
   if (status != CALL_OK) {
     return status;
@@ -2056,27 +2056,27 @@ enum call_status native_store_remove(struct native_store_context *context, struc
     discard_idle_inode(target, false);
     return corrupt(context);
   }
-  if (kind != DIRECTORY_KIND_ANY && kind != native_store_kind(target)) {
+  if (kind != DIRECTORY_KIND_ANY && kind != npfs_store_kind(target)) {
     discard_idle_inode(target, false);
     return CALL_WRONG_TYPE;
   }
-  if (target->record.kind == PNF_INODE_DIRECTORY) {
+  if (target->record.kind == NPFS_INODE_DIRECTORY) {
     status = directory_empty(context, target);
     if (status != CALL_OK) {
       discard_idle_inode(target, false);
       return status;
     }
   }
-  struct pnf_inode parent_previous = directory->record;
-  struct pnf_inode target_previous = target->record;
-  struct pnf_volume volume_previous = directory->volume->record;
+  struct npfs_inode parent_previous = directory->record;
+  struct npfs_inode target_previous = target->record;
+  struct npfs_volume volume_previous = directory->volume->record;
   uint64_t free_previous = pool->free_blocks;
   status = directory_clear(context, directory, position, entry.record_length);
   if (status == CALL_OK) {
-    status = cleanup_link(context, target, PNF_CLEANUP_DETACHED);
+    status = cleanup_link(context, target, NPFS_CLEANUP_DETACHED);
   }
   touch_inode(context, &directory->record, false);
-  struct pnf_inode detached = target->durable;
+  struct npfs_inode detached = target->durable;
   detached.cleanup = target->record.cleanup;
   detached.cleanup_next = target->record.cleanup_next;
   detached.parent = 0;
@@ -2105,37 +2105,37 @@ enum call_status native_store_remove(struct native_store_context *context, struc
   return CALL_OK;
 }
 
-enum call_status native_store_rename(struct native_store_context *context, struct native_store_inode *source,
+enum call_status npfs_store_rename(struct npfs_store_context *context, struct npfs_store_inode *source,
   const char *source_name, size_t source_length,
-  struct native_store_inode *destination, const char *destination_name,
+  struct npfs_store_inode *destination, const char *destination_name,
   size_t destination_length, bool replace)
 {
   require_owner();
   if (source->volume != destination->volume) {
     return CALL_BAD_REQUEST;
   }
-  if (source->record.cleanup & PNF_CLEANUP_DETACHED) {
+  if (source->record.cleanup & NPFS_CLEANUP_DETACHED) {
     return CALL_NOT_FOUND;
   }
-  if (!pnf_name_valid((const uint8_t *)destination_name, destination_length) ||
-    destination->record.kind != PNF_INODE_DIRECTORY) {
+  if (!npfs_name_valid((const uint8_t *)destination_name, destination_length) ||
+    destination->record.kind != NPFS_INODE_DIRECTORY) {
     return CALL_BAD_REQUEST;
   }
-  if (destination->record.cleanup & PNF_CLEANUP_DETACHED) {
+  if (destination->record.cleanup & NPFS_CLEANUP_DETACHED) {
     return CALL_NOT_FOUND;
   }
-  struct native_store_pool *pool = source->volume->pool;
+  struct npfs_store_pool *pool = source->volume->pool;
   enum call_status status = begin_namespace(context, pool, true);
   if (status != CALL_OK) {
     return status;
   }
-  struct pnf_dirent source_entry, destination_entry;
+  struct npfs_dirent source_entry, destination_entry;
   uint64_t source_position, destination_position = 0;
   status = directory_find(context, source, source_name, source_length, &source_entry, &source_position);
   if (status != CALL_OK) {
     return status;
   }
-  struct native_store_inode *moved;
+  struct npfs_store_inode *moved;
   status = inode_get(context, source->volume, source_entry.inode, &moved);
   if (status != CALL_OK) {
     return status;
@@ -2144,7 +2144,7 @@ enum call_status native_store_rename(struct native_store_context *context, struc
     discard_idle_inode(moved, false);
     return corrupt(context);
   }
-  if (moved->record.kind != PNF_INODE_FILE) {
+  if (moved->record.kind != NPFS_INODE_FILE) {
     discard_idle_inode(moved, false);
     return CALL_WRONG_TYPE;
   }
@@ -2155,7 +2155,7 @@ enum call_status native_store_rename(struct native_store_context *context, struc
   }
   status = directory_find(context, destination, destination_name, destination_length,
     &destination_entry, &destination_position);
-  struct native_store_inode *victim = NULL;
+  struct npfs_store_inode *victim = NULL;
   if (status == CALL_OK) {
     if (!replace) {
       discard_idle_inode(moved, false);
@@ -2173,7 +2173,7 @@ enum call_status native_store_rename(struct native_store_context *context, struc
       discard_idle_inode(moved, false);
       return corrupt(context);
     }
-    if (victim->record.kind != PNF_INODE_FILE || victim == moved) {
+    if (victim->record.kind != NPFS_INODE_FILE || victim == moved) {
       if (victim != moved) {
         discard_idle_inode(victim, false);
       }
@@ -2184,15 +2184,15 @@ enum call_status native_store_rename(struct native_store_context *context, struc
     discard_idle_inode(moved, false);
     return status;
   }
-  struct pnf_inode source_previous = source->record;
-  struct pnf_inode destination_previous = destination->record;
-  struct pnf_inode victim_previous = victim ? victim->record : (struct pnf_inode){0};
-  struct pnf_volume volume_previous = source->volume->record;
+  struct npfs_inode source_previous = source->record;
+  struct npfs_inode destination_previous = destination->record;
+  struct npfs_inode victim_previous = victim ? victim->record : (struct npfs_inode){0};
+  struct npfs_volume volume_previous = source->volume->record;
   uint64_t free_previous = pool->free_blocks;
   if (victim) {
     status = directory_clear(context, destination, destination_position, destination_entry.record_length);
     if (status == CALL_OK) {
-      status = cleanup_link(context, victim, PNF_CLEANUP_DETACHED);
+      status = cleanup_link(context, victim, NPFS_CLEANUP_DETACHED);
     }
     if (status == CALL_OK) {
       status = stage_inode(context, victim);
@@ -2253,25 +2253,25 @@ struct cleanup_path {
   unsigned indices[3];
 };
 
-static enum call_status highest_mapping(struct native_store_context *context, struct native_store_inode *inode,
+static enum call_status highest_mapping(struct npfs_store_context *context, struct npfs_store_inode *inode,
   uint64_t limit, struct cleanup_path *path)
 {
-  struct native_store_pool *pool = inode->volume->pool;
+  struct npfs_store_pool *pool = inode->volume->pool;
   const uint64_t *pointers = inode->durable.pointers;
   memset(path, 0, sizeof(*path));
   struct search_frame {
     uint64_t block, base, span;
     unsigned level, cursor, child_index;
   } frames[3];
-  uint64_t bases[3] = {PNF_DIRECT_COUNT, PNF_DIRECT_COUNT + PNF_INDIRECT_COUNT,
-    PNF_DIRECT_COUNT + PNF_INDIRECT_COUNT + (uint64_t)PNF_INDIRECT_COUNT * PNF_INDIRECT_COUNT};
-  uint64_t spans[3] = {1, PNF_INDIRECT_COUNT, (uint64_t)PNF_INDIRECT_COUNT * PNF_INDIRECT_COUNT};
+  uint64_t bases[3] = {NPFS_DIRECT_COUNT, NPFS_DIRECT_COUNT + NPFS_INDIRECT_COUNT,
+    NPFS_DIRECT_COUNT + NPFS_INDIRECT_COUNT + (uint64_t)NPFS_INDIRECT_COUNT * NPFS_INDIRECT_COUNT};
+  uint64_t spans[3] = {1, NPFS_INDIRECT_COUNT, (uint64_t)NPFS_INDIRECT_COUNT * NPFS_INDIRECT_COUNT};
   for (unsigned tier = 3; tier; tier--) {
-    unsigned root_slot = PNF_DIRECT_COUNT + tier - 1;
+    unsigned root_slot = NPFS_DIRECT_COUNT + tier - 1;
     if (!pointers[root_slot]) {
       continue;
     }
-    frames[0] = (struct search_frame){pointers[root_slot], bases[tier - 1], spans[tier - 1], tier, PNF_INDIRECT_COUNT, 0};
+    frames[0] = (struct search_frame){pointers[root_slot], bases[tier - 1], spans[tier - 1], tier, NPFS_INDIRECT_COUNT, 0};
     unsigned depth = 1;
     while (depth) {
       struct search_frame *frame = &frames[depth - 1];
@@ -2284,8 +2284,8 @@ static enum call_status highest_mapping(struct native_store_context *context, st
         return status;
       }
       bool empty = true;
-      for (unsigned i = 0; i < PNF_INDIRECT_COUNT; i++) {
-        if (pnf_get_u64(pool->io[0] + i * 8)) {
+      for (unsigned i = 0; i < NPFS_INDIRECT_COUNT; i++) {
+        if (npfs_get_u64(pool->io[0] + i * 8)) {
           empty = false;
           break;
         }
@@ -2303,7 +2303,7 @@ static enum call_status highest_mapping(struct native_store_context *context, st
       bool descended = false;
       while (frame->cursor) {
         unsigned index = --frame->cursor;
-        uint64_t block = pnf_get_u64(pool->io[0] + index * 8);
+        uint64_t block = npfs_get_u64(pool->io[0] + index * 8);
         uint64_t logical = frame->base + index * frame->span;
         if (!block || logical + frame->span <= limit) {
           continue;
@@ -2325,7 +2325,7 @@ static enum call_status highest_mapping(struct native_store_context *context, st
           return CALL_OK;
         }
         frames[depth++] = (struct search_frame){block, logical,
-          frame->span / PNF_INDIRECT_COUNT, frame->level - 1, PNF_INDIRECT_COUNT, 0};
+          frame->span / NPFS_INDIRECT_COUNT, frame->level - 1, NPFS_INDIRECT_COUNT, 0};
         descended = true;
         break;
       }
@@ -2334,7 +2334,7 @@ static enum call_status highest_mapping(struct native_store_context *context, st
       }
     }
   }
-  for (unsigned slot = PNF_DIRECT_COUNT; slot; slot--) {
+  for (unsigned slot = NPFS_DIRECT_COUNT; slot; slot--) {
     unsigned index = slot - 1;
     if (index >= limit && pointers[index]) {
       path->target = pointers[index];
@@ -2345,10 +2345,10 @@ static enum call_status highest_mapping(struct native_store_context *context, st
   return CALL_OK;
 }
 
-static enum call_status remove_mapping(struct native_store_context *context, struct native_store_inode *inode,
+static enum call_status remove_mapping(struct npfs_store_context *context, struct npfs_store_inode *inode,
   const struct cleanup_path *path)
 {
-  struct native_store_pool *pool = inode->volume->pool;
+  struct npfs_store_pool *pool = inode->volume->pool;
   uint64_t freed = path->target;
   unsigned depth = path->depth;
   for (;;) {
@@ -2362,17 +2362,17 @@ static enum call_status remove_mapping(struct native_store_context *context, str
     }
     unsigned index = --depth;
     uint8_t *bytes;
-    status = edit_block(context, pool, path->parents[index], PNF_METADATA_INDIRECT, false, &bytes);
+    status = edit_block(context, pool, path->parents[index], NPFS_METADATA_INDIRECT, false, &bytes);
     if (status != CALL_OK) {
       return status;
     }
-    if (pnf_get_u64(bytes + path->indices[index] * 8) != freed) {
+    if (npfs_get_u64(bytes + path->indices[index] * 8) != freed) {
       return corrupt(context);
     }
-    pnf_put_u64(bytes + path->indices[index] * 8, 0);
+    npfs_put_u64(bytes + path->indices[index] * 8, 0);
     bool empty = true;
-    for (unsigned i = 0; i < PNF_INDIRECT_COUNT; i++) {
-      if (pnf_get_u64(bytes + i * 8)) {
+    for (unsigned i = 0; i < NPFS_INDIRECT_COUNT; i++) {
+      if (npfs_get_u64(bytes + i * 8)) {
         empty = false;
         break;
       }
@@ -2384,14 +2384,14 @@ static enum call_status remove_mapping(struct native_store_context *context, str
   }
 }
 
-static bool cleanup_mapping_fits(const struct native_store_pool *pool, const struct cleanup_path *path)
+static bool cleanup_mapping_fits(const struct npfs_store_pool *pool, const struct cleanup_path *path)
 {
   uint64_t homes[7];
   unsigned count = 0;
-  homes[count++] = pool->header.bitmap_start + path->target / PNF_BITMAP_BITS;
+  homes[count++] = pool->header.bitmap_start + path->target / NPFS_BITMAP_BITS;
   for (unsigned i = 0; i < path->depth; i++) {
     homes[count++] = path->parents[i];
-    homes[count++] = pool->header.bitmap_start + path->parents[i] / PNF_BITMAP_BITS;
+    homes[count++] = pool->header.bitmap_start + path->parents[i] / NPFS_BITMAP_BITS;
   }
   unsigned images = pool->image_count;
   for (unsigned i = 0; i < count; i++) {
@@ -2411,9 +2411,9 @@ static bool cleanup_mapping_fits(const struct native_store_pool *pool, const str
   return images <= STORE_CLEANUP_IMAGES - 2;
 }
 
-static void drop_inode_cache(struct native_store_inode *inode, uint64_t first)
+static void drop_inode_cache(struct npfs_store_inode *inode, uint64_t first)
 {
-  struct native_store_pool *pool = inode->volume->pool;
+  struct npfs_store_pool *pool = inode->volume->pool;
   for (unsigned chunk = 0; chunk < STORE_CACHE_CHUNKS; chunk++) {
     if (!pool->cache[chunk]) {
       continue;
@@ -2428,14 +2428,14 @@ static void drop_inode_cache(struct native_store_inode *inode, uint64_t first)
   }
 }
 
-static void discard_idle_inode(struct native_store_inode *inode, bool pressure)
+static void discard_idle_inode(struct npfs_store_inode *inode, bool pressure)
 {
   if (inode->references || inode->record.cleanup || inode->size_dirty ||
-    inode->record.kind == PNF_INODE_FREE || next_dirty(inode)) {
+    inode->record.kind == NPFS_INODE_FREE || next_dirty(inode)) {
     return;
   }
   if (!pressure) {
-    struct native_store_pool *pool = inode->volume->pool;
+    struct npfs_store_pool *pool = inode->volume->pool;
     for (unsigned chunk = 0; chunk < STORE_CACHE_CHUNKS; chunk++) {
       if (!pool->cache[chunk]) {
         continue;
@@ -2448,7 +2448,7 @@ static void discard_idle_inode(struct native_store_inode *inode, bool pressure)
     }
   }
   drop_inode_cache(inode, 0);
-  struct native_store_inode **link = &inode->volume->inodes;
+  struct npfs_store_inode **link = &inode->volume->inodes;
   while (*link != inode) {
     KASSERT(*link);
     link = &(*link)->next;
@@ -2457,16 +2457,16 @@ static void discard_idle_inode(struct native_store_inode *inode, bool pressure)
   store_free(inode);
 }
 
-static enum call_status cleanup_one(struct native_store_context *context, struct native_store_volume *volume)
+static enum call_status cleanup_one(struct npfs_store_context *context, struct npfs_store_volume *volume)
 {
-  struct native_store_pool *pool = volume->pool;
+  struct npfs_store_pool *pool = volume->pool;
   enum call_status status = writable(pool);
   if (status != CALL_OK) {
     return status;
   }
-  struct native_store_inode *inode = NULL, *previous = NULL;
+  struct npfs_store_inode *inode = NULL, *previous = NULL;
   uint64_t number = volume->record.cleanup_head;
-  uint64_t count = volume->record.inode_bytes / PNF_INODE_SIZE;
+  uint64_t count = volume->record.inode_bytes / NPFS_INODE_SIZE;
   while (number) {
     if (!count--) {
       return corrupt(context);
@@ -2478,7 +2478,7 @@ static enum call_status cleanup_one(struct native_store_context *context, struct
     if (!inode->record.cleanup) {
       return corrupt(context);
     }
-    if ((inode->record.cleanup & PNF_CLEANUP_SHRINK) || !inode->references) {
+    if ((inode->record.cleanup & NPFS_CLEANUP_SHRINK) || !inode->references) {
       break;
     }
     previous = inode;
@@ -2491,12 +2491,12 @@ static enum call_status cleanup_one(struct native_store_context *context, struct
   if (status != CALL_OK) {
     return status;
   }
-  bool detached = (inode->record.cleanup & PNF_CLEANUP_DETACHED) && !inode->references;
+  bool detached = (inode->record.cleanup & NPFS_CLEANUP_DETACHED) && !inode->references;
   uint64_t target = detached ? 0 : inode->record.shrink_target;
-  uint64_t limit = target / PNF_BLOCK_SIZE + (target % PNF_BLOCK_SIZE != 0);
-  struct pnf_inode old_record = inode->record, old_durable = inode->durable;
-  struct pnf_inode previous_record = previous ? previous->record : (struct pnf_inode){0};
-  struct pnf_volume old_volume = volume->record;
+  uint64_t limit = target / NPFS_BLOCK_SIZE + (target % NPFS_BLOCK_SIZE != 0);
+  struct npfs_inode old_record = inode->record, old_durable = inode->durable;
+  struct npfs_inode previous_record = previous ? previous->record : (struct npfs_inode){0};
+  struct npfs_volume old_volume = volume->record;
   uint64_t old_free = pool->free_blocks;
   bool reclaimed = false;
   bool complete = false;
@@ -2520,16 +2520,16 @@ static enum call_status cleanup_one(struct native_store_context *context, struct
     memcpy(inode->record.pointers, inode->durable.pointers, sizeof(inode->record.pointers));
   }
   if (status == CALL_OK && complete) {
-    inode->record.cleanup &= ~PNF_CLEANUP_SHRINK;
+    inode->record.cleanup &= ~NPFS_CLEANUP_SHRINK;
     inode->record.shrink_target = 0;
-    inode->durable.cleanup &= ~PNF_CLEANUP_SHRINK;
+    inode->durable.cleanup &= ~NPFS_CLEANUP_SHRINK;
     inode->durable.shrink_target = 0;
-    reclaimed = (inode->record.cleanup & PNF_CLEANUP_DETACHED) && !inode->references;
+    reclaimed = (inode->record.cleanup & NPFS_CLEANUP_DETACHED) && !inode->references;
     if (!inode->record.cleanup || reclaimed) {
       uint64_t next = inode->record.cleanup_next;
       if (previous) {
         previous->record.cleanup_next = next;
-        struct pnf_inode durable_previous = previous->durable;
+        struct npfs_inode durable_previous = previous->durable;
         durable_previous.cleanup_next = next;
         status = stage_inode_record(context, previous, &durable_previous);
       } else {
@@ -2578,12 +2578,12 @@ static enum call_status cleanup_one(struct native_store_context *context, struct
   return CALL_OK;
 }
 
-static enum call_status zero_growth_tail(struct native_store_context *context, struct native_store_inode *inode)
+static enum call_status zero_growth_tail(struct npfs_store_context *context, struct npfs_store_inode *inode)
 {
-  if (!inode->record.size || inode->record.size % PNF_BLOCK_SIZE == 0) {
+  if (!inode->record.size || inode->record.size % NPFS_BLOCK_SIZE == 0) {
     return CALL_OK;
   }
-  uint64_t logical = inode->record.size / PNF_BLOCK_SIZE;
+  uint64_t logical = inode->record.size / NPFS_BLOCK_SIZE;
   struct store_cache_entry *entry = cache_find(inode, logical);
   if (!entry || !entry->dirty) {
     uint64_t physical;
@@ -2600,25 +2600,25 @@ static enum call_status zero_growth_tail(struct native_store_context *context, s
   if (status != CALL_OK) {
     return status;
   }
-  unsigned offset = (unsigned)(inode->record.size % PNF_BLOCK_SIZE);
-  memset(entry->bytes + offset, 0, PNF_BLOCK_SIZE - offset);
+  unsigned offset = (unsigned)(inode->record.size % NPFS_BLOCK_SIZE);
+  memset(entry->bytes + offset, 0, NPFS_BLOCK_SIZE - offset);
   entry->dirty = true;
   return CALL_OK;
 }
 
-enum call_status native_store_resize(struct native_store_context *context, struct native_store_inode *inode,
+enum call_status npfs_store_resize(struct npfs_store_context *context, struct npfs_store_inode *inode,
   uint64_t size)
 {
   require_owner();
-  struct native_store_pool *pool = inode->volume->pool;
+  struct npfs_store_pool *pool = inode->volume->pool;
   enum call_status status = writable(pool);
   if (status != CALL_OK) {
     return status;
   }
-  if (inode->record.kind != PNF_INODE_FILE) {
+  if (inode->record.kind != NPFS_INODE_FILE) {
     return CALL_WRONG_TYPE;
   }
-  if (size > PNF_FILE_SIZE_MAX) {
+  if (size > NPFS_FILE_SIZE_MAX) {
     return CALL_FILE_TOO_LARGE;
   }
   status = finish_shrink(context, inode);
@@ -2639,13 +2639,13 @@ enum call_status native_store_resize(struct native_store_context *context, struc
   if (status != CALL_OK) {
     return status;
   }
-  struct pnf_inode old_record = inode->record;
-  struct pnf_volume old_volume = inode->volume->record;
+  struct npfs_inode old_record = inode->record;
+  struct npfs_volume old_volume = inode->volume->record;
   uint64_t old_free = pool->free_blocks;
   inode->record.size = size;
   inode->record.shrink_target = size;
   touch_inode(context, &inode->record, false);
-  status = cleanup_link(context, inode, PNF_CLEANUP_SHRINK);
+  status = cleanup_link(context, inode, NPFS_CLEANUP_SHRINK);
   if (status == CALL_OK) {
     status = stage_inode(context, inode);
   }
@@ -2663,23 +2663,23 @@ enum call_status native_store_resize(struct native_store_context *context, struc
   inode->durable = inode->record;
   inode->durable_size = size;
   inode->size_dirty = false;
-  drop_inode_cache(inode, size / PNF_BLOCK_SIZE + (size % PNF_BLOCK_SIZE != 0));
+  drop_inode_cache(inode, size / NPFS_BLOCK_SIZE + (size % NPFS_BLOCK_SIZE != 0));
   return CALL_OK;
 }
 
-bool native_store_pending(const struct native_store_pool *pool)
+bool npfs_store_pending(const struct npfs_store_pool *pool)
 {
   require_owner();
   if (!pool->writable || pool->failed) {
     return false;
   }
-  if (pool->control.state == PNF_JOURNAL_COMMITTED) {
+  if (pool->control.state == NPFS_JOURNAL_COMMITTED) {
     return true;
   }
-  for (const struct native_store_volume *volume = pool->volumes; volume; volume = volume->next) {
-    for (const struct native_store_inode *inode = volume->inodes; inode; inode = inode->next) {
-      if ((inode->record.cleanup & PNF_CLEANUP_SHRINK) ||
-        ((inode->record.cleanup & PNF_CLEANUP_DETACHED) && !inode->references)) {
+  for (const struct npfs_store_volume *volume = pool->volumes; volume; volume = volume->next) {
+    for (const struct npfs_store_inode *inode = volume->inodes; inode; inode = inode->next) {
+      if ((inode->record.cleanup & NPFS_CLEANUP_SHRINK) ||
+        ((inode->record.cleanup & NPFS_CLEANUP_DETACHED) && !inode->references)) {
         return true;
       }
     }
@@ -2687,7 +2687,7 @@ bool native_store_pending(const struct native_store_pool *pool)
   return false;
 }
 
-enum call_status native_store_maintain(struct native_store_context *context, struct native_store_pool *pool,
+enum call_status npfs_store_maintain(struct npfs_store_context *context, struct npfs_store_pool *pool,
   bool flush_dirty, bool pressure)
 {
   require_owner();
@@ -2696,10 +2696,10 @@ enum call_status native_store_maintain(struct native_store_context *context, str
     status = flush_files(context, pool);
   }
   if (pressure) {
-    for (struct native_store_volume *volume = pool->volumes; volume; volume = volume->next) {
-      struct native_store_inode *inode = volume->inodes;
+    for (struct npfs_store_volume *volume = pool->volumes; volume; volume = volume->next) {
+      struct npfs_store_inode *inode = volume->inodes;
       while (inode) {
-        struct native_store_inode *next = inode->next;
+        struct npfs_store_inode *next = inode->next;
         discard_idle_inode(inode, true);
         inode = next;
       }
@@ -2724,22 +2724,22 @@ enum call_status native_store_maintain(struct native_store_context *context, str
   if (!pool->writable) {
     return CALL_OK;
   }
-  if (pool->control.state == PNF_JOURNAL_COMMITTED) {
+  if (pool->control.state == NPFS_JOURNAL_COMMITTED) {
     return checkpoint(context, pool);
   }
-  for (struct native_store_volume *volume = pool->volumes; volume; volume = volume->next) {
+  for (struct npfs_store_volume *volume = pool->volumes; volume; volume = volume->next) {
     uint64_t number = volume->record.cleanup_head;
-    uint64_t count = volume->record.inode_bytes / PNF_INODE_SIZE;
+    uint64_t count = volume->record.inode_bytes / NPFS_INODE_SIZE;
     while (number) {
       if (!count--) {
         return corrupt(context);
       }
-      struct native_store_inode *inode;
+      struct npfs_store_inode *inode;
       status = inode_get(context, volume, number, &inode);
       if (status != CALL_OK) {
         return status;
       }
-      if ((inode->record.cleanup & PNF_CLEANUP_SHRINK) || !inode->references) {
+      if ((inode->record.cleanup & NPFS_CLEANUP_SHRINK) || !inode->references) {
         return cleanup_one(context, volume);
       }
       number = inode->record.cleanup_next;
@@ -2748,19 +2748,19 @@ enum call_status native_store_maintain(struct native_store_context *context, str
   return CALL_OK;
 }
 
-void native_store_info(struct native_store_inode *inode, struct directory_filesystem_info *info)
+void npfs_store_info(struct npfs_store_inode *inode, struct directory_filesystem_info *info)
 {
   require_owner();
-  struct native_store_pool *pool = inode->volume->pool;
+  struct npfs_store_pool *pool = inode->volume->pool;
   memset(info, 0, sizeof(*info));
-  info->type = FILESYSTEM_TYPE_PYXIS;
+  info->type = FILESYSTEM_TYPE_NPFS;
   info->flags = pool->writable ? 0 : FILESYSTEM_FLAG_READ_ONLY;
   if (pool->degraded) {
     info->flags |= FILESYSTEM_FLAG_DEGRADED;
   }
-  memcpy(info->pool_id, pool->header.pool_id, PNF_ID_SIZE);
-  memcpy(info->volume_id, inode->volume->record.id, PNF_ID_SIZE);
+  memcpy(info->pool_id, pool->header.pool_id, NPFS_ID_SIZE);
+  memcpy(info->volume_id, inode->volume->record.id, NPFS_ID_SIZE);
   info->generation = pool->control.sequence;
-  info->pool_allocatable_bytes = (pool->header.pool_blocks - 2) * PNF_BLOCK_SIZE;
+  info->pool_allocatable_bytes = (pool->header.pool_blocks - 2) * NPFS_BLOCK_SIZE;
   memcpy(info->volume_name, inode->volume->record.name, inode->volume->record.name_length);
 }
