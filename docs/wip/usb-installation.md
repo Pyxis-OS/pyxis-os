@@ -370,6 +370,11 @@ host tools and the later physical-preparation procedure.
      unused compatibility padding does not reject an otherwise bounded descriptor.
      SuperSpeed hubs, hotplug and storage remain deferred; high-speed TT and
      physical hardware remain unqualified. See the [hub reference](../devices/usb-hubs.md).
+   - [x] Recognize SuperSpeedPlus roots from protocol-version defaults or explicit
+     PSI link metadata and inspect their device/configuration descriptors. Expose
+     a distinct `super-plus` inventory category without numeric rate/lane fields.
+     SuperSpeed/SuperSpeedPlus hub descendants remain uninspected and partial;
+     enhanced native link qualification remains pending.
    The initial BOT matcher/endpoint setup was removed for the inspection-only
    slice; reintroduce class transfers with their first consumer and an explicit
    pre-AP resource policy in B.4.

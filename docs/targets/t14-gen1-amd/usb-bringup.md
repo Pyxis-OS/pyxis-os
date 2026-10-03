@@ -65,7 +65,7 @@ usb: 7:0.4 port 1.2.4 device 17ef:306f
 xHCI 7:0.4: boot USB enumeration complete
 ```
 
-Code inspection explains the unknown-speed record: `protocol_speeds` classifies
+Code inspection at the recorded revision explains the unknown-speed record: `protocol_speeds` classifies
 USB 3 rates only for the supported 5 Gb/s profile, while `usb_host_address`
 returns `USB_UNSUPPORTED` for an unknown speed before issuing Address Device.
 The generic detail incorrectly suggests a descriptor transfer failure.

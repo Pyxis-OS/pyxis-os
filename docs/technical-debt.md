@@ -1358,7 +1358,13 @@ The shared startup deadline can expire on large trees; exhausted branches are
 partial. SuperSpeed hubs and low-speed hardware paths remain unqualified.
 The first owner-reported ThinkPad snapshot exercised full-speed descendants
 behind high-speed hubs; recovery and broader TT qualification remain pending.
-QEMU's built-in hub exercises full-speed descendants only.
+QEMU's built-in hub exercises full-speed descendants only. SuperSpeedPlus root
+recognition uses discovered protocol metadata, but QEMU's current devices do not
+exercise that link profile; native address/descriptor qualification is pending.
+SuperSpeed/SuperSpeedPlus hubs retain identity/interfaces without inspecting
+descendants. Revisit traversal in its own bounded hub task. Categorical inventory
+omits directional rates and lane counts; SSP isochronous byte budgets remain
+uninterpreted until actual non-control endpoint scheduling needs them.
 Hub descendants are not monitored after publication; idle downstream removal
 retains their slots/backing until reboot. Revisit this with separately scoped
 hotplug/lifetime work. Root removal still retires the retained subtree, and

@@ -250,16 +250,53 @@ static bool legacy_handoff(struct usb_host_controller *controller, unsigned offs
   return !(read32(base, XHCI_LEGACY_CONTROL) & XHCI_LEGACY_SMI_ENABLES);
 }
 
+static enum usb_speed protocol_speed(unsigned major, uint32_t psi)
+{
+  uint64_t rate = psi >> XHCI_PSI_MANTISSA_SHIFT;
+  unsigned exponent = (psi >> XHCI_PSI_EXPONENT_SHIFT) & XHCI_PSI_EXPONENT_MASK;
+  unsigned protocol = (psi >> XHCI_PSI_PROTOCOL_SHIFT) & XHCI_PSI_PROTOCOL_MASK;
+  if (!rate) {
+    return USB_SPEED_UNKNOWN;
+  }
+  if (major == XHCI_PROTOCOL_USB_3 && (psi & XHCI_PSI_FULL_DUPLEX)) {
+    if (protocol == XHCI_PSI_PROTOCOL_SUPER) {
+      return USB_SPEED_SUPER;
+    }
+    if (protocol == XHCI_PSI_PROTOCOL_SUPER_PLUS) {
+      return USB_SPEED_SUPER_PLUS;
+    }
+  }
+  if (major != XHCI_PROTOCOL_USB_2 || protocol || (psi & XHCI_PSI_FULL_DUPLEX)) {
+    return USB_SPEED_UNKNOWN;
+  }
+  while (exponent--) {
+    rate *= 1000;
+  }
+  return rate == 1500000 ? USB_SPEED_LOW : rate == 12000000 ? USB_SPEED_FULL :
+    rate == 480000000 ? USB_SPEED_HIGH : USB_SPEED_UNKNOWN;
+}
+
 static bool protocol_speeds(uintptr_t base, unsigned offset, unsigned count,
-                            unsigned major, enum usb_speed *speeds)
+                            unsigned major, unsigned minor, enum usb_speed *speeds)
 {
   if (!count) {
-    if (major == 2) {
-      speeds[1] = USB_SPEED_FULL;
-      speeds[2] = USB_SPEED_LOW;
-      speeds[3] = USB_SPEED_HIGH;
-    } else if (major == 3) {
-      speeds[4] = USB_SPEED_SUPER;
+    /* Defaults exist only for these exact BCD protocol revisions. Explicit PSI
+     * entries replace them, including the meanings of otherwise familiar IDs. */
+    if (major == XHCI_PROTOCOL_USB_2 && minor == XHCI_PROTOCOL_MINOR_0) {
+      speeds[XHCI_SPEED_FULL] = USB_SPEED_FULL;
+      speeds[XHCI_SPEED_LOW] = USB_SPEED_LOW;
+      speeds[XHCI_SPEED_HIGH] = USB_SPEED_HIGH;
+    } else if (major == XHCI_PROTOCOL_USB_3 &&
+               (minor == XHCI_PROTOCOL_MINOR_0 || minor == XHCI_PROTOCOL_MINOR_1 ||
+                minor == XHCI_PROTOCOL_MINOR_2)) {
+      speeds[XHCI_SPEED_GEN_1X1] = USB_SPEED_SUPER;
+      if (minor != XHCI_PROTOCOL_MINOR_0) {
+        speeds[XHCI_SPEED_GEN_2X1] = USB_SPEED_SUPER_PLUS;
+      }
+      if (minor == XHCI_PROTOCOL_MINOR_2) {
+        speeds[XHCI_SPEED_GEN_1X2] = USB_SPEED_SUPER_PLUS;
+        speeds[XHCI_SPEED_GEN_2X2] = USB_SPEED_SUPER_PLUS;
+      }
     }
     return true;
   }
@@ -268,13 +305,11 @@ static bool protocol_speeds(uintptr_t base, unsigned offset, unsigned count,
     uint32_t psi = read32(base, offset + XHCI_PROTOCOL_BYTES + i * sizeof(uint32_t));
     unsigned id = psi & XHCI_PSI_ID_MASK;
     unsigned link = (psi >> XHCI_PSI_LINK_TYPE_SHIFT) & XHCI_PSI_LINK_TYPE_MASK;
-    unsigned protocol = (psi >> XHCI_PSI_PROTOCOL_SHIFT) & XHCI_PSI_PROTOCOL_MASK;
     if (!id || (seen & (1u << id))) {
       return false;
     }
     seen |= 1u << id;
-    /* Valid asymmetric pairs may describe an unused link profile. Keep their
-     * shared speed ID unknown without rejecting unrelated supported ports. */
+    enum usb_speed speed = protocol_speed(major, psi);
     if (link == XHCI_PSI_ASYMMETRIC_RX) {
       if (++i == count) {
         return false;
@@ -284,25 +319,17 @@ static bool protocol_speeds(uintptr_t base, unsigned offset, unsigned count,
           ((transmit >> XHCI_PSI_LINK_TYPE_SHIFT) & XHCI_PSI_LINK_TYPE_MASK) != XHCI_PSI_ASYMMETRIC_TX) {
         return false;
       }
+      /* Directional rates/lanes may differ. EP0 needs a common USB 3 protocol,
+       * not an invented aggregate rate or a normalized controller speed ID. */
+      if (usb_speed_is_enhanced(speed) && protocol_speed(major, transmit) == speed) {
+        speeds[id] = speed;
+      }
       continue;
     }
     if (link != XHCI_PSI_SYMMETRIC) {
       return false;
     }
-    if (protocol) {
-      continue;
-    }
-    uint64_t rate = psi >> XHCI_PSI_MANTISSA_SHIFT;
-    unsigned exponent = (psi >> XHCI_PSI_EXPONENT_SHIFT) & XHCI_PSI_EXPONENT_MASK;
-    while (exponent--) {
-      rate *= 1000;
-    }
-    if (major == 2) {
-      speeds[id] = rate == 1500000 ? USB_SPEED_LOW : rate == 12000000 ? USB_SPEED_FULL :
-        rate == 480000000 ? USB_SPEED_HIGH : USB_SPEED_UNKNOWN;
-    } else if (major == 3 && rate == 5000000000ULL) {
-      speeds[id] = USB_SPEED_SUPER;
-    }
+    speeds[id] = speed;
   }
   return true;
 }
@@ -345,7 +372,8 @@ static bool extended_capabilities(struct usb_host_controller *controller)
       unsigned slot_type = read32(base, offset + 12) & XHCI_PROTOCOL_SLOT_TYPE_MASK;
       enum usb_speed speed_map[XHCI_PORT_SPEED_MASK + 1] = {0};
       if (!bootstrap_fits(offset, bytes) ||
-          !protocol_speeds(base, offset, speeds, header >> XHCI_PROTOCOL_MAJOR_SHIFT, speed_map)) {
+          !protocol_speeds(base, offset, speeds, header >> XHCI_PROTOCOL_MAJOR_SHIFT,
+                           (header >> XHCI_PROTOCOL_MINOR_SHIFT) & XHCI_EXT_ID_MASK, speed_map)) {
         return false;
       }
       for (unsigned i = first - 1; i < first - 1 + count; ++i) {
@@ -1283,7 +1311,7 @@ enum usb_result usb_host_address(struct usb_host_device *device, uint64_t deadli
   if (device->speed == USB_SPEED_UNKNOWN) {
     return USB_UNSUPPORTED;
   }
-  device->packet = device->speed == USB_SPEED_SUPER ? 512 : device->speed == USB_SPEED_HIGH ? 64 : 8;
+  device->packet = usb_speed_is_enhanced(device->speed) ? 512 : device->speed == USB_SPEED_HIGH ? 64 : 8;
   memset((void *)device->input.address, 0, device->input.bytes);
   uint32_t *input = (uint32_t *)device->input.address;
   input[1] = 3; /* Slot and EP0 only. */

@@ -95,7 +95,10 @@ for the boot but otherwise unspecified, including controller order. Controller
 records include the PCI identity and inspection state, including unsupported host
 interfaces. A zero root-port count means unknown/not inspected, not a measured
 zero-port controller. A failed controller can retain a count inspected before failure.
-Device records use a controller index and one-based physical root-port number;
+Speeds are categorical: unknown, low, full, high, super or super-plus.
+SuperSpeedPlus does not specify a numeric bit rate or lane count; those fields
+are absent. Device records use a controller index and one-based physical
+root-port number;
 direct roots use `SYSTEM_INFO_USB_NO_PARENT` and zero parent port. Descendants
 name an earlier hub record on the same controller/root port and its one-based
 physical downstream port. These relations supply the full path, independently
