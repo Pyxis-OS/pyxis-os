@@ -140,6 +140,11 @@ bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state
   if (state->command & PCI_COMMAND_MASTER) {
     return false;
   }
+  /* A reset-causing D3hot wake can discard firmware BAR assignments. */
+  if ((state->pmcsr & PCI_POWER_STATE_MASK) == PCI_POWER_D3HOT &&
+      !(state->pmcsr & PCI_POWER_NO_SOFT_RESET)) {
+    return false;
+  }
   if (wake) {
     state->power_changed = true;
     pci_write16(claim, state->power_capability + PCI_POWER_CONTROL,

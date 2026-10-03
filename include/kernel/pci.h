@@ -97,11 +97,11 @@ void pci_cancel_reservation(struct pci_claim *claim);
 /* Reserved claim before mappings, zeroed caller-owned snapshot. If D0/memory
  * decode is already usable, leave configuration untouched, including BME.
  * Otherwise require BME off before temporarily waking/enabling memory decode;
- * preserve PME enable and do not acknowledge PME status. Begin failure may
+ * reject reset-causing D3hot wake, preserve PME enable and leave PME status.
+ * Begin failure may
  * follow a write: restore before cancellation on unsupported identity/failure.
  * Restore requires the still-reserved claim and no other hardware changes;
- * false retains ownership until reboot. Restores configuration only: a D3hot
- * wake may reset device internals and cannot promise untouched hardware. */
+ * false retains ownership until reboot. */
 bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state);
 bool pci_restore_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state);
 /* Assigned, page-aligned memory BAR low-half prefix, before completion/sizing.

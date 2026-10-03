@@ -66,6 +66,8 @@
 #define PCI_POWER_CONTROL 4
 #define PCI_POWER_STATE_MASK 3u
 #define PCI_POWER_D0 0u
+#define PCI_POWER_D3HOT 3u
+#define PCI_POWER_NO_SOFT_RESET (1u << 3)
 #define PCI_POWER_PME_ENABLE (1u << 8)
 #define PCI_POWER_DATA_SELECT_MASK (15u << 9)
 #define PCI_POWER_PME_STATUS (1u << 15)

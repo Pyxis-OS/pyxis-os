@@ -89,7 +89,9 @@ For identity reads that need temporary wake or memory decoding,
 PMCSR before mapping. It rejects duplicate or truncated power capabilities.
 An already-D0 function with memory decoding enabled remains untouched even if
 firmware bus mastering is enabled. Any normalization requires bus mastering
-off: wake to D0, wait 10 ms with the monotonic clock, verify the power state,
+off. D3hot wake without `NoSoftRst` is rejected before writing because an
+internal reset can discard firmware BAR assignments. Otherwise wake to D0,
+wait 10 ms with the monotonic clock, verify the power state,
 then enable memory decoding with readback. PME enable remains unchanged, and
 PME status is never acknowledged. Generic command writes still require a
 completed claim; this is a restricted PCI-owned exception.
@@ -98,8 +100,7 @@ Before canceling after unsupported identity or an early probe failure, the
 caller uses `pci_restore_mmio_probe` to restore changed command/PMCSR fields
 without setting bus mastering or acknowledging PME status. A failed restoration
 retains the claim and mappings until reboot. A successful restoration returns
-the saved command and writable PMCSR fields; it does not undo internal changes caused
-by a D3hot-to-D0 reset. The caller must perform no other hardware writes before
+the saved command and writable PMCSR fields. The caller must perform no other hardware writes before
 this cancellation path. Confirmed controllers continue to driver handoff and
 ordinary claim completion, retaining the normalized power/decoding state.
 
