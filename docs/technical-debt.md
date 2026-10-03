@@ -586,6 +586,14 @@ boot reliability or physical-controller behavior. Revisit with firmware/USB I/O
 diagnosis and the separately assigned hardware stage; native reads/writes and
 physical media have no validation claim from Phase A.
 
+## RTL8111 initial-state support
+
+The [RTL8111 preparation path](devices/rtl8111-hardware.md#controller-preparation)
+rejects D3hot wake without `NoSoftRst`: that transition can discard assigned BARs,
+and the temporary identity probe saves only Command/PMCSR. Such a controller
+remains unavailable while boot continues. Revisit PCI configuration restoration
+if owner-run native qualification encounters this state.
+
 ## Virtio-net runtime resource retention
 
 The [network transport](devices/networking.md#virtio-net-transport) uses two nine-page
