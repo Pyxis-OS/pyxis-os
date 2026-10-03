@@ -336,6 +336,44 @@ Record it in technical debt with that revisit point when implemented.
 the router, configure it statically in the image, and connect from the host in
 the existing direction.
 
+## 4. Parked: DASH serial-over-LAN for boot logs
+
+**Idea.** The second Realtek controller (`02:00.0`, RTL8168ep, XID `502`) is on the
+motherboard; the dock only provides its RJ45 jack. It is a DASH management
+controller (AMD PRO manageability). Its PCI functions are:
+- `02:00.1` and `02:00.2`: two 16550 UARTs. Fedora sees them as `ttyS4` at I/O
+  `0x3200` and `ttyS5` at `0x3100`;
+- `02:00.3`: an IPMI interface;
+- `02:00.4`: an EHCI controller.
+
+If DASH text redirection forwards one of those UARTs over the network, Caelum
+could write its log there and give remote early boot logs with no Pyxis NIC
+driver. Caelum already only reads this controller's XID and leaves it untouched
+(merged #362), so Pyxis would not disturb the management firmware.
+
+**Tried on 2026-10-03, without success:**
+
+- **BIOS:** "DASH support" is enabled, and the BIOS lists the Realtek UEFI UNDI
+  driver for `02:00.0`. There is no DASH authentication or network setting.
+- **Under Fedora:** TCP 623 and 664 on the port's reserved address are answered
+  by Fedora itself (`filtered` with the firewall on, `closed` with it off).
+  Nothing on the NIC claims them. Linux's r8169 signals "OS driver active" to the
+  DASH firmware for this variant, which may make the firmware step back.
+- **In the BIOS and powered off:** no reply on 623 or 664, and `arp-scan` of the
+  LAN shows no ThinkPad MAC at any address.
+- **AMD DASH CLI v8.0.0 for Linux** is available and lists `textredirection`,
+  `usbredirection` and `kvmredirection`. It manages only controllers that are
+  already reachable and set up, and has no command for first-time setup.
+- **A side observation:** the powered-off laptop woke up on its own during the
+  scans. Wake-on-LAN on this NIC is a plausible cause, but this was not
+  confirmed.
+
+**Next step, when it's worth the effort:** first-time DASH setup (credentials
+and network mode). This likely needs a vendor tool running on the laptop's own
+OS, possibly Windows-only. Then run the UART echo test from Fedora during a
+text-redirection session, to see which of `ttyS4` and `ttyS5` is forwarded. Not
+needed for the NIC driver work.
+
 ## Not covered here
 
 - Storage drivers (NVMe, USB mass storage).
