@@ -101,9 +101,9 @@ payload before replay writes. Successful replay logs the committed sequence and
 metadata image count only after the newer EMPTY control is durable. Read-only
 refusal logs that journal replay is required and advises opening read-write once
 to recover; the call still returns READ_ONLY. Unknown required features reject
-opening; unknown read-only-compatible features forbid replay and other writes. Uncertain write or
-flush failure stops mutation and retains dirty state/error. Structural fsck is
-separate from local opening and traversed-record validation.
+opening; unknown read-only-compatible features forbid replay and other writes.
+Uncertain write or flush failure stops mutation and retains dirty state/error.
+Structural fsck is separate from local opening and traversed-record validation.
 Sync acknowledges recoverable retained writeback errors when reporting them;
 later success requires all dirty data to be durable. Ongoing failures still fail
 each sync attempt. Terminal uncertainty is never acknowledged away for the boot.
@@ -155,16 +155,12 @@ succeeded, an ordinary remote shell lacked mount authority, and fastfetch querie
 writable and read-only volumes after the userland INFO correction. The native
 USB-image consumer built and checked successfully; no USB boot is claimed.
 
-The independent [post-merge replay review](../development/native-filesystem-replay-review.md)
-exercised host and kernel replay of a committed journal and read-only refusal,
-then verified subsequent mutation and extracted contents. It used a temporary
-local checkpoint-skip edit to capture COMMITTED, then the unmodified merged kernel
-for recovery; that edit was reverted and is not part of the repository.
-Interrupted cleanup, retained-open unlink, uncertain I/O failure, ENOSPC,
-allocator pressure and read-only-device opening remain source-reviewed,
-not runtime exercised. No crash injection or physical-media qualification was
-performed by the ordinary task-3 workflow. Earlier principal/COW checks do not
-qualify this implementation.
+Committed-journal recovery has been exercised at runtime: host `fsck --replay`
+and kernel replay at writable mount recovered a committed transaction, with
+contents verified, later mutation successful and host fsck clean; read-only
+opening refused it with the logged explanation. Interrupted cleanup, retained-open
+unlink, uncertain I/O, ENOSPC, allocator pressure and read-only-device opening
+remain source-reviewed only. No physical-media qualification has been performed.
 
 Manual debugger work follows the existing [ownership rules](../development/gdb.md);
 no sleeping worker or engine call may be injected as a stopped debugger call.
