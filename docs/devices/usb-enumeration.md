@@ -39,6 +39,11 @@ controller command and control request also has a five-second limit bounded by
 that deadline. Current choices live in `settings.h`, independently of RAM, image
 size and descriptor values. The descriptor/control budget is initially 4 KiB.
 
+A device whose controller speed mapping is unclassified remains an unidentified,
+incomplete observation. Its boot detail says `unsupported device speed` before
+any Address Device command or descriptor request is issued; this is a support
+limit rather than a failed descriptor transfer.
+
 Address Device publishes the device's output-context address through DCBAA and
 lets xHCI assign the USB address. The core never sends SET_ADDRESS. EP0 starts
 with the speed-defined packet size: low/full speed 8, high speed 64, SuperSpeed
