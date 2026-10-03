@@ -2,11 +2,16 @@
 
 Status: **owner direction, 2026-10-02.** This restarts writable filesystem
 work. It supersedes the pyxis-fs writer plans listed under
-[what stops](#what-stops). The [owner decisions](#owner-decisions) and
-[v1 answers](#v1-answers) and the sections after them up to
-[focused tasks](#focused-tasks) are accepted. The [pool sketch](#proposed-pool-sketch)
-and [proposed working method](#proposed-working-method) await the owner.
-[Later ideas](#later-ideas) are not requirements.
+[what stops](#what-stops).
+
+- **Accepted:** [owner decisions](#owner-decisions), [v1 answers](#v1-answers),
+  [installation and authority](#installation-and-authority),
+  [code, file layout and order](#code-file-layout-and-order) and
+  [focused tasks](#focused-tasks).
+- **Proposals awaiting the owner:** [writeback details](#proposed-writeback-details),
+  the [pool sketch](#proposed-pool-sketch) and the
+  [working method](#proposed-working-method).
+- **Not requirements:** [later ideas](#later-ideas).
 
 ## Owner decisions
 
@@ -72,10 +77,20 @@ about as much as starting over.
 
 ## V1 answers
 
-Accepted 2026-10-02.
+Accepted 2026-10-02; durability revised by the owner on 2026-10-03.
 
-1. **A successful sync or close establishes durability.** After a crash,
-   journal recovery restores metadata consistency; data that was never synced may
+1. **Durability is explicit.** `fsync` (one file) and `sync` (everything) are the
+   durability points: the caller blocks until the data is on the disk. A plain
+   `close` only releases the handle and promises nothing. Otherwise, data is
+   written back from the cache:
+   - **periodically,** by a kernel background task that flushes sufficiently old
+     dirty data at an interval set by a constant (30 s or 60 s);
+   - **under memory pressure,** by writing dirty cached data early to reclaim RAM;
+   - **on clean shutdown, restart and sleep,** by flushing everything dirty, once
+     those exist (Pyxis has none of them yet).
+
+   Journal commits happen as needed to keep metadata recoverable. After a crash,
+   journal recovery restores metadata consistency; data not yet written back may
    be lost.
 2. **Crashes are handled by a metadata journal with ordered data,** as in
    ext3/ext4.
@@ -93,6 +108,31 @@ Accepted 2026-10-02.
 4. **Storage is a pool with growable volumes.** A partition holds one pool, and
    the allocation bitmap (or whatever replaces it) covers the whole pool. Volumes
    are virtual and grow inside the pool; they are not partitions sized up front.
+
+## Proposed writeback details
+
+Proposals for the owner, refining the accepted durability model above.
+
+1. **One dumb flush task.** Every T seconds, write all dirty data and commit the
+   journal, with no per-page age tracking. A crash loses at most T seconds of
+   unsynced work. Proposed T: 30 s, a named constant, matching Linux's default
+   dirty-data age.
+2. **`fsync` commits the whole current transaction.** It writes that file's
+   dirty data, then commits the pool's single journal transaction. The file's
+   size, block pointers and directory entry then become durable together. That is
+   simpler for programs than POSIX, where a new file's name needs a separate
+   `fsync` of its directory. Committing other pending metadata along with it is
+   cheap.
+3. **Delayed allocation.** Cached data gets disk blocks only when it is written
+   back. In ordered mode, a commit must first write the data its new metadata
+   points to; allocating at write time would make a small `fsync` wait for an
+   unrelated large write (ext3's fsync stalls). Allocating at writeback also places
+   files contiguously, which helps block pointers. If it complicates the first
+   version, it can be deferred.
+
+Notes for implementation: memory-pressure writeback needs a reclaim hook in
+Caelum's memory management, so it arrives with the page cache. The installer must
+call `sync` before reporting success. Kilo's save should later call `fsync`.
 
 ## Proposed pool sketch
 
