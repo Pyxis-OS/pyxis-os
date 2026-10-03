@@ -125,8 +125,8 @@ placement heuristic.
 Catalog IDs start at prefix offset `n`; the pool root uses offset `n+c`.
 The allocation stream must describe exactly those emitted nodes, catalog nodes
 and root, with no unused live prefix IDs or references to marked source nodes.
-The [publisher](../../fs/core/writer.c) and
-[encoder](../../fs/core/incremental_map.c) now distinguish marked source count
+The [publisher](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/core/writer.c) and
+[encoder](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/core/incremental_map.c) now distinguish marked source count
 from emitted count in claims, encoding and catalog/root offsets. Incrementing a
 fanout without changing claim/offset accounting would be insufficient.
 

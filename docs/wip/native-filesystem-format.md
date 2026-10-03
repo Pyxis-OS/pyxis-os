@@ -2,9 +2,9 @@
 
 Task 1 proposed the format; task 2 implements its codecs and host tools in the
 filesystem repository. The authoritative [encoding contract](../../fs/docs/native-format.md)
-and [host-tool guide](../../fs/docs/native-host-tools.md) live there. Caelum still
-mounts the old format. Kernel caching, allocation policy and the writer remain
-[task 3](native-filesystem.md#focused-tasks).
+and [host-tool guide](../../fs/docs/native-host-tools.md) live there. Caelum now
+uses these codecs for the [native pool writer](../devices/filesystem-native-adapter.md);
+its caching and allocation policy belong to the kernel.
 
 ## Decision status
 
@@ -38,8 +38,10 @@ The installer/formatter chooses journal size **per pool**, not through a build
 setting. The 256 GB target starts at **at least 128 MiB**. Smaller-image invocations
 choose an explicit size; the initial host formatter supplies no automatic default.
 The region remains fixed in v1. Capacity is not a requirement to fill/write the
-whole region each commit. The future writer must prove that indivisible namespace
-operations fit its admission budget before advertising writable support.
+whole region each commit. The kernel writer requires capacity for at least
+eighteen images before writable opening, independently of the format validator's
+smaller minimum. This fits its
+indivisible namespace transactions; capacity alone does not increase cache size.
 
 Only one full-metadata-block transaction commits/checkpoints at a time. Ordered
 data and payload become durable before COMMITTED; only then may metadata reach
@@ -55,7 +57,7 @@ commit. Work spanning batches waits for all covering commits and data. Measure
 foreground latency separately from the four-flush transaction throughput cost.
 Close only releases a handle and has no durability promise.
 
-## Writer requirements still to implement
+## Kernel writer contract
 
 Persistent per-volume cleanup lists track DETACHED, SHRINK or both. Unlink,
 replacement and shrink publish length/namespace/list changes atomically. Cleanup
@@ -78,17 +80,15 @@ parents are internal metadata and grant no parent capability; moves must preserv
 backlinks and acyclic ancestry. There are no on-disk users, permissions, symlinks,
 hard links or volume quotas in v1.
 
-## Open owner questions
+## Task-3 writeback policy
 
-Before task 3, resolve the milestone's
-[proposed writeback details](native-filesystem.md#proposed-writeback-details):
+The owner settled the three remaining writeback choices on 2026-10-03:
+[periodic full flushing](native-filesystem.md#accepted-writeback-details) defaults
+to 30 seconds through menuconfig, `fsync` commits the whole current transaction,
+and allocation is delayed until writeback. The task-3 kernel writer implements them.
 
-1. One periodic task, with proposed nominal interval T = 30 s, not a crash-loss bound.
-2. Whole-current-transaction `fsync`, including ordered dependencies from other files.
-3. Delayed allocation at writeback, which can be deferred if it complicates the first writer.
-
-These remain proposals. The task-2 defaults do not accept them. No compiler rebuild
-or new public capability API is required by task 2. Initial host-tool timing and
-write-byte observations are in the tool guide; kernel latency, cleanup stalls and
-physical SSD wear remain unmeasured. See the
+No compiler rebuild was required by task 2. Initial host-tool timing and write-byte
+observations are in the tool guide; kernel latency and virtual-device write/flush
+counts are in the [task-3 measurement record](../development/experiments/native-filesystem-task3/README.md).
+Physical SSD wear remains unmeasured. See the
 [design limits](../technical-debt.md#native-filesystem-design-limits).

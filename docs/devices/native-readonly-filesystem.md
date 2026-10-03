@@ -91,9 +91,11 @@ capacity for bindings or volumes sharing a pool ID.
 
 ## Combined workflow validation
 
-Task-3 writer runtime validation is pending. The
+Ordinary four-CPU QEMU boots exercised writable and read-only grants, cached
+write/read/sync, resize, rename/replacement, removal, native executable capture
+and persistence across clean reboots. Host fsck and extracted-file comparisons
+passed. The
 [measurement record](../development/experiments/native-filesystem-task3/README.md)
-contains the measured obsolete-adapter baseline and identifies the pending matched
-writer workload. Earlier read-only closure results do not validate the new format,
-writer, replay or persistent cleanup. No physical-media or power-loss result is
-claimed here.
+contains the obsolete-adapter baseline, writer measurements and validation limits.
+Committed-log recovery and memory-pressure failure paths were reviewed in code;
+these boots do not qualify power-loss recovery or physical media.

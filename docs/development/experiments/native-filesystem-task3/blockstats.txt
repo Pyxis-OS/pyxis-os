@@ -1,0 +1,21 @@
+read_after_stats
+pyxis_blk: rd_bytes=6276096 wr_bytes=1196032 rd_operations=1494 wr_operations=292 flush_operations=16 wr_total_time_ns=10251481 rd_total_time_ns=39511819 flush_total_time_ns=42593266 rd_merged=0 wr_merged=0 idle_time_ns=33726041383
+
+initial_write_after_stats
+pyxis_blk: rd_bytes=32179200 wr_bytes=54968320 rd_operations=7818 wr_operations=13420 flush_operations=5232 wr_total_time_ns=447669984 rd_total_time_ns=208744422 flush_total_time_ns=13570270865 rd_merged=0 wr_merged=0 idle_time_ns=58164686665
+
+initial_prepared_after_stats
+pyxis_blk: rd_bytes=55145472 wr_bytes=68308992 rd_operations=13425 wr_operations=16677 flush_operations=5333 wr_total_time_ns=572388836 rd_total_time_ns=379940775 flush_total_time_ns=14287738981 rd_merged=0 wr_merged=0 idle_time_ns=1617021
+
+writer_second_stats_start
+pyxis_blk: rd_bytes=865280 wr_bytes=0 rd_operations=173 wr_operations=0 flush_operations=0 wr_total_time_ns=0 rd_total_time_ns=5202384 flush_total_time_ns=0 rd_merged=0 wr_merged=0 idle_time_ns=26597946996
+
+writer_second_stats_after_read
+pyxis_blk: rd_bytes=5264384 wr_bytes=0 rd_operations=1247 wr_operations=0 flush_operations=0 wr_total_time_ns=0 rd_total_time_ns=40495678 flush_total_time_ns=0 rd_merged=0 wr_merged=0 idle_time_ns=43149210987
+
+writer_second_stats_after_write
+pyxis_blk: rd_bytes=10470400 wr_bytes=7786496 rd_operations=2518 wr_operations=1901 flush_operations=172 wr_total_time_ns=71070976 rd_total_time_ns=78036079 flush_total_time_ns=444407642 rd_merged=0 wr_merged=0 idle_time_ns=50567507982
+
+writer_second_stats_after_prepared
+pyxis_blk: rd_bytes=33444864 wr_bytes=21102592 rd_operations=8127 wr_operations=5152 flush_operations=272 wr_total_time_ns=177852107 rd_total_time_ns=225976101 flush_total_time_ns=1082972982 rd_merged=0 wr_merged=0 idle_time_ns=116033161858
+

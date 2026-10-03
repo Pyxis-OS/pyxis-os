@@ -1,0 +1,81 @@
+writer-gdb-first-create.txt
+0x000000000000fff0 in ?? ()
+Hardware assisted breakpoint 1 at 0xffffffff8002d800: file kernel/fs/native_store.c, line 92.
+
+Thread 1 hit Temporary breakpoint 1, native_store_create (context=0xffff80000239ae70, context@entry=0xffff80000239aca0, directory=0xffff8000000291f0, name=name@entry=0xffff8000023bf260 "trusted", length=7, kind=2, out=0xffff80000239ae58, out@entry=0xffff80000239ac88) at kernel/fs/native_store.c:92
+92	  nativefs_require_worker();
+context = 0xffff80000239ae70
+directory = 0xffff8000000291f0
+name = 0xffff8000023bf260 "trusted"
+length = 7
+kind = 2
+out = 0xffff80000239ae58
+rsp            0xffff80000239adf8  0xffff80000239adf8
+rbp            0xffff80000239afd0  0xffff80000239afd0
+eflags         0x246               [ IOPL=0 IF ZF PF ]
+gs_base        0xffffffff80070300  -2147024128
+#0  native_store_create (context=0xffff80000239ae70, context@entry=0xffff80000239aca0, directory=0xffff8000000291f0, name=name@entry=0xffff8000023bf260 "trusted", length=7, kind=2, out=0xffff80000239ae58, out@entry=0xffff80000239ac88) at kernel/fs/native_store.c:92
+#1  0xffffffff80027722 in child (context=0xffff80000239aca0, job=0xffff8000023bf200) at kernel/fs/native.c:369
+#2  perform (context=0xffff80000239aca0, job=0xffff8000023bf200) at kernel/fs/native.c:522
+#3  nativefs_worker (argument=<optimized out>) at kernel/fs/native.c:665
+#4  0xffff8000023c4d28 in ?? ()
+#5  0x0000000000000038 in ?? ()
+#6  0xffff8000023c4d80 in ?? ()
+#7  0x00000000544017fe in ?? ()
+#8  0x0000000714c86048 in ?? ()
+#9  0x0000000000000000 in ?? ()
+[Inferior 1 (process 1) detached]
+
+writer-gdb-reboot.txt
+0x000000000000fff0 in ?? ()
+Hardware assisted breakpoint 1 at 0xffffffff8002cce0: file kernel/fs/native_store.c, line 93.
+
+Thread 1 hit Temporary breakpoint 1, native_store_root (context=context@entry=0xffff80000239ae70, pool=0xffff8000023c63d0, name=0xffff8000023c4d80 "bench", name@entry=0x0, length=5, out=0xffff80000239ae58, out@entry=0xffff80000239ac88) at kernel/fs/native_store.c:93
+93	  nativefs_require_worker();
+context = 0xffff80000239ae70
+pool = 0xffff8000023c63d0
+name = 0xffff8000023c4d80 "bench"
+length = 5
+out = 0xffff80000239ae58
+rsp            0xffff80000239adf8  0xffff80000239adf8
+eflags         0x297               [ IOPL=0 IF SF AF PF CF ]
+gs_base        0xffffffff80070300  -2147024128
+#0  native_store_root (context=context@entry=0xffff80000239ae70, pool=0xffff8000023c63d0, name=0xffff8000023c4d80 "bench", name@entry=0x0, length=5, out=0xffff80000239ae58, out@entry=0xffff80000239ac88) at kernel/fs/native_store.c:93
+#1  0xffffffff800278fe in acquire_root (context=0xffff80000239ae70, job=0xffff8000023c4d20) at kernel/fs/native.c:320
+#2  perform (context=0xffff80000239ae70, job=0xffff8000023c4d20) at kernel/fs/native.c:465
+#3  nativefs_worker (argument=<optimized out>) at kernel/fs/native.c:665
+#4  0xffff8000023c4d28 in ?? ()
+#5  0x0000000000000038 in ?? ()
+#6  0xffff8000023c4d80 in ?? ()
+#7  0x00000000515fc408 in ?? ()
+#8  0x0000000711e80e00 in ?? ()
+#9  0x0000000000000000 in ?? ()
+[Inferior 1 (process 1) detached]
+
+writer-gdb-settled.txt
+0xffffffff8000a37d in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:108
+108	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+$1 = {pool_id = "0\002_2\330Py\304#ýA\213\234P\034", sequence = 2859, state = 0, image_count = 0, descriptor_blocks = 0, payload_crc = 0}
+$2 = 0
+$3 = CALL_OK
+$4 = false
+$5 = 28881
+$6 = {0xffff800002535000, 0xffff800002637000, 0xffff800002739000, 0xffff80000283b000}
+[Inferior 1 (process 1) detached]
+
+Individual static frames >= 496 bytes (GCC 16.2.0, kernel flags plus -fstack-usage):
+
+kernel/fs/native_store.c:1707:25:directory_insert	928	static
+kernel/fs/native_store.c:1484:25:flush_inode	1488	static
+kernel/fs/native_store.c:2371:25:cleanup_one	1504	static
+kernel/fs/native_store.c:810:18:native_store_open	912	static
+kernel/fs/native_store.c:1808:18:native_store_create	1104	static
+kernel/fs/native_store.c:1943:18:native_store_remove	1376	static
+kernel/fs/native_store.c:2019:18:native_store_rename	1712	static
+kernel/fs/native_store.c:2520:18:native_store_resize	704	static
+kernel/fs/native.c:623:13:nativefs_worker	496	dynamic,bounded
+fs/format/header.c:84:1:pnf_header_encode	4144	static
+fs/format/record.c:76:1:pnf_volume_encode	576	static
+fs/format/record.c:101:1:pnf_volume_decode	496	static
+fs/format/record.c:204:1:pnf_dirent_encode	4128	static
+fs/format/journal.c:44:1:pnf_control_encode	4144	static

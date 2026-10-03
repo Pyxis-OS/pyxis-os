@@ -23,15 +23,13 @@ in Pyxis. A submodule checkout may be detached; create a branch there before
 starting work. Local uncommitted source edits are usable for development;
 the exported SDK manifest records dirty userland inputs.
 
-Kernel source builds require the pinned filesystem core. The host tools remain
-opt-in: `make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs.a`, `mkpyxisfs`,
-`pyxisfs-inspect` and `pyxisfs-write`. The same target also builds `libpyxis-fs-format.a`, `mkpyxisfs-native`,
-`pyxisfs-native-fsck` and `pyxisfs-native-inspect` for the
-[new native format](../../fs/docs/native-host-tools.md), beside the old tools.
-Caelum continues mounting the old format until native writer integration.
-SDK builds do not require the filesystem core. See the
-[host-tool guide](../../fs/docs/host-tools.md) for source import, extraction and
-`pyxisfs-inspect check` whole-image consistency inspection.
+Kernel source builds require the pinned native filesystem format library.
+`make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs-format.a`,
+`mkpyxisfs-native`, `pyxisfs-native-fsck` and `pyxisfs-native-inspect`.
+Caelum owns the native cache and writer; the shared library owns codecs only.
+SDK builds do not require this submodule. See the
+[native host-tool guide](../../fs/docs/native-host-tools.md) for source import,
+inspection, extraction and structural checking.
 
 The relative URL in `.gitmodules` resolves beside the Pyxis repository, using
 the parent remote's host and transport. These repositories are public under
@@ -60,7 +58,7 @@ the checked-out revision or dependency pins.
 | pyxis-userland | libc, libpyxis, libterm, native TLS adapter, startup/link support, applications, initial boot scripts and its TLSF vendor copy |
 | pyxis-ports | Host Lua runner, pinned third-party recipes, ordered patches and staged executables/licenses and development libraries/headers |
 | pyxis-lwip | Pinned lwIP source subset, license/provenance and any local upstream adaptations |
-| pyxis-fs | Native filesystem format, freestanding core, source-importing formatter and diagnostic inspector/extractor with Linux host adapter |
+| pyxis-fs | Native filesystem format codecs and Linux formatter, checker and inspector/extractor |
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime, then installs startup, libraries, linker support
@@ -78,10 +76,9 @@ manifest. CI's shared build job therefore checks out submodules. Local image
 assembly can still use prebuilt bundles without source submodules.
 See [the port boundary](../devices/lwip.md) for worker and packet ownership.
 
-The filesystem build rules remain in Pyxis under `kernel/fs/build.mk`. Normal
-kernel builds compile the pinned read-only core with freestanding kernel flags
-and private filesystem includes, excluding construction, checking and host
-adapters. The kernel bundle records its revision and local state alongside lwIP.
+The filesystem build rules remain in Pyxis under `kernel/fs/build.mk`. Kernel
+source builds compile only the format library with freestanding flags and private
+includes. The kernel bundle records its revision and local state alongside lwIP.
 
 The public ABI remains authoritative in Pyxis. Userland consumes it through the
 SDK, with no kernel-private include paths or copied ABI headers. The shared
@@ -98,46 +95,25 @@ history remains in Pyxis.
 ## Filesystem repository
 
 [PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) owns the shared native
-filesystem format/core, host formatter/inspector and eventual Linux FUSE adapter.
-The completed [read-only filesystem milestone](../devices/filesystem-readonly.md) pins the MPL-2.0
-shared core at `fs/`. Its opt-in `make fs-tools` builds the freestanding archive
-and Linux host formatter/inspector
-with `HOSTCC`/`HOSTAR` forwarded as `HOST_CC`/`HOST_AR`, explicit source/output
-directories and no kernel or SDK include paths. The tools create standalone
-sparse images from selected source directories, extract files/subtrees,
-inspect pool/volume/object metadata, simulate bounded policy
-acquisition and check both committed states for structural consistency. Explicit
-GPT selection supplies a readonly partition extent. Its
-[format and tool contract](../../fs/docs/format.md)
-lives in that repository, including accepted follow-up decisions. See the
-[implemented core boundary](../../fs/docs/core.md) for codec, construction, selection,
-allocation-proof, traversal, policy, checking and lifetime contracts, and
-[host validation](../../fs/docs/host-tools.md#validation) for measured coverage.
-The filesystem repository also owns `make check`, a maintained Unity suite
-linking the real shared core; run `sudo python3 fs/tests/ram_run.py --suite check`
-from Pyxis in the supported Linux/systemd environment. Workload storage requires
-the verified bounded RAM boundary; bare `make check` refuses unsafe scratch. Its emitted
-`Filesystem / host-contract (pull_request)` status must be required in **pyxis-fs**
-branch protection, configured by the owner. The parent workflow also builds and tests the exact gitlink in a separate
-`filesystem` job with bounded tmpfs scratch and a verified finite positive, zero-swap
-cgroup memory limit selected in trusted runner configuration. Its quick-only mode creates fresh fixture pages after joining
-that job; heavier suites still require mount-level `noswap`. Forgejo runner 13.2
-needs trusted runner configuration for the mount, swap and core limits; see
-[runner provisioning](../../fs/docs/ram-validation.md#runner-provisioning).
-The filesystem jobs select `pyxis-fs-ram` and verify actual controls before
-testing; ordinary image builds retain `pyxis`. Both labels may use the owner's
-shared runner at capacity one. Workflows do not override its memory setting.
-The launcher drops privileges before compilation and quick/extended tests; the
-ordinary image-build step also drops its root container identity before `make`.
-The image `build` job explicitly fails unless that job succeeds. Require `Build Pyxis / build (pull_request)` in Pyxis
-branch protection: a missing dependency commit, failed host build or failed
-filesystem suite then blocks that parent check. This runs the pinned tests locally
-in the job and needs no cross-repository status API or extra credentials.
-See [test coverage and limits](../../fs/docs/testing.md).
-Pyxis retains the public OS ABI, capabilities
-and namespace integration. Kernel source builds, including image builds, consume
-the pinned read-only core; SDK and ports targets remain independent. The host
-tools remain opt-in. No compiler-container rebuild is needed.
+filesystem encoding and Linux host tools. The old portable COW core, its host
+writer/tools and Unity tests were retired when Caelum moved to the native format.
+Historical documents and measurements remain explicitly marked as obsolete.
+They do not authorize further portable-writer work or describe current interfaces.
+
+The authoritative [format](../../fs/docs/native-format.md) and
+[host tools](../../fs/docs/native-host-tools.md) describe the codecs, source-importing
+formatter, journal replay and structural checker. Pyxis owns capabilities,
+namespace integration, the cache, writeback and kernel recovery. The library has
+no allocator, I/O or callback tables; the host and Caelum provide its two memory
+symbols at link time. SDK and ports remain independent of this library.
+
+The existing `Filesystem / host-contract (pull_request)` job in pyxis-fs and
+Pyxis's `filesystem` dependency job now build the native library and host tools.
+They retain their existing names and image-build gating. They run no retired
+behavior tests; successful compilation is not recovery or structural-behavior
+coverage. Ordinary host-tool use, interactive QEMU and debugger inspection provide
+the task-specific validation recorded in the relevant PR and subsystem reference.
+No new tests, workflows or compiler-container rebuild are required.
 
 ## Toolchain and remaining boundaries
 

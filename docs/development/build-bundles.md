@@ -71,7 +71,7 @@ configuration; local `.config` edits apply only to kernel source builds.
 These checks establish matching inputs, not a cryptographic trust
 boundary or proof that arbitrary kernel implementation changes preserve behavior.
 
-Kernel source builds require the pinned lwIP and filesystem submodules. Their
+Kernel source builds require the pinned lwIP and filesystem-format submodules. Their
 revisions, local state and change hashes are recorded in the kernel bundle;
 `make fs-tools` remains an opt-in host build outside these bundles.
 

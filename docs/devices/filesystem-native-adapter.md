@@ -72,6 +72,13 @@ COMMITTED is the completion point. Checkpointing and durable EMPTY precede reuse
 of journal space and freed blocks. Cleanup updates pointers and bitmap together
 in bounded batches, retaining persistent list membership through completion.
 
+Creation, rename and shrinking resize conservatively flush prior dirty pool data
+before their namespace/size transaction. Their success already reaches COMMITTED,
+so these operations can wait for unrelated writes or fail on delayed allocation.
+Remove instead stages the target's last durable record with DETACHED, preserving
+retained cached contents while allowing space recovery after disk-full writeback.
+Cleanup reclaims at most 64 mappings and ten metadata images per transaction.
+
 Delayed allocation happens at writeback. Periodic full flushing defaults to 30
 seconds through menuconfig; pressure notifications wake the worker for asynchronous
 reclamation without changing an allocator's result. Close has no durability

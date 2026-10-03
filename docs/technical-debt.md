@@ -834,69 +834,52 @@ service work and wait sets; no worker-process or thread framework is included.
 
 ## Native mount design limits
 
-The [native read-only mount milestone](devices/native-readonly-filesystem.md) is complete;
-the [kernel adapter](devices/filesystem-native-adapter.md) implements bounded
-backing preparation, policy-approved directory/file objects, configured mount
-authority and bounded executable capture. Trusted init mounts and delegates an
-explicit selected root list. A separately attenuable observation grant exposes
-retained identity and shared-pool capacity; `--no-info` omits it. Global usage,
-charged bytes and quota/guarantee observations remain unavailable until their
-evidence and disclosure contracts are established.
-The [implemented core continuation API](../fs/docs/core.md#stateless-directory-continuation)
-avoids rescanning the returned prefix and retains no per-enumeration state. It
-does not remove existing core ancestry scans or allocation-proof costs; measure
-those on concrete workloads and revisit when they limit representative
-listings. Stateless page success must not be presented as global directory-count
-reconciliation. Host validation covers one- and two-level directory trees; maximum
-depth, later generations and actual media/allocator failures retain code-review
-coverage only.
+[Native mounts](devices/native-readonly-filesystem.md) select one configured GPT
+disk identity, explicit partition and volume. Capability grants govern access;
+the filesystem has no principal or persistent permissions. Observation exposes
+identity and shared-pool capacity, but not usage, quotas or charged bytes.
+Concurrent external image modification, hotplug and unmount are unsupported.
+Mounted pool state survives final handle closure until reboot, so dirty contents
+and errors outlive the process's cleanup charge. Revisit teardown with a concrete
+need and explicit synchronization, shared-mapping and dirty-data ownership.
 
-The OS READ grant continues to bundle file bytes and length, so native acquisition
-and descendant lookup must hold both core read and metadata rights. A persistent
-read-only grant lacking metadata cannot become an OS READ grant. Revisit when
-there is a concrete consumer for separately delegable OS file metadata; do not
-weaken core policy to accommodate the existing ABI.
+The worker admits 32 jobs with a cooperative 30-second deadline. Adapter storage
+has a 1 MiB/1,024-wrapper limit; pool metadata, the free-inode list and caches are
+separate. Each pool can retain 4 MiB of cached file payload plus entry metadata,
+and a writable pool reserves up to 520 KiB for 128 journal images and encoding
+buffers. These are implementation bounds, not format limits or aggregate memory
+admission. Mount scans the selected volume's inode file and builds its free list;
+reclaimed slots retain their inode allocation as a list node until reuse.
+Large inode files can therefore exhaust memory or take too long to mount. Revisit
+compact free-slot storage or an explicit pool budget if representative workloads
+reach those limits; preserve NO_MEMORY/LIMIT versus corrupt-image reporting.
 
-Trusted init scripts share one configured bootstrap principal in this milestone.
-They can delegate different subsets, but this is not independent authentication
-or admission for each session. Ordinary applications receive no principal-based
-reacquisition service or mount authority. Revisit with the identity broker/session
-admission work, keeping identity separate from held capabilities.
+Memory pressure wakes the filesystem worker after allocator work. It can flush
+dirty data and return whole clean cache chunks to VM; failed writeback preserves
+dirty chunks. The allocating call is not transparently retried. Kernel heap
+backing remains mapped under the existing heap policy. Revisit reclaim granularity
+and admission only with measured pressure workloads and BSP ownership intact.
 
-The kernel adapter enforces 32 admitted jobs across internal submissions and user
-requests, 8 MiB of shared core payload and 1 MiB/1,024 wrappers for adapter storage. The final combined guest
-workflow peaks at 323,872 core bytes and 106,808 adapter bytes; host nested
-policy acquisition peaks at 315,816 core bytes. These inputs fit the initial profile,
-but a valid image may still exceed it and return LIMIT. Caps exclude stack,
-caller job storage, heap overhead/rounding and mapped-pool slack, and do not
-bound CPU/I/O work. The deadline is cooperative. Revisit the profile with larger
-representative workloads; preserve LIMIT versus corruption and record evidence
-before changing caps.
+All native reads and writes traverse the BSP worker, including cache hits.
+Metadata lookup remains linear and is not generally cached. The
+[task-3 measurements](development/experiments/native-filesystem-task3/README.md)
+distinguish this scheduling/I/O cost from RAM file calls. Revisit only when an
+actual consumer needs lower latency. Executable capture permits one image of up
+to 16 MiB per caller outside wrapper/cache limits; concurrent captures have no
+aggregate staging budget and can fail allocation below that per-image limit.
+The userspace root selection remains bounded to 16 entries within existing
+64 KiB startup/capture storage, independently of format volume/name limits.
 
-Native requests fit the existing provisioned task request storage. Optional
-mounts now distinguish confirmed absence from ambiguous, unsupported, incomplete
-or failed device setup. Mounted views require read-only guest attachment and no
-concurrent host mutation; no live refresh, hotplug or writable co-mount is supported.
-The userspace selection profile has at most 16 roots within the existing 64 KiB
-startup/capture bound; it is not a filesystem name/count limit. Revisit these
-bounds with a concrete launcher workload, preserving explicit failures.
+Actual backing failure, deadline exhaustion, allocation pressure and crash recovery
+retain source-review coverage. No fault injection or physical-media validation
+is claimed by the native writer's ordinary QEMU workflow.
 
-Executable capture permits one image of up to 16 MiB per caller outside the
-8 MiB core and 1 MiB wrapper caps. There is no aggregate staging budget across
-callers, so those adapter caps are not a total native workload memory bound.
-Allocation can still fail below per-image limits. Revisit aggregate admission
-when concurrent native executable loads require a predictable whole-system bound.
+## Retired portable-filesystem costs and validation
 
-Kind-preserving lookup currently derives a
-zero-right OBJECT view before deriving the final requested view; both use held
-authority, but duplicate traversal/proof work. Revisit with measured lookup costs
-and a concrete core kind-query contract, without exposing diagnostic handles. Busy core closes retain their
-identity, charged storage and deferred group cleanup until a later worker retry;
-ordinary clients must close all core children before the last backing put.
-Actual device failures, deadlines and cap exhaustion remain source-reviewed
-adapter paths. No fault injection or physical-hardware validation was performed.
-
-## Writable-filesystem costs and remaining validation
+Historical record: the portable implementation, host writer and its tests are
+retired by native task 3. The paragraphs below describe that former implementation;
+they are not current follow-up requirements. Revisit only if their measured costs
+help compare a concrete native-writer workload.
 
 The [writable-core milestone](wip/writable-filesystem-core.md) used whole-map
 rebuilding for every publication as the first correctness implementation.
@@ -961,9 +944,8 @@ local worst-case bound is established. General split/merge solving and deploymen
 deployed and gets no further work. In the instrumented RAM matrix, measured
 workload time per logical operation was 13–80 ms, against 0.12–0.16 ms for Btrfs,
 and rose 3–5x from 1 MiB to 20 MiB of background data. The owner chose the [simple native filesystem](wip/native-filesystem.md)
-instead. Until it replaces them, native read-only mounts still use the current
-format and the kernel's read-only subset of `fs/core`. Revisit when the new
-filesystem can serve the read-only mount path.
+instead. Native task 3 replaces the old mount path with the new format codecs
+and a Caelum-owned cache/writer.
 Native scratch/backing allocation exceeds the member-
 cgroup peak in a recorded case; do not treat that peak as whole-native-job RAM
 high-water evidence. Scratch/trace remain independently bounded with no swap or
@@ -1054,7 +1036,7 @@ retain the proofs, ordinary/freestanding builds and eventual guest validation.
 
 The [native format decisions](wip/native-filesystem-format.md#decision-status)
 now have [implemented codecs and host tools](../fs/docs/native-host-tools.md).
-Caelum integration remains task 3. Accepted limits include 64 volume slots, roughly 513 GiB per-file block-pointer capacity, and linear directory lookup.
+Caelum owns the mounted inode/cache/writer state. Accepted limits include 64 volume slots, roughly 513 GiB per-file block-pointer capacity, and linear directory lookup.
 Revisit only when a concrete workload exceeds those bounds or lookup becomes costly;
 reserved bytes and feature flags provide extension points. Volumes can exhaust the
 shared pool; quotas and starvation policy remain deferred until a concrete need.
@@ -1064,7 +1046,8 @@ large shrinking truncates stall further writes/resizes of the affected inode.
 The accepted sync completion point is durable COMMITTED; checkpointing continues
 in the background before the next commit. The writer's free-inode list avoids
 per-create scans but adds mount-time work and memory usage.
-Measure these costs, latency and bytes written when the native writer arrives;
+The [task-3 record](development/experiments/native-filesystem-task3/README.md)
+measures latency and virtual-device bytes from the initial writer.
 128 MiB is the initial 256 GB target setting, not a measured optimum or universal
 minimum. Journal capacity is selected per pool and has no v1 resize operation.
 
@@ -1082,13 +1065,17 @@ home-metadata checksums in v1. Writable fsck replays the journal; checksums cann
 detect every later metadata corruption once it is cleared. Revisit metadata
 checksums when integrity needs justify a feature-gated layout change. Committed
 replay and interrupted cleanup are source-reviewed, not runtime exercised; revisit
-with actual writer-produced recovery states in task 3. Host tools require unchanged
+when crash/recovery qualification is explicitly assigned. Host tools require unchanged
 standalone regular images and cooperating locks, stage replay payloads in memory,
 and do not repair arbitrary damage or reclaim cleanup lists. Large images/volumes
-can exhaust host checker memory. Physical-media wear and native operation latency
-remain unmeasured; initial formatter observations are on tmpfs.
+can exhaust host checker memory. Physical-media wear remains unmeasured; native operation latency and QEMU target
+bytes are measured in a nested VM, and do not qualify SSD endurance.
 
-## Writable filesystem kernel-stack prerequisite
+## Retired portable-writer kernel-stack investigation
+
+Historical: this code is retired; these stack costs are not the native writer's
+stack bound. Measure the native paths independently.
+
 
 The reviewed task-2 head (`pyxis-fs` `3e63569`) uses approximately 19,104 bytes
 across the nested edit, canonical validation, encode and decode path. Rechecking
@@ -1157,7 +1144,7 @@ maintenance replacement/pre-slot cuts. History-based simulator refusal is adapte
 enforcement; the core cannot infer historical failure from valid bytes/callbacks.
 Their success is not qualification of an actual host or device.
 
-## Filesystem host prototype limits
+## Retired portable-filesystem host prototype limits
 
 The host-image tools record prototype reserve defaults, but no writable
 transaction/recovery cost bound proves those budgets sufficient. Sparse host

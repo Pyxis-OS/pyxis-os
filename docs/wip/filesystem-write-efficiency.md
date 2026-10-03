@@ -141,8 +141,8 @@ durability and must remain separate.
 Changing a bound requires the affected proof, not preservation of its current
 number merely because earlier documentation calls it a contract.
 The relevant current sources are the [format](../../fs/docs/format.md),
-[`plan.c` closure and arena](../../fs/core/plan.c),
-[`admit.c` capacity checks](../../fs/core/admit.c)
+[`plan.c` closure and arena](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/core/plan.c),
+[`admit.c` capacity checks](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/core/admit.c)
 and [namespace proof](writable-filesystem-core.md#agreed-removable-namespace-profile-byte-and-repair-proof).
 
 | Topic | Genuine requirement / current proof dependency | Reconsiderable policy and proposal |
@@ -205,8 +205,8 @@ as intermediate work after #313, then assigned its implementation. Delivered
 follow-ups, including the one-leaf overflow extension, are recorded below;
 deployment qualification and further structural work remain separate.
 At the carryover baseline used for this investigation, the
-[planner](../../fs/core/plan.c), [publisher](../../fs/core/writer.c)
-and [admission](../../fs/core/admit.c) still rebuilt the entire map for every
+[planner](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/core/plan.c), [publisher](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/core/writer.c)
+and [admission](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/core/admit.c) still rebuilt the entire map for every
 publication, while the catalog replaced only changed paths. Carryover reduced
 standalone fences without reducing each remaining publication's map work.
 Full map/claim summaries and candidate validation remain population-sized in

@@ -68,5 +68,7 @@ or sync. No shutdown/restart/sleep flushing hooks exist yet.
 
 Read-only mounting requires an EMPTY journal. Writable opening replays a validated
 committed log; unknown read-only-compatible features forbid recovery writes.
-Task-3 runtime validation is pending in the
+Ordinary QEMU mutation, synchronization and clean-reboot persistence results are in the
 [measurement record](../development/experiments/native-filesystem-task3/README.md).
+Committed-log recovery and retained-open unlink were reviewed in code, without
+runtime crash injection or a retained-handle exercise.
