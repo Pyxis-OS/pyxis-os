@@ -12,6 +12,8 @@ generations. They retain inode references independently of parent objects. Trust
 init acquires roots through the [mount protocol](../../include/abi/mount.h) for its
 configured disk; no on-disk principal is supplied. Roots require LOOKUP. Mutation
 rights additionally require mount WRITE; observation independently requires OBSERVE.
+Installer disk objects can also acquire read-only roots through the same mount
+path after releasing raw claims; see [installer authority](../devices/installer-authority.md).
 Returned directory/file grants can be attenuated and delegated independently of
 mount authority. Native create/remove/file rename, writes, resizing and sync run
 on the sole kernel filesystem worker. Native FILE_SIZE accepts READ or WRITE.

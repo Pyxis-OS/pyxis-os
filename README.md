@@ -51,13 +51,16 @@ The shell starts at `home://`, which is RAM-backed and lost on reboot. `app://`
 contains the read-only boot archive. Optional [virtio-fs setup](docs/devices/virtio-fs.md)
 provides persistent `host://` files and executable loading; no overlay is needed.
 Networking is opt-in with `VIRTIO_NET=1`; see [network setup](docs/devices/networking.md).
-Kernel-only [block storage](docs/devices/block-storage.md) is opt-in with
+[Block storage](docs/devices/block-storage.md) is opt-in with
 `VIRTIO_BLK_IMAGE=/path/to/disk.raw`.
 The opt-in [raw USB image](docs/development/usb-image.md) builds a FAT32/GPT
 installation image and boots it through emulated USB with `make run-usb`.
 [Native filesystem mounts](docs/userland/init.md#native-disk-configuration-and-mounting)
 use `MOUNT_DISK` configuration and an explicit read-only or writable mount in
 trusted init. File/directory sync provides durability; close does not.
+The boot menu defaults to normal startup after five seconds. Its separate
+[Install Pyxis entry](docs/devices/installer-authority.md) grants raw-disk authority
+only to native installer init; the installer executable is not yet packaged.
 See [QEMU troubleshooting](docs/development/qemu.md) for host emulator boot failures.
 The [shell guide](docs/userland/shell.md) and [edit/build/run walkthrough](docs/development/edit-build-run.md)
 cover ordinary guest use.
