@@ -16,6 +16,8 @@
 #define STORE_CLEANUP_IMAGES 10u
 #define STORE_CLEANUP_MAPPINGS 64u
 
+_Static_assert(STORE_IMAGES_MAX <= PNF_DESCRIPTORS_PER_BLOCK);
+
 struct store_free_slot {
   struct store_free_slot *next;
   uint64_t number;
@@ -74,6 +76,10 @@ struct native_store_pool {
   uint32_t image_count, image_capacity;
   uintptr_t scratch;
   size_t scratch_bytes;
+  /* Retained mount storage; journal images overlay this durable bitmap base. */
+  uintptr_t bitmap;
+  size_t bitmap_bytes;
+  bool bitmap_loaded;
   uint8_t io[2][PNF_BLOCK_SIZE];
 };
 
@@ -226,10 +232,21 @@ static enum call_status transport(struct native_store_context *context, struct n
   return CALL_OK;
 }
 
-static uint8_t *
-image_bytes(struct native_store_pool *pool, unsigned index)
+static uint8_t *image_bytes(struct native_store_pool *pool, unsigned index)
 {
   return (uint8_t *)pool->scratch + (size_t)index * PNF_BLOCK_SIZE;
+}
+
+static const uint8_t *bitmap_page(struct native_store_pool *pool, uint64_t page)
+{
+  KASSERT(pool->bitmap_loaded && page < pool->header.bitmap_blocks);
+  uint64_t home = pool->header.bitmap_start + page;
+  for (unsigned i = 0; i < pool->image_count; i++) {
+    if (pool->images[i].home == home) {
+      return image_bytes(pool, i);
+    }
+  }
+  return (const uint8_t *)pool->bitmap + (size_t)page * PNF_BLOCK_SIZE;
 }
 
 static enum call_status read_block(struct native_store_context *context, struct native_store_pool *pool,
@@ -240,6 +257,12 @@ static enum call_status read_block(struct native_store_context *context, struct 
       memcpy(bytes, image_bytes(pool, i), PNF_BLOCK_SIZE);
       return CALL_OK;
     }
+  }
+  if (pool->bitmap_loaded && home >= pool->header.bitmap_start &&
+    home - pool->header.bitmap_start < pool->header.bitmap_blocks) {
+    memcpy(bytes, (const uint8_t *)pool->bitmap +
+      (size_t)(home - pool->header.bitmap_start) * PNF_BLOCK_SIZE, PNF_BLOCK_SIZE);
+    return CALL_OK;
   }
   return transport(context, pool, BLOCK_READ, home, 1, bytes);
 }
@@ -266,7 +289,7 @@ static enum call_status edit_block(struct native_store_context *context, struct 
     memset(bytes, 0, PNF_BLOCK_SIZE);
   }
   else {
-    status = transport(context, pool, BLOCK_READ, home, 1, bytes);
+    status = read_block(context, pool, home, bytes);
   }
   if (status != CALL_OK) {
     return status;
@@ -299,12 +322,8 @@ static enum call_status allocated_block(struct native_store_context *context, st
   if (!pnf_data_block_valid(&pool->header, block)) {
     return corrupt(context);
   }
-  enum call_status status = read_block(context, pool,
-    pool->header.bitmap_start + block / PNF_BITMAP_BITS, pool->io[1]);
-  if (status != CALL_OK) {
-    return status;
-  }
-  return bit_get(pool->io[1], block % PNF_BITMAP_BITS) ? CALL_OK : corrupt(context);
+  const uint8_t *bytes = bitmap_page(pool, block / PNF_BITMAP_BITS);
+  return bit_get(bytes, block % PNF_BITMAP_BITS) ? CALL_OK : corrupt(context);
 }
 
 static enum call_status map_read(struct native_store_context *context, struct native_store_pool *pool,
@@ -371,28 +390,46 @@ static enum call_status allocate_block(struct native_store_context *context, str
   if (!pool->free_blocks) {
     return CALL_NO_SPACE;
   }
-  for (uint64_t scanned = 0; scanned < pool->header.pool_blocks; scanned++) {
-    uint64_t block = pool->next_free++;
-    if (pool->next_free >= pool->header.pool_blocks) {
-      pool->next_free = 1;
+  uint64_t starts[2] = {pool->next_free, 1};
+  uint64_t ends[2] = {pool->header.pool_blocks, pool->next_free};
+  for (unsigned range = 0; range < 2; range++) {
+    uint64_t block = starts[range];
+    while (block < ends[range]) {
+      if (task_deadline_expired(context->deadline)) {
+        return backing_failure(context, BLOCK_TIMED_OUT);
+      }
+      uint64_t page = block / PNF_BITMAP_BITS;
+      uint64_t page_base = page * PNF_BITMAP_BITS;
+      uint64_t end = page_base + PNF_BITMAP_BITS;
+      if (end > ends[range]) {
+        end = ends[range];
+      }
+      const uint8_t *bytes = bitmap_page(pool, page);
+      while (block < end) {
+        unsigned bit = (unsigned)(block % 64);
+        uint64_t word_base = block - bit;
+        uint64_t available = ~pnf_get_u64(bytes + (size_t)(word_base - page_base) / 8);
+        available &= UINT64_MAX << bit;
+        unsigned count = end - word_base < 64 ? (unsigned)(end - word_base) : 64;
+        if (count < 64) {
+          available &= (UINT64_C(1) << count) - 1;
+        }
+        if (available) {
+          uint64_t candidate = word_base + (unsigned)__builtin_ctzll(available);
+          enum call_status status = bitmap_change(context, pool, candidate, true);
+          if (status != CALL_OK) {
+            return status;
+          }
+          pool->next_free = candidate + 1;
+          if (pool->next_free == pool->header.pool_blocks) {
+            pool->next_free = 1;
+          }
+          *physical = candidate;
+          return CALL_OK;
+        }
+        block = word_base + count;
+      }
     }
-    if (!pnf_data_block_valid(&pool->header, block)) {
-      continue;
-    }
-    enum call_status status = read_block(context, pool,
-      pool->header.bitmap_start + block / PNF_BITMAP_BITS, pool->io[1]);
-    if (status != CALL_OK) {
-      return status;
-    }
-    if (bit_get(pool->io[1], block % PNF_BITMAP_BITS)) {
-      continue;
-    }
-    status = bitmap_change(context, pool, block, true);
-    if (status != CALL_OK) {
-      return status;
-    }
-    *physical = block;
-    return CALL_OK;
   }
   return CALL_NO_SPACE;
 }
@@ -629,6 +666,15 @@ static enum call_status checkpoint(struct native_store_context *context, struct 
   }
   pool->control = empty;
   pool->control_slot = slot;
+  /* Reuse becomes safe only after the newer EMPTY control is durable. */
+  for (unsigned i = 0; i < pool->image_count; i++) {
+    if (pool->images[i].kind == PNF_METADATA_BITMAP) {
+      KASSERT(pool->bitmap_loaded);
+      memcpy((uint8_t *)pool->bitmap +
+        (size_t)(pool->images[i].home - pool->header.bitmap_start) * PNF_BLOCK_SIZE,
+        image_bytes(pool, i), PNF_BLOCK_SIZE);
+    }
+  }
   pool->image_count = 0;
   return CALL_OK;
 }
@@ -930,29 +976,54 @@ enum call_status native_store_open(struct native_store_context *context,
       }
     }
   }
-  for (uint64_t page = 0; page < pool->header.bitmap_blocks; page++) {
-    status = read_block(context, pool, pool->header.bitmap_start + page, pool->io[0]);
+  if (pool->header.bitmap_blocks > SIZE_MAX / PNF_BLOCK_SIZE) {
+    status = CALL_LIMIT;
+    goto fail;
+  }
+  pool->bitmap_bytes = (size_t)pool->header.bitmap_blocks * PNF_BLOCK_SIZE;
+  status = store_vm_allocate(pool->bitmap_bytes, &pool->bitmap);
+  if (status != CALL_OK) {
+    goto fail;
+  }
+  for (uint64_t page = 0; page < pool->header.bitmap_blocks;) {
+    uint64_t remaining = pool->header.bitmap_blocks - page;
+    uint32_t count = remaining < 128 ? (uint32_t)remaining : 128;
+    status = transport(context, pool, BLOCK_READ, pool->header.bitmap_start + page,
+      count, (uint8_t *)pool->bitmap + (size_t)page * PNF_BLOCK_SIZE);
     if (status != CALL_OK) {
       goto fail;
     }
+    page += count;
+  }
+  for (uint64_t page = 0; page < pool->header.bitmap_blocks; page++) {
+    if (task_deadline_expired(context->deadline)) {
+      status = backing_failure(context, BLOCK_TIMED_OUT);
+      goto fail;
+    }
+    const uint8_t *bytes = (const uint8_t *)pool->bitmap + (size_t)page * PNF_BLOCK_SIZE;
     for (unsigned bit = 0; bit < PNF_BITMAP_BITS; bit++) {
       uint64_t number = page * PNF_BITMAP_BITS + bit;
       bool fixed = number >= pool->header.pool_blocks || !pnf_data_block_valid(&pool->header, number);
-      bool allocated = bit_get(pool->io[0], bit);
+      bool allocated = bit_get(bytes, bit);
       if (fixed && !allocated) {
         status = corrupt(context);
         goto fail;
       }
       if (!fixed && !allocated) {
+        if (!pool->free_blocks) {
+          pool->next_free = number;
+        }
         pool->free_blocks++;
       }
     }
   }
+  pool->bitmap_loaded = true;
   pool->next = opened_pools;
   opened_pools = pool;
   *out = pool;
   return CALL_OK;
   fail:
+  store_vm_free(pool->bitmap, pool->bitmap_bytes);
   store_vm_free(pool->scratch, pool->scratch_bytes);
   store_free(pool);
   return status;
