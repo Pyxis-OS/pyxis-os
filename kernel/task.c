@@ -673,7 +673,7 @@ static void reap_completed(void)
       } else if (task->faulted) {
         klog("userspace: CPU %zu faulted task released\n", task->cpu_index);
       } else {
-        klog("userspace: CPU %zu exited with status %d; address space released\n",
+        ktrace("userspace: CPU %zu exited with status %d; address space released\n",
              task->cpu_index, task->exit_status);
       }
     }

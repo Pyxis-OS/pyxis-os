@@ -1,3 +1,4 @@
+#include <arch/clock.h>
 #include <kernel/boot.h>
 #include <kernel/initrd.h>
 #include <kernel/memory.h>
@@ -9,6 +10,7 @@
 #define NEWC_TYPE_MASK 0170000
 #define NEWC_REGULAR 0100000
 #define NEWC_DIRECTORY 0040000
+#define INITRD_CLOCK_SAMPLE_BYTES (256 * PAGE_SIZE)
 
 /* newc stores numbers as eight ASCII hexadecimal digits, not binary integers.
  * Names and payloads follow the header, with each payload/header aligned to 4. */
@@ -141,6 +143,7 @@ static enum initrd_result validate_archive(const uint8_t *bytes, size_t size)
 {
   size_t offset = 0;
   while (offset < size) {
+    arch_clock_maintain();
     struct cpio_entry entry;
     enum initrd_result result = read_entry(bytes, size, &offset, &entry);
     if (result != INITRD_OK) {
@@ -149,6 +152,9 @@ static enum initrd_result validate_archive(const uint8_t *bytes, size_t size)
     if (entry.trailer) {
       /* Accept cpio's final block padding, but not concatenated archives. */
       for (; offset < size; ++offset) {
+        if (!(offset % INITRD_CLOCK_SAMPLE_BYTES)) {
+          arch_clock_maintain();
+        }
         if (bytes[offset]) {
           return INITRD_INVALID;
         }
@@ -187,6 +193,9 @@ enum initrd_result initrd_init(const struct boot_module *module)
       break;
     }
     mapped += PAGE_SIZE;
+    if (!(mapped % INITRD_CLOCK_SAMPLE_BYTES)) {
+      arch_clock_maintain();
+    }
   }
 
   const uint8_t *bytes = (const void *)(mapping + page_offset);

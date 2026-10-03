@@ -1,3 +1,4 @@
+#include <arch/clock.h>
 #include <arch/smp.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
@@ -178,6 +179,7 @@ void user_launch_initial(const char *command_line)
   /* Numeric overrides win over the primary selection regardless of option
    * order. Every workload CPU gets an init; an idle script can simply exit. */
   for (size_t index = primary; index < count; ++index) {
+    arch_clock_maintain();
     const char *image = images[index];
     if (!image && index == primary) {
       image = primary_image;

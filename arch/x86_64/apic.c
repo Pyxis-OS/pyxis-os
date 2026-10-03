@@ -1,4 +1,5 @@
 #include <arch/apic.h>
+#include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/layout.h>
@@ -58,6 +59,7 @@
 #define TIMER_FREQUENCY 120u
 #define PIT_CALIBRATION_COUNT ((PIT_FREQUENCY + TIMER_FREQUENCY - 1) / TIMER_FREQUENCY)
 #define PIT_POLL_LIMIT 10000000u
+#define PIT_CLOCK_POLL_INTERVAL 1024u
 
 uint32_t arch_timer_frequency(void)
 {
@@ -120,6 +122,9 @@ static uint32_t calibrate_timer(void)
   outb(PIT_SPEAKER_CONTROL, stopped | PIT_CHANNEL2_GATE);
   unsigned remaining = PIT_POLL_LIMIT;
   while (!(inb(PIT_SPEAKER_CONTROL) & PIT_CHANNEL2_OUTPUT) && remaining) {
+    if (!(remaining % PIT_CLOCK_POLL_INTERVAL)) {
+      arch_clock_maintain();
+    }
     --remaining;
   }
   uint32_t elapsed = UINT32_MAX - apic_read(APIC_TIMER_CURRENT);

@@ -2,6 +2,20 @@ mainmenu "Pyxis Configuration"
 
 menu "Caelum"
 
+config HPET_MAINTENANCE_TICKS
+  int "HPET maintenance interval (BSP timer ticks)"
+  range 1 4294967295
+  default 120
+  help
+    Sample a software-extended 32-bit HPET after this many delivered BSP
+    LAPIC timer interrupts. The current 120 Hz timer makes 120 ticks
+    nominally one second. Direct 64-bit HPET counters need no maintenance.
+
+    Choose an interval well below the hardware counter's wrap time.
+    Initialization rejects a nominal interval of one wrap or longer.
+    Interrupt delays also count toward the less-than-one-wrap sampling
+    requirement; elapsed time always comes from HPET, not timer ticks.
+
 config XHCI
   bool "XHCI"
   default n

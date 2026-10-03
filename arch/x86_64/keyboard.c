@@ -1,4 +1,5 @@
 #include <arch/cpu.h>
+#include <arch/clock.h>
 #include <arch/cpu_local.h>
 #include <arch/io_apic.h>
 #include <arch/keyboard.h>
@@ -32,6 +33,7 @@
 #define PS2_RESEND 0xfe
 #define PS2_SCAN_SET_2 2
 #define PS2_POLL_LIMIT 1000000
+#define PS2_CLOCK_POLL_INTERVAL 1024u
 #define PS2_COMMAND_ATTEMPTS 3
 #define PS2_DRAIN_LIMIT 256
 #define PS2_IRQ_BYTE_LIMIT 64
@@ -103,6 +105,9 @@ static size_t pause_index;
 static bool wait_input_empty(void)
 {
   for (unsigned i = 0; i < PS2_POLL_LIMIT; ++i) {
+    if (!(i % PS2_CLOCK_POLL_INTERVAL)) {
+      arch_clock_maintain();
+    }
     if (!(inb(PS2_STATUS_PORT) & PS2_INPUT_FULL)) {
       return true;
     }
@@ -132,6 +137,9 @@ static bool write_data(uint8_t data)
 static bool read_reply(uint8_t *reply)
 {
   for (unsigned i = 0; i < PS2_POLL_LIMIT; ++i) {
+    if (!(i % PS2_CLOCK_POLL_INTERVAL)) {
+      arch_clock_maintain();
+    }
     uint8_t status = inb(PS2_STATUS_PORT);
     if (status & PS2_OUTPUT_FULL) {
       uint8_t data = inb(PS2_DATA_PORT);

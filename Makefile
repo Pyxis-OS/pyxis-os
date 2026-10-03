@@ -166,7 +166,7 @@ build/kernel-config.h: Kconfig .config FORCE
 	@mkdir -p $(@D)
 	$(PYTHON) -m genconfig --header-path $@ --config-out build/kernel.config Kconfig
 
-build/kernel/init.o: build/kernel-config.h
+build/kernel/init.o build/arch/x86_64/clock.o: build/kernel-config.h
 
 build/kernel-log-config.h: FORCE
 	@mkdir -p $(@D)

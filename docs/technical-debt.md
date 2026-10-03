@@ -438,17 +438,33 @@ HPET MMIO reads can be expensive, especially under virtualization. The
 removed unnecessary reads for empty scheduler deadline lists and untimed HOST
 idle waits, restoring the measured unprofiled transfer times to baseline. Active
 deadlines and profiling still pay the clock cost. The current source requires
-a 64-bit, memory-mapped HPET; there is no source registry or fallback, and the
-ThinkPad's observed 32-bit HPET stops native boot. On 2026-10-03 the owner chose
+a memory-mapped HPET; there is no source registry or fallback. On 2026-10-03
+the owner chose
 [software-extended HPET first](wip/thinkpad-kvm-tsc.md#accepted-direction-and-implementation-handoff).
-That implementation is pending. Its expected MMIO/shared-state cost and strict
-wrap-sampling requirement are accepted tradeoffs of the selected direction,
-not measured implementation results. Revisit the native blocker when extension
-lands, recording the actual support limits. The accepted future direction is
-TSC with extended-HPET fallback, with frequency discovery and cross-CPU
-qualification, preserving the clock protocol. Revisit performance after native
+The implementation preserves direct 64-bit reads and extends 32-bit counters
+with a shared CAS accumulator. Each advancing extension read publishes to one
+cache line and may retry under contention. BSP maintenance is configurable in
+timer deliveries, default 120 (nominally one second), with explicit early-boot
+sampling. The [matched host-KVM observations](wip/thinkpad-kvm-tsc.md#local-implementation-results)
+show lower clock-call cost for forced low-32-bit extension, with shared-state
+cost included, but do not establish native performance. The direct profiled
+allocation median was about 2.6% higher, mostly in BSP queue time; its cause
+was not isolated. The owner has reached native userspace on all 12 ThinkPad
+CPUs, as [recorded from a screen photo](wip/thinkpad-kvm-tsc.md#native-bring-up-continuation).
+The selected-path log and native multi-wrap clock check remain pending; missing
+keyboard input is a separate bring-up blocker with an unconfirmed cause.
+
+The accepted support requirement is strictly less than one advancing-counter
+wrap between incorporated samples, including individual boot operations, long
+interrupt-disabled execution, firmware stalls and debugger/VM pauses. A violating
+gap requires reboot: the low word cannot identify or reconstruct missing wraps.
+Nominal interval validation cannot enforce the actual gap bound, and suspend,
+resume and migration remain unqualified. Revisit this limitation with an
+independent source or an explicitly scoped stronger progress guarantee. The
+accepted future direction is TSC with extended-HPET fallback, with frequency
+discovery and cross-CPU qualification, preserving the clock protocol. Revisit performance after native
 bring-up when the TSC stage is assigned; it is not part of the first HPET task.
-VirtIO RTC remains deferred until PCI/VirtIO infrastructure exists.
+The VirtIO RTC driver remains deferred.
 
 ## Doom configuration and save-format limits
 

@@ -66,9 +66,11 @@ void arch_init(struct boot_info *boot)
   paging_init(boot);
   arch_clock_init();
   apic_init();
+  arch_clock_maintain();
   if (io_apic_init()) {
     ps2_keyboard_init();
   }
+  arch_clock_maintain();
   arch_user_init();
   arch_syscall_init();
 }

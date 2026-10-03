@@ -295,8 +295,13 @@ software-extended 32-bit HPET first** to continue native bring-up. Its
 [implementation handoff](thinkpad-kvm-tsc.md#accepted-direction-and-implementation-handoff)
 records the sampling/concurrency constraints and validation scope. TSC with
 extended-HPET fallback is the accepted future direction, deferred from this
-first task. The clock implementation is still unchanged; successful native
-Caelum boot remains unqualified.
+first task. The clock now supports software extension and a menuconfig-editable
+BSP maintenance interval, default 120 timer ticks. Its accepted support limit
+requires less than one advancing-counter wrap between incorporated samples;
+the owner subsequently reached native userspace on all 12 ThinkPad CPUs.
+The [native continuation](thinkpad-kvm-tsc.md#native-bring-up-continuation)
+records the next keyboard blocker and unconfirmed cause; the selected clock-path
+log and native multi-wrap check remain pending.
 
 The separate [hardware-inspection proposal](hardware-inspection.md) adds native
 `lspci`/`lsusb` consumers of read-only inventory and pinned plain-text PCI/USB name
