@@ -14,6 +14,7 @@
 #define STORE_CACHE_CHUNKS 4u
 #define STORE_CHUNK_ENTRIES 256u
 #define STORE_CLEANUP_IMAGES 10u
+#define STORE_CLEANUP_MAPPINGS 64u
 
 struct store_free_slot {
   struct store_free_slot *next;
@@ -1613,30 +1614,36 @@ enum call_status native_store_write(struct native_store_context *context, struct
       return status;
     }
   }
-  unsigned within = (unsigned)(offset % PNF_BLOCK_SIZE);
-  size_t count = PNF_BLOCK_SIZE - within;
-  if (count > length) {
-    count = length;
+  const uint8_t *source = bytes;
+  while (length) {
+    unsigned within = (unsigned)(offset % PNF_BLOCK_SIZE);
+    size_t count = PNF_BLOCK_SIZE - within;
+    if (count > length) {
+      count = length;
+    }
+    struct store_cache_entry *entry;
+    status = cache_get(context, inode, offset / PNF_BLOCK_SIZE, &entry);
+    if (status != CALL_OK) {
+      return *written ? CALL_OK : status;
+    }
+    uint64_t old_size = inode->record.size;
+    uint64_t base = offset - within;
+    if (old_size < base + PNF_BLOCK_SIZE) {
+      size_t start = old_size > base ? (size_t)(old_size - base) : 0;
+      memset(entry->bytes + start, 0, PNF_BLOCK_SIZE - start);
+    }
+    memcpy(entry->bytes + within, source, count);
+    entry->dirty = true;
+    if (offset + count > inode->record.size) {
+      inode->record.size = offset + count;
+    }
+    inode->size_dirty = true;
+    touch_inode(context, &inode->record, false);
+    *written += count;
+    source += count;
+    offset += count;
+    length -= count;
   }
-  struct store_cache_entry *entry;
-  status = cache_get(context, inode, offset / PNF_BLOCK_SIZE, &entry);
-  if (status != CALL_OK) {
-    return status;
-  }
-  uint64_t old_size = inode->record.size;
-  uint64_t base = offset - within;
-  if (old_size < base + PNF_BLOCK_SIZE) {
-    size_t start = old_size > base ? (size_t)(old_size - base) : 0;
-    memset(entry->bytes + start, 0, PNF_BLOCK_SIZE - start);
-  }
-  memcpy(entry->bytes + within, bytes, count);
-  entry->dirty = true;
-  if (offset + count > inode->record.size) {
-    inode->record.size = offset + count;
-  }
-  inode->size_dirty = true;
-  touch_inode(context, &inode->record, false);
-  *written = count;
   return CALL_OK;
 }
 
@@ -2288,6 +2295,33 @@ static enum call_status remove_mapping(struct native_store_context *context, str
   }
 }
 
+static bool cleanup_mapping_fits(const struct native_store_pool *pool, const struct cleanup_path *path)
+{
+  uint64_t homes[7];
+  unsigned count = 0;
+  homes[count++] = pool->header.bitmap_start + path->target / PNF_BITMAP_BITS;
+  for (unsigned i = 0; i < path->depth; i++) {
+    homes[count++] = path->parents[i];
+    homes[count++] = pool->header.bitmap_start + path->parents[i] / PNF_BITMAP_BITS;
+  }
+  unsigned images = pool->image_count;
+  for (unsigned i = 0; i < count; i++) {
+    bool present = false;
+    for (unsigned j = 0; j < pool->image_count; j++) {
+      present |= pool->images[j].home == homes[i];
+    }
+    for (unsigned j = 0; j < i; j++) {
+      present |= homes[j] == homes[i];
+    }
+    if (!present) {
+      images++;
+    }
+  }
+  /* Reserve the inode image and the cleanup-list predecessor or volume image.
+   * Ancestor bitmap images are included even when no ancestor becomes empty. */
+  return images <= STORE_CLEANUP_IMAGES - 2;
+}
+
 static void drop_inode_cache(struct native_store_inode *inode, uint64_t first)
 {
   struct native_store_pool *pool = inode->volume->pool;
@@ -2371,23 +2405,32 @@ static enum call_status cleanup_one(struct native_store_context *context, struct
   bool detached = (inode->record.cleanup & PNF_CLEANUP_DETACHED) && !inode->references;
   uint64_t target = detached ? 0 : inode->record.shrink_target;
   uint64_t limit = target / PNF_BLOCK_SIZE + (target % PNF_BLOCK_SIZE != 0);
-  struct cleanup_path path;
-  status = highest_mapping(context, inode, limit, &path);
-  if (status != CALL_OK) {
-    return status;
-  }
   struct pnf_inode old_record = inode->record, old_durable = inode->durable;
   struct pnf_inode previous_record = previous ? previous->record : (struct pnf_inode){0};
   struct pnf_volume old_volume = volume->record;
   uint64_t old_free = pool->free_blocks;
   bool reclaimed = false;
-  if (path.target) {
-    status = remove_mapping(context, inode, &path);
-    if (status == CALL_OK) {
-      memcpy(inode->record.pointers, inode->durable.pointers, sizeof(inode->record.pointers));
-      status = stage_inode_record(context, inode, &inode->durable);
+  bool complete = false;
+  for (unsigned removed = 0; removed < STORE_CLEANUP_MAPPINGS; removed++) {
+    struct cleanup_path path;
+    status = highest_mapping(context, inode, limit, &path);
+    if (status != CALL_OK) {
+      break;
     }
-  } else {
+    if (!path.target) {
+      complete = true;
+      break;
+    }
+    if (!cleanup_mapping_fits(pool, &path)) {
+      break;
+    }
+    status = remove_mapping(context, inode, &path);
+    if (status != CALL_OK) {
+      break;
+    }
+    memcpy(inode->record.pointers, inode->durable.pointers, sizeof(inode->record.pointers));
+  }
+  if (status == CALL_OK && complete) {
     inode->record.cleanup &= ~PNF_CLEANUP_SHRINK;
     inode->record.shrink_target = 0;
     inode->durable.cleanup &= ~PNF_CLEANUP_SHRINK;
@@ -2411,9 +2454,9 @@ static enum call_status cleanup_one(struct native_store_context *context, struct
       memset(&inode->record, 0, sizeof(inode->record));
       memset(&inode->durable, 0, sizeof(inode->durable));
     }
-    if (status == CALL_OK) {
-      status = stage_inode_record(context, inode, &inode->durable);
-    }
+  }
+  if (status == CALL_OK) {
+    status = stage_inode_record(context, inode, &inode->durable);
   }
   if (status == CALL_OK) {
     status = commit(context, pool);

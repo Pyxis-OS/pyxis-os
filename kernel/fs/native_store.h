@@ -68,6 +68,7 @@ enum call_status native_store_rename(struct native_store_context *context,
     struct native_store_inode *source, const char *source_name, size_t source_length,
     struct native_store_inode *destination, const char *destination_name,
     size_t destination_length, bool replace);
+/* A later cache failure returns CALL_OK with the accepted prefix in written. */
 enum call_status native_store_write(struct native_store_context *context,
     struct native_store_inode *inode, uint64_t offset, const void *bytes,
     size_t length, size_t *written);
