@@ -234,7 +234,8 @@ Accepted 2026-10-02.
 
 ## Task-3 handoff
 
-The task branch is `fs/native-writer`, based on main `132aef1`. It uses published
+The task branch is `fs/native-writer`, based on main `132aef1`, with draft
+[parent #348](https://git.internal/PyxisOS/pyxis-os/pulls/348). It uses published
 [filesystem #27](https://git.internal/PyxisOS/pyxis-fs/pulls/27) at `4dbf07a`
 and [userland #104](https://git.internal/PyxisOS/pyxis-userland/pulls/104) at `6308de8`.
 Merge dependencies before the parent PR. The kernel owns cached data, delayed
