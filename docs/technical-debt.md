@@ -437,11 +437,18 @@ HPET MMIO reads can be expensive, especially under virtualization. The
 [HOST forwarding investigation](kernel/bsp-service-requests.md#profiling-and-scheduling-costs)
 removed unnecessary reads for empty scheduler deadline lists and untimed HOST
 idle waits, restoring the measured unprofiled transfer times to baseline. Active
-deadlines and profiling still pay the clock cost. Consider a
-validated TSC source later, including frequency discovery and cross-CPU
-consistency, without changing the clock protocol. The current source requires
-a 64-bit, memory-mapped HPET; there is no source registry or fallback. VirtIO
-RTC remains deferred until PCI/VirtIO infrastructure exists.
+deadlines and profiling still pay the clock cost. The current source requires
+a 64-bit, memory-mapped HPET; there is no source registry or fallback, and the
+ThinkPad's observed 32-bit HPET stops native boot. On 2026-10-03 the owner chose
+[software-extended HPET first](wip/thinkpad-kvm-tsc.md#accepted-direction-and-implementation-handoff).
+That implementation is pending. Its expected MMIO/shared-state cost and strict
+wrap-sampling requirement are accepted tradeoffs of the selected direction,
+not measured implementation results. Revisit the native blocker when extension
+lands, recording the actual support limits. The accepted future direction is
+TSC with extended-HPET fallback, with frequency discovery and cross-CPU
+qualification, preserving the clock protocol. Revisit performance after native
+bring-up when the TSC stage is assigned; it is not part of the first HPET task.
+VirtIO RTC remains deferred until PCI/VirtIO infrastructure exists.
 
 ## Doom configuration and save-format limits
 
