@@ -7,7 +7,8 @@ work. It supersedes the pyxis-fs writer plans listed under
 - **Accepted:** [owner decisions](#owner-decisions), [v1 answers](#v1-answers),
   [installation and authority](#installation-and-authority),
   [code, file layout and order](#code-file-layout-and-order) and
-  [focused tasks](#focused-tasks).
+  [focused tasks](#focused-tasks). The [format proposal](native-filesystem-format.md)
+  records accepted format decisions separately from its remaining proposals.
 - **Proposals awaiting the owner:** [writeback details](#proposed-writeback-details),
   the [pool sketch](#proposed-pool-sketch) and the
   [working method](#proposed-working-method).
@@ -207,7 +208,9 @@ Accepted 2026-10-02.
 
 1. [ ] **Format proposal.** A short design of the on-disk format: pool header,
    bitmap, volume table, inodes, directories and journal, with reserved bytes and
-   feature flags. Owner decisions go at most three per round.
+   feature flags. Owner decisions go at most three per round. The
+   [working proposal](native-filesystem-format.md) records progress; task 1 remains
+   open while the remaining format decisions are discussed.
 2. [ ] **Format library and host tools.** Structure definitions, encoding and
    decoding with link-time symbols, plus host `mkfs`, `fsck` and inspection.
 3. [ ] **Native read/write in Caelum** on virtio-blk, with persistent in-memory
