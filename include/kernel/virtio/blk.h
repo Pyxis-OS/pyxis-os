@@ -3,11 +3,13 @@
 
 #include <kernel/boot.h>
 
-/* BSP/IF=0. Prepare before AP startup; start after task_init(). Missing,
- * ambiguous or unsupported devices leave block operations unavailable. */
+/* BSP/IF=0. Inventory all VirtIO block candidates before AP startup; start one
+ * worker per prepared modern device after task_init(). Failed/unsupported
+ * entries stay in the inventory and do not disable other devices. */
 void virtio_blk_prepare(const struct boot_info *boot);
 void virtio_blk_start(void);
-/* BSP interrupt entry, IF=0: wake the worker without touching DMA buffers. */
+/* BSP interrupt entry, IF=0: wake interrupt-ready workers sharing this vector
+ * without touching their DMA buffers. Spurious wakeups are harmless. */
 void virtio_blk_interrupt(void);
 
 #endif
