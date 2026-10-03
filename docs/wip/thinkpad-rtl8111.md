@@ -5,8 +5,8 @@ the review note “read and accepted the proposal”, then explicitly authorized
 task 1. [Hardware identification](../devices/rtl8111-hardware.md) is complete;
 controller preparation is implemented. [NIC passthrough](../development/thinkpad-nic-passthrough.md)
 is complete. The owner accepted task 2's firmware/power/initial-state defaults
-in PR #359, then authorized task 2 after merging it. Tasks 1–3 are complete;
-Task 4 Ethernet I/O is in progress; task 5 remains separate.
+in PR #359, then authorized task 2 after merging it. Tasks 1–4 are complete;
+operation qualification in task 5 remains pending.
 
 ## Goal and machine configuration
 
@@ -68,15 +68,15 @@ The first binding lasts until reboot, without fallback. Reapplying settings
 to the same controller is allowed; clearing removes IPv4 settings only.
 Absent/ambiguous matching preserves the binding, and switching controllers
 is rejected. The [network reference](../devices/networking.md#native-configuration-capability)
-records binding and read-only lookup authority. VirtIO is the only connected
-driver in task 3; task 4 connects RTL8111 I/O.
+records binding and read-only lookup authority. Task 3 connected VirtIO; task 4 also connects supported RTL8111 controllers.
+Unsupported RTL XIDs remain diagnosed but are excluded from selectable interfaces.
 
 ## Tasks
 
 The five-task outline and planning constraints are accepted. The
 [hardware profile](../devices/rtl8111-hardware.md#controller-preparation)
 records preparation, I/O ownership and accepted choices. Task 4 validation is
-in progress.
+recorded below.
 
 - [x] **1. Identify the hardware.** Begin with the owner's Fedora r8169
   `dmesg`/`ethtool`/`lspci` output, with MAC bytes removed. Record the chip name,
@@ -97,7 +97,7 @@ in progress.
   Configuration chooses the interface. Finish with existing QEMU ping, UDP and
   TCP workloads
   preserving VirtIO behavior; capture matched runs before and after the refactor.
-- [ ] **4. Implement Ethernet I/O.** Add owned RX/TX rings, coherent DMA ordering,
+- [x] **4. Implement Ethernet I/O.** Add owned RX/TX rings, coherent DMA ordering,
   validated completions and interrupts serviced through the existing BSP network
   worker. Connect RTL8111 to the selection layer from task 3. Finish with ARP and
   gateway ping through the built-in port profile and clear buffer ownership.
@@ -152,8 +152,8 @@ register mapping. The existing MSI-X helper maps BAR4's table/PBA; delivery
 stays function-masked during preparation. Task 4 routes entry zero to BSP
 vector 40 and enables delivery only after explicit binding.
 
-**Accepted task 2 choices:** firmware-free first, with link and sustained traffic
-measured in task 4; disable endpoint ASPM/CLKREQ and run the PHY at full power;
+**Accepted task 2 choices:** firmware-free first, with initial I/O measured in
+task 4 and sustained/native qualification in task 5; disable endpoint ASPM/CLKREQ and run the PHY at full power;
 move to D0 with a 10 ms wait, disable PME/wake, and enable initially disabled
 memory decoding only with bus mastering off. Inconsistent initial states leave
 the controller unavailable while boot continues. The
@@ -196,3 +196,64 @@ Task 1 confirms XID `541`, corresponding to Linux's MAC version 46
 in PR #362; task 4 checks VFIO interrupt delivery and initial traffic. Cold-start
 firmware-free reliability and native I/O remain unqualified. PCI revision
 `0x15` alone is not proof of a particular Realtek MAC implementation.
+
+
+## Task 4 validation
+
+Baseline `b8a5255` and implementation `630f86a`, both pinning userspace `08e3c4b`,
+were built with GCC 16.2 and `make -j16 image`, using
+`CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis-` and
+`PYTHON=build/hpet-config-venv/bin/python3`. Both include the merged installer and
+selector dependency changes. Subsequent validation-note edits do not change code.
+Builds passed; existing vendor port warnings remain. No compiler rebuild,
+dependency pin change, test harness or fault injection was added.
+
+Runs used QEMU 10.2.2/KVM on the owner's ThinkPad host (`systemd-detect-virt`: none),
+4 CPUs, 2 GiB RAM, the raw edk2 OVMF pair, default init, and physical passthrough
+`VFIO_PCI=0000:05:00.0`. These are host KVM results, not nested-VM measurements or
+native Pyxis qualification. GDB inspected state without profiling workloads.
+
+With `NETWORK_CONFIG=/private/path/network.lua` and both NICs present, RTL bound
+by its private boot-loaded MAC and VirtIO stayed unstarted with DMA unpublished.
+The existing host remote client connected to `192.168.0.50:2323` and ran three
+`ping -c 5 192.168.0.1` batches: 15/15 replies, batch means 1.383, 0.622 and 0.749 ms
+(range 0.335–2.504 ms). `ping -c 3 127.0.0.1` returned 3/3. GDB found 157 interrupts,
+112 received frames, 50 submitted/completed TX frames, no outstanding TX and no
+malformed RX. Both rings wrapped; the device mask was `0x002f`.
+
+A warm boot initially failed FIFO drain after an active guest exited. The new
+firmware handed off Command `0x0007`, ChipCmd `0x0c` and MCU `0x22`. Recovery now
+requires one confirmed software reset followed by fresh drain/OOB/stop checks;
+it does not assume timeout means stopped. The final RTL boot and following
+VirtIO boot both exercised recovery successfully.
+
+Matched VirtIO runs used `VIRTIO_NET=1 TCP_FORWARD=2323:2323` with the packaged
+profile, keeping RTL inactive (ChipCmd/mask zero, no driver DMA or interrupts).
+The existing remote client ran three `ping -c 5 10.0.2.2` batches and three
+`ttcp -t -p 5001 -n 128 -l 8192 10.0.2.2` sends. Host `socat` accepted TCP port
+5001 and `wc -c` confirmed 1,048,576 bytes per run. UDP used the existing host
+port-18080 echo with `udp-send 10.0.2.15 10.0.2.2 18080 "RTL I/O baseline"`.
+
+| Measurement | Baseline | After |
+| --- | --- | --- |
+| Ping batch means, ms | 0.443 / 0.833 / 0.869 | 0.996 / 0.941 / 0.466 |
+| Ping aggregate mean / median, ms | 0.715 / 0.431 | 0.801 / 0.555 |
+| Ping range, ms; replies | 0.208–2.900; 15/15 | 0.203–2.911; 15/15 |
+| TCP seconds, including closure | 0.470191 / 0.469106 / 0.467918 | 0.487508 / 0.472137 / 0.474428 |
+| TCP mean seconds | 0.469072 | 0.478024 |
+| UDP echo | exact 16-byte reply | exact 16-byte reply |
+
+TCP mean time rose 1.9%, with more variation after the change; the small sample
+cannot establish cause. Ping likewise varies within both runs. This is functional
+and bounded timing evidence, not proof of unchanged throughput or sustained
+reliability. Raw local captures are `build/rtl-io-baseline-*`,
+`build/rtl-io-final-physical.jsonl` and `build/rtl-io-final-virtio-*`.
+
+A separate four-CPU no-NIC boot reached userspace with both controller lists
+empty, binding NONE, worker ready and external IPv4 unassigned.
+
+Manual profile assembly accepted a path containing spaces, replaced only the
+initrd profile and restored the packaged profile when omitted. The userspace
+checkout stayed clean. Native/cold-start I/O, link changes, long transfers,
+firmware-free reliability and other RTL variants remain unqualified; task 5
+has not started.

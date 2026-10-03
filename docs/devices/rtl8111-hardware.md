@@ -135,7 +135,7 @@ A timeout does not establish that hardware has relinquished DMA ownership.
 The owner accepted these defaults in PR #359; they are the current direction and
 may be revised by the owner:
 
-- **Firmware-free first.** Task 4 measures link and sustained traffic without
+- **Firmware-free first.** Tasks 4–5 measure initial and sustained traffic without
   `rtl8168h-2.fw`. Only if those measurements show it is needed, add the pinned
   linux-firmware file, its redistribution license and a small interpreter in a
   focused PR.
