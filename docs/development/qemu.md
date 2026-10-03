@@ -27,9 +27,9 @@ QEMU still validates the memory option itself. Empty `VFIO_PCI` leaves the
 QEMU command line unchanged.
 
 The launcher does not change host drivers, permissions or limits. Follow the
-[ThinkPad host setup](../wip/thinkpad-nic-passthrough.md#task-2-host-setup-on-the-thinkpads-fedora-owner)
-before launching. That plan also describes the owner's first hardware boot;
-the passed-through NIC has no Pyxis driver yet.
+[ThinkPad host setup](thinkpad-nic-passthrough.md#host-setup) before launching.
+The [hardware boot results](thinkpad-nic-passthrough.md#validation-2026-10-03)
+confirm read-only PCI discovery; the passed-through NIC has no Pyxis driver yet.
 
 ## AHCI CD-ROM crash before kernel entry
 

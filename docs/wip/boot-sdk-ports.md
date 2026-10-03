@@ -322,8 +322,9 @@ The ThinkPad's [next bring-up steps](thinkpad-next-steps.md) record the owner's
 order after the native shell: the assigned CPU entropy task first (virtio-rng
 when present, RDSEED with RDRAND fallback otherwise, ChaCha20 later), then
 Ethernet through VFIO passthrough to QEMU and a driver. The
-[NIC passthrough plan](thinkpad-nic-passthrough.md) assigns the launcher option
-as task 1, followed by owner host setup and the first passthrough boot.
+[NIC passthrough reference](../development/thinkpad-nic-passthrough.md) records
+the implemented launcher, host setup and successful owner/agent hardware boots.
+The RTL8111 driver remains a proposed follow-up.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

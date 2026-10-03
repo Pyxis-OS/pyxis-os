@@ -39,7 +39,7 @@ select matching paths for your distribution. Each run copies firmware variables
 into build. Serial uses the launching terminal; exit QEMU with Ctrl-a x.
 `QEMU_DISPLAY=none` disables the graphics window.
 `VFIO_PCI=0000:05:00.0` opts into [PCI passthrough](docs/development/qemu.md#pci-passthrough),
-after the [host setup](docs/wip/thinkpad-nic-passthrough.md#task-2-host-setup-on-the-thinkpads-fedora-owner).
+after the [host setup](docs/development/thinkpad-nic-passthrough.md#host-setup).
 
 On a four-CPU boot, the first tab is Caelum's live kernel log. Super+Left/Right
 switches spaces; select CPU 1 for the development shell or CPU 2 for the read-only

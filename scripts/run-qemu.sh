@@ -169,7 +169,7 @@ if [ -n "$VFIO_PCI" ]; then
   }
   vfio_driver=$(readlink -f "$vfio_device/driver") || vfio_driver=
   [ "$vfio_driver" = /sys/bus/pci/drivers/vfio-pci ] || {
-    echo "VFIO_PCI device $VFIO_PCI must be bound to vfio-pci; see docs/wip/thinkpad-nic-passthrough.md task 2." >&2
+    echo "VFIO_PCI device $VFIO_PCI must be bound to vfio-pci; see docs/development/thinkpad-nic-passthrough.md host setup." >&2
     exit 1
   }
   vfio_group_path=$(readlink -f "$vfio_device/iommu_group") || vfio_group_path=
@@ -179,7 +179,7 @@ if [ -n "$VFIO_PCI" ]; then
   }
   vfio_group=${vfio_group_path##*/}
   [ -r "/dev/vfio/$vfio_group" ] && [ -w "/dev/vfio/$vfio_group" ] || {
-    echo "VFIO_PCI requires read/write access to /dev/vfio/$vfio_group; see docs/wip/thinkpad-nic-passthrough.md task 2." >&2
+    echo "VFIO_PCI requires read/write access to /dev/vfio/$vfio_group; see docs/development/thinkpad-nic-passthrough.md host setup." >&2
     exit 1
   }
   vfio_memlock=$(ulimit -l)
@@ -207,7 +207,7 @@ aligned_units = (size.numerator + size.denominator * ram_alignment - 1) // (size
 required_kib = aligned_units * (ram_alignment // 1024)
 if int(limit) < required_kib:
     sys.exit(f"VFIO_PCI needs memlock >= {required_kib} KiB for MEMORY={memory}; current limit is {limit} KiB. "
-             "Try MEMORY=2G if it fits, or raise the limit as in docs/wip/thinkpad-nic-passthrough.md task 2.")
+             "Try MEMORY=2G if it fits, or raise the limit as in docs/development/thinkpad-nic-passthrough.md host setup.")
 PY
   fi
   set -- "$@" -device "vfio-pci,host=$VFIO_PCI"

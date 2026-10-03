@@ -279,14 +279,22 @@ The router now reserves a fixed address for the built-in port. A static Pyxis
 configuration can use it once the driver exists. MAC addresses and the reserved
 address are intentionally omitted here.
 
-**Passthrough plan (accepted 2026-10-03).** The
-[NIC passthrough plan](thinkpad-nic-passthrough.md) assigns, in order:
-1. a `VFIO_PCI` launcher option with strict validation and preflight checks;
-2. the owner's one-time Fedora host setup, covering `vfio-pci` binding, user
-   access to the VFIO group device and the memory-lock limit;
-3. a first boot showing the card inside Pyxis.
+**Passthrough completed (2026-10-03).** The
+[NIC passthrough reference](../development/thinkpad-nic-passthrough.md) records
+the implemented `VFIO_PCI` launcher, Fedora host setup and successful owner/agent
+boots. Pyxis inventories `10ec:8168`, revision `0x15`, without claiming it.
 
-The RTL8111 driver for `05:00.0` is a follow-up milestone, outlined there.
+**Follow-up milestone: RTL8111 driver (proposed, unassigned).**
+
+- A Caelum driver for the built-in `05:00.0`, revision `0x15`, exposed as `net0`
+  beside the existing VirtIO NIC path in [networking](../devices/networking.md).
+  Reuse [PCI](../devices/pci.md) claims, BAR mapping and MSI-X handling from xHCI.
+- Static IPv4 using the router's reserved address and gateway. DHCP stays
+  separate, together with broadcast reception and section 3's later ideas.
+- Completion goal: reach Pyxis's remote terminal through the real card in QEMU,
+  then through the same port on a native ThinkPad boot.
+- Dock `02:00.0` support comes later: it has a different revision and shares an
+  IOMMU group with the management chip's other functions.
 
 ## 3. Later idea: reverse remote terminal with broadcast discovery
 
