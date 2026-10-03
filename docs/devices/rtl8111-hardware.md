@@ -94,11 +94,13 @@ functions, allocating independent stable state for each candidate:
    gate receive traffic, wait for FIFO drain, stop RX/TX, leave OOB mode, complete
    the shared-FIFO handshake, then wait for reset completion. Give every polling
    operation a monotonic deadline and propagate failure. If FIFO drain fails
-   while bus mastering is confirmed off, perform one recovery reset, require
+   after confirmed supported-XID ownership, perform one recovery reset, require
    reset/RX/TX bits clear and repeat the gate/drain checks with fresh deadlines
    before continuing OOB setup. This handles residual running state after an
    active VFIO guest exits. A failed recovery retains ownership; it never enables
-   DMA to previous buffers or treats a timeout as quiescence.
+   DMA or lends new buffers, and never treats a timeout as quiescence. The
+   original PCI command stays unchanged until the confirmed halt allows claim
+   completion to disable bus mastering.
 3. After confirmed quiescence/reset, complete the claim to disable bus mastering
    and INTx; disable I/O and memory decoding with readback. Use `pci_size_bars`
    and `pci_map_bar` for sized resources, retaining exclusive ownership throughout.

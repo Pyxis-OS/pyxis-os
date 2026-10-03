@@ -108,12 +108,8 @@ static const char *quiesce(struct rtl8111_controller *controller)
                         RTL_TX_FIFO_EMPTY, RTL_FIFO_TIMEOUT_NS) &&
     wait8(controller, RTL_MCU, RTL_MCU_FIFO_EMPTY, RTL_MCU_FIFO_EMPTY, RTL_FIFO_TIMEOUT_NS);
   if (!drained) {
-    uint16_t command = pci_read16(controller->claim.device->address, PCI_COMMAND);
-    if ((command & (PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER)) != PCI_COMMAND_MEMORY) {
-      return "FIFOs did not drain while prior bus mastering remained enabled";
-    }
-    /* A prior VFIO guest can leave RX running after its DMA access is revoked.
-     * Reset discards those FIFOs without lending it new or prior buffers. */
+    /* Reset halts the identified controller and discards inherited FIFOs.
+     * No driver buffers or ring addresses have been published at this point. */
     rtl_write8(controller, RTL_CHIP_COMMAND, RTL_COMMAND_RESET);
     if (!wait8(controller, RTL_CHIP_COMMAND, RTL_COMMAND_RESET | RTL_COMMAND_RX | RTL_COMMAND_TX,
                  0, RTL_RESET_TIMEOUT_NS)) {
@@ -127,7 +123,7 @@ static const char *quiesce(struct rtl8111_controller *controller)
                  RTL_MCU_FIFO_EMPTY, RTL_FIFO_TIMEOUT_NS)) {
       return "FIFOs did not drain after confirmed recovery reset";
     }
-    klog("rtl8111: previous FIFOs cleared by reset with DMA disabled\n");
+    klog("rtl8111: previous FIFOs cleared by confirmed recovery reset\n");
   }
   rtl_write8(controller, RTL_CHIP_COMMAND,
              rtl_read8(controller, RTL_CHIP_COMMAND) & ~(RTL_COMMAND_TX | RTL_COMMAND_RX));
