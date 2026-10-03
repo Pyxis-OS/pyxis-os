@@ -868,11 +868,8 @@ static bool hub_port_connected(uint16_t status, uint16_t change)
 }
 
 static enum usb_speed hub_reset_port(struct usb_device_record *hub, unsigned port,
-                                     uint16_t initial_change, uint64_t deadline)
+                                     uint64_t deadline)
 {
-  if (!hub_acknowledge(hub, port, initial_change, deadline)) {
-    return USB_SPEED_UNKNOWN;
-  }
   uint64_t stable = task_deadline_after_ms(USB_HUB_DEBOUNCE_MS);
   uint16_t status, change;
   do {
@@ -1009,35 +1006,36 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
   }
   /* bNbrPorts is one byte. Capture candidates before resets, without accepting
    * later insertions as part of this hub's boot observation. */
-  uint16_t initial_status[UINT8_MAX + 1], initial_change[UINT8_MAX + 1];
+  uint16_t initial_status[UINT8_MAX + 1];
   struct usb_discovery *discovery = hub->owner;
   size_t first = discovery->device_count;
   for (unsigned port = 1; port <= ports; ++port) {
-    if (!hub_port_status(hub, port, &initial_status[port], &initial_change[port], deadline)) {
-      for (size_t index = first; index < discovery->device_count; ++index) {
-        discovery->devices[index].incomplete = true;
-        discovery->devices[index].detail = "hub snapshot failed before child setup";
-      }
-      return;
+    uint16_t change;
+    if (!hub_port_status(hub, port, &initial_status[port], &change, deadline)) {
+      goto capture_failed;
     }
     if (!(initial_status[port] & USB_HUB_PORT_POWER)) {
       hub->incomplete = true;
       hub->detail = "hub port power unavailable";
     }
-    if (!(initial_status[port] & USB_HUB_PORT_CONNECTION)) {
-      continue;
+    if (initial_status[port] & USB_HUB_PORT_CONNECTION) {
+      if (discovery->device_count == discovery->device_capacity) {
+        hub->incomplete = true;
+        hub->detail = "hub reserved device budget exhausted";
+      } else {
+        struct usb_device_record *child = &discovery->devices[discovery->device_count++];
+        child->owner = discovery;
+        child->present = true;
+        child->info.root_port = hub->info.root_port;
+        child->info.parent_index = hub - discovery->devices;
+        child->info.parent_port = port;
+      }
     }
-    if (discovery->device_count == discovery->device_capacity) {
-      hub->incomplete = true;
-      hub->detail = "hub reserved device budget exhausted";
-      continue;
+    /* Clear only the captured changes now. Delaying this until child setup
+     * could erase a new connection change while earlier children are inspected. */
+    if (!hub_acknowledge(hub, port, change, deadline)) {
+      goto capture_failed;
     }
-    struct usb_device_record *child = &discovery->devices[discovery->device_count++];
-    child->owner = discovery;
-    child->present = true;
-    child->info.root_port = hub->info.root_port;
-    child->info.parent_index = hub - discovery->devices;
-    child->info.parent_port = port;
   }
   size_t last = discovery->device_count;
   for (size_t index = first; index < last; ++index) {
@@ -1049,7 +1047,7 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
       hub->incomplete = true;
       continue;
     }
-    child->speed = hub_reset_port(hub, port, initial_change[port], deadline);
+    child->speed = hub_reset_port(hub, port, deadline);
     child->info.speed = observation_speed(child->speed);
     if (child->speed != USB_SPEED_UNKNOWN &&
         !request_ok(child, usb_host_attach_child(hub->host, port, child->speed,
@@ -1070,13 +1068,19 @@ static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
       return;
     }
     if (((status ^ initial_status[port]) & USB_HUB_PORT_CONNECTION) ||
-        ((initial_status[port] & USB_HUB_PORT_CONNECTION) &&
-         (change & USB_HUB_CHANGE_CONNECTION)) ||
+        (change & USB_HUB_CHANGE_CONNECTION) ||
         !(status & USB_HUB_PORT_POWER) ||
         (status & USB_HUB_PORT_OVERCURRENT)) {
       hub->incomplete = true;
       hub->detail = "hub connection or power changed during boot traversal";
     }
+  }
+  return;
+
+capture_failed:
+  for (size_t index = first; index < discovery->device_count; ++index) {
+    discovery->devices[index].incomplete = true;
+    discovery->devices[index].detail = "hub snapshot failed before child setup";
   }
 }
 
