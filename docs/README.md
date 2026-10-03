@@ -19,6 +19,9 @@ data and probe artifacts live with the corresponding development or userland
 reference. The filesystem encoding and host-tool contracts, and port-specific
 notes, remain authoritative in their separately versioned repositories.
 
+The [ThinkPad RTL8111 hardware profile](devices/rtl8111-hardware.md) records
+identified hardware and proposed preparation; driver implementation is pending.
+
 ## Work in progress
 
 Use the [milestone index](wip/boot-sdk-ports.md) to find active work and parked
