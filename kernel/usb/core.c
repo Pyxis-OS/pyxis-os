@@ -588,6 +588,9 @@ void usb_inventory_prepare(void)
     return;
   }
   inventory.prepared = true;
+  if (pci_inventory_state() == PCI_INVENTORY_UNAVAILABLE) {
+    return;
+  }
   atomic_store_explicit(&inventory.state, SYSTEM_INFO_USB_INITIALIZING, memory_order_release);
   inventory.incomplete = pci_inventory_state() != PCI_INVENTORY_COMPLETE;
   size_t count = 0;
@@ -701,6 +704,17 @@ void usb_release_prepared(struct usb_discovery *discovery)
   kfree(discovery);
 }
 
+static uint8_t observation_speed(enum usb_speed speed)
+{
+  switch (speed) {
+  case USB_SPEED_LOW: return SYSTEM_INFO_USB_SPEED_LOW;
+  case USB_SPEED_FULL: return SYSTEM_INFO_USB_SPEED_FULL;
+  case USB_SPEED_HIGH: return SYSTEM_INFO_USB_SPEED_HIGH;
+  case USB_SPEED_SUPER: return SYSTEM_INFO_USB_SPEED_SUPER;
+  default: return SYSTEM_INFO_USB_SPEED_UNKNOWN;
+  }
+}
+
 /* Capture every boot-present root port before requests can stop the controller. */
 static void capture_ports(struct usb_discovery *discovery)
 {
@@ -716,7 +730,7 @@ static void capture_ports(struct usb_discovery *discovery)
     device->info.root_port = port + 1;
     if (device->host) {
       device->speed = usb_host_device_speed(device->host);
-      device->info.speed = device->speed;
+      device->info.speed = observation_speed(device->speed);
     }
   }
 }

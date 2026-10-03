@@ -335,7 +335,7 @@ receipts can still hold all sixteen records; see
 ### Everyday pipeline performance target
 
 Future workload, recorded 2026-10-02; no Pyxis result is claimed. Once `wc` is
-available, use the [proposed packaged PCI database](../wip/hardware-inspection.md#packaged-databases) for a small end-to-end
+available, use the [packaged PCI database](../devices/hardware-inspection.md) for a small end-to-end
 workload, with the proposed asset path:
 
 ```sh

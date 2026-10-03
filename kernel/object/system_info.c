@@ -9,6 +9,7 @@
 #include <kernel/panic.h>
 #include <kernel/pci.h>
 #include <kernel/user_memory.h>
+#include "../usb/core.h"
 
 static const struct system_info_identity identity = {
   .os_name = "Pyxis OS",
@@ -83,6 +84,11 @@ system_info_call(uint64_t rights, uint64_t operation, uintptr_t request_address,
   size_t size;
   size_t payload_size = 0;
   const void *reply;
+  struct system_info_usb usb;
+  struct system_info_usb_controller usb_controller;
+  struct system_info_usb_device usb_device;
+  struct system_info_usb_interface usb_interface;
+  struct system_info_usb_request usb_request = {0};
   struct system_info_pci pci;
   struct system_info_pci_function function;
   struct system_info_pci_function_request function_request = {0};
@@ -107,6 +113,25 @@ system_info_call(uint64_t rights, uint64_t operation, uintptr_t request_address,
     size = sizeof(function);
     payload_size = sizeof(function_request) - sizeof(function_request.header);
     reply = &function;
+    break;
+  case SYSTEM_INFO_USB:
+    size = sizeof(usb);
+    reply = &usb;
+    break;
+  case SYSTEM_INFO_USB_CONTROLLER:
+    size = sizeof(usb_controller);
+    payload_size = sizeof(usb_request.index);
+    reply = &usb_controller;
+    break;
+  case SYSTEM_INFO_USB_DEVICE:
+    size = sizeof(usb_device);
+    payload_size = sizeof(usb_request.index);
+    reply = &usb_device;
+    break;
+  case SYSTEM_INFO_USB_INTERFACE:
+    size = sizeof(usb_interface);
+    payload_size = sizeof(usb_request.index);
+    reply = &usb_interface;
     break;
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -143,6 +168,31 @@ system_info_call(uint64_t rights, uint64_t operation, uintptr_t request_address,
       .base_class = device->base_class, .subclass = device->subclass,
       .interface = device->interface, .revision = device->revision,
     };
+  }
+
+  if (operation == SYSTEM_INFO_USB) {
+    usb_inventory_read(&usb);
+  }
+  if (operation == SYSTEM_INFO_USB_CONTROLLER || operation == SYSTEM_INFO_USB_DEVICE ||
+      operation == SYSTEM_INFO_USB_INTERFACE) {
+    if (!copy_from_user(&usb_request.index, request_address, payload_size)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    bool found;
+    switch (operation) {
+    case SYSTEM_INFO_USB_CONTROLLER:
+      found = usb_inventory_read_controller(usb_request.index, &usb_controller);
+      break;
+    case SYSTEM_INFO_USB_DEVICE:
+      found = usb_inventory_read_device(usb_request.index, &usb_device);
+      break;
+    default:
+      found = usb_inventory_read_interface(usb_request.index, &usb_interface);
+      break;
+    }
+    if (!found) {
+      return (struct syscall_result){CALL_NOT_FOUND, 0};
+    }
   }
 
   struct system_info_memory memory;

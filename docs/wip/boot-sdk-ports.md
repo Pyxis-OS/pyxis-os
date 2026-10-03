@@ -281,8 +281,9 @@ an opt-in [raw image and emulated USB launch](../development/usb-image.md);
 Phase B.1 now defines explicit backend/unique-disk selection, controller resource
 preparation, bounded requests and failure ownership. Phase B.2 adds
 [controller ownership, rings, MSI-X and root-port slot reservations](../devices/usb-xhci.md).
-Phase B.3 adds [checked enumeration, control requests and provisional BOT endpoint
-setup](../devices/usb-enumeration.md). BOT/SCSI reads and native block integration
+Phase B.3 adds [checked enumeration and control requests](../devices/usb-enumeration.md).
+The later inspection-first slice discovers controllers independently and publishes
+root-device observations without selecting/configuring a storage transport. BOT/SCSI reads and native block integration
 remain pending; writable work is unassigned. Reusable controller/USB/class/block
 boundaries are required, without
 speculative driver frameworks. This does not reorder filesystem core, spaces/SMP
@@ -298,9 +299,10 @@ extended-HPET fallback is the accepted future direction, deferred from this
 first task. The clock implementation is still unchanged; successful native
 Caelum boot remains unqualified.
 
-The separate [hardware-inspection proposal](hardware-inspection.md) adds native
+The separate [hardware inspection](../devices/hardware-inspection.md) provides native
 `lspci`/`lsusb` consumers of read-only inventory and pinned plain-text PCI/USB name
-databases. `lspci` can precede USB support; these tasks do not expand boot-image
+databases. USB inventory covers direct root devices and reports partial hub
+inventory; these tools do not expand boot-image
 Phase A. The [everyday pipeline performance target](../development/io-reliability-attribution.md#everyday-pipeline-performance-target)
 records their use as text-tool input without assigning a port or benchmark campaign.
 

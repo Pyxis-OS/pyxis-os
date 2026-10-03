@@ -2,7 +2,7 @@
 
 The explicitly delegated `system_info` resource supplies synchronous queries
 through [the system-information ABI](../../include/abi/system_info.h).
-One READ right authorizes system-wide identity, CPU, allocator and PCI inventory
+One READ right authorizes system-wide identity, CPU, allocator, PCI and USB inventory
 observations.
 There is no ambient query or acquisition syscall. Kernel bootstrap creates the
 stateless authority for trusted init; ordinary local and remote launch paths
@@ -11,8 +11,8 @@ service providers do not receive it.
 
 ## Queries and meaning
 
-Requests contain only a `message_header`, except that `SYSTEM_INFO_PCI_FUNCTION`
-adds an index. Replies are bounded records with fixed-size NUL-terminated strings
+Requests contain only a `message_header`, except that indexed PCI/USB queries
+add an index. Replies are bounded records with fixed-size NUL-terminated strings
 and zeroed unused bytes.
 
 | Query | Reply | Meaning |
@@ -22,6 +22,10 @@ and zeroed unused bytes.
 | `SYSTEM_INFO_MEMORY` | `system_info_memory` | Coherent allocator total, allocated and free bytes |
 | `SYSTEM_INFO_PCI` | `system_info_pci` | PCI inventory state and retained function count |
 | `SYSTEM_INFO_PCI_FUNCTION` | `system_info_pci_function` | One retained PCI function's address and identity |
+| `SYSTEM_INFO_USB` | `system_info_usb` | Boot snapshot state and controller/device/interface counts |
+| `SYSTEM_INFO_USB_CONTROLLER` | `system_info_usb_controller` | PCI identity, inspection state and advertised root-port count |
+| `SYSTEM_INFO_USB_DEVICE` | `system_info_usb_device` | Root-port identity, speed and checked device descriptor fields |
+| `SYSTEM_INFO_USB_INTERFACE` | `system_info_usb_interface` | Checked configuration/alternate interface classes |
 
 Empty build-revision or CPU-brand strings explicitly mean unavailable fields;
 other fields remain usable. CPU count is neither physical cores nor the CPU
@@ -68,6 +72,37 @@ that want a consistent listing need no snapshot: the inventory does not change
 after boot and there is no hotplug.
 See [PCI discovery](../devices/pci.md#inventory) and [lspci](../userland/lspci.md).
 
+## USB inventory
+
+The USB snapshot is built asynchronously by the BSP controller workers. Until
+all retained xHCI controllers finish their bounded startup inspection, the root
+query returns `SYSTEM_INFO_USB_INITIALIZING` with zero counts. When xHCI is
+build-disabled or PCI access is unavailable, it returns `SYSTEM_INFO_USB_UNAVAILABLE`.
+Otherwise publication uses release/acquire ordering; indexed queries copy only
+immutable final records and need no BSP service request.
+
+`SYSTEM_INFO_USB_COMPLETE` means every discovered USB host controller was inspected
+within the supported profile, and all its boot-present direct root devices and
+advertised configurations were checked. `SYSTEM_INFO_USB_INCOMPLETE` retains
+usable observations when a controller is unsupported/failed, PCI discovery is
+incomplete, descriptors exceed retained budgets or a hub has uninspected descendants.
+An empty complete inventory is valid. No controller count or port numbering is a
+machine requirement.
+
+Indexed requests use `system_info_usb_request`; indices at or above their respective
+counts, including before publication, return `CALL_NOT_FOUND`. Controller records
+include the PCI identity and inspection state, including unsupported host interfaces.
+Device records use a controller index and one-based physical root-port number;
+they are not Linux bus/address identifiers. `IDENTIFIED` distinguishes a checked
+VID/PID from a connected port whose descriptors could not be inspected. Interfaces
+have global device indices and configuration/interface/alternate identities. They
+are descriptive observations, not assertions that a configuration or driver is active.
+
+The snapshot does not update after runtime removal or controller failure. Device
+strings, serials, hub descendants, raw descriptors, endpoint addresses, physical
+addresses and kernel pointers are absent. READ grants no USB transfer or reset
+access. Names are resolved in [lsusb](../userland/lsusb.md) from packaged data.
+
 ## Errors and library interface
 
 Wrong protocol or operation is `CALL_BAD_OPERATION`; missing READ is
@@ -77,13 +112,16 @@ handles follow the ordinary `CALL_BAD_HANDLE` path. No authority failure returns
 synthetic observations.
 
 Libpyxis exports `system_info_get_identity`, `system_info_get_cpu`,
-`system_info_get_memory`, `system_info_get_pci` and `system_info_get_pci_function`
+`system_info_get_memory`, `system_info_get_pci`, `system_info_get_pci_function`
+and the four `system_info_get_usb*` queries
 through `<system_info.h>`. The PCI wrappers reject unknown states, nonzero
 counts for an unavailable inventory, out-of-range device or function numbers,
 the multifunction bit, vendor `ffff` and nonzero reserved fields. Pass an explicitly supplied
 handle, typically `startup_resource("system_info")`. The wrappers validate the
 reply and leave the caller's output unchanged on every failure. The SDK exports
-both the ABI and library headers with the ordinary runtime build.
+both the ABI and library headers with the ordinary runtime build. USB helpers
+check states, flags, speeds, reserved fields and fixed reply sizes; `lsusb` checks
+controller/device/interface associations before formatting.
 
 Uptime remains on [clock READ](../../include/abi/clock.h), whose monotonic epoch
 begins at HPET initialization and omits earlier boot time. It makes no wall-time

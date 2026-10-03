@@ -1248,18 +1248,17 @@ monotonic duration from the current wall clock.
 
 Native xHCI initialization is [disabled by default](devices/usb-xhci.md) while
 ThinkPad qualification is paused. Firmware USB boot remains available, but
-Caelum USB enumeration is unavailable. Revisit the default after controller selection and
-the physical hardware profile have been qualified.
+Caelum USB enumeration is unavailable. Revisit the default after the physical hardware profile has been qualified.
 
 The [initial controller](devices/usb-xhci.md) is qualified only against QEMU's
-single PCI xHCI profile. It requires firmware memory decoding enabled for a
+PCI xHCI profile, now with multiple independently discovered controllers. It requires firmware memory decoding enabled for a
 page-aligned BAR0 prefix, interpreted extended capabilities within that 4 KiB
 prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles, external hubs,
 power management and insertion after the startup snapshot are unsupported.
 QEMU advertises zero scratchpads and 32-byte contexts; nonzero scratchpads,
 64-byte device contexts, nondefault PSI mappings and BIOS ownership handoff remain
-unmeasured paths. Enumeration now prepares a descriptor-supported BOT transport,
-but LUN/media support and USB block access remain pending.
+unmeasured paths. Enumeration now publishes direct root-device observations; hub descendants,
+LUN/media support and USB block access remain pending.
 
 USB 2 port reset has no explicit connect-debounce interval. The startup snapshot
 waits 20 ms only after the driver powers a port; it has no separate link-settling
@@ -1278,9 +1277,10 @@ BAR sizing saves/restores the assignment, but there is no explicit comparison
 with the original bootstrap physical base. Revisit that consistency check when
 extending PCI mapping/profile validation, keeping one authority for mapping identity.
 
-One worker admits controller commands serially and checks notifications/health at
+Each controller worker admits its own commands serially and checks notifications/health at
 a ten-millisecond interval even when idle, scheduling up to 100 polling
-opportunities per second. Actual CPU wakeups and laptop power cost are unmeasured.
+opportunities per second. The shared MSI-X vector notifies every active controller per delivery, so unrelated
+workers may wake. Actual CPU wakeups and laptop power cost are unmeasured.
 Rings and polling/deadline budgets are initial choices, not machine/image
 requirements. Revisit event-driven waiting and health-poll costs when descriptor
 transfers and actual USB storage reads provide a workload; controller startup is
@@ -1294,9 +1294,11 @@ with the VM/device lifetime work, not a local allocator-lock workaround.
 
 [Enumeration](devices/usb-enumeration.md) inspects every advertised configuration
 using an initial 4 KiB descriptor/control budget. A larger configuration makes
-inventory incomplete, even after finding a BOT candidate. Unknown/vendor classes
-and external hubs also prevent proving uniqueness. Revisit those bounds or class
-classification only with a concrete target descriptor/topology requirement.
+inventory incomplete. The initial arena retains up to 512 validated interface
+records per controller; overflow is partial. Unknown/vendor classes are valid
+unbound observations; external hub descendants remain uninspected. Revisit these
+bounds and hub traversal with concrete descriptor/topology requirements. Storage
+selection across controllers must be settled separately before class/media work.
 
 All advertised ports receive input/output contexts, an EP0 ring/control buffer and
 two initial non-control rings before AP startup. With the current 4 KiB buffer
@@ -1309,7 +1311,7 @@ requires the VM ownership work rather than allocator locks.
 The first implementation bounds each device to one active control request. Early
 errors, deadlines or removal during active work stop the whole controller and
 retain unresolved DMA until reboot. There is no endpoint-local recovery yet.
-The initial client reads complete descriptors and sends configuration requests;
+The current inventory client reads complete descriptors without configuration requests;
 short packets, active abandonment, early errors, ring wrap and nonzero alternate
 selection follow reviewed source/spec rules but have no synthetic validation.
 Revisit with an actual class-transfer workload in BOT/SCSI work, keeping hardware

@@ -36,7 +36,7 @@
 #define SYSTEM_INFO_PCI_COMPLETE UINT64_C(3)
 
 /* Synchronous queries on explicitly delegated system_info authority. All
- * require READ and send only a message_header, except PCI_FUNCTION.
+ * require READ and send only a message_header, except indexed PCI/USB queries.
  * Strings are NUL-terminated and unused bytes are zero.
  * Empty build_revision or brand means that field is unavailable; other fields
  * remain valid. No kernel pointers, physical map or ambient query is exposed. */

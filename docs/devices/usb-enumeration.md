@@ -1,37 +1,37 @@
 # USB enumeration and control transfers
 
-Caelum addresses boot-present devices directly attached to the selected xHCI
-controller, reads checked descriptors and prepares one provisional SCSI/Bulk-Only
-transport. It does not yet establish LUN/media support or expose USB block access.
-[The installation milestone](../wip/usb-installation.md#b-native-read-only-usb-storage)
-tracks those remaining layers. QEMU is the temporary target; physical hardware is
-unqualified.
+Caelum addresses boot-present devices directly attached to every prepared xHCI
+controller and publishes an immutable read-only boot snapshot for native
+[lsusb](../userland/lsusb.md). It does not configure a storage transport or expose
+USB block access. [The installation milestone](../wip/usb-installation.md#b-native-read-only-usb-storage)
+tracks class/media work. Physical hardware is unqualified.
 
 ## Boundaries and preparation
 
 `kernel/usb/xhci.c` owns controller commands, contexts, endpoint rings, DMA and
 transfer-event interpretation. `core.c` owns USB requests, descriptor traversal,
-configuration/alternate selection and inventory completeness. `bot.c` matches
+inventory completeness and immutable observation publication. `bot.c` matches
 checked interface/endpoint facts to the initial SCSI/BOT profile; it has no bulk
 exchange or SCSI implementation yet. No class is selected from a vendor ID.
-Known unrelated classes, including HID, remain unbound. Their standard descriptor
-structure is checked without configuring their endpoints or interpreting class
-reports. Unknown/vendor classes and hubs make discovery incomplete, because this
-initial implementation cannot classify their possible storage inventory.
+All standard classes and opaque vendor classes remain unbound. Their standard
+descriptor structure is checked without configuring endpoints or interpreting
+class reports. Hubs are listed, but uninspected descendants make inventory partial.
 
-`usb_prepare()` allocates retained per-port discovery records and one reusable
-scratch descriptor buffer before AP startup. xHCI prepares input/output contexts,
+`usb_prepare()` allocates retained per-port discovery records, one reusable
+scratch descriptor buffer and a bounded interface-record arena per controller
+before AP startup. xHCI prepares input/output contexts,
 an EP0 ring, control-data storage and two non-control rings for every advertised
 root port at the same stage. The runtime worker allocates or maps nothing.
 Resource exhaustion fails preparation or discovery explicitly; it cannot silently
-skip a configuration or port that might change disk selection.
+skip a configuration or connected port while claiming complete observation.
 
 The private interfaces in `host.h` run on the current BSP controller worker.
 This placement follows the scheduler/VM ownership contract; it is not a permanent
-USB architecture requirement. Storage, unrelated-device records and requests
-retain separate state despite sharing that worker and scratch buffer.
+USB architecture requirement. Each controller and its worker have separate
+discovery state and scratch storage;
+waits can interleave without lending one controller's buffer to another.
 
-## Discovery and selection
+## Descriptor inspection
 
 Port setup and enumeration share one absolute thirty-second deadline. Each
 controller command and control request also has a five-second limit bounded by
@@ -45,30 +45,41 @@ with the speed-defined packet size: low/full speed 8, high speed 64, SuperSpeed
 the full descriptor. Full-speed devices may require Evaluate Context to update
 EP0; SuperSpeed's wire value 9 means 512 bytes.
 
-Every advertised configuration is inspected, even after finding a candidate.
+Every advertised configuration is inspected within the controller startup deadline.
 Checks include descriptor lengths and totals, stable repeated headers, distinct
 configuration values, interface/alternate identities, default alternates,
 endpoint counts and addresses, speed-dependent packet/interval fields and
 SuperSpeed companion structure. Interface numbering follows USB's consecutive
 zero-based numbering rule. Class/vendor descriptors retain opaque contents but
-must have valid traversal lengths. The matcher supports one interface with class
-08, SCSI subclass 06, BOT protocol 50, and exactly two opposite bulk endpoints.
-Composite storage, other protocols, streams and unsupported shapes remain
-positively unsupported when the full inventory is otherwise classifiable.
+must have valid traversal lengths. Validated interface records retain
+configuration value, interface number, alternate,
+class, subclass, protocol and endpoint count. A malformed configuration rolls back
+its interface records while retaining checked device identity. The current interface
+arena holds 512 records per controller; exceeding it gives partial inventory. This
+is a resource choice in `settings.h`, not a hardware or database requirement.
 
-The first supported configuration/alternate in descriptor order represents one
-physical-device candidate. Additional configurations/alternates on that same
-device are not additional disks. Incomplete inventory prevents selection;
-multiple physical-device candidates fail as ambiguous. With one candidate,
-SET_CONFIGURATION uses its actual configuration value, and a nonzero alternate
-requires SET_INTERFACE with its actual interface/alternate values. The host then
-configures the actual endpoint DCIs, packet sizes and bursts. SuperSpeed bulk
-requires 1024-byte packets and preserves the descriptor's burst, including 15.
-A failed selected-device setup cannot select another device.
+There is no automatic SET_CONFIGURATION, SET_INTERFACE, endpoint configuration
+or BOT device selection on this path. The pure BOT descriptor matcher and host
+bulk-endpoint support remain for subsequent class/media work. Selection across
+multiple controllers needs its own storage contract; observation does not choose
+a disk.
 
-The resulting transport remains provisional: GET_MAX_LUN, LUN 0 qualification,
-SCSI commands, geometry, bulk exchange and block/mount integration are subsequent
-tasks. The configured endpoints do not imply a supported or readable disk.
+## Snapshot publication
+
+The pre-AP registry retains all discovered PCI USB host functions. Unsupported
+host interfaces and failed xHCI preparation remain controller records. Every
+connected startup root port observed by a running controller is retained, including
+unidentified ports when inspection fails. No zero VID/PID is presented as a checked
+identity unless IDENTIFIED is set. Unreadable descriptors, exceeded budgets,
+unsupported speeds and hub descendants make the aggregate observation incomplete.
+
+Each controller finishes within its startup deadline. Only after all entries finish
+does the BSP compute global controller/device/interface indices and publish the
+snapshot with release ordering. Readers on any CPU acquire that publication before
+copying immutable records. Until then, the root query reports initializing and zero
+counts. Publication does not grant transfer/reset authority, and later runtime
+removal or controller failure does not alter the snapshot. See
+[system information](../interfaces/system-information.md#usb-inventory).
 
 ## Control-request ownership
 
@@ -93,10 +104,11 @@ unresolved span. Halt, interrupt masking or disabling bus mastering alone cannot
 justify recycling it. All runtime backing remains until reboot, including after
 successful completion. Idle port removal still retires that device independently.
 
-`discovery` and the controller's per-port/request records are available for GDB
-inspection. They are internal state, not a public device registry.
+`inventory` and each controller's private discovery/per-port/request records are
+available for GDB inspection. Only the copied observation records cross the ABI.
 
-See the [bring-up record](../development/usb-enumeration-bringup.md) for measured
+See the [inventory bring-up record](../development/usb-inventory-bringup.md) and
+[earlier control-transfer record](../development/usb-enumeration-bringup.md) for measured
 behavior and limits. Context and transfer semantics follow the
 [Intel xHCI 1.2b specification](https://cdrdv2-public.intel.com/625472/625472_xHCI_Rev1_2b.pdf),
 particularly §§4.3, 4.6, 4.9, 4.11, 6.2, 6.4 and 7.2. Unbound class recognition

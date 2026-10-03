@@ -48,6 +48,10 @@ PCIIDS_INPUTS := $(wildcard ports/pciids/*) ports/ports.lua ports/build.lua
 PCIIDS_OUTPUTS := $(addprefix build/ports/pciids/stage/,share/hwdata/pci.ids \
   share/pciids/source.txt share/licenses/pciids/LICENSE share/licenses/pciids/NOTICE)
 
+USBIDS_INPUTS := $(wildcard ports/usbids/*) ports/ports.lua ports/build.lua
+USBIDS_OUTPUTS := $(addprefix build/ports/usbids/stage/,share/hwdata/usb.ids \
+  share/usbids/source.txt share/licenses/usbids/LICENSE share/licenses/usbids/NOTICE)
+
 SBASE_INPUTS := $(wildcard ports/sbase/*.lua ports/sbase/Makefile \
                           ports/sbase/patches/*.patch) ports/ports.lua ports/build.lua
 SBASE_OUTPUTS := $(addprefix build/ports/sbase/stage/,bin/cksum.pxe bin/tee.pxe \
@@ -72,7 +76,7 @@ MBEDTLS_OUTPUTS := $(addprefix build/ports/mbedtls/stage/,dev/lib/libmbedtls.a \
 .PHONY: all
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
      $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) \
-     $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
+     $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
 
 # This work tree is disposable build output. Port edits belong in ports/kilo,
 # not the fetched source copy, which is replaced when its inputs change.
@@ -136,3 +140,7 @@ $(MBEDTLS_OUTPUTS) &: $(MBEDTLS_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 $(FASTFETCH_OUTPUTS) &: $(FASTFETCH_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/fastfetch
 	$(LUA) ports/build.lua fastfetch --sdk $(abspath build/sdk) --work $(abspath build/ports/fastfetch)
+
+$(USBIDS_OUTPUTS) &: $(USBIDS_INPUTS) scripts/ports.mk
+	rm -rf build/ports/usbids
+	$(LUA) ports/build.lua usbids --sdk $(abspath build/sdk) --work $(abspath build/ports/usbids)
