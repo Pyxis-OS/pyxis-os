@@ -6,7 +6,7 @@ LUA ?= lua
 export CROSS_COMPILE HOSTCC LUA
 QEMU ?= qemu-system-x86_64
 QEMU_DISPLAY ?= gtk
-MEMORY ?= 256M
+MEMORY ?= 8G
 CPUS ?= 1
 ACCEL ?= kvm
 VIRTIO_FS_SOCKET ?=
