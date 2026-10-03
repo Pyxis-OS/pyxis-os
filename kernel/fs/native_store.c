@@ -15,8 +15,10 @@
 #define STORE_CHUNK_ENTRIES 256u
 #define STORE_CLEANUP_IMAGES 10u
 #define STORE_CLEANUP_MAPPINGS 64u
+#define STORE_BITMAP_READ_BLOCKS 128u
 
-_Static_assert(STORE_IMAGES_MAX <= PNF_DESCRIPTORS_PER_BLOCK);
+_Static_assert(STORE_IMAGES_MAX <= PNF_DESCRIPTORS_PER_BLOCK,
+  "native journal writes one descriptor block");
 
 struct store_free_slot {
   struct store_free_slot *next;
@@ -987,7 +989,8 @@ enum call_status native_store_open(struct native_store_context *context,
   }
   for (uint64_t page = 0; page < pool->header.bitmap_blocks;) {
     uint64_t remaining = pool->header.bitmap_blocks - page;
-    uint32_t count = remaining < 128 ? (uint32_t)remaining : 128;
+    uint32_t count = remaining < STORE_BITMAP_READ_BLOCKS ? (uint32_t)remaining :
+      STORE_BITMAP_READ_BLOCKS;
     status = transport(context, pool, BLOCK_READ, pool->header.bitmap_start + page,
       count, (uint8_t *)pool->bitmap + (size_t)page * PNF_BLOCK_SIZE);
     if (status != CALL_OK) {
