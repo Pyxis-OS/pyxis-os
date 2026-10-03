@@ -150,7 +150,7 @@ unauthenticated and unencrypted until Pyxis itself has authentication. A host
 that answers gets the configured shell privileges, so this assumes a trusted LAN.
 Record it in technical debt with that revisit point when implemented.
 
-*Proposed,* not security, for the owner to confirm:
+**Also accepted by the owner (2026-10-03).** Neither is security:
 
 - **Opt-in only.** Reverse mode starts only when the image or init configuration
   asks for it, never by default.
