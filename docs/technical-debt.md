@@ -1034,6 +1034,40 @@ per-PR suite. See [current coverage and limits](../fs/docs/testing.md). Passing 
 not establish host/device recovery, exhaustive correctness or native guest behavior;
 retain the proofs, ordinary/freestanding builds and eventual guest validation.
 
+## Native filesystem design limits
+
+The [native format proposal](wip/native-filesystem-format.md#decision-status)
+separates owner decisions from agent-proposed details; neither is implemented
+behavior. Accepted limits include 64 volume
+slots, roughly 513 GiB per-file block-pointer capacity, and linear directory lookup.
+Revisit only when a concrete workload exceeds those bounds or lookup becomes costly;
+reserved bytes and feature flags provide extension points. Volumes can exhaust the
+shared pool; quotas and starvation policy remain deferred until a concrete need.
+
+One transaction commits/checkpoints at a time. Cleanup delays space reuse, and
+large shrinking truncates stall further writes/resizes of the affected inode.
+The accepted sync completion point is durable COMMITTED; checkpointing continues
+in the background before the next commit. The writer's free-inode list avoids
+per-create scans but adds mount-time work and memory usage.
+Measure these costs, latency and bytes written when the native writer arrives;
+128 MiB is the initial 256 GB target setting, not a measured optimum or universal
+minimum. Journal capacity is selected per pool and has no v1 resize operation.
+
+Creation/modification times use signed 64-bit Unix nanoseconds, clamped on write.
+Dates outside that range lose precision at the endpoints, and wall-clock values
+can repeat or move backwards; timestamps are not unique change counters. A missing
+clock leaves the affected timestamp explicitly unknown without failing mutation.
+Revisit only if a consumer needs wider dates or a stronger change-detection contract.
+
+Unknown required features refuse opening; unknown read-only-compatible features
+refuse writes, including recovery writes; unknown compatible features are ignored.
+Conflicting valid headers require repair. These are accepted compatibility rules.
+The agent-proposed read-only policy additionally refuses committed journals rather
+than replaying into RAM. This remains a policy choice before implementation.
+The proposed layout also lacks home-metadata checksums: journal checksums cannot
+detect every later metadata corruption once the journal is cleared. This integrity
+limit is a proposal for review, not an accepted exclusion of metadata checksums.
+
 ## Writable filesystem kernel-stack prerequisite
 
 The reviewed task-2 head (`pyxis-fs` `3e63569`) uses approximately 19,104 bytes
