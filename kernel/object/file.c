@@ -484,7 +484,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     required = FILE_RIGHT_READ;
     break;
   case FILE_SIZE:
-    required = file->backing == FILE_NATIVE ? FILE_RIGHT_READ : FILE_RIGHTS;
+    required = FILE_RIGHTS;
     break;
   case FILE_WRITE:
   case FILE_RESIZE:

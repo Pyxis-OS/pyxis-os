@@ -498,8 +498,8 @@ static enum call_status perform(struct native_store_context *context, struct nat
   case NATIVEFS_RENAME: required = DIRECTORY_RIGHT_REMOVE; break;
   case NATIVEFS_FILESYSTEM_INFO: required = DIRECTORY_RIGHT_FILESYSTEM_INFO; break;
   case NATIVEFS_READ:
-  case NATIVEFS_SIZE:
   case NATIVEFS_CAPTURE: required = FILE_RIGHT_READ; break;
+  case NATIVEFS_SIZE: required = FILE_RIGHTS; break;
   case NATIVEFS_WRITE:
   case NATIVEFS_RESIZE: required = FILE_RIGHT_WRITE; break;
   case NATIVEFS_SYNC: required = directory ? DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_REMOVE :
