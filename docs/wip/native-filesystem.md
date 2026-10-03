@@ -5,7 +5,8 @@ work. It supersedes the pyxis-fs writer plans listed under
 [what stops](#what-stops).
 
 - **Accepted:** [owner decisions](#owner-decisions), [v1 answers](#v1-answers),
-  [installation and authority](#installation-and-authority),
+  [installation and authority](#installation-and-authority) with its
+  [installer decisions](#installer-decisions) and [target consent](#target-consent),
   [code, file layout and order](#code-file-layout-and-order) and
   [focused tasks](#focused-tasks). The completed
   [format decisions](native-filesystem-format.md#decision-status) record accepted
@@ -94,7 +95,8 @@ Accepted 2026-10-02; durability revised by the owner on 2026-10-03.
    image; v1 does not depend on any one of them. Limine loads everything into RAM,
    so the installer reads its source files from the boot archive and needs no
    driver for the live medium. It contains or launches tools that:
-   - create a GPT on an empty target disk;
+   - create a GPT on a target disk the owner prepared (see
+     [target consent](#target-consent));
    - create the Pyxis partition or partitions;
    - install the files needed to boot Pyxis from that disk.
 
@@ -181,7 +183,7 @@ Accepted 2026-10-02.
    that is a QEMU virtio-blk disk. [USB mass storage](usb-installation.md) is
    developed in parallel, and a USB target follows when it lands; it is not a
    prerequisite. NVMe comes later.
-3. **Installer steps.** On an empty target disk the installer:
+3. **Installer steps.** On a [consenting target](#target-consent) the installer:
    1. creates a GPT;
    2. creates the boot partition (a FAT32 EFI system partition, written fresh,
       with no general FAT driver), because firmware boots from FAT and Limine never
@@ -192,6 +194,76 @@ Accepted 2026-10-02.
 
    V1 ships a fixed set of standard inits. Programs still run from the boot
    archive; the pool holds persistent volumes mounted after boot.
+
+### Installer decisions
+
+Accepted 2026-10-03.
+
+1. **Name.** The format is **npfs** (next Pyxis filesystem). Code, tools, docs
+   and messages use it: the `pnf_` prefix becomes `npfs_`, and the host tools
+   become `mkfs.npfs`, `fsck.npfs` and `npfs-inspect`. The pyxis-fs repository
+   keeps its name.
+2. **Source files.** The kernel exposes the files Limine loaded (Caelum and the
+   boot archive) read-only to the installer. The Limine EFI binary and the
+   `limine.conf` template ship in the boot archive.
+3. **Layout.** A 512 MiB ESP, then the rest of the disk is the pool. The journal
+   is at least 128 MiB on the 256 GB target, scaled down for small QEMU disks.
+   The installer creates one volume, `system`.
+4. **Starting it, for now.** A second Limine entry, "Install Pyxis", selects an
+   install init. That init starts the installer in the first user space and is
+   the only init that passes it the disk authority; the normal entry never
+   receives it. This is a deliberate simplification. The preferred later flow is
+   in [later ideas](#later-ideas).
+5. **Interactive, with no command-line options.** The flow is:
+   1. First choice, with no further description: **Proceed with installation**
+      or **Read the room**. Read the room widens which disks are eligible (see
+      [target consent](#target-consent)).
+   2. A list of every disk, and why each one does or doesn't qualify.
+   3. With one eligible disk, its size, GUID and the volumes that will be
+      destroyed, and a typed `wipe` to continue. With several, the user picks one
+      by number first.
+   4. Installation, then a read-back check: the ESP files are compared byte for
+      byte with their sources, the pool is reopened read-only through the normal
+      mount path, and every volume is checked for its marker. Only then does it
+      report "installed".
+
+### Target consent
+
+Accepted 2026-10-03. A disk qualifies only when its owner has marked it as
+disposable:
+
+- It has a GPT and a partition holding an npfs pool with at least one live
+  volume.
+- **Every** live volume has a regular file named `SAFE_TO_WIPE` in its root.
+- No partition of the disk is mounted, which also excludes the stick Pyxis
+  booted from.
+- The journal is EMPTY. A committed journal is not damage: the installer, which
+  already holds write authority, replays it (the same recovery a read-write
+  mount performs), then checks the markers.
+
+A qualifying disk is rebuilt from scratch: a new GPT, ESP and pool, using the
+layout above. The existing layout is not reused. The installer creates
+`SAFE_TO_WIPE` in each volume it makes, so development reinstalls repeat with no
+host step. **Deleting those files marks an install as final.**
+
+The first disk is prepared on the host: `make usb-image` (which also places the
+markers), then `dd` to the stick. Host tools work on image files, not block
+devices.
+
+**Read the room** makes every disk eligible except mounted disks and npfs
+installs that are verifiably final (all volumes readable, no markers). This
+covers:
+- blank disks;
+- foreign layouts, such as a store-bought FAT32 stick;
+- damaged npfs pools, where the checksummed header is valid but the volumes or
+  markers can't be read. These are listed as "npfs pool, damaged: consent
+  unreadable", so a broken test install is recovered without another computer.
+
+Every eligible disk is listed with what it is, and still needs the typed `wipe`.
+On the normal path, a damaged pool is never eligible: a final install that is
+later damaged is the one whose data fsck should get a chance to recover. Once
+Caelum can write NVMe, the ThinkPad's Fedora disk will appear under Read the room
+as a foreign disk. This is accepted.
 
 ## Code, file layout and order
 
@@ -228,8 +300,17 @@ Accepted 2026-10-02.
    record latency, bytes and ordinary validation from the start. Final owner
    policies are implemented; crash injection and physical-media qualification
    were not assigned.
-4. [ ] **Installer tools:** GPT creation, the FAT32 boot partition, pool
-   formatting and copying files from the boot archive.
+4. [ ] **Installer.** Follows the [installer decisions](#installer-decisions)
+   and [target consent](#target-consent), as three focused PRs:
+   1. [ ] **Rename to npfs**: a mechanical rename across pyxis-fs and the parent,
+      with no behavior change. `make usb-image` places the `SAFE_TO_WIPE`
+      markers.
+   2. [ ] **Kernel authority**: whole-disk write authority for trusted init, the
+      read-only Limine-loaded files, and the "Install Pyxis" boot entry with its
+      init.
+   3. [ ] **Installer program**: the interactive flow, GPT, a fresh FAT32 ESP,
+      npfs formatting and the read-back check, with userspace as the third
+      link-time symbol provider.
 5. [ ] **End to end:** install and boot in QEMU, then on the ThinkPad.
 
 ## Task-3 delivery
@@ -276,6 +357,11 @@ Not requirements, and not v1. Recorded so they are not designed out:
 
 - **An interactive installer or launcher** that lets the user choose which inits
   start which spaces.
+- **A live-system install flow (owner preference).** Boot a usable system in
+  which you can inspect disks and the network, then enter the installer when
+  ready, as Linux live images do, rather than rebooting into a separate entry.
+  This likely needs the new tab bar for spaces. The second Limine entry is the
+  v1 simplification.
 - **Filesystem overlays,** for example a volume overlaid on the boot archive.
   "Root filesystem" was only an illustration; it is not a Pyxis name or design.
 
