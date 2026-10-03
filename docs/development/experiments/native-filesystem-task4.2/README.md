@@ -149,3 +149,36 @@ journal overlay and no writes before consent, deferring pool retirement to the
 later live-install flow. These are task-4.3 policy refinements, documented as
 future behavior rather than implemented consent code. The temporary probe and
 protected task-3 experiment directory remain intact.
+
+## Merged userland integration
+
+The owner requested updating the pin after userland PRs
+[107](https://git.internal/PyxisOS/pyxis-userland/pulls/107) and
+[108](https://git.internal/PyxisOS/pyxis-userland/pulls/108) merged. Parent
+integration commit `94067c7` merges main `cf78936` and pins published userland
+`08e3c4b`, which contains both changes. Current main supplies the matching
+explicit network-selector ABI; the integration preserves its RTL8111 preparation
+and driver source selection. Filesystem, ports and lwIP pins are unchanged.
+
+A full source `make -j16 image fs-tools` passed with the settings above, rather
+than reusing the earlier component bundles. Its SDK manifest records clean
+parent `94067c7` and clean userland `08e3c4b`. The retained probe rebuilt against
+that SDK. A normal-entry boot with the same four-CPU, 2 GiB nested-KVM setup
+reached the remote session through its explicit VirtIO network selection.
+Existing iobench read and write/file-sync commands each verified two 1 MiB
+samples after one warmup, without short transfers or failed passes. This is an
+integration check; the five-sample comparisons above remain measurements of
+their recorded earlier revisions.
+
+A fresh-fixture, five-device Install-entry run passed every retained probe
+group, including exact 4 KiB transfers and last-close claim cleanup. After
+stopping QEMU, GPT verification and pool fsck passed; the extracted target pool
+matched its original formatter output, and the independent prepared disk
+matched the untouched writer fixture byte for byte. Its original SHA-256 above
+remained unchanged. The ordinary image was restored without the probe and with
+timeout zero; all validation processes were stopped.
+
+For the earlier review follow-up `d56193b`, CI run 764 passed filesystem checks
+but failed the image build fetching the unchanged Mbed TLS archive from GitHub
+with HTTP 503. Existing workflow retry 766 on that exact revision passed both
+jobs. CI for the final integrated revision is reported separately on the PR.
