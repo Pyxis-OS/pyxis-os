@@ -92,6 +92,39 @@ inspection. GDB confirmed the aggregate partial snapshot and two healthy
 controllers. Named/numeric `lsusb` returned status 1 and the shell remained usable.
 This exercises a normal unsupported hardware profile, without register fault injection.
 
+## Review follow-up
+
+The actionable review notes were addressed on the same branch: controller indices
+are stable for the boot with otherwise unspecified order, uninspected counts are
+unknown, and unused BOT/bulk setup and ring allocations are removed. Userland
+`53b6860f08dc` prints `root ports unknown` for count zero, while preserving any
+advertised count retained before controller failure.
+
+A matched manual boot before the cleanup at kernel `6cfe0bada94b` and after it
+used the same q35/nested-KVM/four-vCPU/8-GiB configuration, VirtIO network/RNG,
+one `qemu-xhci,p2=2,p3=2` at 08.0, always-plugged null-backed serial at virtual
+port 1 and mouse at 2. GDB measured per-port input/output, EP0 ring and control
+buffer at one 4-KiB page each. Before cleanup there were also two 4-KiB bulk-ring
+pages per port; afterward those buffers and helpers no longer exist. Device DMA
+therefore fell from 96 KiB to 64 KiB for this advertised four-port configuration,
+a saving of two pages per advertised port rather than a machine-size requirement.
+Both boots completed four commands and fourteen events, published one complete
+controller/two device/two interface records and had no controller failure. Named,
+numeric and missing-database listings after cleanup all returned status 0.
+These are resource/protocol observations, not throughput or elapsed-time samples.
+
+A mixed boot after cleanup placed a four-port xHCI behind a bridge at 0b.0, an
+empty three-port xHCI at 0c.0, a four-port no-MSI-X xHCI at 09.0, EHCI at 0a.0
+and a working four-port xHCI at 08.0. Root devices were SuperSpeed UAS storage,
+keyboard, vendor-class serial and a hub with an uninspected downstream mouse.
+It published five controllers and four root devices/interfaces. The listing
+showed EHCI as `unsupported, root ports unknown`, the failed xHCI as `failed,
+root ports 4`, and the empty controller as complete. SuperSpeed companion/bulk
+descriptor validation remained intact, including the UAS interface's four
+endpoints. Named and numeric listings returned status 1 while the shell stayed
+usable. The removed functions are absent from the linked ELF, which has no
+undefined symbols. No tests or fault injection were added.
+
 ## Limits
 
 This validates emulated multi-controller discovery, read-only publication and the

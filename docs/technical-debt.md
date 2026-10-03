@@ -1300,13 +1300,16 @@ unbound observations; external hub descendants remain uninspected. Revisit these
 bounds and hub traversal with concrete descriptor/topology requirements. Storage
 selection across controllers must be settled separately before class/media work.
 
-All advertised ports receive input/output contexts, an EP0 ring/control buffer and
-two initial non-control rings before AP startup. With the current 4 KiB buffer
-and 4 KiB allocations, this adds six pages/range records per port even when empty.
+All advertised ports receive input/output contexts and an EP0 ring/control buffer
+before AP startup. With the current 4 KiB buffer and 4 KiB allocations, this adds
+four pages/range records per port even when empty. The unused two bulk-ring pages
+per port, BOT matcher and endpoint setup were removed from the inventory slice.
 This fits QEMU's eight-port profile but consumes the shared VM range budget and
 can fail preparation on larger controllers. Revisit boot inventory/resource
 preparation with physical port-count evidence; runtime allocation/reclamation
-requires the VM ownership work rather than allocator locks.
+requires the VM ownership work rather than allocator locks. Reintroduce class
+transfers with a concrete consumer and an explicit pre-AP resource policy, rather
+than restoring unused reservations for future work.
 
 The first implementation bounds each device to one active control request. Early
 errors, deadlines or removal during active work stop the whole controller and

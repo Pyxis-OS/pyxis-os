@@ -23,7 +23,8 @@ publication, records remain unchanged even after removal or controller failure.
 Resource exhaustion, descriptor/control failure, unsupported hardware or incomplete
 PCI discovery retain usable observations and report partial inventory. Device
 strings, serial numbers and hub traversal are deferred. The inventory path does
-not configure or select a storage transport.
+not configure or select a storage transport. It has no unused BOT matching,
+bulk-endpoint setup or bulk-ring reservation.
 
 Userland resolves descriptive labels from pinned plain-text databases:
 

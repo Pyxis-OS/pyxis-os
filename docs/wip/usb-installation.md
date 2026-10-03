@@ -360,10 +360,12 @@ host tools and the later physical-preparation procedure.
    rings, interrupt delivery and root-port state. Start with one directly attached
    supported storage device present at boot. Leave UAS, external hubs, insertion
    after boot, legacy UHCI/OHCI/EHCI and power management outside this first slice.
-3. [x] **Enumerate and transfer.** Implement control transfers, checked descriptor
-   parsing, addressing/configuration and endpoint setup. Select supported
-   SCSI/Bulk-Only interfaces by descriptors; unsupported devices fail explicitly.
-   Support the endpoint packet/burst requirements of the chosen SuperSpeed path.
+3. [x] **Enumerate and transfer.** Implement bounded control transfers, checked
+   descriptor parsing and addressing. Publish root-device and interface observations
+   independently of class binding; unsupported inspection remains explicit.
+   The initial BOT matcher/endpoint setup was removed for the inspection-only
+   slice; reintroduce class transfers with their first consumer and an explicit
+   pre-AP resource policy in B.4.
 4. [ ] **Implement Bulk-Only/SCSI reads.** Identify media, obtain capacity and
    logical-block geometry, report command failures and read bounded block ranges.
    Handle short transfers, stalls, protocol status and required reset recovery.

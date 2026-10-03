@@ -36,14 +36,13 @@ enum port_state { PORT_ABSENT, PORT_UNSUPPORTED, PORT_CONNECTED, PORT_RESERVED, 
 enum control_state { CONTROL_IDLE, CONTROL_ACTIVE, CONTROL_DONE, CONTROL_HELD };
 struct usb_host_device {
   struct usb_host_controller *controller;
-  struct dma_buffer input, output, control_ring, data, bulk[USB_NONCONTROL_ENDPOINTS];
+  struct dma_buffer input, output, control_ring, data;
   uintptr_t data_address;
   phys_addr_t data_physical;
   unsigned port, slot, enqueue;
   uint16_t packet;
-  uint8_t configuration, interface, alternate;
   enum usb_speed speed;
-  bool cycle, addressed, configured;
+  bool cycle, addressed;
   struct {
     enum control_state state;
     uint64_t generation, deadline;
@@ -468,12 +467,6 @@ static bool allocate_devices(struct usb_host_controller *controller)
     device->data_address = device->data.address + offset;
     device->data_physical = device->data.physical + offset;
     initialize_transfer_ring(&device->control_ring);
-    for (unsigned j = 0; j < USB_NONCONTROL_ENDPOINTS; ++j) {
-      if (dma_buffer_allocate(&device->bulk[j], PAGE_SIZE) != MM_OK || !ring_layout(&device->bulk[j])) {
-        return false;
-      }
-      initialize_transfer_ring(&device->bulk[j]);
-    }
   }
   return true;
 }
@@ -521,9 +514,6 @@ static void release_boot_resources(struct usb_host_controller *controller)
   if (controller->ports) {
     for (unsigned i = 0; i < controller->port_count; ++i) {
       struct usb_host_device *device = &controller->ports[i].device;
-      for (unsigned j = 0; j < USB_NONCONTROL_ENDPOINTS; ++j) {
-        dma_buffer_release(&device->bulk[j]);
-      }
       dma_buffer_release(&device->data);
       dma_buffer_release(&device->control_ring);
       dma_buffer_release(&device->output);
@@ -1131,14 +1121,13 @@ static uint32_t *input_endpoint(const struct usb_host_device *device, unsigned d
   return (uint32_t *)(device->input.address + (dci + 1) * controller->context_bytes);
 }
 
-static void set_endpoint(uint32_t *context, unsigned type, unsigned packet,
-                         unsigned burst, phys_addr_t ring, unsigned average)
+static void set_control_endpoint(uint32_t *context, unsigned packet, phys_addr_t ring)
 {
-  context[1] = (packet << XHCI_ENDPOINT_PACKET_SHIFT) | (burst << XHCI_ENDPOINT_BURST_SHIFT) |
-    (type << XHCI_ENDPOINT_TYPE_SHIFT) | XHCI_ENDPOINT_ERRORS;
+  context[1] = (packet << XHCI_ENDPOINT_PACKET_SHIFT) |
+    (XHCI_ENDPOINT_CONTROL << XHCI_ENDPOINT_TYPE_SHIFT) | XHCI_ENDPOINT_ERRORS;
   context[2] = (uint32_t)ring | XHCI_TRB_CYCLE;
   context[3] = ring >> 32;
-  context[4] = average;
+  context[4] = XHCI_CONTROL_AVERAGE_TRB;
 }
 
 static enum usb_result context_command(struct usb_host_device *device, unsigned type, uint64_t deadline)
@@ -1173,8 +1162,8 @@ enum usb_result usb_host_address(struct usb_host_device *device, uint64_t deadli
   slot[0] = (1u << XHCI_SLOT_ENTRIES_SHIFT) |
     ((unsigned)controller->ports[device->port].speed << XHCI_SLOT_SPEED_SHIFT);
   slot[1] = (device->port + 1) << XHCI_SLOT_ROOT_PORT_SHIFT;
-  set_endpoint(input_endpoint(device, XHCI_ENDPOINT_ZERO), XHCI_ENDPOINT_CONTROL,
-               device->packet, 0, device->control_ring.physical, XHCI_CONTROL_AVERAGE_TRB);
+  set_control_endpoint(input_endpoint(device, XHCI_ENDPOINT_ZERO),
+                       device->packet, device->control_ring.physical);
   volatile uint64_t *dcbaa = (volatile uint64_t *)controller->dcbaa.address;
   dcbaa[device->slot] = device->output.physical;
   enum usb_result result = context_command(device, XHCI_TRB_ADDRESS_DEVICE, deadline);
@@ -1385,66 +1374,6 @@ void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket 
       device->request.state = CONTROL_IDLE;
     }
   }
-}
-
-enum usb_result usb_host_configure_bulk(struct usb_host_device *device, uint8_t configuration,
-                                       uint8_t interface, uint8_t alternate,
-                                       const struct usb_bulk_endpoint *endpoints, unsigned count,
-                                       uint64_t deadline)
-{
-  struct usb_host_controller *controller = device->controller;
-  assert_device_owner(device);
-  if (!device_ready(device) || !device->addressed) {
-    return USB_IO;
-  }
-  if (device->configured || device->request.state != CONTROL_IDLE) {
-    return USB_BUSY;
-  }
-  if (!configuration || !endpoints || !count || count > USB_NONCONTROL_ENDPOINTS) {
-    return USB_INVALID;
-  }
-  unsigned adds = 1, highest = XHCI_ENDPOINT_ZERO;
-  for (unsigned i = 0; i < count; ++i) {
-    const struct usb_bulk_endpoint *endpoint = &endpoints[i];
-    unsigned number = endpoint->address & 0x0f;
-    unsigned dci = number * 2 + ((endpoint->address & 0x80) != 0);
-    bool packet = device->speed == USB_SPEED_FULL ?
-      endpoint->max_packet == 8 || endpoint->max_packet == 16 || endpoint->max_packet == 32 || endpoint->max_packet == 64 :
-      device->speed == USB_SPEED_HIGH ? endpoint->max_packet == 512 :
-      device->speed == USB_SPEED_SUPER && endpoint->max_packet == 1024;
-    if (!number || (endpoint->address & 0x70) || (adds & (1u << dci)) || !packet ||
-        endpoint->max_burst > 15 || (device->speed != USB_SPEED_SUPER && endpoint->max_burst)) {
-      return USB_INVALID;
-    }
-    adds |= 1u << dci;
-    if (highest < dci) {
-      highest = dci;
-    }
-  }
-  memset((void *)device->input.address, 0, device->input.bytes);
-  ((uint32_t *)device->input.address)[1] = adds;
-  /* Output Slot contains hardware state and reserved bytes, which are zero in
-   * an Input Slot. Reconstruct this direct-root topology explicitly. */
-  input_slot(device)[0] = (highest << XHCI_SLOT_ENTRIES_SHIFT) |
-    ((unsigned)controller->ports[device->port].speed << XHCI_SLOT_SPEED_SHIFT);
-  input_slot(device)[1] = (device->port + 1) << XHCI_SLOT_ROOT_PORT_SHIFT;
-  for (unsigned i = 0; i < count; ++i) {
-    const struct usb_bulk_endpoint *endpoint = &endpoints[i];
-    bool inbound = (endpoint->address & 0x80) != 0;
-    unsigned dci = (endpoint->address & 0x0f) * 2 + inbound;
-    set_endpoint(input_endpoint(device, dci), inbound ? XHCI_ENDPOINT_BULK_IN : XHCI_ENDPOINT_BULK_OUT,
-                 endpoint->max_packet, endpoint->max_burst, device->bulk[i].physical, endpoint->max_packet);
-  }
-  /* CIE is disabled: CIC configuration/interface/alternate fields stay zero.
-   * The USB core has already sent the actual values to the device. */
-  enum usb_result result = context_command(device, XHCI_TRB_CONFIGURE_ENDPOINT, deadline);
-  if (result == USB_OK) {
-    device->configured = true;
-    device->configuration = configuration;
-    device->interface = interface;
-    device->alternate = alternate;
-  }
-  return result;
 }
 
 static void program_rings(struct usb_host_controller *controller)

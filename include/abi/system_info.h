@@ -106,7 +106,8 @@ struct system_info_usb {
   uint64_t interface_count;
 };
 
-/* Stable global indices, using the corresponding count above. */
+/* Indices use the corresponding count above and are stable for the boot.
+ * Their order is otherwise unspecified. */
 struct system_info_usb_request {
   struct message_header header;
   uint64_t index;
@@ -115,7 +116,7 @@ struct system_info_usb_request {
 struct system_info_usb_controller {
   struct system_info_pci_function pci;
   uint32_t state;
-  uint32_t root_port_count;
+  uint32_t root_port_count; /* Zero means unknown/not inspected, not zero ports. */
 };
 
 /* Unidentified connected ports have zero descriptor fields and IDENTIFIED clear.

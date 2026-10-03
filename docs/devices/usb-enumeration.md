@@ -10,9 +10,9 @@ tracks class/media work. Physical hardware is unqualified.
 
 `kernel/usb/xhci.c` owns controller commands, contexts, endpoint rings, DMA and
 transfer-event interpretation. `core.c` owns USB requests, descriptor traversal,
-inventory completeness and immutable observation publication. `bot.c` matches
-checked interface/endpoint facts to the initial SCSI/BOT profile; it has no bulk
-exchange or SCSI implementation yet. No class is selected from a vendor ID.
+inventory completeness and immutable observation publication. There is no BOT
+matcher or class-transfer path in the inventory slice. No class is selected
+from a vendor ID.
 All standard classes and opaque vendor classes remain unbound. Their standard
 descriptor structure is checked without configuring endpoints or interpreting
 class reports. Hubs are listed, but uninspected descendants make inventory partial.
@@ -20,8 +20,8 @@ class reports. Hubs are listed, but uninspected descendants make inventory parti
 `usb_prepare()` allocates retained per-port discovery records, one reusable
 scratch descriptor buffer and a bounded interface-record arena per controller
 before AP startup. xHCI prepares input/output contexts,
-an EP0 ring, control-data storage and two non-control rings for every advertised
-root port at the same stage. The runtime worker allocates or maps nothing.
+an EP0 ring and control-data storage for every advertised root port at the same
+stage. The runtime worker allocates or maps nothing.
 Resource exhaustion fails preparation or discovery explicitly; it cannot silently
 skip a configuration or connected port while claiming complete observation.
 
@@ -59,10 +59,10 @@ arena holds 512 records per controller; exceeding it gives partial inventory. Th
 is a resource choice in `settings.h`, not a hardware or database requirement.
 
 There is no automatic SET_CONFIGURATION, SET_INTERFACE, endpoint configuration
-or BOT device selection on this path. The pure BOT descriptor matcher and host
-bulk-endpoint support remain for subsequent class/media work. Selection across
-multiple controllers needs its own storage contract; observation does not choose
-a disk.
+or BOT device selection on this path. The unused matcher, bulk-endpoint setup
+and bulk-ring allocations were removed. Class transfers belong with their first
+consumer and an explicit resource-preparation policy. Selection across multiple
+controllers needs its own storage contract; observation does not choose a disk.
 
 ## Snapshot publication
 

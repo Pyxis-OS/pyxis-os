@@ -90,8 +90,11 @@ An empty complete inventory is valid. No controller count or port numbering is a
 machine requirement.
 
 Indexed requests use `system_info_usb_request`; indices at or above their respective
-counts, including before publication, return `CALL_NOT_FOUND`. Controller records
-include the PCI identity and inspection state, including unsupported host interfaces.
+counts, including before publication, return `CALL_NOT_FOUND`. Index order is stable
+for the boot but otherwise unspecified, including controller order. Controller
+records include the PCI identity and inspection state, including unsupported host
+interfaces. A zero root-port count means unknown/not inspected, not a measured
+zero-port controller. A failed controller can retain a count inspected before failure.
 Device records use a controller index and one-based physical root-port number;
 they are not Linux bus/address identifiers. `IDENTIFIED` distinguishes a checked
 VID/PID from a connected port whose descriptors could not be inspected. Interfaces

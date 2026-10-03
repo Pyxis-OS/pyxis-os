@@ -52,7 +52,7 @@ release ownership later, but this boot does not retry controller preparation.
 Preparation allocates port records, DCBAA, scratchpads when advertised, one
 command-ring page, one event-ring page and an ERST allocation. All backing and
 mappings exist before AP startup. Each advertised port also receives input/output
-contexts, an EP0 ring/control buffer and two initial non-control rings. CPU and
+contexts and an EP0 ring/control buffer. CPU and
 device physical addresses remain distinct. Rings are 64-byte aligned and remain within a 64 KiB segment
 boundary. The command ring ends with a Toggle Cycle Link TRB; the event ring uses
 one ERST entry. The initial choice is 256 TRBs per ring, derived from the supported
@@ -93,11 +93,10 @@ For each supported enabled port, Enable Slot uses its advertised Slot Type and
 retains the checked returned slot ID with that port. Address Device then publishes
 its output context in DCBAA and configures EP0. Output contexts belong to hardware;
 input contexts are constructed independently and remain immutable until command
-completion. Configure Endpoint adds the selected bulk DCIs with A1 clear; endpoint
-count does not replace the highest enabled DCI. Configuration Information Enable
-is left disabled, so Input Control configuration/interface/alternate fields remain
-zero. These endpoint helpers are retained for future class consumers; inventory
-enumeration does not send configuration/alternate requests or bind endpoints.
+completion. The input Slot advertises only EP0; Configuration Information Enable
+is left disabled and Input Control configuration/interface/alternate fields remain
+zero. Inventory enumeration does not send configuration/alternate requests or
+bind non-control endpoints. No unused bulk rings are allocated.
 Every inspectable root device receives its own address/descriptor record and remains unbound.
 
 A connection change after the snapshot retires that startup candidate. Loss of

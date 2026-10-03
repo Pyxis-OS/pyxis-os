@@ -16,10 +16,6 @@ struct usb_setup {
 };
 struct usb_ticket { uint64_t generation; };
 struct usb_completion { enum usb_result result; size_t bytes; };
-struct usb_bulk_endpoint {
-  uint8_t address, max_burst;
-  uint16_t max_packet;
-};
 
 /* Private BSP controller-worker interfaces. Records and buffers are prepared
  * before AP startup and retained at runtime. Indices cover advertised root ports;
@@ -44,12 +40,5 @@ enum usb_result usb_host_control_wait(struct usb_host_device *device, struct usb
 enum usb_result usb_host_control_take(struct usb_host_device *device, struct usb_ticket ticket,
                                       void *destination, size_t capacity, struct usb_completion *completion);
 void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket ticket);
-
-/* Caller supplies checked descriptor fields. The host owns contexts/rings, not
- * configuration or class selection. The initial non-control ring budget is two. */
-enum usb_result usb_host_configure_bulk(struct usb_host_device *device, uint8_t configuration,
-                                       uint8_t interface, uint8_t alternate,
-                                       const struct usb_bulk_endpoint *endpoints, unsigned count,
-                                       uint64_t deadline);
 
 #endif
