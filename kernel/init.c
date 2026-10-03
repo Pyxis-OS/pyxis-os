@@ -19,7 +19,7 @@
 #include <kernel/virtio/blk.h>
 #include <kernel/virtio/pci.h>
 #include <kernel/virtio/net.h>
-#include <kernel/virtio/rng.h>
+#include <kernel/random.h>
 #include <kernel/task.h>
 #include <kernel/usb/xhci.h>
 #include <kernel/service/request.h>
@@ -54,7 +54,7 @@
 #endif
   virtio_fs_pci_prepare(boot);
   virtio_net_prepare(boot);
-  virtio_rng_prepare(boot);
+  random_prepare(boot);
   virtio_blk_prepare(boot);
   gpt_prepare();
   arch_clock_maintain();
@@ -77,7 +77,7 @@
 
   klog("devices: starting virtio, block and native filesystem workers\n");
   virtio_fs_pci_start();
-  virtio_rng_start();
+  random_start();
   virtio_blk_start();
   gpt_start();
   nativefs_start();

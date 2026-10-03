@@ -41,7 +41,7 @@ milestone's remaining interface details before starting its code work.
     client-server use.
     DHCP and TCP follow as separate milestones.
 
-13. Complete: [host-backed randomness](../devices/randomness.md), using VirtIO entropy
+13. Complete: [hardware-backed randomness](../devices/randomness.md), using VirtIO entropy
     and a bounded native READ capability.
 14. Complete: [DNS queries and hostname ping](../userland/dns.md), using a shared
     userspace client, route-aware UDP opening and a configured default resolver
@@ -318,9 +318,9 @@ Phase A. The [everyday pipeline performance target](../development/io-reliabilit
 records their use as text-tool input without assigning a port or benchmark campaign.
 
 The ThinkPad's [next bring-up steps](thinkpad-next-steps.md) record the owner's
-order after the native shell: an entropy source first (RDSEED with RDRAND
-fallback, ChaCha20 later), then Ethernet through VFIO passthrough to QEMU and a
-driver.
+order after the native shell: the assigned CPU entropy task first (virtio-rng
+when present, RDSEED with RDRAND fallback otherwise, ChaCha20 later), then
+Ethernet through VFIO passthrough to QEMU and a driver.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

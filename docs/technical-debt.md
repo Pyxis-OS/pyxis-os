@@ -1354,3 +1354,17 @@ short packets, active abandonment, early errors, ring wrap and nonzero alternate
 selection follow reviewed source/spec rules but have no synthetic validation.
 Revisit with an actual class-transfer workload in BOT/SCSI work, keeping hardware
 ownership explicit. Physical USB qualification remains separate.
+
+## CPU entropy without a kernel generator
+
+The native entropy path trusts RDSEED/RDRAND directly, with bounded instruction
+retries and checks for zero, all-ones and repeated words. VirtIO remains preferred
+when present; neither source provides independence from the hardware/hypervisor.
+The CPU boot self-test and runtime checks reject obvious failures, not arbitrary
+bias, malicious hardware or firmware defects. Availability depends on the
+instruction supply; carry-clear exhaustion fails the current read, and a health
+failure requires reboot. See [randomness](devices/randomness.md).
+
+The accepted follow-up is a kernel ChaCha20 generator seeded from these sources.
+Revisit source mixing, reseeding and generator ownership in that task; do not add
+predictable fallback bytes or treat the current checks as entropy certification.

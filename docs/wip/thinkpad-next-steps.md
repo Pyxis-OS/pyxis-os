@@ -45,6 +45,10 @@ The Ryzen 5 PRO 4650U advertises both `rdseed` and `rdrand` (inventory CPU flags
 QEMU's `-cpu max` passes the host's instructions through, so the work can be
 developed and validated in QEMU with `VIRTIO_RNG=0`, then confirmed natively.
 
+**Assigned implementation, 2026-10-03:** CPU entropy with virtio-rng preferred
+when present, as confirmed by the owner after #345 merged. Ethernet remains later
+work.
+
 **Requirements:**
 
 - **Detect each instruction through CPUID before use:** RDRAND is
@@ -61,14 +65,19 @@ developed and validated in QEMU with `VIRTIO_RNG=0`, then confirmed natively.
 - **Keep the `random` capability unchanged.** Callers see the same interface;
   only the kernel's backing source changes.
 
-*Proposed,* for the owner to confirm:
+**Source selection (owner accepted, 2026-10-03):** use virtio-rng when present,
+and CPU entropy otherwise. Preparation or runtime failure of a present VirtIO
+device does not select another source. The existing VirtIO ready log remains;
+the CPU path reports its ready/self-test result without logging random bytes.
 
-- **Source choice when both exist.** In QEMU both virtio-rng and the CPU
-  instructions are available. Proposed default: use virtio-rng when present, as
-  today, and the CPU source otherwise. Native hardware then always uses the CPU,
-  and QEMU behaviour doesn't change.
-- **A log line naming the selected source,** for example
-  `random: CPU RDSEED (RDRAND fallback)`, so a native boot shows it.
+**Implementation checklist:**
+
+- [x] CPUID-gated 64-bit RDSEED/RDRAND, bounded retries and boot/runtime checks.
+- [x] Fixed boot source selection, virtio-rng first, CPU only when absent.
+- [x] Keep the random ABI, shared slots, deadlines and cancellation behavior.
+- [x] Document the hardware trust and ChaCha20 follow-up.
+- [ ] Ordinary build and QEMU validation without virtio-rng, plus VirtIO regression.
+- [ ] Owner native PXE confirmation of HTTPS/TCP entropy startup.
 
 **Validation:**
 
