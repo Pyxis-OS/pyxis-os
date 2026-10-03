@@ -15,7 +15,7 @@
 #include <kernel/panic.h>
 #include <kernel/pci.h>
 #include <kernel/gpt.h>
-#include <kernel/fs/native.h>
+#include <kernel/fs/npfs.h>
 #include <kernel/virtio/blk.h>
 #include <kernel/virtio/pci.h>
 #include <kernel/virtio/net.h>
@@ -80,7 +80,7 @@
   random_start();
   virtio_blk_start();
   gpt_start();
-  nativefs_start();
+  npfs_start();
   klog("devices: workers started\n");
   arch_clock_maintain();
 

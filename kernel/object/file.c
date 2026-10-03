@@ -5,7 +5,7 @@
 #include <kernel/object/file.h>
 #include <kernel/initrd.h>
 #include <kernel/fs/hostfs.h>
-#include <kernel/fs/native.h>
+#include <kernel/fs/npfs.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
@@ -17,8 +17,8 @@ static void destroy_file(struct kernel_object *object)
 {
   struct file_object *file = (struct file_object *)object;
   KASSERT(!file->busy && !file->first_waiter);
-  if (file->backing == FILE_NATIVE) {
-    nativefs_retire(file->native);
+  if (file->backing == FILE_NPFS) {
+    npfs_retire(file->npfs);
     return;
   }
   if (file->backing == FILE_HOST) {
@@ -69,10 +69,10 @@ struct file_object *file_create_host(struct hostfs_node *host)
   return file;
 }
 
-void file_init_native(struct file_object *file, struct nativefs_node *node)
+void file_init_npfs(struct file_object *file, struct npfs_node *node)
 {
   KASSERT(arch_cpu_index() == 0 && file && node);
-  *file = (struct file_object){.backing = FILE_NATIVE, .native = node};
+  *file = (struct file_object){.backing = FILE_NPFS, .npfs = node};
   atomic_init(&file->locked, false);
   object_init(&file->object, OBJECT_FILE, destroy_file);
 }
@@ -308,23 +308,23 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
   }
   uintptr_t data_address = reply_address + sizeof(reply);
 
-  if (file->backing == FILE_NATIVE) {
-    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_READ);
-    pending->job.node = file->native;
+  if (file->backing == FILE_NPFS) {
+    struct npfs_request *pending = npfs_request_prepare(NPFS_READ);
+    pending->job.node = file->npfs;
     pending->job.rights = rights;
     pending->job.offset = request->offset;
     pending->job.count = request->capacity;
-    nativefs_request_submit_and_wait(pending);
+    npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
     if (status != CALL_OK) {
-      nativefs_request_release(pending);
+      npfs_request_release(pending);
       return (struct syscall_result){status, 0};
     }
     KASSERT(pending->job.count <= request->capacity);
     reply.read = pending->job.count;
     KASSERT(copy_to_user(data_address, pending->job.data, pending->job.count));
     KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
-    nativefs_request_release(pending);
+    npfs_request_release(pending);
     return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
   }
   if (file->backing == FILE_HOST) {
@@ -383,24 +383,24 @@ static struct syscall_result write_file(struct file_object *file, uint64_t right
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
 
-  if (file->backing == FILE_NATIVE) {
-    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_WRITE);
-    pending->job.node = file->native;
+  if (file->backing == FILE_NPFS) {
+    struct npfs_request *pending = npfs_request_prepare(NPFS_WRITE);
+    pending->job.node = file->npfs;
     pending->job.rights = rights;
     pending->job.offset = request->offset;
     pending->job.count = request->size;
     KASSERT(pending->job.count <= sizeof(pending->job.data));
     KASSERT(copy_from_user(pending->job.data, data_address, pending->job.count));
-    nativefs_request_submit_and_wait(pending);
+    npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
     if (status != CALL_OK) {
-      nativefs_request_release(pending);
+      npfs_request_release(pending);
       return (struct syscall_result){status, 0};
     }
     KASSERT(pending->job.count <= request->size);
     reply.written = pending->job.count;
     KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
-    nativefs_request_release(pending);
+    npfs_request_release(pending);
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (!request->size) {
@@ -475,7 +475,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (file->backing == FILE_NATIVE && (rights & ~FILE_RIGHTS)) {
+  if (file->backing == FILE_NPFS && (rights & ~FILE_RIGHTS)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   uint64_t required;
@@ -526,13 +526,13 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     if (request_size) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
-    if (file->backing == FILE_NATIVE) {
-      struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_SYNC);
-      pending->job.node = file->native;
+    if (file->backing == FILE_NPFS) {
+      struct npfs_request *pending = npfs_request_prepare(NPFS_SYNC);
+      pending->job.node = file->npfs;
       pending->job.rights = rights;
-      nativefs_request_submit_and_wait(pending);
+      npfs_request_submit_and_wait(pending);
       enum call_status status = pending->job.status;
-      nativefs_request_release(pending);
+      npfs_request_release(pending);
       return (struct syscall_result){status, 0};
     }
     if (file->backing == FILE_HOST) {
@@ -553,14 +553,14 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     if (!copy_from_user(&request, request_address, sizeof(request))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
-    if (file->backing == FILE_NATIVE) {
-      struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_RESIZE);
-      pending->job.node = file->native;
+    if (file->backing == FILE_NPFS) {
+      struct npfs_request *pending = npfs_request_prepare(NPFS_RESIZE);
+      pending->job.node = file->npfs;
       pending->job.rights = rights;
       pending->job.offset = request.size;
-      nativefs_request_submit_and_wait(pending);
+      npfs_request_submit_and_wait(pending);
       enum call_status status = pending->job.status;
-      nativefs_request_release(pending);
+      npfs_request_release(pending);
       return (struct syscall_result){status, 0};
     }
     if (file->backing == FILE_HOST) {
@@ -585,19 +585,19 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
   if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (file->backing == FILE_NATIVE) {
-    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_SIZE);
-    pending->job.node = file->native;
+  if (file->backing == FILE_NPFS) {
+    struct npfs_request *pending = npfs_request_prepare(NPFS_SIZE);
+    pending->job.node = file->npfs;
     pending->job.rights = rights;
-    nativefs_request_submit_and_wait(pending);
+    npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
     if (status != CALL_OK) {
-      nativefs_request_release(pending);
+      npfs_request_release(pending);
       return (struct syscall_result){status, 0};
     }
     reply.size = pending->job.offset;
     KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
-    nativefs_request_release(pending);
+    npfs_request_release(pending);
     return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (file->backing == FILE_HOST) {

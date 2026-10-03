@@ -1,10 +1,10 @@
-# Native filesystem kernel adapter
+# npfs kernel adapter
 
-Caelum links the native format-only codecs and owns persistent pool, inode, cache
+Caelum links the npfs format-only codecs and owns persistent pool, inode, cache
 and writer state in the kernel. One serial BSP worker serves the existing file,
 directory and mount protocols. The authoritative
-[format](../../fs/docs/native-format.md) and
-[host-tool guide](../../fs/docs/native-host-tools.md) remain in pyxis-fs.
+[format](../../fs/docs/npfs-format.md) and
+[host-tool guide](../../fs/docs/npfs-host-tools.md) remain in pyxis-fs.
 
 ## Build and ownership
 
@@ -14,7 +14,7 @@ memory symbols and implements block access and allocation policy. Host formattin
 inspection and whole-image checking remain separate tools. The existing compiler
 is sufficient; no container rebuild is needed.
 
-The [job interface](../../include/kernel/fs/native.h) uses shared kernel storage.
+The [job interface](../../include/kernel/fs/npfs.h) uses shared kernel storage.
 Trusted ROOT submission supplies the configured disk GUID, GPT entry, volume name
 and exact directory rights including LOOKUP. User handlers capture requests and
 validate buffers before publishing to the BSP executor, which forwards them to
@@ -122,9 +122,9 @@ GPT disks. Format and check the pool before copying it into a new partition:
 
 ```sh
 make -j16 fs-tools
-build/fs-tools/mkpyxisfs-native --image /tmp/native-pool.raw --size 64MiB \
+build/fs-tools/mkfs.npfs --image /tmp/native-pool.raw --size 64MiB \
   --journal 1MiB --volume system --source /path/to/unchanging/source
-build/fs-tools/pyxisfs-native-fsck --image /tmp/native-pool.raw
+build/fs-tools/fsck.npfs --image /tmp/native-pool.raw
 truncate -s 68M /tmp/native-disk.raw
 sgdisk --clear --set-alignment=1 --new=1:2049:+64M \
   --disk-guid=12345678-1234-4567-89ab-0123456789ab /tmp/native-disk.raw

@@ -68,6 +68,7 @@ empty filesystem or a successful partial list. No mount, raw-device or principal
 acquisition service is used. Existing shell/session/remote handoffs already carry
 the selected root grants with their actual rights.
 
+The filesystem type is displayed as `npfs`; `hideFS` uses that same name.
 The default text identifies each binding, filesystem type and read-only state,
 with an explicit **shared pool capacity** label. Multiple volumes or repeated
 mounts of one pool may produce separate rows with the same capacity; they share

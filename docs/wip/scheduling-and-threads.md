@@ -96,7 +96,7 @@ measurement is established by this investigation.
 | Ready queues, parking and stop publication | `kernel/task.c` | Preserve queue locking and early-wakeup handshake; publish no stack still executing. |
 | Dispatch state and user entry | `arch/x86_64/user.c`, `arch/x86_64/syscall_entry.S` | Install destination CR3, entry stack and user CPU state; kernel GS remains CPU-local. |
 | Heap/PMM/VM have one allocator owner and shared scratch aliases | `kernel/mm/heap.c`, `kernel/mm/pmm.c`, `kernel/mm/vm.c`, `arch/x86_64/paging.c` | Synchronize metadata, provide CPU-local scratch, prove growth/publication and mapping lifetime. |
-| Serial services rely on BSP execution and IF=0 | `kernel/service/request.c`, `kernel/fs/native.c`, `kernel/fs/hostfs.c`, `kernel/virtio/blk.c`, `kernel/net/interface.c` | Retain ownership initially. Off-BSP workers need explicit cross-CPU handoffs, not just different affinity. |
+| Serial services rely on BSP execution and IF=0 | `kernel/service/request.c`, `kernel/fs/npfs.c`, `kernel/fs/hostfs.c`, `kernel/virtio/blk.c`, `kernel/net/interface.c` | Retain ownership initially. Off-BSP workers need explicit cross-CPU handoffs, not just different affinity. |
 
 ### Scheduler and process lifetime
 

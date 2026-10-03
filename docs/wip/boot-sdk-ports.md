@@ -209,8 +209,8 @@ and virtio-blk; bounded ticketed reads/writes and ordered flushes support
 [GPT discovery](../devices/gpt.md). Device/transport failure remains terminal
 until reboot. PyxisOS/pyxis-fs owns the pinned native format-only library and Linux
 host tools built by `make fs-tools`; Caelum owns mounted state and the writer.
-The [native format contract](../../fs/docs/native-format.md),
-[host-tool guide](../../fs/docs/native-host-tools.md) and
+The [native format contract](../../fs/docs/npfs-format.md),
+[host-tool guide](../../fs/docs/npfs-host-tools.md) and
 [kernel adapter](../devices/filesystem-native-adapter.md) describe implemented
 behavior. BSP request separation is complete. FUSE is not a prerequisite.
 

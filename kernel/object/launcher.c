@@ -5,7 +5,7 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
-#include <kernel/fs/native.h>
+#include <kernel/fs/npfs.h>
 #include <kernel/mm/heap.h>
 #include <kernel/memory.h>
 #include <kernel/object/file.h>
@@ -501,16 +501,16 @@ static enum call_status capture_launch_request(const struct launch_request *requ
     return error;
   }
   capture->image = (struct file_object *)image;
-  if (capture->image->backing == FILE_NATIVE) {
-    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_CAPTURE);
-    pending->job.node = capture->image->native;
+  if (capture->image->backing == FILE_NPFS) {
+    struct npfs_request *pending = npfs_request_prepare(NPFS_CAPTURE);
+    pending->job.node = capture->image->npfs;
     pending->job.rights = image_rights;
-    nativefs_request_submit_and_wait(pending);
+    npfs_request_submit_and_wait(pending);
     enum call_status status = pending->job.status;
     capture->external_image = pending->job.captured;
     capture->external_image_size = pending->job.count;
     pending->job.captured = NULL;
-    nativefs_request_release(pending);
+    npfs_request_release(pending);
     if (status != CALL_OK) {
       discard_launch_capture(capture);
       return status;

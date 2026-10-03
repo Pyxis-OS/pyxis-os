@@ -21,7 +21,7 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
-      - name: Build pinned native format and host tools
+      - name: Build pinned npfs format and host tools
         run: |
           if [ "$(id -u)" -eq 0 ]; then
             build_uid=$(id -u nobody)

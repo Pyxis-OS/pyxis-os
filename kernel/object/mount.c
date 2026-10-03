@@ -1,7 +1,7 @@
 #include <abi/mount.h>
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
-#include <kernel/fs/native.h>
+#include <kernel/fs/npfs.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -86,7 +86,7 @@ static enum call_status open_native(struct mount_object *mount, uint64_t rights,
   if (!copy_from_user(name, open.name, open.name_length)) {
     return CALL_BAD_BUFFER;
   }
-  if (!pnf_name_valid((const uint8_t *)name, open.name_length)) {
+  if (!npfs_name_valid((const uint8_t *)name, open.name_length)) {
     return CALL_BAD_REQUEST;
   }
   name[open.name_length] = '\0';
@@ -94,17 +94,17 @@ static enum call_status open_native(struct mount_object *mount, uint64_t rights,
     return mount->setup_status;
   }
 
-  struct nativefs_request *request = nativefs_request_prepare(NATIVEFS_ROOT);
+  struct npfs_request *request = npfs_request_prepare(NPFS_ROOT);
   request->job.disk = mount->config.disk;
   request->job.partition = open.partition;
   request->job.rights = open.rights;
   request->job.count = open.name_length;
   memcpy(request->job.name, name, open.name_length + 1);
-  nativefs_request_submit_and_wait(request);
+  npfs_request_submit_and_wait(request);
   enum call_status status = request->job.status;
   *root = request->job.object;
   request->job.object = NULL;
-  nativefs_request_release(request);
+  npfs_request_release(request);
   *directory_rights = open.rights;
   return status;
 }
@@ -149,11 +149,11 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
     if (mount->setup_status != CALL_OK) {
       return (struct syscall_result){mount->setup_status, 0};
     }
-    struct nativefs_request *request = nativefs_request_prepare(NATIVEFS_DISK_SYNC);
+    struct npfs_request *request = npfs_request_prepare(NPFS_DISK_SYNC);
     request->job.disk = mount->config.disk;
-    nativefs_request_submit_and_wait(request);
+    npfs_request_submit_and_wait(request);
     enum call_status status = request->job.status;
-    nativefs_request_release(request);
+    npfs_request_release(request);
     return (struct syscall_result){status, 0};
   }
   if (operation != (mount->backend == MOUNT_HOST ? MOUNT_OPEN_ROOT : MOUNT_OPEN_VOLUME)) {

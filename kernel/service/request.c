@@ -4,7 +4,7 @@
 #include <kernel/object/terminal.h>
 #include <kernel/fs/ramfs.h>
 #include <kernel/fs/hostfs.h>
-#include <kernel/fs/native.h>
+#include <kernel/fs/npfs.h>
 #include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/capability.h>
@@ -54,8 +54,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct launcher_request, request)},
   [BSP_SERVICE_HOSTFS] = {sizeof(struct hostfs_request), alignof(struct hostfs_request),
       offsetof(struct hostfs_request, request)},
-  [BSP_SERVICE_NATIVEFS] = {sizeof(struct nativefs_request), alignof(struct nativefs_request),
-      offsetof(struct nativefs_request, request)},
+  [BSP_SERVICE_NPFS] = {sizeof(struct npfs_request), alignof(struct npfs_request),
+      offsetof(struct npfs_request, request)},
   [BSP_SERVICE_READINESS] = {sizeof(struct readiness_request), alignof(struct readiness_request),
       offsetof(struct readiness_request, request)},
 };
@@ -133,7 +133,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_FILE_REPLACE:
   case BSP_SERVICE_LAUNCHER:
   case BSP_SERVICE_HOSTFS:
-  case BSP_SERVICE_NATIVEFS:
+  case BSP_SERVICE_NPFS:
   case BSP_SERVICE_READINESS:
   case BSP_SERVICE_SYSTEM_INFO_MEMORY:
     return false;
@@ -151,8 +151,8 @@ static void publish_request(struct bsp_request *request)
     file_replace_published((struct file_replace_request *)request);
   } else if (request->service == BSP_SERVICE_HOSTFS) {
     hostfs_request_published((struct hostfs_request *)request);
-  } else if (request->service == BSP_SERVICE_NATIVEFS) {
-    nativefs_request_published((struct nativefs_request *)request);
+  } else if (request->service == BSP_SERVICE_NPFS) {
+    npfs_request_published((struct npfs_request *)request);
   }
   lock_requests();
   request->state = BSP_REQUEST_QUEUED;
@@ -215,7 +215,7 @@ void bsp_request_complete(struct bsp_request *request)
   KASSERT(arch_cpu_index() == 0);
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->state == BSP_REQUEST_SERVICING ||
-      ((request->service == BSP_SERVICE_HOSTFS || request->service == BSP_SERVICE_NATIVEFS ||
+      ((request->service == BSP_SERVICE_HOSTFS || request->service == BSP_SERVICE_NPFS ||
         request->service == BSP_SERVICE_READINESS) &&
        request->state == BSP_REQUEST_FORWARDED));
   KASSERT(!request->next && request->wait);
@@ -244,10 +244,10 @@ static void service_request(struct bsp_request *request)
     /* Forwarding can complete immediately. The worker owns final completion;
      * even inspecting the request after this transfer would race its caller. */
     return;
-  case BSP_SERVICE_NATIVEFS:
+  case BSP_SERVICE_NPFS:
     object_cleanup_leave(previous);
     request->state = BSP_REQUEST_FORWARDED;
-    nativefs_forward((struct nativefs_request *)request);
+    npfs_forward((struct npfs_request *)request);
     return;
   case BSP_SERVICE_TERMINAL_CREATE:
     terminal_create_execute((struct terminal_create_service_request *)request);

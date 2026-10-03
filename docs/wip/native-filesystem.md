@@ -1,4 +1,4 @@
-# Simple native filesystem
+# npfs native filesystem
 
 Status: **owner direction, 2026-10-02.** This restarts writable filesystem
 work. It supersedes the pyxis-fs writer plans listed under
@@ -161,8 +161,8 @@ Accepted mount authority and lifetime policies, 2026-10-03:
 
 The [format decisions](native-filesystem-format.md) record the accepted shape:
 one bitmap, 64 volumes with growable inode files, block-pointer mappings, simple
-directories and one metadata journal. The [implemented encoding](../../fs/docs/native-format.md)
-and [host tools](../../fs/docs/native-host-tools.md) live in pyxis-fs; the
+directories and one metadata journal. The [implemented encoding](../../fs/docs/npfs-format.md)
+and [host tools](../../fs/docs/npfs-host-tools.md) live in pyxis-fs; the
 old core and tools are retired. V1 checksums only headers and journal; read-only opening refuses a
 committed journal and writable fsck replays it. Journal capacity is chosen per
 pool, starting at at least 128 MiB for the 256 GB target. Volume starvation remains
@@ -200,9 +200,9 @@ Accepted 2026-10-02.
 Accepted 2026-10-03.
 
 1. **Name.** The format is **npfs** (next Pyxis filesystem). Code, tools, docs
-   and messages use it: the `pnf_` prefix becomes `npfs_`, and the host tools
-   become `mkfs.npfs`, `fsck.npfs` and `npfs-inspect`. The pyxis-fs repository
-   keeps its name.
+   and messages use it: the API prefix is `npfs_`, and the host tools are
+   `mkfs.npfs`, `fsck.npfs` and `npfs-inspect`. The pyxis-fs repository keeps its
+   name.
 2. **Source files.** The kernel exposes the files Limine loaded (Caelum and the
    boot archive) read-only to the installer. The Limine EFI binary and the
    `limine.conf` template ship in the boot archive.
@@ -289,7 +289,7 @@ Accepted 2026-10-02.
 2. [x] **Format library and host tools.** Structure definitions, encoding and
    decoding with link-time symbols, plus host `mkfs`, `fsck` and inspection.
    Implemented in [pyxis-fs #26](https://git.internal/PyxisOS/pyxis-fs/pulls/26);
-   [tool guide and validation](../../fs/docs/native-host-tools.md). Committed replay
+   [tool guide and validation](../../fs/docs/npfs-host-tools.md). Committed replay
    has been exercised at runtime in host and kernel; see the
    [adapter](../devices/filesystem-native-adapter.md#task-3-validation).
    The task-3 kernel writer produces normal COMMITTED/checkpoint transactions. Broader crash qualification remains separate.
@@ -302,9 +302,12 @@ Accepted 2026-10-02.
    were not assigned.
 4. [ ] **Installer.** Follows the [installer decisions](#installer-decisions)
    and [target consent](#target-consent), as three focused PRs:
-   1. [ ] **Rename to npfs**: a mechanical rename across pyxis-fs and the parent,
+   1. [x] **Rename to npfs**: a mechanical rename across pyxis-fs and the parent,
       with no behavior change. `make usb-image` places the `SAFE_TO_WIPE`
-      markers.
+      markers. The namespace/header/tool rename preserves the disk encoding
+      and numeric ABI values; current consumers use the new names together.
+      The USB builder places one empty regular marker in its sole `usb-test`
+      volume.
    2. [ ] **Kernel authority**: whole-disk write authority for trusted init, the
       read-only Limine-loaded files, and the "Install Pyxis" boot entry with its
       init.
