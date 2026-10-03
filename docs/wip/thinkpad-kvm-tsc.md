@@ -1,8 +1,76 @@
 # ThinkPad KVM boot and invariant-TSC investigation
 
-Status: findings recorded on 2026-10-02; implementation proposals and policy
-decisions remain open. No clock, scheduler, ABI or QEMU-launcher implementation
-is included in this report.
+Status: **owner direction accepted, 2026-10-03:** implement software-extended
+32-bit HPET first to continue native ThinkPad bring-up. The intended future
+direction is TSC with extended-HPET fallback; TSC work is deferred. The findings
+below were recorded on 2026-10-02. This document records the implementation
+handoff; the clock code is unchanged and native boot still stops at the HPET
+capability check.
+
+## Accepted direction and implementation handoff
+
+The owner selected the following sequence on 2026-10-03:
+
+1. **Now: software-extended 32-bit HPET.** Preserve the existing direct 64-bit
+   HPET path and add software accumulation for a 32-bit counter. The objective
+   is to pass the observed clock blocker and continue native ThinkPad bring-up.
+   This does not establish that later initialization will succeed.
+2. **Future: TSC with extended-HPET fallback.** Use TSC where it qualifies and
+   retain a usable HPET source where it does not. This is the chosen future
+   direction, not a requirement to implement TSC, calibration, source switching
+   or a clock-source framework in the first change. Boot-time fallback and any
+   later runtime failure detection/switching are separate work.
+
+The ThinkPad implementation agent should begin with the HPET task below. The
+source choice is settled; the remaining implementation questions concern the
+sampling and concurrency contract, not whether to choose TSC instead.
+
+- [x] Record the HPET-first decision and deferred TSC-with-fallback direction.
+- [ ] Implement and validate software-extended HPET in a focused code PR.
+  Preserve shared monotonic nanoseconds, the initialization epoch, saturation,
+  wall-clock anchoring and existing deadline semantics. Keep comparator/legacy
+  HPET interrupts disabled and retain the existing LAPIC scheduler timer.
+- [ ] Record the native result and any next blocker, update the implemented
+  timekeeping reference and carry remaining costs/limits into technical debt.
+  Do not start the next hardware or TSC task implicitly.
+
+Start from current main after checking this documentation PR's merge status.
+The handoff was prepared against main `1f5624e`, with #332 (investigation) and
+#337 (xHCI configuration) merged. Reuse that checkout's pinned dependencies;
+this clock task needs no dependency or compiler-container change. Keep
+`CONFIG_XHCI=n` for the first native qualification, as in current main.
+
+Relevant code is [clock initialization and reads](../../arch/x86_64/clock.c),
+its [public arch contract](../../arch/x86_64/include/arch/clock.h),
+[early architecture initialization](../../arch/x86_64/init.c),
+[interrupt dispatch](../../arch/x86_64/idt.c),
+[AP startup](../../arch/x86_64/smp.c) and
+[kernel startup](../../kernel/init.c). Read the
+[timekeeping reference](../kernel/timekeeping.md) and
+[SMP ownership contract](../kernel/smp.md) before changing them.
+
+Use the [extension sketch](#software-extension-sketch-costs-and-required-bound)
+as a starting point, not an already approved line-by-line implementation.
+Before coding, state how maintenance ownership and early-boot/runtime sampling
+satisfy the less-than-one-wrap condition, including concurrent and interrupting
+readers. A BSP timer-triggered sample plus explicit coverage before interrupts
+are enabled is a candidate, not an owner-selected mechanism. Identify any
+unsupported pause/suspend/debugger behavior explicitly; the counter alone cannot
+detect or reconstruct a missed full wrap. Resolve a material support-policy
+change with the owner; routine placement and helper choices need no new approval.
+
+Validation should use ordinary `make -j16` builds, interactive QEMU and debugger
+inspection, then the owner's native boot. Check the existing 64-bit path and
+exercise the actual 32-bit extension across multiple wraps, with SMP activity
+and idle periods. A normal QEMU 64-bit HPET boot alone does not cover extension;
+record how the 32-bit path was exercised. Use existing workloads to compare
+clock-sensitive behavior before/after where both revisions can run; native
+pre-change evidence is the panic, not a working performance baseline. Record
+revisions, CPU count, accelerator, durations and measurement variation, and
+separate emulator evidence from physical results. Do not add tests, fault
+injection or boot automation without assignment. Follow the existing
+[USB-image procedure](../development/usb-image.md) for owner-selected boot media;
+this handoff does not select or authorize overwriting a physical drive.
 
 ## Recorded build and boot
 
@@ -157,6 +225,9 @@ AP publication, BSP service and AP resumption in
 
 ## What Caelum must establish for TSC
 
+The following is deferred design work for the accepted future direction. It is
+not a prerequisite for implementing extended HPET.
+
 ### Capability detection
 
 Check CPUID maximum leaves before querying features. Require TSC availability
@@ -231,36 +302,20 @@ drift. An arbitrary skew tolerance smaller than a scheduler tick would not
 justify weakening the existing timestamp-ordering contract. Independent per-CPU
 epochs are unsuitable.
 
-## Proposed bounded implementation and fallback
+## Implementation scope and future fallback
 
-The options below preserve `arch_monotonic_ns()`, the public clock interfaces
-and the independent scheduler timer interrupts. Source selection occurs at boot;
-conversion parameters become immutable before scheduler release. No option has
-been chosen. Each native-enabling option addresses the observed clock blocker;
-none establishes that later native initialization will succeed.
+The selected first change preserves `arch_monotonic_ns()`, public clock
+interfaces and independent scheduler timer interrupts. HPET initialization stays
+at its current point, with one shared epoch established before ordinary clock
+consumers run. Counter width selects the existing direct path or software
+extension. No TSC qualification, provisional clock source or boot-time rebase is
+needed for this first change.
 
-1. **TSC optimization only:** retain mandatory 64-bit HPET initialization,
-   qualify TSC across all CPUs, then switch while preserving the existing epoch.
-   Rejection leaves HPET selected. Native 32-bit HPET remains unsupported.
-2. **Native-enabling TSC:** accept 32-bit HPET solely
-   as a calibration reference, establish provisional BSP TSC before wall-clock
-   anchoring and device deadlines, and qualify APs before scheduler release.
-   Rejection uses 64-bit HPET where available, with a boot-only rebase preserving
-   already-issued timestamps and deadlines. With only 32-bit HPET, rejection
-   produces an explicit boot failure. This does not include counter extension.
-3. **Software-extended 32-bit HPET:** keep HPET as the source and extend its
-   main counter in software, without TSC qualification. Native 64-bit counters
-   retain today's direct path. Initialization and epoch establishment remain at
-   their current point, without a provisional source or boot-only rebase.
-   Correctness requires the sampling bound and concurrent-read discipline below.
-4. **TSC with extended-HPET fallback:** implement both TSC qualification and
-   software extension. Use TSC where it qualifies; rejection uses 64-bit HPET
-   or qualified software-extended 32-bit HPET. This avoids option 2's failure
-   solely for lacking 64-bit HPET, at the cost of implementing and qualifying
-   both paths. Failure to establish either source's requirements still prevents
-   admitting that source.
-
-If no supported source qualifies under the selected option, boot fails explicitly.
+The future combined direction adds TSC qualification and source selection while
+preserving the same epoch and deadlines. TSC optimization that still requires a
+64-bit HPET would not solve this machine's blocker; TSC without a usable 32-bit
+fallback would fail boot if qualification rejected it. Neither is the selected
+first task. Exact TSC acceptance and fallback mechanics remain future decisions.
 
 ### Software extension: sketch, costs and required bound
 
@@ -302,7 +357,7 @@ TSC calibration and synchronization work.
 
 ### Boot ordering and scope limits
 
-The second scope needs careful boot ordering because
+The future TSC stage needs careful boot ordering because
 [`kernel_init`](../../kernel/init.c) anchors wall time and prepares devices before
 starting APs. It cannot reset the clock epoch after SMP qualification. APs must
 remain gated from normal clock use until source selection and any fallback
@@ -310,29 +365,33 @@ rebase are complete. Keep the HPET mapping rather than introducing remote
 page-table mutation during this selection.
 
 In the tested default KVM configuration, invariant TSC is not advertised, so
-the TSC options would retain the existing 64-bit HPET. No TSC-qualified guest
-configuration was validated here.
+the future combined implementation would retain the existing 64-bit HPET. No
+TSC-qualified guest configuration was validated here.
 
 Runtime clock switching, a clock framework, a runtime watchdog, suspend/resume,
 CPU hotplug, VM migration support and scheduler timer reprogramming are proposed
-outside these initial options. HPET extension would nevertheless require the
-bounded maintenance sampling described above. KVM pvclock would be a separate
+outside the first HPET implementation. HPET extension nevertheless requires
+the bounded maintenance sampling described above. KVM pvclock would be a separate
 clock-source decision:
 its stable-clock flag governs converted pvclock readings, not unconditional
 agreement of raw TSC values. See
 [KVM clock MSRs](https://docs.kernel.org/virt/kvm/x86/msr.html).
 
-## Decisions still open
+## Remaining implementation and future decisions
 
-- TSC optimization only, native-enabling TSC with explicit rejection behavior,
-  software-extended 32-bit HPET alone, or TSC with extended-HPET fallback.
-- For HPET extension, maintenance ownership, the less-than-one-wrap sampling
-  guarantee through early boot and runtime, concurrent-read ordering, overflow
-  behavior and the policy for states where the bound cannot be established.
-- Platform acceptance criteria for strict SMP ordering, or a shared atomic floor.
-- Conservative ordered reads or qualified faster paths; policy for any MSR setup.
-- Calibration and SMP sampling, error and retry budgets.
-- Support boundary for resumed, migrated or otherwise unqualified environments.
-- Whether to investigate KVM pvclock later as a separate source.
+**For the selected HPET task:** maintenance ownership and the less-than-one-wrap
+sampling guarantee through early boot and runtime; concurrent-read ordering and
+overflow behavior; and the explicit policy for states where that bound cannot
+be established. The extension sketch describes the correctness constraints;
+it does not establish that current boot/runtime paths already satisfy them.
 
-These proposals do not authorize implementation or establish accepted policy.
+**For the deferred TSC stage:** platform acceptance criteria for strict SMP
+ordering versus a shared atomic floor; ordered-read mechanisms and any MSR
+setup; frequency calibration and SMP sampling/error/retry budgets; and epoch
+preservation during boot-time selection. Runtime switching, suspend/resume,
+CPU hotplug and VM migration need their own scope. KVM pvclock remains a
+separate possible future source.
+
+The owner has selected HPET first and TSC with extended-HPET fallback later.
+These remaining choices do not reopen that direction or authorize starting the
+TSC stage with the HPET task.

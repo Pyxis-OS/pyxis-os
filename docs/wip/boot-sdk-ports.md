@@ -290,9 +290,13 @@ or the visible-work sequence.
 
 The [ThinkPad KVM and invariant-TSC investigation](thinkpad-kvm-tsc.md) records
 a successful four-vCPU KVM boot, an owner-observed native HPET panic, the
-native/guest timer differences and undecided TSC, extended-HPET and combined
-fallback scopes. Its implementation and policy decisions remain open; successful
-native Caelum boot remains unqualified.
+native/guest timer differences and the **2026-10-03 owner decision: implement
+software-extended 32-bit HPET first** to continue native bring-up. Its
+[implementation handoff](thinkpad-kvm-tsc.md#accepted-direction-and-implementation-handoff)
+records the sampling/concurrency constraints and validation scope. TSC with
+extended-HPET fallback is the accepted future direction, deferred from this
+first task. The clock implementation is still unchanged; successful native
+Caelum boot remains unqualified.
 
 The separate [hardware-inspection proposal](hardware-inspection.md) adds native
 `lspci`/`lsusb` consumers of read-only inventory and pinned plain-text PCI/USB name
