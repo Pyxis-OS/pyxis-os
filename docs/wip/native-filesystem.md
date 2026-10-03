@@ -216,7 +216,7 @@ Accepted 2026-10-03.
    in [later ideas](#later-ideas).
 5. **Interactive, with no command-line options.** The flow is:
    1. First choice, with no further description: **Proceed with installation**
-      or **Read the room**. Read the room also makes blank disks eligible (see
+      or **Read the room**. Read the room widens which disks are eligible (see
       [target consent](#target-consent)).
    2. A list of every disk, and why each one does or doesn't qualify.
    3. With one eligible disk, its size, GUID and the volumes that will be
@@ -237,8 +237,9 @@ disposable:
 - **Every** live volume has a regular file named `SAFE_TO_WIPE` in its root.
 - No partition of the disk is mounted, which also excludes the stick Pyxis
   booted from.
-- The pool's journal is EMPTY. A committed journal is refused with the
-  "mount read-write once to recover" explanation.
+- The journal is EMPTY. A committed journal is not damage: the installer, which
+  already holds write authority, replays it (the same recovery a read-write
+  mount performs), then checks the markers.
 
 A qualifying disk is rebuilt from scratch: a new GPT, ESP and pool, using the
 layout above. The existing layout is not reused. The installer creates
@@ -247,8 +248,22 @@ host step. **Deleting those files marks an install as final.**
 
 The first disk is prepared on the host: `make usb-image` (which also places the
 markers), then `dd` to the stick. Host tools work on image files, not block
-devices. Under **Read the room**, blank disks (no partition table) are also
-eligible. They are listed as such and still need the typed `wipe`.
+devices.
+
+**Read the room** makes every disk eligible except mounted disks and npfs
+installs that are verifiably final (all volumes readable, no markers). This
+covers:
+- blank disks;
+- foreign layouts, such as a store-bought FAT32 stick;
+- damaged npfs pools, where the checksummed header is valid but the volumes or
+  markers can't be read. These are listed as "npfs pool, damaged: consent
+  unreadable", so a broken test install is recovered without another computer.
+
+Every eligible disk is listed with what it is, and still needs the typed `wipe`.
+On the normal path, a damaged pool is never eligible: a final install that is
+later damaged is the one whose data fsck should get a chance to recover. Once
+Caelum can write NVMe, the ThinkPad's Fedora disk will appear under Read the room
+as a foreign disk. This is accepted.
 
 ## Code, file layout and order
 
