@@ -1,4 +1,35 @@
-# QEMU boot troubleshooting
+# QEMU launcher and boot troubleshooting
+
+## PCI passthrough
+
+`VFIO_PCI` is empty by default. Set it to a full lowercase PCI address
+`DDDD:BB:DD.F`, with function 0–7, to attach one host function:
+
+```sh
+make run VFIO_PCI=0000:05:00.0 MEMORY=2G CPUS=4
+```
+
+The same option is available with `make debug`, `make run-usb` and
+`make debug-usb`. The launcher adds `-device vfio-pci,host=0000:05:00.0`;
+VirtIO devices remain controlled by their existing options.
+
+Before QEMU starts, the launcher checks that the function exists in sysfs,
+is bound to `vfio-pci`, has a resolved IOMMU group, and that the invoking user
+can read and write its `/dev/vfio/<group>` node. The `ulimit -l` limit must be
+unlimited or cover `MEMORY`, since VFIO pins guest RAM. A finite limit is in
+KiB; its comparison uses Python 3 and requires a scalar decimal size of at least
+one byte (fractions are recognized), in MiB when unsuffixed or with a case-insensitive
+`B`, `K`, `M`, `G`, `T`, `P` or `E` binary suffix. Compound QEMU memory options
+are passed through with an unlimited limit, but cannot be checked with a finite
+limit. The comparison rounds up to QEMU's
+[8 KiB machine-RAM alignment](https://github.com/qemu/qemu/blob/v10.2.2/hw/core/machine.c);
+QEMU still validates the memory option itself. Empty `VFIO_PCI` leaves the
+QEMU command line unchanged.
+
+The launcher does not change host drivers, permissions or limits. Follow the
+[ThinkPad host setup](../wip/thinkpad-nic-passthrough.md#task-2-host-setup-on-the-thinkpads-fedora-owner)
+before launching. That plan also describes the owner's first hardware boot;
+the passed-through NIC has no Pyxis driver yet.
 
 ## AHCI CD-ROM crash before kernel entry
 

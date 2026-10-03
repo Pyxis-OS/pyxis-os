@@ -12,6 +12,7 @@ set -eu
 : "${VIRTIO_RNG:=1}"
 : "${VIRTIO_BLK_IMAGE:=}"
 : "${VIRTIO_BLK_READONLY:=0}"
+: "${VFIO_PCI:=}"
 : "${USB_BOOT_IMAGE:=}"
 : "${UDP_FORWARD:=}"
 : "${TCP_FORWARD:=}"
@@ -155,6 +156,61 @@ if [ -n "$VIRTIO_FS_SOCKET" ]; then
     -object "memory-backend-memfd,id=pyxis_mem,size=$MEMORY,share=on" \
     -chardev "socket,id=pyxis_fs,path=$VIRTIO_FS_SOCKET" \
     -device vhost-user-fs-pci,chardev=pyxis_fs,tag=pyxis-host
+fi
+if [ -n "$VFIO_PCI" ]; then
+  case "$VFIO_PCI" in
+    [0-9a-f][0-9a-f][0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f].[0-7]) ;;
+    *) echo 'VFIO_PCI must be a full lowercase PCI address DDDD:BB:DD.F (function 0..7).' >&2; exit 1 ;;
+  esac
+  vfio_device="/sys/bus/pci/devices/$VFIO_PCI"
+  [ -d "$vfio_device" ] || {
+    echo "VFIO_PCI device $VFIO_PCI does not exist on this host." >&2
+    exit 1
+  }
+  vfio_driver=$(readlink -f "$vfio_device/driver") || vfio_driver=
+  [ "$vfio_driver" = /sys/bus/pci/drivers/vfio-pci ] || {
+    echo "VFIO_PCI device $VFIO_PCI must be bound to vfio-pci; see docs/wip/thinkpad-nic-passthrough.md task 2." >&2
+    exit 1
+  }
+  vfio_group_path=$(readlink -f "$vfio_device/iommu_group") || vfio_group_path=
+  [ -d "$vfio_group_path" ] || {
+    echo "VFIO_PCI device $VFIO_PCI has no resolved IOMMU group; check the host IOMMU setup." >&2
+    exit 1
+  }
+  vfio_group=${vfio_group_path##*/}
+  [ -r "/dev/vfio/$vfio_group" ] && [ -w "/dev/vfio/$vfio_group" ] || {
+    echo "VFIO_PCI requires read/write access to /dev/vfio/$vfio_group; see docs/wip/thinkpad-nic-passthrough.md task 2." >&2
+    exit 1
+  }
+  vfio_memlock=$(ulimit -l)
+  if [ "$vfio_memlock" != unlimited ]; then
+    command -v python3 >/dev/null 2>&1 || {
+      echo 'VFIO_PCI with a finite memlock limit requires python3 to check MEMORY.' >&2
+      exit 1
+    }
+    python3 - "$MEMORY" "$vfio_memlock" <<'PY'
+import re
+import sys
+from fractions import Fraction
+
+memory, limit = sys.argv[1:]
+match = re.fullmatch(r"([0-9]+(?:\.[0-9]*)?|\.[0-9]+)([bBkKmMgGtTpPeE]?)", memory)
+if match is None:
+    sys.exit("Finite VFIO memlock checking requires scalar MEMORY in MiB or with a B/K/M/G/T/P/E suffix.")
+suffix = match[2].upper() or "M"
+size = Fraction(match[1]) * 1024 ** "BKMGTPE".index(suffix)
+if not 1 <= size < 2 ** 64:
+    sys.exit("VFIO MEMORY must be at least one byte and below 2**64 bytes.")
+# QEMU rounds machine RAM up to 8192 bytes; conservatively round fractions up too.
+ram_alignment = 8192
+aligned_units = (size.numerator + size.denominator * ram_alignment - 1) // (size.denominator * ram_alignment)
+required_kib = aligned_units * (ram_alignment // 1024)
+if int(limit) < required_kib:
+    sys.exit(f"VFIO_PCI needs memlock >= {required_kib} KiB for MEMORY={memory}; current limit is {limit} KiB. "
+             "Try MEMORY=2G if it fits, or raise the limit as in docs/wip/thinkpad-nic-passthrough.md task 2.")
+PY
+  fi
+  set -- "$@" -device "vfio-pci,host=$VFIO_PCI"
 fi
 exec "$QEMU" -machine "$machine" -accel "$ACCEL" -cpu max \
   -rtc base=utc \

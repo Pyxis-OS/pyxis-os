@@ -5,6 +5,10 @@ assigned in order. Task 1 is a code change; tasks 2 and 3 are run by the owner o
 the ThinkPad. The RTL8111 driver is a [follow-up milestone](#follow-up-milestone-rtl8111-driver),
 not part of this work. Context: [ThinkPad next steps](thinkpad-next-steps.md#2-ethernet-passthrough-to-qemu-then-a-driver).
 
+- [x] Task 1: launcher option and preflight checks.
+- [ ] Task 2: owner host setup.
+- [ ] Task 3: owner first passthrough boot.
+
 ## Goal
 
 Run Pyxis in QEMU/KVM on the ThinkPad's own Fedora with the **built-in RJ45
@@ -48,6 +52,29 @@ make run VFIO_PCI=0000:05:00.0 MEMORY=2G
   for host setup.
 
 No other launcher, kernel or image change is part of this task.
+
+### Task 1 validation (2026-10-03)
+
+Implemented on `bringup/vfio-launcher` from main `a433a19`; usage and the finite
+memory-limit parser's supported formats are in
+[QEMU launcher documentation](../development/qemu.md#pci-passthrough).
+`sh -n` and `git diff --check` passed. Manual argument comparisons against the
+main launcher confirmed an unchanged command line with passthrough off and one
+VFIO device argument with it on, including debug and USB launch modes. Those
+argument checks used `QEMU=/bin/echo`, not a hardware boot.
+
+Malformed addresses, a missing function and an unbound function were rejected.
+For `MEMORY=2G`, a finite 2097152 KiB limit passed and 2097151 KiB failed;
+an 8 KiB limit rejected `MEMORY=8193B`, which needs 16 KiB after alignment.
+The real NIC's driver, group and access checks passed after the owner's reboot;
+this session reported unlimited memlock and a user-owned `/dev/vfio/15`.
+
+The ordinary image build passed with GCC 16.2 and the pinned submodules. An
+interactive boot without passthrough reached userspace using installed QEMU
+10.2.2, KVM on the ThinkPad host (not nested virtualization), four CPUs, 2 GiB RAM,
+no display window and the matching raw edk2 OVMF pair. GDB confirmed four online
+CPUs after initialization. QEMU and GDB were stopped afterward. Task 3's hardware
+boot remains unrun by the agent.
 
 ## Task 2: host setup on the ThinkPad's Fedora (owner)
 
