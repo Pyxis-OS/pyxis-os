@@ -71,7 +71,10 @@ one bit per pool block in BSP-owned VM storage. Mapping checks and allocation
 read memory; allocation skips full 64-bit words and starts at the first free
 block found during mount. Journal bitmap images overlay the checkpointed copy.
 Only checkpoint completion through durable EMPTY folds them into that copy;
-healthy abort drops the overlay, preserving the checkpointed bits. Pressure
+healthy abort drops the overlay, preserving the checkpointed bits. Allocation
+asserts that the current transaction has freed no blocks, so an overlay cannot
+make those blocks reusable before durable EMPTY. A successful checkpoint or
+healthy transaction discard clears that guard. Pressure
 cannot evict the bitmap, and read-only mounts retain it for later writable upgrade.
 
 The worker maintains dirty data and one pool-wide metadata redo transaction.

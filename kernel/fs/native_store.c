@@ -76,6 +76,7 @@ struct native_store_pool {
   struct store_cache_chunk *cache[STORE_CACHE_CHUNKS];
   struct store_image images[STORE_IMAGES_MAX];
   uint32_t image_count, image_capacity;
+  bool freed_in_transaction;
   uintptr_t scratch;
   size_t scratch_bytes;
   /* Retained mount storage; journal images overlay this durable bitmap base. */
@@ -382,6 +383,7 @@ static enum call_status bitmap_change(struct native_store_context *context, stru
     pool->free_blocks--;
   } else {
     pool->free_blocks++;
+    pool->freed_in_transaction = true;
   }
   return CALL_OK;
 }
@@ -389,6 +391,8 @@ static enum call_status bitmap_change(struct native_store_context *context, stru
 static enum call_status allocate_block(struct native_store_context *context, struct native_store_pool *pool,
   uint64_t *physical)
 {
+  /* Bitmap overlays may expose frees that are not yet safe to reuse. */
+  KASSERT(!pool->freed_in_transaction);
   if (!pool->free_blocks) {
     return CALL_NO_SPACE;
   }
@@ -678,6 +682,7 @@ static enum call_status checkpoint(struct native_store_context *context, struct 
     }
   }
   pool->image_count = 0;
+  pool->freed_in_transaction = false;
   return CALL_OK;
 }
 
@@ -1616,6 +1621,7 @@ static enum call_status flush_inode(struct native_store_context *context, struct
       pool->free_blocks = previous_free;
       if (!pool->failed && pool->control.state == PNF_JOURNAL_EMPTY) {
         pool->image_count = 0;
+        pool->freed_in_transaction = false;
       }
       if (pool->writeback_error == CALL_OK) {
         pool->writeback_error = status;
@@ -1879,6 +1885,7 @@ static void namespace_abort(struct native_store_pool *pool, uint64_t free_blocks
 {
   if (!pool->failed && pool->control.state == PNF_JOURNAL_EMPTY) {
     pool->image_count = 0;
+    pool->freed_in_transaction = false;
     pool->free_blocks = free_blocks;
   }
 }
