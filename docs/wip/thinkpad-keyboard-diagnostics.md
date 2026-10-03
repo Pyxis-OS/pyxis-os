@@ -22,27 +22,29 @@ assigned before the failure is identified.
 
 ## Assigned inventory
 
-- [ ] Report the PS/2 initialization step that failed, the last observed
+- [x] Report the PS/2 initialization step that failed, the last observed
   controller status and the scan-set reply when available. Distinguish
   disable/drain, config read/write, keyboard enable, scanning disable,
   scan-set selection/query, IRQ enable and scanning enable. Preserve the
   existing commands, retry limits and failure cleanup.
-- [ ] Move PCI function, BAR and owned-BAR inventory details to `ktrace`.
+- [x] Move PCI function, BAR and owned-BAR inventory details to `ktrace`.
   Keep the existing function/bus summary, discovery breadcrumbs and incomplete
   inventory or ownership warnings at info. Capability and bridge inventory
   details belong with their function's trace output. Per-space initialization
   and ordinary process exits already moved to trace in #341.
-- [ ] Retain the early kernel log in a fixed static buffer without heap use.
+- [x] Retain the early kernel log in a fixed static buffer without heap use.
   Keep the beginning when full, count dropped bytes, and replay a truncation
   notice after the retained prefix. Replay once into the initialized Caelum
   TTY under the existing log lock before enabling live TTY output. Stop
   capturing after this handoff. Serial stays live without duplicate replay;
   existing early-console and panic ownership remain intact. A 32 KiB buffer
   is an implementation choice, not an architectural minimum.
-- [ ] Validate ordinary info/trace builds, interactive QEMU boots and debugger
+- [x] Validate ordinary info/trace builds, interactive QEMU boots and debugger
   inspection of capture/replay state. Check 12 CPUs and a 1920x1080 framebuffer
   where supported. Record exact revisions, configuration and limits, then ask
   the owner to capture the next native keyboard result from the Caelum tab.
+- [ ] Record the owner's next native PXE result, then select any keyboard fix
+  or stall diagnostic from that evidence in a separately agreed scope.
 
 Replay retains bytes, not terminal scrollback: later output can still scroll
 the retained text off screen. Userspace log access would require a separate
@@ -63,5 +65,75 @@ The roughly 15-minute native HPET clock check remains pending until input works.
 
 ## Delivery state
 
-Inventory recorded; implementation and validation pending. #341 is merged;
-this PR targets main. No QEMU/debugger jobs are active.
+The three diagnostic changes are implemented in [PR #343](https://git.internal/PyxisOS/pyxis-os/pulls/343),
+based on main `c185e13`. #341 is merged; this PR targets main. Its code was
+built with GCC 16.2.0 and pinned Kconfiglib 14.1.0 using:
+
+```sh
+make -j16 image PREBUILT='sdk userspace ports' LOG_LEVEL=info \
+  PYTHON=build/hpet-config-venv/bin/python3 \
+  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis-
+```
+
+The SDK/userspace/ports inputs are unchanged verified bundles. Repeat with
+`LOG_LEVEL=trace` to retain detailed inventory. Both ordinary builds passed
+without warnings or undefined symbols. Both interactive QEMU 10.2.2 Q35/KVM
+boots used 12 CPUs, 256 MiB, `-cpu max`, the Fedora OVMF pair and
+`CONFIG_XHCI=n`. The host is the Ryzen 5 PRO 4650U ThinkPad running Fedora,
+with host KVM rather than nested virtualization.
+
+The info boot used `make debug` with VirtIO network/entropy and a 1280x800
+framebuffer. GDB stopped at `log_set_tty`: 3,774 retained bytes, zero dropped,
+initialized TTY, IF clear and replay not yet performed. On return, replay was
+complete, the byte counts unchanged, the selected TTY correct, IF still clear
+and the lock released. Counts remained unchanged after userspace started.
+The Caelum screenshot showed pre-attachment lines after presentation handoff;
+serial showed each boot line once. At this resolution with verbose VirtIO
+startup logs, the earliest lines had already scrolled off, as expected without
+scrollback.
+
+Manual QEMU monitor `sendkey shift` and `sendkey a` produced the raw set-2 bytes
+`12 f0 12 1c f0 1c`, all consumed. No input loss was recorded; both held-key
+states were released and the BSP timer advanced from 6,028 to 9,852 deliveries.
+This confirms the virtual input path continues to work; it does not reproduce
+or diagnose the native freeze.
+
+The trace boot used the same CPU/memory/firmware configuration, with no NIC or
+VirtIO RNG and `-vga none -device VGA,xres=1920,yres=1080`. Its actual framebuffer
+was 1920x1080. It reached preemptive userspace and retained individual PCI/BAR/
+capability, space and exit messages. GDB observed 2,722 retained bytes, zero
+dropped, a single replay and unchanged counts after startup. The different
+retained length reflects the different devices, not a matched performance
+comparison. Debugger stops separate these checks from timing measurements.
+
+Those pre-commit info/trace runs exercised the source committed as `1849129`.
+The info image was rebuilt at that code revision and booted again with the
+1920x1080/no-NIC/no-RNG configuration:
+
+```sh
+cp /usr/share/edk2/ovmf/OVMF_VARS.fd build/keyboard-diagnostics-final-vars.fd
+qemu-system-x86_64 -machine q35 -accel kvm -cpu max -rtc base=utc \
+  -smp cpus=12,sockets=1,cores=12,threads=1 -m 256M \
+  -drive if=pflash,format=raw,unit=0,readonly=on,file=/usr/share/edk2/ovmf/OVMF_CODE.fd \
+  -drive if=pflash,format=raw,unit=1,file=build/keyboard-diagnostics-final-vars.fd \
+  -display none -serial mon:stdio -vga none -device VGA,xres=1920,yres=1080 \
+  -nic none -cdrom build/pyxis.iso -boot d -no-reboot -no-shutdown
+```
+
+The final Caelum screenshot showed the retained header, clock, keyboard and
+PCI summary still visible after userspace and presentation started. No per-function
+or BAR inventory lines were present at info. The absent entropy-source message
+remained visible; it is outside this keyboard/logging scope. Final unforced
+info artifact SHA-256 values at `1849129` are:
+
+```text
+caelum.elf  ccdee99bac9113983dd1efc9c7b6d75a77a168b1e63fb86d16b4abf9860bf8a9
+pyxis.iso   e2987dae31c708af7c1cd6762320d99b17272ec099ab47d5498e3692eeddc04e
+```
+
+Local logs use `build/keyboard-diagnostics-*`. Buffer exhaustion and PS/2 failure
+diagnostics were reviewed by code inspection, not triggered in QEMU; no fault
+injection, diagnostic hooks or new tests were added. The command/retry sequence
+and panic routing were independently reviewed without a concrete finding. All
+validation QEMU/GDB jobs are stopped; the final delivery uses info logging.
+Native evidence and the cause of the keypress-triggered freeze remain pending.
