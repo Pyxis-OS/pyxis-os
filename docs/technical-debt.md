@@ -596,6 +596,12 @@ if owner-run native qualification encounters this state.
 
 ## Virtio-net runtime resource retention
 
+The external interface's first unique configuration binding lasts until reboot.
+Address clearing preserves it; controller switching and fallback after failure
+are unsupported. Unselected prepared controllers retain their boot resources
+with DMA/delivery off. Revisit runtime switching with a concrete teardown,
+packet draining and SMP invalidation contract rather than adding implicit fallback.
+
 The [network transport](devices/networking.md#virtio-net-transport) uses two nine-page
 contiguous allocations for rings and packet buffers (72 KiB total). Runtime
 failure attempts reset and disables delivery/DMA, but retains the PCI claim,
