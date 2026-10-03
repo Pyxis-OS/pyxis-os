@@ -83,9 +83,10 @@ Log out and back in, or reboot, then check:
 ulimit -l                                      # expect "unlimited"
 ```
 
-To limit exposure, a numeric value of at least the guest size (in KiB) can
-replace `unlimited`/`infinity`. QEMU is run directly, not through libvirt, so no
-SELinux or libvirt configuration is involved.
+Unlimited memlock is the supported and qualified configuration here. A finite
+value must cover guest RAM plus any additional memory QEMU/VFIO locks; the
+launcher's RAM-minimum preflight does not estimate that overhead. QEMU is run
+directly, not through libvirt, so no SELinux or libvirt configuration is involved.
 
 ## Validation (2026-10-03)
 
@@ -95,8 +96,10 @@ confirmed an unchanged command line with passthrough off and one VFIO device
 with it on, including debug and USB launch modes. Those argument checks used
 `QEMU=/bin/echo`; they did not boot a USB image. Malformed addresses, a missing
 function and an unbound function were rejected. For `MEMORY=2G`, a finite
-2097152 KiB limit passed and 2097151 KiB failed. An 8 KiB limit rejected
-`MEMORY=8193B`, which needs 16 KiB after alignment.
+2097152 KiB limit passed and 2097151 KiB failed in argument-only checks; these do
+not qualify hardware pinning at that boundary. After review, the finite-limit
+parser was simplified to shell integer K/M/G sizes. An 8 KiB limit accepts
+`MEMORY=8K` and rejects `MEMORY=9K`, which needs 16 KiB after alignment.
 
 The ordinary image build passed with GCC 16.2 and the pinned submodules. Both
 agent boots used installed QEMU 10.2.2, KVM on the ThinkPad host (not nested

@@ -184,31 +184,23 @@ if [ -n "$VFIO_PCI" ]; then
   }
   vfio_memlock=$(ulimit -l)
   if [ "$vfio_memlock" != unlimited ]; then
-    command -v python3 >/dev/null 2>&1 || {
-      echo 'VFIO_PCI with a finite memlock limit requires python3 to check MEMORY.' >&2
+    case "$MEMORY" in
+      *[Kk]) vfio_size=${MEMORY%?}; vfio_unit_kib=1 ;;
+      *[Mm]) vfio_size=${MEMORY%?}; vfio_unit_kib=1024 ;;
+      *[Gg]) vfio_size=${MEMORY%?}; vfio_unit_kib=1048576 ;;
+      *) vfio_size=$MEMORY; vfio_unit_kib=1024 ;;
+    esac
+    case "$vfio_size" in
+      ''|*[!0-9]*)
+        echo 'Finite VFIO memlock checking requires integer MEMORY in MiB or with a K/M/G suffix.' >&2
+        exit 1 ;;
+    esac
+    # QEMU rounds RAM up to 8 KiB. Divide the limit to avoid size overflow.
+    vfio_max_size=$((vfio_memlock / 8 * 8 / vfio_unit_kib))
+    [ "$vfio_size" -gt 0 ] 2>/dev/null && [ "$vfio_size" -le "$vfio_max_size" ] 2>/dev/null || {
+      echo "VFIO_PCI needs positive MEMORY=$MEMORY covered by memlock; current limit is $vfio_memlock KiB. Try MEMORY=2G if it fits, or raise the limit as in docs/development/thinkpad-nic-passthrough.md host setup." >&2
       exit 1
     }
-    python3 - "$MEMORY" "$vfio_memlock" <<'PY'
-import re
-import sys
-from fractions import Fraction
-
-memory, limit = sys.argv[1:]
-match = re.fullmatch(r"([0-9]+(?:\.[0-9]*)?|\.[0-9]+)([bBkKmMgGtTpPeE]?)", memory)
-if match is None:
-    sys.exit("Finite VFIO memlock checking requires scalar MEMORY in MiB or with a B/K/M/G/T/P/E suffix.")
-suffix = match[2].upper() or "M"
-size = Fraction(match[1]) * 1024 ** "BKMGTPE".index(suffix)
-if not 1 <= size < 2 ** 64:
-    sys.exit("VFIO MEMORY must be at least one byte and below 2**64 bytes.")
-# QEMU rounds machine RAM up to 8192 bytes; conservatively round fractions up too.
-ram_alignment = 8192
-aligned_units = (size.numerator + size.denominator * ram_alignment - 1) // (size.denominator * ram_alignment)
-required_kib = aligned_units * (ram_alignment // 1024)
-if int(limit) < required_kib:
-    sys.exit(f"VFIO_PCI needs memlock >= {required_kib} KiB for MEMORY={memory}; current limit is {limit} KiB. "
-             "Try MEMORY=2G if it fits, or raise the limit as in docs/development/thinkpad-nic-passthrough.md host setup.")
-PY
   fi
   set -- "$@" -device "vfio-pci,host=$VFIO_PCI"
 fi
