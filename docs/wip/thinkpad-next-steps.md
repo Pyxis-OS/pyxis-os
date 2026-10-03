@@ -200,6 +200,65 @@ The health checks do not certify hardware randomness. Remaining owner action:
 PXE boot this implementation on the ThinkPad and confirm the HTTPS startup and
 TCP identity entropy errors are gone. Ethernet remains separate unassigned work.
 
+### Review follow-up: independent instruction health
+
+The owner chose per-instruction health latches in the #347 review on 2026-10-03.
+Implemented in `dae754c7017a9066c34f4956e51cee403a4f8f50`, after integrating
+main `ae5ee94` so the reverse-terminal proposal remains intact. Boot tests each
+advertised instruction separately; a failing instruction is disabled until
+reboot, and the CPU service remains available while another is healthy. At
+runtime, zero/all-ones/per-instruction repeats disable only the failing
+instruction. The worker clears all staging bytes and resets the current read's
+filled count before refilling under its original deadline and cancellation.
+An ambiguous cross-instruction repeat disables both. The randomness reference
+and technical debt describe this current policy; the earlier `24dca31` record
+above describes the original single-latch implementation.
+
+The reviewer requested temporary, uncommitted forcing changes for validation.
+Four variants based on `dae754c` were rebuilt and booted with the same four-CPU,
+256 MiB Q35/KVM, CPU `max`, no virtio-rng, fresh Fedora OVMF and VirtIO networking
+configuration used above. Only instruction outputs in the arch adapter were
+forced; the service's checks, staging and queue handling were unmodified.
+Each forcing variant was built and booted once. GDB attached after startup.
+
+| Temporary forcing case | Independent expectation and observed result |
+| --- | --- |
+| RDRAND always returns all-ones with carry set; RDSEED unchanged | RDRAND disabled at boot, RDSEED remains healthy, TCP identity ready. GDB: disabled `{true, false}`, admission open, no active call and all eight slots free. |
+| Separate tagged, increasing words from each instruction; the seventh RDSEED draw returns zero | The eight-word self-test passes; RDSEED fails after two further good words. RDSEED alone is disabled, the interrupted request refills from RDRAND, and TCP identity is ready. All four delivered 64-bit TCP key words have the RDRAND tag, with no RDSEED prefix retained. A subsequent remote `dig example.com` returns NOERROR and exits zero, confirming later reads succeed. |
+| Both instructions always return all-ones with carry set | Both disabled at boot; source admission closed and TCP identity unavailable with entropy error 6. All slots are free. |
+| Tagged words pass self-test; the first runtime RDSEED word succeeds, subsequent RDSEED attempts clear carry, then RDRAND returns that last RDSEED word | The repeat is across instructions rather than within one stream. Both are disabled, the current read fails and TCP identity is unavailable. GDB confirms both latches, closed admission and all four TCP key words still zero. |
+
+For the runtime refill and repeat cases, controlled good words used RDSEED tag
+`0x2468ace000000000` and RDRAND tag `0x135790ab00000000`, with an independent
+instruction draw count in the low bits. GDB compared the high 32 bits of each
+TCP key word against the RDRAND tag, rather than merely checking readiness. In
+the cross-repeat case the forced RDRAND word was `0x2468ace000000005`, matching
+the preceding RDSEED draw, after 32 carry-clear RDSEED attempts. This distinguishes
+the ambiguous shared-failure rule from a per-instruction repeat. These values
+are temporary validation fixtures, not entropy sources in the submitted code.
+
+All forcing changes were reverted and both production source files compared
+identically with the committed revision. The production image was rebuilt using
+the existing matching SDK/userspace/ports bundles. It passed without compiler
+warnings or undefined ELF symbols. The clean CPU boot passed self-test and TCP
+identity, with both latches clear, all eight slots free, and a successful
+`cat https://example.com/ > home://entropy-https.html` through the existing remote
+client. A clean VirtIO-priority boot reported TCP identity ready; GDB confirmed
+`RANDOM_VIRTIO`, untouched CPU state, no outstanding DMA and all slots free.
+The forced images were not published; no forcing hook or test infrastructure
+remains. All QEMU, GDB and remote-client jobs were stopped.
+
+Validated production hashes: kernel
+`b80ba89d216cb809fe712cbaeba6243cdffba67221d28593834a02de482e7df5`, ISO
+`0f42e38f36d617ea067a7a93735e45e1a4fad34697fc90db52dfe8c5e4a1ed4d`.
+Local forcing patches, build/boot logs and GDB records are ignored
+`build/cpu-entropy-forced-*`; production evidence is `build/cpu-entropy-latches-*`.
+An independent read-only review found no concrete latch/refill ownership hazard.
+Native PXE confirmation remains pending. These controlled guest checks validate
+the failure policy and read provenance; they do not qualify entropy quality or
+measure throughput. Cancellation during refill and late/failed VirtIO completions
+remain code-inspected rather than induced.
+
 ## 2. Ethernet: passthrough to QEMU, then a driver
 
 The ThinkPad has two Realtek RTL8111-family controllers (`10ec:8168`), and they
