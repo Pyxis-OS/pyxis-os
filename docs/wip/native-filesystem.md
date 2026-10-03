@@ -8,8 +8,8 @@ work. It supersedes the pyxis-fs writer plans listed under
   [installation and authority](#installation-and-authority),
   [code, file layout and order](#code-file-layout-and-order) and
   [focused tasks](#focused-tasks). The completed
-  [format proposal](native-filesystem-format.md#decision-status) separates owner
-  decisions from agent-proposed layouts and policies for task 1 (2026-10-03).
+  [format decisions](native-filesystem-format.md#decision-status) record accepted
+  policies and the implemented task-2 format/tool boundary (2026-10-03).
 - **Proposals awaiting the owner:** [writeback details](#proposed-writeback-details) and the
   [working method](#proposed-working-method).
 - **Not requirements:** [later ideas](#later-ideas).
@@ -122,7 +122,7 @@ The owner accepted these task-3 policies during the
   before the next commit. A request spanning batches waits for all required
   batches; this does not accept the separate whole-current-transaction policy.
 
-These are future writer requirements, not implementation in this format PR.
+These remain requirements for task 3, beyond the implemented codecs and host tools.
 
 ## Proposed writeback details
 
@@ -154,16 +154,17 @@ Notes for implementation: memory-pressure writeback needs a reclaim hook in
 Caelum's memory management, so it arrives with the page cache. The installer must
 call `sync` before reporting success. Kilo's save should later call `fsync`.
 
-## Pool format proposal
+## Pool format and host tools
 
-Task 1's [format proposal](native-filesystem-format.md) replaces the earlier pool
-sketch: one bitmap, 64 volumes with growable inode files, block-pointer mappings,
-simple directories and one metadata journal. It distinguishes accepted choices
-from proposed record details. Follow-up owner decisions add all three feature
-compatibility classes, creation/modification times and internal directory parents.
-Journal capacity is
-chosen per pool by the installer/formatter, starting at 128 MiB for the 256 GB
-target. Volume starvation remains deferred: working first, space policy later.
+The [format decisions](native-filesystem-format.md) record the accepted shape:
+one bitmap, 64 volumes with growable inode files, block-pointer mappings, simple
+directories and one metadata journal. The [implemented encoding](../../fs/docs/native-format.md)
+and [host tools](../../fs/docs/native-host-tools.md) live in pyxis-fs beside the
+old core. V1 checksums only headers and journal; read-only opening refuses a
+committed journal and writable fsck replays it. Journal capacity is chosen per
+pool, starting at at least 128 MiB for the 256 GB target. Volume starvation remains
+deferred: working first, space policy later. Caelum's old native mounts continue
+using the old format; the new writer and mounts belong to task 3.
 
 The native installer makes Pyxis userspace the third link-time symbol provider
 for the format library, alongside the host and Caelum.
@@ -210,11 +211,13 @@ Accepted 2026-10-02.
 1. [x] **Format proposal.** A short design of the on-disk format: pool header,
    bitmap, volume table, inodes, directories and journal, with reserved bytes and
    feature flags. Owner decisions go at most three per round. The
-   [completed proposal](native-filesystem-format.md) distinguishes accepted choices
-   from agent-proposed record budgets and policies; unresolved choices must be
-   settled before their implementation. This is not an implemented filesystem.
-2. [ ] **Format library and host tools.** Structure definitions, encoding and
+   [format decisions](native-filesystem-format.md) retain accepted choices and
+   unresolved writer policies; task 2 implements the format details.
+2. [x] **Format library and host tools.** Structure definitions, encoding and
    decoding with link-time symbols, plus host `mkfs`, `fsck` and inspection.
+   Implemented in [pyxis-fs #26](https://git.internal/PyxisOS/pyxis-fs/pulls/26);
+   [tool guide and validation](../../fs/docs/native-host-tools.md). Committed replay
+   is source-reviewed, not runtime exercised; no writer exists yet.
 3. [ ] **Native read/write in Caelum** on virtio-blk, with persistent in-memory
    state and caching. Latency and bytes written are measured from the start.
 4. [ ] **Installer tools:** GPT creation, the FAT32 boot partition, pool

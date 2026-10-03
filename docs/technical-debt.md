@@ -1036,10 +1036,9 @@ retain the proofs, ordinary/freestanding builds and eventual guest validation.
 
 ## Native filesystem design limits
 
-The [native format proposal](wip/native-filesystem-format.md#decision-status)
-separates owner decisions from agent-proposed details; neither is implemented
-behavior. Accepted limits include 64 volume
-slots, roughly 513 GiB per-file block-pointer capacity, and linear directory lookup.
+The [native format decisions](wip/native-filesystem-format.md#decision-status)
+now have [implemented codecs and host tools](../fs/docs/native-host-tools.md).
+Caelum integration remains task 3. Accepted limits include 64 volume slots, roughly 513 GiB per-file block-pointer capacity, and linear directory lookup.
 Revisit only when a concrete workload exceeds those bounds or lookup becomes costly;
 reserved bytes and feature flags provide extension points. Volumes can exhaust the
 shared pool; quotas and starvation policy remain deferred until a concrete need.
@@ -1062,11 +1061,16 @@ Revisit only if a consumer needs wider dates or a stronger change-detection cont
 Unknown required features refuse opening; unknown read-only-compatible features
 refuse writes, including recovery writes; unknown compatible features are ignored.
 Conflicting valid headers require repair. These are accepted compatibility rules.
-The agent-proposed read-only policy additionally refuses committed journals rather
-than replaying into RAM. This remains a policy choice before implementation.
-The proposed layout also lacks home-metadata checksums: journal checksums cannot
-detect every later metadata corruption once the journal is cleared. This integrity
-limit is a proposal for review, not an accepted exclusion of metadata checksums.
+The owner accepted refusal of committed journals for read-only opening and no
+home-metadata checksums in v1. Writable fsck replays the journal; checksums cannot
+detect every later metadata corruption once it is cleared. Revisit metadata
+checksums when integrity needs justify a feature-gated layout change. Committed
+replay and interrupted cleanup are source-reviewed, not runtime exercised; revisit
+with actual writer-produced recovery states in task 3. Host tools require unchanged
+standalone regular images and cooperating locks, stage replay payloads in memory,
+and do not repair arbitrary damage or reclaim cleanup lists. Large images/volumes
+can exhaust host checker memory. Physical-media wear and native operation latency
+remain unmeasured; initial formatter observations are on tmpfs.
 
 ## Writable filesystem kernel-stack prerequisite
 
