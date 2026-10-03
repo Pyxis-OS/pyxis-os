@@ -651,7 +651,7 @@ keep completed/retired calls immune to late errors.
 Generic ephemeral binding currently scans 49152–65535 from a rotating cursor;
 this allocator is not a defense against off-path reply guessing. The
 [DNS client shared by dig and ping](userland/dns.md) explicitly chooses random ports
-using [host-backed randomness](devices/randomness.md). Revisit the generic allocator's
+using [hardware-backed randomness](devices/randomness.md). Revisit the generic allocator's
 policy for other consumers. Network authority and resource
 bounds also remain system-wide rather than isolated by space.
 
@@ -825,12 +825,12 @@ a concrete IP-address consumer needs HTTPS; do not route it through DNS/CN name
 matching. Scheme authority and optional custom roots do not confine destinations.
 Revisit destination policy separately when a consumer requires isolation.
 
-Entropy comes from the [VirtIO random capability](devices/randomness.md) and trusts the
-hypervisor's bytes. There is no implemented physical-hardware entropy path or
-fallback. Missing entropy leaves HTTPS unpublished and also disables new kernel
-TCP connections for that boot. Inventory and implement a supported hardware
-source before claiming native-machine HTTPS; a presumed CPU feature is not an
-entropy source. UTC remains subject to the
+Entropy comes from the [hardware-backed random capability](devices/randomness.md):
+VirtIO when present, otherwise checked CPU RDSEED/RDRAND. The selected hardware
+is trusted directly, with no kernel generator or source mixing. Missing or failed
+entropy leaves HTTPS unpublished and disables new kernel TCP connections for that
+boot. The owner must confirm this startup path on native hardware; successful
+QEMU CPU reads are guest evidence. UTC remains subject to the
 [wall-clock limits](#wall-clock-time-and-clock-source-performance) above.
 
 TLS buffers, chain depth and the 2 MiB counted allocation cap deliberately reject

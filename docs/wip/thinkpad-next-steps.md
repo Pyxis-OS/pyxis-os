@@ -13,7 +13,7 @@ Caelum reaches an interactive shell on all 12 CPUs with the full 32 GB:
   time from 14:12 to past 14:24, more than two of the counter's ~300 s wraps, with
   Doom running in between. A longer run is planned.
 - **Keyboard:** works with the scan-set read-back made optional
-  ([keyboard diagnostics](thinkpad-keyboard-diagnostics.md) on its branch).
+  ([keyboard diagnostics](thinkpad-keyboard-diagnostics.md), merged in #343).
   `fastfetch`, Lua and Doom all run.
 - **Display:** occasional tearing in Doom is expected, because nothing is double
   buffered. It is accepted for now.
@@ -76,7 +76,7 @@ the CPU path reports its ready/self-test result without logging random bytes.
 - [x] Fixed boot source selection, virtio-rng first, CPU only when absent.
 - [x] Keep the random ABI, shared slots, deadlines and cancellation behavior.
 - [x] Document the hardware trust and ChaCha20 follow-up.
-- [ ] Ordinary build and QEMU validation without virtio-rng, plus VirtIO regression.
+- [x] Ordinary build and QEMU validation without virtio-rng, plus VirtIO regression.
 - [ ] Owner native PXE confirmation of HTTPS/TCP entropy startup.
 
 **Validation:**
@@ -88,6 +88,112 @@ the CPU path reports its ready/self-test result without logging random bytes.
   gone.
 - **Docs:** update [randomness](../devices/randomness.md), and record the
   ChaCha20 follow-up in technical debt.
+
+### CPU entropy implementation and validation
+
+Branch `bringup/cpu-entropy`, based on merged main `bbf61c0`. Implementation
+commit `24dca3130e551f053cea805e6778a0d581a53ac8` adds the source-neutral BSP
+service and CPU instruction adapter. No dependency pin, launcher, Ethernet,
+userspace source or compiler-container change is part of this task. The pinned
+repositories remain fs `810d2af6`, ports `a50ae5cc`, lwIP `a1aadb91`, userspace
+`53b6860f`. The [randomness reference](../devices/randomness.md) records implemented
+source selection, self-test, retry, repeat-history and failure behavior.
+
+Agent-host validation used GCC 16.2.0 and QEMU 10.2.2 Q35/KVM guests on an AMD
+Ryzen 5 PRO 4650U. These are guest results, not native Caelum PXE validation.
+All boots used four CPUs (one socket, four cores, one thread per core), 256 MiB,
+fresh matching Fedora OVMF variables, the normal info image, xHCI disabled,
+VirtIO networking and loopback TCP forward `2333:2323`. Baseline main was built
+and booted before implementation; the submitted code was then booted with matched
+startup settings. Each baseline and matching post-change configuration was booted
+once; the additional CPU feature configurations were also each booted once.
+This establishes startup behavior, not a latency or throughput measurement.
+
+Build commands:
+
+```sh
+make -j16 image PREBUILT="sdk userspace ports" \
+  PYTHON=build/hpet-config-venv/bin/python3 \
+  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis-
+# After changing the ABI header comment, rebuild exports and consumers together:
+make -j16 image PYTHON=build/hpet-config-venv/bin/python3 \
+  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis-
+```
+
+Both passed. The full SDK/ports/userspace build emitted existing vendored sbase
+and Doom warnings. The final kernel/image build passed without kernel warnings
+or undefined ELF symbols; freshly rebuilt matching bundles were verified on
+reuse. Changed-document relative file targets and whitespace checks passed.
+An independent read-only review found no concrete ownership/cancellation
+regression. No new test suite, fault injection, boot automation or diagnostic
+hook was added. The bounded boot self-test is explicitly part of the assigned
+entropy requirements.
+
+The baseline launcher command was:
+
+```sh
+QEMU_DISPLAY=none MEMORY=256M CPUS=4 ACCEL=kvm \
+  OVMF_CODE=/usr/share/edk2/ovmf/OVMF_CODE.fd \
+  OVMF_VARS=/usr/share/edk2/ovmf/OVMF_VARS.fd \
+  VIRTIO_RNG=0 VIRTIO_NET=1 TCP_FORWARD=2333:2323 \
+  scripts/run-qemu.sh run
+# Repeat with VIRTIO_RNG=1 for the baseline VirtIO path.
+```
+
+Post-change boots used the same devices and image with `-gdb
+tcp:127.0.0.1:1234`, attached after startup rather than pausing firmware:
+
+```sh
+cp /usr/share/edk2/ovmf/OVMF_VARS.fd build/cpu-entropy-vars.fd
+qemu-system-x86_64 -machine q35 -accel kvm -cpu max -rtc base=utc \
+  -smp cpus=4,sockets=1,cores=4,threads=1 -m 256M \
+  -drive if=pflash,format=raw,unit=0,readonly=on,file=/usr/share/edk2/ovmf/OVMF_CODE.fd \
+  -drive if=pflash,format=raw,unit=1,file=build/cpu-entropy-vars.fd \
+  -display none -serial mon:stdio \
+  -netdev user,id=pyxis_net,hostfwd=tcp:127.0.0.1:2333-10.0.2.15:2323 \
+  -device virtio-net-pci,netdev=pyxis_net,disable-legacy=on \
+  -cdrom build/pyxis.iso -boot d -gdb tcp:127.0.0.1:1234 \
+  -no-reboot -no-shutdown
+```
+
+For the VirtIO post-change boot, add
+`-object rng-random,id=pyxis_rng,filename=/dev/urandom` and
+`-device virtio-rng-pci,rng=pyxis_rng,disable-legacy=on`. The RDRAND-only and
+unsupported configurations change only the CPU to `max,rdseed=off` and
+`max,rdseed=off,rdrand=off`, respectively; both omit virtio-rng.
+
+| Revision/configuration | Observed startup and inspection |
+| --- | --- |
+| Baseline `bbf61c0`, no RNG device | Interactive shell; TCP identity entropy error 6; all three HTTPS setup/provider errors visible in Development. |
+| Baseline `bbf61c0`, VirtIO RNG | TCP identity ready; Development has no HTTPS entropy errors. |
+| `24dca31`, no RNG device, CPU `max` | RDSEED/RDRAND boot self-test passed; TCP identity ready; HTTPS setup has no entropy errors. GDB: `RANDOM_CPU`, both instructions advertised, no health latch, no active caller and all eight slots free. |
+| `24dca31`, VirtIO RNG, CPU `max` | VirtIO source ready; TCP identity ready; HTTPS setup has no entropy errors. GDB: `RANDOM_VIRTIO`, CPU instruction state untouched, all eight slots free, DMA outstanding zero, used index seven. |
+| `24dca31`, no RNG device, CPU `max,rdseed=off` | RDRAND boot self-test passed, TCP identity ready, HTTPS setup has no entropy errors. GDB confirms only RDRAND advertised and all slots free. |
+| `24dca31`, no RNG device, both CPU features off | Boot and shell work; CPU source unavailable, TCP identity entropy error 6 and the expected three HTTPS setup/provider failures. GDB: admission closed, both features absent, all slots free. |
+
+The existing host remote client connected on `127.0.0.1:2333` in the CPU and
+VirtIO boots. On the CPU boot, `dig example.com` returned NOERROR with two answers
+and exited zero. `cat https://example.com/ > home://entropy-https.html` exited zero
+on both sources, exercising an HTTPS connection in addition to provider startup.
+An attempted `wc -c` inspection was not available in the image and is not counted
+as validation. No guest library, probe or test program was added.
+
+Baseline hashes: kernel
+`3bce9f12f0635f42586cfa6dc5c6afa17731e0f4f69f7823a500a807396706dd`, ISO
+`bff45aa0fc411607d4e8b8b2ee13703b71334b7e1c7e2ecca76816cd1e817b45`.
+Validated implementation hashes: kernel
+`5a714e21908d4b5e6aeb6ce1b8a4fcad145570b628ee4b61f0d58f795489156c`, ISO
+`3bfc988737bee21bd89b639585ca2faa676e879fa1fd5c5988a204e9d09f0911`.
+Local evidence remains in ignored `build/cpu-entropy-*` logs and screenshots.
+QEMU, GDB and remote-client processes were stopped after inspection.
+
+Limits: carry-clear exhaustion with both instructions present, suspect-word
+rejection, cancellation during generation, and late/failed VirtIO completions
+have code-review coverage rather than induced-failure evidence. The ordinary
+CPU feature masks check discovery/absence, not simulated bad instruction output.
+The health checks do not certify hardware randomness. Remaining owner action:
+PXE boot this implementation on the ThinkPad and confirm the HTTPS startup and
+TCP identity entropy errors are gone. Ethernet remains separate unassigned work.
 
 ## 2. Ethernet: passthrough to QEMU, then a driver
 
