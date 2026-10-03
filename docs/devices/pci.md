@@ -74,13 +74,35 @@ incomplete discovery. [xHCI](usb-xhci.md) uses class/subclass/interface matching
 
 MMIO controllers can first call `pci_reserve_device`, preserving firmware
 decoding and bus-master state while reserving software/configuration ownership.
-`pci_map_bootstrap_bar0` maps a checked, assigned, page-aligned 4 KiB BAR0 prefix
-with firmware memory decoding already enabled. This provisional mapping does not
+`pci_map_bootstrap_bar` maps a checked, assigned, page-aligned 4 KiB prefix of a
+caller-selected memory BAR with memory decoding already enabled. It
+rejects out-of-range indices, I/O or unsupported memory BARs, and the upper half
+of a paired 64-bit BAR; xHCI selects BAR0. This provisional mapping does not
 establish BAR size. Its consumer bounds every access and confirms firmware
 handoff/halt before `pci_complete_claim` disables DMA/INTx. Cancellation of an
 uncompleted reservation unmaps CPU access without command writes or restoring
 bus mastering. Failed completion retains ownership until safe quiescence is
 confirmed. VirtIO keeps its immediate-claim reset path.
+
+For identity reads that need temporary wake or memory decoding,
+`pci_begin_mmio_probe` snapshots the reserved function's command and optional
+PMCSR before mapping. It rejects duplicate or truncated power capabilities.
+An already-D0 function with memory decoding enabled remains untouched even if
+firmware bus mastering is enabled. Any normalization requires bus mastering
+off. D3hot wake without `NoSoftRst` is rejected before writing because an
+internal reset can discard firmware BAR assignments. Otherwise wake to D0,
+wait 10 ms with the monotonic clock, verify the power state,
+then enable memory decoding with readback. PME enable remains unchanged, and
+PME status is never acknowledged. Generic command writes still require a
+completed claim; this is a restricted PCI-owned exception.
+
+Before canceling after unsupported identity or an early probe failure, the
+caller uses `pci_restore_mmio_probe` to restore changed command/PMCSR fields
+without setting bus mastering or acknowledging PME status. A failed restoration
+retains the claim and mappings until reboot. A successful restoration returns
+the saved command and writable PMCSR fields. The caller must perform no other hardware writes before
+this cancellation path. Confirmed controllers continue to driver handoff and
+ordinary claim completion, retaining the normalized power/decoding state.
 
 The driver must confirm the device is stopped and disable address decoding before
 calling `pci_size_bars`. Sizing handles firmware-assigned 32-bit and paired 64-bit

@@ -11,7 +11,7 @@
 #include <kernel/net/echo.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
-#include <kernel/virtio/net.h>
+#include <kernel/net/driver.h>
 #include <stdatomic.h>
 
 #define NET_WORK_BUDGET 8
@@ -157,7 +157,7 @@ static void wait_for_work(void)
     timed = true;
   }
   uint64_t transport_deadline;
-  if (virtio_net_next_deadline(&transport_deadline) && (!timed || transport_deadline < deadline)) {
+  if (net_driver_next_deadline(&transport_deadline) && (!timed || transport_deadline < deadline)) {
     deadline = transport_deadline;
     timed = true;
   }
@@ -202,9 +202,8 @@ static void network_worker(void *argument)
 {
   (void)argument;
   net_lwip_init();
-  virtio_net_start();
   for (;;) {
-    bool transport_busy = virtio_net_service();
+    bool transport_busy = net_driver_service();
     bool serviced = net_config_service();
     serviced |= net_udp_service();
     serviced |= net_echo_service();

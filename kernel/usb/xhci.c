@@ -164,7 +164,7 @@ static uintptr_t port_register(const struct usb_host_controller *controller, uns
 
 static bool bootstrap_fits(unsigned offset, size_t bytes)
 {
-  return offset <= PCI_BOOTSTRAP_BAR0_BYTES && bytes <= PCI_BOOTSTRAP_BAR0_BYTES - offset;
+  return offset <= PCI_BOOTSTRAP_BAR_BYTES && bytes <= PCI_BOOTSTRAP_BAR_BYTES - offset;
 }
 
 static bool wait_boot_bits(uintptr_t base, unsigned offset, uint32_t mask, uint32_t value)
@@ -476,7 +476,7 @@ static bool map_registers(struct usb_host_controller *controller, const struct b
   uint64_t runtime_end = (uint64_t)controller->runtime + XHCI_INTERRUPTER_ZERO + XHCI_INTERRUPTER_BYTES;
   uint64_t doorbells_end = (uint64_t)controller->doorbells +
     (controller->slot_count + 1) * XHCI_DOORBELL_BYTES;
-  if (!pci_size_bars(claim) || claim->bars[0].bytes < PCI_BOOTSTRAP_BAR0_BYTES ||
+  if (!pci_size_bars(claim) || claim->bars[0].bytes < PCI_BOOTSTRAP_BAR_BYTES ||
       !register_region_fits(controller, 0, ports_end) ||
       !register_region_fits(controller, controller->runtime, runtime_end - controller->runtime) ||
       !register_region_fits(controller, controller->doorbells, doorbells_end - controller->doorbells) ||
@@ -682,7 +682,7 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
     return;
   }
   const char *failure = "unsupported assigned BAR0 bootstrap mapping";
-  if (pci_map_bootstrap_bar0(&controller->claim, boot, &controller->bootstrap) != MM_OK) {
+  if (pci_map_bootstrap_bar(&controller->claim, 0, boot, &controller->bootstrap) != MM_OK) {
     goto fail;
   }
   failure = "unsupported capabilities or controller record allocation failed";

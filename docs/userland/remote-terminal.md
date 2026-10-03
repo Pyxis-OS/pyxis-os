@@ -3,7 +3,9 @@
 The default four-CPU image selects `app://init-remote` on CPU 3, titled Remote.
 It starts the native TCP terminal server on the configured guest IPv4 address,
 port 2323. CPU 1 remains the network configuration owner; Remote waits for an
-assigned address with a 100 ms clock sleep. An absent or unavailable NIC is
+assigned address with a 100 ms clock sleep. Remote looks up the configured
+selector under READ authority, then waits for the configuration owner to bind
+and assign that candidate; lookup never activates hardware. An absent or unavailable NIC is
 reported on the Remote tab. Init/server failures are not restarted, and address
 changes invalidate the listener rather than rebinding it. Additional CPUs keep
 the idle init; boots without CPU 3 do not start the default server.

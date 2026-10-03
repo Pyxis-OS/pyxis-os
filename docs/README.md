@@ -20,7 +20,7 @@ reference. The filesystem encoding and host-tool contracts, and port-specific
 notes, remain authoritative in their separately versioned repositories.
 
 The [ThinkPad RTL8111 hardware profile](devices/rtl8111-hardware.md) records
-identified hardware and proposed preparation; driver implementation is pending.
+identified hardware and implemented controller preparation; Ethernet I/O is pending.
 
 ## Work in progress
 

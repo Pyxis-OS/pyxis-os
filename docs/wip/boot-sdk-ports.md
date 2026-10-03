@@ -270,9 +270,10 @@ the implemented launcher, host setup and successful owner/agent hardware boots.
 The owner accepted the [RTL8111 plan](thinkpad-rtl8111.md).
 [Hardware identification](../devices/rtl8111-hardware.md) is complete from the
 owner's Fedora capture and Caelum-side confirmation. Configuration chooses the
-interface. Task 2's firmware/power/initial-state defaults are accepted; its
-preparation sequence remains proposed. Driver implementation waits for PR #359's
-merge and an explicit owner go-ahead.
+interface. Controller preparation is implemented with bounded waits and
+firmware-free PHY setup; RTL DMA and delivery remain disabled. Explicit selector
+ABI/configuration and driver-neutral dispatch are implemented with VirtIO as the
+only connected driver. RTL8111 Ethernet I/O and native qualification remain.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
