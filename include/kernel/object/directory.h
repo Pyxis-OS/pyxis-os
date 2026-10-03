@@ -49,8 +49,12 @@ struct directory_object *directory_create(enum directory_backing backing);
 void directory_init_native(struct directory_object *directory, struct nativefs_node *node);
 
 /* Current user task, IF=0, with a live reference and stable private mappings.
- * Lookup retains the child before releasing the lock or waiting for BSP table
- * growth. CREATE waits for BSP entry allocation/disposal with no locks held.
+ * Native operations forward actual rights and copied names to the worker;
+ * CREATE lends the caller's table exclusively until its returned handle and
+ * namespace edit are complete. RENAME borrows both live parent capabilities
+ * through completion without retaining pointers into table storage.
+ * In-memory lookup retains the child before releasing the lock or waiting for
+ * BSP table growth. CREATE waits for BSP entry allocation/disposal with no locks held.
  * Enumeration copies the selected name while locked. REMOVE detaches an entry
  * under the lock and then lends it to BSP disposal, with no borrowed readers.
  * RENAME stages name storage on BSP, rechecks both parents under their locks,

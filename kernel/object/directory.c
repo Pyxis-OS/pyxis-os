@@ -210,7 +210,7 @@ static enum call_status check_child_request(struct directory_object *directory, 
     if (request->rights & ~mask) {
       return CALL_BAD_REQUEST;
     }
-    if (request->name_length > PFS_NAME_MAX) {
+    if (request->name_length > PNF_NAME_MAX) {
       return CALL_LIMIT;
     }
   }
@@ -271,6 +271,7 @@ static struct syscall_result lookup(struct directory_object *directory, uint64_t
     pending->job.kind = request->kind;
     pending->job.count = request->name_length;
     KASSERT(copy_from_user(pending->job.name, request->name, request->name_length));
+    pending->job.name[request->name_length] = 0;
     nativefs_request_submit_and_wait(pending);
     status = pending->job.status;
     object = pending->job.object;
@@ -341,6 +342,29 @@ static struct syscall_result create_child(struct directory_object *directory, ui
       reply_address, reply_capacity);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
+  }
+  if (directory->backing == DIRECTORY_NATIVE) {
+    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_CREATE);
+    pending->job.node = directory->native;
+    pending->job.rights = rights;
+    pending->job.child_rights = request->rights;
+    pending->job.kind = request->kind;
+    pending->job.count = request->name_length;
+    pending->job.table = &process_current()->capabilities;
+    KASSERT(copy_from_user(pending->job.name, request->name, request->name_length));
+    pending->job.name[request->name_length] = 0;
+    /* The blocked caller lends its table until the worker has installed the
+     * returned handle and either published or unwound the namespace edit. */
+    nativefs_request_submit_and_wait(pending);
+    status = pending->job.status;
+    if (status != CALL_OK) {
+      nativefs_request_release(pending);
+      return (struct syscall_result){status, 0};
+    }
+    struct directory_child_reply reply = {.handle = pending->job.handle};
+    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    nativefs_request_release(pending);
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (directory->backing == DIRECTORY_HOST) {
     if (request->name_length > VIRTIO_FS_NAME_MAX) {
@@ -421,18 +445,31 @@ static struct syscall_result create_child(struct directory_object *directory, ui
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
-static struct syscall_result remove_child(struct directory_object *directory,
+static struct syscall_result remove_child(struct directory_object *directory, uint64_t rights,
     const struct directory_remove_request *request)
 {
   if (request->kind != DIRECTORY_KIND_ANY && request->kind != DIRECTORY_KIND_FILE &&
       request->kind != DIRECTORY_KIND_DIRECTORY) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if (directory->backing == DIRECTORY_NATIVE && request->name_length > PFS_NAME_MAX) {
+  if (directory->backing == DIRECTORY_NATIVE && request->name_length > PNF_NAME_MAX) {
     return (struct syscall_result){CALL_LIMIT, 0};
   }
   enum call_status status = check_name(request->name, request->name_length);
   if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  if (directory->backing == DIRECTORY_NATIVE) {
+    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_REMOVE);
+    pending->job.node = directory->native;
+    pending->job.rights = rights;
+    pending->job.kind = request->kind;
+    pending->job.count = request->name_length;
+    KASSERT(copy_from_user(pending->job.name, request->name, request->name_length));
+    pending->job.name[request->name_length] = 0;
+    nativefs_request_submit_and_wait(pending);
+    status = pending->job.status;
+    nativefs_request_release(pending);
     return (struct syscall_result){status, 0};
   }
   if (directory->backing == DIRECTORY_HOST) {
@@ -526,7 +563,7 @@ static enum call_status check_rename(struct directory_object *source,
   return CALL_OK;
 }
 
-static struct syscall_result rename_child(struct directory_object *source,
+static struct syscall_result rename_child(struct directory_object *source, uint64_t rights,
     const struct directory_rename_request *request)
 {
   if (request->policy != DIRECTORY_RENAME_NO_REPLACE &&
@@ -549,8 +586,11 @@ static struct syscall_result rename_child(struct directory_object *source,
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   bool native = source->backing == DIRECTORY_NATIVE || destination->backing == DIRECTORY_NATIVE;
-  if (native && (request->source_length > PFS_NAME_MAX ||
-      request->destination_length > PFS_NAME_MAX)) {
+  if (native && (source->backing != DIRECTORY_NATIVE || destination->backing != DIRECTORY_NATIVE)) {
+    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  }
+  if (native && (request->source_length > PNF_NAME_MAX ||
+      request->destination_length > PNF_NAME_MAX)) {
     return (struct syscall_result){CALL_LIMIT, 0};
   }
   enum call_status status = check_name(request->source_name, request->source_length);
@@ -565,7 +605,25 @@ static struct syscall_result rename_child(struct directory_object *source,
         !(destination_rights & DIRECTORY_RIGHT_REMOVE)) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
-    return (struct syscall_result){CALL_READ_ONLY, 0};
+    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_RENAME);
+    pending->job.node = source->native;
+    pending->job.destination = destination->native;
+    pending->job.rights = rights;
+    pending->job.destination_rights = destination_rights;
+    pending->job.count = request->source_length;
+    pending->job.destination_length = request->destination_length;
+    pending->job.replace = request->policy == DIRECTORY_RENAME_REPLACE;
+    KASSERT(copy_from_user(pending->job.name, request->source_name, request->source_length));
+    pending->job.name[request->source_length] = 0;
+    KASSERT(copy_from_user(pending->job.destination_name, request->destination_name,
+        request->destination_length));
+    pending->job.destination_name[request->destination_length] = 0;
+    /* Both capability entries remain alive while their sole task is blocked;
+     * no replaceable table-entry pointer crosses to the worker. */
+    nativefs_request_submit_and_wait(pending);
+    status = pending->job.status;
+    nativefs_request_release(pending);
+    return (struct syscall_result){status, 0};
   }
   if (source->backing == DIRECTORY_HOST || destination->backing == DIRECTORY_HOST) {
     if (source->backing != DIRECTORY_HOST || destination->backing != DIRECTORY_HOST) {
@@ -822,12 +880,21 @@ struct syscall_result directory_call(struct directory_object *directory, uint64_
     return create_child(directory, rights, &request.create, reply_address, reply_capacity);
   }
   if (operation == DIRECTORY_REMOVE) {
-    return remove_child(directory, &request.remove);
+    return remove_child(directory, rights, &request.remove);
   }
   if (operation == DIRECTORY_RENAME) {
-    return rename_child(directory, &request.rename);
+    return rename_child(directory, rights, &request.rename);
   }
   if (operation == DIRECTORY_SYNC) {
+    if (directory->backing == DIRECTORY_NATIVE) {
+      struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_SYNC);
+      pending->job.node = directory->native;
+      pending->job.rights = rights;
+      nativefs_request_submit_and_wait(pending);
+      enum call_status status = pending->job.status;
+      nativefs_request_release(pending);
+      return (struct syscall_result){status, 0};
+    }
     if (directory->backing == DIRECTORY_HOST) {
       struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_SYNC);
       pending->node = directory->host;
