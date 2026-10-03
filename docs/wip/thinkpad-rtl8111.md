@@ -4,7 +4,8 @@ Status: **plan accepted, 2026-10-03.** The owner approved and merged PR #355 wit
 the review note “read and accepted the proposal”, then explicitly authorized
 task 1. [Hardware identification](../devices/rtl8111-hardware.md) is complete;
 driver implementation has not started. [NIC passthrough](../development/thinkpad-nic-passthrough.md)
-is complete. New task 1 preparation details below remain proposals for task 2.
+is complete. The owner accepted task 2's firmware/power/initial-state defaults
+in PR #359; the detailed preparation sequence remains proposed.
 
 ## Goal and machine configuration
 
@@ -60,10 +61,11 @@ ownership work; its scope remains a decision before implementation.
 
 ## Tasks
 
-The five-task outline and planning constraints are accepted. Task 1's new
-preparation sequence and remaining firmware/power choices are documented in the
+The five-task outline and planning constraints are accepted. Task 1's proposed
+preparation sequence is documented in the
 [hardware profile](../devices/rtl8111-hardware.md#proposed-bounded-preparation-for-task-2)
-for discussion before task 2 implementation. Task 2 has not started.
+alongside the accepted task 2 choices below. Task 2 has not started; it starts
+only after PR #359 merges and the owner explicitly says to begin.
 
 - [x] **1. Identify the hardware.** Begin with the owner's Fedora r8169
   `dmesg`/`ethtool`/`lspci` output, with MAC bytes removed. Record the chip name,
@@ -138,10 +140,15 @@ hardware profile. It confirmed four MSI-X entries with table/PBA in BAR4;
 use the existing MSI-X helper. Entry-zero routing is proposed for task 2;
 actual interrupt delivery remains to be qualified in task 4.
 
-After identification, settle any required firmware source, pin, packaging and
-license, plus explicit PHY/power-management settings, reset/stop ordering and
-bounded failure handling. Keep only the confirmed variant's necessary setup;
-the plan does not choose a firmware-free path without qualification.
+**Accepted task 2 choices:** firmware-free first, with link and sustained traffic
+measured in task 4; disable endpoint ASPM/CLKREQ and run the PHY at full power;
+move to D0 with a 10 ms wait, disable PME/wake, and enable initially disabled
+memory decoding only with bus mastering off. Inconsistent initial states leave
+the controller unavailable while boot continues. The
+[hardware profile](../devices/rtl8111-hardware.md#accepted-task-2-choices) records
+the defaults and conditional firmware import. These are the owner's current
+direction, revisable by the owner; their acceptance does not qualify operation.
+Keep only the confirmed variant's necessary setup, with bounded failure handling.
 
 ## Accepted validation and boundaries
 

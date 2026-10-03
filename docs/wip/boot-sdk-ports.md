@@ -270,8 +270,9 @@ the implemented launcher, host setup and successful owner/agent hardware boots.
 The owner accepted the [RTL8111 plan](thinkpad-rtl8111.md).
 [Hardware identification](../devices/rtl8111-hardware.md) is complete from the
 owner's Fedora capture and Caelum-side confirmation. Configuration chooses the
-interface. Task 2 preparation details and firmware/power choices remain proposals;
-driver implementation has not started.
+interface. Task 2's firmware/power/initial-state defaults are accepted; its
+preparation sequence remains proposed. Driver implementation waits for PR #359's
+merge and an explicit owner go-ahead.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

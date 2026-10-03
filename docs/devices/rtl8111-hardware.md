@@ -6,10 +6,6 @@ Caelum has no RTL8111 driver yet. Full and partial MAC bytes are omitted.
 
 ## Owner's Fedora capture
 
-The owner supplied `dmesg`, `ip -br link`, `ethtool -i enp5s0` and
-`lspci -vvv -s 0000:05:00.0` from Fedora kernel
-`6.19.10-300.fc44.x86_64` with r8169 bound to the built-in port.
-
 | Property | Observed value |
 | --- | --- |
 | Built-in host function | `0000:05:00.0`, `10ec:8168`, revision `0x15` |
@@ -25,39 +21,17 @@ The owner supplied `dmesg`, `ip -br link`, `ethtool -i enp5s0` and
 | Power / PCIe | D0; ASPM L1, clock power management and L1.1/L1.2 enabled |
 
 Linux reported that it could not disable ASPM because the OS lacked ASPM control.
-That observation does not establish a Pyxis power-management policy.
 
 The dock's `0000:02:00.0` reported `RTL8168ep/8111ep`, XID `502`, link down.
 It is a separate variant; this capture does not qualify its preparation or I/O.
 
 ## Caelum-side confirmation
 
-The agent built and inspected main `e30204d3498252e851a139b8ab2218b05db418f7`.
-Dependency pins were fs `f95e5a3`, userspace `d15d782`, ports `a50ae5c` and
-lwIP `a1aadb9`. The ordinary image build passed with GCC 16.2.0:
-
-```sh
-make -j16 image PYTHON=build/hpet-config-venv/bin/python3 \
-  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis-
-QEMU_DISPLAY=none MEMORY=2G CPUS=4 ACCEL=kvm VIRTIO_NET=0 \
-  OVMF_CODE=/usr/share/edk2/ovmf/OVMF_CODE.fd \
-  OVMF_VARS=/usr/share/edk2/ovmf/OVMF_VARS.fd \
-  VFIO_PCI=0000:05:00.0 scripts/run-qemu.sh debug
-gdb -q build/caelum.elf
-```
-
-This used installed QEMU 10.2.2, KVM on the ThinkPad host, unlimited memlock,
-fresh copied OVMF variables, VirtIO RNG enabled, xHCI disabled and no VirtIO net,
-block or filesystem device. It was not a nested-VM measurement or performance run.
-The host function was already bound to vfio-pci; no host binding was changed.
-
-GDB stopped the BSP at `boot_start_cpus`, after PCI discovery and before Caelum
-started APs. The complete inventory contained seven functions. Its RTL record
-was `00:03.0`, `10ec:8168`, revision `0x15`, with no owner. ECAM was read through
-Caelum's existing mapping; register reads used QEMU's physical-memory monitor.
-No inferior function calls, PCI configuration writes, BAR probes, NIC resets,
-DMA activation or interrupt enablement were issued by the inspection.
-QEMU/OVMF/VFIO may already have changed hardware state before kernel entry.
+GDB stopped the BSP at `boot_start_cpus`, before AP startup, with the RTL function
+unclaimed; ECAM and QEMU monitor `xp` reads issued no hardware writes.
+Use `monitor info pci` to locate the BARs, then read TxConfig at BAR2 + `0x40`;
+guest assignments may change. [PR #359](https://git.internal/PyxisOS/pyxis-os/pulls/359)
+records the build, dependency pins, boot configuration and debugger procedure.
 
 | Property | Observed guest value |
 | --- | --- |
@@ -79,34 +53,6 @@ Caelum did not size them. Guest PCIe state is virtualized and does not prove
 native ASPM has been disabled. RX/TX being clear in this boot does not prove
 firmware DMA is quiescent on every boot; PCI bus mastering was still enabled.
 Interrupt capability presence does not qualify delivery.
-
-To reproduce the inspected reads, first locate the guest function with
-`monitor info pci`; its address and BAR assignments may change. For this boot:
-
-```gdb
-set pagination off
-target remote localhost:1234
-thbreak boot_start_cpus
-continue
-monitor info pci
-set $cfg = 0xfffffe8050018000
-x/1hx $cfg + 4
-x/6wx $cfg + 0x10
-x/1hx $cfg + 0x44
-x/1wx $cfg + 0x50
-x/1wx $cfg + 0x70
-x/1hx $cfg + 0x80
-x/3wx $cfg + 0xb0
-monitor xp /1wx 0x380000008040
-monitor xp /1bx 0x380000008037
-monitor xp /1hx 0x38000000803c
-detach
-quit
-```
-
-After inspection, boot resumed through four online CPUs, userspace startup and
-the loopback/TCP worker. QEMU and GDB were stopped. This confirms ordinary boot,
-not RTL Ethernet operation.
 
 ## Source interpretation
 
@@ -145,7 +91,7 @@ The following is a proposed implementation sequence, not measured reset behavior
    MSI-X discovery/mapping for the confirmed BAR4 table/PBA and check region
    disjointness. Propose MSI-X entry zero on the BSP; delivery is qualified in
    task 4. Re-enable memory decoding while keeping bus mastering, RX/TX and
-   interrupt delivery disabled. Initialize PHY under the agreed firmware/power
+   interrupt delivery disabled. Initialize PHY under the accepted firmware/power
    policy; rings and activation belong to task 4.
 
 The pre-size access is the concrete PCI gap: `pci_map_bar` already supports sized
@@ -160,8 +106,22 @@ interrupts and DMA disabled. If halt/reset is uncertain, retain ownership and
 mappings until reboot, report that controller unavailable and continue boot.
 A timeout does not establish that hardware has relinquished DMA ownership.
 
-Before task 2 implementation, settle firmware inclusion/source pin/license and
-packaging, native D0/wakeup and initially disabled memory-decode handling, and
-ASPM/clock-request/PHY power policy. Existing provisional mapping requires memory
-decoding enabled; this VFIO boot does not settle other native initial states.
-These choices and successful native handoff remain unqualified.
+## Accepted task 2 choices
+
+The owner accepted these defaults in PR #359; they are the current direction and
+may be revised by the owner:
+
+- **Firmware-free first.** Task 4 measures link and sustained traffic without
+  `rtl8168h-2.fw`. Only if those measurements show it is needed, add the pinned
+  linux-firmware file, its redistribution license and a small interpreter in a
+  focused PR.
+- **Power.** Disable ASPM and CLKREQ in the endpoint's PCIe Link Control during
+  preparation; run the PHY at full power. Further power policy is deferred.
+- **Native initial state.** If PMCSR is not D0, move to D0 and wait 10 ms;
+  disable PME and wake. If memory decoding is off, enable it with bus mastering
+  still off before provisional access. An inconsistent state, including bus
+  mastering enabled with decoding disabled, leaves that controller unavailable
+  while ordinary boot continues.
+
+These choices do not establish successful firmware-free operation or native
+handoff. Task 2 starts only after this PR merges and the owner says to begin.
