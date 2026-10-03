@@ -35,17 +35,17 @@ mapping and explicit `fsync`/`sync` durability. They do not accept its proposed
 | Pool header | Format identification, geometry, pool identity, feature flags, bitmap/table/journal locations and reserved bytes. Copy and validation rules remain open. |
 | Allocation bitmap | One bit per pool block; shared by all volumes. Fixed metadata and journal blocks must be reserved from file allocation. |
 | Volume table | 64 records containing identity, name, root inode and the inode-file mapping. Record encoding and unused-slot representation remain open. |
-| Inode file | Growable array of fixed-size inode records; the proposed mapping and free-slot representation are below. |
-| Directory file | Maps a component name to an inode within the same volume; proposed record rules are below. |
+| Inode file | Growable array of fixed-size inode records; accepted mapping and free-slot rules are below. |
+| Directory file | Maps a component name to an inode within the same volume; accepted record rules are below. |
 | Journal | Replacement metadata images, their destination blocks and transaction commit information. Recovery record encoding remains open. |
 
 New structures will reserve bytes for later extensions. Exact offsets and flag
 values belong to the completed proposal and format library; this draft does not
 establish an ABI by omission.
 
-## Next owner decisions
+## Accepted inodes, directories and cleanup
 
-Proposals only. Each can be changed or deferred independently.
+Owner accepted these choices, including the explicit inode reserve, on 2026-10-03.
 
 1. **256-byte inodes with direct and indirect block pointers.** Use twelve direct
    pointers and one each for single, double and triple indirection. An indirect
@@ -55,7 +55,9 @@ Proposals only. Each can be changed or deferred independently.
    kind zero marks a free slot. Inode numbers index this file and cannot be reused
    while an old object is still held. A volume record embeds the same mapping
    for its inode file. The fixed inode size trades some space for simple indexing
-   and room for future fields.
+   and room for future fields. Of its 256 bytes, 120 hold pointers, 72 form the
+   current-field area and **64 are reserved for future format features**. The
+   initial implementation cannot consume that separate reserve.
 2. **Directories are unsorted lists of variable-length entries.** Each entry has
    an inode number, record length, name length and name bytes. Records stay within
    one block, and freed entries can be reused. Names are case-sensitive UTF-8,
@@ -77,18 +79,96 @@ Proposals only. Each can be changed or deferred independently.
    target. Admission, concurrent-operation rules and transaction bounds must be
    specified before this mechanism is ready for implementation.
 
-The third proposal preserves the [existing file-handle lifetime contract](../interfaces/filesystem-mutations.md)
+The cleanup choice preserves the [existing file-handle lifetime contract](../interfaces/filesystem-mutations.md)
 without requiring every large deletion to fit one journal transaction. It does
 not promise atomic whole-file writes or durable unsynced data.
 
-## Remaining design work
+### Inode space budget
 
-After the next round: settle header copies and feature handling, journal sizing,
-commit/replay validation, and cleanup progress rules. Keep the decisions in rounds
-of at most three; no choice in this section is accepted implicitly. A metadata
-journal must not assume that a 4 KiB write is atomic: Caelum's
+The required fields fit without consuming the separate reserve. This field-width
+budget is a layout proposal within the accepted allocation, not extra behavior:
+
+| Area | Bytes |
+| --- | ---: |
+| Kind and mapping type, 16 bits each; flags, 32 bits | 8 |
+| Byte length, next cleanup inode and cleanup target size, 64 bits each | 24 |
+| Cleanup state, 32 bits | 4 |
+| Unassigned bytes within the 72-byte current-field area | 36 |
+| Twelve direct pointers and three indirect pointers, 64 bits each | 120 |
+| Separate future-feature reserve | 64 |
+| Total | 256 |
+
+Unassigned and reserved bytes are initially zero; future meanings require feature
+flags. The mapping type also allows a future mapping to reinterpret the pointer
+area. No timestamps, permissions or other new behavior are implied by free space.
+
+## Next owner decisions
+
+Proposals only. Each can be changed or deferred independently.
+
+1. **Two checked pool headers, with strict feature handling.** Put the primary
+   header at pool block zero and its backup at the last complete block. They
+   describe fixed geometry, identity and bitmap/table/journal extents; mutable
+   roots and cleanup state live in journaled volume records instead. A CRC32C
+   checksum covers each header. Validate bounds, nonoverlap, bitmap capacity and
+   permanent reservation of fixed metadata. One valid copy suffices, but two valid copies
+   that disagree are an error, not an invitation to guess. V1 does not rewrite
+   the headers while mounted. Unknown required-feature bits reject a mount,
+   including read-only mounts; reserve space for finer compatibility rules later.
+   Other record types also retain explicit reserved bytes. Checksums detect
+   accidental damage, not malicious media, and do not replace bounds checks.
+2. **One reusable journal area, sized at format time (default 16 MiB).** Two
+   alternating, checksummed control blocks record a sequence number and EMPTY or
+   COMMITTED state; formatting initializes both. A checksum-valid unknown state
+   is rejected, never treated as a torn copy. Descriptors name destination blocks;
+   the control records the image count and payload checksum. The complete descriptor
+   set and metadata images are bound to the transaction sequence and checksummed.
+   Write and flush the ordered file data and journal payload before publishing
+   COMMITTED, then flush that control record. Checkpoint the metadata to its home
+   blocks and flush before publishing and flushing a higher-sequence EMPTY record.
+   Only then reuse payload space. Recovery selects the highest valid control
+   sequence; a committed transaction is fully validated before any replay write.
+   Invalid committed payload is an error, not an uncommitted transaction to skip.
+   Home destinations must be unique, valid metadata blocks outside the headers
+   and journal. Control sequence exhaustion fails instead of wrapping. No valid
+   control, or conflicting controls at the same sequence, requires repair.
+   Read-only opening requires an empty journal; recovery requires write authority.
+   Pending cleanup can remain unreclaimed during read-only access. Writable
+   recovery completes replay and the EMPTY flush before admitting new transactions.
+3. **Bounded cleanup, with serialization on the affected inode.** Removing a
+   name or committing a smaller size records its cleanup state atomically. Each
+   reclamation batch journals pointer removal, allocation-bit clearing and progress
+   together; it never frees a block still reachable in the committed mapping.
+   Every freed block remains unavailable for reuse, even within the freeing
+   transaction, until home writes and the newer EMPTY control are durable. This
+   includes former directory and indirect blocks whose old contents recovery may
+   still need. Shrink cleanup blocks subsequent writes and resizes
+   of that inode until done, while reads respect the smaller size. Before later
+   growth exposes bytes, they must be zeroed or supplied by the write, including
+   the retained partial block; those data writes are ordered dependencies of the
+   size-growth commit. A detached open file remains usable until final
+   close; its inode cannot be reclaimed early. Before modifying metadata, reserve
+   journal capacity for the complete next batch. An indivisible namespace operation
+   must fit or fail before changing the namespace; large data writes and cleanup
+   may span transactions and do not gain whole-operation crash atomicity.
+   Cleanup itself needs no new disk blocks. List insertion/removal and cleanup
+   state changes share the transaction that requires them. Unlink during shrink
+   changes the existing entry to detached-file cleanup, never adding a duplicate.
+
+A metadata journal must not assume that a 4 KiB write is atomic: Caelum's
 [block interface](../devices/block-storage.md#ordering-persistence-and-failure)
 requires successful flushes for persistence and does not promise that atomicity.
+The proposed control copies and checksums handle incomplete writes under that
+contract. Any uncertain write/flush failure stops further mutation; no rollback
+or continued writable use is promised. Corruption and failed storage can still
+require repair; successful recovery is not guaranteed for arbitrary damage.
+
+## Remaining design work
+
+After this round, finish record sizes/reserves, journal validation fields and
+cleanup progress details within the accepted design. Any material behavior choice
+still unresolved comes back to the owner, at most three at a time. The final
+proposal must cover directory and volume reserves as explicitly as the inode.
 
 Writeback scheduling and `fsync` policy remain the separate proposals in the
 milestone. They need resolution before the writer task, without turning cache
@@ -97,6 +177,6 @@ policy into an on-disk format requirement.
 ## Task handoff
 
 Branch: `docs/native-filesystem-format`, based on Pyxis `d9b88e4`. This work changes
-only Pyxis design documents and no dependency revisions. Round 1 is accepted;
-round 2 above awaits the owner. Task 1 remains unchecked. No build, boot or
+only Pyxis design documents and no dependency revisions. Rounds 1 and 2 are
+accepted; round 3 above awaits the owner. Task 1 remains unchecked. No build, boot or
 filesystem implementation has been attempted; no validation processes are running.
