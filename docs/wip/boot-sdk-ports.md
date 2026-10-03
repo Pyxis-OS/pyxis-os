@@ -267,7 +267,9 @@ when present, RDSEED with RDRAND fallback otherwise, ChaCha20 later), then
 Ethernet through VFIO passthrough to QEMU and a driver. The
 [NIC passthrough reference](../development/thinkpad-nic-passthrough.md) records
 the implemented launcher, host setup and successful owner/agent hardware boots.
-The RTL8111 driver remains a proposed follow-up.
+The approved [RTL8111 five-task outline](thinkpad-rtl8111.md) begins with owner
+hardware capture and Caelum confirmation; implementation details remain proposals.
+Configuration chooses the interface. Implementation and task 1 have not started.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
