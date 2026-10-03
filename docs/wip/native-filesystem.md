@@ -114,19 +114,24 @@ Accepted 2026-10-02; durability revised by the owner on 2026-10-03.
 Proposals for the owner, refining the accepted durability model above.
 
 1. **One dumb flush task.** Every T seconds, write all dirty data and commit the
-   journal, with no per-page age tracking. A crash loses at most T seconds of
-   unsynced work. Proposed T: 30 s, a named constant, matching Linux's default
-   dirty-data age.
+   journal, with no per-page age tracking. T is the nominal writeback interval,
+   not a bound on crash loss. Data written just after a pass waits for the next
+   one, plus that pass's I/O and commit time, and longer under load. Only `fsync`
+   and `sync` guarantee durability. Proposed T: 30 s, a named constant.
 2. **`fsync` commits the whole current transaction.** It writes that file's
    dirty data, then commits the pool's single journal transaction. The file's
    size, block pointers and directory entry then become durable together. That is
    simpler for programs than POSIX, where a new file's name needs a separate
-   `fsync` of its directory. Committing other pending metadata along with it is
-   cheap.
+   `fsync` of its directory. The commit must satisfy every ordered-data
+   dependency in the transaction. If another file's newly allocated blocks are in
+   it, that data must reach the disk first, so a small `fsync` can wait for
+   unrelated I/O.
 3. **Delayed allocation.** Cached data gets disk blocks only when it is written
    back. In ordered mode, a commit must first write the data its new metadata
-   points to; allocating at write time would make a small `fsync` wait for an
-   unrelated large write (ext3's fsync stalls). Allocating at writeback also places
+   points to. Allocating at write time puts every cached write into the
+   transaction, so a small `fsync` waits for unrelated large writes (ext3's fsync
+   stalls). Delayed allocation reduces that coupling, but cannot remove
+   dependencies already in the transaction. Allocating at writeback also places
    files contiguously, which helps block pointers. If it complicates the first
    version, it can be deferred.
 
