@@ -89,6 +89,9 @@ payload before replay writes. Unknown required features reject opening; unknown
 read-only-compatible features forbid replay and other writes. Uncertain write or
 flush failure stops mutation and retains dirty state/error. Structural fsck is
 separate from local opening and traversed-record validation.
+Sync acknowledges recoverable retained writeback errors when reporting them;
+later success requires all dirty data to be durable. Ongoing failures still fail
+each sync attempt. Terminal uncertainty is never acknowledged away for the boot.
 
 Checked partition-relative I/O supports 512-byte and 4 KiB device blocks, including
 unaligned partition starts on 512-byte media. Transfers obey device limits and

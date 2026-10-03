@@ -40,7 +40,7 @@ prevent host writes, and concurrent external writers are unsupported.
 
 Every operation carries the calling capability's actual rights. Child directory
 rights are a subset of its parent's grant; child file READ/WRITE require parent
-READ_FILES/WRITE_FILES. Native FILE_SIZE and executable capture require READ.
+READ_FILES/WRITE_FILES. FILE_SIZE accepts READ or WRITE; executable capture requires READ.
 WRITE authorizes write, resize and file sync, including validation of zero-length
 writes. Parent CREATE and REMOVE authorize namespace mutations independently of
 child file rights. Directory sync requires either CREATE or REMOVE.

@@ -185,7 +185,7 @@ rejected. Operation numbers are local to each protocol and may overlap.
 | Console read | `CONSOLE_RIGHT_READ` | Destination user address, capacity | Bytes read |
 | Console size | Console READ or WRITE | Unused | Columns, rows |
 | File read at offset | `FILE_RIGHT_READ` | Byte offset, capacity | Byte count, copied bytes |
-| File size | File READ or WRITE (native filesystem: READ) | None | File byte size |
+| File size | File READ or WRITE | None | File byte size |
 | File write at offset | `FILE_RIGHT_WRITE` | Byte offset, length, copied bytes | Bytes written |
 | File resize | `FILE_RIGHT_WRITE` | New byte size | None |
 | File sync | `FILE_RIGHT_WRITE` | None | None |

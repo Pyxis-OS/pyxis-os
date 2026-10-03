@@ -128,3 +128,134 @@ REMOTE {"type": "command_complete", "command": 3, "kind": "exited", "exit_status
 REMOTE {"type": "command_complete", "command": 4, "kind": "builtin", "status": 0}
 
 REMOTE {"type": "final", "cause": "shell_exit", "process_reason": 1, "process_reason_name": "exited", "exit_status": 0, "drain": "complete"}
+
+Final policy boot: parent ae0590c, filesystem 4dbf07a, userland c9d19c2.
+Submitted command order (output echo disabled):
+1: cat app://share/hello.txt > empty://write-only.txt
+2: cat app://share/hello.txt >> empty://write-only.txt
+3: sync empty://
+4: cat empty://write-only.txt
+5: fastfetch --logo none --structure Disk --format json
+6: sync empty://
+7: exit
+
+Decoded remote output and completions:
+
+REMOTE {"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+shell: Unsupported operator
+
+REMOTE {"type": "command_complete", "command": 2, "kind": "rejected"}
+
+REMOTE {"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+This text came from the boot archive. Hello received an app directory capability,
+listed its entries, and looked up share and then this file with explicit rights.
+It did not need a global filesystem root or a kernel path parser.
+
+The program queries the file size, reads at explicit byte offsets, and prints
+through its space's console. Directory enumeration does not grant handles;
+lookup returns a new reference which the program closes after reading.
+
+The endpoint client passes its own read-only file capability to the server.
+Closing either handle leaves the other reference valid. The shared boot archive
+keeps its original bytes after the programs exit.
+
+REMOTE {"type": "command_complete", "command": 4, "kind": "exited", "exit_status": 0}
+[
+  {
+    "type": "Disk",
+    "result": [
+      {
+        "bytes": {
+          "available": null,
+          "free": null,
+          "total": null,
+          "used": null
+        },
+        "files": {
+          "total": null,
+          "used": null
+        },
+        "filesystem": "Pyxis",
+        "mountpoint": "data://",
+        "mountFrom": null,
+        "name": "bench",
+        "volumeType": [
+          "Regular"
+        ],
+        "createTime": null,
+        "native": {
+          "poolId": "30025f32d85079c423c3bd418b9c501c",
+          "volumeId": "16594264869962abc56b01fbec724d9a",
+          "selectedGeneration": 2863,
+          "poolAllocatableBytes": 134209536,
+          "gptDegraded": false,
+          "filesystemDegraded": false
+        }
+      },
+      {
+        "bytes": {
+          "available": null,
+          "free": null,
+          "total": null,
+          "used": null
+        },
+        "files": {
+          "total": null,
+          "used": null
+        },
+        "filesystem": "Pyxis",
+        "mountpoint": "empty://",
+        "mountFrom": null,
+        "name": "empty",
+        "volumeType": [
+          "Regular"
+        ],
+        "createTime": null,
+        "native": {
+          "poolId": "30025f32d85079c423c3bd418b9c501c",
+          "volumeId": "f13c47768411d002eb942fd8250aa8ad",
+          "selectedGeneration": 2863,
+          "poolAllocatableBytes": 134209536,
+          "gptDegraded": false,
+          "filesystemDegraded": false
+        }
+      },
+      {
+        "bytes": {
+          "available": null,
+          "free": null,
+          "total": null,
+          "used": null
+        },
+        "files": {
+          "total": null,
+          "used": null
+        },
+        "filesystem": "Pyxis",
+        "mountpoint": "ro://",
+        "mountFrom": null,
+        "name": "bench",
+        "volumeType": [
+          "Regular"
+        ],
+        "createTime": null,
+        "native": {
+          "poolId": "30025f32d85079c423c3bd418b9c501c",
+          "volumeId": "16594264869962abc56b01fbec724d9a",
+          "selectedGeneration": 2863,
+          "poolAllocatableBytes": 134209536,
+          "gptDegraded": false,
+          "filesystemDegraded": false
+        }
+      }
+    ]
+  }
+]
+
+REMOTE {"type": "command_complete", "command": 5, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 6, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 7, "kind": "builtin", "status": 0}
+
+REMOTE {"type": "final", "cause": "shell_exit", "process_reason": 1, "process_reason_name": "exited", "exit_status": 0, "drain": "complete"}

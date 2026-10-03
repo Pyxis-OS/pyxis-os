@@ -157,6 +157,10 @@ Accepted mount authority and lifetime policies, 2026-10-03:
 - Last-handle close releases the process's cleanup charge and makes no durability
   promise. The mounted pool retains dirty data and writeback errors for later
   synchronization. Failed writeback does not discard cached contents.
+- FILE_SIZE accepts READ or WRITE, including write-only append/end-relative seek.
+- Sync reports and acknowledges each retained recoverable writeback error. Later
+  sync can succeed after dirty data is durable; ongoing failures still fail each
+  attempt. Uncertain disk I/O stops mutation and remains visible until reboot.
 
 ## Pool format and host tools
 
@@ -215,45 +219,42 @@ Accepted 2026-10-02.
 1. [x] **Format proposal.** A short design of the on-disk format: pool header,
    bitmap, volume table, inodes, directories and journal, with reserved bytes and
    feature flags. Owner decisions go at most three per round. The
-   [format decisions](native-filesystem-format.md) retain accepted choices and
-   unresolved writer policies; task 2 implements the format details.
+   [format decisions](native-filesystem-format.md) retain accepted choices;
+   task 2 implements the format details.
 2. [x] **Format library and host tools.** Structure definitions, encoding and
    decoding with link-time symbols, plus host `mkfs`, `fsck` and inspection.
    Implemented in [pyxis-fs #26](https://git.internal/PyxisOS/pyxis-fs/pulls/26);
    [tool guide and validation](../../fs/docs/native-host-tools.md). Committed replay
    is source-reviewed, not crash-injection qualified; the task-3 kernel writer
    now produces normal COMMITTED/checkpoint transactions.
-3. [ ] **Native read/write in Caelum** on virtio-blk, with persistent in-memory
-   state and caching. Implementation and ordinary validation are on
-   `fs/native-writer`; [measurements](../development/experiments/native-filesystem-task3/README.md)
-   record latency and bytes from the start. Final policy replies remain pending
-   as recorded below; the parent PR remains a draft until they are settled.
+3. [x] **Native read/write in Caelum** on virtio-blk, with persistent in-memory
+   state and caching. Implemented in
+   [parent #348](https://git.internal/PyxisOS/pyxis-os/pulls/348);
+   [measurements](../development/experiments/native-filesystem-task3/README.md)
+   record latency, bytes and ordinary validation from the start. Final owner
+   policies are implemented; crash injection and physical-media qualification
+   were not assigned.
 4. [ ] **Installer tools:** GPT creation, the FAT32 boot partition, pool
    formatting and copying files from the boot archive.
 5. [ ] **End to end:** install and boot in QEMU, then on the ThinkPad.
 
-## Task-3 handoff
+## Task-3 delivery
 
-The task branch is `fs/native-writer`, based on main `132aef1`, with draft
-[parent #348](https://git.internal/PyxisOS/pyxis-os/pulls/348). It uses published
+The task branch is `fs/native-writer`, based on main `132aef1`, with
+[parent #348](https://git.internal/PyxisOS/pyxis-os/pulls/348). Main `d04c6a6` was
+merged during delivery to preserve concurrent completed work. It uses published
 [filesystem #27](https://git.internal/PyxisOS/pyxis-fs/pulls/27) at `4dbf07a`
-and [userland #104](https://git.internal/PyxisOS/pyxis-userland/pulls/104) at `6308de8`.
+and [userland #104](https://git.internal/PyxisOS/pyxis-userland/pulls/104) at `c9d19c2`,
+which preserves current userland main alongside the native changes.
 Merge dependencies before the parent PR. The kernel owns cached data, delayed
 allocation, journal commit/replay/checkpoint and bounded cleanup; the old shared
 core and tools are retired. No compiler-container rebuild is needed.
 
-Two proposed refinements await owner replies; neither is an accepted requirement:
-
-- Native FILE_SIZE currently retains the old READ requirement. Allowing READ or
-  WRITE would match other backends and permit append/end-relative seek through
-  write-only grants; it also discloses length through WRITE.
-- Recoverable writeback errors currently remain visible on every sync until
-  reboot. Reporting them once would permit later sync success after dirty data
-  is durable. Uncertain disk I/O must still stop mutations for the boot.
-
-The measurement record holds builds, QEMU/GDB observations, persistence and host
-checking results. Remaining work is to apply selected refinements, finish their
-ordinary validation, inspect exact parent CI and mark task 3 complete. Runtime
+The owner accepted both final refinements: FILE_SIZE through READ or WRITE, and
+one-time acknowledgment of retained recoverable errors by sync. The measurement
+record holds builds, QEMU/GDB observations, persistence and host checking results.
+The final ordinary build and QEMU boot, sync, writable INFO, host fsck and file
+comparison passed. Exact submitted-revision CI is reported with the PR. Runtime
 crash injection and physical-media qualification were not assigned. All task
 validation clients, QEMU and debugger processes have been stopped.
 

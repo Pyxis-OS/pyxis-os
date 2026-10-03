@@ -53,8 +53,8 @@ new disk blocks. SHRINK may coexist with DETACHED; subsequent writes/resizes wai
 for shrink cleanup. Reads respect the smaller size. Growth supplies or zeros newly
 exposed bytes, including a retained partial tail, before size publication.
 
-File WRITE permits writes, resizing and sync; native size queries still require
-READ. Directory sync requires CREATE or REMOVE. File/directory sync commits the
+File WRITE permits writes, resizing and sync; size queries accept READ or WRITE.
+Directory sync requires CREATE or REMOVE. File/directory sync commits the
 pool's current transaction with its ordered-data dependencies; mount WRITE permits
 MOUNT_SYNC across the configured disk's mounted pools. Success reaches durable
 COMMITTED; checkpoint and durable EMPTY follow before journal/freed-block reuse.
@@ -62,6 +62,9 @@ Large writes and cleanup do not promise whole-operation crash atomicity.
 
 Close releases the process's wrapper/cleanup charge and promises no durability.
 The mounted pool retains dirty contents and writeback errors after handles close.
+Sync reports and acknowledges retained recoverable errors; later sync can succeed
+after dirty data is durable. An ongoing failure still fails each attempt. Uncertain
+disk I/O stops mutation for the boot and remains an error on every sync.
 Periodic full flushing defaults to 30 seconds through menuconfig, and pressure
 writeback runs asynchronously. Delayed allocation can encounter ENOSPC at writeback
 or sync. No shutdown/restart/sleep flushing hooks exist yet.

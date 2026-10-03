@@ -74,9 +74,29 @@ boot used the engine from `6cc8487`; the second used cleanup fixes from `e091492
 and `e65e35b`, with the adapter/configuration integration later committed as
 `3d04538`. Its saved running ELF SHA-256 was
 `30cd773da6cbb2df825d498f68b4449ec9ca2c752dcc5e344406baf84e6d9f49`.
-The final boot used parent `4439d94`, filesystem `4dbf07a`, userland `6308de8`
-and unchanged ports `a50ae5ccf1`. An internal diagnostic-field rename between
-the second measurement and that revision changed neither layout nor behavior.
+The writable-INFO consumer boot used parent `4439d94`, filesystem `4dbf07a`,
+userland `6308de8` and unchanged ports `a50ae5ccf1`. An internal diagnostic-field
+rename between the second measurement and that revision changed neither layout
+nor behavior.
+
+During PR delivery, main advanced to `d04c6a6`. Parent `7169f86` merges it and
+uses published userland `c9d19c2`, which includes the newer main's lsusb changes
+and preserves the mount/sync/INFO code unchanged. The measured workload tables
+below retain their original revision context.
+
+The final policy image at `ae0590c`, still using filesystem `4dbf07a` and userland
+`c9d19c2`, rebuilt successfully after accepting FILE_SIZE through READ or WRITE
+and recoverable-error acknowledgment on sync. Terminal failure supersedes an
+older recoverable error and remains latched; failed pools cannot clear it. Review
+covered both failed-flush acknowledgment and successful-flush reporting of an
+older retained error. Ongoing failures still fail each retry. No error was injected.
+Both file-handler and worker SIZE checks now accept either right; libc's write-only
+append/end-relative seek paths call SIZE. Runtime shell `>>` was rejected as an
+unsupported operator before filesystem access, so append/end-relative seek has
+source-review coverage rather than a shell runtime result.
+The final boot's ordinary write/read, repeated directory sync and writable INFO
+query passed. After clean stop, extracted-pool fsck and the new text-file comparison
+passed again. Its output is appended to the [consumer record](writer-final-consumer.txt).
 
 The first trusted init mounted both volumes read/write, created `data://trusted`,
 copied the 1 MiB fixture there and completed `sync --disk` before creating the
