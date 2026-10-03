@@ -29,7 +29,7 @@ make debug CPUS=4        # paused; see docs/development/gdb.md
 make clean
 ```
 
-Make defaults to KVM, one CPU, 256 MiB RAM and GTK display. Override
+Make defaults to KVM, one CPU, 8 GiB RAM and GTK display. Override
 `CROSS_COMPILE`, `QEMU`, `CPUS`, `MEMORY`, `ACCEL`, `QEMU_DISPLAY`, `OVMF_CODE`
 and `OVMF_VARS` on the command line as needed. Firmware defaults are
 `/usr/share/OVMF/x64/OVMF_CODE.4m.fd` and `OVMF_VARS.4m.fd` in the same directory;

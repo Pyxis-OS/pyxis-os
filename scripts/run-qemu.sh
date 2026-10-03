@@ -2,7 +2,7 @@
 set -eu
 : "${QEMU:=qemu-system-x86_64}"
 : "${QEMU_DISPLAY:=gtk}"
-: "${MEMORY:=256M}"
+: "${MEMORY:=8G}"
 : "${CPUS:=1}"
 : "${ACCEL:=tcg}"
 : "${OVMF_CODE:=/usr/share/OVMF/OVMF_CODE.fd}"
