@@ -3,7 +3,7 @@
 #include <kernel/object/random.h>
 #include <kernel/panic.h>
 #include <kernel/user_memory.h>
-#include <kernel/virtio/rng.h>
+#include <kernel/random.h>
 
 static void destroy_random(struct kernel_object *object)
 {
@@ -47,7 +47,7 @@ struct syscall_result random_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
   uint8_t bytes[RANDOM_MAX_BYTES];
-  enum call_status status = virtio_rng_read(bytes, request.length, request.deadline_ns);
+  enum call_status status = random_read(bytes, request.length, request.deadline_ns);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
