@@ -25,7 +25,11 @@ the exported SDK manifest records dirty userland inputs.
 
 Kernel source builds require the pinned filesystem core. The host tools remain
 opt-in: `make -j16 fs-tools` builds `build/fs-tools/libpyxis-fs.a`, `mkpyxisfs`,
-`pyxisfs-inspect` and `pyxisfs-write`. SDK builds do not require the filesystem core. See the
+`pyxisfs-inspect` and `pyxisfs-write`. The same target also builds `libpyxis-fs-format.a`, `mkpyxisfs-native`,
+`pyxisfs-native-fsck` and `pyxisfs-native-inspect` for the
+[new native format](../../fs/docs/native-host-tools.md), beside the old tools.
+Caelum continues mounting the old format until native writer integration.
+SDK builds do not require the filesystem core. See the
 [host-tool guide](../../fs/docs/host-tools.md) for source import, extraction and
 `pyxisfs-inspect check` whole-image consistency inspection.
 
