@@ -317,6 +317,11 @@ inventory; these tools do not expand boot-image
 Phase A. The [everyday pipeline performance target](../development/io-reliability-attribution.md#everyday-pipeline-performance-target)
 records their use as text-tool input without assigning a port or benchmark campaign.
 
+The ThinkPad's [next bring-up steps](thinkpad-next-steps.md) record the owner's
+order after the native shell: an entropy source first (RDSEED with RDRAND
+fallback, ChaCha20 later), then Ethernet through VFIO passthrough to QEMU and a
+driver.
+
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
 | SDL2 and graphical applications | A native software-rendered SDL2 backend supports a selected GrafX2 edit/save workflow. | Probe the pinned application first; settle input/presentation and image-library needs. zlib/libpng are useful shared candidates. Compositor and GPU support stay separate. |
