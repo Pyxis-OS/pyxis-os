@@ -7,14 +7,14 @@ process exit and disappear on reboot.
 
 Both use the existing tagged CALL interface. There is no kernel path parser.
 [Native filesystem objects](../devices/filesystem-native-adapter.md) use the same
-protocol with policy-approved views, 255-byte UTF-8 components and stateless
-continuations; they retain backing independently of parent objects. Trusted init
-acquires native roots through the [mount protocol](../../include/abi/mount.h),
-using one configured disk/principal authority and exact requested directory
-rights. Roots require LOOKUP; ordinary directory/file grants can then be
-attenuated and delegated independently of mount authority. Native mutations fail
-under the ordinary rights/read-only rules. See
-[init configuration](../userland/init.md#native-disk-configuration-and-mounting).
+protocol with capability authority, 255-byte UTF-8 components and shared directory
+generations. They retain inode references independently of parent objects. Trusted
+init acquires roots through the [mount protocol](../../include/abi/mount.h) for its
+configured disk; no on-disk principal is supplied. Roots require LOOKUP. Mutation
+rights additionally require mount WRITE; observation independently requires OBSERVE.
+Returned directory/file grants can be attenuated and delegated independently of
+mount authority. Native create/remove/file rename, writes, resizing and sync run
+on the sole kernel filesystem worker. Native FILE_SIZE accepts READ or WRITE.
 The tree internals below describe the archive/RAM backends.
 
 ## Scoped filesystem information
@@ -27,11 +27,10 @@ existing grants. The `directory_filesystem_info()` library wrapper publishes a
 record only after a successful, well-formed reply.
 
 Observation is a separate kernel grant. Acquiring it on a native root requires
-`MOUNT_RIGHT_OBSERVE` in addition to OPEN_ROOT; ordinary acquisition still checks
-persistent policy for the requested core rights. Copies may attenuate a retained
-root to observation alone. Directory lookup may explicitly request observation
-only when its parent grant holds it, without adding any core object/admin right.
-A child never reacquires the bootstrap principal's authority. `DIRECTORY_RIGHTS`
+`MOUNT_RIGHT_OBSERVE` in addition to OPEN_ROOT; it implies no mutation authority.
+Copies may attenuate a retained root to observation alone. Directory lookup may explicitly request observation
+only when its parent grant holds it. A child never reacquires withheld mount
+or parent authority. `DIRECTORY_RIGHTS`
 is the complete recognized mask; `DIRECTORY_CONTENT_RIGHTS` is the existing six
 content-operation bits, used for non-native grants.
 
@@ -40,22 +39,22 @@ content-operation bits, used for non-native grants.
 | `type` | `FILESYSTEM_TYPE_PYXIS` |
 | `flags` | READ_ONLY, plus independent GPT_DEGRADED and filesystem DEGRADED opening flags |
 | `pool_id`, `volume_id` | Opaque 16-byte identities from retained selected metadata |
-| `generation` | Selected pool generation retained by the view |
-| `pool_allocatable_bytes` | `(pool blocks - 2) * 4096`; verified geometry excluding the two superblock slots |
+| `generation` | Current retained pool journal sequence |
+| `pool_allocatable_bytes` | `(pool blocks - 2) * 4096`; verified geometry excluding the two header slots |
 | `volume_name` | Retained filesystem volume name, NUL-terminated and zero-padded |
 
 All listed fields are available on success. Capacity includes shared metadata
 and reserves; it is neither per-volume capacity nor writable allowance. Multiple
 bindings or volumes with the same pool ID share this capacity and must not be
 summed. Namespace binding names come from the caller's own selected roots, not
-this record. The immutable retained state requires the attached image to remain
-unchanged externally.
+this record. The worker owns mounted state; external changes to an attached image
+are unsupported.
 
 Used/free bytes, volume charged bytes, guarantees, quotas and percentages are
 unavailable and have no fields in this record; absence never means zero. Ordinary
 opening validates geometry and selected root envelopes, not global allocation
 accounting. The query copies retained metadata on the filesystem worker, without
-traversal, a whole-image check, new views or block I/O. Failure publishes no reply.
+traversal, a whole-image check, new handles or block I/O. Failure publishes no reply.
 
 ## Tree and lifetime
 
@@ -100,8 +99,8 @@ kernel compares bounded chunks without allocating on an AP.
 | ENUMERATE | List names and kinds, without acquiring child handles |
 | READ_FILES | Grant READ on a file found through LOOKUP or CREATE |
 | WRITE_FILES | Grant WRITE on a file found through LOOKUP or CREATE |
-| CREATE | Add a directory or empty file to RAM backing |
-| REMOVE | Remove a file or empty directory name from RAM backing |
+| CREATE | Add a directory or empty file to writable backing |
+| REMOVE | Remove a file or empty directory name from writable backing |
 
 Returned directory rights must be a subset of the parent's granted directory
 rights. Returned file READ requires READ_FILES; WRITE requires WRITE_FILES.
@@ -137,17 +136,21 @@ inside a successful reply so a short buffer can carry its required size without
 changing the CALL error convention. Name and reply destinations must be disjoint;
 request storage may overlap outputs because the kernel captures the request first.
 
-Generation checks, selection and copying the name occur under the directory
-lock. User mappings are validated beforehand and remain private/stable, so the
-copy cannot allocate or sleep. Removal cannot reclaim the name during copying.
+For native directories, the worker checks the shared inode generation, selects
+and stages a name before replying. Mutations through any handle invalidate acquired
+cursors; restart CHANGED from zero. Positions are opaque and not wrapper identities.
+
+For archive/RAM directories, generation checks, selection and copying the name
+occur under the directory lock. User mappings are validated beforehand and remain
+private/stable, so the copy cannot allocate or sleep. Removal cannot reclaim the name during copying.
 Successful creation, removal or a rename that changes entries increments the
 generation; a later mutation affects the next enumeration call. Even an old END cursor reports CHANGED after
 a mutation. A short-buffer reply keeps the original cursor, including zero when
 no generation has been acquired.
 
 Generation never wraps: exhausted generation rejects mutation with LIMIT.
-Creation also checks entry-count capacity. Failed mutation does not advance it. This contract provides
-no snapshot, and callers should not retry forever if another process keeps
+RAM creation also checks entry-count capacity. Failed mutation does not advance
+it. This contract provides no snapshot, and callers should not retry forever if another process keeps
 changing a directory.
 
 ## Exclusive creation
@@ -160,8 +163,15 @@ permission to read or modify the child.
 Existing names return ALREADY_EXISTS, regardless of kind; nothing is opened,
 replaced or truncated. There is no recursive parent creation.
 
-The handler checks all user buffers and authority before staging an entry. An
-initrd directory rejects mutation with READ_ONLY even if its grant includes
+For native CREATE, the handler captures the name and lends its capability table
+exclusively to the worker. The worker stages the returned handle before publishing
+creation; failed creation removes that staged handle. No table-entry pointer
+crosses the wait. The entry survives closing the returned handle. Successful native
+namespace mutations reach durable COMMITTED before returning; file data may remain
+dirty until synchronization.
+
+The archive/RAM handler checks all user buffers and authority before staging an
+entry. An initrd directory rejects mutation with READ_ONLY even if its grant includes
 CREATE; a grant without CREATE fails the authority check with DENIED first.
 A new RAM file has no data allocation, size zero and immediate EOF through the
 file protocol. A WRITE grant permits subsequent writes and resizing; see the
@@ -204,12 +214,12 @@ a kind mismatch WRONG_TYPE, and a nonempty directory NOT_EMPTY. Insufficient
 rights returns DENIED before immutable backing can report READ_ONLY.
 
 A successful removal unlinks the entry and advances the parent's generation.
-No fallible work remains after unlinking. The detached entry retains its child
+For RAM backing, no fallible work remains after unlinking. The detached entry retains its child
 reference until the existing BSP disposal service releases it. Open file handles
 remain usable, and recreating the name creates a different object. The last
 reference releases the old object's storage through normal retirement.
 
-Removing a directory takes the mutation lock, then its parent and child locks,
+Removing a RAM directory takes the mutation lock, then its parent and child locks,
 checks that the child is empty and marks it detached before unlinking. The
 mutation lock serializes operations needing more than one directory lock,
 including rename between arbitrary parents. CREATE checks detached state before
@@ -217,8 +227,11 @@ staging and again at publication. An open removed directory can still be
 inspected or closed, but attempts to create children return NOT_FOUND. A new
 directory created under the old name does not reactivate those handles.
 
-Roots have no removable parent entry. Removal is nonrecursive; no mount changes,
-capability revocation or persistent storage is added.
+Native removal atomically records detachment with the namespace edit. Existing
+handles retain the inode; persistent cleanup reclaims it in bounded batches after
+references drain. An open detached directory rejects child creation. Reboot resumes
+cleanup because pre-crash handles no longer survive. This does not revoke other
+capabilities. Roots have no removable parent entry and removal is nonrecursive.
 
 ## Atomic file rename
 
@@ -233,16 +246,26 @@ entry exists, NO_REPLACE returns ALREADY_EXISTS; REPLACE additionally needs
 REMOVE on the destination. Neither file READ/WRITE nor parent ENUMERATE/LOOKUP
 is needed for the direct operation. Sources must be files, and replacement
 accepts only files. Directory moves/replacement return WRONG_TYPE. Missing
-sources and detached parents return NOT_FOUND. Only RAM backing is mutable;
-initrd mutation returns READ_ONLY after capability checks. There is no implicit
+sources and detached parents return NOT_FOUND. Native parents must be in the same
+volume, and mixed backends fail BAD_OPERATION. Native REPLACE requires destination
+REMOVE even if the destination name is absent. Native replacement records the old
+inode's detachment atomically and preserves its open handles. Initrd mutation
+returns READ_ONLY after capability checks. There is no implicit
 copy-and-delete fallback or cross-filesystem implementation.
 
-Renaming an existing file to the same entry, including through another handle
-to the same parent, succeeds without allocation or generation changes under
-either policy. Ordinary source REMOVE/destination CREATE checks still apply.
-A missing source never becomes a successful no-op.
+For RAM backing, renaming an existing file to the same entry, including through
+another handle to the same parent, succeeds without allocation or generation
+changes under either policy. Ordinary source REMOVE/destination CREATE checks
+still apply. Native same-entry rename also leaves the namespace generation
+unchanged, after authority checks and writer preparation; REPLACE still requires
+destination REMOVE. A missing source never becomes a successful no-op.
 
-Rename first checks the operation under both parent locks. If work is needed,
+The native worker serializes the complete name operation and uses one metadata
+transaction for both parent edits and any replacement cleanup membership. The
+caller's two capability borrows survive the blocked call. There is no missing
+replacement interval. Success reaches durable COMMITTED before returning.
+
+RAM rename first checks the operation under both parent locks. If work is needed,
 it releases all locks and submits a name-only RAMFS request for storage with a
 `NULL` child. The caller's private mappings and directory capabilities remain
 stable while waiting. After filling the name, it reacquires
@@ -258,7 +281,8 @@ to a replaced destination. Obsolete entries are disposed on BSP after unlocking.
 Each changed parent advances its generation once; same-parent rename advances it
 once total. Enumeration order remains unspecified.
 
-A short shared mutation lock precedes directory locks for REMOVE and RENAME,
+For RAM backing, a short shared mutation lock precedes directory locks for REMOVE
+and RENAME,
 preventing cycles between parent/child removal and arbitrary-parent rename.
 Lookup, enumeration and creation retain their per-directory locks. No allocation,
 BSP wait, scheduler lock or file-data operation occurs under these locks.

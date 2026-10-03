@@ -9,6 +9,10 @@ struct boot_info;
  * Copies the UTC seed and samples the monotonic anchor; uses no allocation. */
 void clock_init(const struct boot_info *boot);
 
+/* Allocation-free kernel reading after initialization, on any CPU. False means
+ * UTC is unavailable; otherwise signed Unix nanoseconds are clamped to int64. */
+bool clock_wall_nanoseconds(int64_t *result);
+
 /* Stateless authority to read the shared clock and/or sleep the caller.
  * Creation is BSP-only, IF=0; returns one owned reference. */
 struct kernel_object *clock_create(void);

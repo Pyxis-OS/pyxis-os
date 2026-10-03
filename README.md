@@ -11,7 +11,7 @@ information and piping an HTTPS response into `sha256sum`.
 Requires GNU Make, a host C compiler, the [Pyxis GCC/binutils toolchain](toolchain/README.md),
 QEMU, GNU cpio, xorriso, host Lua 5.4, Python 3 with
 [Kconfiglib](docs/development/configuration.md), and a matching raw OVMF code/variables pair.
-Userspace, ports, lwIP and the filesystem core are [pinned submodules](docs/development/sdk-and-repositories.md).
+Userspace, ports, lwIP and the filesystem format library are [pinned submodules](docs/development/sdk-and-repositories.md).
 See [port builds](docs/development/ports.md) for application dependencies. CI publishes
 [independent build bundles](docs/development/build-bundles.md) for local reuse.
 
@@ -55,9 +55,9 @@ Kernel-only [block storage](docs/devices/block-storage.md) is opt-in with
 `VIRTIO_BLK_IMAGE=/path/to/disk.raw`.
 The opt-in [raw USB image](docs/development/usb-image.md) builds a FAT32/GPT
 installation image and boots it through emulated USB with `make run-usb`.
-[Native read-only mounts](docs/userland/init.md#native-disk-configuration-and-mounting)
-add paired `MOUNT_DISK`/`MOUNT_PRINCIPAL` configuration, read-only image attachment
-and an explicit mount in trusted init.
+[Native filesystem mounts](docs/userland/init.md#native-disk-configuration-and-mounting)
+use `MOUNT_DISK` configuration and an explicit read-only or writable mount in
+trusted init. File/directory sync provides durability; close does not.
 See [QEMU troubleshooting](docs/development/qemu.md) for host emulator boot failures.
 The [shell guide](docs/userland/shell.md) and [edit/build/run walkthrough](docs/development/edit-build-run.md)
 cover ordinary guest use.

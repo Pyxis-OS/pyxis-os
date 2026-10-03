@@ -65,6 +65,12 @@ struct file_write_reply {
  * Success on RAM is a no-op, not persistence. Host durability depends on the
  * backing service/storage; OUTCOME_UNKNOWN means completion was not confirmed.
  * Closing a handle and flushing a userspace stream do not imply SYNC. */
+/* Native SYNC provides the stronger whole-current-pool guarantee: all ordered
+ * data dependencies and covering COMMITTED journal records are durable before
+ * success. Home checkpointing can continue afterward.
+ * It reports and acknowledges retained recoverable writeback errors.
+ * An ongoing failure still fails each attempt; uncertain disk I/O stays terminal
+ * until reboot. Closing a handle promises no durability and discards no dirty data. */
 
 /* FILE_SIZE has no payload fields. */
 struct file_size_reply {

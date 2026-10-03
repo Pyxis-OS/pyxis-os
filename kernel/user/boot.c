@@ -89,7 +89,7 @@ void user_launch_initial(const char *command_line)
   }
   memset(images, 0, count * sizeof(*images));
   const char *default_image = NULL, *primary_image = NULL;
-  const char *mount_disk = NULL, *mount_principal = NULL;
+  const char *mount_disk = NULL;
 
   char *cursor = options;
   while (*cursor) {
@@ -119,13 +119,6 @@ void user_launch_initial(const char *command_line)
         panic("duplicate mount disk configuration");
       }
       mount_disk = image;
-      continue;
-    }
-    if (same_text(key, "mount.principal")) {
-      if (mount_principal) {
-        panic("duplicate mount principal configuration");
-      }
-      mount_principal = image;
       continue;
     }
     if (strlen(image) <= 6 || memcmp(image, "app://", 6)) {
@@ -164,15 +157,8 @@ void user_launch_initial(const char *command_line)
   }
 
   struct mount_config mount = {0};
-  if (!!mount_disk != !!mount_principal) {
-    panic("mount.disk and mount.principal must be supplied together");
-  }
   if (mount_disk) {
     mount.disk = parse_disk_guid(mount_disk);
-    if (pfs_principal_id_parse(mount_principal, strlen(mount_principal),
-          &mount.principal) != PFS_OK) {
-      panic("mount.principal must be a nonzero 128-bit ID");
-    }
     mount.enabled = true;
   }
 

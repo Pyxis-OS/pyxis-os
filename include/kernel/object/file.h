@@ -91,7 +91,9 @@ void file_replace_execute(struct file_replace_request *request);
  * rights and operation from a checked protocol tag. request_address/size
  * describe the payload after that tag. Captures requests and checks all user
  * buffers before mutation. May sleep for file ownership or BSP allocation;
- * writes the reply last if it overlaps the data destination. */
+ * native operations forward actual rights and copied write bytes to the worker,
+ * retaining the caller's live reference through completion. Writes the reply
+ * last if it overlaps the data destination. */
 struct syscall_result file_call(struct file_object *file, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity);

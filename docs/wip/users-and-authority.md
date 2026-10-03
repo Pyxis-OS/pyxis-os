@@ -5,7 +5,10 @@ restricted permissions and the identity/authority separation below are agreed.
 Persistent grants, prospective policy changes and the creation/move rules below
 are also agreed; explicit revocation mechanisms remain open. This is not an
 implementation assignment. See the [milestone index](boot-sdk-ports.md) and
-[persistent storage draft](persistent-storage.md).
+[native filesystem direction](native-filesystem.md). The native v1 format has no
+users or persistent permissions; it supersedes the former portable-core ownership
+implementation. The identity and sharing directions below remain deferred until
+a concrete consumer needs them.
 
 ## Agreed identity and authority direction
 
@@ -23,10 +26,9 @@ do not themselves authorize kernel operations.
   Linking another authentication method/provider requires explicit authority.
 - Persistent resource ownership refers to the Pyxis principal, independently of
   token expiry, account renaming or an authorized authentication-provider change.
-  The shared filesystem core uses opaque 128-bit principal IDs generated
-  from strong randomness, with zero invalid; import procedures remain undecided. The
-  [storage identity rules](persistent-storage.md#agreed-persistent-identity-and-imported-ownership)
-  require trusted mappings and retain unmapped ownership.
+  The retired portable core used opaque principal IDs; native v1 carries no
+  principal or ownership fields. Future persistent identity/import rules need
+  a concrete enforcement design before implementation.
 - A user directory may eventually be local, remote or federated. It supplies
   admission, identity mappings and trusted attributes. External groups can map
   to local roles, but local machine policy determines their actual grants.
@@ -35,11 +37,9 @@ do not themselves authorize kernel operations.
   and constructs bounded sessions; its name or process identity confers no
   universal bypass. Broad capabilities still make it security-critical.
 - Keep authentication, external claim interpretation and machine/session policy
-  in userspace. The shared storage core evaluates native persistent grants against
-  trusted context; the kernel enforces capabilities without interpreting JWTs,
-  external groups or OIDC. The
-  [storage acquisition interface](../../fs/docs/core.md#policy-acquisition-and-ordinary-views)
-  is implemented in the host-only core; native broker integration remains future work.
+  in userspace. The kernel enforces capabilities without interpreting JWTs,
+  external groups or OIDC. Native mount authority remains explicitly delegated;
+  a future broker needs its own concrete contract.
 - Restricted applications cannot recover the user's full authority merely by
   identifying as that user. Access to PCA and particular grant requests must be
   controlled; sensitive elevation may require trusted user interaction. Login
@@ -91,14 +91,10 @@ and [OAuth Device Authorization Grant](https://www.rfc-editor.org/rfc/rfc8628.ht
   is defined. Terminating a session releases its own resources but cannot recall
   copies delegated outside it or data already read.
 
-The [initial filesystem model](../devices/filesystem-readonly.md#ownership-and-acquisition-policy)
-selects persistent policy owners and explicit individual-principal grants with
-object/subtree scope, plus implemented bounded policy-based acquisition. The
-[format contract](../../fs/docs/format.md#rights-and-trusted-acquisition) specifies
-rights and layouts; the
-[core contract](../../fs/docs/core.md#policy-acquisition-and-ordinary-views)
-specifies trusted acquisition inputs and held views. Native broker integration
-and immediate revocation machinery remain open.
+The earlier portable format's ownership and policy-acquisition implementation is
+retired. [Native mounts](../devices/native-readonly-filesystem.md) enforce held
+capabilities without persistent identity or sharing records. Broker integration
+and revocation remain separate future decisions.
 
 ## Agreed creation and namespace changes
 
@@ -147,22 +143,21 @@ earlier checkpoint. The current init and host-mount slices do not need
 a complete account system, but their prototype grants are not the eventual
 multi-user policy.
 
-The completed [initial format and read-only core](../devices/filesystem-readonly.md)
-implements storage ownership records and read/list acquisition enforcement. It
-does not authorize placeholder login
-APIs, Unix IDs or mode bits, or implementation of the full identity broker.
+The completed [native format and tools](../devices/filesystem-readonly.md) have no
+user ownership or permission records. They do not authorize placeholder login
+APIs, Unix IDs or mode bits, or implementation of an identity broker.
 
 ## Remaining decisions
 
-- Principal IDs and explicit formatter-supplied bootstrap ownership are selected.
-  Specify local authentication and bootstrap admission, plus the interfaces for
+- Native formatting supplies no bootstrap user ownership. Specify local
+  authentication and bootstrap admission, plus the interfaces for
   establishing/changing a session's authenticated context; a recorded owner alone
   neither authenticates a principal nor bypasses acquisition authority.
 - How do users relate to sessions, spaces and processes? A space is an execution
   domain, not automatically a user; one user may have several spaces. Decide
   which component creates them and supplies their initial resources.
-- Integrate the implemented storage acquisition interface with concrete broker
-  contracts for initial grants, restricted launches and intentional delegation.
+- Define concrete broker contracts for initial grants, restricted launches and
+  intentional delegation over the native capability interfaces.
   Identity must not widen authority; policy administration needs explicit rights.
 - What does `home://` expose for each user? The earlier shared-home idea must not
   imply that all users can access one another's data. Decide sharing across one
@@ -195,11 +190,11 @@ enforcement still require implementation milestones.
 
 ## Completion of the design checkpoint
 
-The model and example consequences above are agreed design direction. Complete
-the checkpoint by identifying the first implementation slice, required storage
-metadata and concrete broker/storage enforcement responsibilities. Account UI
-and external authentication can follow later; do not leave ownership enforcement
-implicit when introducing writable persistent storage.
+The model and example consequences above are agreed future design direction.
+When a concrete multi-user consumer is assigned, identify its first implementation
+slice, required metadata and broker/storage enforcement responsibilities. Native
+v1 deliberately has no ownership enforcement; completing its writable-storage
+milestone does not implement or require this deferred identity model.
 
 ## Related direction
 

@@ -65,55 +65,61 @@ Kernel-only builds do not select or package init.
 
 ## Native disk configuration and mounting
 
-`MOUNT_DISK` and `MOUNT_PRINCIPAL` are paired deployment inputs. They generate
-`mount.disk=<GPT-GUID>` and `mount.principal=<32-hex-digits>` in the Limine
-command line. The disk GUID uses canonical hyphenated text; the principal is a
-nonzero 128-bit ID. Both absent disables native mount authority. Partial,
-malformed, zero or duplicate configuration fails setup; kernel parsing also
-rejects malformed or duplicate options supplied outside the Make generator.
-The GUID selects a disk but authenticates neither it nor its content.
+`MOUNT_DISK=<canonical-GPT-GUID>` selects the deployment disk and generates
+`mount.disk=<GPT-GUID>` in Limine configuration. Omission disables native mount
+authority. Malformed, zero or duplicate configuration fails setup; kernel parsing
+also rejects malformed or duplicate options outside the Make generator. The GUID
+selects a disk but authenticates neither it nor its contents. The filesystem has
+no on-disk principal or permission policy.
 
 Prepare a populated GPT image using the
 [native adapter instructions](../devices/filesystem-native-adapter.md#prepare-a-disposable-disk),
-then attach it read-only with configuration matching that image:
+then attach it with configuration matching that image:
 
 ```sh
 make run CPUS=4 INIT=/tmp/init-native.sh INIT_CPUS= \
-  VIRTIO_BLK_IMAGE=/absolute/path/to/development.raw VIRTIO_BLK_READONLY=1 \
-  MOUNT_DISK=01234567-89ab-cdef-0123-456789abcdef \
-  MOUNT_PRINCIPAL=00112233445566778899aabbccddeeff
+  VIRTIO_BLK_IMAGE=/absolute/path/to/development.raw \
+  MOUNT_DISK=01234567-89ab-cdef-0123-456789abcdef
 ```
 
-These IDs are examples, not defaults. Do not mutate the image from the host while
-it is open in the guest. A trusted script can mount a selected volume before
-its usual session handoff:
+The GUID is illustrative, not a default. Do not change an attached image from the
+host. A trusted script can mount and delegate a writable root:
 
 ```sh
 #!app://shell.pxe
-mount --partition 1 --volume system --read-only data://
+mount --partition 1 --volume system --read-write data://
 session app://session.pxe --start-services
 ```
 
-Every workload init gets the same configured principal and disk scope. The
-`native_mount` resource is issued when configuration is enabled unless the
-complete inventory establishes hardware absence. Ambiguous or incomplete discovery,
-unsupported hardware and setup failures retain a failing authority. Mount waits
-for the immutable GPT result, verifies the configured disk GUID, then selects a
-one-based partition entry and resolves the volume name within the retained
-filesystem generation. Persistent policy must authorize the configured principal.
-No request or command can supply a different principal.
+Use `--read-only` and `VIRTIO_BLK_READONLY=1` for a read-only device. Read-only
+pool opening refuses a committed journal; writable opening validates and replays
+it before exposing records. Unknown required features prevent opening; unknown
+read-only-compatible features prevent writes and replay.
 
-`--optional` skips only a missing authority, including disabled configuration or
-confirmed hardware absence. Wrong GUID, missing partition/volume, policy denial,
-invalid media and all other failures from present authority stop the script.
-The selected root uses LOOKUP, ENUMERATE and READ_FILES, plus filesystem
-observation when the mount authority holds OBSERVE. `--no-info` omits observation.
-Ordinary applications
-receive independently retained directory/file grants through handoff; they
-receive neither mount nor raw-block authority. Closing init's mount handle does
-not revoke those roots. Observation can be independently withheld or attenuated;
-it discloses [retained identity and shared-pool capacity](../interfaces/directories.md#scoped-filesystem-information),
+Every trusted workload init receives the same configured disk scope. The
+`native_mount` resource is issued unless inventory establishes hardware absence.
+Ambiguous or incomplete discovery, unsupported hardware and setup failures retain
+a failing authority. Mount waits for GPT, verifies the configured GUID, selects a
+one-based partition entry and resolves the volume name in the retained pool.
+`MOUNT_RIGHT_OPEN_ROOT`, `MOUNT_RIGHT_OBSERVE` and `MOUNT_RIGHT_WRITE` are independent:
+requesting root mutation rights requires WRITE; requesting filesystem information
+requires OBSERVE. `--no-info` omits observation. `--optional` skips only missing
+mount authority; wrong selectors, invalid media and other operation failures remain
+errors.
+
+Ordinary applications receive independently retained directory/file grants through
+handoff, with no mount or raw-block authority. Closing init's mount handle does
+not revoke those roots. Attenuated read-only grants cannot mutate. Observation
+provides [identity and shared-pool capacity](../interfaces/directories.md#scoped-filesystem-information),
 not usage or a writable allowance.
+
+File and directory sync commit the whole current pool, including ordered data from
+other files. Trusted init can call `sync --disk` to synchronize all mounted pools on
+its configured disk; this requires mount WRITE and accepts no disk selector.
+Existing `sync PATH...` remains the path-based utility. Ordinary sessions can use
+sync on their granted files/directories. Closing a file promises no durability;
+dirty data and writeback errors survive in the mounted pool after its final handle
+closes. Call sync explicitly before reporting that persistent work is complete.
 
 ## Packaged scripts
 

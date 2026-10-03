@@ -14,20 +14,20 @@ partitions are needed. The compiler container does not need rebuilding.
 
 ```sh
 git submodule update --init fs userspace ports third_party/lwip
-make -j16 usb-image USB_POOL_OWNER=0a32efc079ed4c7bab58e224cf119315
+make -j16 usb-image
 ```
 
-Replace the illustrative owner with the principal selected for the volume.
-`USB_POOL_OWNER` is required and records a nonzero 128-bit ID as 32 hexadecimal
-digits. It does not provision an account, authenticate a user or configure a
-kernel mount. Pool, volume, object, disk and partition IDs are freshly generated
-on each image build. Knowing an ID grants no authority.
+The sample pool uses the [native format](../../fs/docs/native-format.md), with
+fresh pool, volume, disk and partition IDs on each build. It has no on-disk
+principal. Knowing an ID grants no authority. The formatter chooses its journal
+from the image builder's `USB_POOL_JOURNAL` configuration; the default is 8 MiB
+for this small development pool. Choose at least 128 MiB for a 256 GB pool.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `USB_IMAGE_MIB` | `1024` | Total raw disk size in MiB |
 | `USB_ESP_MIB` | `256` | FAT32 EFI System Partition size in MiB |
-| `USB_POOL_OWNER` | Required | Owner principal for the sample volume |
+| `USB_POOL_JOURNAL` | `8MiB` | Journal size passed to the native formatter |
 | `USB_BOOT_IMAGE` | `build/pyxis-usb.img` | Existing raw file used by the USB launcher |
 
 Image sizes are positive decimal MiB counts without leading zeros. They are
@@ -37,8 +37,7 @@ kernel/archive pair in a valid FAT32 ESP. For example, a different configuration
 is selected directly:
 
 ```sh
-make -j16 usb-image USB_IMAGE_MIB=512 USB_ESP_MIB=128 \
-  USB_POOL_OWNER=0a32efc079ed4c7bab58e224cf119315
+make -j16 usb-image USB_IMAGE_MIB=512 USB_ESP_MIB=128 USB_POOL_JOURNAL=8MiB
 ```
 
 The disk uses 512-byte logical sectors, a protective MBR, 128 GPT entries and
@@ -87,7 +86,7 @@ being hidden by another storage backend. See QEMU's
 [USB emulation](https://www.qemu.org/docs/master/system/devices/usb.html) and
 [boot ordering](https://www.qemu.org/docs/master/system/bootindex.html) references.
 
-Launching does not rebuild the image and does not require its owner-principal
+Launching does not rebuild the image and does not require its formatting
 input again. Existing CPU, memory, accelerator, display, networking, host
 filesystem and firmware overrides apply. The launcher copies fresh OVMF
 variables for every run; use a matching raw code/variables pair with USB boot

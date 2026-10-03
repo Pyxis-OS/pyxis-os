@@ -25,13 +25,6 @@ if [ "$USB_IMAGE_MIB" -le "$((USB_ESP_MIB + 2))" ]; then
   echo 'USB_IMAGE_MIB must leave room for the ESP, pool and two MiB of GPT/alignment space.' >&2
   exit 1
 fi
-case "$USB_POOL_OWNER" in
-  *[!a-fA-F0-9]*) echo 'USB_POOL_OWNER contains invalid hex digits.' >&2; exit 1 ;;
-esac
-if [ "${#USB_POOL_OWNER}" -ne 32 ] || [ "$USB_POOL_OWNER" = 00000000000000000000000000000000 ]; then
-  echo 'USB_POOL_OWNER must be supplied as a nonzero principal ID (32 hex digits).' >&2
-  exit 1
-fi
 
 image=build/pyxis-usb.img
 if [ -L "$image" ] || { [ -e "$image" ] && [ ! -f "$image" ]; }; then
@@ -39,7 +32,7 @@ if [ -L "$image" ] || { [ -e "$image" ] && [ ! -f "$image" ]; }; then
   exit 1
 fi
 mkdir -p build
-staging=$(mktemp -d build/usb-image.XXXXXX)
+staging=$(mktemp -d "$(cd build && pwd -P)/usb-image.XXXXXX")
 trap 'rm -rf -- "$staging"' EXIT
 trap 'exit 1' HUP INT TERM
 
@@ -63,9 +56,9 @@ boot archive. Firmware loads the EFI kernel/archive pair; native USB reads
 require the separate kernel USB milestone. This is not a persistent home volume.
 EOF
 cp build/initrd-root/cat.pxe "$staging/source/bin/cat.pxe"
-build/fs-tools/mkpyxisfs --image "$staging/pool.img" \
-  --size "$((pool_mib * mib_bytes))" \
-  --volume usb-test --source "$staging/source" --owner "$USB_POOL_OWNER"
+build/fs-tools/mkpyxisfs-native --image "$staging/pool.img" \
+  --size "$((pool_mib * mib_bytes))" --journal "$USB_POOL_JOURNAL" \
+  --volume usb-test --source "$staging/source"
 
 mkfs.fat -C -F 32 -S "$sector_bytes" -h "$esp_start" -n PYXIS_BOOT \
   "$staging/esp.img" "$((USB_ESP_MIB * 1024))"
@@ -83,5 +76,5 @@ sgdisk --clear \
 dd if="$staging/esp.img" of="$staging/disk.img" bs=1M seek=1 conv=notrunc,sparse status=none
 dd if="$staging/pool.img" of="$staging/disk.img" bs=1M seek="$pool_start_mib" conv=notrunc,sparse status=none
 mv -T "$staging/disk.img" "$image"
-printf 'Built %s: %s MiB, ESP %s MiB, usb-test pool %s MiB; owner %s\n' \
-  "$image" "$USB_IMAGE_MIB" "$USB_ESP_MIB" "$pool_mib" "$USB_POOL_OWNER"
+printf 'Built %s: %s MiB, ESP %s MiB, usb-test pool %s MiB; journal %s\n' \
+  "$image" "$USB_IMAGE_MIB" "$USB_ESP_MIB" "$pool_mib" "$USB_POOL_JOURNAL"

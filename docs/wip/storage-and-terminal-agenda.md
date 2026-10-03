@@ -7,30 +7,27 @@ the interfaces below.
 
 ## 1. Discuss persistent disk storage
 
-The active [pool/filesystem working draft](persistent-storage.md) records the
-discussion and explicitly agreed choices; other mechanisms remain proposals.
+The [native filesystem direction](native-filesystem.md) replaced the portable
+COW design. Its format-only codecs, host tools and Caelum cache/writer are complete;
+[ordinary task-3 measurements](../development/experiments/native-filesystem-task3/README.md)
+record the exercised behavior and unqualified recovery/pressure paths.
 
 Writable `host://` already provides host-backed persistence. The
-[block-storage foundation](../devices/block-storage.md) is complete. The
-[initial format and read-only core](../devices/filesystem-readonly.md) is complete;
-[native read-only mounts](../devices/native-readonly-filesystem.md) are also complete.
-Writable recovery and installation remain proposed. Use the existing
-[filesystem direction](vfs.md) and
+[block-storage foundation](../devices/block-storage.md) and
+[native mounts](../devices/filesystem-native-adapter.md) are complete. Installation
+remains separate. Use the existing [filesystem direction](vfs.md) and
 [storage notes](later-os-directions.md#persistent-storage-and-installation).
 
-- The first milestone delivered kernel-internal block I/O and GPT discovery.
-  Native read-only mounting followed; installation and system updates remain
-  separate work.
-- The storage discussion selected a custom COW pool/filesystem with a shared
-  core for Caelum and Linux FUSE. The
-  [format contract](../../fs/docs/format.md) now defines the initial disk layouts
-  and read-only host tools; writable recovery algorithms remain open.
+- Kernel-internal block I/O and GPT discovery support the native writer;
+  installation and system updates remain separate work.
+- The native format has no persistent users or permissions. Capabilities govern
+  access; the earlier portable-core policy model is retired.
 - Identify required file metadata and identity, replacement/open-handle behavior,
   flush and durability boundaries, and expected behavior after interrupted writes.
 - The [users and authority checkpoint](users-and-authority.md) supplies the
-  implemented ownership/grant model. Resolve writable bootstrap admission and
-  writable native integration before introducing shared-home assumptions. Native
-  authority rules should drive the design; Unix IDs and permission bits are not defaults.
+  future identity/grant direction. Resolve concrete user and sharing policy
+  before introducing shared-home assumptions. Native authority rules should drive
+  the design; Unix IDs and permission bits are not defaults.
 
 Use the working draft to scope a later milestone and its policy decisions before
 implementation.
@@ -97,9 +94,9 @@ applications alongside navigators.
 
 The first slice is implemented as [native remote terminal sessions](../userland/remote-terminal.md),
 with a text-based agent/developer client and independent session lifetime.
-The agreed order is to finish [writable filesystem core](writable-filesystem-core.md),
-then [runtime SMP and independent spaces](scheduling-and-threads.md), followed by
-these focused milestones:
+The [native filesystem writer](../devices/filesystem-native-adapter.md) is complete.
+The agreed continuation is [runtime SMP and independent spaces](scheduling-and-threads.md),
+followed by these focused milestones:
 
 1. [VirtIO GPU presentation and dynamic display resizing](desktop-graphics.md#virtio-gpu-presentation-and-display-resizing):
    present the software framebuffer and propagate changed terminal dimensions,
@@ -119,15 +116,14 @@ these focused milestones:
 This sequence combines visible applications with reusable display and terminal
 infrastructure. Define each milestone's bounded tasks before starting it; this
 ordering does not authorize implementing the whole chain. Initial navigator work
-can use RAM and writable `host://` storage plus read-only native mounts. Completing
-the shared writable core does not itself enable writable native mounts in Caelum;
-that integration remains separate.
+can use RAM, writable `host://` storage and the implemented native writable mounts.
+No additional portable-core integration is required.
 
 ## Implemented foundation and later choices
 
 The [BSP request milestone](../kernel/bsp-service-requests.md) and
 [native remote terminal implementation](../userland/remote-terminal.md) provide
-the request-ownership and session-lifetime foundations. Persistent writable
-storage, the toolchain transition, multiplexer and navigator remain parked
+the request-ownership and session-lifetime foundations. Native writable storage
+is complete; the toolchain transition, multiplexer and navigator remain parked
 directions. The sequence above is agreed, but each future slice still needs its
 behavior, authority and lifetime decisions settled before implementation.

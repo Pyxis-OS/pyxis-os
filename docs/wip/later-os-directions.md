@@ -13,10 +13,10 @@ milestone; this does not commit to Unix PID 1 semantics.
 
 ## Backend interfaces and scoped service dependencies
 
-Agreed direction to revisit later, not an implementation task. Finish the
-[writable filesystem core](writable-filesystem-core.md), then the
-[runtime SMP and independent spaces milestone](scheduling-and-threads.md).
-This idea adds no prerequisites or tasks to either milestone.
+Agreed direction to revisit later, not an implementation task. The
+[native filesystem writer](../devices/filesystem-native-adapter.md) is complete;
+the [runtime SMP and independent spaces milestone](scheduling-and-threads.md)
+follows. This idea adds no prerequisites or tasks to either milestone.
 
 Borrow explicit dependency wiring and scoped resolution from inversion of control
 and dependency injection. Launchers already supply capabilities, and FILE and
@@ -187,14 +187,14 @@ boundary leaves open. [Space titles](../userland/init.md#space-titles) are also 
 Keep three choices separate: Pyxis file/directory capability requests, a backend
 operation interface, and the disk format. A FUSE-inspired backend need not force
 Linux FUSE's complete wire ABI, Unix permissions or path semantics on applications.
-If a custom disk format is selected, a freestanding format implementation could
-be shared by a Caelum adapter and a Linux FUSE adapter. The host and kernel sides
-would supply their own I/O/allocation glue. The native filesystem need not run in
-userspace to enable host mounting.
+The selected [native format](../../fs/docs/native-format.md) has shared freestanding
+codecs and host tools; Caelum owns its implemented cache/writer and I/O/allocation
+policy. A future Linux FUSE adapter could consume the same codecs with its own
+runtime state. Host mounting requires a separate assignment and does not require
+moving the native kernel writer into userspace.
 
-Defer existing-versus-custom disk format selection and installer design until
-there are block I/O and concrete persistence requirements. Virtio-fs can support
-port development while those decisions remain open.
+Installer design remains separate from the completed native writer. Virtio-fs
+continues to support port development alongside native disk storage.
 
 ## References
 

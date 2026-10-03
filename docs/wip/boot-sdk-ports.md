@@ -112,73 +112,23 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Current focus and later candidates
 
-The [native read-only filesystem milestone](../devices/native-readonly-filesystem.md)
-is complete: init-selected GPT partition/volume mounting, policy-approved objects,
-explicit root delegation, ordinary reads and executable loading, scoped filesystem
-information and Fastfetch Disk. Combined validation covers source-content reads,
-retained rights, repeated operations, final cleanup and unchanged media.
-The agreed storage continuation is [writable core and recovery](writable-filesystem-core.md),
-with [native persistent volumes](native-persistent-volumes.md) as its later
-integration. The first task
-settles bounded publication/reclamation, live handles, admission and maintained
-host contract tests with a per-filesystem-PR CI merge gate. Tests and the bounded
-failure adapter land with their behavior in pyxis-fs. The namespace profile, tighter
-deletion reservation and Unity setup are accepted; real-host post-error recovery
-qualification is deferred. Tasks 1–6 are complete, including public file/namespace
-mutation, retained-handle lifetime, funded orphan cleanup and their maintained
-tests. Task 7 has shared extended campaigns and the populated 4 GiB recovery
-workload, with a focused contiguous-volume-selection correction for the observed
-fragmentation limit. Whole-map write costs and remaining qualification still
-block milestone closure and writable deployment. Task 7 now requires
-RAM-only validation/baselines, incremental allocation-map design with revised
-admission and cleanup bounds, implementation/recovery tests, and repeated write-cost
-acceptance measurements. Large disk-backed runs are suspended; larger profiles
-need a bounded RAM-only execution plan. The placement fix remains useful but does
-not resolve this blocker. The first corrective step adds the scoped
-2 GiB RAM / 4 GiB job launcher and a small Pyxis/ext4/Btrfs baseline; this VM is
-the agreed safety boundary. Two 40-case matrices and the maintained suites pass;
-the initial target is now Btrfs-comparable submitted-write costs on representative
-matched workloads, with ext4 retained as a comparison and longer-term goal.
-The delivered narrow final-orphan
-cleanup reduces compiler-history totals by 15.70–18.79% through maintenance.
-The merged [bounded retirement-debt correction](filesystem-retirement-debt.md)
-(filesystem #20 / Pyxis #312) carries reclamation across individually durable
-publications and lowers matched compiler totals by a further 53.19–58.95%.
-All eight short Pyxis cases beat recorded Btrfs totals; sustained writes, larger
-populations/fragmentation, namespace churn, pressure and recovery qualification
-remain open. The [incremental-map proposal](filesystem-write-efficiency.md#incremental-allocation-map-proposal)
-records the accepted topology-preserving intermediate path and explicit funded
-bulk/global-closure limitation. The first implementation is merged; the assigned
-focused planning follow-up adds indexed retirement membership and phase-separated
-diagnostics under the same budgets. The subsequently assigned
-[bounded sustained follow-up](../../fs/docs/sustained-map-measurements.md)
-completes 54 independently verified cases on source maps up to J=216, with all
-setup, preparation, windows and final maintenance included. Broad local closure
-dominates append/overwrite metadata traffic; the largest such histories exceed
-Btrfs totals. Compiler writes are non-monotonic with population while instrumented
-planning time grows. Native member-cgroup peaks are not complete RAM high-water
-measurements; independent scratch/trace bounds and conservative estimates remain.
-The subsequently assigned [occupancy-aware neighbour repair](../../fs/docs/neighbour-repair-measurements.md)
-compares complete expanded runs under the same funding/termination bounds.
-Matched results are mixed; this selector does not settle broad closure or planning
-costs. After #327 merged, the owner accepted and assigned the
-[bounded leaf-overflow split](filesystem-overflow-split.md): one extra leaf under
-an existing parent, distinct retired/emitted counts, renewed self-accounting and
-one seed restoration before ordinary repair/bulk. Its
-[implementation and matched record](../../fs/docs/overflow-split-measurements.md)
-retain existing admission/reserve/memory/runner policy. General structural editing
-and further optimisations require separate assignment.
-On 2026-10-02 the owner superseded this writable track with a
-[simple native filesystem](native-filesystem.md): ext2-class structures, native
-to Caelum, with a format-only shared library. The pyxis-fs writer's measured
-workload time reached 13–80 ms per logical operation in RAM, growing with
-population. Native read-only
-mounts keep working until the replacement lands.
-Broader population/pressure and recovery qualification, deployment criteria and
-task 7 remain open. See
-the linked milestone for the corrective task list.
-FUSE and installation remain separate. These
-plans do not start implementation or displace explicitly assigned libc/remote work.
+The [native filesystem milestone](native-filesystem.md) has completed format-only
+codecs, host tools and the Caelum-owned cache/writer. Trusted init selects explicit
+read-only or writable roots; native file, directory and configured-disk sync
+commit required data and metadata. Close releases a handle without promising
+durability. The [kernel adapter](../devices/filesystem-native-adapter.md) records
+current authority, lifetime, recovery and resource contracts; the
+[task-3 measurements](../development/experiments/native-filesystem-task3/README.md)
+record ordinary nested-KVM performance, persistence and consumer validation.
+
+The portable COW implementation, tools, tests and six superseded planning documents
+and obsolete filesystem docs are removed. Git retains its historical
+[RAM baseline](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/ram-baseline.md),
+[sustained map record](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/sustained-map-measurements.md) and
+[overflow-split record](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/overflow-split-measurements.md).
+Those records do not assign further portable-writer work. Crash recovery,
+allocation pressure and physical-media qualification remain unexercised paths,
+not unfinished portable-core tasks. FUSE and installation remain separate.
 
 The [libc input read-ahead milestone](../userland/stdio.md#input-read-ahead) is
 complete: buffered stdio fetches file and pipe input in BUFSIZ blocks while
@@ -199,8 +149,8 @@ limits live in the subsystem docs, with the
 [fetch/inspect/compile/run workflow](../development/edit-build-run.md#fetch-source-over-https)
 beside the local development loop. SSH/libssh remains deferred. The
 [block-storage foundation](../devices/block-storage.md) is also complete. The
-[initial filesystem format and read-only core](../devices/filesystem-readonly.md) is
-complete; writable core/native integration scopes are linked above, while FUSE
+[native filesystem format and tools](../devices/filesystem-readonly.md) and
+[kernel writer](../devices/filesystem-native-adapter.md) are complete; FUSE
 remains a later proposal.
 
 The [task state and BSP service requests milestone](../kernel/bsp-service-requests.md)
@@ -240,7 +190,7 @@ evidence and header probes; its proposed native event, threading, metadata and
 terminal milestones remain deferred. No Neovim build or runtime compatibility
 is claimed. The LLVM investigation remains separate future work.
 
-After writable filesystem core completion, the agreed
+After native filesystem writer completion, the agreed
 [runtime SMP milestone](scheduling-and-threads.md) separates spaces and boot sessions
 from CPU topology, schedules existing single-task processes across eligible CPUs
 including the BSP, and brings private-memory operations onto the caller's CPU.
@@ -249,28 +199,20 @@ per-task fairness and a scrolling space bar are explicit. Capture matched
 before/after performance records; selected services remain serial initially.
 Declarative YAML init is a separate userspace follow-up, not an SMP prerequisite.
 User threads and off-BSP service-worker placement follow separately. Native writable
-mount integration remains a storage follow-up, not a prerequisite for this SMP work.
+mount integration is complete and adds no separate prerequisite to this SMP work.
 The [backend interfaces and scoped dependency direction](later-os-directions.md#backend-interfaces-and-scoped-service-dependencies)
-is parked for later; it does not change the filesystem-core-then-spaces/SMP order.
+is parked for later; it does not change the native-writer-then-spaces/SMP order.
 
-The [persistent storage design](persistent-storage.md) records the agreed custom
-COW pool, volume guarantees, migration strategy, durability and compatibility
-contracts. The [block-storage foundation](../devices/block-storage.md) is complete:
-[configurable split queues](../devices/virtio-queues.md) serve filesystem, entropy and
-virtio-blk; bounded ticketed reads/writes and ordered flushes support
-[GPT discovery](../devices/gpt.md). Final validation combined those devices on the merged
-implementation. Device/transport failure remains terminal until reboot. The
-[initial format and read-only shared core](../devices/filesystem-readonly.md) is complete.
-PyxisOS/pyxis-fs owns the pinned freestanding core and Linux host tools built by
-`make fs-tools`. They create populated images, reopen and extract them, evaluate
-bounded acquisition and check both retained states. The
-[format contract](../../fs/docs/format.md), [core interfaces](../../fs/docs/core.md)
-and [measured host validation](../../fs/docs/host-tools.md#validation) are durable
-references. The [native read-only mount milestone](../devices/native-readonly-filesystem.md) is also
-complete. The [writable core](writable-filesystem-core.md) and
-[native persistence](native-persistent-volumes.md) follow as separate milestones;
-FUSE is not a prerequisite.
-BSP request separation is complete.
+The [block-storage foundation](../devices/block-storage.md) is complete:
+[configurable split queues](../devices/virtio-queues.md) serve filesystem, entropy
+and virtio-blk; bounded ticketed reads/writes and ordered flushes support
+[GPT discovery](../devices/gpt.md). Device/transport failure remains terminal
+until reboot. PyxisOS/pyxis-fs owns the pinned native format-only library and Linux
+host tools built by `make fs-tools`; Caelum owns mounted state and the writer.
+The [native format contract](../../fs/docs/native-format.md),
+[host-tool guide](../../fs/docs/native-host-tools.md) and
+[kernel adapter](../devices/filesystem-native-adapter.md) describe implemented
+behavior. BSP request separation is complete. FUSE is not a prerequisite.
 
 The [USB installation proposal](usb-installation.md) records a replaceable SanDisk
 target and QEMU-first stages: boot Limine/kernel/archive from a FAT32 EFI partition,
@@ -333,7 +275,7 @@ The RTL8111 driver remains a proposed follow-up.
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
 | Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../devices/block-storage.md), [read-only core](../devices/filesystem-readonly.md) and [native mounts](../devices/native-readonly-filesystem.md) are complete. | [Writable core/recovery](writable-filesystem-core.md), then [native persistence](native-persistent-volumes.md); FUSE remains later. |
+| Native disk storage | The [block-storage foundation](../devices/block-storage.md), [native format/tools](../devices/filesystem-readonly.md) and [kernel cache/writer](../devices/filesystem-native-adapter.md) are complete. | Installation and crash/physical-media qualification remain separate; FUSE remains later. |
 
 The [application port candidates](application-ports.md) include longer-term
 DevilutionX and C AbyssEngine/Diablo II investigations. The

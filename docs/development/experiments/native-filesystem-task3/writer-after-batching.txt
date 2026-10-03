@@ -1,0 +1,285 @@
+Submitted command order (output echo disabled):
+1: iobench read empty://nested/small.bin --bytes 32768 --rounds 1
+2: ls empty://nested
+3: iobench read data://iobench.bin --buffer 4088 --rounds 5
+4: iobench write data://writer.bin --buffer 4080 --rounds 5 --sync
+5: iobench write data://writer-batched.bin --buffer 4080 --rounds 5 --sync
+6: iobench write data://prepared-batched.bin --prepared --buffer 4080 --rounds 5 --sync
+7: iobench write home://native-task3-control.bin --buffer 4080 --rounds 5 --sync
+8: cat app://share/hello.txt > empty://nested/text.txt
+9: cat empty://nested/text.txt
+10: mv empty://nested/text.txt empty://nested/renamed.txt
+11: cat app://share/iobench-small.bin > empty://nested/replaced.txt
+12: mv empty://nested/renamed.txt empty://nested/replaced.txt
+13: cat empty://nested/replaced.txt
+14: cat app://cat.pxe > data://cat.pxe
+15: data://cat.pxe empty://nested/replaced.txt
+16: cat app://share/hello.txt > ro://blocked.txt
+17: sync ro://
+18: sync --disk
+19: fastfetch --logo none --structure Disk --format json
+20: mv empty://nested/replaced.txt data://cross-volume.txt
+21: rm empty://nested/small.bin
+22: iobench copy data://iobench.bin data://copied.bin --buffer 4080 --rounds 1 --sync
+23: mkdir empty://café
+24: rmdir empty://café
+25: rmdir empty://nested
+26: sync empty://
+27: exit
+
+Decoded remote output and completions:
+iobench read: source=empty://nested/small.bin output=none buffer=4088 rounds=1 warmup=1 fixture=32768 bytes
+Clock-call loop: 35491 ns/read (1000 reads); not subtracted
+Host FILE profiling: off (measured payload reads only)
+warmup 1: OK; requested=32768 completed=32768 bytes; read_calls=9 short_reads=0 eof_calls=1 failed_pass=0
+sample 1: OK; requested=32768 completed=32768 bytes; read_calls=9 short_reads=0 eof_calls=1 failed_pass=0
+  open=11745170 ns
+  payload=5683360 ns (5.683 ms); 5.499 MiB/s
+  complete=17982340 ns (17.982 ms); 1.738 MiB/s
+OPEN summary: 1 verified samples; elapsed median=11.745 ms range=11.745..11.745 ms
+Payload read summary: 1 verified samples; elapsed median=5.683 ms range=5.683..5.683 ms; throughput at median elapsed=5.499 MiB/s
+Complete consumption summary: 1 verified samples; elapsed median=17.982 ms range=17.982..17.982 ms; throughput at median elapsed=1.738 MiB/s
+
+REMOTE {"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+small.bin
+
+REMOTE {"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+iobench read: source=data://iobench.bin output=none buffer=4088 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 35725 ns/read (1000 reads); not subtracted
+Host FILE profiling: off (measured payload reads only)
+warmup 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+sample 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=11838760 ns
+  payload=147912560 ns (147.913 ms); 6.761 MiB/s
+  complete=160358700 ns (160.359 ms); 6.236 MiB/s
+sample 2: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=22500310 ns
+  payload=142337470 ns (142.337 ms); 7.026 MiB/s
+  complete=165346620 ns (165.347 ms); 6.048 MiB/s
+sample 3: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=23007370 ns
+  payload=140411330 ns (140.411 ms); 7.122 MiB/s
+  complete=163917300 ns (163.917 ms); 6.101 MiB/s
+sample 4: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=23734680 ns
+  payload=151310590 ns (151.311 ms); 6.609 MiB/s
+  complete=175545490 ns (175.545 ms); 5.697 MiB/s
+sample 5: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=23188930 ns
+  payload=149255040 ns (149.255 ms); 6.700 MiB/s
+  complete=172943250 ns (172.943 ms); 5.782 MiB/s
+OPEN summary: 5 verified samples; elapsed median=23.007 ms range=11.839..23.735 ms
+Payload read summary: 5 verified samples; elapsed median=147.913 ms range=140.411..151.311 ms; throughput at median elapsed=6.761 MiB/s
+Complete consumption summary: 5 verified samples; elapsed median=165.347 ms range=160.359..175.545 ms; throughput at median elapsed=6.048 MiB/s
+
+REMOTE {"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://writer.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 36675 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+iobench: exclusive output creation: Already exists
+iobench: no creation retry or removal; inspect destination after host errors
+iobench: FAILED; no successful-run summary
+shell: iobench: Exited with status 1
+
+REMOTE {"type": "command_complete", "command": 4, "kind": "exited", "exit_status": 1}
+iobench write: source=generated output=data://writer-batched.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 35545 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=268661640 ns (268.662 ms); 3.722 MiB/s
+  file_sync=207445640 ns (207.446 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=251318360 ns (251.318 ms); 3.979 MiB/s
+  file_sync=206344900 ns (206.345 ms)
+sample 3: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=251027700 ns (251.028 ms); 3.984 MiB/s
+  file_sync=207348070 ns (207.348 ms)
+sample 4: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=251179480 ns (251.179 ms); 3.981 MiB/s
+  file_sync=204907030 ns (204.907 ms)
+sample 5: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=244988630 ns (244.989 ms); 4.082 MiB/s
+  file_sync=557575590 ns (557.576 ms)
+Output retained: data://writer-batched.bin
+Transfer summary: 5 verified samples; elapsed median=251.179 ms range=244.989..268.662 ms; throughput at median elapsed=3.981 MiB/s
+File sync summary: 5 verified samples; elapsed median=207.348 ms range=204.907..557.576 ms
+
+REMOTE {"type": "command_complete", "command": 5, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://prepared-batched.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 35823 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=prepared overwrite sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=155667200 ns (155.667 ms); 6.424 MiB/s
+  file_sync=569929110 ns (569.929 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=161893870 ns (161.894 ms); 6.177 MiB/s
+  file_sync=554307040 ns (554.307 ms)
+sample 3: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=161490940 ns (161.491 ms); 6.192 MiB/s
+  file_sync=559224740 ns (559.225 ms)
+sample 4: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=164051590 ns (164.052 ms); 6.096 MiB/s
+  file_sync=557320740 ns (557.321 ms)
+sample 5: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=159875330 ns (159.875 ms); 6.255 MiB/s
+  file_sync=573885550 ns (573.886 ms)
+Output retained: data://prepared-batched.bin
+Transfer summary: 5 verified samples; elapsed median=161.491 ms range=155.667..164.052 ms; throughput at median elapsed=6.192 MiB/s
+File sync summary: 5 verified samples; elapsed median=559.225 ms range=554.307..573.886 ms
+
+REMOTE {"type": "command_complete", "command": 6, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=home://native-task3-control.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 36161 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=6231200 ns (6.231 ms); 160.483 MiB/s
+  file_sync=35540 ns (0.036 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=10481820 ns (10.482 ms); 95.403 MiB/s
+  file_sync=33970 ns (0.034 ms)
+sample 3: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=9327760 ns (9.328 ms); 107.207 MiB/s
+  file_sync=33580 ns (0.034 ms)
+sample 4: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=7994350 ns (7.994 ms); 125.088 MiB/s
+  file_sync=33970 ns (0.034 ms)
+sample 5: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=6758580 ns (6.759 ms); 147.960 MiB/s
+  file_sync=33830 ns (0.034 ms)
+Output retained: home://native-task3-control.bin
+Transfer summary: 5 verified samples; elapsed median=7.994 ms range=6.231..10.482 ms; throughput at median elapsed=125.088 MiB/s
+File sync summary: 5 verified samples; elapsed median=0.034 ms range=0.034..0.036 ms
+
+REMOTE {"type": "command_complete", "command": 7, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 8, "kind": "exited", "exit_status": 0}
+This text came from the boot archive. Hello received an app directory capability,
+listed its entries, and looked up share and then this file with explicit rights.
+It did not need a global filesystem root or a kernel path parser.
+
+The program queries the file size, reads at explicit byte offsets, and prints
+through its space's console. Directory enumeration does not grant handles;
+lookup returns a new reference which the program closes after reading.
+
+The endpoint client passes its own read-only file capability to the server.
+Closing either handle leaves the other reference valid. The shared boot archive
+keeps its original bytes after the programs exit.
+
+REMOTE {"type": "command_complete", "command": 9, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 10, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 11, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 12, "kind": "exited", "exit_status": 0}
+This text came from the boot archive. Hello received an app directory capability,
+listed its entries, and looked up share and then this file with explicit rights.
+It did not need a global filesystem root or a kernel path parser.
+
+The program queries the file size, reads at explicit byte offsets, and prints
+through its space's console. Directory enumeration does not grant handles;
+lookup returns a new reference which the program closes after reading.
+
+The endpoint client passes its own read-only file capability to the server.
+Closing either handle leaves the other reference valid. The shared boot archive
+keeps its original bytes after the programs exit.
+
+REMOTE {"type": "command_complete", "command": 13, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 14, "kind": "exited", "exit_status": 0}
+This text came from the boot archive. Hello received an app directory capability,
+listed its entries, and looked up share and then this file with explicit rights.
+It did not need a global filesystem root or a kernel path parser.
+
+The program queries the file size, reads at explicit byte offsets, and prints
+through its space's console. Directory enumeration does not grant handles;
+lookup returns a new reference which the program closes after reading.
+
+The endpoint client passes its own read-only file capability to the server.
+Closing either handle leaves the other reference valid. The shared boot archive
+keeps its original bytes after the programs exit.
+
+REMOTE {"type": "command_complete", "command": 15, "kind": "exited", "exit_status": 0}
+shell: redirect: ro://blocked.txt: Permission denied or path escapes its boundary
+
+REMOTE {"type": "command_complete", "command": 16, "kind": "launch_failed"}
+sync: ro://: Permission denied or path escapes its boundary
+shell: sync: Exited with status 1
+
+REMOTE {"type": "command_complete", "command": 17, "kind": "exited", "exit_status": 1}
+shell: sync: configured native disk: Working directory or resource unavailable
+
+REMOTE {"type": "command_complete", "command": 18, "kind": "builtin", "status": 1}
+[
+  {
+    "type": "Disk",
+    "error": "Native filesystem information query failed"
+  }
+]
+
+REMOTE {"type": "command_complete", "command": 19, "kind": "exited", "exit_status": 0}
+mv: empty://nested/replaced.txt -> data://cross-volume.txt: Operation not supported
+shell: mv: Exited with status 1
+
+REMOTE {"type": "command_complete", "command": 20, "kind": "exited", "exit_status": 1}
+
+REMOTE {"type": "command_complete", "command": 21, "kind": "exited", "exit_status": 0}
+iobench copy: source=data://iobench.bin output=data://copied.bin buffer=4080 rounds=1 warmup=1 fixture=1048576 bytes
+Clock-call loop: 35592 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=438273140 ns (438.273 ms); 2.282 MiB/s
+  file_sync=209537990 ns (209.538 ms)
+Output retained: data://copied.bin
+Transfer summary: 1 verified samples; elapsed median=438.273 ms range=438.273..438.273 ms; throughput at median elapsed=2.282 MiB/s
+File sync summary: 1 verified samples; elapsed median=209.538 ms range=209.538..209.538 ms
+
+REMOTE {"type": "command_complete", "command": 22, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 23, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 24, "kind": "exited", "exit_status": 0}
+rmdir: empty://nested: Directory not empty
+shell: rmdir: Exited with status 1
+
+REMOTE {"type": "command_complete", "command": 25, "kind": "exited", "exit_status": 1}
+
+REMOTE {"type": "command_complete", "command": 26, "kind": "exited", "exit_status": 0}
+
+REMOTE {"type": "command_complete", "command": 27, "kind": "builtin", "status": 0}
+
+REMOTE {"type": "final", "cause": "shell_exit", "process_reason": 1, "process_reason_name": "exited", "exit_status": 0, "drain": "complete"}

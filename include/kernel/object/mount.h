@@ -4,7 +4,6 @@
 #include <abi/syscall.h>
 #include <kernel/gpt.h>
 #include <kernel/object/object.h>
-#include <pyxis_fs/base.h>
 
 /* BSP/IF=0: one owned reference to authority over the selected boot-lifetime
  * virtio-fs export. Creation does not wait for transport initialization. */
@@ -13,7 +12,6 @@ struct kernel_object *mount_create(void);
 struct mount_config {
   bool enabled;
   struct gpt_guid disk;
-  struct pfs_principal_id principal;
 };
 
 /* Trusted boot configuration is captured; authority owns no backing roots. */

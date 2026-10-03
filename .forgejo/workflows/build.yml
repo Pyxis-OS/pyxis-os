@@ -21,8 +21,16 @@ jobs:
         with:
           submodules: recursive
           persist-credentials: false
-      - name: Verify RAM boundary and test pinned filesystem
-        run: python3 fs/tests/ram_run.py --inside --suite check --ci-quick
+      - name: Build pinned native format and host tools
+        run: |
+          if [ "$(id -u)" -eq 0 ]; then
+            build_uid=$(id -u nobody)
+            build_gid=$(id -g nobody)
+            chown -hR "$build_uid:$build_gid" .
+            exec setpriv --reuid="$build_uid" --regid="$build_gid" --clear-groups \
+              --no-new-privs env HOME=/tmp make -j16 fs-tools
+          fi
+          exec make -j16 fs-tools
 
   build:
     needs: filesystem

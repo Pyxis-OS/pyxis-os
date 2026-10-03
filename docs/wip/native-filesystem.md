@@ -10,8 +10,8 @@ work. It supersedes the pyxis-fs writer plans listed under
   [focused tasks](#focused-tasks). The completed
   [format decisions](native-filesystem-format.md#decision-status) record accepted
   policies and the implemented task-2 format/tool boundary (2026-10-03).
-- **Proposals awaiting the owner:** [writeback details](#proposed-writeback-details) and the
-  [working method](#proposed-working-method).
+- **Accepted task-3 policies:** [writeback details](#accepted-writeback-details).
+- **Proposal awaiting the owner:** the [working method](#proposed-working-method).
 - **Not requirements:** [later ideas](#later-ideas).
 
 ## Owner decisions
@@ -50,7 +50,7 @@ complete candidate. In the instrumented RAM matrix, measured workload time per
 logical operation was 13–80 ms, against 0.12–0.16 ms for Btrfs, and grew 3–5x from
 1 MiB to 20 MiB of stored data. That figure is window time divided by operations,
 including the host failure simulator, not a per-call latency distribution.
-That is the [overflow-split record](../../fs/docs/overflow-split-measurements.md)
+That is the [overflow-split record](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/overflow-split-measurements.md)
 at filesystem `a250731`. Write volume was already below Btrfs, but at that
 latency every synchronous write would stall the system.
 
@@ -60,21 +60,14 @@ about as much as starting over.
 
 ## What stops
 
-- No further pyxis-fs writer work: no write-efficiency, latency or map-planner
-  tasks, and no further measurement matrices. These plans are superseded and kept
-  only as history:
-  - [writable filesystem core](writable-filesystem-core.md);
-  - [write efficiency](filesystem-write-efficiency.md);
-  - [retirement debt](filesystem-retirement-debt.md);
-  - [overflow split](filesystem-overflow-split.md);
-  - [native persistent volumes](native-persistent-volumes.md);
-  - [pool and persistent filesystem](persistent-storage.md).
-
-  The owner decides separately whether to delete them now or when the
-  replacement lands.
+- No further portable pyxis-fs writer work: no write-efficiency, latency or
+  map-planner tasks, and no further measurement matrices. The six superseded
+  planning documents were removed with task 3; Git retains their history.
+  The obsolete filesystem docs and measurement records were also removed;
+  Git retains the [evidence for the restart](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/overflow-split-measurements.md).
 - The pyxis-fs writer is never run against a real disk.
-- The [native read-only mounts](../devices/native-readonly-filesystem.md) keep
-  working on the current format until the new filesystem replaces them.
+- The [native mounts](../devices/native-readonly-filesystem.md) now use the new
+  format and kernel writer; the portable core and obsolete tools are retired.
 
 ## V1 answers
 
@@ -120,51 +113,59 @@ The owner accepted these task-3 policies during the
 - `fsync`/`sync` return once all required data and the covering COMMITTED records
   are durable. Checkpointing and EMPTY publication continue in the background,
   before the next commit. A request spanning batches waits for all required
-  batches; this does not accept the separate whole-current-transaction policy.
+  batches. The whole-current-transaction policy was subsequently accepted below.
 
-These remain requirements for task 3, beyond the implemented codecs and host tools.
+These policies are implemented by the kernel writer, alongside the codecs and host tools.
 
-## Proposed writeback details
+## Accepted writeback details
 
-Proposals for the owner, refining the accepted durability model above.
+Accepted by the owner for task 3 on 2026-10-03:
 
-1. **One dumb flush task.** Every T seconds, write all dirty data and commit the
-   journal, with no per-page age tracking. T is the nominal writeback interval,
-   not a bound on crash loss. Data written just after a pass waits for the next
-   one, plus that pass's I/O and commit time, and longer under load. Only `fsync`
-   and `sync` guarantee durability. Proposed T: 30 s, a named constant.
-2. **`fsync` commits the whole current transaction.** It writes that file's
-   dirty data, then commits the pool's single journal transaction. The file's
-   size, block pointers and directory entry then become durable together. That is
-   simpler for programs than POSIX, where a new file's name needs a separate
-   `fsync` of its directory. The commit must satisfy every ordered-data
-   dependency in the transaction. If another file's newly allocated blocks are in
-   it, that data must reach the disk first, so a small `fsync` can wait for
-   unrelated I/O.
-3. **Delayed allocation.** Cached data gets disk blocks only when it is written
-   back. In ordered mode, a commit must first write the data its new metadata
-   points to. Allocating at write time puts every cached write into the
-   transaction, so a small `fsync` waits for unrelated large writes (ext3's fsync
-   stalls). Delayed allocation reduces that coupling, but cannot remove
-   dependencies already in the transaction. Allocating at writeback also places
-   files contiguously, which helps block pointers. If it complicates the first
-   version, it can be deferred.
+1. **Periodic full flush.** One background task flushes all dirty data every T
+   seconds, without per-page age tracking. T defaults to **30 seconds** and is
+   configurable through **menuconfig**. T is nominal, not a bound on crash loss;
+   a pass can take longer under load. Only `fsync` and `sync` guarantee durability.
+2. **Whole-current-transaction `fsync`.** Flush the requested file's dirty data
+   and commit the pool's current metadata transaction, satisfying every ordered
+   data dependency. File contents/size, mappings and the directory entry become
+   durable together. A small save can wait for unrelated I/O from other files.
+3. **Delayed allocation.** Assign physical disk blocks when cached data is written
+   back. This improves batching and reduces coupling between files, but cannot
+   remove dependencies already in a transaction. A cached write can succeed and
+   later encounter insufficient disk space during writeback or synchronization.
 
-Notes for implementation: memory-pressure writeback needs a reclaim hook in
-Caelum's memory management, so it arrives with the page cache. The installer must
-call `sync` before reporting success. Kilo's save should later call `fsync`.
+Memory-pressure writeback arrives with the cache and its memory-management hook.
+The installer must call `sync` before reporting success; Kilo's save should later
+call `fsync`. The kernel writer implements these policies; clean shutdown,
+restart and sleep flushing remain deferred until those operations exist.
+
+Accepted mount authority and lifetime policies, 2026-10-03:
+
+- Native mount configuration selects a GPT disk GUID without an on-disk
+  principal. `MOUNT_RIGHT_WRITE` separately authorizes requesting mutation rights
+  on a root; read-only file and directory grants remain attenuated.
+- `MOUNT_SYNC` requires mount WRITE and synchronizes every mounted pool on the
+  capability's configured disk. Existing file and directory sync calls remain
+  available through their own capabilities.
+- Last-handle close releases the process's cleanup charge and makes no durability
+  promise. The mounted pool retains dirty data and writeback errors for later
+  synchronization. Failed writeback does not discard cached contents.
+- FILE_SIZE accepts READ or WRITE, including write-only append/end-relative seek.
+- Sync reports and acknowledges each retained recoverable writeback error. Later
+  sync can succeed after dirty data is durable; ongoing failures still fail each
+  attempt. Uncertain disk I/O stops mutation and remains visible until reboot.
 
 ## Pool format and host tools
 
 The [format decisions](native-filesystem-format.md) record the accepted shape:
 one bitmap, 64 volumes with growable inode files, block-pointer mappings, simple
 directories and one metadata journal. The [implemented encoding](../../fs/docs/native-format.md)
-and [host tools](../../fs/docs/native-host-tools.md) live in pyxis-fs beside the
-old core. V1 checksums only headers and journal; read-only opening refuses a
+and [host tools](../../fs/docs/native-host-tools.md) live in pyxis-fs; the
+old core and tools are retired. V1 checksums only headers and journal; read-only opening refuses a
 committed journal and writable fsck replays it. Journal capacity is chosen per
 pool, starting at at least 128 MiB for the 256 GB target. Volume starvation remains
-deferred: working first, space policy later. Caelum's old native mounts continue
-using the old format; the new writer and mounts belong to task 3.
+deferred: working first, space policy later. Caelum's native mounts use the new
+format through its own inode/cache/writer engine.
 
 The native installer makes Pyxis userspace the third link-time symbol provider
 for the format library, alongside the host and Caelum.
@@ -211,18 +212,62 @@ Accepted 2026-10-02.
 1. [x] **Format proposal.** A short design of the on-disk format: pool header,
    bitmap, volume table, inodes, directories and journal, with reserved bytes and
    feature flags. Owner decisions go at most three per round. The
-   [format decisions](native-filesystem-format.md) retain accepted choices and
-   unresolved writer policies; task 2 implements the format details.
+   [format decisions](native-filesystem-format.md) retain accepted choices;
+   task 2 implements the format details.
 2. [x] **Format library and host tools.** Structure definitions, encoding and
    decoding with link-time symbols, plus host `mkfs`, `fsck` and inspection.
    Implemented in [pyxis-fs #26](https://git.internal/PyxisOS/pyxis-fs/pulls/26);
    [tool guide and validation](../../fs/docs/native-host-tools.md). Committed replay
-   is source-reviewed, not runtime exercised; no writer exists yet.
-3. [ ] **Native read/write in Caelum** on virtio-blk, with persistent in-memory
-   state and caching. Latency and bytes written are measured from the start.
+   is source-reviewed, not crash-injection qualified; the task-3 kernel writer
+   now produces normal COMMITTED/checkpoint transactions.
+3. [x] **Native read/write in Caelum** on virtio-blk, with persistent in-memory
+   state and caching. Implemented in
+   [parent #348](https://git.internal/PyxisOS/pyxis-os/pulls/348);
+   [measurements](../development/experiments/native-filesystem-task3/README.md)
+   record latency, bytes and ordinary validation from the start. Final owner
+   policies are implemented; crash injection and physical-media qualification
+   were not assigned.
 4. [ ] **Installer tools:** GPT creation, the FAT32 boot partition, pool
    formatting and copying files from the boot archive.
 5. [ ] **End to end:** install and boot in QEMU, then on the ThinkPad.
+
+## Task-3 delivery
+
+The task branch is `fs/native-writer`, based on main `132aef1`, with
+[parent #348](https://git.internal/PyxisOS/pyxis-os/pulls/348). Main `d04c6a6` was
+merged during delivery, followed by main `e7f389e`, to preserve concurrent
+completed work. It uses published
+[filesystem #27](https://git.internal/PyxisOS/pyxis-fs/pulls/27) at `caf8edc`
+and [userland #104](https://git.internal/PyxisOS/pyxis-userland/pulls/104) at `d15d782`,
+which preserves current userland main alongside the native changes.
+Merge dependencies before the parent PR. The kernel owns cached data, delayed
+allocation, journal commit/replay/checkpoint and bounded cleanup; the old shared
+core and tools are retired. No compiler-container rebuild is needed.
+
+The owner accepted both final refinements: FILE_SIZE through READ or WRITE, and
+one-time acknowledgment of retained recoverable errors by sync. The measurement
+record holds builds, QEMU/GDB observations, persistence and host checking results.
+The final ordinary build and QEMU boot, sync, writable INFO, host fsck and file
+comparison passed. Exact submitted-revision CI is reported with the PR. Runtime
+crash injection and physical-media qualification were not assigned. All task
+validation clients, QEMU and debugger processes have been stopped.
+
+PR review found per-candidate disk bitmap reads that caused writeback timeout on
+a populated 1 GiB pool. The kernel now retains the full bitmap with staged journal
+overlays, scans free words and folds changes only after durable EMPTY. The
+[populated-pool review](../development/experiments/native-filesystem-task3/populated-pool-review.md)
+records the reproduction, ordinary corrected workloads and memory cost. The six
+superseded portable-writer plans and their active references were removed as
+directed by the owner. The obsolete pyxis-fs docs and measurement JSON were
+also removed; the current task-3 experiment directory remains unchanged.
+Allocation now asserts that its transaction has freed no blocks. The guard
+clears only after durable EMPTY or healthy transaction discard. An ordinary
+four-CPU, 256 MiB nested-KVM boot verified repeated truncate/write/sync rounds,
+unlink cleanup and subsequent allocation. GDB observed the flag set with a
+COMMITTED cleanup transaction and cleared after successful checkpoint/EMPTY.
+The stopped pool passed host fsck, and the extracted new file matched the
+installed 1 MiB fixture. Healthy abort and uncertain-failure handling were
+source-reviewed; no failure injection was added.
 
 ## Later ideas
 

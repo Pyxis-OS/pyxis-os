@@ -370,7 +370,7 @@ static struct syscall_result read_file(struct file_object *file, uint64_t rights
   return (struct syscall_result){CALL_OK, sizeof(reply) + reply.read};
 }
 
-static struct syscall_result write_file(struct file_object *file,
+static struct syscall_result write_file(struct file_object *file, uint64_t rights,
     const struct file_write_request *request, uintptr_t data_address,
     uintptr_t reply_address, size_t reply_capacity)
 {
@@ -384,7 +384,24 @@ static struct syscall_result write_file(struct file_object *file,
   }
 
   if (file->backing == FILE_NATIVE) {
-    return (struct syscall_result){CALL_READ_ONLY, 0};
+    struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_WRITE);
+    pending->job.node = file->native;
+    pending->job.rights = rights;
+    pending->job.offset = request->offset;
+    pending->job.count = request->size;
+    KASSERT(pending->job.count <= sizeof(pending->job.data));
+    KASSERT(copy_from_user(pending->job.data, data_address, pending->job.count));
+    nativefs_request_submit_and_wait(pending);
+    enum call_status status = pending->job.status;
+    if (status != CALL_OK) {
+      nativefs_request_release(pending);
+      return (struct syscall_result){status, 0};
+    }
+    KASSERT(pending->job.count <= request->size);
+    reply.written = pending->job.count;
+    KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+    nativefs_request_release(pending);
+    return (struct syscall_result){CALL_OK, sizeof(reply)};
   }
   if (!request->size) {
     KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
@@ -467,7 +484,7 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     required = FILE_RIGHT_READ;
     break;
   case FILE_SIZE:
-    required = file->backing == FILE_NATIVE ? FILE_RIGHT_READ : FILE_RIGHTS;
+    required = FILE_RIGHTS;
     break;
   case FILE_WRITE:
   case FILE_RESIZE:
@@ -502,12 +519,21 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     if (request.size != request_size - sizeof(request)) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
-    return write_file(file, &request, request_address + sizeof(request),
+    return write_file(file, rights, &request, request_address + sizeof(request),
         reply_address, reply_capacity);
   }
   if (operation == FILE_SYNC) {
     if (request_size) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (file->backing == FILE_NATIVE) {
+      struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_SYNC);
+      pending->job.node = file->native;
+      pending->job.rights = rights;
+      nativefs_request_submit_and_wait(pending);
+      enum call_status status = pending->job.status;
+      nativefs_request_release(pending);
+      return (struct syscall_result){status, 0};
     }
     if (file->backing == FILE_HOST) {
       struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_SYNC);
@@ -526,6 +552,16 @@ struct syscall_result file_call(struct file_object *file, uint64_t rights,
     }
     if (!copy_from_user(&request, request_address, sizeof(request))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    if (file->backing == FILE_NATIVE) {
+      struct nativefs_request *pending = nativefs_request_prepare(NATIVEFS_RESIZE);
+      pending->job.node = file->native;
+      pending->job.rights = rights;
+      pending->job.offset = request.size;
+      nativefs_request_submit_and_wait(pending);
+      enum call_status status = pending->job.status;
+      nativefs_request_release(pending);
+      return (struct syscall_result){status, 0};
     }
     if (file->backing == FILE_HOST) {
       struct hostfs_request *pending = hostfs_request_prepare(HOSTFS_RESIZE);
