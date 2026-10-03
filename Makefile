@@ -3,6 +3,7 @@ CC := $(CROSS_COMPILE)gcc
 HOSTCC ?= cc
 HOSTAR ?= ar
 LUA ?= lua
+PYTHON ?= python3
 export CROSS_COMPILE HOSTCC LUA
 QEMU ?= qemu-system-x86_64
 QEMU_DISPLAY ?= gtk
@@ -66,8 +67,11 @@ OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM
 include kernel/net/lwip/build.mk
 include kernel/fs/build.mk
 
-.PHONY: all kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools fs-tools sdk sdk-headers userspace ports initrd image usb-image run debug run-usb debug-usb clean check-toolchain FORCE
+.PHONY: all menuconfig kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools fs-tools sdk sdk-headers userspace ports initrd image usb-image run debug run-usb debug-usb clean check-toolchain FORCE
 all: kernel
+
+menuconfig:
+	$(PYTHON) -m menuconfig Kconfig
 
 ifneq ($(filter kernel,$(PREBUILT)),)
 kernel:
@@ -157,6 +161,12 @@ endif
 # Preserve the header timestamp unless the selected level actually changes.
 # Compiler flags alone do not make existing objects out of date.
 FORCE:
+
+build/kernel-config.h: Kconfig .config FORCE
+	@mkdir -p $(@D)
+	$(PYTHON) -m genconfig --header-path $@ --config-out build/kernel.config Kconfig
+
+build/kernel/init.o: build/kernel-config.h
 
 build/kernel-log-config.h: FORCE
 	@mkdir -p $(@D)

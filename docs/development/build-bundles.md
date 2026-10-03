@@ -9,7 +9,7 @@ or repeated checkouts.
 
 | Component / artifact | Local target | Tar payload |
 | --- | --- | --- |
-| kernel / pyxis-kernel | `make bundle-kernel` | `build/caelum.elf` |
+| kernel / pyxis-kernel | `make bundle-kernel` | `build/caelum.elf`, `build/kernel.config` |
 | sdk / pyxis-sdk | `make bundle-sdk` | `build/sdk` |
 | userland / pyxis-userland | `make bundle-userspace` | `build/userspace-root` |
 | ports / pyxis-ports | `make bundle-ports` | `build/ports-root`, `build/ports-dev` |
@@ -65,7 +65,10 @@ the complete ports development tree used for its session launcher, HTTP library
 and native TLS adapter. Mismatches fail rather than silently
 building a different component. Records include source revisions, dirty state
 and local change hashes, selected builder image, and relevant compiler/flag
-provenance. These checks establish matching inputs, not a cryptographic trust
+provenance. Kernel bundles also include the complete effective Kconfig
+configuration and record its content hash. A selected prebuilt kernel uses that
+configuration; local `.config` edits apply only to kernel source builds.
+These checks establish matching inputs, not a cryptographic trust
 boundary or proof that arbitrary kernel implementation changes preserve behavior.
 
 Kernel source builds require the pinned lwIP and filesystem submodules. Their

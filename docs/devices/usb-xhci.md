@@ -1,10 +1,12 @@
 # Initial xHCI controller
 
-Native xHCI initialization is temporarily disabled by `XHCI_ENABLED` in
-[`kernel/init.c`](../../kernel/init.c). Both controller preparation and worker
+Native xHCI initialization defaults to disabled by `CONFIG_XHCI=n` in
+[`.config`](../../.config). Both controller preparation and worker
 startup are skipped, with `xHCI: disabled at build time` in the boot log. The
-kernel makes no xHCI claim or DMA allocation. Set the constant to `1` and rebuild
-to resume explicit QEMU bring-up. The ThinkPad's three-controller inventory is
+kernel makes no xHCI claim or DMA allocation. Enable XHCI under Caelum in
+[`make menuconfig`](../development/configuration.md), or set `CONFIG_XHCI=y`
+directly in `.config`, and rebuild to resume explicit QEMU bring-up.
+The ThinkPad's three-controller inventory is
 outside the current unique-controller profile; native hardware remains unqualified.
 Firmware can still load the kernel and boot archive from USB.
 

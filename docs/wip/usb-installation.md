@@ -344,8 +344,9 @@ host tools and the later physical-preparation procedure.
 ### B. Native read-only USB storage
 
 - [x] **Pause native xHCI initialization by default.** Guard preparation and
-  worker startup with one build-time constant while the ThinkPad profile remains
-  unqualified. QEMU bring-up can explicitly re-enable it for a rebuilt image.
+  worker startup with the `CONFIG_XHCI` Kconfig option while the ThinkPad profile
+  remains unqualified. The checked-in `.config` defaults to `n`; direct edits or
+  `make menuconfig` can explicitly re-enable QEMU bring-up for a rebuilt image.
 
 1. [x] **Settle controller, request and disk-selection contracts.** Inventory
    current PCI resource/interrupt/DMA facilities and block-interface coupling.

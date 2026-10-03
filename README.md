@@ -9,13 +9,15 @@ Doom in the Development space, alongside a remote shell showing native filesyste
 information and piping an HTTPS response into `sha256sum`.
 
 Requires GNU Make, a host C compiler, the [Pyxis GCC/binutils toolchain](toolchain/README.md),
-QEMU, GNU cpio, xorriso, host Lua 5.4, and a matching raw OVMF code/variables pair.
+QEMU, GNU cpio, xorriso, host Lua 5.4, Python 3 with
+[Kconfiglib](docs/development/configuration.md), and a matching raw OVMF code/variables pair.
 Userspace, ports, lwIP and the filesystem core are [pinned submodules](docs/development/sdk-and-repositories.md).
 See [port builds](docs/development/ports.md) for application dependencies. CI publishes
 [independent build bundles](docs/development/build-bundles.md) for local reuse.
 
 ```sh
 git submodule update --init userspace ports third_party/lwip fs
+make menuconfig          # optional; .config can also be edited directly
 make -j16                 # kernel: build/caelum.elf
 make -j16 image           # kernel, userspace and ports: build/pyxis.iso
 make sdk                  # export build/sdk; see docs/development/sdk.md
