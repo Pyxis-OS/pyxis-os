@@ -38,6 +38,7 @@
 #define USB_DESCRIPTOR_HUB 0x29
 #define USB_HUB_PREFIX_BYTES 7
 #define USB_HUB_STATUS_BYTES 4
+#define USB_SIGNAL_ATTACH_MS 100
 #define USB_HUB_OVERCURRENT 0x02
 #define USB_HUB_CHARACTERISTICS_RESERVED 0xff00
 #define USB_HUB_TT_SHIFT 5
@@ -949,9 +950,13 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
     return false;
   }
   *ports = prefix[2];
-  size_t total = USB_HUB_PREFIX_BYTES + 2 * ((*ports + 1 + 7) / 8);
+  /* DeviceRemovable reserves bit zero; the compatibility power mask only
+   * requires one bit per port. Accept extra padding without interpreting it. */
+  size_t minimum = USB_HUB_PREFIX_BYTES + (*ports + 1 + 7) / 8 + (*ports + 7) / 8;
+  size_t total = prefix[0];
   unsigned characteristics = read16(prefix + 3);
-  if (!*ports || prefix[1] != USB_DESCRIPTOR_HUB || prefix[0] != total ||
+  if (!*ports || prefix[1] != USB_DESCRIPTOR_HUB || total < minimum ||
+      total > hub->owner->capacity ||
       (characteristics & USB_HUB_CHARACTERISTICS_RESERVED)) {
     hub->detail = "invalid USB 2 hub descriptor";
     return false;
@@ -978,7 +983,8 @@ static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
   if (power_delay < USB_PORT_POWER_DELAY_MS) {
     power_delay = USB_PORT_POWER_DELAY_MS;
   }
-  if (!hub_sleep(power_delay, deadline)) {
+  /* Bus-powered devices may take TSIGATT after VBUS is valid to signal attach. */
+  if (!hub_sleep(power_delay + USB_SIGNAL_ATTACH_MS, deadline)) {
     return false;
   }
   struct usb_setup status = {
@@ -1137,6 +1143,35 @@ void usb_inventory_controller_failed(size_t index)
        controller->info.pci.device, controller->info.pci.function);
 }
 
+static void log_device(const struct usb_device_record *device)
+{
+  /* A path contains one root and at most the reserved descendant count.
+   * Each uint16_t port needs at most five digits and a separator. */
+  char path[(USB_DESCENDANT_BUDGET + 1) * sizeof("65535")];
+  char *cursor = path + sizeof(path) - 1;
+  *cursor = '\0';
+  const struct usb_device_record *ancestor = device;
+  for (;;) {
+    bool root = ancestor->info.parent_index == SYSTEM_INFO_USB_NO_PARENT;
+    unsigned port = root ? ancestor->info.root_port : ancestor->info.parent_port;
+    do {
+      *--cursor = '0' + port % 10;
+      port /= 10;
+    } while (port);
+    if (root) {
+      break;
+    }
+    *--cursor = '.';
+    ancestor = &device->owner->devices[ancestor->info.parent_index];
+  }
+  const struct system_info_pci_function *pci =
+    &inventory.controllers[device->owner->registry_index].info.pci;
+  klog("usb: %x:%x.%u port %s device %x:%x%s%s%s\n", pci->bus, pci->device,
+       pci->function, cursor, device->info.vendor_id, device->info.product_id,
+       device->incomplete ? " (incomplete)" : "", device->detail ? ": " : "",
+       device->detail ? device->detail : "");
+}
+
 void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
 {
   if (!discovery || discovery->started ||
@@ -1156,11 +1191,6 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
       device->info.flags |= SYSTEM_INFO_USB_DEVICE_INCOMPLETE;
       incomplete = true;
     }
-    const struct system_info_pci_function *pci =
-      &inventory.controllers[discovery->registry_index].info.pci;
-    klog("usb: %x:%x.%u port %u device %x:%x%s%s\n", pci->bus, pci->device, pci->function,
-         device->info.root_port, device->info.vendor_id, device->info.product_id,
-         device->detail ? ": " : "", device->detail ? device->detail : "");
   }
   /* Roots are inspected first. Appended children make this an iterative
    * breadth-first walk, with every parent preceding its descendants. */
@@ -1173,6 +1203,7 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
       device->info.flags |= SYSTEM_INFO_USB_DEVICE_INCOMPLETE;
       incomplete = true;
     }
+    log_device(device);
   }
   incomplete |= !usb_host_inventory_complete(discovery->host) || task_deadline_expired(deadline);
   uint64_t flags = cpu_save_interrupts();

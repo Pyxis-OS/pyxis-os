@@ -13,8 +13,10 @@ Other classes remain unbound. Hub activation gives system_info READ clients no
 transfer or reset authority.
 
 Hub class requests use EP0. The core checks the variable-length USB 2 hub
-descriptor, updates xHCI hub Slot metadata, powers ports and waits for the
-advertised power-good delay, with the existing minimum settling delay. It checks
+descriptor, requiring room for both bitmaps while accepting extra compatibility
+padding as opaque data. It updates xHCI hub Slot metadata, powers ports and waits
+for the advertised power-good delay, with the existing minimum settling delay,
+then the USB 2 maximum 100 ms signal-attachment interval. It checks
 overcurrent and every port's logical power state, then captures connected
 candidates before resetting any child. Observed candidates survive later failure
 as unidentified/incomplete records. Each candidate has a stable connection
@@ -23,6 +25,10 @@ bits are acknowledged explicitly; later connection changes make traversal partia
 Final status checks include empty ports and power. No hub interrupt endpoint is
 configured: boot polling supplies this snapshot, without runtime monitoring of
 hub descendants.
+
+The boot log reports each retained device's full physical path, numeric IDs and
+inspection detail. Hub lines are emitted after traversal so partial branch
+reasons are visible without debugger access.
 
 Roots are inspected first, followed by an iterative breadth-first hub walk.
 USB requests remain in core; xHCI owns routing, Slot commands, speed identities,

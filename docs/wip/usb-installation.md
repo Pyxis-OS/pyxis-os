@@ -365,7 +365,9 @@ host tools and the later physical-preparation procedure.
    descriptor parsing and addressing. Publish root-device and interface observations
    independently of class binding; unsupported inspection remains explicit.
    - [x] Extend the inspection snapshot through USB 2 hubs with low/full/high-speed
-     descendants, discovered parent/port paths and bounded pre-AP resources.
+     descendants, discovered parent/port paths, full-path boot diagnostics and
+     bounded pre-AP resources. Capture follows power-good and attachment settling;
+     unused compatibility padding does not reject an otherwise bounded descriptor.
      SuperSpeed hubs, hotplug and storage remain deferred; high-speed TT and
      physical hardware remain unqualified. See the [hub reference](../devices/usb-hubs.md).
    The initial BOT matcher/endpoint setup was removed for the inspection-only

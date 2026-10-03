@@ -1335,9 +1335,7 @@ Revisit the budget and root reservation policy with actual topology/resource
 requirements, without runtime mapping or allocation outside the VM contract.
 The shared startup deadline can expire on large trees; exhausted branches are
 partial. SuperSpeed hubs and low-speed/high-speed-TT hardware paths remain
-unqualified; QEMU's built-in hub exercises full-speed descendants only. It also
-returns a malformed descriptor at its default eight-port setting, which is
-reported partial rather than receiving an emulator-specific exception.
+unqualified; QEMU's built-in hub exercises full-speed descendants only.
 Hub descendants are not monitored after publication; idle downstream removal
 retains their slots/backing until reboot. Revisit this with separately scoped
 hotplug/lifetime work. Root removal still retires the retained subtree, and

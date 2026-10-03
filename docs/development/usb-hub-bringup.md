@@ -62,12 +62,12 @@ hub controller, one failed controller without MSI-X, and unsupported EHCI.
 Named/numeric/missing-database listings returned status 1; `lspci -n` returned 0
 and the shell remained usable.
 
-QEMU's built-in eight-port hub returns a ten-byte hub descriptor, whereas its
-advertised port count requires eleven bytes: both bitmaps include the reserved
-hub bit. This ordinary model was listed as an incomplete hub with its checked
-identity and interface, without guessing its descendants or stopping other
-controllers. There is no QEMU-specific descriptor exception. Supported validation
-cases selected three, five or seven ports; QEMU rejects more than eight ports.
+The initial exact-length check rejected QEMU's built-in eight-port hub's ten-byte
+descriptor, retaining only its identity and interface. That check incorrectly
+required the compatibility power mask to include DeviceRemovable's reserved bit
+zero. USB 2 Table 11-13 requires one power-mask bit per port. The review follow-up
+below corrects this generic descriptor bound; no emulator-specific exception is
+needed. QEMU rejects more than eight ports.
 
 A larger ordinary tree attached four seven-port hubs and 29 mice below one
 seven-port root hub, presenting 33 descendants. The initial 32-entry descendant
@@ -75,6 +75,55 @@ budget retained 33 devices/interfaces including the root, marked the exhausted
 hub/controller partial and kept the controller running. The shell and numeric
 listing remained usable with status 1. This also exercised natural command/event
 ring wrap. No artificial register or transfer failures were injected.
+
+## Review follow-up
+
+The follow-up accepts a declared hub descriptor length large enough for the
+seven-byte prefix, `ceil((ports + 1) / 8)` removable bitmap and `ceil(ports / 8)`
+compatibility power mask. It reads the declared length within the existing
+descriptor budget and leaves trailing data opaque. Hub connection capture now
+waits an additional 100 ms after the power-good delay for USB 2 TSIGATT; debounce
+and the existing shared startup deadline remain unchanged. This adds 100 ms of
+requested settling per traversed hub, not a measured boot-time result. Slow
+physical attachment remains unqualified because QEMU attaches immediately.
+
+An ordinary enabled kernel/SDK/full source image build passed with the published
+userland README clarification at `a6e1a409`. The same QEMU/CPU/RAM/firmware profile
+used four/three/five-port nested hubs, a default eight-port hub with a keyboard on
+its eighth port, and a direct mouse. The device arguments were:
+
+```text
+-device qemu-xhci,id=usb
+-device usb-hub,bus=usb.0,port=1,ports=4
+-device usb-hub,bus=usb.0,port=1.2,ports=3
+-device usb-hub,bus=usb.0,port=1.2.3,ports=5
+-device usb-kbd,bus=usb.0,port=1.1
+-device usb-tablet,bus=usb.0,port=1.2.1
+-device usb-mouse,bus=usb.0,port=1.2.3.5
+-device usb-hub,bus=usb.0,port=2
+-device usb-kbd,bus=usb.0,port=2.8
+-device usb-mouse,bus=usb.0,port=3
+```
+
+GDB showed a complete nine-device/nine-interface snapshot, six admitted
+descendants, 22 controller commands and 215 consumed events. The serial boot log
+reported all nine paths, including `6.8` and `5.2.3.5`; hub lines followed their
+traversal. Named, numeric, missing-database and piped listings all exited 0, as
+did `lspci -n`. Native remote command completion and final drain were successful.
+
+The 33-descendant tree was repeated to check failure diagnostics after the new
+logging. It retained the root plus 32 descendants, reported partial inventory
+with a running controller, and logged the exhausted hub's full path and
+`hub reserved device budget exhausted` reason at `3.4`. Numeric `lsusb` exited 1,
+`lspci -n` exited 0 and the remote session drained successfully. GDB showed 71
+commands and 745 events, compared with the earlier sample's 746 events; this
+variation is not a performance result. This checks bounded diagnostics without
+changing resource admission or failure policy.
+
+The default `CONFIG_XHCI=n` was restored, and the ordinary kernel/SDK/full image
+build passed again. Follow-up kernel and userland builds emitted no warnings;
+the enabled full source rebuild included existing vendored-port warnings. All
+QEMU, debugger and remote client jobs used here were closed.
 
 ## Qualification limits
 
