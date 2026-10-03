@@ -42,7 +42,7 @@ static void report_bars(struct pci_scan *scan, struct pci_address address,
     }
 
     if (low & PCI_BAR_IO) {
-      klog("  BAR%u: I/O base=0x%x\n", index, low & PCI_BAR_IO_ADDRESS_MASK);
+      ktrace("  BAR%u: I/O base=0x%x\n", index, low & PCI_BAR_IO_ADDRESS_MASK);
       continue;
     }
 
@@ -62,7 +62,7 @@ static void report_bars(struct pci_scan *scan, struct pci_address address,
       continue;
     }
 
-    klog("  BAR%u: memory%u base=0x%lx prefetchable=%u\n", first,
+    ktrace("  BAR%u: memory%u base=0x%lx prefetchable=%u\n", first,
          type == PCI_BAR_MEMORY_64 ? 64u : 32u, base,
          (unsigned)((low & PCI_BAR_PREFETCHABLE) != 0));
   }
@@ -97,7 +97,7 @@ static void report_extended_capabilities(struct pci_scan *scan,
     if (!header || header == UINT32_MAX) {
       return;
     }
-    klog("  extended capability 0x%x version=%u at 0x%x\n",
+    ktrace("  extended capability 0x%x version=%u at 0x%x\n",
          header & PCI_EXT_CAP_ID_MASK,
          (header >> PCI_EXT_CAP_VERSION_SHIFT) & PCI_EXT_CAP_VERSION_MASK, offset);
     offset = header >> PCI_EXT_CAP_NEXT_SHIFT;
@@ -121,7 +121,7 @@ static void report_capabilities(struct pci_scan *scan, struct pci_address addres
     seen[offset / PCI_REGISTER_BYTES] = true;
 
     unsigned id = pci_read8(address, offset + PCI_CAP_ID);
-    klog("  capability 0x%x (%s) at 0x%x\n", id, capability_name(id), offset);
+    ktrace("  capability 0x%x (%s) at 0x%x\n", id, capability_name(id), offset);
     express |= id == PCI_CAP_EXPRESS;
     offset = pci_read8(address, offset + PCI_CAP_NEXT) & PCI_CAP_POINTER_MASK;
   }
@@ -137,7 +137,7 @@ static void discover_bridge(struct pci_scan *scan, struct pci_address address,
   unsigned primary = pci_read8(address, PCI_BRIDGE_PRIMARY);
   unsigned secondary = pci_read8(address, PCI_BRIDGE_SECONDARY);
   unsigned subordinate = pci_read8(address, PCI_BRIDGE_SUBORDINATE);
-  klog("  bridge: primary=%u secondary=%u subordinate=%u\n",
+  ktrace("  bridge: primary=%u secondary=%u subordinate=%u\n",
        primary, secondary, subordinate);
 
   if (!secondary && !subordinate) {
@@ -178,7 +178,7 @@ static void discover_function(struct pci_scan *scan, struct pci_address address,
   unsigned interface = pci_read8(address, PCI_INTERFACE);
   unsigned revision = pci_read8(address, PCI_REVISION);
   unsigned header = pci_read8(address, PCI_HEADER_TYPE) & PCI_HEADER_TYPE_MASK;
-  klog("PCI 0:%x:%x.%u: vendor=0x%x device=0x%x class=%x:%x:%x revision=0x%x header=%u\n",
+  ktrace("PCI 0:%x:%x.%u: vendor=0x%x device=0x%x class=%x:%x:%x revision=0x%x header=%u\n",
        address.bus, address.device, address.function, vendor, device,
        class, subclass, interface, revision, header);
   ++scan->functions;

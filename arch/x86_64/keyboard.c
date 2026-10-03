@@ -102,13 +102,21 @@ static unsigned locks;
 static bool extended, released, pause_release;
 static size_t pause_index;
 
-static bool wait_input_empty(void)
+struct ps2_setup {
+  const char *step;
+  uint8_t status;
+  uint8_t reply;
+  bool reply_received;
+};
+
+static bool wait_input_empty(struct ps2_setup *setup)
 {
   for (unsigned i = 0; i < PS2_POLL_LIMIT; ++i) {
     if (!(i % PS2_CLOCK_POLL_INTERVAL)) {
       arch_clock_maintain();
     }
-    if (!(inb(PS2_STATUS_PORT) & PS2_INPUT_FULL)) {
+    setup->status = inb(PS2_STATUS_PORT);
+    if (!(setup->status & PS2_INPUT_FULL)) {
       return true;
     }
     __asm__ volatile("pause");
@@ -116,33 +124,38 @@ static bool wait_input_empty(void)
   return false;
 }
 
-static bool write_command(uint8_t command)
+static bool write_command(struct ps2_setup *setup, uint8_t command)
 {
-  if (!wait_input_empty()) {
+  if (!wait_input_empty(setup)) {
     return false;
   }
   outb(PS2_COMMAND_PORT, command);
   return true;
 }
 
-static bool write_data(uint8_t data)
+static bool write_data(struct ps2_setup *setup, uint8_t data)
 {
-  if (!wait_input_empty()) {
+  if (!wait_input_empty(setup)) {
     return false;
   }
   outb(PS2_DATA_PORT, data);
   return true;
 }
 
-static bool read_reply(uint8_t *reply)
+static bool read_reply(struct ps2_setup *setup, uint8_t *reply)
 {
   for (unsigned i = 0; i < PS2_POLL_LIMIT; ++i) {
     if (!(i % PS2_CLOCK_POLL_INTERVAL)) {
       arch_clock_maintain();
     }
     uint8_t status = inb(PS2_STATUS_PORT);
+    setup->status = status;
     if (status & PS2_OUTPUT_FULL) {
       uint8_t data = inb(PS2_DATA_PORT);
+      if (!(status & PS2_AUXILIARY_DATA)) {
+        setup->reply = data;
+        setup->reply_received = true;
+      }
       if (status & (PS2_TIMEOUT_ERROR | PS2_PARITY_ERROR)) {
         return false;
       }
@@ -156,16 +169,16 @@ static bool read_reply(uint8_t *reply)
   return false;
 }
 
-static bool keyboard_command(uint8_t command)
+static bool keyboard_command(struct ps2_setup *setup, uint8_t command)
 {
   for (unsigned attempt = 0; attempt < PS2_COMMAND_ATTEMPTS; ++attempt) {
-    if (!write_data(command)) {
+    if (!write_data(setup, command)) {
       return false;
     }
     /* Bytes already in flight before disable-scanning may precede its ACK. */
     for (unsigned i = 0; i < PS2_DRAIN_LIMIT; ++i) {
       uint8_t reply;
-      if (!read_reply(&reply)) {
+      if (!read_reply(setup, &reply)) {
         return false;
       }
       if (reply == PS2_ACK) {
@@ -179,53 +192,97 @@ static bool keyboard_command(uint8_t command)
   return false;
 }
 
-static bool configure_keyboard(void)
+static bool configure_keyboard(struct ps2_setup *setup)
 {
-  if (!write_command(PS2_DISABLE_KEYBOARD) || !write_command(PS2_DISABLE_AUXILIARY)) {
+  setup->step = "disable keyboard";
+  if (!write_command(setup, PS2_DISABLE_KEYBOARD)) {
     return false;
   }
+  setup->step = "disable auxiliary";
+  if (!write_command(setup, PS2_DISABLE_AUXILIARY)) {
+    return false;
+  }
+  setup->step = "drain output";
   for (unsigned i = 0; i < PS2_DRAIN_LIMIT; ++i) {
-    if (!(inb(PS2_STATUS_PORT) & PS2_OUTPUT_FULL)) {
+    setup->status = inb(PS2_STATUS_PORT);
+    if (!(setup->status & PS2_OUTPUT_FULL)) {
       break;
     }
     inb(PS2_DATA_PORT);
   }
-  if (inb(PS2_STATUS_PORT) & PS2_OUTPUT_FULL) {
+  setup->status = inb(PS2_STATUS_PORT);
+  if (setup->status & PS2_OUTPUT_FULL) {
     return false;
   }
 
   uint8_t config;
-  if (!write_command(PS2_READ_CONFIG) || !read_reply(&config)) {
+  setup->step = "read config";
+  if (!write_command(setup, PS2_READ_CONFIG) || !read_reply(setup, &config)) {
     return false;
   }
   config &= ~(PS2_CONFIG_KEYBOARD_IRQ | PS2_CONFIG_AUXILIARY_IRQ |
               PS2_CONFIG_TRANSLATION);
   config |= PS2_CONFIG_AUXILIARY_DISABLED;
-  if (!write_command(PS2_WRITE_CONFIG) || !write_data(config) ||
-      !write_command(PS2_ENABLE_KEYBOARD) || !keyboard_command(PS2_DISABLE_SCANNING) ||
-      !keyboard_command(PS2_SET_SCAN_CODES) || !keyboard_command(PS2_SCAN_SET_2)) {
+  setup->step = "write config (translation off)";
+  if (!write_command(setup, PS2_WRITE_CONFIG) || !write_data(setup, config)) {
+    return false;
+  }
+  setup->step = "enable keyboard";
+  if (!write_command(setup, PS2_ENABLE_KEYBOARD)) {
+    return false;
+  }
+  setup->step = "disable scanning";
+  if (!keyboard_command(setup, PS2_DISABLE_SCANNING)) {
+    return false;
+  }
+  setup->step = "set scan set command";
+  if (!keyboard_command(setup, PS2_SET_SCAN_CODES)) {
+    return false;
+  }
+  setup->step = "set scan set 2";
+  if (!keyboard_command(setup, PS2_SCAN_SET_2)) {
     return false;
   }
 
   /* Query the selected set while scanning is stopped, so replies cannot be
    * mistaken for key events. The controller must leave these bytes untranslated. */
   uint8_t scan_set;
-  if (!keyboard_command(PS2_SET_SCAN_CODES) || !keyboard_command(0) ||
-      !read_reply(&scan_set) || scan_set != PS2_SCAN_SET_2) {
+  setup->step = "query scan set command";
+  if (!keyboard_command(setup, PS2_SET_SCAN_CODES)) {
+    return false;
+  }
+  setup->step = "query scan set value";
+  if (!keyboard_command(setup, 0)) {
+    return false;
+  }
+  setup->step = "read scan set";
+  if (!read_reply(setup, &scan_set) || scan_set != PS2_SCAN_SET_2) {
     return false;
   }
 
   config &= ~PS2_CONFIG_KEYBOARD_DISABLED;
   config |= PS2_CONFIG_KEYBOARD_IRQ;
-  return write_command(PS2_WRITE_CONFIG) && write_data(config) &&
-         keyboard_command(PS2_ENABLE_SCANNING);
+  setup->step = "enable keyboard IRQ";
+  if (!write_command(setup, PS2_WRITE_CONFIG) || !write_data(setup, config)) {
+    return false;
+  }
+  setup->step = "enable scanning";
+  return keyboard_command(setup, PS2_ENABLE_SCANNING);
 }
 
 void ps2_keyboard_init(void)
 {
-  if (!configure_keyboard()) {
-    write_command(PS2_DISABLE_KEYBOARD);
-    klog("keyboard: PS/2 initialization failed; input unavailable\n");
+  struct ps2_setup setup = {0};
+  if (!configure_keyboard(&setup)) {
+    struct ps2_setup failed = setup;
+    write_command(&setup, PS2_DISABLE_KEYBOARD);
+    if (failed.reply_received) {
+      klog("keyboard: PS/2 initialization failed at %s (status 0x%x, last reply 0x%x); input unavailable\n",
+           failed.step, failed.status, failed.reply);
+    } else {
+      klog("keyboard: PS/2 initialization failed at %s (status 0x%x, no reply); input unavailable\n",
+           failed.step, failed.status);
+    }
     return;
   }
 

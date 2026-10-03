@@ -214,6 +214,11 @@ serial-only, as before. Showing them would mean taking the screen back from a
 presenter that may still be running on the BSP, so a machine without serial
 shows no panic text once userspace has started. A serial port that stops
 accepting output is latched off for the rest of boot and not retried.
+Early ordinary log bytes are retained in a fixed, prefix-preserving 32 KiB buffer
+and replayed into the Caelum TTY once. This does not provide scrollback: later
+output can still displace the beginning, and a full buffer drops later bytes
+with a notice. Revisit capacity or a separate log-view capability only when
+native bring-up needs more retained history.
 Revisit with real-hardware bring-up, if post-boot panics need to be visible
 without serial.
 
