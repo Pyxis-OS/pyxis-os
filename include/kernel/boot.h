@@ -24,7 +24,7 @@ struct boot_region {
   enum boot_region_type type;
 };
 
-/* The boot archive remains in boot-reserved physical frames. The kernel must
+/* Boot files remain in boot-reserved physical frames. The kernel must
  * map them before reading; neither the Limine pointer nor its HHDM survives. */
 struct boot_module {
   uint64_t physical;
@@ -56,6 +56,7 @@ struct boot_info {
   int64_t utc_seconds; /* Unix seconds from Limine; not an exact handoff sample. */
   bool utc_available;
   char command_line[BOOT_COMMAND_LINE_SIZE];
+  struct boot_module kernel_file; /* Original ELF bytes, not the loaded image. */
   struct boot_module initrd;
   struct boot_framebuffer framebuffer;
   size_t region_count;

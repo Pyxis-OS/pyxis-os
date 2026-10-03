@@ -4,6 +4,7 @@
 #include <kernel/init.h>
 #include <kernel/user/launch.h>
 #include <kernel/boot.h>
+#include <kernel/boot_files.h>
 #include <kernel/initrd.h>
 #include <kernel/log.h>
 #include <kernel/mm/heap.h>
@@ -41,6 +42,13 @@
     panic("cannot initialize boot archive (error %u)", (unsigned)archive_result);
   }
   klog("initrd: newc archive=%zu bytes, mapped read-only\n", boot->initrd.size);
+  arch_clock_maintain();
+
+  enum mm_result boot_files_result = boot_files_init(boot);
+  if (boot_files_result != MM_OK) {
+    panic("cannot retain boot files (error %u)", (unsigned)boot_files_result);
+  }
+  klog("boot files: original kernel=%zu bytes, mapped read-only\n", boot->kernel_file.size);
   arch_clock_maintain();
 
   klog("PCI: discovery starting\n");
