@@ -1290,9 +1290,11 @@ PCI xHCI profile, now with multiple independently discovered controllers. It req
 page-aligned BAR0 prefix, interpreted extended capabilities within that 4 KiB
 prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles, SuperSpeed hubs,
 power management and insertion after the startup snapshot are unsupported.
-QEMU advertises zero scratchpads and 32-byte contexts; nonzero scratchpads,
-64-byte device contexts, nondefault PSI mappings and BIOS ownership handoff remain
-unmeasured paths. Enumeration publishes root devices and bounded USB 2 hub descendants;
+QEMU advertises zero scratchpads and 32-byte contexts. An
+[owner-reported ThinkPad run](targets/t14-gen1-amd/usb-bringup.md) observed
+nonzero scratchpads and 64-byte contexts; nondefault PSI mappings and BIOS
+ownership handoff remain unmeasured paths. This first native snapshot does not
+establish broad controller qualification. Enumeration publishes root devices and bounded USB 2 hub descendants;
 SuperSpeed hubs, LUN/media support and USB block access remain pending.
 
 USB 2 root-port reset has no explicit connect-debounce interval. The startup snapshot
@@ -1353,8 +1355,10 @@ controller. Pool allocation failure can fail that controller's preparation.
 Revisit the budget and root reservation policy with actual topology/resource
 requirements, without runtime mapping or allocation outside the VM contract.
 The shared startup deadline can expire on large trees; exhausted branches are
-partial. SuperSpeed hubs and low-speed/high-speed-TT hardware paths remain
-unqualified; QEMU's built-in hub exercises full-speed descendants only.
+partial. SuperSpeed hubs and low-speed hardware paths remain unqualified.
+The first owner-reported ThinkPad snapshot exercised full-speed descendants
+behind high-speed hubs; recovery and broader TT qualification remain pending.
+QEMU's built-in hub exercises full-speed descendants only.
 Hub descendants are not monitored after publication; idle downstream removal
 retains their slots/backing until reboot. Revisit this with separately scoped
 hotplug/lifetime work. Root removal still retires the retained subtree, and

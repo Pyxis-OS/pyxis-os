@@ -5,6 +5,7 @@
 #include <arch/dma.h>
 #include <arch/pci.h>
 #include <arch/smp.h>
+#include <kernel/format.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/dma.h>
@@ -954,6 +955,18 @@ static uint32_t observe_port(struct usb_host_controller *controller, unsigned in
   return status;
 }
 
+static void format_protocol_revision(const struct xhci_port *port, char *revision)
+{
+  /* Hex digits preserve the BCD fields; omit a zero subminor component. */
+  unsigned minor = port->minor >> XHCI_REVISION_DIGIT_SHIFT;
+  unsigned subminor = port->minor & XHCI_REVISION_DIGIT_MASK;
+  if (subminor) {
+    sprintf(revision, "%x.%x.%x", port->major, minor, subminor);
+  } else {
+    sprintf(revision, "%x.%x", port->major, minor);
+  }
+}
+
 static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadline)
 {
   bool powered = false;
@@ -984,9 +997,11 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
     struct xhci_port *port = &controller->ports[i];
     if (port->state != PORT_CONNECTED) {
       if (port->state == PORT_UNSUPPORTED) {
-        klog("xHCI %x:%x.%u: port %u unsupported protocol %u.%u\n",
+        char revision[sizeof("ff.f.f")];
+        format_protocol_revision(port, revision);
+        klog("xHCI %x:%x.%u: port %u unsupported protocol %s\n",
              controller->address.bus, controller->address.device, controller->address.function,
-             i + 1, port->major, port->minor);
+             i + 1, revision);
       }
       continue;
     }
@@ -1033,9 +1048,11 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
     port->device.speed = port->speeds[port->speed];
     port->device.raw_speed = port->speed;
     port->state = PORT_RESERVED;
-    klog("xHCI %x:%x.%u: root port %u USB %u.%u speed-id=%u slot=%u enabled; addressing pending\n",
+    char revision[sizeof("ff.f.f")];
+    format_protocol_revision(port, revision);
+    klog("xHCI %x:%x.%u: root port %u USB %s speed-id=%u slot=%u enabled; addressing pending\n",
          controller->address.bus, controller->address.device, controller->address.function,
-         i + 1, port->major, port->minor, port->speed, port->slot);
+         i + 1, revision, port->speed, port->slot);
   }
   return true;
 }
