@@ -455,14 +455,14 @@ rejects a revision-3-or-newer FADT whose bit 1 at offset 109 is clear.
 [I/O APIC setup](../../arch/x86_64/io_apic.c) then reports unavailable input
 without initializing PS/2. The owner subsequently posted the Fedora FADT
 readout at offset 109: `0013` (hexadecimal). Bit `0x2` is set, so the suspected
-clear-flag rejection is ruled out for that table. The FADT revision and early
-keyboard log are still unrecorded; the cause of missing input remains unknown.
+clear-flag rejection is ruled out for that table. The earlier FADT-probing
+proposal is withdrawn. The early keyboard log is still unrecorded; the cause
+of missing input remains unknown.
 
-The owner's flag-read command and remaining revision read are:
+The owner's flag-read command was:
 
 ```sh
 sudo od -A d -t x2 -j 109 -N 2 /sys/firmware/acpi/tables/FACP
-sudo od -A d -t u1 -j 8 -N 1 /sys/firmware/acpi/tables/FACP
 ```
 
 Also capture the early `keyboard:` and `clock:` lines, for example in a
@@ -470,8 +470,9 @@ slow-motion boot video. The keyboard log distinguishes absent route/controller,
 PS/2 initialization failure and scan-set-2 readiness; a ready controller leaves
 interrupt delivery or a later freeze to investigate. Continued output for about
 a minute would distinguish ongoing execution from a complete freeze; use a
-trace build if observing the ordinary exit lines. Bounded controller probing
-and ACPI namespace discovery are proposed alternatives, not accepted changes.
+trace build if observing the ordinary exit lines. A later review comment proposes
+a visible heartbeat with timer, presenter and keyboard counters to distinguish
+stalls from missing input; that diagnostic has not been assigned or implemented.
 Do not begin keyboard or TSC implementation as part of this PR.
 
 ### Clock and scheduler boundaries
