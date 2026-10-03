@@ -1,4 +1,4 @@
-# RAM filesystem mutations
+# Filesystem mutations
 
 The native directory protocol supports creation, removal and atomic file
 rename/replacement. These operations act on single component names through
@@ -11,7 +11,7 @@ Existing file handles retain their object. A detached directory can remain
 open, but rejects creation of new children. Enumeration returns copied names
 and reports CHANGED when its generation no longer matches.
 
-Rename requires REMOVE on the source parent and CREATE on the destination;
+RAM rename requires REMOVE on the source parent and CREATE on the destination;
 replacing another entry also requires destination REMOVE. Both parents must
 refer to writable RAM directories. The operation supports explicit replace or
 no-replace policy, and failure preserves both entries. No missing-destination
@@ -33,5 +33,40 @@ Directory moves, hard links, recursive deletion and cross-filesystem moves are
 not implemented. Directory moves need cycle prevention, lock ordering and a
 policy for retained working-directory chains and `..`. The filesystem does not
 automatically create missing parents; applications create the directories they
-need explicitly. These operations do not introduce persistent storage or a
-mount framework.
+need explicitly. Native storage uses the [mounted pool writer](../devices/filesystem-native-adapter.md)
+through these same component operations.
+
+## Native persistent backing
+
+Native CREATE, REMOVE and regular-file RENAME use the same capability checks.
+Parents for native rename must belong to one volume; mixed backends return
+BAD_OPERATION. REPLACE requires destination REMOVE even when its name is absent.
+The serial worker stages CREATE's returned capability before publishing the entry;
+failure unwinds that handle. Names are counted UTF-8 components of at most 255 bytes.
+No on-disk principal or permission grant participates.
+
+Unlink/replacement records DETACHED cleanup in the same transaction as the name
+edit. Successful namespace mutations reach durable COMMITTED before returning.
+Surviving handles keep the inode usable. Reclamation waits for references to
+drain and persists pointer/bitmap progress in bounded batches, without allocating
+new disk blocks. SHRINK may coexist with DETACHED; subsequent writes/resizes wait
+for shrink cleanup. Reads respect the smaller size. Growth supplies or zeros newly
+exposed bytes, including a retained partial tail, before size publication.
+
+File WRITE permits writes, resizing and sync; native size queries still require
+READ. Directory sync requires CREATE or REMOVE. File/directory sync commits the
+pool's current transaction with its ordered-data dependencies; mount WRITE permits
+MOUNT_SYNC across the configured disk's mounted pools. Success reaches durable
+COMMITTED; checkpoint and durable EMPTY follow before journal/freed-block reuse.
+Large writes and cleanup do not promise whole-operation crash atomicity.
+
+Close releases the process's wrapper/cleanup charge and promises no durability.
+The mounted pool retains dirty contents and writeback errors after handles close.
+Periodic full flushing defaults to 30 seconds through menuconfig, and pressure
+writeback runs asynchronously. Delayed allocation can encounter ENOSPC at writeback
+or sync. No shutdown/restart/sleep flushing hooks exist yet.
+
+Read-only mounting requires an EMPTY journal. Writable opening replays a validated
+committed log; unknown read-only-compatible features forbid recovery writes.
+Task-3 runtime validation is pending in the
+[measurement record](../development/experiments/native-filesystem-task3/README.md).
