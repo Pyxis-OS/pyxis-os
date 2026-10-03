@@ -5,7 +5,7 @@ Status: **owner direction accepted, 2026-10-03:** implement software-extended
 direction is TSC with extended-HPET fallback; TSC work is deferred. The findings
 below were recorded on 2026-10-02. This document records the implementation
 handoff and implementation validation; software extension is implemented on
-`clock/extend-hpet`, with local validation in progress and native qualification
+`clock/extend-hpet`, with local validation complete and native qualification
 still pending.
 
 ## Accepted direction and implementation handoff
@@ -22,16 +22,16 @@ The owner selected the following sequence on 2026-10-03:
    or a clock-source framework in the first change. Boot-time fallback and any
    later runtime failure detection/switching are separate work.
 
-The ThinkPad implementation agent should begin with the HPET task below. The
-source choice is settled; the remaining implementation questions concern the
-sampling and concurrency contract, not whether to choose TSC instead.
+The ThinkPad task follows the accepted HPET-first direction. The sampling and
+concurrency contract is recorded below; remaining work is delivery and native
+qualification. TSC stays deferred.
 
 - [x] Record the HPET-first decision and deferred TSC-with-fallback direction.
 - [x] Select a menuconfig-editable maintenance interval in BSP LAPIC timer
   ticks, defaulting to 120 delivered interrupts (nominally one second).
   This is the owner's 2026-10-03 configuration choice, not elapsed-time
   accounting. The owner separately accepted the support limit below.
-- [ ] Implement and validate software-extended HPET in a focused code PR.
+- [x] Implement and locally validate software-extended HPET in a focused code PR.
   Preserve shared monotonic nanoseconds, the initialization epoch, saturation,
   wall-clock anchoring and existing deadline semantics. Keep comparator/legacy
   HPET interrupts disabled and retain the existing LAPIC scheduler timer.
@@ -75,8 +75,8 @@ execution bounded. See the [implemented clock contract](../kernel/timekeeping.md
 
 ### Implementation validation
 
-Implementation preparation on 2026-10-03 is on branch `clock/extend-hpet`,
-based on main `e7b8933`; the implementation PR has not yet been opened.
+Implementation and local validation on 2026-10-03 use branch `clock/extend-hpet`,
+based on main `e7b8933`. Code validation uses revision `4aefdb5`.
 The pinned dependencies are `fs` `a2507317`, `ports` `2f9d55d3`, lwIP
 `a1aadb91` and userspace `0c4743de`. The mechanism is a shared CAS
 accumulator with a fresh hardware sample on every retry, BSP timer-triggered
@@ -106,8 +106,104 @@ Elapsed values were 140.200, 138.320 and 138.669 ms; their clock-loop values wer
 validation or performance targets. Local untracked records are
 `build/hpet-baseline-build.log`, `build/hpet-baseline-boot.log` and
 `build/hpet-baseline-remote/events.jsonl`. The baseline QEMU and remote-client
-processes have been stopped. Remaining work is matched validation, delivery and
-owner native boot.
+processes have been stopped. Local implementation validation is recorded below;
+delivery and owner native boot remain.
+
+#### Local implementation results
+
+Code revision `4aefdb5` was built and booted with the baseline configuration
+above, first unforced (direct 64-bit) and then with the permitted temporary
+low-32-bit extension selection. `make menuconfig` displayed the default 120
+and saved a separate 240-tick configuration for later debugger inspection.
+The final delivered default remains 120 with xHCI disabled. Both paths booted
+four CPUs and passed the same five-pass file workload and three separate
+profiled allocation invocations, each with 192 allocations/releases and zero
+failures. These workload observations preceded debugger attachment.
+
+| Observation | Baseline `e7b8933` | Direct `4aefdb5` | Forced extension `4aefdb5` |
+| --- | --- | --- | --- |
+| File workload clock loop, ns/read | 20,844 | 20,141 | 7,721 |
+| File complete median / range, ms | 0.085 / 0.084..0.145 | 0.084 / 0.083..0.092 | 0.059 / 0.052..0.094 |
+| Profiled allocation elapsed samples, ms | 140.200, 138.320, 138.669 | 147.675, 140.482, 142.270 | 90.632, 94.775, 94.525 |
+| Allocation clock-loop samples, ns/read | 21,166, 21,462, 19,863 | 20,816, 20,594, 20,381 | 8,606, 7,428, 7,761 |
+
+The direct allocation median was about 2.6% above baseline, with a wider sample
+range. In the median samples, allocation BSP queue time rose from 28.811 to
+32.616 ms while service time changed from 47.445 to 47.737 ms. This locates much
+of the observed difference in waiting; three runs do not isolate its cause.
+Direct clock-call and file measurements did not show a comparable regression.
+The forced extension's lower KVM clock cost is consistent with one MMIO read
+per successful attempt instead of three, despite its shared CAS publication.
+These are profiled elapsed times and emulator observations, not unprofiled
+allocator throughput, native performance or universal improvement claims.
+
+A longer forced-extension command was manually invoked:
+
+```text
+allocbench pages --rounds 4096 --live 64 --size 65536 --profile
+```
+
+It completed 262,144 allocations and releases with zero failures in
+123,737.515 ms, spanning at least two full low-word wraps at the reported
+10,000,000 fs period. AP/BSP timestamp profiling ran throughout without a
+duration-order assertion. Shells were otherwise left at their prompts between
+the short commands and during a separate idle interval. At host UTC 08:11:04,
+08:13:50, 08:17:21 and 08:19:20, `date -u` printed 08:11:04, 08:13:49,
+08:17:20 and 08:19:20.
+These coarse readings show no gross wrap loss/jump; they do not prove every
+interleaving or independence from incidental readers such as presentation.
+The last two readings bracket a separate 119-second host idle interval, spanning
+at least two wraps, with only the shells at their prompts. The initial/final
+readings span 496 host seconds and 496 displayed guest seconds. These are
+second-scale observations, not a calibrated clock-frequency measurement.
+
+A separate forced-extension image used the menuconfig-saved 240-tick interval
+and `make debug` with the same four-CPU KVM/device configuration. GDB stopped
+first at BSP timer delivery 1, then at the maintenance branch on deliveries
+240 and 480. It observed countdown zero at sampling and reload to 240 before
+interrupt scheduler handling, with CPU index 0 and IF cleared. After running
+from host UTC 08:22:27 to 08:24:57 without breakpoints, a manual interrupt found
+`extended_ticks=0x39d9487ac`; its high word and the hardware counter's high word
+were both 3. The next maintenance branch occurred on BSP delivery 18,720.
+The stack showed `hpet_extended_ticks` / `arch_clock_maintain` /
+`arch_clock_tick` / `interrupt_handler`, establishing that explicit maintenance
+runs even when shells are idle. It does not establish absence of other readers.
+
+This debugger session paused at each inspected state, including an initial
+inspection pause of roughly a minute. Those stops halt QEMU virtual time; the
+debugger session is separate from uninterrupted workload/date observations and
+is not used for performance. Its local log is `build/hpet-forced240-gdb.log`.
+No injected calls, counter mutations or additional test hooks were used.
+
+The temporary patch, relative to `4aefdb5`, changes only:
+
+```diff
+-  software_extended = counter_bits == 32;
++  software_extended = true;
+-       software_extended ? "software-extended" : "direct", period_fs);
++       "forced software-extended (low 32 bits)", period_fs);
+```
+
+The extension implementation already samples only the low word. This patch
+therefore selects the actual accumulation/maintenance path without pretending
+the hardware is 32-bit. It is recorded locally in `build/hpet-forced32.patch`
+and has been removed along with the temporary 240-tick configuration. The
+normal code and checked-in 120-tick configuration were restored before final
+rebuild. All validation QEMU, remote-client, menuconfig and GDB processes were
+stopped.
+
+| Image at `4aefdb5` | ELF SHA-256 | ISO SHA-256 |
+| --- | --- | --- |
+| Direct 64-bit | `44a31276f711d87fdb3af546a57298bcebc69701aed14fe38eb2dc28ace5f2d6` | `e2b3538eb17f9e77061e6c85b8a4a309266074b5c45870f3bf97fdd5bf1c57ba` |
+| Forced low-32-bit, 120 ticks | `e71cda035b421852505a9abdf8cdf0377601c489776fa17662b8f28f0cb46f64` | `6230ac358a733adf8ce392fc2af0039cad6e256f6012ac41d556425688c258dc` |
+| Forced low-32-bit, 240 ticks (debugger) | `f8679f1e9e599d18d1a807dda10c0833f4461bdf7d8cda73edc79e79270462fc` | `cf32b54caf87a9edf0e37f10f3263903f1d911cff89aea008a1e1f5b05f07286` |
+
+Local untracked records use `build/hpet-direct-*`, `build/hpet-forced32-*`,
+`build/hpet-final-*` and `build/hpet-clock-disassembly.txt`. Disassembly confirmed a fresh shared
+load and UC MMIO read after a failed locked CAS, and the ELF has no undefined
+compiler-runtime symbols. An independent read-only review found no code
+blocker. Local observations supplement that concurrency review; they do not
+establish native boot or all interleavings.
 
 Use ordinary `make -j16` builds, interactive QEMU and debugger inspection, then
 an owner-run native boot. Use existing workloads to compare clock-sensitive
@@ -281,10 +377,12 @@ since clock initialization through
 one epoch. The public clock `NOW`, `WALL_NOW` and `SLEEP_UNTIL` requests and
 library interfaces can remain unchanged.
 
-[Current clock initialization](../../arch/x86_64/clock.c) requires a valid,
-page-aligned ACPI HPET with a 64-bit main counter. It explicitly panics for a
-32-bit counter. That explains the native inventory limitation and the following
-owner-observed failure, independently of the successful virtual boot.
+At the recorded investigation revision, clock initialization required a valid,
+page-aligned ACPI HPET with a 64-bit main counter and panicked for a 32-bit
+counter. That explains the following owner-observed failure independently of
+the successful virtual boot. [Clock initialization](../../arch/x86_64/clock.c)
+now selects direct 64-bit reads or software extension; native qualification
+of that implementation remains pending.
 
 ### Owner-observed native USB boot
 
@@ -423,26 +521,26 @@ unsigned modular delta `(uint32_t)(now32 - (uint32_t)last)` and add it to the
 shared snapshot, with checked overflow behavior. Publish the candidate using
 compare-and-swap. On failure, retry with both a fresh shared snapshot and a
 fresh MMIO sample. Reusing a stale counter sample against a newer shared value
-can fabricate almost a whole wrap. Read ordering and atomic publication must
-preserve the existing cross-CPU monotonicity contract.
+can fabricate almost a whole wrap. The implemented acquire snapshot and locked
+CAS preserve sample/publication ordering with the HPET's UC mapping. Tick
+overflow is terminal and returns `UINT64_MAX` nanoseconds, as does nanosecond
+conversion overflow; no saturated low word is used for another modular delta.
 
 The deliberate correctness condition is **strictly less than one full counter
 wrap between successfully incorporated HPET samples**, including initialization,
 early boot and every supported runtime state. At 14.318180 MHz this is roughly
 300 seconds. A longer gap can silently lose whole wraps; the 32-bit value alone
-cannot recover how many elapsed. A periodic maintainer needs an explicit owner
-and a stated bound that covers stalled execution and long interrupt-disabled
-sections. Suspend or debugger/VM pauses during which HPET advances also need
-an explicit support policy.
+cannot recover how many elapsed. The owner accepted the progress requirement
+through boot, runtime and pauses/stalls where the counter advances, with reboot
+after a violating gap. Suspend/resume and migration are unqualified.
 
-The existing 120 Hz LAPIC interrupt is a possible maintenance trigger, but its
-rate alone is not a guarantee. The current
-[`timer interrupt path`](../../arch/x86_64/idt.c) does not unconditionally read
-the clock; scheduler reads are conditional on timed waits and sleepers. An
-implementation would need a deliberate bounded sampling path, including the
-interval before interrupts become available. A maintenance sample triggered by
-an existing tick would extend HPET elapsed time; it would not turn tick counts
-into the monotonic clock or change the scheduler interrupt rate.
+The existing 120 Hz LAPIC interrupt triggers maintenance on the BSP after the
+configured number of deliveries, default 120, independently of conditional
+scheduler reads. Explicit samples cover boot phases, polling and cumulative
+iteration sequences before BSP interrupts are enabled. These samples extend
+HPET elapsed time; timer deliveries do not become the monotonic clock and the
+scheduler interrupt rate is unchanged. The nominal configuration check does
+not prove actual elapsed gaps bounded under arbitrary stalls.
 
 Each advancing read normally publishes to the shared cache line, with contention
 and possible retries across CPUs, similar to a TSC floor. Reads still incur
@@ -477,11 +575,11 @@ agreement of raw TSC values. See
 
 ## Remaining implementation and future decisions
 
-**For the selected HPET task:** maintenance ownership and the less-than-one-wrap
-sampling guarantee through early boot and runtime; concurrent-read ordering and
-overflow behavior; and the explicit policy for states where that bound cannot
-be established. The extension sketch describes the correctness constraints;
-it does not establish that current boot/runtime paths already satisfy them.
+**For the selected HPET task:** record the owner's native result, including the
+selected-path log and roughly 15-minute console check. Maintenance ownership,
+concurrent-read ordering, saturation and the
+progress/support requirement are recorded in the implemented timekeeping
+reference; native success is still unqualified.
 
 **For the deferred TSC stage:** platform acceptance criteria for strict SMP
 ordering versus a shared atomic floor; ordered-read mechanisms and any MSR
