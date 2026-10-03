@@ -11,7 +11,7 @@ Native hardware remains unqualified.
 Firmware can still load the kernel and boot archive from USB.
 
 When enabled, Caelum prepares each discovered PCI xHCI function and its own
-slots/contexts for boot-present root-port devices and bounded USB 2 hub descendants.
+slots/contexts for boot-present root-port devices and bounded hub descendants.
 [USB enumeration](usb-enumeration.md)
 addresses them, checks descriptors and publishes a read-only boot inventory.
 USB block access remains pending. The archive-backed shell and existing VirtIO block behavior remain available.
@@ -43,8 +43,11 @@ full duplex, with Link Protocol selecting SuperSpeed or SuperSpeedPlus;
 receive/transmit pairs are supported when both entries identify that same
 category. Directional rates and lane counts may differ. Reserved or unsupported
 profiles remain unknown. Raw speed IDs remain in Slot contexts; no rate or
-lane count is inferred for inventory. No port numbering or vendor identity
-selects a device. These mappings follow [xHCI 1.2b §7.2.2](https://cdrdv2-public.intel.com/625472/625472_xHCI_Rev1_2b.pdf).
+lane count is inferred for public inventory. Private profiles retain directional
+rates and default generation/lane counts. Explicit root lane counts come from
+PORTLI; downstream counts come from hub extended status. Child setup requires
+one matching enhanced speed identity and supplies higher-rank parent fields.
+No port numbering or vendor identity selects a device. These mappings follow [xHCI 1.2b §7.2.2](https://cdrdv2-public.intel.com/625472/625472_xHCI_Rev1_2b.pdf).
 
 If legacy ownership is present, request OS ownership, wait for BIOS release and
 then disable legacy SMI sources. Wait for controller readiness, halt before
