@@ -1,15 +1,14 @@
 # ThinkPad RTL8111 driver
 
-Status: **five-task outline approved, 2026-10-03.** Approval covers the work and
-completion points in that outline, not every detail below. Implementation,
-ownership and reference choices remain proposals pending owner confirmation;
-specific owner decisions are recorded separately. Driver implementation and task 1
-have not started. [NIC passthrough](../development/thinkpad-nic-passthrough.md)
-is complete.
+Status: **plan accepted, 2026-10-03.** The owner approved and merged PR #355 with
+the review note “read and accepted the proposal”, then explicitly authorized
+task 1. [Hardware identification](../devices/rtl8111-hardware.md) is complete;
+driver implementation has not started. [NIC passthrough](../development/thinkpad-nic-passthrough.md)
+is complete. New task 1 preparation details below remain proposals for task 2.
 
 ## Goal and machine configuration
 
-Proposed goal: use the ThinkPad's built-in RJ45 controller for Pyxis networking,
+Use the ThinkPad's built-in RJ45 controller for Pyxis networking,
 first through VFIO in QEMU/KVM, then on a native boot. Completion means the existing remote
 terminal is reachable through this port, with ordinary loopback and VirtIO
 operation preserved.
@@ -22,7 +21,7 @@ The owner confirmed these settings for the **built-in port profile**:
 | Prefix | `/24` (`255.255.255.0`) |
 | Gateway | `192.168.0.1` |
 
-These are machine configuration. Proposed packaging: apply them through the
+These are machine configuration. Apply them through the
 existing userspace network configuration authority and keep the QEMU user-network
 profile separate. Configuration/profile packaging belongs to the separately
 versioned userspace repository; publish any dependency PR before updating the
@@ -42,7 +41,7 @@ user profile binds VirtIO. Discovering RTL8111 does not automatically switch awa
 from a configured VirtIO interface or its host-forwarded remote terminal.
 Full and partial MAC bytes stay out of the repository and published captures.
 
-Proposed controller model, pending confirmation:
+Accepted controller model:
 
 - Keep driver state per controller, with explicit PCI, register, DMA and interrupt
   ownership. A global singleton is not the driver model.
@@ -55,17 +54,18 @@ Proposed controller model, pending confirmation:
   restriction.
 
 The current stack has one external interface, `net0`, and direct VirtIO calls.
-Proposed integration keeps per-controller state distinct from the selected
+Integration keeps per-controller state distinct from the selected
 interface. Exposing multiple active interfaces also needs address, ARP and routing
 ownership work; its scope remains a decision before implementation.
 
 ## Tasks
 
-The five-task work/completion outline is approved. The ordering and task 1 capture
-instructions below incorporate the requested PR review corrections; detailed
-implementation proposals remain subject to confirmation.
+The five-task outline and planning constraints are accepted. Task 1's new
+preparation sequence and remaining firmware/power choices are documented in the
+[hardware profile](../devices/rtl8111-hardware.md#proposed-bounded-preparation-for-task-2)
+for discussion before task 2 implementation. Task 2 has not started.
 
-- [ ] **1. Identify the hardware.** Begin with the owner's Fedora r8169
+- [x] **1. Identify the hardware.** Begin with the owner's Fedora r8169
   `dmesg`/`ethtool`/`lspci` output, with MAC bytes removed. Record the chip name,
   TxConfig-derived MAC/XID, firmware reported by Linux, BARs and MSI/MSI-X
   capabilities. Then confirm the same XID and capabilities from Caelum before
@@ -90,7 +90,7 @@ implementation proposals remain subject to confirmation.
   link changes and sustained traffic, then native boot. Finish with the built-in
   port working in VFIO and natively, including with the dock attached.
 
-### Proposed task 1 owner capture
+### Task 1 owner capture
 
 With the VFIO VM stopped, the owner can return the port to r8169, capture the
 following output and restore the VFIO binding. Use Wi-Fi or dock Ethernet for
@@ -98,7 +98,7 @@ host connectivity. Replace `enp5s0` with the interface identified by `ip -br lin
 
 ```sh
 sudo driverctl unset-override 0000:05:00.0
-sudo dmesg | rg -i 'r8169|rtl_nic'
+sudo dmesg | grep -iE 'r8169|rtl_nic'
 ip -br link
 sudo ethtool -i enp5s0
 sudo lspci -vvv -s 0000:05:00.0
@@ -107,12 +107,13 @@ sudo driverctl set-override 0000:05:00.0 vfio-pci
 
 Remove all MAC bytes before sharing or committing the capture. Linux's reported
 firmware establishes what its driver used; firmware-free operation remains a
-measurement rather than an assumption. These commands are task instructions,
-not work performed for this planning PR.
+measurement rather than an assumption. The owner supplied this capture on
+2026-10-03; the hardware profile contains its redacted summary and the agent's
+Caelum-side confirmation.
 
-## Proposed ownership and preparation constraints
+## Accepted ownership and preparation constraints
 
-The proposal follows the existing [PCI](../devices/pci.md),
+The plan follows the existing [PCI](../devices/pci.md),
 [networking](../devices/networking.md), [SMP](../kernel/smp.md) and
 [memory](../kernel/memory.md) contracts. Boot preparation
 and allocation remain BSP-owned before AP startup; the network worker owns
@@ -129,20 +130,20 @@ for the identified variant, not inherited VirtIO values or architectural limits.
 
 The host reports I/O BAR0, 4 KiB memory BAR2 and 16 KiB memory BAR4.
 `pci_size_bars()` sizes all memory BARs and skips I/O BARs; `pci_map_bar()` maps
-any sized BAR, including BAR2 and BAR4. The proposal reuses those existing helpers.
+any sized BAR, including BAR2 and BAR4. Reuse those existing helpers.
 Only xHCI's early `pci_map_bootstrap_bar0()` path is BAR0-specific; BAR2 does not
-require a new mapping helper merely because its index differs. Safe claim,
-quiescence, sizing and mapping ordering remains to be established for this NIC.
-Task 1 confirms the interrupt capability and table BAR; the existing MSI-X helper
-can map its table/PBA when applicable. The interrupt-mode choice remains proposed
-until that capture is available.
+require a new mapping helper merely because its index differs. Task 1 identified
+a separate pre-size register-access gap and proposes staged preparation in the
+hardware profile. It confirmed four MSI-X entries with table/PBA in BAR4;
+use the existing MSI-X helper. Entry-zero routing is proposed for task 2;
+actual interrupt delivery remains to be qualified in task 4.
 
 After identification, settle any required firmware source, pin, packaging and
 license, plus explicit PHY/power-management settings, reset/stop ordering and
 bounded failure handling. Keep only the confirmed variant's necessary setup;
 the plan does not choose a firmware-free path without qualification.
 
-## Proposed validation and boundaries
+## Accepted validation and boundaries
 
 Use ordinary builds, interactive VFIO boots and debugger inspection. Before
 stack changes, capture a VirtIO baseline with existing ping/UDP/TCP workloads;
@@ -156,7 +157,7 @@ and hot-plug remain separate work. The dock's profile and multiple active
 interface routing remain explicit follow-ups/decisions, rather than accidental
 restrictions in the built-in controller implementation.
 
-## Proposed hardware references
+## Accepted hardware references
 
 Use pinned primary sources as hardware references, with provenance and licensing
 recorded for any imported material. Linux v6.18 identifies the MAC implementation
@@ -166,6 +167,7 @@ from TxConfig/XID and contains variant-specific PHY/firmware setup:
 - [r8169 PHY configuration](https://github.com/torvalds/linux/blob/v6.18/drivers/net/ethernet/realtek/r8169_phy_config.c)
 - [r8169 firmware format and interpreter](https://github.com/torvalds/linux/blob/v6.18/drivers/net/ethernet/realtek/r8169_firmware.c)
 
-The exact MAC/XID, usable interrupt mode and firmware requirement remain unmeasured
-in this plan until task 1's owner capture and Caelum confirmation. PCI revision
-`0x15` is an observed identity, not proof of a particular Realtek MAC implementation.
+Task 1 confirms XID `541`, corresponding to Linux's MAC version 46
+(`RTL8168h/8111h`), and the MSI-X layout. Firmware-free reliability, successful
+interrupt delivery and native preparation remain unqualified. PCI revision
+`0x15` alone is not proof of a particular Realtek MAC implementation.
