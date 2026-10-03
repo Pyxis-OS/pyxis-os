@@ -432,6 +432,10 @@ enum block_result block_abandon(const struct block_ticket *ticket)
   if (slot->wait) {
     return BLOCK_BUSY;
   }
+  if (slot->operation != BLOCK_READ &&
+      (slot->state == BLK_ACTIVE || slot->completion.submitted)) {
+    disk->info.write_failed = true;
+  }
   slot->abandoned = true;
   if (slot->state != BLK_ACTIVE) {
     slot->state = BLK_FREE;

@@ -3,6 +3,7 @@
 
 #include <abi/directory.h>
 #include <abi/file.h>
+#include <abi/disk.h>
 #include <abi/syscall.h>
 #include <kernel/block.h>
 #include <kernel/gpt.h>
@@ -15,6 +16,10 @@
 #define NPFS_TIMEOUT_MS 30000u
 #define NPFS_DIRECTORY_RIGHTS DIRECTORY_RIGHTS
 
+_Static_assert(DISK_IO_MAX_BYTES >= FILE_READ_MAX_BYTES &&
+    DISK_IO_MAX_BYTES >= FILE_WRITE_MAX_BYTES, "native request transfer capacity");
+
+struct disk_object;
 struct npfs_node;
 struct kernel_object;
 struct npfs_request;
@@ -24,6 +29,8 @@ enum npfs_operation {
   NPFS_ROOT, NPFS_LOOKUP, NPFS_ENUMERATE, NPFS_READ, NPFS_SIZE,
   NPFS_CAPTURE, NPFS_FILESYSTEM_INFO, NPFS_CREATE, NPFS_REMOVE,
   NPFS_RENAME, NPFS_WRITE, NPFS_RESIZE, NPFS_SYNC, NPFS_DISK_SYNC,
+  NPFS_RAW_INFO, NPFS_RAW_OPEN, NPFS_RAW_READ, NPFS_RAW_WRITE,
+  NPFS_RAW_FLUSH, NPFS_RAW_RELEASE,
 };
 enum npfs_job_state {
   NPFS_JOB_IDLE, NPFS_JOB_QUEUED, NPFS_JOB_ACTIVE, NPFS_JOB_COMPLETE,
@@ -43,6 +50,8 @@ struct npfs_job {
   enum npfs_job_state state;
   enum npfs_operation operation;
   struct gpt_guid disk;
+  block_device_id device;
+  struct disk_object *raw;
   uint32_t partition;
   struct npfs_node *node, *destination;
   uint64_t rights, child_rights, destination_rights, kind, offset;
@@ -56,8 +65,9 @@ struct npfs_job {
   struct directory_cursor cursor;
   struct directory_enumerate_reply entry;
   union {
-    uint8_t data[FILE_READ_MAX_BYTES];
+    uint8_t data[DISK_IO_MAX_BYTES];
     struct directory_filesystem_info info;
+    struct disk_info disk_info;
   };
   enum call_status status;
   enum npfs_status format_status;
@@ -101,5 +111,10 @@ void npfs_require_worker(void);
 /* BSP/IF=0 object destructor: allocation-free transfer of wrapper, inode reference,
  * backing reference and deferred group cleanup to the owning worker. */
 void npfs_retire(struct npfs_node *node);
+
+/* The sole worker serializes physical-device mount registration and raw claims. */
+bool npfs_device_mounted(block_device_id device);
+/* BSP/IF=0: notify the worker of allocation-free deferred raw cleanup. */
+void npfs_notify(void);
 
 #endif

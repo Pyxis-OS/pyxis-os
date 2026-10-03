@@ -38,10 +38,26 @@ struct gpt_scratch {
   struct gpt_header headers[2];
 };
 
-static struct gpt_scratch *scratch;
-static struct block_info device;
-static struct gpt_snapshot snapshot;
-static bool published;
+struct gpt_device {
+  block_device_id id;
+  struct block_info device;
+  struct gpt_snapshot snapshot;
+  struct gpt_scratch *scratch;
+  bool published;
+};
+
+static struct gpt_device *devices;
+static size_t device_count;
+
+static struct gpt_device *find_device(block_device_id id)
+{
+  for (size_t i = 0; i < device_count; ++i) {
+    if (devices[i].id == id) {
+      return &devices[i];
+    }
+  }
+  return NULL;
+}
 
 static uint16_t read_le16(const uint8_t *bytes)
 {
@@ -80,20 +96,20 @@ static uint32_t crc32(const uint8_t *bytes, size_t count)
   return ~crc;
 }
 
-static enum gpt_copy_status read_blocks(uint64_t first, uint32_t blocks,
+static enum gpt_copy_status read_blocks(struct gpt_device *scan, uint64_t first, uint32_t blocks,
     uint8_t *destination, uint64_t deadline)
 {
   while (blocks) {
     if (task_deadline_expired(deadline)) {
       return GPT_COPY_TIMED_OUT;
     }
-    uint32_t count = device.max_transfer / device.block_size;
+    uint32_t count = scan->device.max_transfer / scan->device.block_size;
     if (count > blocks) {
       count = blocks;
     }
     struct block_ticket ticket;
     uint64_t flags = cpu_save_interrupts();
-    enum block_result result = block_submit(BLOCK_READ, first, count, NULL, &ticket);
+    enum block_result result = block_submit(scan->id, BLOCK_READ, first, count, NULL, &ticket);
     cpu_restore_interrupts(flags);
     if (result == BLOCK_FULL) {
       kernel_task_sleep_until(task_deadline_after_ms(1));
@@ -110,7 +126,7 @@ static enum gpt_copy_status read_blocks(uint64_t first, uint32_t blocks,
       return result == BLOCK_TIMED_OUT ? GPT_COPY_TIMED_OUT : GPT_COPY_IO_ERROR;
     }
     struct block_completion completion;
-    size_t bytes = (size_t)count * device.block_size;
+    size_t bytes = (size_t)count * scan->device.block_size;
     result = block_collect(&ticket, destination, bytes, &completion);
     KASSERT(result == BLOCK_OK);
     cpu_restore_interrupts(flags);
@@ -124,16 +140,16 @@ static enum gpt_copy_status read_blocks(uint64_t first, uint32_t blocks,
   return GPT_COPY_VALID;
 }
 
-static enum mbr_status validate_mbr(void)
+static enum mbr_status validate_mbr(struct gpt_device *scan)
 {
-  const uint8_t *block = scratch->block;
+  const uint8_t *block = scan->scratch->block;
   if (read_le16(block + MBR_SIGNATURE_OFFSET) != MBR_SIGNATURE) {
     return MBR_ABSENT;
   }
   unsigned protective = 0;
   bool invalid = false;
-  uint32_t expected = device.block_count - 1 > UINT32_MAX ? UINT32_MAX :
-      (uint32_t)(device.block_count - 1);
+  uint32_t expected = scan->device.block_count - 1 > UINT32_MAX ? UINT32_MAX :
+      (uint32_t)(scan->device.block_count - 1);
   for (unsigned i = 0; i < MBR_ENTRY_COUNT; ++i) {
     const uint8_t *entry = block + MBR_ENTRIES_OFFSET + i * MBR_ENTRY_BYTES;
     if (entry[4] == MBR_PROTECTIVE_TYPE) {
@@ -147,23 +163,23 @@ static enum mbr_status validate_mbr(void)
       invalid = true;
     }
   }
-  if (invalid || protective > 1 || !zero_bytes(block + 512, device.block_size - 512)) {
+  if (invalid || protective > 1 || !zero_bytes(block + 512, scan->device.block_size - 512)) {
     return MBR_INVALID;
   }
   return protective == 1 ? MBR_VALID : MBR_ABSENT;
 }
 
-static enum gpt_copy_status validate_header(unsigned copy)
+static enum gpt_copy_status validate_header(struct gpt_device *scan, unsigned copy)
 {
-  uint8_t *block = scratch->block;
-  struct gpt_header *header = &scratch->headers[copy];
-  uint64_t last = device.block_count - 1;
+  uint8_t *block = scan->scratch->block;
+  struct gpt_header *header = &scan->scratch->headers[copy];
+  uint64_t last = scan->device.block_count - 1;
   uint64_t location = copy == 0 ? 1 : last;
   if (memcmp(block, "EFI PART", 8)) {
     return GPT_COPY_ABSENT;
   }
   uint32_t bytes = read_le32(block + 12);
-  if (bytes < GPT_HEADER_BYTES || bytes > device.block_size) {
+  if (bytes < GPT_HEADER_BYTES || bytes > scan->device.block_size) {
     return GPT_COPY_INVALID;
   }
   uint32_t expected_crc = read_le32(block + 16);
@@ -175,7 +191,7 @@ static enum gpt_copy_status validate_header(unsigned copy)
     return GPT_COPY_UNSUPPORTED;
   }
   if (read_le32(block + 20) ||
-      !zero_bytes(block + GPT_HEADER_BYTES, device.block_size - GPT_HEADER_BYTES) ||
+      !zero_bytes(block + GPT_HEADER_BYTES, scan->device.block_size - GPT_HEADER_BYTES) ||
       read_le64(block + 24) != location || read_le64(block + 32) != (copy == 0 ? last : 1)) {
     return GPT_COPY_INVALID;
   }
@@ -192,10 +208,10 @@ static enum gpt_copy_status validate_header(unsigned copy)
     return GPT_COPY_INVALID;
   }
   uint64_t array_bytes = (uint64_t)header->entry_count * header->entry_bytes;
-  uint64_t array_blocks = (array_bytes + device.block_size - 1) / device.block_size;
+  uint64_t array_blocks = (array_bytes + scan->device.block_size - 1) / scan->device.block_size;
   uint64_t reserved = array_blocks;
-  if (reserved < GPT_ARRAY_RESERVE / device.block_size) {
-    reserved = GPT_ARRAY_RESERVE / device.block_size;
+  if (reserved < GPT_ARRAY_RESERVE / scan->device.block_size) {
+    reserved = GPT_ARRAY_RESERVE / scan->device.block_size;
   }
   if (reserved >= last || header->first_usable < 2 + reserved ||
       header->first_usable > header->last_usable || header->last_usable >= last - reserved ||
@@ -212,10 +228,10 @@ static enum gpt_copy_status validate_header(unsigned copy)
   return GPT_COPY_VALID;
 }
 
-static enum gpt_copy_status validate_entries(unsigned copy)
+static enum gpt_copy_status validate_entries(struct gpt_device *scan, unsigned copy)
 {
-  const struct gpt_header *header = &scratch->headers[copy];
-  const uint8_t *array = scratch->arrays[copy];
+  const struct gpt_header *header = &scan->scratch->headers[copy];
+  const uint8_t *array = scan->scratch->arrays[copy];
   if (crc32(array, header->array_bytes) != header->array_crc) {
     return GPT_COPY_INVALID;
   }
@@ -247,46 +263,46 @@ static enum gpt_copy_status validate_entries(unsigned copy)
   return GPT_COPY_VALID;
 }
 
-static enum gpt_copy_status scan_copy(unsigned copy, uint64_t deadline)
+static enum gpt_copy_status scan_copy(struct gpt_device *scan, unsigned copy, uint64_t deadline)
 {
-  enum gpt_copy_status status = read_blocks(copy == 0 ? 1 : device.block_count - 1,
-      1, scratch->block, deadline);
+  enum gpt_copy_status status = read_blocks(scan, copy == 0 ? 1 : scan->device.block_count - 1,
+      1, scan->scratch->block, deadline);
   if (status != GPT_COPY_VALID) {
     return status;
   }
-  status = validate_header(copy);
+  status = validate_header(scan, copy);
   if (status != GPT_COPY_VALID) {
     return status;
   }
-  const struct gpt_header *header = &scratch->headers[copy];
-  uint32_t blocks = (header->array_bytes + device.block_size - 1) / device.block_size;
-  status = read_blocks(header->array_lba, blocks, scratch->arrays[copy], deadline);
-  return status == GPT_COPY_VALID ? validate_entries(copy) : status;
+  const struct gpt_header *header = &scan->scratch->headers[copy];
+  uint32_t blocks = (header->array_bytes + scan->device.block_size - 1) / scan->device.block_size;
+  status = read_blocks(scan, header->array_lba, blocks, scan->scratch->arrays[copy], deadline);
+  return status == GPT_COPY_VALID ? validate_entries(scan, copy) : status;
 }
 
-static bool copies_agree(void)
+static bool copies_agree(struct gpt_device *scan)
 {
-  const struct gpt_header *primary = &scratch->headers[0], *backup = &scratch->headers[1];
+  const struct gpt_header *primary = &scan->scratch->headers[0], *backup = &scan->scratch->headers[1];
   return primary->header_bytes == backup->header_bytes &&
       primary->first_usable == backup->first_usable && primary->last_usable == backup->last_usable &&
       primary->entry_count == backup->entry_count && primary->entry_bytes == backup->entry_bytes &&
       !memcmp(primary->disk_guid.bytes, backup->disk_guid.bytes, sizeof(primary->disk_guid.bytes)) &&
-      !memcmp(scratch->arrays[0], scratch->arrays[1], primary->array_bytes);
+      !memcmp(scan->scratch->arrays[0], scan->scratch->arrays[1], primary->array_bytes);
 }
 
-static void select_copy(unsigned copy)
+static void select_copy(struct gpt_device *scan, unsigned copy)
 {
-  const struct gpt_header *header = &scratch->headers[copy];
-  snapshot.disk_guid = header->disk_guid;
-  snapshot.first_usable = header->first_usable;
-  snapshot.last_usable = header->last_usable;
-  snapshot.selected_copy = copy + 1;
+  const struct gpt_header *header = &scan->scratch->headers[copy];
+  scan->snapshot.disk_guid = header->disk_guid;
+  scan->snapshot.first_usable = header->first_usable;
+  scan->snapshot.last_usable = header->last_usable;
+  scan->snapshot.selected_copy = copy + 1;
   for (uint32_t i = 0; i < header->entry_count; ++i) {
-    const uint8_t *entry = scratch->arrays[copy] + i * header->entry_bytes;
+    const uint8_t *entry = scan->scratch->arrays[copy] + i * header->entry_bytes;
     if (zero_bytes(entry, 16)) {
       continue;
     }
-    struct gpt_partition *partition = &snapshot.partitions[snapshot.partition_count++];
+    struct gpt_partition *partition = &scan->snapshot.partitions[scan->snapshot.partition_count++];
     memcpy(partition->type.bytes, entry, sizeof(partition->type.bytes));
     memcpy(partition->guid.bytes, entry + 16, sizeof(partition->guid.bytes));
     partition->first_block = read_le64(entry + 32);
@@ -299,9 +315,9 @@ static void select_copy(unsigned copy)
   }
 }
 
-static enum gpt_status choose_map(enum mbr_status mbr)
+static enum gpt_status choose_map(struct gpt_device *scan, enum mbr_status mbr)
 {
-  enum gpt_copy_status primary = snapshot.primary, backup = snapshot.backup;
+  enum gpt_copy_status primary = scan->snapshot.primary, backup = scan->snapshot.backup;
   if (primary == GPT_COPY_TIMED_OUT || backup == GPT_COPY_TIMED_OUT) {
     return GPT_TIMED_OUT;
   }
@@ -318,20 +334,20 @@ static enum gpt_status choose_map(enum mbr_status mbr)
     return GPT_INVALID;
   }
   if (primary == GPT_COPY_VALID && backup == GPT_COPY_VALID) {
-    if (!copies_agree()) {
+    if (!copies_agree(scan)) {
       return GPT_AMBIGUOUS;
     }
-    select_copy(0);
+    select_copy(scan, 0);
     return GPT_HEALTHY;
   }
   if (primary == GPT_COPY_VALID || backup == GPT_COPY_VALID) {
-    select_copy(primary == GPT_COPY_VALID ? 0 : 1);
+    select_copy(scan, primary == GPT_COPY_VALID ? 0 : 1);
     return GPT_DEGRADED;
   }
   return GPT_INVALID;
 }
 
-static void publish(enum gpt_status status)
+static void publish(struct gpt_device *scan, enum gpt_status status)
 {
   static const char *const names[] = {
     [GPT_HEALTHY] = "healthy", [GPT_DEGRADED] = "degraded (read-only)",
@@ -340,15 +356,15 @@ static void publish(enum gpt_status status)
     [GPT_NO_MEMORY] = "no memory", [GPT_IO_ERROR] = "I/O error", [GPT_TIMED_OUT] = "timed out",
   };
   uint64_t flags = cpu_save_interrupts();
-  snapshot.status = status;
-  kfree(scratch);
-  scratch = NULL;
-  published = true;
+  scan->snapshot.status = status;
+  kfree(scan->scratch);
+  scan->scratch = NULL;
+  scan->published = true;
   cpu_restore_interrupts(flags);
-  klog("GPT: %s; primary=%u backup=%u partitions=%u\n", names[status],
-       (unsigned)snapshot.primary, (unsigned)snapshot.backup, snapshot.partition_count);
-  for (uint32_t i = 0; i < snapshot.partition_count; ++i) {
-    const struct gpt_partition *partition = &snapshot.partitions[i];
+  klog("GPT: device %u %s; primary=%u backup=%u partitions=%u\n", (unsigned)scan->id, names[status],
+       (unsigned)scan->snapshot.primary, (unsigned)scan->snapshot.backup, scan->snapshot.partition_count);
+  for (uint32_t i = 0; i < scan->snapshot.partition_count; ++i) {
+    const struct gpt_partition *partition = &scan->snapshot.partitions[i];
     klog("GPT: entry %u first=%lu blocks=%lu\n", partition->entry_number,
          partition->first_block, partition->block_count);
   }
@@ -356,53 +372,101 @@ static void publish(enum gpt_status status)
 
 static void scan_disk(void *argument)
 {
-  (void)argument;
-  if (device.block_count < 3) {
-    publish(GPT_INVALID);
+  struct gpt_device *scan = argument;
+  if (scan->device.block_count < 3) {
+    publish(scan, GPT_INVALID);
     return;
   }
   uint64_t deadline = task_deadline_after_ms(GPT_SCAN_TIMEOUT_MS);
-  enum gpt_copy_status status = read_blocks(0, 1, scratch->block, deadline);
+  enum gpt_copy_status status = read_blocks(scan, 0, 1, scan->scratch->block, deadline);
   if (status != GPT_COPY_VALID) {
-    publish(status == GPT_COPY_TIMED_OUT ? GPT_TIMED_OUT : GPT_IO_ERROR);
+    publish(scan, status == GPT_COPY_TIMED_OUT ? GPT_TIMED_OUT : GPT_IO_ERROR);
     return;
   }
-  enum mbr_status mbr = validate_mbr();
-  snapshot.primary = scan_copy(0, deadline);
-  snapshot.backup = scan_copy(1, deadline);
-  publish(choose_map(mbr));
+  enum mbr_status mbr = validate_mbr(scan);
+  scan->snapshot.primary = scan_copy(scan, 0, deadline);
+  scan->snapshot.backup = scan_copy(scan, 1, deadline);
+  publish(scan, choose_map(scan, mbr));
 }
 
 void gpt_prepare(void)
 {
-  scratch = kmalloc(sizeof(*scratch));
+  device_count = block_device_count();
+  if (!device_count) {
+    return;
+  }
+  devices = kmalloc(device_count * sizeof(*devices));
+  if (!devices) {
+    device_count = 0;
+    return;
+  }
+  memset(devices, 0, device_count * sizeof(*devices));
+  for (size_t i = 0; i < device_count; ++i) {
+    devices[i].id = block_device_at(i);
+    devices[i].scratch = kmalloc(sizeof(*devices[i].scratch));
+  }
+}
+
+static bool prepare_scan(struct gpt_device *scan)
+{
+  scan->snapshot = (struct gpt_snapshot){0};
+  scan->published = false;
+  if (block_get_info(scan->id, &scan->device) != BLOCK_OK) {
+    publish(scan, GPT_UNAVAILABLE);
+    return false;
+  }
+  scan->snapshot.disk_blocks = scan->device.block_count;
+  scan->snapshot.block_size = scan->device.block_size;
+  if (!scan->scratch) {
+    publish(scan, GPT_NO_MEMORY);
+    return false;
+  }
+  if ((scan->device.block_size != 512 && scan->device.block_size != GPT_BLOCK_LIMIT) ||
+      scan->device.max_transfer < scan->device.block_size) {
+    publish(scan, GPT_UNSUPPORTED);
+    return false;
+  }
+  return true;
 }
 
 void gpt_start(void)
 {
-  if (block_get_info(&device) != BLOCK_OK) {
-    publish(GPT_UNAVAILABLE);
-    return;
-  }
-  snapshot.disk_blocks = device.block_count;
-  snapshot.block_size = device.block_size;
-  if (!scratch) {
-    publish(GPT_NO_MEMORY);
-    return;
-  }
-  if ((device.block_size != 512 && device.block_size != GPT_BLOCK_LIMIT) ||
-      device.max_transfer < device.block_size) {
-    publish(GPT_UNSUPPORTED);
-    return;
-  }
-  if (kernel_task_create(scan_disk, NULL) != MM_OK) {
-    publish(GPT_NO_MEMORY);
+  for (size_t i = 0; i < device_count; ++i) {
+    struct gpt_device *scan = &devices[i];
+    if (prepare_scan(scan) && kernel_task_create(scan_disk, scan) != MM_OK) {
+      publish(scan, GPT_NO_MEMORY);
+    }
   }
 }
 
-const struct gpt_snapshot *gpt_get_snapshot(void)
+const struct gpt_snapshot *gpt_get_snapshot(block_device_id id)
 {
   KASSERT(cpu_current() == cpu_bsp());
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  return published ? &snapshot : NULL;
+  struct gpt_device *scan = find_device(id);
+  static const struct gpt_snapshot no_memory = {.status = GPT_NO_MEMORY};
+  if (!devices && block_device_count() && block_preparation_result(id) != BLOCK_DEVICE_INVALID) {
+    return &no_memory;
+  }
+  return scan && scan->published ? &scan->snapshot : NULL;
+}
+
+enum gpt_status gpt_rescan(block_device_id id)
+{
+  KASSERT(cpu_current() == cpu_bsp());
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
+  struct gpt_device *scan = find_device(id);
+  if (!scan || !scan->published) {
+    cpu_restore_interrupts(flags);
+    return devices ? GPT_UNAVAILABLE : GPT_NO_MEMORY;
+  }
+  KASSERT(!scan->scratch);
+  scan->scratch = kmalloc(sizeof(*scan->scratch));
+  bool ready = prepare_scan(scan);
+  cpu_restore_interrupts(flags);
+  if (ready) {
+    scan_disk(scan);
+  }
+  return scan->snapshot.status;
 }

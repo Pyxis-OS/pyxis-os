@@ -2,6 +2,7 @@
 #define KERNEL_GPT_H
 
 #include <stdint.h>
+#include <kernel/block.h>
 
 #define GPT_PARTITION_LIMIT 256u
 #define GPT_NAME_UNITS 36u
@@ -43,12 +44,14 @@ struct gpt_snapshot {
 void gpt_prepare(void);
 void gpt_start(void);
 
-/* BSP/IF=0, outside IRQ/fault entry. NULL while scanning; otherwise immutable
- * for the boot, including failure results. Only HEALTHY/DEGRADED carry a map.
- * DEGRADED is read-only; HEALTHY is a prerequisite, not sufficient authority,
- * for future partition writes. Check current device state separately.
- * Trusted raw-block clients must preserve GPT metadata throughout the boot.
- * No rescan, repair, partition I/O wrapper or userspace ABI is provided. */
-const struct gpt_snapshot *gpt_get_snapshot(void);
+/* BSP/IF=0. NULL while the initial scan or an exclusive raw writer's rescan
+ * is pending. Views are borrowed until the next scheduling point; callers copy
+ * needed fields before sleeping. Only HEALTHY/DEGRADED carry a map. */
+const struct gpt_snapshot *gpt_get_snapshot(block_device_id device);
+
+/* BSP kernel task, IF=1. Initial discovery must have completed. The caller
+ * excludes every mount and raw mutation on this device until publication.
+ * Replaces the snapshot after rereading both copies; performs no disk writes. */
+enum gpt_status gpt_rescan(block_device_id device);
 
 #endif

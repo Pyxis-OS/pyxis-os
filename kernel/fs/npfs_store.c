@@ -64,6 +64,7 @@ struct store_image {
 
 struct npfs_store_pool {
   struct npfs_store_pool *next;
+  block_device_id device_id;
   struct gpt_partition partition;
   struct block_info device;
   struct npfs_header header;
@@ -193,7 +194,7 @@ static enum call_status transport(struct npfs_store_context *context, struct npf
     }
     struct block_ticket ticket;
     uint64_t flags = cpu_save_interrupts();
-    enum block_result result = block_submit(operation, sector, transfer,
+    enum block_result result = block_submit(pool->device_id, operation, sector, transfer,
       operation == BLOCK_WRITE ? cursor : NULL, &ticket);
     cpu_restore_interrupts(flags);
     if (result == BLOCK_FULL) {
@@ -866,7 +867,7 @@ static enum call_status prepare_writable(struct npfs_store_context *context, str
 }
 
 enum call_status npfs_store_open(struct npfs_store_context *context,
-  const struct gpt_partition *partition, const struct block_info *device,
+  block_device_id device_id, const struct gpt_partition *partition, const struct block_info *device,
   bool write, struct npfs_store_pool **out)
 {
   require_owner();
@@ -881,6 +882,7 @@ enum call_status npfs_store_open(struct npfs_store_context *context,
   if (!pool) {
     return CALL_NO_MEMORY;
   }
+  pool->device_id = device_id;
   pool->partition = *partition;
   pool->device = *device;
   pool->next_free = 1;

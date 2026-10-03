@@ -80,7 +80,8 @@ enum block_result block_collect(const struct block_ticket *ticket, void *read_by
     size_t read_capacity, struct block_completion *completion);
 /* Queued work is canceled before publication. Active work loses its client but
  * keeps its slot/DMA ownership until checked completion or confirmed reset.
- * Abandonment neither recalls published writes nor promises a durability fence. */
+ * Abandoning a published WRITE/FLUSH latches write failure for this device until
+ * reboot. It neither recalls published writes nor promises a durability fence. */
 enum block_result block_abandon(const struct block_ticket *ticket);
 /* BSP kernel task, IF=1, no held locks. Wait for a collectable result; OK means
  * ready, not I/O success. Absolute monotonic deadline; timeout does not cancel

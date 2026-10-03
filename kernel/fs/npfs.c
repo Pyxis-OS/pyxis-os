@@ -10,6 +10,7 @@
 #include <kernel/object/object.h>
 #include <kernel/object/directory.h>
 #include <kernel/object/file.h>
+#include <kernel/object/disk.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/capability.h>
 #include <kernel/panic.h>
@@ -23,6 +24,7 @@ struct npfs_pool {
   struct npfs_pool *next;
   struct gpt_partition partition;
   struct gpt_guid disk;
+  block_device_id device;
   struct npfs_store_pool *store;
   enum call_status maintenance_error;
   bool gpt_degraded;
@@ -106,24 +108,77 @@ static struct npfs_store_context context_for(uint64_t deadline)
 }
 
 static enum call_status select_partition(struct npfs_store_context *context,
-    const struct npfs_job *job, struct gpt_partition *partition,
+    struct npfs_job *job, struct gpt_partition *partition,
     struct block_info *device, bool *degraded)
 {
-  const struct gpt_snapshot *snapshot;
+  uint64_t inventory_flags = cpu_save_interrupts();
+  bool complete = block_inventory_complete();
+  cpu_restore_interrupts(inventory_flags);
+  if (!complete) {
+    return CALL_UNAVAILABLE;
+  }
+  enum gpt_status selected_status = GPT_UNAVAILABLE;
+  uint64_t selected_blocks = 0;
+  uint32_t selected_block_size = 0;
+  struct gpt_guid selected_guid = {0};
+  struct gpt_partition selected_partition = {0};
+  bool partition_found = false;
+  block_device_id selected_id = BLOCK_DEVICE_ID_NONE;
   for (;;) {
+    bool pending = false;
+    selected_id = BLOCK_DEVICE_ID_NONE;
+    uint64_t flags = cpu_save_interrupts();
+    for (size_t i = 0; i < block_device_count(); ++i) {
+      block_device_id id = block_device_at(i);
+      if (job->device && job->device != id) {
+        continue;
+      }
+      const struct gpt_snapshot *snapshot = gpt_get_snapshot(id);
+      if (!snapshot) {
+        pending = true;
+        continue;
+      }
+      if (job->device) {
+        selected_id = id;
+      } else if ((snapshot->status == GPT_HEALTHY || snapshot->status == GPT_DEGRADED) &&
+          !memcmp(&job->disk, &snapshot->disk_guid, sizeof(job->disk))) {
+        if (selected_id) {
+          cpu_restore_interrupts(flags);
+          return CALL_IO;
+        }
+        selected_id = id;
+      } else {
+        continue;
+      }
+      selected_status = snapshot->status;
+      selected_blocks = snapshot->disk_blocks;
+      selected_block_size = snapshot->block_size;
+      selected_guid = snapshot->disk_guid;
+      partition_found = false;
+      for (size_t p = 0; p < snapshot->partition_count; ++p) {
+        if (snapshot->partitions[p].entry_number == job->partition) {
+          selected_partition = snapshot->partitions[p];
+          partition_found = true;
+          break;
+        }
+      }
+    }
+    cpu_restore_interrupts(flags);
+    if (!pending) {
+      break;
+    }
     if (task_deadline_expired(context->deadline)) {
       return CALL_TIMED_OUT;
     }
-    uint64_t flags = cpu_save_interrupts();
-    snapshot = gpt_get_snapshot();
-    cpu_restore_interrupts(flags);
-    if (snapshot) {
-      break;
-    }
-    uint64_t retry = task_deadline_after_ms(1);
-    kernel_task_sleep_until(retry < context->deadline ? retry : context->deadline);
+    kernel_task_sleep_until(task_deadline_after_ms(1));
   }
-  switch (snapshot->status) {
+  if (!selected_id) {
+    return CALL_NOT_FOUND;
+  }
+  if (disk_device_claimed(selected_id)) {
+    return CALL_BUSY;
+  }
+  switch (selected_status) {
   case GPT_HEALTHY:
   case GPT_DEGRADED: break;
   case GPT_UNAVAILABLE:
@@ -132,38 +187,35 @@ static enum call_status select_partition(struct npfs_store_context *context,
   case GPT_TIMED_OUT: return CALL_TIMED_OUT;
   default: return CALL_IO;
   }
-  if (memcmp(&job->disk, &snapshot->disk_guid, sizeof(job->disk))) {
-    return CALL_NOT_FOUND;
-  }
-  bool found = false;
-  for (size_t i = 0; i < snapshot->partition_count; ++i) {
-    if (snapshot->partitions[i].entry_number == job->partition) {
-      *partition = snapshot->partitions[i];
-      found = true;
-      break;
+  if (partition) {
+    if (!partition_found) {
+      return CALL_NOT_FOUND;
     }
-  }
-  if (!found) {
-    return CALL_NOT_FOUND;
+    *partition = selected_partition;
   }
   uint64_t flags = cpu_save_interrupts();
-  enum block_result result = block_get_info(device);
+  enum block_result result = block_get_info(selected_id, device);
   cpu_restore_interrupts(flags);
   if (result != BLOCK_OK) {
     context->backing_error = result;
     return result == BLOCK_TIMED_OUT ? CALL_TIMED_OUT : CALL_UNAVAILABLE;
   }
-  if (device->block_size != snapshot->block_size ||
-      device->block_count != snapshot->disk_blocks ||
+  if (device->write_failed) {
+    return CALL_IO;
+  }
+  if (device->block_size != selected_block_size ||
+      device->block_count != selected_blocks ||
       (device->block_size != 512 && device->block_size != NPFS_BLOCK_SIZE) ||
       device->max_transfer < device->block_size) {
     return CALL_UNAVAILABLE;
   }
-  if (!partition->block_count || partition->first_block >= device->block_count ||
-      partition->block_count > device->block_count - partition->first_block) {
+  if (partition && (!partition->block_count || partition->first_block >= device->block_count ||
+      partition->block_count > device->block_count - partition->first_block)) {
     return CALL_IO;
   }
-  *degraded = snapshot->status == GPT_DEGRADED;
+  job->device = selected_id;
+  job->disk = selected_guid;
+  *degraded = selected_status == GPT_DEGRADED;
   return CALL_OK;
 }
 
@@ -173,7 +225,7 @@ static bool mutation_rights(uint64_t rights)
 }
 
 static enum call_status open_pool(struct npfs_store_context *context,
-    const struct npfs_job *job, struct npfs_pool **out)
+    struct npfs_job *job, struct npfs_pool **out)
 {
   struct gpt_partition partition;
   struct block_info device;
@@ -184,7 +236,7 @@ static enum call_status open_pool(struct npfs_store_context *context,
   }
   bool writable = mutation_rights(job->rights);
   for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
-    if (!memcmp(&pool->disk, &job->disk, sizeof(job->disk)) &&
+    if (pool->device == job->device &&
         pool->partition.entry_number == partition.entry_number &&
         pool->partition.first_block == partition.first_block &&
         pool->partition.block_count == partition.block_count) {
@@ -202,13 +254,14 @@ static enum call_status open_pool(struct npfs_store_context *context,
   if (status != CALL_OK) {
     return status;
   }
-  status = npfs_store_open(context, &partition, &device, writable, &pool->store);
+  status = npfs_store_open(context, job->device, &partition, &device, writable, &pool->store);
   if (status != CALL_OK) {
     adapter_free(pool, sizeof(*pool));
     return status;
   }
   pool->partition = partition;
   pool->disk = job->disk;
+  pool->device = job->device;
   pool->gpt_degraded = degraded;
   pool->next = pools;
   pools = pool;
@@ -461,13 +514,21 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   if (task_deadline_expired(context->deadline)) {
     return CALL_TIMED_OUT;
   }
+  if (job->operation >= NPFS_RAW_INFO) {
+    return disk_perform(context, job);
+  }
   if (job->operation == NPFS_ROOT) {
     return acquire_root(context, job);
   }
   if (job->operation == NPFS_DISK_SYNC) {
-    enum call_status result = CALL_OK;
+    struct block_info device;
+    bool degraded;
+    enum call_status result = select_partition(context, job, NULL, &device, &degraded);
+    if (result != CALL_OK) {
+      return result;
+    }
     for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
-      if (memcmp(&job->disk, &pool->disk, sizeof(job->disk))) {
+      if (job->device != pool->device) {
         continue;
       }
       enum call_status status = npfs_store_sync(context, pool->store);
@@ -598,6 +659,7 @@ static void complete_job(struct npfs_job *job)
   job->user_request = NULL;
   job->node = NULL;
   job->destination = NULL;
+  job->raw = NULL;
   job->table = NULL;
   job->next = NULL;
   if (job->admitted) {
@@ -629,6 +691,7 @@ static void npfs_worker(void *argument)
     bool pending = maintenance_pending();
     uint64_t flags = cpu_save_interrupts();
     bool pressure = mm_pressure_take();
+    struct disk_object *disks = disk_take_retired();
     struct npfs_node *nodes = retired_nodes;
     retired_nodes = NULL;
     struct npfs_job *job = first_job;
@@ -643,7 +706,7 @@ static void npfs_worker(void *argument)
     bool flush = task_deadline_expired(next_flush);
     bool maintenance = pressure || flush || task_deadline_expired(next_maintenance) ||
         pending;
-    if (!nodes && !job && !maintenance) {
+    if (!nodes && !disks && !job && !maintenance) {
       KASSERT(!worker_wait);
       struct task_wait *wait = task_wait_prepare();
       worker_wait = wait;
@@ -655,6 +718,7 @@ static void npfs_worker(void *argument)
       continue;
     }
     cpu_restore_interrupts(flags);
+    disk_cleanup_retired(disks);
     destroy_nodes(nodes);
     if (job) {
       flags = cpu_save_interrupts();
@@ -725,7 +789,7 @@ enum call_status npfs_submit(struct npfs_job *job)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!job || job->state != NPFS_JOB_IDLE || job->object || job->captured || job->next ||
-      job->user_request || job->admitted || (unsigned)job->operation > NPFS_DISK_SYNC) {
+      job->user_request || job->admitted || (unsigned)job->operation > NPFS_RAW_RELEASE) {
     return CALL_BAD_REQUEST;
   }
   if (!available) {
@@ -755,7 +819,7 @@ void npfs_request_submit_and_wait(struct npfs_request *request)
 
 void npfs_request_release(struct npfs_request *request)
 {
-  KASSERT(!request->job.node && !request->job.destination && !request->job.table && !request->job.object && !request->job.captured && !request->job.next &&
+  KASSERT(!request->job.raw && !request->job.node && !request->job.destination && !request->job.table && !request->job.object && !request->job.captured && !request->job.next &&
       !request->job.user_request && !request->job.admitted);
   bsp_request_release(&request->request);
 }
@@ -789,4 +853,21 @@ void npfs_start(void)
     return;
   }
   available = true;
+}
+
+bool npfs_device_mounted(block_device_id device)
+{
+  npfs_require_worker();
+  for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
+    if (pool->device == device) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void npfs_notify(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  wake_worker();
 }
