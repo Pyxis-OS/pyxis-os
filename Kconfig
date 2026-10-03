@@ -1,0 +1,12 @@
+mainmenu "Pyxis Configuration"
+
+menu "Caelum"
+
+config XHCI
+  bool "XHCI"
+  default n
+  help
+    Enable native xHCI controller preparation and USB enumeration.
+    Qualified only in QEMU; leave disabled for ThinkPad bring-up.
+
+endmenu

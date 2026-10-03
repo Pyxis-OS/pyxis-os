@@ -23,6 +23,7 @@
 #include <kernel/usb/xhci.h>
 #include <kernel/service/request.h>
 #include <kernel/space.h>
+#include <kernel-config.h>
 
 [[noreturn]] void kernel_init(const struct boot_info *boot)
 {
@@ -42,7 +43,11 @@
   klog("PCI: discovery starting\n");
   pci_discover();
   klog("PCI: discovery complete\n");
+#ifdef CONFIG_XHCI
   xhci_prepare(boot);
+#else
+  klog("xHCI: disabled at build time\n");
+#endif
   virtio_fs_pci_prepare(boot);
   virtio_net_prepare(boot);
   virtio_rng_prepare(boot);
@@ -58,7 +63,9 @@
   bsp_requests_init();
   klog("tasks: scheduler and BSP request queues ready\n");
 
+#ifdef CONFIG_XHCI
   xhci_start();
+#endif
 
   klog("devices: starting virtio, block and native filesystem workers\n");
   virtio_fs_pci_start();

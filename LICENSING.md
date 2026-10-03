@@ -33,6 +33,9 @@ applied: MPL's standard secondary-license provisions remain available.
 - `toolchain/*.patch`: upstream-derived patches follow the licenses of the
   files they modify, including applicable GNU runtime exceptions. See
   [toolchain provenance](toolchain/README.md).
+- Kconfiglib is an externally installed, ISC-licensed host build dependency,
+  pinned in `requirements.txt`, with no local changes. See
+  [configuration setup](docs/development/configuration.md).
 - `userspace`, `ports`, `third_party/lwip` and `fs` are separately versioned
   repositories. Their own licensing files and upstream notices govern their
   contents; the parent license does not override them.

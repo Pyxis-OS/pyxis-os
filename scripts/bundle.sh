@@ -6,7 +6,7 @@ export LC_ALL=C
 action=${1:?Usage: scripts/bundle.sh record|pack|verify COMPONENT}
 component=${2:?Missing component}
 case "$component" in
-  kernel) payload=(build/caelum.elf); repository=. ;;
+  kernel) payload=(build/caelum.elf build/kernel.config); repository=. ;;
   sdk) payload=(build/sdk); repository=. ;;
   userspace) payload=(build/userspace-root); repository=userspace ;;
   ports) payload=(build/ports-root build/ports-dev); repository=ports ;;
@@ -66,6 +66,7 @@ case "$action" in
           source_info fs fs
           printf 'abi_sha256=%s\n' "$(interface_id include)"
           printf 'log_level=%s\n' "${LOG_LEVEL:-info}"
+          printf 'config_sha256=%s\n' "$(sha256sum build/kernel.config | cut -d ' ' -f 1)"
           printf 'cppflags=%s\ncflags=%s\nldflags=%s\n' "${CPPFLAGS:-}" "${CFLAGS:-}" "${LDFLAGS:-}"
           "${CC:-${CROSS_COMPILE:-x86_64-unknown-pyxis-}gcc}" --version | head -n 1
           ;;
