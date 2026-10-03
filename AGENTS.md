@@ -29,6 +29,10 @@
   creating branches unless asked. For review, report concrete findings first;
   write fixes when requested. Once implementation is authorized, carry that task
   through validation, commits and PR without repeated routine permission requests.
+- A plan PR being open, reviewed or updated does not authorize its first task.
+  Start a milestone task only after the owner merges the plan or explicitly says
+  to begin it. When asked what you did or intend to do, answer from your own
+  earlier messages.
 - Before implementing a task, identify unresolved behavior, authority, lifetime
   and policy decisions. Propose a concrete small scope and stop to discuss those
   decisions. Routine implementation choices do not require approval. Do not turn
