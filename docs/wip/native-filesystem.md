@@ -227,6 +227,22 @@ Accepted 2026-10-03.
       mount path, and every volume is checked for its marker. Only then does it
       report "installed".
 
+### Kernel authority choices
+
+Task-4.2 authority choices accepted 2026-10-03:
+
+- Discover multiple disks now. Boot inventory IDs select physical devices;
+  GPT GUIDs remain metadata and normal mount selection must be unique.
+- A writable raw open requires exclusive access: any retained pool or existing
+  claim refuses it. The claim blocks new mounts, and release flushes and rescans
+  GPT before relinquishing access. Pools remain mounted until reboot.
+- Show the Limine menu for five seconds, defaulting to the normal entry.
+
+The [implemented authority](../devices/installer-authority.md) keeps consent in
+the trusted installer. Consent inspection must use raw reads and the format
+codecs; opening a pool through the normal mount path retains it and prevents
+formatting in the same boot. Use that path for verification after release.
+
 ### Target consent
 
 Accepted 2026-10-03. A disk qualifies only when its owner has marked it as
@@ -308,9 +324,12 @@ Accepted 2026-10-02.
       and numeric ABI values; current consumers use the new names together.
       The USB builder places one empty regular marker in its sole `usb-test`
       volume.
-   2. [ ] **Kernel authority**: whole-disk write authority for trusted init, the
+   2. [x] **Kernel authority**: whole-disk write authority for trusted init, the
       read-only Limine-loaded files, and the "Install Pyxis" boot entry with its
-      init.
+      native init. Multiple VirtIO disks, exclusive raw claims and release-time
+      GPT rescans are implemented; see the [authority reference](../devices/installer-authority.md)
+      and [validation/probe](../development/experiments/native-filesystem-task4.2/README.md).
+      The probe is temporary until task 4.3; the ordinary image does not package it.
    3. [ ] **Installer program**: the interactive flow, GPT, a fresh FAT32 ESP,
       npfs formatting and the read-back check, with userspace as the third
       link-time symbol provider.
