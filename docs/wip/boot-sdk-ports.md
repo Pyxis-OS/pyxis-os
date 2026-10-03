@@ -41,7 +41,7 @@ milestone's remaining interface details before starting its code work.
     client-server use.
     DHCP and TCP follow as separate milestones.
 
-13. Complete: [host-backed randomness](../devices/randomness.md), using VirtIO entropy
+13. Complete: [hardware-backed randomness](../devices/randomness.md), using VirtIO entropy
     and a bounded native READ capability.
 14. Complete: [DNS queries and hostname ping](../userland/dns.md), using a shared
     userspace client, route-aware UDP opening and a configured default resolver
@@ -283,7 +283,8 @@ preparation, bounded requests and failure ownership. Phase B.2 adds
 [controller ownership, rings, MSI-X and root-port slot reservations](../devices/usb-xhci.md).
 Phase B.3 adds [checked enumeration and control requests](../devices/usb-enumeration.md).
 The later inspection-first slice discovers controllers independently and publishes
-root-device observations without selecting/configuring a storage transport. BOT/SCSI reads and native block integration
+root-device observations and [USB 2 hub descendants](../devices/usb-hubs.md)
+without selecting/configuring a storage transport. BOT/SCSI reads and native block integration
 remain pending; writable work is unassigned. Reusable controller/USB/class/block
 boundaries are required, without
 speculative driver frameworks. This does not reorder filesystem core, spaces/SMP
@@ -301,15 +302,26 @@ BSP maintenance interval, default 120 timer ticks. Its accepted support limit
 requires less than one advancing-counter wrap between incorporated samples;
 the owner subsequently reached native userspace on all 12 ThinkPad CPUs.
 The [native continuation](thinkpad-kvm-tsc.md#native-bring-up-continuation)
-records the next keyboard blocker and unconfirmed cause; the selected clock-path
-log and native multi-wrap check remain pending.
+records the native 32-bit/software-extended clock-path log and next keyboard
+blocker; the native multi-wrap check remains pending.
+
+The assigned [ThinkPad keyboard diagnostics](thinkpad-keyboard-diagnostics.md)
+follow separately: name PS/2 setup failures, reduce PCI inventory log noise and
+replay early logs into the Caelum tab. The native result identified an absent
+scan-set query ID; the owner approved a short optional-ID wait after ACKed set-2
+selection, with native input qualification still pending.
 
 The separate [hardware inspection](../devices/hardware-inspection.md) provides native
 `lspci`/`lsusb` consumers of read-only inventory and pinned plain-text PCI/USB name
-databases. USB inventory covers direct root devices and reports partial hub
-inventory; these tools do not expand boot-image
+databases. USB inventory covers root devices and USB 2 hub descendants; unsupported hub
+branches report partial inventory; these tools do not expand boot-image
 Phase A. The [everyday pipeline performance target](../development/io-reliability-attribution.md#everyday-pipeline-performance-target)
 records their use as text-tool input without assigning a port or benchmark campaign.
+
+The ThinkPad's [next bring-up steps](thinkpad-next-steps.md) record the owner's
+order after the native shell: the assigned CPU entropy task first (virtio-rng
+when present, RDSEED with RDRAND fallback otherwise, ChaCha20 later), then
+Ethernet through VFIO passthrough to QEMU and a driver.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

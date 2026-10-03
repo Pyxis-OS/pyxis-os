@@ -11,7 +11,7 @@ Native hardware remains unqualified.
 Firmware can still load the kernel and boot archive from USB.
 
 When enabled, Caelum prepares each discovered PCI xHCI function and its own
-slots/contexts for boot-present, directly attached root-port devices.
+slots/contexts for boot-present root-port devices and bounded USB 2 hub descendants.
 [USB enumeration](usb-enumeration.md)
 addresses them, checks descriptors and publishes a read-only boot inventory.
 USB block access remains pending. The archive-backed shell and existing VirtIO block behavior remain available.
@@ -95,9 +95,10 @@ its output context in DCBAA and configures EP0. Output contexts belong to hardwa
 input contexts are constructed independently and remain immutable until command
 completion. The input Slot advertises only EP0; Configuration Information Enable
 is left disabled and Input Control configuration/interface/alternate fields remain
-zero. Inventory enumeration does not send configuration/alternate requests or
-bind non-control endpoints. No unused bulk rings are allocated.
-Every inspectable root device receives its own address/descriptor record and remains unbound.
+zero. Ordinary device enumeration does not send configuration/alternate requests or
+bind non-control endpoints. Supported hubs receive Slot-only Configure Endpoint
+metadata for [boot traversal](usb-hubs.md). No unused bulk rings are allocated.
+Every inspectable device receives an address/descriptor record; classes other than supported hubs remain unbound.
 
 A connection change after the snapshot retires that startup candidate. Loss of
 an enabled reserved port runs Disable Slot after prior command completion, then

@@ -12,7 +12,8 @@
  * every failure leaves output untouched. Zero length is a no-op after checking
  * the deadline and authority, even without a device. Larger than MAX is LIMIT.
  * Deadline is absolute monotonic time, at most MAX_WAIT_NS ahead. Past deadlines
- * time out. No fallback or partial success; host-supplied randomness is trusted.
+ * time out. No predictable fallback or partial success; the selected hardware
+ * source is trusted.
  * Eight shared call slots include queued, active and unconsumed completions. */
 struct random_read_request {
   struct message_header header;

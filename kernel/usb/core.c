@@ -26,6 +26,38 @@
 #define USB_ENDPOINT_BYTES 7
 #define USB_SUPER_COMPANION_BYTES 6
 #define USB_CLASS_HUB 0x09
+#define USB_ENDPOINT_IN 0x80
+#define USB_REQUEST_GET_STATUS 0
+#define USB_REQUEST_CLEAR_FEATURE 1
+#define USB_REQUEST_SET_FEATURE 3
+#define USB_REQUEST_SET_CONFIGURATION 9
+#define USB_REQUEST_DEVICE_OUT 0x00
+#define USB_REQUEST_HUB_IN 0xa0
+#define USB_REQUEST_PORT_IN 0xa3
+#define USB_REQUEST_PORT_OUT 0x23
+#define USB_DESCRIPTOR_HUB 0x29
+#define USB_HUB_PREFIX_BYTES 7
+#define USB_HUB_STATUS_BYTES 4
+#define USB_SIGNAL_ATTACH_MS 100
+#define USB_HUB_OVERCURRENT 0x02
+#define USB_HUB_CHARACTERISTICS_RESERVED 0xff00
+#define USB_HUB_TT_SHIFT 5
+#define USB_HUB_TT_MASK 0x03
+#define USB_HUB_PORT_CONNECTION 0x0001
+#define USB_HUB_PORT_ENABLE 0x0002
+#define USB_HUB_PORT_SUSPEND 0x0004
+#define USB_HUB_PORT_OVERCURRENT 0x0008
+#define USB_HUB_PORT_RESET 0x0010
+#define USB_HUB_PORT_POWER 0x0100
+#define USB_HUB_PORT_LOW_SPEED 0x0200
+#define USB_HUB_PORT_HIGH_SPEED 0x0400
+#define USB_HUB_PORT_RESERVED 0xe0e0
+#define USB_HUB_CHANGE_RESERVED 0xffe0
+#define USB_HUB_CHANGE_CONNECTION 0x0001
+#define USB_HUB_CHANGE_RESET 0x0010
+#define USB_HUB_FEATURE_RESET 4
+#define USB_HUB_FEATURE_POWER 8
+#define USB_HUB_FEATURE_CHANGE_FIRST 16
 #define USB_ENDPOINT_TYPE_MASK 0x03
 #define USB_ENDPOINT_CONTROL 0x00
 #define USB_ENDPOINT_ISOCHRONOUS 0x01
@@ -59,6 +91,7 @@ struct usb_device_record {
   struct system_info_usb_device info;
   enum usb_speed speed;
   const char *detail;
+  uint8_t hub_configuration;
   bool present, incomplete;
 };
 
@@ -68,7 +101,7 @@ struct usb_discovery {
   struct system_info_usb_interface *interfaces;
   uint8_t *descriptors;
   size_t capacity, interface_count, device_count, registry_index;
-  unsigned port_count;
+  unsigned port_count, device_capacity;
   bool started, hardware_failed;
 };
 
@@ -176,8 +209,40 @@ static void classify_class(struct usb_device_record *device, uint8_t class)
 {
   if (class == USB_CLASS_HUB) {
     device->info.flags |= SYSTEM_INFO_USB_DEVICE_HUB;
-    device->incomplete = true;
-    device->detail = "hub downstream inventory unavailable";
+  }
+}
+
+/* Only an ordinary USB 2 hub's default interface is activated. Multi-TT hubs
+ * retain their required single-TT alternate, so no SET_INTERFACE is needed. */
+static void select_hub_configuration(struct usb_device_record *device, size_t total)
+{
+  if (device->hub_configuration || device->info.device_class != USB_CLASS_HUB ||
+      device->info.device_subclass || device->owner->descriptors[4] != 1) {
+    return;
+  }
+  unsigned protocol;
+  if (device->speed == USB_SPEED_FULL && device->info.device_protocol == 0) {
+    protocol = 0;
+  } else if (device->speed == USB_SPEED_HIGH &&
+             (device->info.device_protocol == 1 || device->info.device_protocol == 2)) {
+    protocol = device->info.device_protocol == 2 ? 1 : 0;
+  } else {
+    return;
+  }
+  bool candidate = false;
+  for (size_t offset = USB_CONFIGURATION_BYTES; offset < total;
+       offset += device->owner->descriptors[offset]) {
+    const uint8_t *part = device->owner->descriptors + offset;
+    if (part[1] == USB_DESCRIPTOR_INTERFACE) {
+      candidate = !part[2] && !part[3] && part[4] == 1 && part[5] == USB_CLASS_HUB &&
+                  !part[6] && part[7] == protocol;
+    } else if (candidate && part[1] == USB_DESCRIPTOR_ENDPOINT) {
+      if ((part[2] & USB_ENDPOINT_IN) &&
+          (part[3] & USB_ENDPOINT_TYPE_MASK) == USB_ENDPOINT_INTERRUPT) {
+        device->hub_configuration = device->owner->descriptors[5];
+      }
+      return;
+    }
   }
 }
 
@@ -515,6 +580,8 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
       device->info.flags = previous_flags;
       device->incomplete = true;
       device->detail = "malformed or changing configuration descriptors";
+    } else {
+      select_hub_configuration(device, total);
     }
   }
 }
@@ -536,12 +603,15 @@ static void publish_inventory(void)
     if (!discovery) {
       continue;
     }
-    for (unsigned port = 0; port < discovery->port_count; ++port) {
+    for (unsigned port = 0; port < discovery->device_count; ++port) {
       struct usb_device_record *device = &discovery->devices[port];
       if (!device->present) {
         continue;
       }
       device->info.controller_index = index;
+      if (device->info.parent_index != SYSTEM_INFO_USB_NO_PARENT) {
+        device->info.parent_index += controller->device_first;
+      }
       size_t first = device->info.interface_first;
       for (size_t i = 0; i < device->info.interface_count; ++i) {
         discovery->interfaces[first + i].device_index = device_index;
@@ -659,9 +729,11 @@ struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index
     return NULL;
   }
   unsigned ports = usb_host_port_count(host);
+  unsigned descendants = usb_host_descendant_capacity(host);
   size_t capacity = usb_host_control_capacity();
   controller->info.root_port_count = ports;
-  if (!ports || ports > UINT16_MAX || sizeof(struct usb_device_record) > SIZE_MAX / ports ||
+  if (!ports || ports > UINT16_MAX || descendants > UINT_MAX - ports ||
+      sizeof(struct usb_device_record) > SIZE_MAX / (ports + descendants) ||
       capacity < USB_DEVICE_BYTES || capacity > UINT16_MAX) {
     return NULL;
   }
@@ -673,15 +745,16 @@ struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index
   discovery->registry_index = index;
   discovery->host = host;
   discovery->port_count = ports;
+  discovery->device_capacity = ports + descendants;
   discovery->capacity = capacity;
-  discovery->devices = kmalloc(ports * sizeof(*discovery->devices));
+  discovery->devices = kmalloc(discovery->device_capacity * sizeof(*discovery->devices));
   discovery->descriptors = kmalloc(capacity);
   discovery->interfaces = kmalloc(USB_INTERFACE_BUDGET * sizeof(*discovery->interfaces));
   if (!discovery->devices || !discovery->descriptors || !discovery->interfaces) {
     usb_release_prepared(discovery);
     return NULL;
   }
-  memset(discovery->devices, 0, ports * sizeof(*discovery->devices));
+  memset(discovery->devices, 0, discovery->device_capacity * sizeof(*discovery->devices));
   controller->discovery = discovery;
   return discovery;
 }
@@ -715,17 +788,319 @@ static uint8_t observation_speed(enum usb_speed speed)
   }
 }
 
+static bool hub_request(struct usb_device_record *device, const struct usb_setup *setup,
+                        void *destination, size_t length, uint64_t deadline)
+{
+  size_t bytes;
+  if (!request_ok(device, control(device, setup, destination, length, &bytes, deadline))) {
+    return false;
+  }
+  if (bytes != length) {
+    device->incomplete = true;
+    device->detail = "short hub response";
+    return false;
+  }
+  return true;
+}
+
+static bool hub_feature(struct usb_device_record *hub, unsigned port, unsigned feature,
+                        bool set, uint64_t deadline)
+{
+  struct usb_setup setup = {
+    .request_type = USB_REQUEST_PORT_OUT,
+    .request = set ? USB_REQUEST_SET_FEATURE : USB_REQUEST_CLEAR_FEATURE,
+    .value = feature,
+    .index = port,
+  };
+  return hub_request(hub, &setup, NULL, 0, deadline);
+}
+
+static bool hub_port_status(struct usb_device_record *hub, unsigned port, uint16_t *status,
+                            uint16_t *change, uint64_t deadline)
+{
+  struct usb_setup setup = {
+    .request_type = USB_REQUEST_PORT_IN,
+    .request = USB_REQUEST_GET_STATUS,
+    .index = port,
+    .length = USB_HUB_STATUS_BYTES,
+  };
+  uint8_t bytes[USB_HUB_STATUS_BYTES];
+  if (!hub_request(hub, &setup, bytes, sizeof(bytes), deadline)) {
+    return false;
+  }
+  *status = read16(bytes);
+  *change = read16(bytes + 2);
+  if ((*status & USB_HUB_PORT_RESERVED) || (*change & USB_HUB_CHANGE_RESERVED)) {
+    hub->incomplete = true;
+    hub->detail = "invalid hub port status";
+    return false;
+  }
+  return true;
+}
+
+static bool hub_sleep(unsigned milliseconds, uint64_t deadline)
+{
+  uint64_t wake = task_deadline_after_ms(milliseconds);
+  if (wake > deadline) {
+    return false;
+  }
+  kernel_task_sleep_until(wake);
+  return !task_deadline_expired(deadline);
+}
+
+static bool hub_acknowledge(struct usb_device_record *hub, unsigned port, uint16_t change,
+                            uint64_t deadline)
+{
+  for (unsigned bit = 0; bit < 5; ++bit) {
+    if ((change & (1u << bit)) &&
+        !hub_feature(hub, port, USB_HUB_FEATURE_CHANGE_FIRST + bit, false, deadline)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool hub_port_connected(uint16_t status, uint16_t change)
+{
+  return (status & (USB_HUB_PORT_CONNECTION | USB_HUB_PORT_POWER)) ==
+         (USB_HUB_PORT_CONNECTION | USB_HUB_PORT_POWER) &&
+         !(status & (USB_HUB_PORT_SUSPEND | USB_HUB_PORT_OVERCURRENT)) &&
+         !(change & USB_HUB_CHANGE_CONNECTION);
+}
+
+static enum usb_speed hub_reset_port(struct usb_device_record *hub, unsigned port,
+                                     uint64_t deadline)
+{
+  uint64_t stable = task_deadline_after_ms(USB_HUB_DEBOUNCE_MS);
+  uint16_t status, change;
+  do {
+    if (!hub_sleep(USB_HUB_POLL_MS, deadline) ||
+        !hub_port_status(hub, port, &status, &change, deadline) ||
+        !hub_port_connected(status, change)) {
+      return USB_SPEED_UNKNOWN;
+    }
+  } while (!task_deadline_expired(stable));
+
+  if (!hub_feature(hub, port, USB_HUB_FEATURE_RESET, true, deadline)) {
+    return USB_SPEED_UNKNOWN;
+  }
+  uint64_t reset = task_deadline_after_ms(USB_HUB_RESET_TIMEOUT_MS);
+  if (reset > deadline) {
+    reset = deadline;
+  }
+  do {
+    if (!hub_sleep(USB_HUB_POLL_MS, reset) ||
+        !hub_port_status(hub, port, &status, &change, reset) ||
+        !hub_port_connected(status, change)) {
+      return USB_SPEED_UNKNOWN;
+    }
+  } while ((status & USB_HUB_PORT_RESET) || !(status & USB_HUB_PORT_ENABLE) ||
+           !(change & USB_HUB_CHANGE_RESET));
+  if (!hub_acknowledge(hub, port, change, deadline) ||
+      !hub_sleep(USB_HUB_RESET_RECOVERY_MS, deadline) ||
+      !hub_port_status(hub, port, &status, &change, deadline) ||
+      !hub_port_connected(status, change) || !(status & USB_HUB_PORT_ENABLE)) {
+    return USB_SPEED_UNKNOWN;
+  }
+  if ((status & (USB_HUB_PORT_LOW_SPEED | USB_HUB_PORT_HIGH_SPEED)) ==
+      (USB_HUB_PORT_LOW_SPEED | USB_HUB_PORT_HIGH_SPEED)) {
+    return USB_SPEED_UNKNOWN;
+  }
+  if (status & USB_HUB_PORT_LOW_SPEED) {
+    return USB_SPEED_LOW;
+  }
+  return status & USB_HUB_PORT_HIGH_SPEED ? USB_SPEED_HIGH : USB_SPEED_FULL;
+}
+
+static void inspect_record(struct usb_device_record *device, uint64_t deadline)
+{
+  device->info.interface_first = device->owner->interface_count;
+  if (!device->host || device->owner->hardware_failed || task_deadline_expired(deadline)) {
+    device->incomplete = true;
+    device->detail = "connected port could not be inspected";
+  } else {
+    inspect_device(device, deadline);
+  }
+  device->info.interface_count = device->owner->interface_count - device->info.interface_first;
+}
+
+static bool prepare_hub(struct usb_device_record *hub, unsigned *ports,
+                        uint64_t deadline)
+{
+  if (hub->incomplete || !hub->hub_configuration) {
+    hub->detail = "hub shape or speed unsupported for traversal";
+    return false;
+  }
+  struct usb_setup configure = {
+    .request_type = USB_REQUEST_DEVICE_OUT,
+    .request = USB_REQUEST_SET_CONFIGURATION,
+    .value = hub->hub_configuration,
+  };
+  if (!hub_request(hub, &configure, NULL, 0, deadline)) {
+    return false;
+  }
+  struct usb_setup descriptor = {
+    .request_type = USB_REQUEST_HUB_IN,
+    .request = USB_REQUEST_GET_DESCRIPTOR,
+    .value = USB_DESCRIPTOR_HUB << 8,
+    .length = USB_HUB_PREFIX_BYTES,
+  };
+  uint8_t prefix[USB_HUB_PREFIX_BYTES];
+  if (!hub_request(hub, &descriptor, prefix, sizeof(prefix), deadline)) {
+    return false;
+  }
+  *ports = prefix[2];
+  /* DeviceRemovable reserves bit zero; the compatibility power mask only
+   * requires one bit per port. Accept extra padding without interpreting it. */
+  size_t minimum = USB_HUB_PREFIX_BYTES + (*ports + 1 + 7) / 8 + (*ports + 7) / 8;
+  size_t total = prefix[0];
+  unsigned characteristics = read16(prefix + 3);
+  if (!*ports || prefix[1] != USB_DESCRIPTOR_HUB || total < minimum ||
+      total > hub->owner->capacity ||
+      (characteristics & USB_HUB_CHARACTERISTICS_RESERVED)) {
+    hub->detail = "invalid USB 2 hub descriptor";
+    return false;
+  }
+  descriptor.length = total;
+  if (!hub_request(hub, &descriptor, hub->owner->descriptors, total, deadline)) {
+    return false;
+  }
+  if (memcmp(prefix, hub->owner->descriptors, sizeof(prefix))) {
+    hub->detail = "changing USB 2 hub descriptor";
+    return false;
+  }
+  unsigned tt = hub->speed == USB_SPEED_HIGH ?
+    (characteristics >> USB_HUB_TT_SHIFT) & USB_HUB_TT_MASK : 0;
+  if (!request_ok(hub, usb_host_configure_hub(hub->host, *ports, tt, false, deadline))) {
+    return false;
+  }
+  for (unsigned port = 1; port <= *ports; ++port) {
+    if (!hub_feature(hub, port, USB_HUB_FEATURE_POWER, true, deadline)) {
+      return false;
+    }
+  }
+  unsigned power_delay = prefix[5] * 2;
+  if (power_delay < USB_PORT_POWER_DELAY_MS) {
+    power_delay = USB_PORT_POWER_DELAY_MS;
+  }
+  /* Bus-powered devices may take TSIGATT after VBUS is valid to signal attach. */
+  if (!hub_sleep(power_delay + USB_SIGNAL_ATTACH_MS, deadline)) {
+    return false;
+  }
+  struct usb_setup status = {
+    .request_type = USB_REQUEST_HUB_IN,
+    .request = USB_REQUEST_GET_STATUS,
+    .length = USB_HUB_STATUS_BYTES,
+  };
+  uint8_t bytes[USB_HUB_STATUS_BYTES];
+  if (!hub_request(hub, &status, bytes, sizeof(bytes), deadline)) {
+    return false;
+  }
+  if (read16(bytes) & USB_HUB_OVERCURRENT) {
+    hub->detail = "hub reports overcurrent";
+    return false;
+  }
+  return true;
+}
+
+static void inspect_hub(struct usb_device_record *hub, uint64_t deadline)
+{
+  unsigned ports;
+  if (!prepare_hub(hub, &ports, deadline)) {
+    hub->incomplete = true;
+    return;
+  }
+  /* bNbrPorts is one byte. Capture candidates before resets, without accepting
+   * later insertions as part of this hub's boot observation. */
+  uint16_t initial_status[UINT8_MAX + 1];
+  struct usb_discovery *discovery = hub->owner;
+  size_t first = discovery->device_count;
+  for (unsigned port = 1; port <= ports; ++port) {
+    uint16_t change;
+    if (!hub_port_status(hub, port, &initial_status[port], &change, deadline)) {
+      goto capture_failed;
+    }
+    if (!(initial_status[port] & USB_HUB_PORT_POWER)) {
+      hub->incomplete = true;
+      hub->detail = "hub port power unavailable";
+    }
+    if (initial_status[port] & USB_HUB_PORT_CONNECTION) {
+      if (discovery->device_count == discovery->device_capacity) {
+        hub->incomplete = true;
+        hub->detail = "hub reserved device budget exhausted";
+      } else {
+        struct usb_device_record *child = &discovery->devices[discovery->device_count++];
+        child->owner = discovery;
+        child->present = true;
+        child->info.root_port = hub->info.root_port;
+        child->info.parent_index = hub - discovery->devices;
+        child->info.parent_port = port;
+      }
+    }
+    /* Clear only the captured changes now. Delaying this until child setup
+     * could erase a new connection change while earlier children are inspected. */
+    if (!hub_acknowledge(hub, port, change, deadline)) {
+      goto capture_failed;
+    }
+  }
+  size_t last = discovery->device_count;
+  for (size_t index = first; index < last; ++index) {
+    struct usb_device_record *child = &discovery->devices[index];
+    unsigned port = child->info.parent_port;
+    if (discovery->hardware_failed || task_deadline_expired(deadline)) {
+      child->incomplete = true;
+      child->detail = "hub traversal stopped before child setup";
+      hub->incomplete = true;
+      continue;
+    }
+    child->speed = hub_reset_port(hub, port, deadline);
+    child->info.speed = observation_speed(child->speed);
+    if (child->speed != USB_SPEED_UNKNOWN &&
+        !request_ok(child, usb_host_attach_child(hub->host, port, child->speed,
+                                                deadline, &child->host))) {
+      child->host = NULL;
+    }
+    inspect_record(child, deadline);
+    if (child->incomplete) {
+      hub->incomplete = true;
+    }
+  }
+  if (discovery->hardware_failed) {
+    return;
+  }
+  for (unsigned port = 1; port <= ports; ++port) {
+    uint16_t status, change;
+    if (!hub_port_status(hub, port, &status, &change, deadline)) {
+      return;
+    }
+    if (((status ^ initial_status[port]) & USB_HUB_PORT_CONNECTION) ||
+        (change & USB_HUB_CHANGE_CONNECTION) ||
+        !(status & USB_HUB_PORT_POWER) ||
+        (status & USB_HUB_PORT_OVERCURRENT)) {
+      hub->incomplete = true;
+      hub->detail = "hub connection or power changed during boot traversal";
+    }
+  }
+  return;
+
+capture_failed:
+  for (size_t index = first; index < discovery->device_count; ++index) {
+    discovery->devices[index].incomplete = true;
+    discovery->devices[index].detail = "hub snapshot failed before child setup";
+  }
+}
+
 /* Capture every boot-present root port before requests can stop the controller. */
 static void capture_ports(struct usb_discovery *discovery)
 {
   for (unsigned port = 0; port < discovery->port_count; ++port) {
-    struct usb_device_record *device = &discovery->devices[port];
-    device->owner = discovery;
-    device->present = usb_host_port_present(discovery->host, port);
-    if (!device->present) {
+    if (!usb_host_port_present(discovery->host, port)) {
       continue;
     }
-    ++discovery->device_count;
+    struct usb_device_record *device = &discovery->devices[discovery->device_count++];
+    device->owner = discovery;
+    device->present = true;
+    device->info.parent_index = SYSTEM_INFO_USB_NO_PARENT;
     device->host = usb_host_device_at(discovery->host, port);
     device->info.root_port = port + 1;
     if (device->host) {
@@ -733,6 +1108,7 @@ static void capture_ports(struct usb_discovery *discovery)
       device->info.speed = observation_speed(device->speed);
     }
   }
+  discovery->device_capacity = discovery->device_count + usb_host_descendant_capacity(discovery->host);
 }
 
 void usb_inventory_controller_failed(size_t index)
@@ -751,7 +1127,7 @@ void usb_inventory_controller_failed(size_t index)
       return;
     }
     capture_ports(discovery);
-    for (unsigned port = 0; port < discovery->port_count; ++port) {
+    for (unsigned port = 0; port < discovery->device_count; ++port) {
       if (discovery->devices[port].present) {
         discovery->devices[port].info.flags |= SYSTEM_INFO_USB_DEVICE_INCOMPLETE;
       }
@@ -767,6 +1143,35 @@ void usb_inventory_controller_failed(size_t index)
        controller->info.pci.device, controller->info.pci.function);
 }
 
+static void log_device(const struct usb_device_record *device)
+{
+  /* A path contains one root and at most the reserved descendant count.
+   * Each uint16_t port needs at most five digits and a separator. */
+  char path[(USB_DESCENDANT_BUDGET + 1) * sizeof("65535")];
+  char *cursor = path + sizeof(path) - 1;
+  *cursor = '\0';
+  const struct usb_device_record *ancestor = device;
+  for (;;) {
+    bool root = ancestor->info.parent_index == SYSTEM_INFO_USB_NO_PARENT;
+    unsigned port = root ? ancestor->info.root_port : ancestor->info.parent_port;
+    do {
+      *--cursor = '0' + port % 10;
+      port /= 10;
+    } while (port);
+    if (root) {
+      break;
+    }
+    *--cursor = '.';
+    ancestor = &device->owner->devices[ancestor->info.parent_index];
+  }
+  const struct system_info_pci_function *pci =
+    &inventory.controllers[device->owner->registry_index].info.pci;
+  klog("usb: %x:%x.%u port %s device %x:%x%s%s%s\n", pci->bus, pci->device,
+       pci->function, cursor, device->info.vendor_id, device->info.product_id,
+       device->incomplete ? " (incomplete)" : "", device->detail ? ": " : "",
+       device->detail ? device->detail : "");
+}
+
 void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
 {
   if (!discovery || discovery->started ||
@@ -776,28 +1181,29 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
   discovery->started = true;
   capture_ports(discovery);
   bool incomplete = !usb_host_inventory_complete(discovery->host);
-  for (unsigned port = 0; port < discovery->port_count; ++port) {
+  for (unsigned port = 0; port < discovery->device_count; ++port) {
     struct usb_device_record *device = &discovery->devices[port];
     if (!device->present) {
       continue;
     }
-    device->info.interface_first = discovery->interface_count;
-    if (!device->host || discovery->hardware_failed || task_deadline_expired(deadline)) {
-      device->incomplete = true;
-      device->detail = "connected port could not be inspected";
-    } else {
-      inspect_device(device, deadline);
-    }
-    device->info.interface_count = discovery->interface_count - device->info.interface_first;
+    inspect_record(device, deadline);
     if (device->incomplete) {
       device->info.flags |= SYSTEM_INFO_USB_DEVICE_INCOMPLETE;
       incomplete = true;
     }
-    const struct system_info_pci_function *pci =
-      &inventory.controllers[discovery->registry_index].info.pci;
-    klog("usb: %x:%x.%u port %u device %x:%x%s%s\n", pci->bus, pci->device, pci->function,
-         port + 1, device->info.vendor_id, device->info.product_id,
-         device->detail ? ": " : "", device->detail ? device->detail : "");
+  }
+  /* Roots are inspected first. Appended children make this an iterative
+   * breadth-first walk, with every parent preceding its descendants. */
+  for (size_t index = 0; index < discovery->device_count; ++index) {
+    struct usb_device_record *device = &discovery->devices[index];
+    if (device->info.flags & SYSTEM_INFO_USB_DEVICE_HUB) {
+      inspect_hub(device, deadline);
+    }
+    if (device->incomplete) {
+      device->info.flags |= SYSTEM_INFO_USB_DEVICE_INCOMPLETE;
+      incomplete = true;
+    }
+    log_device(device);
   }
   incomplete |= !usb_host_inventory_complete(discovery->host) || task_deadline_expired(deadline);
   uint64_t flags = cpu_save_interrupts();
@@ -849,7 +1255,7 @@ bool usb_inventory_read_device(uint64_t index, struct system_info_usb_device *re
       continue;
     }
     size_t local = index - controller->device_first;
-    for (unsigned port = 0; port < discovery->port_count; ++port) {
+    for (unsigned port = 0; port < discovery->device_count; ++port) {
       if (discovery->devices[port].present) {
         if (!local) {
           *reply = discovery->devices[port].info;

@@ -15,12 +15,33 @@ boot progress and early panics. It is for hardware bring-up, not a terminal.
 2. **Rebind.** `paging_init` switches the console to the kernel's own
    framebuffer mapping immediately after the CR3 write, before the next log
    line. The direct map no longer exists at that point.
-3. **Mirror.** Every ordinary log line goes to serial, then the early console,
-   then, once spaces exist, space 0's TTY. That TTY draws into an off-screen
-   buffer that is not yet presented.
+3. **Mirror and retain.** Every ordinary log line goes live to serial and the
+   early console. Before space 0's initialized TTY attaches, log bytes are also
+   retained in static storage. Attaching the TTY replays that prefix once under
+   the log lock, then enables live TTY output. The TTY draws into an off-screen
+   buffer that is not yet presented; replay does not duplicate serial output.
 4. **Handoff.** Before its first framebuffer write, the presenter takes the log
    lock and retires the console. Afterwards the console never draws again, and
    the presenter logs `display: presentation started; early console retired`.
+
+## Retained boot log
+
+The current buffer holds 32 KiB without heap allocation. It keeps the beginning
+when full and counts later discarded bytes, saturating the count at `SIZE_MAX`.
+Replay writes the kept bytes directly to the TTY, followed by
+`[early log truncated: N bytes dropped]` when necessary. The replay and TTY
+selection save/restore caller interrupts and share the ordinary log lock;
+concurrent output cannot interleave at the boundary. Capturing stops permanently
+after the first attachment. Selecting a TTY again does not replay or restart it.
+Emergency panic output bypasses capture and TTY replay.
+
+This is byte retention, not terminal scrollback or a userspace-readable log.
+Later output can still scroll the beginning off screen. A full buffer can cut
+a line or escape sequence; the truncation notice starts on a fresh line. Use
+info logging for native bring-up: PCI function/resource/capability details,
+per-space initialization and ordinary task exits require `LOG_LEVEL=trace`.
+Discovery summaries and warnings remain at info. Buffer capacity is an
+implementation choice, not a required architectural minimum.
 
 ## Rendering
 

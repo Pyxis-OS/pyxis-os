@@ -214,8 +214,26 @@ serial-only, as before. Showing them would mean taking the screen back from a
 presenter that may still be running on the BSP, so a machine without serial
 shows no panic text once userspace has started. A serial port that stops
 accepting output is latched off for the rest of boot and not retried.
+Early ordinary log bytes are retained in a fixed, prefix-preserving 32 KiB buffer
+and replayed into the Caelum TTY once. This does not provide scrollback: later
+output can still displace the beginning, and a full buffer drops later bytes
+with a notice. Revisit capacity or a separate log-view capability only when
+native bring-up needs more retained history.
 Revisit with real-hardware bring-up, if post-boot panics need to be visible
 without serial.
+
+## PS/2 scan-set query compatibility
+
+The ThinkPad ACKs set-2 selection and its query but supplies no set-ID byte.
+[Keyboard setup](devices/keyboard.md) therefore accepts an absent ID after a
+short monotonic wait, keeps wrong observed IDs and controller errors fatal,
+and drains queued output before enabling scanning. The fallback relies on the
+ACKed selection producing untranslated set 2; native character/modifier/extended
+key qualification remains required. A drain cannot identify arbitrary firmware
+replies delayed until after scanning starts, although the expected late `02`
+has no key mapping. Revisit this policy if native input disproves the selection
+or another controller supplies delayed contradictory output. A translated set-1
+decoder is a separate compatibility decision, not part of this fallback.
 
 ## Process termination and Ctrl-C
 
@@ -451,8 +469,9 @@ cost included, but do not establish native performance. The direct profiled
 allocation median was about 2.6% higher, mostly in BSP queue time; its cause
 was not isolated. The owner has reached native userspace on all 12 ThinkPad
 CPUs, as [recorded from a screen photo](wip/thinkpad-kvm-tsc.md#native-bring-up-continuation).
-The selected-path log and native multi-wrap clock check remain pending; missing
-keyboard input is a separate bring-up blocker with an unconfirmed cause.
+The owner recorded the 32-bit/software-extended path log; the native multi-wrap
+clock check remains pending. Missing keyboard input is a separate bring-up
+blocker; the diagnostic follow-up identified an absent scan-set query ID.
 
 The accepted support requirement is strictly less than one advancing-counter
 wrap between incorporated samples, including individual boot operations, long
@@ -632,7 +651,7 @@ keep completed/retired calls immune to late errors.
 Generic ephemeral binding currently scans 49152–65535 from a rotating cursor;
 this allocator is not a defense against off-path reply guessing. The
 [DNS client shared by dig and ping](userland/dns.md) explicitly chooses random ports
-using [host-backed randomness](devices/randomness.md). Revisit the generic allocator's
+using [hardware-backed randomness](devices/randomness.md). Revisit the generic allocator's
 policy for other consumers. Network authority and resource
 bounds also remain system-wide rather than isolated by space.
 
@@ -806,12 +825,12 @@ a concrete IP-address consumer needs HTTPS; do not route it through DNS/CN name
 matching. Scheme authority and optional custom roots do not confine destinations.
 Revisit destination policy separately when a consumer requires isolation.
 
-Entropy comes from the [VirtIO random capability](devices/randomness.md) and trusts the
-hypervisor's bytes. There is no implemented physical-hardware entropy path or
-fallback. Missing entropy leaves HTTPS unpublished and also disables new kernel
-TCP connections for that boot. Inventory and implement a supported hardware
-source before claiming native-machine HTTPS; a presumed CPU feature is not an
-entropy source. UTC remains subject to the
+Entropy comes from the [hardware-backed random capability](devices/randomness.md):
+VirtIO when present, otherwise checked CPU RDSEED/RDRAND. The selected hardware
+is trusted directly, with no kernel generator or source mixing. Missing or failed
+entropy leaves HTTPS unpublished and disables new kernel TCP connections for that
+boot. The owner must confirm this startup path on native hardware; successful
+QEMU CPU reads are guest evidence. UTC remains subject to the
 [wall-clock limits](#wall-clock-time-and-clock-source-performance) above.
 
 TLS buffers, chain depth and the 2 MiB counted allocation cap deliberately reject
@@ -1256,14 +1275,14 @@ Caelum USB enumeration is unavailable. Revisit the default after the physical ha
 The [initial controller](devices/usb-xhci.md) is qualified only against QEMU's
 PCI xHCI profile, now with multiple independently discovered controllers. It requires firmware memory decoding enabled for a
 page-aligned BAR0 prefix, interpreted extended capabilities within that 4 KiB
-prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles, external hubs,
+prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles, SuperSpeed hubs,
 power management and insertion after the startup snapshot are unsupported.
 QEMU advertises zero scratchpads and 32-byte contexts; nonzero scratchpads,
 64-byte device contexts, nondefault PSI mappings and BIOS ownership handoff remain
-unmeasured paths. Enumeration now publishes direct root-device observations; hub descendants,
-LUN/media support and USB block access remain pending.
+unmeasured paths. Enumeration publishes root devices and bounded USB 2 hub descendants;
+SuperSpeed hubs, LUN/media support and USB block access remain pending.
 
-USB 2 port reset has no explicit connect-debounce interval. The startup snapshot
+USB 2 root-port reset has no explicit connect-debounce interval. The startup snapshot
 waits 20 ms only after the driver powers a port; it has no separate link-settling
 wait when power was already on or the controller lacks port power control. It can
 miss a physical USB 3 link still initializing after controller reset, leaving that
@@ -1299,8 +1318,7 @@ with the VM/device lifetime work, not a local allocator-lock workaround.
 using an initial 4 KiB descriptor/control budget. A larger configuration makes
 inventory incomplete. The initial arena retains up to 512 validated interface
 records per controller; overflow is partial. Unknown/vendor classes are valid
-unbound observations; external hub descendants remain uninspected. Revisit these
-bounds and hub traversal with concrete descriptor/topology requirements. Storage
+unbound observations. Revisit these bounds with concrete descriptor/topology requirements. Storage
 selection across controllers must be settled separately before class/media work.
 
 All advertised ports receive input/output contexts and an EP0 ring/control buffer
@@ -1314,11 +1332,43 @@ requires the VM ownership work rather than allocator locks. Reintroduce class
 transfers with a concrete consumer and an explicit pre-AP resource policy, rather
 than restoring unused reservations for future work.
 
+USB 2 hub discovery adds a pre-AP descendant pool, initially 32 per controller,
+capped by advertised Slot capacity after reserving possible roots. One owned DMA
+arena avoids multiplying VM range records but retains all reserved backing even
+when no hub is attached; the current 32-entry/4 KiB profile adds 512 KiB per
+controller. Pool allocation failure can fail that controller's preparation.
+Revisit the budget and root reservation policy with actual topology/resource
+requirements, without runtime mapping or allocation outside the VM contract.
+The shared startup deadline can expire on large trees; exhausted branches are
+partial. SuperSpeed hubs and low-speed/high-speed-TT hardware paths remain
+unqualified; QEMU's built-in hub exercises full-speed descendants only.
+Hub descendants are not monitored after publication; idle downstream removal
+retains their slots/backing until reboot. Revisit this with separately scoped
+hotplug/lifetime work. Root removal still retires the retained subtree, and
+active request errors quarantine the controller.
+
 The first implementation bounds each device to one active control request. Early
 errors, deadlines or removal during active work stop the whole controller and
 retain unresolved DMA until reboot. There is no endpoint-local recovery yet.
-The current inventory client reads complete descriptors without configuration requests;
+The inventory client configures supported USB 2 hubs but leaves other classes unbound;
 short packets, active abandonment, early errors, ring wrap and nonzero alternate
 selection follow reviewed source/spec rules but have no synthetic validation.
 Revisit with an actual class-transfer workload in BOT/SCSI work, keeping hardware
 ownership explicit. Physical USB qualification remains separate.
+
+## CPU entropy without a kernel generator
+
+The native entropy path trusts RDSEED/RDRAND directly, with bounded instruction
+retries and checks for zero, all-ones and repeated words. VirtIO remains preferred
+when present; neither source provides independence from the hardware/hypervisor.
+The CPU boot self-test and runtime checks reject obvious failures, not arbitrary
+bias, malicious hardware or firmware defects. Availability depends on the
+instruction supply; carry-clear exhaustion fails the current read. A health
+failure disables its instruction until reboot and discards/refills the whole
+request from any healthy survivor. An ambiguous cross-instruction repeat disables
+both. The source is unavailable once no healthy instruction remains. See
+[randomness](devices/randomness.md).
+
+The accepted follow-up is a kernel ChaCha20 generator seeded from these sources.
+Revisit source mixing, reseeding and generator ownership in that task; do not add
+predictable fallback bytes or treat the current checks as entropy certification.

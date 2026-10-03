@@ -5,7 +5,7 @@
 #include <kernel/net/interface.h>
 #include <kernel/net/lwip.h>
 #include <kernel/task.h>
-#include <kernel/virtio/rng.h>
+#include <kernel/random.h>
 #include <siphash.h>
 #include <stdatomic.h>
 #include <caelum_hooks.h>
@@ -38,7 +38,7 @@ static void prepare_identity(void *argument)
   (void)argument;
   uint8_t secrets[2 * TCP_SECRET_BYTES] = {0};
   uint64_t flags = cpu_save_interrupts();
-  enum call_status result = virtio_rng_read(secrets, sizeof(secrets),
+  enum call_status result = random_read(secrets, sizeof(secrets),
       task_deadline_after_ms(TCP_SEED_WAIT_MS));
   cpu_restore_interrupts(flags);
 

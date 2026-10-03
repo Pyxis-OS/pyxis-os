@@ -5,8 +5,10 @@
 
 struct tty;
 
-/* Select the log TTY on the BSP before releasing AP schedulers. Until the
- * presenter's first frame, logging also draws on the early console. */
+/* Select an initialized log TTY on the BSP before releasing AP schedulers.
+ * The first selection replays the retained early log under the log lock.
+ * Saves/restores caller IF. Until the presenter's first frame, logging also
+ * draws on the early console. */
 void log_set_tty(struct tty *tty);
 
 /* Formatting subset is documented in <kernel/format.h>.
