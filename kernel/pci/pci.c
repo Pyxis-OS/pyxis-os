@@ -322,3 +322,12 @@ const struct pci_device *pci_device_at(size_t index)
   }
   return entry;
 }
+
+bool pci_reserve_device_at(size_t index, struct pci_claim *claim)
+{
+  struct pci_device *entry = devices;
+  for (; entry && index; --index) {
+    entry = entry->next;
+  }
+  return pci_reserve_device(entry, claim);
+}

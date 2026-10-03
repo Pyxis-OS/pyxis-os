@@ -41,7 +41,7 @@ void net_worker_assert_context(void)
 {
   KASSERT(arch_cpu_index() == 0);
   uint64_t flags = cpu_save_interrupts();
-  KASSERT((flags & RFLAGS_INTERRUPT_ENABLE) && kernel_task_is_current(network_worker));
+  KASSERT((flags & RFLAGS_INTERRUPT_ENABLE) && kernel_task_is_current(network_worker, NULL));
   cpu_restore_interrupts(flags);
 }
 

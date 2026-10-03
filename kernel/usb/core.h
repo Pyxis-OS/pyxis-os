@@ -1,13 +1,28 @@
 #ifndef USB_CORE_H
 #define USB_CORE_H
 
+#include <abi/system_info.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
-/* Prepare/release only before publication, on the BSP with IF=0. Enumeration
- * runs once on the BSP controller worker with one absolute overall deadline. */
-bool usb_prepare(void);
-void usb_release_prepared(void);
-void usb_enumerate(uint64_t deadline);
+struct usb_host_controller;
+struct usb_discovery;
+
+/* Registry and allocations are prepared on the BSP before AP startup. Every PCI
+ * USB controller is retained, including unsupported host interfaces. */
+void usb_inventory_prepare(void);
+size_t usb_inventory_controller_count(void);
+size_t usb_inventory_pci_index(size_t index);
+void usb_inventory_controller_failed(size_t index);
+struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index);
+void usb_release_prepared(struct usb_discovery *discovery);
+void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline);
+
+/* Acquire publication before copying immutable records on any CPU. */
+void usb_inventory_read(struct system_info_usb *reply);
+bool usb_inventory_read_controller(uint64_t index, struct system_info_usb_controller *reply);
+bool usb_inventory_read_device(uint64_t index, struct system_info_usb_device *reply);
+bool usb_inventory_read_interface(uint64_t index, struct system_info_usb_interface *reply);
 
 #endif
