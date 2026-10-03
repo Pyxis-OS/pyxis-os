@@ -1069,7 +1069,7 @@ requires the VM ownership work rather than allocator locks. Reintroduce class
 transfers with a concrete consumer and an explicit pre-AP resource policy, rather
 than restoring unused reservations for future work.
 
-USB 2 hub discovery adds a pre-AP descendant pool, initially 32 per controller,
+Hub discovery uses a pre-AP descendant pool, initially 32 per controller,
 capped by advertised Slot capacity after reserving possible roots. One owned DMA
 arena avoids multiplying VM range records but retains all reserved backing even
 when no hub is attached; the current 32-entry/4 KiB profile adds 512 KiB per
@@ -1077,14 +1077,18 @@ controller. Pool allocation failure can fail that controller's preparation.
 Revisit the budget and root reservation policy with actual topology/resource
 requirements, without runtime mapping or allocation outside the VM contract.
 The shared startup deadline can expire on large trees; exhausted branches are
-partial. SuperSpeed hubs and low-speed hardware paths remain unqualified.
+partial. USB 3 hub traversal and low-speed hardware paths remain unqualified.
 The first owner-reported ThinkPad snapshot exercised full-speed descendants
 behind high-speed hubs; recovery and broader TT qualification remain pending.
 QEMU's built-in hub exercises full-speed descendants only. SuperSpeedPlus root
 recognition uses discovered protocol metadata, but QEMU's current devices do not
 exercise that link profile; native address/descriptor qualification is pending.
-SuperSpeed/SuperSpeedPlus hubs retain identity/interfaces without inspecting
-descendants. Revisit traversal in its own bounded hub task. Categorical inventory
+USB 3 hub traversal is source/spec-reviewed, with QEMU USB 2 regression coverage;
+no USB 3 hub execution coverage is claimed. The ThinkPad recheck is deferred
+while the owner works on its NIC. Revisit with the next available native run.
+Only standard symmetric Gen1/Gen2 one/two-lane downstream links are attached.
+Absent/ambiguous controller profiles remain partial; revisit with actual profile
+evidence rather than picking a speed ID. Categorical inventory
 omits directional rates and lane counts; SSP isochronous byte budgets remain
 uninterpreted until actual non-control endpoint scheduling needs them.
 Hub descendants are not monitored after publication; idle downstream removal
@@ -1095,11 +1099,19 @@ active request errors quarantine the controller.
 The first implementation bounds each device to one active control request. Early
 errors, deadlines or removal during active work stop the whole controller and
 retain unresolved DMA until reboot. There is no endpoint-local recovery yet.
-The inventory client configures supported USB 2 hubs but leaves other classes unbound;
+The inventory client configures supported hubs but leaves other classes unbound;
 short packets, active abandonment, early errors, ring wrap and nonzero alternate
 selection follow reviewed source/spec rules but have no synthetic validation.
 Revisit with an actual class-transfer workload in BOT/SCSI work, keeping hardware
 ownership explicit. Physical USB qualification remains separate.
+
+USB 3 inspection omits SET_SEL and SET_ISOCH_DELAY, which the specification
+requires during full enumeration. EP0 routing/descriptor inspection does not
+consume their power-exit or isochronous scheduling values, but complete inventory
+is not full USB 3 conformance. Revisit with actual path-latency accounting before
+adding power management or non-control scheduling; do not send successful zero
+placeholders. USB 3 boot traversal retains the existing conservative USB 2
+stability/recovery delays and adds no explicit warm-reset recovery retry.
 
 ## CPU entropy without a kernel generator
 

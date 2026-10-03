@@ -136,7 +136,27 @@ QEMU's built-in hub exposes full-speed links. A subsequent
 observed full-speed enumeration behind nested high-speed hubs, 64-byte contexts
 and nonzero scratchpads. Low-speed descendants, recovery and delayed physical
 attachment remain unqualified. The ThinkPad's SuperSpeed dock and 10 Gb/s links remain
-unsupported, alongside the existing firmware/controller profile limits.
+unqualified, alongside the existing firmware/controller profile limits.
 Hotplug, idle downstream removal monitoring, endpoint-local recovery and USB
 storage remain deferred. See [implemented hub behavior](../devices/usb-hubs.md)
 and [retained costs](../technical-debt.md#usb-descriptor-bounds-and-per-port-preparation).
+
+## USB 3 traversal integration regression
+
+The USB 3 hub implementation was checked against USB 3.2 and xHCI 1.2b and
+reviewed independently for host profiles/routing and hub descriptors/status.
+QEMU 10.2.2 q35 nested-KVM, four vCPUs, 8 GiB, raw OVMF and modern VirtIO NET/RNG
+ran two nested full-speed hubs (three and five ports), a keyboard on physical
+path `3.2.3`, a direct SuperSpeed storage device for descriptor inspection, and
+unsupported EHCI. Named lsusb retained four device/interface records. GDB showed
+complete xHCI and globally partial inventory from EHCI; lsusb exited 1, lspci
+exited 0 and the remote shell drained normally. Enabled and default-disabled
+ordinary source images built with `make -j16`. No synthetic USB 3 hub, tests,
+fault injection or boot automation was added. Own QEMU/debugger/client jobs ended.
+
+This is USB 2/direct-root regression coverage, not execution coverage of USB 3
+hub traversal. The available QEMU hub has no SuperSpeed mode. Native SS/SSP
+root and hub checks remain deferred while the ThinkPad is busy with NIC work;
+`CONFIG_XHCI=n` remains checked in. The next native run should inspect named lsusb
+and boot diagnostics for dock children, negotiated profiles, partial branches
+and controller health without assuming a fixed machine topology.

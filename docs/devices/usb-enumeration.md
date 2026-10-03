@@ -1,6 +1,6 @@
 # USB enumeration and control transfers
 
-Caelum addresses boot-present root devices and supported USB 2 hub descendants on every prepared xHCI
+Caelum addresses boot-present root devices and supported hub descendants on every prepared xHCI
 controller and publishes an immutable read-only boot snapshot for native
 [lsusb](../userland/lsusb.md). It does not configure a storage transport or expose
 USB block access. [The installation milestone](../wip/usb-installation.md#b-native-read-only-usb-storage)
@@ -15,7 +15,7 @@ matcher or class-transfer path in the inventory slice. No class is selected
 from a vendor ID.
 Classes other than supported hubs remain unbound. Their standard
 descriptor structure is checked without configuring endpoints or interpreting
-class reports. [USB 2 hubs](usb-hubs.md) are configured for boot traversal;
+class reports. [USB hubs](usb-hubs.md) are configured for boot traversal;
 unsupported hubs or uninspected descendants make inventory partial.
 
 `usb_prepare()` allocates retained root/descendant discovery records, one reusable
@@ -66,8 +66,8 @@ is a resource choice in `settings.h`, not a hardware or database requirement.
 
 SuperSpeedPlus root devices use the same bounded inspection path as SuperSpeed.
 Their link category comes from the host protocol metadata, never the device
-descriptor version. SuperSpeed and SuperSpeedPlus hubs retain their checked
-identity/interfaces but remain incomplete because descendants are uninspected.
+descriptor version. Supported SuperSpeed and SuperSpeedPlus hubs expose boot descendants through
+[hub traversal](usb-hubs.md); unsupported or unreadable branches remain partial.
 The SSP isochronous companion is structurally traversed; its link-dependent
 byte budget remains uninterpreted without non-control endpoint scheduling.
 

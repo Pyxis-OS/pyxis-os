@@ -43,9 +43,9 @@ struct usb_host_device {
   phys_addr_t data_physical;
   unsigned port, slot, enqueue, downstream_port, depth, hub_ports;
   uint32_t route;
-  uint8_t raw_speed, tt_slot, tt_port;
+  uint8_t raw_speed, parent_slot, parent_port;
   uint16_t packet;
-  enum usb_speed speed;
+  struct usb_link link;
   bool cycle, addressed, multi_tt, removed;
   struct {
     enum control_state state;
@@ -57,10 +57,14 @@ struct usb_host_device {
     struct usb_setup setup_packet;
   } request;
 };
+struct xhci_speed {
+  struct usb_link link;
+  bool symmetric;
+};
 struct xhci_port {
   enum port_state state;
   uint8_t major, minor, slot_type, speed, slot;
-  enum usb_speed speeds[XHCI_PORT_SPEED_MASK + 1];
+  struct xhci_speed speeds[XHCI_PORT_SPEED_MASK + 1];
   bool protocol, dirty, boot_present;
   struct usb_host_device device;
 };
@@ -276,26 +280,45 @@ static enum usb_speed protocol_speed(unsigned major, uint32_t psi)
     rate == 480000000 ? USB_SPEED_HIGH : USB_SPEED_UNKNOWN;
 }
 
+static uint64_t protocol_rate(uint32_t psi)
+{
+  uint64_t rate = psi >> XHCI_PSI_MANTISSA_SHIFT;
+  unsigned exponent = (psi >> XHCI_PSI_EXPONENT_SHIFT) & XHCI_PSI_EXPONENT_MASK;
+  while (exponent--) {
+    rate *= 1000;
+  }
+  return rate;
+}
+
+static struct xhci_speed default_speed(enum usb_speed speed, uint64_t lane_bps, unsigned lanes)
+{
+  return (struct xhci_speed){
+    .link = { .speed = speed, .rx_bps = lane_bps * lanes, .tx_bps = lane_bps * lanes,
+              .rx_lanes = lanes, .tx_lanes = lanes },
+    .symmetric = true,
+  };
+}
+
 static bool protocol_speeds(uintptr_t base, unsigned offset, unsigned count,
-                            unsigned major, unsigned minor, enum usb_speed *speeds)
+                            unsigned major, unsigned minor, struct xhci_speed *speeds)
 {
   if (!count) {
     /* Defaults exist only for these exact BCD protocol revisions. Explicit PSI
      * entries replace them, including the meanings of otherwise familiar IDs. */
     if (major == XHCI_PROTOCOL_USB_2 && minor == XHCI_PROTOCOL_MINOR_0) {
-      speeds[XHCI_SPEED_FULL] = USB_SPEED_FULL;
-      speeds[XHCI_SPEED_LOW] = USB_SPEED_LOW;
-      speeds[XHCI_SPEED_HIGH] = USB_SPEED_HIGH;
+      speeds[XHCI_SPEED_FULL].link.speed = USB_SPEED_FULL;
+      speeds[XHCI_SPEED_LOW].link.speed = USB_SPEED_LOW;
+      speeds[XHCI_SPEED_HIGH].link.speed = USB_SPEED_HIGH;
     } else if (major == XHCI_PROTOCOL_USB_3 &&
                (minor == XHCI_PROTOCOL_MINOR_0 || minor == XHCI_PROTOCOL_MINOR_1 ||
                 minor == XHCI_PROTOCOL_MINOR_2)) {
-      speeds[XHCI_SPEED_GEN_1X1] = USB_SPEED_SUPER;
+      speeds[XHCI_SPEED_GEN_1X1] = default_speed(USB_SPEED_SUPER, USB_SUPER_LANE_BPS, 1);
       if (minor != XHCI_PROTOCOL_MINOR_0) {
-        speeds[XHCI_SPEED_GEN_2X1] = USB_SPEED_SUPER_PLUS;
+        speeds[XHCI_SPEED_GEN_2X1] = default_speed(USB_SPEED_SUPER_PLUS, USB_GEN2_LANE_BPS, 1);
       }
       if (minor == XHCI_PROTOCOL_MINOR_2) {
-        speeds[XHCI_SPEED_GEN_1X2] = USB_SPEED_SUPER_PLUS;
-        speeds[XHCI_SPEED_GEN_2X2] = USB_SPEED_SUPER_PLUS;
+        speeds[XHCI_SPEED_GEN_1X2] = default_speed(USB_SPEED_SUPER_PLUS, USB_SUPER_LANE_BPS, 2);
+        speeds[XHCI_SPEED_GEN_2X2] = default_speed(USB_SPEED_SUPER_PLUS, USB_GEN2_LANE_BPS, 2);
       }
     }
     return true;
@@ -322,14 +345,17 @@ static bool protocol_speeds(uintptr_t base, unsigned offset, unsigned count,
       /* Directional rates/lanes may differ. EP0 needs a common USB 3 protocol,
        * not an invented aggregate rate or a normalized controller speed ID. */
       if (usb_speed_is_enhanced(speed) && protocol_speed(major, transmit) == speed) {
-        speeds[id] = speed;
+        speeds[id].link = (struct usb_link){ .speed = speed,
+          .rx_bps = protocol_rate(psi), .tx_bps = protocol_rate(transmit) };
       }
       continue;
     }
     if (link != XHCI_PSI_SYMMETRIC) {
       return false;
     }
-    speeds[id] = speed;
+    speeds[id].link = (struct usb_link){ .speed = speed,
+      .rx_bps = protocol_rate(psi), .tx_bps = protocol_rate(psi) };
+    speeds[id].symmetric = true;
   }
   return true;
 }
@@ -370,7 +396,7 @@ static bool extended_capabilities(struct usb_host_controller *controller)
         return false;
       }
       unsigned slot_type = read32(base, offset + 12) & XHCI_PROTOCOL_SLOT_TYPE_MASK;
-      enum usb_speed speed_map[XHCI_PORT_SPEED_MASK + 1] = {0};
+      struct xhci_speed speed_map[XHCI_PORT_SPEED_MASK + 1] = {0};
       if (!bootstrap_fits(offset, bytes) ||
           !protocol_speeds(base, offset, speeds, header >> XHCI_PROTOCOL_MAJOR_SHIFT,
                            (header >> XHCI_PROTOCOL_MINOR_SHIFT) & XHCI_EXT_ID_MASK, speed_map)) {
@@ -1073,7 +1099,12 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
     }
     port->slot = controller->command.slot;
     port->device.slot = port->slot;
-    port->device.speed = port->speeds[port->speed];
+    port->device.link = port->speeds[port->speed].link;
+    if (port->major == XHCI_PROTOCOL_USB_3 && !port->device.link.rx_lanes) {
+      uint32_t lanes = read32(port_register(controller, i), XHCI_PORT_LINK_INFO);
+      port->device.link.rx_lanes = ((lanes >> XHCI_PORT_RX_LANES_SHIFT) & XHCI_PORT_LANES_MASK) + 1;
+      port->device.link.tx_lanes = ((lanes >> XHCI_PORT_TX_LANES_SHIFT) & XHCI_PORT_LANES_MASK) + 1;
+    }
     port->device.raw_speed = port->speed;
     port->state = PORT_RESERVED;
     char revision[sizeof("ff.f.f")];
@@ -1217,7 +1248,7 @@ bool usb_host_inventory_complete(const struct usb_host_controller *controller)
   }
   for (unsigned i = 0; i < controller->port_count; ++i) {
     struct xhci_port *port = &controller->ports[i];
-    if (port->boot_present && (port->state != PORT_RESERVED || port->device.speed == USB_SPEED_UNKNOWN)) {
+    if (port->boot_present && (port->state != PORT_RESERVED || port->device.link.speed == USB_SPEED_UNKNOWN)) {
       return false;
     }
     if (port->boot_present) {
@@ -1245,9 +1276,14 @@ bool usb_host_port_present(const struct usb_host_controller *controller, unsigne
   return controller->ports && index < controller->port_count && controller->ports[index].boot_present;
 }
 
+unsigned usb_host_device_depth(const struct usb_host_device *device)
+{
+  return device->depth;
+}
+
 enum usb_speed usb_host_device_speed(const struct usb_host_device *device)
 {
-  return device->speed;
+  return device->link.speed;
 }
 
 static bool device_present(const struct usb_host_device *device)
@@ -1308,10 +1344,10 @@ enum usb_result usb_host_address(struct usb_host_device *device, uint64_t deadli
   if (device->addressed || device->request.state != CONTROL_IDLE) {
     return USB_BUSY;
   }
-  if (device->speed == USB_SPEED_UNKNOWN) {
+  if (device->link.speed == USB_SPEED_UNKNOWN) {
     return USB_UNSUPPORTED;
   }
-  device->packet = usb_speed_is_enhanced(device->speed) ? 512 : device->speed == USB_SPEED_HIGH ? 64 : 8;
+  device->packet = usb_speed_is_enhanced(device->link.speed) ? 512 : device->link.speed == USB_SPEED_HIGH ? 64 : 8;
   memset((void *)device->input.address, 0, device->input.bytes);
   uint32_t *input = (uint32_t *)device->input.address;
   input[1] = 3; /* Slot and EP0 only. */
@@ -1320,7 +1356,7 @@ enum usb_result usb_host_address(struct usb_host_device *device, uint64_t deadli
     ((unsigned)device->raw_speed << XHCI_SLOT_SPEED_SHIFT) |
     (device->multi_tt ? XHCI_SLOT_MULTI_TT : 0);
   slot[1] = (device->port + 1) << XHCI_SLOT_ROOT_PORT_SHIFT;
-  slot[2] = device->tt_slot | ((unsigned)device->tt_port << XHCI_SLOT_TT_PORT_SHIFT);
+  slot[2] = device->parent_slot | ((unsigned)device->parent_port << XHCI_SLOT_PARENT_PORT_SHIFT);
   set_control_endpoint(input_endpoint(device, XHCI_ENDPOINT_ZERO),
                        device->packet, device->control_ring.physical);
   volatile uint64_t *dcbaa = (volatile uint64_t *)controller->dcbaa.address;
@@ -1343,8 +1379,10 @@ enum usb_result usb_host_configure_hub(struct usb_host_device *device, unsigned 
     return USB_BUSY;
   }
   if (!ports || ports > UINT8_MAX || tt_think_time > XHCI_SLOT_TT_THINK_MAX ||
-      (device->speed != USB_SPEED_FULL && device->speed != USB_SPEED_HIGH) ||
-      (device->speed != USB_SPEED_HIGH && (tt_think_time || multi_tt))) {
+      (device->link.speed != USB_SPEED_FULL && device->link.speed != USB_SPEED_HIGH &&
+       !usb_speed_is_enhanced(device->link.speed)) ||
+      (usb_speed_is_enhanced(device->link.speed) && ports > XHCI_SLOT_ROUTE_PORT_MAX) ||
+      (device->link.speed != USB_SPEED_HIGH && (tt_think_time || multi_tt))) {
     return USB_UNSUPPORTED;
   }
   memset((void *)device->input.address, 0, device->input.bytes);
@@ -1358,19 +1396,66 @@ enum usb_result usb_host_configure_hub(struct usb_host_device *device, unsigned 
   enum usb_result result = context_command(device, XHCI_TRB_CONFIGURE_ENDPOINT, deadline);
   if (result == USB_OK) {
     device->hub_ports = ports;
-    if (device->speed == USB_SPEED_HIGH) {
+    if (device->link.speed == USB_SPEED_HIGH) {
       device->multi_tt = multi_tt;
     }
   }
   return result;
 }
 
+static unsigned link_rank(const struct usb_link *link)
+{
+  if (!usb_speed_is_enhanced(link->speed) || !link->rx_lanes ||
+      link->rx_lanes != link->tx_lanes || link->rx_bps != link->tx_bps) {
+    return 0;
+  }
+  uint64_t lane_bps = link->rx_bps / link->rx_lanes;
+  if (link->speed == USB_SPEED_SUPER && lane_bps == USB_SUPER_LANE_BPS && link->rx_lanes == 1) {
+    return 1;
+  }
+  if (link->speed != USB_SPEED_SUPER_PLUS) {
+    return 0;
+  }
+  if (lane_bps == USB_SUPER_LANE_BPS && link->rx_lanes == 2) {
+    return 2;
+  }
+  if (lane_bps == USB_GEN2_LANE_BPS && link->rx_lanes == 1) {
+    return 3;
+  }
+  return lane_bps == USB_GEN2_LANE_BPS && link->rx_lanes == 2 ? 4 : 0;
+}
+
+static unsigned child_speed_id(const struct xhci_port *root, const struct usb_link *link)
+{
+  unsigned match = 0;
+  for (unsigned i = 1; i <= XHCI_PORT_SPEED_MASK; ++i) {
+    const struct xhci_speed *profile = &root->speeds[i];
+    if (profile->link.speed != link->speed) {
+      continue;
+    }
+    if (!usb_speed_is_enhanced(link->speed)) {
+      return i;
+    }
+    if (!profile->symmetric || profile->link.rx_bps != link->rx_bps ||
+        profile->link.tx_bps != link->tx_bps ||
+        (profile->link.rx_lanes && profile->link.rx_lanes != link->rx_lanes) ||
+        (profile->link.tx_lanes && profile->link.tx_lanes != link->tx_lanes)) {
+      continue;
+    }
+    if (match) {
+      return 0;
+    }
+    match = i;
+  }
+  return match;
+}
+
 enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned port,
-                                      enum usb_speed speed, uint64_t deadline,
+                                      const struct usb_link *link, uint64_t deadline,
                                       struct usb_host_device **child)
 {
   assert_device_owner(parent);
-  if (!child) {
+  if (!child || !link) {
     return USB_INVALID;
   }
   *child = NULL;
@@ -1381,10 +1466,14 @@ enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned p
   if (!controller->enumerating || parent->request.state != CONTROL_IDLE) {
     return USB_BUSY;
   }
+  enum usb_speed speed = link->speed;
+  bool enhanced = usb_speed_is_enhanced(speed);
   if (!parent->hub_ports || !port || port > parent->hub_ports ||
       parent->depth >= XHCI_SLOT_ROUTE_DEPTH ||
-      (speed != USB_SPEED_LOW && speed != USB_SPEED_FULL && speed != USB_SPEED_HIGH) ||
-      (parent->speed != USB_SPEED_HIGH && speed == USB_SPEED_HIGH) ||
+      (enhanced ? !usb_speed_is_enhanced(parent->link.speed) || !link_rank(link) :
+        (speed != USB_SPEED_LOW && speed != USB_SPEED_FULL && speed != USB_SPEED_HIGH) ||
+        usb_speed_is_enhanced(parent->link.speed) ||
+        (parent->link.speed != USB_SPEED_HIGH && speed == USB_SPEED_HIGH)) ||
       controller->descendants_used == controller->descendant_capacity) {
     return USB_UNSUPPORTED;
   }
@@ -1394,15 +1483,16 @@ enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned p
     }
   }
   struct xhci_port *root = &controller->ports[parent->port];
-  unsigned raw_speed = 0;
-  for (unsigned i = 1; i <= XHCI_PORT_SPEED_MASK; ++i) {
-    if (root->speeds[i] == speed) {
-      raw_speed = i;
-      break;
-    }
-  }
-  if (!raw_speed || root->major != 2) {
+  unsigned raw_speed = child_speed_id(root, link);
+  if (!raw_speed || root->major != (enhanced ? XHCI_PROTOCOL_USB_3 : XHCI_PROTOCOL_USB_2)) {
     return USB_UNSUPPORTED;
+  }
+  if (enhanced) {
+    for (const struct usb_host_device *hub = parent; hub; hub = hub->parent) {
+      if (!link_rank(&hub->link)) {
+        return USB_UNSUPPORTED;
+      }
+    }
   }
   if (task_deadline_expired(deadline)) {
     return USB_TIMEOUT;
@@ -1414,17 +1504,28 @@ enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned p
   device->depth = parent->depth + 1;
   unsigned route_port = port < XHCI_SLOT_ROUTE_PORT_MAX ? port : XHCI_SLOT_ROUTE_PORT_MAX;
   device->route = parent->route | (route_port << (parent->depth * XHCI_SLOT_ROUTE_PORT_BITS));
-  device->speed = speed;
+  device->link = *link;
   device->raw_speed = raw_speed;
   if (speed == USB_SPEED_LOW || speed == USB_SPEED_FULL) {
-    if (parent->speed == USB_SPEED_HIGH) {
-      device->tt_slot = parent->slot;
-      device->tt_port = port;
+    if (parent->link.speed == USB_SPEED_HIGH) {
+      device->parent_slot = parent->slot;
+      device->parent_port = port;
       device->multi_tt = parent->multi_tt;
     } else {
-      device->tt_slot = parent->tt_slot;
-      device->tt_port = parent->tt_port;
+      device->parent_slot = parent->parent_slot;
+      device->parent_port = parent->parent_port;
       device->multi_tt = parent->multi_tt;
+    }
+  }
+  if (enhanced) {
+    const struct usb_host_device *below = device;
+    for (const struct usb_host_device *hub = parent; hub; hub = hub->parent) {
+      if (link_rank(&hub->link) > link_rank(link)) {
+        device->parent_slot = hub->slot;
+        device->parent_port = below->downstream_port;
+        break;
+      }
+      below = hub;
     }
   }
   if (!run_command(controller, XHCI_TRB_ENABLE_SLOT, root->slot_type, 0, deadline)) {
@@ -1445,7 +1546,7 @@ enum usb_result usb_host_update_packet(struct usb_host_device *device, uint16_t 
   if (device->request.state != CONTROL_IDLE) {
     return USB_BUSY;
   }
-  if (device->speed != USB_SPEED_FULL || (packet != 8 && packet != 16 && packet != 32 && packet != 64)) {
+  if (device->link.speed != USB_SPEED_FULL || (packet != 8 && packet != 16 && packet != 32 && packet != 64)) {
     return USB_INVALID;
   }
   if (packet == device->packet) {

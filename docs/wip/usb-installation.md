@@ -368,13 +368,18 @@ host tools and the later physical-preparation procedure.
      descendants, discovered parent/port paths, full-path boot diagnostics and
      bounded pre-AP resources. Capture follows power-good and attachment settling;
      unused compatibility padding does not reject an otherwise bounded descriptor.
-     SuperSpeed hubs, hotplug and storage remain deferred; high-speed TT and
-     physical hardware remain unqualified. See the [hub reference](../devices/usb-hubs.md).
+     Hotplug and storage remain deferred; broader high-speed TT and physical
+     hardware qualification remain pending. See the [hub reference](../devices/usb-hubs.md).
    - [x] Recognize SuperSpeedPlus roots from protocol-version defaults or explicit
      PSI link metadata and inspect their device/configuration descriptors. Expose
      a distinct `super-plus` inventory category without numeric rate/lane fields.
-     SuperSpeed/SuperSpeedPlus hub descendants remain uninspected and partial;
-     enhanced native link qualification remains pending.
+     Root link recognition precedes the hub traversal slice below; enhanced
+     native link qualification remains pending.
+   - [x] Traverse boot-present SuperSpeed/SuperSpeedPlus hubs with checked BOS
+     speed attributes, USB 3 hub descriptors/depth/status/reset, discovered
+     routes and unique controller-profile matching. Keep unsupported links and
+     exhausted branches partial; native validation remains deferred. No storage,
+     hotplug or power-management policy is introduced.
    The initial BOT matcher/endpoint setup was removed for the inspection-only
    slice; reintroduce class transfers with their first consumer and an explicit
    pre-AP resource policy in B.4.
