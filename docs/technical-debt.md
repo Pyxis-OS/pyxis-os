@@ -933,6 +933,14 @@ improve 20.373–41.378%, while small compiler regresses 7.098%; largest write
 windows still spend about 80–82% of metadata bytes on map replacement. Global
 closure, full source validation and funded bulk remain; no uniform saving or
 local worst-case bound is established. General split/merge solving and deployment qualification remain open.
+
+**Superseded by a native restart (2026-10-02).** The pyxis-fs writer is not
+deployed and gets no further work. In the instrumented RAM matrix, measured
+workload time per logical operation was 13–80 ms, against 0.12–0.16 ms for Btrfs,
+and rose 3–5x from 1 MiB to 20 MiB of background data. The owner chose the [simple native filesystem](wip/native-filesystem.md)
+instead. Until it replaces them, native read-only mounts still use the current
+format and the kernel's read-only subset of `fs/core`. Revisit when the new
+filesystem can serve the read-only mount path.
 Native scratch/backing allocation exceeds the member-
 cgroup peak in a recorded case; do not treat that peak as whole-native-job RAM
 high-water evidence. Scratch/trace remain independently bounded with no swap or

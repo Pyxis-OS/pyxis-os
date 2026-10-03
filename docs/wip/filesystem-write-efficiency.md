@@ -1,5 +1,8 @@
 # Filesystem write-efficiency investigation
 
+**Superseded 2026-10-02** by the [simple native filesystem](native-filesystem.md)
+restart. Kept as history; no further work on this plan is assigned.
+
 Status: research recorded on 2026-10-02. The narrow combined cleanup below is
 implemented with unchanged admission and reserve policy. The owner subsequently
 accepted the [retirement-debt policy and bounds](filesystem-retirement-debt.md)

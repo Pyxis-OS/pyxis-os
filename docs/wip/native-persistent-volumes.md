@@ -1,5 +1,8 @@
 # Native persistent volumes
 
+**Superseded 2026-10-02** by the [simple native filesystem](native-filesystem.md)
+restart. Kept as history; no further work on this plan is assigned.
+
 Status: agreed follow-on milestone scope, 2026-09-30; implementation waits for
 the [writable core and recovery milestone](writable-filesystem-core.md). Detailed
 native authority and lifetime mappings are task 1 decisions, not frozen APIs.

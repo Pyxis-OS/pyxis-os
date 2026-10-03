@@ -1,5 +1,8 @@
 # Bounded allocation-map overflow split
 
+**Superseded 2026-10-02** by the [simple native filesystem](native-filesystem.md)
+restart. Kept as history; no further work on this plan is assigned.
+
 Status: **accepted and implemented bounded correction**, 2026-10-02. After
 [Pyxis #327](https://git.internal/PyxisOS/pyxis-os/pulls/327) merged, the owner
 accepted this package and assigned implementation with focused tests and the

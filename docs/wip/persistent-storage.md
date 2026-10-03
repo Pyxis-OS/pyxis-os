@@ -1,5 +1,8 @@
 # Pyxis pool and persistent filesystem
 
+**Superseded 2026-10-02** by the [simple native filesystem](native-filesystem.md)
+restart. Kept as history; no further work on this plan is assigned.
+
 Status: agreed design direction, 2026-09-29. The
 [block-storage foundation](../devices/block-storage.md) and
 [initial format and read-only core](../devices/filesystem-readonly.md) are complete.
