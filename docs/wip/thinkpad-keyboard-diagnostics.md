@@ -162,3 +162,36 @@ validation QEMU/GDB jobs are stopped; the final delivery uses info logging.
 The subsequent native result above identifies the query timeout. The original
 keypress-triggered freeze remains unexplained, and native input validation after
 the fallback remains pending.
+
+### Optional-query follow-up validation
+
+The source committed as `0217e95` was built after integrating main `132aef1`.
+Ordinary `make -j16 image` rebuilt the SDK, userspace and ports at main's pins;
+it passed with vendored port warnings. The subsequent kernel/image rebuild
+using those verified bundles passed without kernel warnings or undefined
+symbols. Logs are `build/keyboard-optional-query-build.log` and
+`build/keyboard-optional-query-kernel-build.log`.
+
+An initial KVM/GDB run with a hardware breakpoint installed before firmware
+boot stalled before any Caelum output. QEMU segfaulted when closed. That run
+did not validate the query path. The repeat ordinary boot, with GDB attached
+only after startup, passed on the same host with 12 CPUs, 256 MiB, Q35/KVM,
+1920x1080 VGA, OVMF, no NIC/RNG and xHCI disabled. It reported scan set 2 ready
+and reached preemptive userspace; QEMU returns its ID normally, so the native
+missing-ID fallback was not exercised. No fault injection or test hooks were
+used to simulate that condition.
+
+Manual monitor commands `sendkey meta_l-right`, `sendkey a`, `sendkey 1`,
+`sendkey shift-a` and `sendkey up` selected Development, displayed `a1A`, and
+produced the extended Up-key sequence. GDB found all 27 raw bytes consumed,
+zero queued bytes, no input loss and released Shift/Up states. The BSP timer
+advanced from 8,756 to 15,689 deliveries. The late-reply drain and tri-state
+error/absence distinction were inspected; a read-only review identified and
+resolved a logging delay between drain and scanning enable. The fallback
+message now follows successful setup, so draining is immediately before the
+enable-scanning command. All QEMU/GDB jobs were stopped.
+
+Local records are `build/keyboard-optional-query-normal-boot.log`,
+`build/keyboard-optional-query-normal-gdb.log` and the Development screenshot
+at `build/keyboard-optional-query-development.png`. These checks qualify the
+normal virtual input path, not the native fallback or the original freeze.
