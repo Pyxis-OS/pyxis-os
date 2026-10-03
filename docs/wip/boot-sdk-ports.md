@@ -303,6 +303,10 @@ The [native continuation](thinkpad-kvm-tsc.md#native-bring-up-continuation)
 records the next keyboard blocker and unconfirmed cause; the selected clock-path
 log and native multi-wrap check remain pending.
 
+The assigned [ThinkPad keyboard diagnostics](thinkpad-keyboard-diagnostics.md)
+follow separately: name PS/2 setup failures, reduce PCI inventory log noise and
+replay early logs into the Caelum tab before selecting a keyboard fix.
+
 The separate [hardware-inspection proposal](hardware-inspection.md) adds native
 `lspci`/`lsusb` consumers of read-only inventory and pinned plain-text PCI/USB name
 databases. `lspci` can precede USB support; these tasks do not expand boot-image
