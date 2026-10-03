@@ -6,7 +6,7 @@ task 1. [Hardware identification](../devices/rtl8111-hardware.md) is complete;
 controller preparation is implemented. [NIC passthrough](../development/thinkpad-nic-passthrough.md)
 is complete. The owner accepted task 2's firmware/power/initial-state defaults
 in PR #359, then authorized task 2 after merging it. Tasks 1–3 are complete;
-Ethernet I/O remains pending.
+Task 4 Ethernet I/O is in progress; task 5 remains separate.
 
 ## Goal and machine configuration
 
@@ -25,9 +25,10 @@ The owner confirmed these settings for the **built-in port profile**:
 
 These are machine configuration. Apply them through the
 existing userspace network configuration authority and keep the QEMU user-network
-profile separate. Configuration/profile packaging belongs to the separately
-versioned userspace repository; publish any dependency PR before updating the
-parent pin, following [SDK and repository integration](../development/sdk-and-repositories.md).
+profile separate. Profile parsing and packaged defaults belong to the separately
+versioned userspace repository. The parent image assembler accepts a private
+`NETWORK_CONFIG` file without modifying that repository. Publish any dependency
+PR before updating the parent pin, following [SDK and repository integration](../development/sdk-and-repositories.md).
 
 ## Controllers and selection
 
@@ -74,7 +75,8 @@ driver in task 3; task 4 connects RTL8111 I/O.
 
 The five-task outline and planning constraints are accepted. The
 [hardware profile](../devices/rtl8111-hardware.md#controller-preparation)
-records implemented preparation and accepted choices. Task 4 has not started.
+records preparation, I/O ownership and accepted choices. Task 4 validation is
+in progress.
 
 - [x] **1. Identify the hardware.** Begin with the owner's Fedora r8169
   `dmesg`/`ethtool`/`lspci` output, with MAC bytes removed. Record the chip name,
@@ -147,8 +149,8 @@ any sized BAR, including BAR2 and BAR4. Reuse those existing helpers.
 Task 2 generalized the provisional 4 KiB `pci_map_bootstrap_bar()` helper:
 xHCI selects BAR0, RTL8111 selects BAR2 before sizing, then retains its checked
 register mapping. The existing MSI-X helper maps BAR4's table/PBA; delivery
-remains disabled and function-masked. Entry-zero routing and interrupt delivery
-belong to task 4.
+stays function-masked during preparation. Task 4 routes entry zero to BSP
+vector 40 and enables delivery only after explicit binding.
 
 **Accepted task 2 choices:** firmware-free first, with link and sustained traffic
 measured in task 4; disable endpoint ASPM/CLKREQ and run the PHY at full power;
@@ -190,6 +192,7 @@ from TxConfig/XID and contains variant-specific PHY/firmware setup:
 - [r8169 firmware format and interpreter](https://github.com/torvalds/linux/blob/v6.18/drivers/net/ethernet/realtek/r8169_firmware.c)
 
 Task 1 confirms XID `541`, corresponding to Linux's MAC version 46
-(`RTL8168h/8111h`), and the MSI-X layout. Firmware-free reliability, successful
-interrupt delivery and native preparation remain unqualified. PCI revision
+(`RTL8168h/8111h`), and the MSI-X layout. Native preparation is owner-reported
+in PR #362; task 4 checks VFIO interrupt delivery and initial traffic. Cold-start
+firmware-free reliability and native I/O remain unqualified. PCI revision
 `0x15` alone is not proof of a particular Realtek MAC implementation.

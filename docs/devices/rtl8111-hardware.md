@@ -100,10 +100,9 @@ functions, allocating independent stable state for each candidate:
    and `pci_map_bar` for sized resources, retaining exclusive ownership throughout.
 4. Validate and retain the provisional register prefix against the sized BAR2.
    Use existing MSI-X discovery/mapping for the confirmed BAR4 table/PBA and
-   check region disjointness. Keep MSI-X disabled and function-masked without routing a vector;
-   routing and delivery belong to task 4. Re-enable memory decoding while keeping
-   bus mastering, RX/TX and interrupt delivery disabled. Initialize PHY under the accepted firmware/power
-   policy; rings and activation belong to task 4.
+   check region disjointness. Re-enable memory decoding while keeping bus mastering,
+   RX/TX and interrupt delivery disabled. Initialize PHY under the accepted
+   firmware/power policy, then prepare the I/O resources described below.
 
 The generalized `pci_map_bootstrap_bar` provides the checked assigned memory-BAR
 prefix needed before sizing; xHCI still selects BAR0. The NIC selects BAR2 and
@@ -116,8 +115,7 @@ then confirms a PHY reset and restarts autonegotiation, preserving speed/duplex
 and pause advertisements. PFM, ALDPS, PLL power saving and EEE advertisement
 are disabled. Link completion is not required: an unplugged cable is valid.
 MAC, ERI and PHY polls propagate timeout/readback failures, with finite monotonic
-budgets; PHY reset has a 600 ms budget. Packet filters, rings and activation
-remain task 4 work.
+budgets; PHY reset has a 600 ms budget. Activation follows explicit binding.
 
 Restore temporary PCI probe changes and cancel after unsupported identity or
 preparation failure before variant-specific writes.
@@ -154,5 +152,62 @@ The owner subsequently reported native UEFI/PXE preparation success in
 prepared state and XID `502`, with DASH enabled, was identified and released
 without variant-specific writes. This is owner-reported evidence of that
 firmware handoff, not a measurement of every initial power/decode state.
-Link and cold-start firmware-free traffic remain unqualified; task 4 measures
-I/O and task 5 includes owner-run native qualification.
+VFIO link and initial traffic are measured in task 4; cold-start firmware-free
+reliability and owner-run native I/O qualification remain task 5 work.
+
+
+## Ethernet I/O
+
+After supported-XID identification, capture the boot-loaded IDR MAC without
+logging it. This is the identity observed at boot, not a guarantee that the
+previous owner left the factory address unchanged. Retain supported candidates
+and their known identity even if later preparation fails. Identified unsupported
+XIDs are excluded from selection; failure to identify a candidate or allocate
+its state makes the RTL inventory incomplete.
+
+Boot preparation allocates independent RX/TX rings through `dma_buffer_allocate`:
+32 descriptors and 32 fixed 2048-byte buffers per ring, 68 KiB each. The descriptor
+bank occupies the first page; physical DMA addresses and CPU mappings remain
+distinct. These capacities are implementation choices. Complete bounded H EPHY,
+ERI FIFO/filter and MAC timer tuning, disable checksum/VLAN offloads, program
+ring addresses high then low, and route MSI-X entry zero to BSP vector 40 under
+function/entry masks. Other table entries stay masked. Unselected controllers
+retain this storage with DMA, RX/TX and interrupt delivery disabled.
+
+Only the BSP network worker activates the selected controller after BIND. Enable
+bus mastering, then RX/TX, program TxConfig after TX enablement, and unmask
+MSI-X/device sources after checking activation. Accept own-unicast and broadcast
+frames, without multicast hash filtering. Link state comes from PHYstatus and
+link-change interrupts; lack of carrier does not invalidate preparation.
+
+Interrupt entry masks device sources, acknowledges observed W1C status and wakes
+the worker. The worker drains at most one ring's worth of completions per pass,
+yields when saturated and reenables sources after draining. Pending status stays
+latched while masked, closing the completion/sleep race without periodic polling.
+The mask includes RX/TX completion/error and link change for MAC46.
+
+TX copies into the next CPU-owned buffer, zero-pads short frames to 60 bytes,
+publishes metadata before OWN, and kicks the normal queue. OWN clearing permits
+reuse; it does not establish delivery. Pending TX has a five-second completion
+budget. RX observes OWN clear before acquiring payload bytes, validates the
+fixed address, EOR, flags and byte bounds, strips the four-byte FCS, lends valid
+bytes synchronously to Ethernet and reposts afterward. Error, oversized and
+fragmented frames are dropped without accessing payload. The reference's
+`RxMaxSize = 0x4000` is a permissive length filter; each descriptor's 2048-byte
+capacity bounds DMA, with oversized packets split across descriptors.
+
+Runtime failure masks delivery, disables bus mastering, requests reset and
+checks completion with a finite deadline. Neither timeout nor reset frees or
+reposts outstanding storage. Claims, rings and shared mappings remain until
+reboot, and configuration cannot switch or fall back to another controller.
+A response that stops TX also stops the enclosing RX service before reposting.
+
+Register and descriptor facts follow the pinned
+[Linux v6.18 MAC46 start sequence](https://github.com/torvalds/linux/blob/v6.18/drivers/net/ethernet/realtek/r8169_main.c#L3371-L3430),
+[common start](https://github.com/torvalds/linux/blob/v6.18/drivers/net/ethernet/realtek/r8169_main.c#L3898-L3962)
+and [completion handling](https://github.com/torvalds/linux/blob/v6.18/drivers/net/ethernet/realtek/r8169_main.c#L4534-L4678).
+The public [RTL8111B/8168B register datasheet](https://people.freebsd.org/~wpaul/RealTek/RTL8111B_8168B_Registers_DataSheet_1.0.pdf)
+corroborates descriptor capacity/chaining and TX-enable ordering for the older B
+variant; H behavior is checked against the pinned driver and physical VFIO boot.
+No Linux code or firmware blob is imported. Undocumented tuning values remain
+variant programming data rather than new architectural contracts.

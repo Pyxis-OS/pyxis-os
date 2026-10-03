@@ -3,6 +3,7 @@
 
 #include <kernel/pci/msix.h>
 #include "registers.h"
+#include "ring.h"
 
 struct rtl8111_controller {
   struct pci_claim claim;
@@ -10,7 +11,16 @@ struct rtl8111_controller {
   struct pci_mapping registers;
   struct pci_msix msix;
   unsigned power_capability, express_capability, xid;
-  bool mutated, quiesced, prepared;
+  bool identified, mutated, quiesced, prepared;
+  uint8_t mac[6];
+  bool identity_known, started, active, link_up, stopping;
+  struct rtl_ring rx, tx;
+  uint64_t tx_deadlines[RTL_RING_COUNT];
+  uint64_t reset_deadline, reset_recheck;
+  uint16_t pending_interrupts;
+  const char *stop_reason;
+  bool dma_disabled, interrupts_disabled;
+  uint64_t interrupts, received, malformed, transmitted, completed, queue_full;
   struct rtl8111_controller *next;
 };
 
@@ -50,5 +60,6 @@ void rtl_mac_write(struct rtl8111_controller *controller, unsigned address, uint
 void rtl_mac_modify(struct rtl8111_controller *controller, unsigned address,
                     uint16_t clear, uint16_t set);
 bool rtl_phy_prepare(struct rtl8111_controller *controller);
+bool rtl_phy_read(struct rtl8111_controller *controller, unsigned address, uint16_t *value);
 
 #endif
