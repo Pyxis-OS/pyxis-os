@@ -107,3 +107,8 @@ The captures do not establish the stick's USB 2 companion routes, direct routing
 through the remaining laptop USB-C socket, USB-C orientation behavior, firmware
 ownership handoff or pre-OS controller state. Linux MSI-X settings describe the
 running Linux driver, not firmware settings presented to Caelum.
+
+## Next bring-up steps
+
+The owner's order after reaching a native shell (2026-10-03) is recorded in
+[ThinkPad next steps](../../wip/thinkpad-next-steps.md): entropy, then Ethernet.
