@@ -896,8 +896,11 @@ aggregate staging budget and can fail allocation below that per-image limit.
 The userspace root selection remains bounded to 16 entries within existing
 64 KiB startup/capture storage, independently of format volume/name limits.
 
-Uncertain backing failure, allocation pressure and crash recovery retain
-source-review coverage. The [populated-pool review](development/experiments/native-filesystem-task3/populated-pool-review.md)
+Uncertain backing failure and allocation pressure retain source-review coverage.
+An independent [post-merge replay review](development/native-filesystem-replay-review.md)
+exercised committed-journal recovery on host and kernel; it does not qualify
+arbitrary interrupted cleanup or storage failure. The
+[populated-pool review](development/experiments/native-filesystem-task3/populated-pool-review.md)
 reproduced the old allocation timeout and validated the retained-bitmap correction.
 No fault injection or physical-media validation
 is claimed by the native writer's ordinary QEMU workflow.
@@ -934,8 +937,9 @@ The owner accepted refusal of committed journals for read-only opening and no
 home-metadata checksums in v1. Writable fsck replays the journal; checksums cannot
 detect every later metadata corruption once it is cleared. Revisit metadata
 checksums when integrity needs justify a feature-gated layout change. Committed
-replay and interrupted cleanup are source-reviewed, not runtime exercised; revisit
-when crash/recovery qualification is explicitly assigned. Host tools require unchanged
+replay has an independent recovery case in the linked review; interrupted
+cleanup and arbitrary failure points remain source-reviewed. Broader qualification
+waits until explicitly assigned. Host tools require unchanged
 standalone regular images and cooperating locks, stage replay payloads in memory,
 and do not repair arbitrary damage or reclaim cleanup lists. Large images/volumes
 can exhaust host checker memory. Physical-media wear remains unmeasured; native operation latency and QEMU target

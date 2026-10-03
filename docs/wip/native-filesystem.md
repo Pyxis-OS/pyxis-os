@@ -218,8 +218,9 @@ Accepted 2026-10-02.
    decoding with link-time symbols, plus host `mkfs`, `fsck` and inspection.
    Implemented in [pyxis-fs #26](https://git.internal/PyxisOS/pyxis-fs/pulls/26);
    [tool guide and validation](../../fs/docs/native-host-tools.md). Committed replay
-   is source-reviewed, not crash-injection qualified; the task-3 kernel writer
-   now produces normal COMMITTED/checkpoint transactions.
+   has an independent [post-merge review](../development/native-filesystem-replay-review.md)
+   covering host and kernel recovery; the task-3 kernel writer produces normal
+   COMMITTED/checkpoint transactions. Broader crash qualification remains separate.
 3. [x] **Native read/write in Caelum** on virtio-blk, with persistent in-memory
    state and caching. Implemented in
    [parent #348](https://git.internal/PyxisOS/pyxis-os/pulls/348);
