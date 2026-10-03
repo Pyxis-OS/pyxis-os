@@ -10,6 +10,7 @@
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/vm.h>
 #include <kernel/net/interface.h>
+#include <kernel/net/rtl8111.h>
 #include <kernel/object/clock.h>
 #include <kernel/object/system_info.h>
 #include <kernel/panic.h>
@@ -54,6 +55,7 @@
 #endif
   virtio_fs_pci_prepare(boot);
   virtio_net_prepare(boot);
+  rtl8111_prepare(boot);
   random_prepare(boot);
   virtio_blk_prepare(boot);
   gpt_prepare();

@@ -1,0 +1,108 @@
+#ifndef RTL8111_REGISTERS_H
+#define RTL8111_REGISTERS_H
+
+#define RTL_VENDOR_ID 0x10ec
+#define RTL_DEVICE_ID 0x8168
+#define RTL_REGISTER_BAR 2
+#define RTL_XID_SHIFT 20
+#define RTL_XID_MASK 0xfcf
+#define RTL_XID_8168H 0x541
+
+#define RTL_CHIP_COMMAND 0x37
+#define RTL_COMMAND_TX (1u << 2)
+#define RTL_COMMAND_RX (1u << 3)
+#define RTL_COMMAND_RESET (1u << 4)
+#define RTL_INTERRUPT_MASK 0x3c
+#define RTL_INTERRUPT_STATUS 0x3e
+#define RTL_TX_CONFIG 0x40
+#define RTL_TX_FIFO_EMPTY (1u << 11)
+#define RTL_CONFIG_LOCK 0x50
+#define RTL_CONFIG_UNLOCK 0xc0
+#define RTL_CONFIG2 0x53
+#define RTL_CONFIG2_PME (1u << 5)
+#define RTL_CONFIG2_CLKREQ (1u << 7)
+#define RTL_CONFIG3 0x54
+#define RTL_CONFIG3_L23_READY (1u << 1)
+#define RTL_CONFIG3_LINK_WAKE (1u << 4)
+#define RTL_CONFIG5 0x56
+#define RTL_CONFIG5_ASPM (1u << 0)
+#define RTL_CONFIG5_LAN_WAKE (1u << 1)
+#define RTL_CONFIG5_FRAME_WAKE (7u << 4)
+#define RTL_ERI_DATA 0x70
+#define RTL_ERI_COMMAND 0x74
+#define RTL_ERI_ALL_BYTES (15u << 12)
+#define RTL_INDIRECT_FLAG (1u << 31)
+#define RTL_MAC_OCP 0xb0
+#define RTL_PHY_OCP 0xb8
+#define RTL_OCP_ADDRESS_SHIFT 15
+#define RTL_DLL_POWER 0xd0
+#define RTL_DLL_PFM (1u << 6)
+#define RTL_DLL_10M_POWER_SAVE (1u << 7)
+#define RTL_MCU 0xd3
+#define RTL_MCU_LINK_LIST_READY (1u << 1)
+#define RTL_MCU_FIFO_EMPTY ((1u << 4) | (1u << 5))
+#define RTL_MCU_OOB (1u << 7)
+#define RTL_MISC 0xf0
+#define RTL_MISC_RX_GATE (1u << 19)
+#define RTL_MISC1 0xf2
+#define RTL_MISC1_D3_PFM (1u << 6)
+
+#define RTL_MAC_SHARED_FIFO 0xe8de
+#define RTL_MAC_FIFO_CLEAR (1u << 14)
+#define RTL_MAC_FIFO_SET (1u << 15)
+#define RTL_MAC_L1_POWER 0xe092
+#define RTL_MAC_L1_POWER_MASK 0xffu
+#define RTL_MAC_ADC_SELECT 0xdd02
+#define RTL_MAC_ADC_SAMPLE 0xdd00
+#define RTL_ADC_SELECT_VALUE 0x807d
+#define RTL_ADC_SIGN (1u << 7)
+#define RTL_ADC_BIAS_SIGN (1u << 15)
+#define RTL_ADC_BIAS_HIGH 0x7ff8u
+#define RTL_ADC_BIAS_LOW 0x0007u
+#define RTL_ERI_WAKE 0xdc
+#define RTL_ERI_MAGIC_WAKE (1u << 16)
+#define RTL_ERI_EEE 0x1b0
+#define RTL_ERI_EEE_ENABLE ((1u << 0) | (1u << 1) | (1u << 12))
+
+/* Native PHY OCP addresses; page/register selectors are not hardware state. */
+#define RTL_PHY_CONTROL 0xa400
+#define RTL_PHY_CONTROL_RESET (1u << 15)
+#define RTL_PHY_CONTROL_AUTONEG (1u << 12)
+#define RTL_PHY_CONTROL_POWER_DOWN (1u << 11)
+#define RTL_PHY_CONTROL_ISOLATE (1u << 10)
+#define RTL_PHY_CONTROL_RESTART (1u << 9)
+#define RTL_PHY_PARAM_SELECT 0xa436
+#define RTL_PHY_PARAM_DATA 0xa438
+#define RTL_PHY_ESTIMATOR_PARAM 0x808a
+#define RTL_PHY_ESTIMATOR_MASK 0x003f
+#define RTL_PHY_ESTIMATOR_VALUE 0x000a
+#define RTL_PHY_RETUNE_PARAM 0x0811
+#define RTL_PHY_RETUNE_ENABLE (1u << 11)
+#define RTL_PHY_RETUNE_CONTROL 0xa42c
+#define RTL_PHY_RETUNE_START (1u << 1)
+#define RTL_PHY_10M_POWER 0xa442
+#define RTL_PHY_10M_ENABLE (1u << 11)
+#define RTL_PHY_PFM (1u << 7)
+#define RTL_PHY_POWER 0xa430
+#define RTL_PHY_PLL_OFF (1u << 0)
+#define RTL_PHY_ALDPS (1u << 2)
+#define RTL_PHY_EEE_TUNE 0xa432
+#define RTL_PHY_EEE_TUNE_ENABLE (1u << 4)
+#define RTL_PHY_EEE_ADVERTISE 0xa5d0
+#define RTL_PHY_ADC_BIAS 0xbcfc
+#define RTL_PHY_TX_LPF_SAMPLE 0xbcdc
+#define RTL_PHY_TX_LPF_TUNE 0xbcde
+#define RTL_PHY_TX_LPF_MASK 0xfu
+#define RTL_PHY_TX_LPF_BIAS 3u
+
+#define RTL_FIFO_TIMEOUT_NS UINT64_C(4200000)
+#define RTL_RESET_TIMEOUT_NS UINT64_C(10000000)
+#define RTL_PHY_ACCESS_TIMEOUT_NS UINT64_C(250000)
+#define RTL_ERI_TIMEOUT_NS UINT64_C(10000000)
+#define RTL_PHY_RESET_TIMEOUT_NS UINT64_C(600000000)
+#define RTL_RX_GATE_SETTLE_NS UINT64_C(2000000)
+#define RTL_STOP_SETTLE_NS UINT64_C(1000000)
+#define RTL_PHY_WAKE_SETTLE_NS UINT64_C(20000000)
+#define RTL_PHY_RESET_SETTLE_NS UINT64_C(1000000)
+
+#endif
