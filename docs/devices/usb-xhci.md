@@ -1,7 +1,16 @@
 # Initial xHCI controller
 
-Caelum prepares a unique PCI xHCI function and hardware slots/contexts for
-boot-present, directly attached root-port devices. [USB enumeration](usb-enumeration.md)
+Native xHCI initialization is temporarily disabled by `XHCI_ENABLED` in
+[`kernel/init.c`](../../kernel/init.c). Both controller preparation and worker
+startup are skipped, with `xHCI: disabled at build time` in the boot log. The
+kernel makes no xHCI claim or DMA allocation. Set the constant to `1` and rebuild
+to resume explicit QEMU bring-up. The ThinkPad's three-controller inventory is
+outside the current unique-controller profile; native hardware remains unqualified.
+Firmware can still load the kernel and boot archive from USB.
+
+When enabled, Caelum prepares a unique PCI xHCI function and hardware
+slots/contexts for boot-present, directly attached root-port devices.
+[USB enumeration](usb-enumeration.md)
 addresses them, checks descriptors and configures a provisional BOT transport.
 USB block access remains pending. The archive-backed shell and existing VirtIO block behavior remain available.
 [Phase B](../wip/usb-installation.md#b-native-read-only-usb-storage) tracks those

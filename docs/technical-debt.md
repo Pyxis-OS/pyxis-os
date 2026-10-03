@@ -1193,6 +1193,11 @@ monotonic duration from the current wall clock.
 
 ## xHCI hardware profile and runtime retention
 
+Native xHCI initialization is [disabled by default](devices/usb-xhci.md) while
+ThinkPad qualification is paused. Firmware USB boot remains available, but
+Caelum USB enumeration is unavailable. Revisit the default after controller selection and
+the physical hardware profile have been qualified.
+
 The [initial controller](devices/usb-xhci.md) is qualified only against QEMU's
 single PCI xHCI profile. It requires firmware memory decoding enabled for a
 page-aligned BAR0 prefix, interpreted extended capabilities within that 4 KiB

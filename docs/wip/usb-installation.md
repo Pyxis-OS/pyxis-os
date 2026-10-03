@@ -2,6 +2,9 @@
 
 Status: Phase A image assembly/USB boot and Phase B.3 enumeration/control
 transfers implemented, 2026-10-02; BOT/SCSI media and block access remain pending.
+Native xHCI initialization and Phase B development are paused for ThinkPad
+qualification. The [build-time switch](../devices/usb-xhci.md) defaults to disabled;
+firmware USB boot and archive-backed programs remain available.
 The owner wants a replaceable USB drive as the first
 physical installation target, with QEMU development before laptop validation.
 Implemented image behavior lives in the [USB image reference](../development/usb-image.md).
@@ -339,6 +342,10 @@ host tools and the later physical-preparation procedure.
    boot. Document preparing the eventual selected physical target separately.
 
 ### B. Native read-only USB storage
+
+- [x] **Pause native xHCI initialization by default.** Guard preparation and
+  worker startup with one build-time constant while the ThinkPad profile remains
+  unqualified. QEMU bring-up can explicitly re-enable it for a rebuilt image.
 
 1. [x] **Settle controller, request and disk-selection contracts.** Inventory
    current PCI resource/interrupt/DMA facilities and block-interface coupling.

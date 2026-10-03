@@ -24,6 +24,9 @@
 #include <kernel/service/request.h>
 #include <kernel/space.h>
 
+/* Keep native USB bring-up paused until the ThinkPad profile is qualified. */
+#define XHCI_ENABLED 0
+
 [[noreturn]] void kernel_init(const struct boot_info *boot)
 {
   clock_init(boot);
@@ -42,7 +45,11 @@
   klog("PCI: discovery starting\n");
   pci_discover();
   klog("PCI: discovery complete\n");
-  xhci_prepare(boot);
+  if (XHCI_ENABLED) {
+    xhci_prepare(boot);
+  } else {
+    klog("xHCI: disabled at build time\n");
+  }
   virtio_fs_pci_prepare(boot);
   virtio_net_prepare(boot);
   virtio_rng_prepare(boot);
@@ -58,7 +65,9 @@
   bsp_requests_init();
   klog("tasks: scheduler and BSP request queues ready\n");
 
-  xhci_start();
+  if (XHCI_ENABLED) {
+    xhci_start();
+  }
 
   klog("devices: starting virtio, block and native filesystem workers\n");
   virtio_fs_pci_start();
