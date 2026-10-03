@@ -29,6 +29,17 @@ void clock_init(const struct boot_info *boot)
   }
 }
 
+bool clock_wall_nanoseconds(int64_t *result)
+{
+  if (!wall_available) {
+    return false;
+  }
+  __int128 value = (__int128)wall_seconds * NANOSECONDS_PER_SECOND +
+      (arch_monotonic_ns() - wall_anchor_ns);
+  *result = value > INT64_MAX ? INT64_MAX : value < INT64_MIN ? INT64_MIN : (int64_t)value;
+  return true;
+}
+
 static void destroy_clock(struct kernel_object *object)
 {
   kfree(object);

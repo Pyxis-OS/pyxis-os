@@ -95,7 +95,9 @@ union directory_payload {
 /* SYNC requires either CREATE or REMOVE. Send the complete zeroed message;
  * it ignores the body and returns no reply. Synchronizes this directory's
  * entries, not its children or the whole filesystem. RAM succeeds as a no-op;
- * host durability depends on the service/storage. OUTCOME_UNKNOWN means the
+ * host durability depends on the service/storage. Native sync commits all
+ * dirty data and metadata in the current pool, including other files.
+ * OUTCOME_UNKNOWN means the
  * submitted synchronization has no trustworthy completion. */
 struct directory_message {
   struct message_header header;
@@ -136,7 +138,8 @@ struct directory_enumerate_reply {
  * Allocatable bytes are (pool blocks - 2) * 4096, excluding superblock slots but
  * INCLUDING shared metadata/reserves. This is shared pool capacity, never a
  * volume's writable allowance. Identity, generation and capacity describe the
- * retained selected state; degraded flags distinguish GPT and filesystem opening.
+ * mounted pool; generation is its selected journal sequence. Degraded flags
+ * distinguish GPT and filesystem opening.
  * Used/free bytes, charged bytes, guarantees, quotas and percentages are NOT
  * available: this record has no such fields. Their absence never means zero.
  * Opening validates geometry/root envelopes, not global allocation accounting. */

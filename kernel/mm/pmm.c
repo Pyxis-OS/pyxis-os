@@ -1,4 +1,5 @@
 #include <kernel/mm/pmm.h>
+#include <kernel/mm/pressure.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 
@@ -148,6 +149,9 @@ phys_addr_t pmm_alloc(size_t pages)
 {
   KASSERT(unavailable_bitmap != NULL);
   if (!pages || pages > stats.free_frames) {
+    if (pages) {
+      mm_pressure_notify();
+    }
     return 0;
   }
 
@@ -167,9 +171,14 @@ phys_addr_t pmm_alloc(size_t pages)
 
       stats.free_frames -= pages;
       stats.allocated_frames += pages;
+      /* Start asynchronous cache reclamation before physical exhaustion. */
+      if (stats.free_frames < stats.total_frames / 16) {
+        mm_pressure_notify();
+      }
       return first * PAGE_SIZE;
     }
   }
+  mm_pressure_notify();
   return 0;
 }
 

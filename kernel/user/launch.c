@@ -200,7 +200,8 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
   if (mount_config->enabled && block_preparation_result() != BLOCK_DEVICE_ABSENT) {
     mount = mount_create_native(mount_config);
     if (!mount || capability_install(&process->capabilities, mount,
-          MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE, 0, &native_mount_handle) != CAP_OK) {
+          MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE,
+          0, &native_mount_handle) != CAP_OK) {
       goto fail;
     }
     object_release(mount);

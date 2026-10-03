@@ -26,12 +26,7 @@ for selection in $INIT_CPUS; do
   command_line="$command_line init.$cpu=$image"
 done
 mount_disk=${MOUNT_DISK:-}
-mount_principal=${MOUNT_PRINCIPAL:-}
-if [ -n "$mount_disk" ] || [ -n "$mount_principal" ]; then
-  if [ -z "$mount_disk" ] || [ -z "$mount_principal" ]; then
-    echo 'MOUNT_DISK and MOUNT_PRINCIPAL must be supplied together.' >&2
-    exit 1
-  fi
+if [ -n "$mount_disk" ]; then
   case "$mount_disk" in
     ????????-????-????-????-????????????) ;;
     *) echo 'MOUNT_DISK must be a canonical GPT GUID.' >&2; exit 1 ;;
@@ -44,14 +39,7 @@ if [ -n "$mount_disk" ] || [ -n "$mount_principal" ]; then
     echo 'MOUNT_DISK must be a nonzero canonical GPT GUID.' >&2
     exit 1
   fi
-  case "$mount_principal" in
-    *[!a-fA-F0-9]*) echo 'MOUNT_PRINCIPAL contains invalid hex digits.' >&2; exit 1 ;;
-  esac
-  if [ "${#mount_principal}" -ne 32 ] || [ "$mount_principal" = 00000000000000000000000000000000 ]; then
-    echo 'MOUNT_PRINCIPAL must be a nonzero 128-bit ID (32 hex digits).' >&2
-    exit 1
-  fi
-  command_line="$command_line mount.disk=$mount_disk mount.principal=$mount_principal"
+  command_line="$command_line mount.disk=$mount_disk"
 fi
 if [ "${#command_line}" -gt 4095 ]; then
   echo 'Kernel command line exceeds 4095 bytes.' >&2

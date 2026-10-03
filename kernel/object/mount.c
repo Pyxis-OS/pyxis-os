@@ -75,8 +75,9 @@ static enum call_status open_native(struct mount_object *mount, uint64_t rights,
       (open.rights & ~DIRECTORY_RIGHTS) || !(open.rights & DIRECTORY_RIGHT_LOOKUP)) {
     return CALL_BAD_REQUEST;
   }
-  if (open.rights & ~NATIVEFS_DIRECTORY_RIGHTS) {
-    return CALL_READ_ONLY;
+  if ((open.rights & (DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
+      DIRECTORY_RIGHT_REMOVE)) && !(rights & MOUNT_RIGHT_WRITE)) {
+    return CALL_DENIED;
   }
   if ((open.rights & DIRECTORY_RIGHT_FILESYSTEM_INFO) && !(rights & MOUNT_RIGHT_OBSERVE)) {
     return CALL_DENIED;
@@ -85,7 +86,7 @@ static enum call_status open_native(struct mount_object *mount, uint64_t rights,
   if (!copy_from_user(name, open.name, open.name_length)) {
     return CALL_BAD_BUFFER;
   }
-  if (pfs_name_validate((const uint8_t *)name, open.name_length) != PFS_OK) {
+  if (!pnf_name_valid((const uint8_t *)name, open.name_length)) {
     return CALL_BAD_REQUEST;
   }
   name[open.name_length] = '\0';
@@ -95,7 +96,6 @@ static enum call_status open_native(struct mount_object *mount, uint64_t rights,
 
   struct nativefs_request *request = nativefs_request_prepare(NATIVEFS_ROOT);
   request->job.disk = mount->config.disk;
-  request->job.principal = mount->config.principal;
   request->job.partition = open.partition;
   request->job.rights = open.rights;
   request->job.count = open.name_length;
@@ -139,6 +139,23 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
     uintptr_t reply_address, size_t reply_capacity)
 {
   struct mount_object *mount = (struct mount_object *)object;
+  if (operation == MOUNT_SYNC && mount->backend == MOUNT_NATIVE) {
+    if (!(rights & MOUNT_RIGHT_WRITE)) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    if (request_size) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (mount->setup_status != CALL_OK) {
+      return (struct syscall_result){mount->setup_status, 0};
+    }
+    struct nativefs_request *request = nativefs_request_prepare(NATIVEFS_DISK_SYNC);
+    request->job.disk = mount->config.disk;
+    nativefs_request_submit_and_wait(request);
+    enum call_status status = request->job.status;
+    nativefs_request_release(request);
+    return (struct syscall_result){status, 0};
+  }
   if (operation != (mount->backend == MOUNT_HOST ? MOUNT_OPEN_ROOT : MOUNT_OPEN_VOLUME)) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }

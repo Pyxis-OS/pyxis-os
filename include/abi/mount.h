@@ -6,8 +6,10 @@
 
 #define MOUNT_RIGHT_OPEN_ROOT (UINT64_C(1) << 0)
 #define MOUNT_RIGHT_OBSERVE (UINT64_C(1) << 1)
+#define MOUNT_RIGHT_WRITE (UINT64_C(1) << 2)
 #define MOUNT_OPEN_ROOT UINT64_C(1)
 #define MOUNT_OPEN_VOLUME UINT64_C(2)
+#define MOUNT_SYNC UINT64_C(3)
 #define MOUNT_VOLUME_NAME_MAX 255u
 
 #define MOUNT_ACCESS_READ_ONLY UINT64_C(0)
@@ -28,12 +30,14 @@ struct mount_message {
   struct mount_open_request body;
 };
 
-/* Native authority selects one configured disk and principal. Partition is a
+/* Native authority selects one configured disk. Partition is a
  * one-based GPT entry; name is counted UTF-8, captured before work is queued.
  * Rights are exact DIRECTORY rights, including LOOKUP. FILESYSTEM_INFO also
- * requires OBSERVE on the mount authority; it adds no core policy rights.
- * Mutation rights fail READ_ONLY; unknown bits fail BAD_REQUEST. Success owns an independent root.
- * No principal, device, binding name or raw-block address is caller supplied. */
+ * requires OBSERVE on the mount authority; it grants no content rights.
+ * Mutation rights also require WRITE on the mount authority; unknown bits fail
+ * BAD_REQUEST. Success owns an independent root. No device, binding name or
+ * raw-block address is caller supplied. WRITE permits attempts; device and
+ * filesystem feature restrictions can still return READ_ONLY. */
 struct mount_volume_request {
   uint64_t partition;
   uint64_t name;
@@ -45,6 +49,11 @@ struct mount_volume_message {
   struct message_header header;
   struct mount_volume_request body;
 };
+
+/* Native-only SYNC requires WRITE, an empty request and no reply. It commits
+ * dirty data and metadata in every mounted pool on this authority's configured
+ * disk. Closing a handle does not synchronize it. A failure can follow durable
+ * commits in other pools; callers must inspect the error, not assume rollback. */
 
 struct mount_reply {
   handle_t root;
