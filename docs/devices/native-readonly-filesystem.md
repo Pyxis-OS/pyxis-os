@@ -24,10 +24,12 @@ REMOVE additionally require mount WRITE. FILESYSTEM_INFO independently requires
 mount OBSERVE. WRITE authorizes an attempt; device and feature restrictions can
 still refuse it. Pool/volume IDs identify storage and confer no authority.
 
-The configured GUID selects the disk, not authentication of its contents. A
-present but unsupported or ambiguous device retains a failing authority; optional
-mounting suppresses only absent authority. The GPT type is not a filesystem
-selector, and failure does not probe another partition. Namespace binding names
+The configured GUID selects among all per-device GPT snapshots; it does not
+authenticate contents. Duplicate matching disk GUIDs are an error. A complete
+empty inventory omits authority; incomplete discovery and present but unusable
+hardware retain a failing authority. Optional mounting suppresses only absent
+authority. A live installer raw claim prevents mounts on its device. The GPT
+type is not a filesystem selector, and failure does not probe another partition. Namespace binding names
 belong to the caller, outside the disk format. Applications receive only explicitly
 delegated roots and cannot reacquire withheld rights through a parent inode.
 
@@ -51,7 +53,9 @@ owns persistent inode, cache and writer state. Final wrapper retirement releases
 its reference and process cleanup charge; it neither flushes nor discards dirty
 contents. Mounted pool state and writeback errors remain available for later
 synchronization after all process handles close. Clones with a duplicate pool ID
-cannot be opened simultaneously on another extent.
+cannot be opened simultaneously on another extent. Any retained pool blocks
+exclusive raw writing on its device even after its final handle closes; the
+[installer disk service](installer-authority.md) has no teardown exception.
 
 Enumeration uses the shared directory inode's generation and an opaque position.
 Independent handles observe the same generation. Mutation invalidates an acquired

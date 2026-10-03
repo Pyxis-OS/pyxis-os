@@ -39,8 +39,7 @@ struct kernel_object *mount_create(void)
 struct kernel_object *mount_create_native(const struct mount_config *config)
 {
   KASSERT(arch_cpu_index() == 0 && config->enabled);
-  enum block_preparation preparation = block_preparation_result();
-  KASSERT(preparation != BLOCK_DEVICE_ABSENT);
+  bool complete = block_inventory_complete();
   struct mount_object *mount = kmalloc(sizeof(*mount));
   if (!mount) {
     return NULL;
@@ -48,18 +47,17 @@ struct kernel_object *mount_create_native(const struct mount_config *config)
   *mount = (struct mount_object){
     .backend = MOUNT_NATIVE,
     .config = *config,
-    .setup_status = preparation == BLOCK_DEVICE_READY ? CALL_OK :
-        preparation == BLOCK_DEVICE_AMBIGUOUS ? CALL_IO : CALL_UNAVAILABLE,
+    .setup_status = complete ? CALL_OK : CALL_UNAVAILABLE,
   };
   object_init(&mount->object, OBJECT_MOUNT, destroy_mount);
   if (mount->setup_status != CALL_OK) {
-    klog("mount: configured native authority has block preparation failure %u\n",
-         (unsigned)preparation);
+    klog("mount: configured native authority has incomplete block inventory\n");
   }
   return &mount->object;
 }
 
-static enum call_status open_native(struct mount_object *mount, uint64_t rights,
+static enum call_status open_native(const struct gpt_guid *disk, block_device_id device,
+    enum call_status setup_status, uint64_t rights,
     uintptr_t request_address, size_t request_size, struct kernel_object **root,
     uint64_t *directory_rights)
 {
@@ -90,12 +88,15 @@ static enum call_status open_native(struct mount_object *mount, uint64_t rights,
     return CALL_BAD_REQUEST;
   }
   name[open.name_length] = '\0';
-  if (mount->setup_status != CALL_OK) {
-    return mount->setup_status;
+  if (setup_status != CALL_OK) {
+    return setup_status;
   }
 
   struct npfs_request *request = npfs_request_prepare(NPFS_ROOT);
-  request->job.disk = mount->config.disk;
+  if (disk) {
+    request->job.disk = *disk;
+  }
+  request->job.device = device;
   request->job.partition = open.partition;
   request->job.rights = open.rights;
   request->job.count = open.name_length;
@@ -132,6 +133,33 @@ static enum call_status open_host(uintptr_t request_address, size_t request_size
   request->object = NULL;
   hostfs_request_release(request);
   return status;
+}
+
+static struct syscall_result install_root(struct kernel_object *root,
+    uint64_t directory_rights, uintptr_t reply_address)
+{
+  struct mount_reply reply;
+  /* Keep the returned reference across capability-table growth. The mount
+   * authority and the resulting directory have independent lifetimes. */
+  enum capability_result result;
+  for (;;) {
+    result = capability_insert(&process_current()->capabilities, root,
+        directory_rights, 0, &reply.root);
+    if (result != CAP_FULL) {
+      break;
+    }
+    result = capability_request_growth();
+    if (result != CAP_OK) {
+      break;
+    }
+  }
+  object_release(root);
+  if (result != CAP_OK) {
+    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
+    return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+  }
+  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
+  return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
 struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
@@ -172,7 +200,8 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
   struct kernel_object *root = NULL;
   uint64_t directory_rights = 0;
   enum call_status status = mount->backend == MOUNT_NATIVE ?
-      open_native(mount, rights, request_address, request_size, &root, &directory_rights) :
+      open_native(&mount->config.disk, BLOCK_DEVICE_ID_NONE, mount->setup_status, rights,
+          request_address, request_size, &root, &directory_rights) :
       open_host(request_address, request_size, &root, &directory_rights);
   if (status != CALL_OK) {
     KASSERT(!root);
@@ -180,25 +209,27 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
   }
   KASSERT(root);
 
-  /* Keep the returned reference across capability-table growth. The mount
-   * authority and the resulting directory have independent lifetimes. */
-  enum capability_result result;
-  for (;;) {
-    result = capability_insert(&process_current()->capabilities, root,
-        directory_rights, 0, &reply.root);
-    if (result != CAP_FULL) {
-      break;
-    }
-    result = capability_request_growth();
-    if (result != CAP_OK) {
-      break;
-    }
+  return install_root(root, directory_rights, reply_address);
+}
+
+struct syscall_result mount_open_device(block_device_id device,
+    uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
+{
+  if (reply_capacity < sizeof(struct mount_reply)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  object_release(root);
-  if (result != CAP_OK) {
-    KASSERT(result == CAP_NO_MEMORY || result == CAP_LIMIT);
-    return (struct syscall_result){result == CAP_NO_MEMORY ? CALL_NO_MEMORY : CALL_LIMIT, 0};
+  if (!user_buffer_check(reply_address, sizeof(struct mount_reply), USER_BUFFER_WRITE)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
-  return (struct syscall_result){CALL_OK, sizeof(reply)};
+  struct kernel_object *root = NULL;
+  uint64_t directory_rights = 0;
+  enum call_status status = open_native(NULL, device, CALL_OK,
+      MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE, request_address, request_size,
+      &root, &directory_rights);
+  if (status != CALL_OK) {
+    KASSERT(!root);
+    return (struct syscall_result){status, 0};
+  }
+  return install_root(root, directory_rights, reply_address);
 }

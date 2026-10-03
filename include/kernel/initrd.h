@@ -39,6 +39,11 @@ enum initrd_result initrd_next(size_t *offset, struct initrd_entry *entry);
  * the kernel lifetime. Failure removes partial mappings and reservations. */
 enum initrd_result initrd_init(const struct boot_module *module);
 
+/* Entire original archive, including its trailer and final padding. Borrows
+ * the existing immutable mapping for the kernel lifetime; no copying.
+ * Requires successful initialization. Failure clears *file when non-NULL. */
+enum initrd_result initrd_archive(struct initrd_file *file);
+
 /* Exact archive-name lookup, without path normalization or directory traversal.
  * Returns the first matching regular file. The view is borrowed, immutable and
  * valid for the kernel lifetime; do not free it. No allocation or copying.

@@ -63,6 +63,25 @@ commit deliberate default changes with their code. `make clean` preserves
 `.config`. When adding an option to `Kconfig`, also list its default in `.config`
 so it remains directly editable without opening the menu.
 
+## Boot menu timeout
+
+`BOOT_MENU_TIMEOUT` is a Make build setting in nonnegative decimal seconds,
+default `0`. It configures the generated Limine menu independently of kernel
+Kconfig. Ordinary development boots immediately into the normal entry. For
+install media, show the menu explicitly:
+
+```sh
+make -j16 image BOOT_MENU_TIMEOUT=5
+make -j16 usb-image BOOT_MENU_TIMEOUT=5
+```
+
+The same value applies to generated configurations for ISO, USB and PXE use.
+Both normal and `Install Pyxis` entries remain present with either timeout.
+Pass the setting on each build that needs it; a later build without it restores
+the default. `scripts/configure-boot.sh` fills the timeout and normal command-line
+placeholders in the authored template. This rebuilds boot configuration/image
+inputs, not the compiler.
+
 ## Build outputs and bundles
 
 Each kernel source build reads `.config` through Kconfiglib and generates

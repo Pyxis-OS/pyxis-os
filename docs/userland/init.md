@@ -12,7 +12,8 @@ it is delegated independently of space membership.
 
 Initial processes share the read-only `app://` archive and writable RAM-backed
 `home://` tree. Home is not private per space and disappears on reboot. Each
-init receives the full available bootstrap grants. Init scripts are trusted
+init receives the ordinary available bootstrap grants. Raw installer resources
+are issued only on the separate install path. Init scripts are trusted
 setup policy; the session handoff delegates resources to ordinary applications.
 
 ## Boot selection
@@ -63,6 +64,25 @@ configuration and archive contents retain their timestamps. Supply overrides on
 each invocation; a later build without them restores the packaged defaults.
 Kernel-only builds do not select or package init.
 
+## Install boot selection
+
+The build setting `BOOT_MENU_TIMEOUT` defaults to `0`, booting normally without
+a menu delay. Set `BOOT_MENU_TIMEOUT=5` when building install media to allow menu
+selection. The `Install Pyxis` entry is generated for either timeout and
+adds `boot.install=1`, selecting native `app://init-install.pxe` on the primary
+workload CPU and `app://init-idle` elsewhere, overriding ordinary init selections.
+Only that primary init receives `disks`, `boot_kernel` and `boot_archive`.
+Selecting the same executable through a normal init override supplies none of
+these resources.
+
+Native installer init explicitly delegates its bounded installer resources to
+`app://installer.pxe`, waits for completion and reports its result. The installer
+is not yet packaged, so this entry currently reports installation unavailable;
+it does not open a shell or silently format a disk. See
+[installer authority](../devices/installer-authority.md) for the source-file,
+raw-claim and handoff contracts. These resources do not enter ordinary session
+or child launch automatically.
+
 ## Native disk configuration and mounting
 
 `MOUNT_DISK=<canonical-GPT-GUID>` selects the deployment disk and generates
@@ -98,9 +118,10 @@ read-only-compatible features prevent writes and replay.
 
 Every trusted workload init receives the same configured disk scope. The
 `native_mount` resource is issued unless inventory establishes hardware absence.
-Ambiguous or incomplete discovery, unsupported hardware and setup failures retain
-a failing authority. Mount waits for GPT, verifies the configured GUID, selects a
-one-based partition entry and resolves the volume name in the retained pool.
+Incomplete discovery, unsupported hardware and setup failures retain
+a failing authority. Mount waits for per-device GPT discovery, selects the unique
+matching configured GUID, rejects duplicate matches, and selects a one-based
+partition entry and volume name. A live raw claim prevents opening that device.
 `MOUNT_RIGHT_OPEN_ROOT`, `MOUNT_RIGHT_OBSERVE` and `MOUNT_RIGHT_WRITE` are independent:
 requesting root mutation rights requires WRITE; requesting filesystem information
 requires OBSERVE. `--no-info` omits observation. `--optional` skips only missing
@@ -220,7 +241,7 @@ network configuration, caller-scoped [memory profiling](../development/allocatio
 [endpoint creation](../interfaces/endpoints.md) through the `service` resource,
 read-only app and writable home roots, an initial `home://` working directory and
 the initial environment. When virtio-fs is present it also receives `host_mount`,
-scoped to that export. Paired native disk configuration also supplies
+scoped to that export. Native disk configuration also supplies
 `native_mount` as described above. The BSP fallback omits the title grant.
 Workload CPU selection chooses which trusted init runs, not an authority ceiling; no workload
 authority is chosen from a hard-coded CPU role.

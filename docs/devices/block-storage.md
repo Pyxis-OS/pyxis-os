@@ -1,12 +1,13 @@
 # Internal block storage
 
-Caelum exposes one modern virtio-blk disk through the kernel-only
+Caelum inventories modern virtio-blk disks through the kernel-only
 [block interface](../../include/kernel/block.h). It supports bounded asynchronous
-reads, writes and flushes. [GPT discovery](gpt.md) publishes an immutable boot-time
-partition map through a separate kernel interface.
+reads, writes and flushes. [GPT discovery](gpt.md) publishes a partition-map
+snapshot per device through a separate kernel interface.
 [Native filesystem mounts](filesystem-native-adapter.md)
-expose directory/file capabilities selected by trusted init, while raw-disk
-authority remains kernel-only.
+expose directory/file capabilities selected by trusted init. A separate
+[installer disk service](installer-authority.md) delegates bounded raw access
+only to the trusted install path.
 
 The [Phase B.1 USB contract](../wip/usb-installation.md#phase-b1-read-only-contract)
 defines the planned explicit backend selection and asynchronous preparation
@@ -33,35 +34,38 @@ or formats the image and does not accept a host block device. Relative paths are
 resolved to absolute paths; commas are rejected because they introduce QEMU
 options. `VIRTIO_BLK_READONLY` accepts `0` (default) or `1`. QEMU uses explicit raw
 format, writeback caching that honors flushes, and one modern virtio-blk queue.
-Writable attachment permits kernel clients to modify the supplied image.
-Trusted raw-block clients must preserve GPT metadata throughout the boot;
-discovery does not gate raw writes or rescan after them.
+Writable attachment permits authorized clients to modify the supplied image.
+Installer raw claims exclude retained mounted pools and refresh GPT on release.
+External host mutation while attached remains unsupported.
 
-The guest requires exactly one modern virtio-blk candidate in a complete PCI
-inventory. A known transitional virtio-blk device is present but unsupported;
-multiple candidates, including a modern/transitional pair, are ambiguous.
+The guest retains every recognized candidate in a complete PCI inventory and
+prepares modern devices independently. A known transitional virtio-blk device
+remains listed as unsupported; it does not disable a supported neighbour.
 Writable devices must offer flush support. Read-only devices support reads;
 writes and flushes return `BLOCK_READ_ONLY`.
 
-`block_preparation_result()` retains the immutable selection/setup reason:
-ABSENT, READY, UNSUPPORTED, SETUP_FAILED, AMBIGUOUS or INVENTORY_INCOMPLETE.
+`block_device_count()` and `block_device_at()` enumerate stable nonzero boot IDs;
+zero means no device. `block_inventory_complete()` distinguishes a complete empty
+inventory from failed discovery. Incomplete discovery enables no device.
+`block_preparation_result(id)` retains each candidate's immutable READY,
+UNSUPPORTED or SETUP_FAILED reason; invalid IDs return INVALID.
 Generic allocation, mapping or transport setup failures use SETUP_FAILED rather
 than claiming unsupported hardware. Only a complete inventory with no recognized
 candidate establishes absence; a later `block_get_info()` failure establishes
 neither absence nor the preparation reason. Configured native mount authority
-is omitted only for ABSENT; other failures remain visible to trusted init and
+is omitted only for a complete empty inventory; other failures remain visible and
 cannot be suppressed by an optional mount. A READY result describes preparation,
 not a promise that the transport remains operational.
 
 ## Geometry and capacity
 
-`block_get_info()` reports logical block size and count, maximum transfer bytes,
+`block_get_info(id)` reports logical block size and count, maximum transfer bytes,
 request slots, writable/flush support and the latched write-failure state.
 Logical blocks are 512 bytes or 4 KiB. The driver translates block addresses to
 VirtIO's fixed 512-byte sector units. Zero capacity, partial logical blocks,
 unsupported sizes and unusable advertised transfer limits are rejected.
 
-The driver uses one split queue with 32 descriptors, reduced to the device's
+Each prepared device uses one split queue with 32 descriptors, reduced to its
 smaller supported size. There are at most eight request slots, reduced when the
 queue cannot hold three descriptors per slot. Each slot has its own control and
 data DMA allocations. Transfers are at most 64 KiB, reduced by the advertised
@@ -80,12 +84,13 @@ fault entry. Their pointer arguments refer to caller-owned kernel storage and
 are borrowed only during the call. A ticket has one client; it must not be
 collected or abandoned while that client is waiting on it.
 
-`block_submit()` validates operation, range and transfer bounds before admission.
+`block_submit(id, ...)` validates operation, range and transfer bounds before
+admission.
 Reads and writes require a nonzero count of logical blocks. Writes copy caller
 bytes into the reserved DMA slot before returning. Reads retain no caller
 destination pointer. Flush takes zero start/count and no data pointer. Successful
-admission returns a slot/generation ticket; stale generations cannot identify a
-reused slot. Rejection changes neither the output ticket nor the device.
+admission returns a device/slot/generation ticket; stale generations cannot
+identify a reused slot. Rejection changes neither the output ticket nor the device.
 
 `block_collect()` returns `BLOCK_PENDING` until completion. A return of `BLOCK_OK`
 consumes the ticket and fills `block_completion`; the completion's `result` is

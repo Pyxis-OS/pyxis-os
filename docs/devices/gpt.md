@@ -1,15 +1,16 @@
 # GPT discovery
 
-Caelum scans the selected [block device](block-storage.md) once during boot and
-publishes an immutable partition-map snapshot through
+Caelum scans each inventoried [block device](block-storage.md) during boot and
+publishes a partition-map snapshot per device through
 [`gpt_get_snapshot()`](../../include/kernel/gpt.h). Discovery reads metadata only.
 It does not repair GPT, choose a filesystem, mount partitions, grant access or
 provide a partition I/O wrapper or userspace ABI.
 
 ## Execution and lifetime
 
-`gpt_prepare()` reserves bounded scratch before AP startup. After the block
-worker and scheduler are created, `gpt_start()` launches one BSP kernel task.
+`gpt_prepare()` reserves bounded scratch per device before AP startup. After the
+block worker and scheduler are created, `gpt_start()` launches a BSP scan task
+for each prepared device.
 The task reads through the ordinary `block_submit()`, `block_wait()` and
 `block_collect()` interface. Reads respect the device's transfer limit. A full
 request queue causes a short sleep and retry within the scan deadline.
@@ -17,13 +18,21 @@ request queue causes a short sleep and retry within the scan deadline.
 One absolute 30-second deadline covers scan I/O and admission waits. A timed-out
 read ticket is abandoned; the block driver retains any outstanding DMA ownership.
 The block driver's separate device watchdog still applies. The scanner frees
-scratch when it publishes its result, including on failure. The snapshot remains
-allocated and immutable for the boot.
+scratch when it publishes its result, including on failure. Snapshot storage
+remains allocated for the boot; raw-writer release can replace its contents.
 
-Call `gpt_get_snapshot()` on the BSP with interrupts disabled, outside IRQ/fault
-entry. It returns `NULL` while scanning and a pointer to the final snapshot
-after publication. There is no wait interface, rescan, hotplug or runtime map
-replacement. The primary and backup copy statuses remain available for diagnosis.
+Call `gpt_get_snapshot(device)` on the BSP with interrupts disabled, outside
+IRQ/fault entry. It returns `NULL` while initial discovery or a rescan is pending.
+A published view is borrowed only until the next scheduling point; copy needed
+fields before sleeping. Primary and backup copy statuses remain available for
+diagnosis. There is no hotplug or general userspace rescan interface.
+
+`gpt_rescan(device)` runs on a BSP kernel task with interrupts enabled after
+initial discovery. Its caller must exclude all mounts and raw mutation on that
+device until publication. It allocates fresh scratch, rereads both copies and
+replaces the snapshot, including on failure. The
+[installer raw claim](installer-authority.md) supplies this exclusion and rescans
+before releasing its claim. Rescanning performs no writes or GPT repair.
 
 ## Supported layout and checks
 
@@ -97,17 +106,19 @@ Unknown partition type GUIDs are metadata, not a reason to invent a handler.
 
 ## Authority and accepted limits
 
-Healthy metadata is a prerequisite for future partition writes, not sufficient
+Healthy metadata is a prerequisite for writable filesystem mounts, not sufficient
 authority to perform them. Degraded maps are read-only. The snapshot records
 discovery health; callers must separately check current block-device availability,
 writability and the write-failure latch. Later transport failure does not rewrite
-the immutable snapshot.
+the published snapshot.
 
-There is no raw-block write gate: trusted kernel raw-block clients must preserve
-GPT headers, arrays and the protective MBR throughout the boot. External mutation
-or a raw client rewriting metadata can invalidate the snapshot. There is no
-coherent live-update or repair protocol. GUIDs, attributes and names grant no
-capabilities or filesystem policy. See the
+The installer can claim an unmounted device even when GPT is absent or invalid;
+raw formatting does not require an existing healthy map. Claim release refreshes
+discovery before mounts become available again. INFO during a claim describes
+the last completed scan, not each raw write. External mutation remains
+unsupported, and trusted kernel raw clients must preserve metadata or use the
+same exclusion/rescan ordering. GUIDs, attributes and names grant no capabilities
+or filesystem policy. See the
 [accepted discovery limits](../technical-debt.md#gpt-snapshot-and-profile-limits).
 
 ## Validation

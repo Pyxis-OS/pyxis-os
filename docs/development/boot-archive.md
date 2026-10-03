@@ -1,8 +1,8 @@
 # Boot archive assembly
 
-The kernel still reads the same `newc` archive directly from the Limine module.
-Guest paths and the kernel reader are unchanged. The build separates compilation,
-install trees, guest-tree assembly and archive packing.
+The kernel maps and validates the uncompressed `newc` archive supplied as the
+sole Limine module. The build separates compilation, install trees, guest-tree
+assembly and archive packing.
 
 Userland's `make install` owns its selected programs, `init` and assets, exporting
 `build/userspace-root` through the root build. Objects and debug ELFs stay in
@@ -12,10 +12,18 @@ of the guest tree.
 
 `boot/initrd.lua` combines those trees with the SDK's target headers, runtime
 archives, toolchain notices and provenance. It adds the selected Doom data and
-optional init override. The root Makefile only orchestrates these steps. New
-applications belong in userland's install selection; new port payload paths
+optional init override, plus Limine's EFI executable, source configuration
+template and license for the trusted installer. The root Makefile only
+orchestrates these steps. New applications belong in userland's install selection; new port payload paths
 belong in the ports manifest. Neither requires enumerating archive members in
 the root Makefile.
+
+The [installer boot resources](../devices/installer-authority.md#boot-sources-and-handoff)
+retain the original ELF and the whole archive as immutable FILE views. They borrow
+boot-reserved physical frames through kernel-lifetime read-only/NX mappings,
+without copying payloads. The archive view includes final padding and reuses the
+reader's existing mapping; it is not a reconstructed collection of members.
+The running kernel image is not a substitute for the original ELF file.
 
 ## Manifest and publication
 

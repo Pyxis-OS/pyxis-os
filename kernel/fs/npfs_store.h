@@ -25,7 +25,7 @@ struct npfs_store_context {
 };
 
 enum call_status npfs_store_open(struct npfs_store_context *context,
-    const struct gpt_partition *partition, const struct block_info *device,
+    block_device_id device_id, const struct gpt_partition *partition, const struct block_info *device,
     bool writable, struct npfs_store_pool **out);
 enum call_status npfs_store_upgrade(struct npfs_store_context *context,
     struct npfs_store_pool *pool);

@@ -15,8 +15,13 @@ inspection and whole-image checking remain separate tools. The existing compiler
 is sufficient; no container rebuild is needed.
 
 The [job interface](../../include/kernel/fs/npfs.h) uses shared kernel storage.
-Trusted ROOT submission supplies the configured disk GUID, GPT entry, volume name
-and exact directory rights including LOOKUP. User handlers capture requests and
+Trusted ROOT submission supplies a configured disk GUID or an installer disk
+object's boot-device ID, plus GPT entry, volume name and exact directory rights
+including LOOKUP. GUID selection searches all completed per-device GPT snapshots
+and rejects duplicate matches; device selection uses only that inventoried ID.
+Incomplete inventory and live raw claims prevent opening. Installer disk objects
+permit only read-only roots through this same path; see
+[installer authority](installer-authority.md). User handlers capture requests and
 validate buffers before publishing to the BSP executor, which forwards them to
 the worker. No user pointer, replaceable capability entry or AP stack crosses to
 the worker. The calling capability retains its node through the uninterruptible
@@ -35,8 +40,10 @@ lock spans disk waits. Native wrappers embed file/directory objects and retain
 inode references, without using RAM file buffers or directory entry lists.
 Retirement transfers wrappers to the worker without allocating. It releases the
 process cleanup charge while dirty contents and errors remain pool-owned.
-Same-extent mounts share retained pools; another extent with the same pool ID is
-rejected. Closing all wrappers does not evict mounted pool state or synchronize it.
+Same-device, same-extent mounts share retained pools; another extent with the
+same pool ID is rejected. Closing all wrappers does not evict mounted pool state or synchronize it.
+Any retained pool also excludes raw-write claims on its device, including a
+read-only pool whose final handle has closed.
 
 ## Rights and ordinary calls
 

@@ -30,7 +30,8 @@ INIT_DEFAULT ?= app://init-idle
 INIT_PRIMARY ?= app://init
 INIT_CPUS ?= 2=app://init-readonly 3=app://init-remote
 MOUNT_DISK ?=
-export INIT_DEFAULT INIT_PRIMARY INIT_CPUS MOUNT_DISK
+BOOT_MENU_TIMEOUT ?= 0
+export INIT_DEFAULT INIT_PRIMARY INIT_CPUS MOUNT_DISK BOOT_MENU_TIMEOUT
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
@@ -143,7 +144,8 @@ initrd: build/initrd.cpio
 
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports Makefile boot/initrd.lua scripts/stage-tree.lua scripts/assemble-initrd.sh
+build/initrd.cpio: userspace ports Makefile boot/initrd.lua scripts/stage-tree.lua scripts/assemble-initrd.sh \
+                   boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE
 	./scripts/assemble-initrd.sh
 
 check-toolchain:

@@ -5,6 +5,7 @@
 #include <kernel/object/tcp.h>
 #include <kernel/object/random.h>
 #include <kernel/object/mount.h>
+#include <kernel/object/disk.h>
 #include <kernel/object/echo.h>
 #include <kernel/object/net_config.h>
 #include <kernel/object/keyboard.h>
@@ -241,6 +242,18 @@ static struct syscall_result call_object(handle_t handle,
     }
     return keyboard_call((struct keyboard_object *)object, rights, header.operation,
         request_address, request_size, reply_address, reply_capacity);
+  case OBJECT_DISKS:
+    if (header.protocol != PROTOCOL_DISKS) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return disks_call(rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
+  case OBJECT_DISK:
+    if (header.protocol != PROTOCOL_DISK) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return disk_call(object, rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
   case OBJECT_MOUNT:
     if (header.protocol != PROTOCOL_MOUNT) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

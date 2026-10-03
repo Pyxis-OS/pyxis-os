@@ -221,6 +221,18 @@ enum initrd_result initrd_init(const struct boot_module *module)
   return result;
 }
 
+enum initrd_result initrd_archive(struct initrd_file *file)
+{
+  if (file) {
+    *file = (struct initrd_file){0};
+  }
+  if (!archive_bytes || !file) {
+    return INITRD_INVALID;
+  }
+  *file = (struct initrd_file){.data = archive_bytes, .size = archive_size};
+  return INITRD_OK;
+}
+
 enum initrd_result initrd_lookup(const char *name, struct initrd_file *file)
 {
   if (file) {

@@ -6,6 +6,9 @@ return function(inputs)
     { tree = inputs.sdk .. "/share/licenses", at = "sdk/share/licenses" },
     { tree = inputs.sdk .. "/share/toolchain", at = "sdk/share/toolchain" },
     { file = inputs.provenance, at = "sdk/manifest.txt" },
+    { file = "third_party/limine/BOOTX64.EFI", at = "share/installer/BOOTX64.EFI" },
+    { file = "boot/limine/limine.conf", at = "share/installer/limine.conf.template" },
+    { file = "third_party/limine/LICENSE", at = "share/licenses/limine/LICENSE" },
   }
   for _, library in ipairs({ "crt0.o", "libc.a", "libterm.a", "libpyxis.a", "libgcc.a" }) do
     entries[#entries + 1] = {

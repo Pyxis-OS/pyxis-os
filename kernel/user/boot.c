@@ -90,6 +90,7 @@ void user_launch_initial(const char *command_line)
   memset(images, 0, count * sizeof(*images));
   const char *default_image = NULL, *primary_image = NULL;
   const char *mount_disk = NULL;
+  bool install = false, install_seen = false;
 
   char *cursor = options;
   while (*cursor) {
@@ -114,6 +115,14 @@ void user_launch_initial(const char *command_line)
       panic("kernel option needs a value: %s", key);
     }
     *image++ = '\0';
+    if (same_text(key, "boot.install")) {
+      if (install_seen || !same_text(image, "1")) {
+        panic("boot.install must occur once with value 1");
+      }
+      install = true;
+      install_seen = true;
+      continue;
+    }
     if (same_text(key, "mount.disk")) {
       if (mount_disk) {
         panic("duplicate mount disk configuration");
@@ -170,7 +179,11 @@ void user_launch_initial(const char *command_line)
     if (!image && index == primary) {
       image = primary_image;
     }
-    user_launch_init(index, image ? image : default_image, &mount);
+    image = image ? image : default_image;
+    if (install) {
+      image = index == primary ? "app://init-install.pxe" : "app://init-idle";
+    }
+    user_launch_init(index, image, &mount, install && index == primary);
   }
   kfree(images);
   kfree(options);

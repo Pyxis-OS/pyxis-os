@@ -45,6 +45,11 @@ static volatile struct limine_executable_address_request address_request = {
 };
 
 __attribute__((used, section(".limine_requests")))
+static volatile struct limine_executable_file_request executable_file_request = {
+  .id = LIMINE_EXECUTABLE_FILE_REQUEST_ID,
+};
+
+__attribute__((used, section(".limine_requests")))
 static volatile struct limine_executable_cmdline_request command_line_request = {
   .id = LIMINE_EXECUTABLE_CMDLINE_REQUEST_ID,
 };
@@ -103,8 +108,9 @@ static void validate_responses(void)
   }
 
   if (!memory_request.response || !hhdm_request.response ||
-      !address_request.response || !paging_request.response) {
-    panic("missing required Limine response (memory/HHDM/executable/paging)");
+      !address_request.response || !executable_file_request.response ||
+      !paging_request.response) {
+    panic("missing required Limine response (memory/HHDM/executable/file/paging)");
   }
 
   if (paging_request.response->mode != LIMINE_PAGING_MODE_X86_64_4LVL) {
@@ -164,26 +170,67 @@ static void copy_memory_map(void)
   }
 }
 
-static void copy_initrd(void)
+static void split_memory_region(size_t index, uint64_t boundary)
 {
-  const struct limine_module_response *response = module_request.response;
-  if (!response || response->module_count != 1 || !response->modules ||
-      !response->modules[0]) {
-    panic("expected exactly one initrd module");
+  if (boot.region_count == BOOT_MAX_REGIONS) {
+    panic("boot file reservation exceeds memory map capacity (limit %u)", BOOT_MAX_REGIONS);
   }
-
-  const struct limine_file *module = response->modules[0];
-  uintptr_t address = (uintptr_t)module->address;
-  if (!module->size || address < boot.bootstrap_direct_offset ||
-      module->size > UINTPTR_MAX - address) {
-    panic("invalid initrd module extent");
+  struct boot_region region = boot.regions[index];
+  for (size_t i = boot.region_count; i > index; --i) {
+    boot.regions[i] = boot.regions[i - 1];
   }
+  ++boot.region_count;
+  boot.regions[index].length = boundary - region.base;
+  boot.regions[index + 1].base = boundary;
+  boot.regions[index + 1].length = region.base + region.length - boundary;
+}
 
+static void reserve_kernel_file(uint64_t first_frame, uint64_t frame_end)
+{
+  /* Original file bytes may be loader-reclaimable, unlike loaded ELF segments.
+   * Preserve only these frames when loader memory is eventually reclaimed. */
+  for (size_t i = 0; i < boot.region_count; ++i) {
+    struct boot_region region = boot.regions[i];
+    uint64_t region_end = region.base + region.length;
+    if (region_end <= first_frame) {
+      continue;
+    }
+    if (region.base >= frame_end) {
+      break;
+    }
+    if (region.type == BOOT_KERNEL) {
+      continue;
+    }
+    if (region.base < first_frame) {
+      split_memory_region(i, first_frame);
+      ++i;
+    }
+    if (region_end > frame_end) {
+      split_memory_region(i, frame_end);
+    }
+    boot.regions[i].type = BOOT_KERNEL;
+  }
+}
+
+static struct boot_module copy_file_extent(const struct limine_file *file,
+                                          const char *name, bool executable)
+{
+  if (!file) {
+    panic("missing %s file", name);
+  }
+  uintptr_t address = (uintptr_t)file->address;
+  if (!file->size || file->size > SIZE_MAX ||
+      address < boot.bootstrap_direct_offset || file->size > UINTPTR_MAX - address) {
+    panic("invalid %s file extent", name);
+  }
   uint64_t physical = address - boot.bootstrap_direct_offset;
+  if (file->size > UINT64_MAX - physical) {
+    panic("%s file extent overflows", name);
+  }
   uint64_t first_frame = physical & ~(ARCH_PAGE_SIZE - 1);
-  uint64_t end = physical + module->size;
+  uint64_t end = physical + file->size;
   if (end > UINT64_MAX - (ARCH_PAGE_SIZE - 1)) {
-    panic("initrd module extent overflows");
+    panic("%s file page extent overflows", name);
   }
   uint64_t frame_end = (end + ARCH_PAGE_SIZE - 1) & ~(ARCH_PAGE_SIZE - 1);
 
@@ -196,16 +243,32 @@ static void copy_initrd(void)
     if (region_end <= covered) {
       continue;
     }
-    if (region->base > covered || region->type != BOOT_KERNEL) {
+    if (region->base > covered ||
+        (region->type != BOOT_KERNEL && !(executable && region->type == BOOT_LOADER))) {
       break;
     }
     covered = region_end;
   }
   if (covered < frame_end) {
-    panic("initrd is outside executable/module reservations");
+    panic("%s file is outside boot file reservations", name);
+  }
+  if (executable) {
+    reserve_kernel_file(first_frame, frame_end);
+  }
+  return (struct boot_module){.physical = physical, .size = file->size};
+}
+
+static void copy_boot_files(void)
+{
+  const struct limine_module_response *response = module_request.response;
+  if (!response || response->module_count != 1 || !response->modules ||
+      !response->modules[0]) {
+    panic("expected exactly one initrd module");
   }
 
-  boot.initrd = (struct boot_module){.physical = physical, .size = module->size};
+  boot.initrd = copy_file_extent(response->modules[0], "initrd", false);
+  boot.kernel_file = copy_file_extent(executable_file_request.response->executable_file,
+                                    "kernel ELF", true);
 }
 
 static void copy_acpi_address(void)
@@ -325,7 +388,7 @@ static void copy_command_line(void)
   klog("early console: %zux%zu framebuffer\n", boot.framebuffer.width, boot.framebuffer.height);
   copy_command_line();
   copy_acpi_address();
-  copy_initrd();
+  copy_boot_files();
   if (date_request.response) {
     boot.utc_seconds = date_request.response->timestamp;
     boot.utc_available = true;

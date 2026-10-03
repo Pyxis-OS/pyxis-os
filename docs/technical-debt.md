@@ -541,10 +541,10 @@ an explicit error-acknowledgment/recovery contract; never silently retry writes
 that may already have modified storage.
 
 Runtime device failure retains the PCI claim, queue bookkeeping, DMA allocations
-and mappings even after confirmed reset. The default profile reserves 512 KiB
-of payload storage plus control buffers and rings. This bounds retained memory
-but provides no reconnect or reclamation. Revisit alongside shared-mapping TLB
-invalidation, DMA ownership and a defined device teardown lifecycle. Timeout alone
+and mappings even after confirmed reset. Each prepared device reserves up to
+512 KiB of payload storage plus control buffers and rings. Retained memory scales
+with the inventory; there is no reconnect or reclamation. Revisit alongside
+shared-mapping TLB invalidation, DMA ownership and a defined device teardown lifecycle. Timeout alone
 cannot release storage still accessible to the device.
 
 Physical hardware and power-loss persistence have no coverage in this milestone.
@@ -555,12 +555,13 @@ recovery or support for production data.
 
 ## GPT snapshot and profile limits
 
-[GPT discovery](devices/gpt.md) publishes one immutable boot-time snapshot. There is no
-raw-block write gate, metadata generation tracking or rescan, so trusted kernel
-clients must preserve GPT metadata and avoid external mutation for the entire
-boot. Snapshot health does not track later device failure. Revisit with the first
-partition I/O consumer and any format/repair workflow, defining authority,
-metadata exclusion and replacement lifetimes before allowing live changes.
+[GPT discovery](devices/gpt.md) publishes one snapshot per device. Exclusive
+installer raw claims exclude mounts and refresh the snapshot on release, but
+there is no hotplug, external-mutation detection or automatic repair. Borrowed
+snapshot views last only until the next scheduling point. Health does not track
+later transport failure or changes during raw writes. Revisit generation
+tracking and broader replacement lifetimes when a concrete consumer needs them;
+external host writers remain unsupported.
 
 The supported profile is GPT 1.0 on 512-byte or 4 KiB blocks, at most 256 entries
 and 64 KiB per array. Unsupported revisions, larger layouts, reserved attributes
@@ -569,6 +570,31 @@ map only when the other is absent or invalid; I/O errors, timeouts and unsupport
 metadata prevent fallback. These conservative bounds can exclude otherwise usable
 media. Revisit only for a concrete consumer with explicit resource limits and
 recovery policy; no automatic repair is available.
+
+## Installer authority and retained pools
+
+The [installer disk service](devices/installer-authority.md) supplies explicit raw
+claims and immutable boot sources, but `installer.pxe` is not yet packaged. It
+does not implement target consent, formatting or installation. The trusted
+installer must establish consent; the kernel does not interpret `SAFE_TO_WIPE`.
+Revisit those remaining operations in the assigned installer task.
+
+Any retained npfs pool blocks an exclusive raw-write claim on its device, even
+when read-only and after all handles close. Opening a volume to inspect a marker
+therefore cannot be followed by raw formatting of that device in the same boot.
+This is the owner-accepted current direction. There is no pool teardown or
+installer bypass. Task 4.3 will inspect each volume's root marker through raw
+reads and the format library, overlaying a committed journal in memory without
+writing before consent. Rejected consent leaves the disk untouched; accepted
+targets will be wiped rather than receive a persisted replay. Pool retirement
+is a prerequisite of the later live-install flow, which can inspect through
+normal mounts before installing in the same boot. It needs an explicit
+pool-retirement and ownership contract. Read-only raw handles acquire no claim
+and promise no snapshot against raw writes.
+
+Physical-media, power-loss and uncertain-failure evidence remains separate from
+ordinary emulated operation; revisit reliability claims only with corresponding
+validation.
 
 ## USB image updates and firmware qualification
 

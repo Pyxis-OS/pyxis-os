@@ -10,6 +10,7 @@
 #include <abi/tcp.h>
 #include <abi/random.h>
 #include <abi/mount.h>
+#include <abi/disk.h>
 #include <abi/echo.h>
 #include <abi/net_config.h>
 #include <abi/keyboard.h>
@@ -71,6 +72,10 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_KEYBOARD;
   case OBJECT_MOUNT:
     return PROTOCOL_MOUNT;
+  case OBJECT_DISKS:
+    return PROTOCOL_DISKS;
+  case OBJECT_DISK:
+    return PROTOCOL_DISK;
   case OBJECT_ECHO:
     return PROTOCOL_ECHO;
   case OBJECT_NET_CONFIG:
@@ -194,6 +199,10 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~KEYBOARD_RIGHT_INPUT);
   case OBJECT_MOUNT:
     return !(rights & ~(MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE));
+  case OBJECT_DISKS:
+    return !(rights & ~(DISKS_RIGHT_ENUMERATE | DISKS_RIGHT_OPEN));
+  case OBJECT_DISK:
+    return !(rights & ~DISK_RIGHTS);
   case OBJECT_RANDOM:
     return !(rights & ~RANDOM_RIGHT_READ);
   case OBJECT_TCP_SERVICE:
