@@ -83,6 +83,15 @@ both functions with status 0, while `lsusb` reported unavailable/status 1. GDB
 showed no driver controller contexts, no USB registry entries and UNAVAILABLE.
 The shell and PCI observation remained usable.
 
+A final enabled boot at kernel revision `5031f41` used three xHCI functions:
+working controllers advertised two and four ports, while the third used
+`qemu-xhci,msix=off`. That controller reported failed with its advertised eight
+ports, released unpublished port backing and its PCI claim, and did not create
+a worker. The other controllers completed mouse and vendor-class serial
+inspection. GDB confirmed the aggregate partial snapshot and two healthy
+controllers. Named/numeric `lsusb` returned status 1 and the shell remained usable.
+This exercises a normal unsupported hardware profile, without register fault injection.
+
 ## Limits
 
 This validates emulated multi-controller discovery, read-only publication and the

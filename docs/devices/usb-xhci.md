@@ -22,9 +22,10 @@ remaining layers. QEMU is the temporary target; physical hardware is unqualified
 
 `xhci_prepare()` runs on the BSP with interrupts disabled before AP startup.
 Class/subclass matching retains all discovered USB host controllers. The driver
-uses programming interface 30 for xHCI, and the inventory lists other interfaces
+uses programming interface `0x30` for xHCI, and the inventory lists other interfaces
 as unsupported. Incomplete PCI discovery makes the USB snapshot incomplete but
-does not prevent inspecting retained controllers. The initial profile requires PCI xHCI 1.x,
+does not prevent inspecting retained controllers. The initial profile requires
+PCI xHCI 1.x,
 a firmware-assigned, page-aligned memory BAR0 with decoding already enabled,
 64-bit DMA, 4 KiB pages and disabled firmware MSI/MSI-X. It records the advertised
 32- or 64-byte context stride for device input/output contexts.
