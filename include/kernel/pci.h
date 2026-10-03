@@ -46,7 +46,7 @@ enum pci_selection pci_select_class(uint8_t base_class, uint8_t subclass,
  * layout limits, not limits on the number of devices the kernel can own. */
 #define PCI_BAR_COUNT 6
 #define PCI_CAP_COUNT 48
-#define PCI_BOOTSTRAP_BAR0_BYTES 4096
+#define PCI_BOOTSTRAP_BAR_BYTES 4096
 
 struct pci_bar {
   phys_addr_t physical;
@@ -75,6 +75,12 @@ struct pci_claim {
   bool reserved, dma_started;
 };
 
+struct pci_probe_state {
+  uint16_t command, pmcsr;
+  unsigned power_capability;
+  bool command_changed, power_changed;
+};
+
 /* BSP/IF=0 before AP startup, stable zeroed claim/mapping records. Reserve
  * an endpoint with MSI/MSI-X disabled. Software/configuration ownership leaves
  * firmware command state unchanged.
@@ -88,11 +94,21 @@ bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim);
 bool pci_reserve_device_at(size_t index, struct pci_claim *claim);
 bool pci_complete_claim(struct pci_claim *claim);
 void pci_cancel_reservation(struct pci_claim *claim);
-/* Assigned, page-aligned BAR0 prefix only, before completion/sizing. Requires
- * firmware memory decoding enabled; maps exactly PCI_BOOTSTRAP_BAR0_BYTES.
+/* Reserved claim before mappings, zeroed caller-owned snapshot. If D0/memory
+ * decode is already usable, leave configuration untouched, including BME.
+ * Otherwise require BME off before temporarily waking/enabling memory decode;
+ * preserve PME enable and do not acknowledge PME status. Begin failure may
+ * follow a write: restore before cancellation on unsupported identity/failure.
+ * Restore requires the still-reserved claim and no other hardware changes;
+ * false retains ownership until reboot. Restores configuration only: a D3hot
+ * wake may reset device internals and cannot promise untouched hardware. */
+bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state);
+bool pci_restore_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state);
+/* Assigned, page-aligned memory BAR low-half prefix, before completion/sizing.
+ * Requires memory decoding enabled; maps PCI_BOOTSTRAP_BAR_BYTES.
  * Caller checks every access/body against this provisional extent and validates
  * the extent against the sized BAR after reset. This does not publish BAR size. */
-enum mm_result pci_map_bootstrap_bar0(struct pci_claim *claim,
+enum mm_result pci_map_bootstrap_bar(struct pci_claim *claim, unsigned bar,
     const struct boot_info *boot, struct pci_mapping *mapping);
 
 /* BSP/IF=0 before AP startup. Caller keeps claim/mapping records at stable

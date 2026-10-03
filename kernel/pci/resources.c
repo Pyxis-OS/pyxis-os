@@ -1,3 +1,4 @@
+#include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/pci.h>
@@ -5,6 +6,9 @@
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
 #include <kernel/pci/registers.h>
+#include <kernel/task.h>
+
+#define PCI_POWER_D0_WAIT_MS 10
 
 static void require_owner(const struct pci_claim *claim)
 {
@@ -105,6 +109,96 @@ bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim)
   claim->reserved = true;
   device->owner = claim;
   arch_pci_config_writable(device->address, true);
+  return true;
+}
+
+bool pci_begin_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state)
+{
+  require_owner(claim);
+  KASSERT(claim->reserved && !claim->mappings);
+  KASSERT(state && !state->command_changed && !state->power_changed);
+  *state = (struct pci_probe_state){0};
+  struct pci_address address = claim->device->address;
+  state->command = pci_read16(address, PCI_COMMAND);
+  for (unsigned i = 0; i < claim->capability_count; ++i) {
+    unsigned offset = claim->capabilities[i];
+    if (pci_read8(address, offset) != PCI_CAP_POWER) {
+      continue;
+    }
+    if (state->power_capability || !pci_capability_fits(claim, offset, PCI_POWER_BYTES)) {
+      return false;
+    }
+    state->power_capability = offset;
+  }
+  if (state->power_capability) {
+    state->pmcsr = pci_read16(address, state->power_capability + PCI_POWER_CONTROL);
+  }
+  bool wake = (state->pmcsr & PCI_POWER_STATE_MASK) != PCI_POWER_D0;
+  if (!wake && (state->command & PCI_COMMAND_MEMORY)) {
+    return true;
+  }
+  if (state->command & PCI_COMMAND_MASTER) {
+    return false;
+  }
+  if (wake) {
+    state->power_changed = true;
+    pci_write16(claim, state->power_capability + PCI_POWER_CONTROL,
+                state->pmcsr & ~(PCI_POWER_STATE_MASK | PCI_POWER_PME_STATUS));
+    uint64_t deadline = task_deadline_after_ms(PCI_POWER_D0_WAIT_MS);
+    do {
+      arch_clock_maintain();
+      __asm__ volatile("pause");
+    } while (!task_deadline_expired(deadline));
+    uint16_t pmcsr = pci_read16(address, state->power_capability + PCI_POWER_CONTROL);
+    uint16_t expected = state->pmcsr & ~PCI_POWER_STATE_MASK;
+    if ((pmcsr & PCI_POWER_CONTROL_WRITABLE) != (expected & PCI_POWER_CONTROL_WRITABLE)) {
+      return false;
+    }
+  }
+  uint16_t command = pci_read16(address, PCI_COMMAND);
+  if (command & PCI_COMMAND_MASTER) {
+    return false;
+  }
+  uint16_t expected = state->command | PCI_COMMAND_MEMORY;
+  if (command != expected) {
+    state->command_changed = true;
+    /* The generic reserved-claim command-write ban remains in force. Only
+     * this PCI-owned probe path may restore the snapshot and enable memory. */
+    arch_pci_write16(address, PCI_COMMAND, expected);
+  }
+  return pci_read16(address, PCI_COMMAND) == expected;
+}
+
+bool pci_restore_mmio_probe(struct pci_claim *claim, struct pci_probe_state *state)
+{
+  require_owner(claim);
+  KASSERT(claim->reserved && state);
+  if (!state->command_changed && !state->power_changed) {
+    return true;
+  }
+  struct pci_address address = claim->device->address;
+  uint16_t command = pci_read16(address, PCI_COMMAND);
+  if ((command | state->command) & PCI_COMMAND_MASTER) {
+    return false;
+  }
+  if (state->command_changed || command != state->command) {
+    state->command_changed = true;
+    arch_pci_write16(address, PCI_COMMAND, state->command);
+    if (pci_read16(address, PCI_COMMAND) != state->command) {
+      return false;
+    }
+    state->command_changed = false;
+  }
+  if (state->power_changed) {
+    pci_write16(claim, state->power_capability + PCI_POWER_CONTROL,
+                state->pmcsr & PCI_POWER_CONTROL_WRITABLE);
+    uint16_t pmcsr = pci_read16(address, state->power_capability + PCI_POWER_CONTROL);
+    if ((pmcsr & PCI_POWER_CONTROL_WRITABLE) != (state->pmcsr & PCI_POWER_CONTROL_WRITABLE) ||
+        pci_read16(address, PCI_COMMAND) != state->command) {
+      return false;
+    }
+    state->power_changed = false;
+  }
   return true;
 }
 
@@ -305,28 +399,44 @@ static enum mm_result map_resource(struct pci_claim *claim, phys_addr_t physical
   return MM_OK;
 }
 
-enum mm_result pci_map_bootstrap_bar0(struct pci_claim *claim,
+enum mm_result pci_map_bootstrap_bar(struct pci_claim *claim, unsigned bar,
     const struct boot_info *boot, struct pci_mapping *mapping)
 {
   require_owner(claim);
   KASSERT(claim->reserved && !claim->mappings);
+  if (bar >= PCI_BAR_COUNT) {
+    return MM_INVALID;
+  }
   struct pci_address address = claim->device->address;
   if (!(pci_read16(address, PCI_COMMAND) & PCI_COMMAND_MEMORY)) {
     return MM_INVALID;
   }
-  uint32_t low = pci_read32(address, PCI_BAR_FIRST);
+  /* Walk low halves so address bits in a paired upper half are never decoded
+   * as another BAR's type. */
+  for (unsigned previous = 0; previous < bar; ++previous) {
+    uint32_t low = pci_read32(address, PCI_BAR_FIRST + previous * PCI_REGISTER_BYTES);
+    if (!(low & PCI_BAR_IO) && (low & PCI_BAR_MEMORY_TYPE_MASK) == PCI_BAR_MEMORY_64) {
+      if (previous + 1 == bar) {
+        return MM_INVALID;
+      }
+      ++previous;
+    }
+  }
+  unsigned offset = PCI_BAR_FIRST + bar * PCI_REGISTER_BYTES;
+  uint32_t low = pci_read32(address, offset);
   unsigned type = low & PCI_BAR_MEMORY_TYPE_MASK;
-  if ((low & PCI_BAR_IO) || (type != PCI_BAR_MEMORY_32 && type != PCI_BAR_MEMORY_64)) {
+  bool wide = type == PCI_BAR_MEMORY_64;
+  if ((low & PCI_BAR_IO) || (type != PCI_BAR_MEMORY_32 && !wide) ||
+      (wide && bar + 1 == PCI_BAR_COUNT)) {
     return MM_INVALID;
   }
-  uint32_t high = type == PCI_BAR_MEMORY_64 ?
-    pci_read32(address, PCI_BAR_FIRST + PCI_REGISTER_BYTES) : 0;
+  uint32_t high = wide ? pci_read32(address, offset + PCI_REGISTER_BYTES) : 0;
   phys_addr_t physical = ((uint64_t)high << PCI_BAR_HIGH_SHIFT) |
     (low & PCI_BAR_MEMORY_ADDRESS_MASK);
-  if (!physical || (physical & (PCI_BOOTSTRAP_BAR0_BYTES - 1))) {
+  if (!physical || (physical & (PAGE_SIZE - 1))) {
     return MM_INVALID;
   }
-  return map_resource(claim, physical, PCI_BOOTSTRAP_BAR0_BYTES, boot, mapping);
+  return map_resource(claim, physical, PCI_BOOTSTRAP_BAR_BYTES, boot, mapping);
 }
 
 enum mm_result pci_map_bar(struct pci_claim *claim, unsigned bar, uint64_t offset,
