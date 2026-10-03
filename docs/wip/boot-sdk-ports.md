@@ -281,7 +281,8 @@ an opt-in [raw image and emulated USB launch](../development/usb-image.md);
 Phase B.1 now defines explicit backend/unique-disk selection, controller resource
 preparation, bounded requests and failure ownership. Phase B.2 adds
 [controller ownership, rings, MSI-X and root-port slot reservations](../devices/usb-xhci.md).
-Phase B.3 adds [checked enumeration and control requests](../devices/usb-enumeration.md).
+Phase B.3 adds [checked enumeration and control requests](../devices/usb-enumeration.md),
+including SuperSpeedPlus root link recognition.
 The later inspection-first slice discovers controllers independently and publishes
 root-device observations and [USB 2 hub descendants](../devices/usb-hubs.md)
 without selecting/configuring a storage transport. BOT/SCSI reads and native block integration

@@ -5,7 +5,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
-enum usb_speed { USB_SPEED_UNKNOWN, USB_SPEED_LOW, USB_SPEED_FULL, USB_SPEED_HIGH, USB_SPEED_SUPER };
+enum usb_speed {
+  USB_SPEED_UNKNOWN, USB_SPEED_LOW, USB_SPEED_FULL, USB_SPEED_HIGH,
+  USB_SPEED_SUPER, USB_SPEED_SUPER_PLUS
+};
+
+static inline bool usb_speed_is_enhanced(enum usb_speed speed)
+{
+  return speed == USB_SPEED_SUPER || speed == USB_SPEED_SUPER_PLUS;
+}
+
 enum usb_result { USB_OK, USB_BUSY, USB_INVALID, USB_IO, USB_TIMEOUT, USB_UNSUPPORTED, USB_STALE };
 
 struct usb_host_controller;

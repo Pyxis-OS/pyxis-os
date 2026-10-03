@@ -20,7 +20,8 @@ Devices show their physical root/downstream port path, speed and checked VID/PID
 with vendor/product labels from `app://share/hwdata/usb.ids` when available. Checked
 interfaces show their configuration, number, alternate, class/subclass/protocol and
 endpoint count. These descriptors do not imply an active configuration or binding.
-Unidentified connected ports are labeled explicitly. Supported USB 2 hubs expose observed descendants; unsupported or failed branches are partial.
+`super` and `super-plus` distinguish USB 3 link categories without claiming a
+numeric rate or lane count. Unidentified connected ports are labeled explicitly. Supported USB 2 hubs expose observed descendants; unsupported or failed branches are partial.
 
 `-n` skips names; `-i FILE` chooses another database. The bounded streaming parser
 reads vendor and one-tab product labels, ignoring nested interface and class sections.

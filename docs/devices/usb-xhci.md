@@ -34,11 +34,17 @@ A staged [PCI claim](pci.md#driver-owned-resources) leaves firmware command stat
 intact for provisional access to BAR0's first 4 KiB. Every interpreted extended
 capability body must fit that prefix and avoid defined register regions. Supported
 Protocol capabilities associate root ports with protocol versions, Slot Type and
-speed identities. PSIC zero permits the protocol-defined defaults. Nonzero PSI
-entries replace those defaults: supported symmetric USB 2 rates map to low/full/high
-speed and 5 Gb/s SuperSpeed maps to SuperSpeed. Raw speed IDs remain in Slot
-contexts; unknown rates, newer link protocols and valid asymmetric pairs remain
-unclassifiable. No QEMU port numbering or vendor identity selects a device.
+speed identities. With PSIC zero, exact BCD versions select the specification's
+speed-ID defaults: USB 2.0 IDs 1–3, USB 3.0 ID 4, USB 3.1 IDs 4–5 and USB 3.2
+IDs 4–7. ID 4 is SuperSpeed; IDs 5–7 are SuperSpeedPlus. Other revisions have
+no implied map. Nonzero PSI entries replace all defaults. Symmetric USB 2
+rates map to low/full/high speed. USB 3 entries require a positive rate and
+full duplex, with Link Protocol selecting SuperSpeed or SuperSpeedPlus;
+receive/transmit pairs are supported when both entries identify that same
+category. Directional rates and lane counts may differ. Reserved or unsupported
+profiles remain unknown. Raw speed IDs remain in Slot contexts; no rate or
+lane count is inferred for inventory. No port numbering or vendor identity
+selects a device. These mappings follow [xHCI 1.2b §7.2.2](https://cdrdv2-public.intel.com/625472/625472_xHCI_Rev1_2b.pdf).
 
 If legacy ownership is present, request OS ownership, wait for BIOS release and
 then disable legacy SMI sources. Wait for controller readiness, halt before

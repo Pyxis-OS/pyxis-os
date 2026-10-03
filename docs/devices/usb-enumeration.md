@@ -46,23 +46,30 @@ limit rather than a failed descriptor transfer.
 
 Address Device publishes the device's output-context address through DCBAA and
 lets xHCI assign the USB address. The core never sends SET_ADDRESS. EP0 starts
-with the speed-defined packet size: low/full speed 8, high speed 64, SuperSpeed
-512 bytes. The first eight device-descriptor bytes are checked before reading
+with the speed-defined packet size: low/full speed 8, high speed 64,
+SuperSpeed and SuperSpeedPlus 512 bytes. The first eight device-descriptor bytes are checked before reading
 the full descriptor. Full-speed devices may require Evaluate Context to update
-EP0; SuperSpeed's wire value 9 means 512 bytes.
+EP0; both USB 3 speed categories require wire value 9 for 512 bytes.
 
 Every advertised configuration is inspected within the controller startup deadline.
 Checks include descriptor lengths and totals, stable repeated headers, distinct
 configuration values, interface/alternate identities, default alternates,
 endpoint counts and addresses, speed-dependent packet/interval fields and
-SuperSpeed companion structure. Interface numbering follows USB's consecutive
-zero-based numbering rule. Class/vendor descriptors retain opaque contents but
+SuperSpeed companion structure for both USB 3 speed categories. Interface numbering
+follows USB's consecutive zero-based numbering rule. Class/vendor descriptors retain opaque contents but
 must have valid traversal lengths. Validated interface records retain
 configuration value, interface number, alternate,
 class, subclass, protocol and endpoint count. A malformed configuration rolls back
 its interface records while retaining checked device identity. The current interface
 arena holds 512 records per controller; exceeding it gives partial inventory. This
 is a resource choice in `settings.h`, not a hardware or database requirement.
+
+SuperSpeedPlus root devices use the same bounded inspection path as SuperSpeed.
+Their link category comes from the host protocol metadata, never the device
+descriptor version. SuperSpeed and SuperSpeedPlus hubs retain their checked
+identity/interfaces but remain incomplete because descendants are uninspected.
+The SSP isochronous companion is structurally traversed; its link-dependent
+byte budget remains uninterpreted without non-control endpoint scheduling.
 
 Only supported hubs receive SET_CONFIGURATION and xHCI Slot hub metadata.
 There is no SET_INTERFACE, non-control endpoint binding or BOT device selection. The unused matcher, bulk-endpoint setup
