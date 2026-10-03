@@ -127,6 +127,6 @@ functions including the same NIC identity at `00:03.0`. The guest PCI address is
 assigned by QEMU and need not match the host address. These boots qualify
 passthrough and read-only PCI discovery; they do not establish Ethernet I/O.
 
-The card retains its physical MAC. The accepted B0-22 static configuration and
-driver tasks are recorded in the [RTL8111 plan](../wip/thinkpad-rtl8111.md).
+The card retains its physical MAC. The owner-confirmed built-in port profile and
+driver outline are recorded in the [RTL8111 plan](../wip/thinkpad-rtl8111.md).
 Later dock work is also distinguished from built-in qualification there.

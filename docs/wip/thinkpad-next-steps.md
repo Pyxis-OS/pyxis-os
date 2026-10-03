@@ -275,7 +275,7 @@ that function only. Dock Ethernet is the PCI controller at `02:00.0`, sharing
 group 12 with its UARTs, IPMI and EHCI; the same driver family can cover it later
 with revision-specific handling. AX200 Wi-Fi is `03:00.0`.
 
-The router reserves a fixed address for the built-in port. The accepted B0-22
+The router reserves a fixed address for the built-in port. Its owner-confirmed
 static profile is recorded in the
 [driver plan](thinkpad-rtl8111.md#goal-and-machine-configuration). These values
 are machine configuration, not a driver contract.
@@ -285,13 +285,13 @@ are machine configuration, not a driver contract.
 the implemented `VFIO_PCI` launcher, Fedora host setup and successful owner/agent
 boots. Pyxis inventories `10ec:8168`, revision `0x15`, without claiming it.
 
-**RTL8111 driver plan accepted (2026-10-03).** The
-[milestone](thinkpad-rtl8111.md) starts with MAC/XID and capability identification,
-then preparation, Ethernet I/O, stack integration and VFIO/native qualification.
-State belongs to each controller; the presence of another NIC must not prevent
-the built-in port from working. Interface selection prefers RTL8111 over VirtIO
-when both are present. Dock revision support and multiple active interfaces are
-separate from that preference. Driver implementation has not started.
+**RTL8111 five-task outline approved (2026-10-03).** The
+[milestone](thinkpad-rtl8111.md) records the review's revised order: owner Fedora
+capture and Caelum identification, preparation, the VirtIO selection refactor,
+RTL8111 I/O, then VFIO/native qualification. The owner directs configuration to
+choose the interface; there is no automatic RTL8111 preference. The per-controller
+model, dock revision support, ownership details and hardware references remain
+proposals pending confirmation. Driver implementation and task 1 have not started.
 
 ## 3. Later idea: reverse remote terminal with broadcast discovery
 
