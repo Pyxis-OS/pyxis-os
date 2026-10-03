@@ -75,7 +75,7 @@ static void nativefs_worker(void *argument);
 static void require_worker(void)
 {
   uint64_t flags = cpu_save_interrupts();
-  KASSERT(arch_cpu_index() == 0 && kernel_task_is_current(nativefs_worker));
+  KASSERT(arch_cpu_index() == 0 && kernel_task_is_current(nativefs_worker, NULL));
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
   cpu_restore_interrupts(flags);
 }

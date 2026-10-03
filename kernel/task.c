@@ -177,11 +177,12 @@ void task_syscall_leave(void)
   local_scheduler()->current_task->in_syscall = false;
 }
 
-bool kernel_task_is_current(void (*entry)(void *))
+bool kernel_task_is_current(void (*entry)(void *), const void *argument)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct task *task = schedulers ? local_scheduler()->current_task : NULL;
-  return task && task->kind == TASK_KERNEL && task->kernel_entry == entry;
+  return task && task->kind == TASK_KERNEL && task->kernel_entry == entry &&
+    task->argument == argument;
 }
 
 void task_init(void)

@@ -56,8 +56,8 @@ These observations do not prove cache-flush support or power-loss durability.
 Explicit cache synchronization needs validation before writable use; lack of FUA
 alone does not exclude that path. The [ThinkPad T14 Gen 1 AMD inventories](../targets/t14-gen1-amd/notes.md)
 now record three xHCI functions, directly attached laptop routes and hub-backed
-dock routes under Fedora. Current unique-controller selection does not admit
-that observed inventory. Native controller qualification and firmware handoff
+dock routes under Fedora. Inventory now inspects each discovered controller
+independently without selecting from those addresses. Native qualification and firmware handoff
 remain unverified; Linux topology does not establish Pyxis support.
 
 ## QEMU-first development
@@ -126,17 +126,20 @@ class parsing without rewriting the working storage path. Phase B validation
 should include an unrelated unsupported USB device as well as the chosen disk.
 Phase A itself needs no kernel USB abstractions or placeholder drivers.
 
-Native hardware-listing tools and their name databases are a separate
-[hardware-inspection proposal](hardware-inspection.md). `lsusb` will consume the
-USB inventory; neither tool nor its benchmark is a boot-image prerequisite.
+Native hardware-listing tools and their name databases are described separately
+in [hardware inspection](../devices/hardware-inspection.md). `lsusb` consumes the
+USB boot inventory; neither tool nor its benchmark is a boot-image prerequisite.
 
 ## Phase B.1 read-only contract
 
 The owner accepted unique supported-disk selection, failing on ambiguity. The
 following design is the accepted implementation contract for the read-only
 milestone. B.2 implements its controller slice; the rest remains pending.
-Its first consumer is the
-directly attached QEMU disk. Physical-controller qualification remains Phase C.
+Its first consumer is the directly attached QEMU disk. The later accepted
+inspection-first slice now handles multiple controllers and does not configure
+a BOT transport. Before resuming B.4, settle how unique supported-disk selection
+spans those controllers; the single-controller profile below is the earlier
+storage proposal, not an inventory requirement. Physical qualification remains Phase C.
 
 ### Selection and authority
 
@@ -357,10 +360,12 @@ host tools and the later physical-preparation procedure.
    rings, interrupt delivery and root-port state. Start with one directly attached
    supported storage device present at boot. Leave UAS, external hubs, insertion
    after boot, legacy UHCI/OHCI/EHCI and power management outside this first slice.
-3. [x] **Enumerate and transfer.** Implement control transfers, checked descriptor
-   parsing, addressing/configuration and endpoint setup. Select supported
-   SCSI/Bulk-Only interfaces by descriptors; unsupported devices fail explicitly.
-   Support the endpoint packet/burst requirements of the chosen SuperSpeed path.
+3. [x] **Enumerate and transfer.** Implement bounded control transfers, checked
+   descriptor parsing and addressing. Publish root-device and interface observations
+   independently of class binding; unsupported inspection remains explicit.
+   The initial BOT matcher/endpoint setup was removed for the inspection-only
+   slice; reintroduce class transfers with their first consumer and an explicit
+   pre-AP resource policy in B.4.
 4. [ ] **Implement Bulk-Only/SCSI reads.** Identify media, obtain capacity and
    logical-block geometry, report command failures and read bounded block ranges.
    Handle short transfers, stalls, protocol status and required reset recovery.
@@ -392,8 +397,10 @@ host tools and the later physical-preparation procedure.
 ## Remaining assignment and qualification decisions
 
 - Phase A and B.3 enumeration/control transfers are implemented; B.1 defines the
-  read-only contract. BOT transport selection is provisional until B.4 establishes
-  LUN/media support. BOT/SCSI reads and native integration remain pending. Writable
+  read-only contract. Inspection-first enumeration now publishes root devices
+  without configuring a transport. Multi-controller disk selection must be settled
+  before B.4 establishes LUN/media support. BOT/SCSI reads and native integration
+  remain pending. Writable
   work and its roadmap ordering remain unassigned.
 - Image update/preservation ownership remains open for persistent installation.
   Read-only disk selection does not qualify a write target or authenticate media.

@@ -285,3 +285,14 @@ The `tzdata` recipe builds matching host zic and the pinned IANA database. The
 under `app://share`, with no dependency on the host's installed timezone version.
 It travels in the same ports bundle as the executable ports. Libc provides
 [local-time conversion](../userland/timezones.md); absent or empty `TZ` defaults to UTC.
+
+## USB ID database
+
+The `usbids` data recipe stages the pinned upstream text unchanged at
+`app://share/hwdata/usb.ids`. The [metadata](../../ports/usbids/metadata.lua)
+records its commit; `app://share/usbids/source.txt` records provenance. Pyxis elects
+the USB ID Project's BSD database grant, independently of the mirror repository's
+GPL license. Terms and NOTICE are packaged under `app://share/licenses/usbids/`.
+[lsusb](../userland/lsusb.md) uses the data only for descriptive names and falls
+back to numeric IDs when names are unavailable. Updating the database requires
+no compiler-container rebuild. See [recipe notes](../../ports/usbids/README.md).

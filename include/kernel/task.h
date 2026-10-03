@@ -98,9 +98,9 @@ void task_init(void);
  * As elsewhere in the kernel, FP/SIMD use is forbidden. */
 enum mm_result kernel_task_create(void (*entry)(void *), void *argument);
 
-/* Task context, IF=0. Tests the current task's entry without lending task
+/* Task context, IF=0. Tests the current task's entry and borrowed argument without lending task
  * metadata. Used to enforce services owned by one kernel worker. */
-bool kernel_task_is_current(void (*entry)(void *));
+bool kernel_task_is_current(void (*entry)(void *), const void *argument);
 
 /* Current BSP kernel task only, IF=1. Sleep until a monotonic nanosecond
  * deadline; a past deadline yields to the ready queue. Resumes with IF=1. */

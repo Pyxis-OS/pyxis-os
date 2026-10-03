@@ -1,4 +1,4 @@
-# Initial xHCI controller
+# xHCI controllers
 
 Native xHCI initialization defaults to disabled by `CONFIG_XHCI=n` in
 [`.config`](../../.config). Both controller preparation and worker
@@ -6,14 +6,14 @@ startup are skipped, with `xHCI: disabled at build time` in the boot log. The
 kernel makes no xHCI claim or DMA allocation. Enable XHCI under Caelum in
 [`make menuconfig`](../development/configuration.md), or set `CONFIG_XHCI=y`
 directly in `.config`, and rebuild to resume explicit QEMU bring-up.
-The ThinkPad's three-controller inventory is
-outside the current unique-controller profile; native hardware remains unqualified.
+Every discovered xHCI function is inspected independently when enabled.
+Native hardware remains unqualified.
 Firmware can still load the kernel and boot archive from USB.
 
-When enabled, Caelum prepares a unique PCI xHCI function and hardware
+When enabled, Caelum prepares each discovered PCI xHCI function and its own
 slots/contexts for boot-present, directly attached root-port devices.
 [USB enumeration](usb-enumeration.md)
-addresses them, checks descriptors and configures a provisional BOT transport.
+addresses them, checks descriptors and publishes a read-only boot inventory.
 USB block access remains pending. The archive-backed shell and existing VirtIO block behavior remain available.
 [Phase B](../wip/usb-installation.md#b-native-read-only-usb-storage) tracks those
 remaining layers. QEMU is the temporary target; physical hardware is unqualified.
@@ -21,8 +21,11 @@ remaining layers. QEMU is the temporary target; physical hardware is unqualified
 ## Preparation and activation
 
 `xhci_prepare()` runs on the BSP with interrupts disabled before AP startup.
-Class/subclass/programming-interface matching preserves absent, ambiguous and
-incomplete PCI inventory outcomes. The initial profile requires PCI xHCI 1.x,
+Class/subclass matching retains all discovered USB host controllers. The driver
+uses programming interface `0x30` for xHCI, and the inventory lists other interfaces
+as unsupported. Incomplete PCI discovery makes the USB snapshot incomplete but
+does not prevent inspecting retained controllers. The initial profile requires
+PCI xHCI 1.x,
 a firmware-assigned, page-aligned memory BAR0 with decoding already enabled,
 64-bit DMA, 4 KiB pages and disabled firmware MSI/MSI-X. It records the advertised
 32- or 64-byte context stride for device input/output contexts.
@@ -49,17 +52,22 @@ release ownership later, but this boot does not retry controller preparation.
 Preparation allocates port records, DCBAA, scratchpads when advertised, one
 command-ring page, one event-ring page and an ERST allocation. All backing and
 mappings exist before AP startup. Each advertised port also receives input/output
-contexts, an EP0 ring/control buffer and two initial non-control rings. CPU and
+contexts and an EP0 ring/control buffer. CPU and
 device physical addresses remain distinct. Rings are 64-byte aligned and remain within a 64 KiB segment
 boundary. The command ring ends with a Toggle Cycle Link TRB; the event ring uses
 one ERST entry. The initial choice is 256 TRBs per ring, derived from the supported
 4 KiB page and hardware TRB layout, with one command admitted at a time.
 
-After scheduler setup, `xhci_start()` creates one BSP worker. It enables bus
+After scheduler setup, `xhci_start()` creates one BSP worker per prepared controller.
+Each context owns its claims, mappings, ports, rings, commands, waits and discovery
+buffers. Device helpers derive their controller from the device; caller validation
+checks both the worker entry and its borrowed controller argument. Each worker enables bus
 mastering before programming rings: a halted controller may fetch the ERST as
 soon as its base is written. It then enables interrupter zero, MSI-X entry zero
-on static vector 39 and Run/Stop. IRQ work only acknowledges observed activity,
-records notification and detaches/wakes the worker wait. The worker parses and
+on shared static vector 39 and Run/Stop. IRQ work acknowledges and notifies every
+active controller, then detaches/wakes its wait. MSI-X may already clear IP, so
+it cannot identify the originating controller from that bit. Workers inspect only
+their own cycle-owned events. The worker parses and
 validates cycle-owned events, matches command/transfer completions to admitted
 physical TRB identities, advances dequeue and releases EHB after consumption.
 Empty polls do not
@@ -85,11 +93,11 @@ For each supported enabled port, Enable Slot uses its advertised Slot Type and
 retains the checked returned slot ID with that port. Address Device then publishes
 its output context in DCBAA and configures EP0. Output contexts belong to hardware;
 input contexts are constructed independently and remain immutable until command
-completion. Configure Endpoint adds the selected bulk DCIs with A1 clear; endpoint
-count does not replace the highest enabled DCI. Configuration Information Enable
-is left disabled, so Input Control configuration/interface/alternate fields remain
-zero. The USB core sends those actual values through standard requests.
-An unrelated mouse receives its own address/descriptor record and remains unbound.
+completion. The input Slot advertises only EP0; Configuration Information Enable
+is left disabled and Input Control configuration/interface/alternate fields remain
+zero. Inventory enumeration does not send configuration/alternate requests or
+bind non-control endpoints. No unused bulk rings are allocated.
+Every inspectable root device receives its own address/descriptor record and remains unbound.
 
 A connection change after the snapshot retires that startup candidate. Loss of
 an enabled reserved port runs Disable Slot after prior command completion, then
@@ -101,7 +109,9 @@ changes and preserve neutral power/wake fields; they never echo PED or reset bit
 
 Command timeout, invalid completion/event identity, controller error, failed
 port setup or failed slot retirement stops the controller for this boot. The
-worker attempts bounded halt, masks delivery and disables bus mastering. All
+worker attempts bounded halt, masks delivery and disables bus mastering. Other
+controllers continue independently. Failed/unsupported controllers remain explicit
+inventory records, making the aggregate snapshot incomplete. All
 runtime claims, mappings, command state and DMA allocations remain until reboot,
 including when halt succeeds. Masking interrupts or disabling bus mastering alone
 does not establish returned DMA ownership. The shared VM contract supplies no
