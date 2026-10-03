@@ -84,6 +84,8 @@ struct pci_claim {
  * Cancel an uncompleted reservation without command writes. No driver DMA or
  * interrupt delivery may have been published, and firmware BME is preserved. */
 bool pci_reserve_device(struct pci_device *device, struct pci_claim *claim);
+/* Same reservation contract for a retained inventory index. */
+bool pci_reserve_device_at(size_t index, struct pci_claim *claim);
 bool pci_complete_claim(struct pci_claim *claim);
 void pci_cancel_reservation(struct pci_claim *claim);
 /* Assigned, page-aligned BAR0 prefix only, before completion/sizing. Requires
