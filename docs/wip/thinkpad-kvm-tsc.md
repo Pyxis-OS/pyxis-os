@@ -5,8 +5,10 @@ Status: **owner direction accepted, 2026-10-03:** implement software-extended
 direction is TSC with extended-HPET fallback; TSC work is deferred. The findings
 below were recorded on 2026-10-02. This document records the implementation
 handoff and implementation validation; software extension is implemented on
-`clock/extend-hpet`, with local validation complete and native qualification
-still pending.
+`clock/extend-hpet`, with local validation complete and an owner-observed native
+boot reaching userspace on all 12 CPUs. The selected-path log and native
+multi-wrap clock check remain pending; keyboard input is the next reported
+blocker, with its cause unconfirmed.
 
 ## Accepted direction and implementation handoff
 
@@ -41,6 +43,8 @@ qualification. TSC stays deferred.
   forced, without misreporting the hardware width.
 - [ ] Record the native result and any next blocker, update the implemented
   timekeeping reference and carry remaining costs/limits into technical debt.
+  Native userspace bring-up is recorded below; the path log and roughly
+  15-minute clock check remain pending because local input is unavailable.
   Do not start the next hardware or TSC task implicitly.
 
 Start from current main after checking this documentation PR's merge status.
@@ -107,7 +111,8 @@ validation or performance targets. Local untracked records are
 `build/hpet-baseline-build.log`, `build/hpet-baseline-boot.log` and
 `build/hpet-baseline-remote/events.jsonl`. The baseline QEMU and remote-client
 processes have been stopped. Local implementation validation is recorded below;
-delivery and owner native boot remain.
+delivery and native clock qualification remain. The subsequent owner-observed
+boot is recorded under [native bring-up continuation](#native-bring-up-continuation).
 
 #### Local implementation results
 
@@ -204,6 +209,19 @@ load and UC MMIO read after a failed locked CAS, and the ELF has no undefined
 compiler-runtime symbols. An independent read-only review found no code
 blocker. Local observations supplement that concurrency review; they do not
 establish native boot or all interleavings.
+
+The PR review follow-up clarified that the reported 120 Hz is the BSP timer
+frequency, and moved per-space initialization and ordinary task exits to trace.
+Ordinary `make -j16 image` builds passed at both `LOG_LEVEL=info` and `trace`,
+using the unchanged SDK/userspace/ports inputs and the same host-KVM setup with
+12 CPUs and 256 MiB. Both boots reached preemptive userspace. The info log showed
+one `spaces: 12 CPU spaces initialized` line and omitted both detailed message
+types; the trace log retained all 12 space lines and ordinary exit details.
+No extension or sampling behavior changed, so the earlier multi-wrap and GDB
+checks were not repeated. Local logs use `build/hpet-review-*`; both QEMU
+processes were stopped and the final build returns to info logging.
+
+### Validation scope and owner handoff
 
 Use ordinary `make -j16` builds, interactive QEMU and debugger inspection, then
 an owner-run native boot. Use existing workloads to compare clock-sensitive
@@ -381,8 +399,8 @@ At the recorded investigation revision, clock initialization required a valid,
 page-aligned ACPI HPET with a 64-bit main counter and panicked for a 32-bit
 counter. That explains the following owner-observed failure independently of
 the successful virtual boot. [Clock initialization](../../arch/x86_64/clock.c)
-now selects direct 64-bit reads or software extension; native qualification
-of that implementation remains pending.
+now selects direct 64-bit reads or software extension. The owner subsequently
+reached native userspace, while native clock qualification remains pending.
 
 ### Owner-observed native USB boot
 
@@ -405,6 +423,56 @@ Caelum panic: monotonic clock requires a 64-bit HPET counter
 This confirms progress through Limine handoff, early architecture setup, ECAM
 discovery and the owned CR3 switch, followed by the HPET capability rejection.
 It does not establish successful native boot or execution beyond that point.
+
+### Native bring-up continuation
+
+The [PR #341 owner-requested continuation comment](https://git.internal/PyxisOS/pyxis-os/pulls/341)
+reports a subsequent native USB boot of `clock/extend-hpet` on the ThinkPad
+T14 Gen 1 AMD, based on the owner's screen photo. The exact booted revision
+was not supplied. The photo reaches `Caelum ready: starting preemptive userspace`,
+shows spaces and initial launches for all 12 CPUs, and records
+`PMM: total=8150554` frames (about 31.1 GiB). The display took over from the
+early console. This is owner-observed evidence relayed in review, not an
+agent-run native qualification.
+
+The early `clock:` line had scrolled off. Reaching userspace establishes progress
+past the previous HPET rejection; it does not independently record the selected
+path or prove native multi-wrap behavior. Capture that line and complete the
+[local-console clock check](#validation-scope-and-owner-handoff) when input is
+available. The roughly 15-minute check has not been performed.
+
+The owner reports no keyboard input, with a possible freeze still to distinguish.
+Repeated CPU 1/2/3 exits with status 0/1 appear in the photo; their cause is
+unknown. The reported entropy error 6 and unavailable GPT are separate hardware
+bring-up observations, outside this clock task. The owner requested quieter info
+logs: per-space initialization and ordinary task exits now use `ktrace`, available
+with `LOG_LEVEL=trace`, while one info line reports the number of initialized
+CPU spaces. Fault and termination diagnostics retain their existing level.
+
+Keyboard work requires a separate focused branch/PR and a confirmed cause.
+Code inspection shows that [ACPI keyboard routing](../../arch/x86_64/acpi.c)
+rejects a revision-3-or-newer FADT whose bit 1 at offset 109 is clear.
+[I/O APIC setup](../../arch/x86_64/io_apic.c) then reports unavailable input
+without initializing PS/2. The owner subsequently posted the Fedora FADT
+readout at offset 109: `0013` (hexadecimal). Bit `0x2` is set, so the suspected
+clear-flag rejection is ruled out for that table. The FADT revision and early
+keyboard log are still unrecorded; the cause of missing input remains unknown.
+
+The owner's flag-read command and remaining revision read are:
+
+```sh
+sudo od -A d -t x2 -j 109 -N 2 /sys/firmware/acpi/tables/FACP
+sudo od -A d -t u1 -j 8 -N 1 /sys/firmware/acpi/tables/FACP
+```
+
+Also capture the early `keyboard:` and `clock:` lines, for example in a
+slow-motion boot video. The keyboard log distinguishes absent route/controller,
+PS/2 initialization failure and scan-set-2 readiness; a ready controller leaves
+interrupt delivery or a later freeze to investigate. Continued output for about
+a minute would distinguish ongoing execution from a complete freeze; use a
+trace build if observing the ordinary exit lines. Bounded controller probing
+and ACPI namespace discovery are proposed alternatives, not accepted changes.
+Do not begin keyboard or TSC implementation as part of this PR.
 
 ### Clock and scheduler boundaries
 
@@ -575,11 +643,13 @@ agreement of raw TSC values. See
 
 ## Remaining implementation and future decisions
 
-**For the selected HPET task:** record the owner's native result, including the
-selected-path log and roughly 15-minute console check. Maintenance ownership,
+**For the selected HPET task:** capture the remaining selected-path log and
+roughly 15-minute console check after keyboard access is available. The owner
+has reached native userspace; the next reported blocker and diagnostic handoff
+are recorded above. Maintenance ownership,
 concurrent-read ordering, saturation and the
 progress/support requirement are recorded in the implemented timekeeping
-reference; native success is still unqualified.
+reference; native multi-wrap clock behavior remains unqualified.
 
 **For the deferred TSC stage:** platform acceptance criteria for strict SMP
 ordering versus a shared atomic floor; ordered-read mechanisms and any MSR

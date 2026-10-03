@@ -449,7 +449,10 @@ sampling. The [matched host-KVM observations](wip/thinkpad-kvm-tsc.md#local-impl
 show lower clock-call cost for forced low-32-bit extension, with shared-state
 cost included, but do not establish native performance. The direct profiled
 allocation median was about 2.6% higher, mostly in BSP queue time; its cause
-was not isolated. Native boot is still awaiting owner qualification.
+was not isolated. The owner has reached native userspace on all 12 ThinkPad
+CPUs, as [recorded from a screen photo](wip/thinkpad-kvm-tsc.md#native-bring-up-continuation).
+The selected-path log and native multi-wrap clock check remain pending; missing
+keyboard input is a separate bring-up blocker with an unconfirmed cause.
 
 The accepted support requirement is strictly less than one advancing-counter
 wrap between incorporated samples, including individual boot operations, long

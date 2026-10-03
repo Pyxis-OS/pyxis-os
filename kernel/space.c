@@ -111,7 +111,7 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
     } else {
       sprintf(space->title, "CPU %zu", i);
     }
-    klog("Initializing Space: %s\n", space->title);
+    ktrace("Initializing Space: %s\n", space->title);
 
     space->fb = fb_alloc(boot_fb, boot_fb->width, 
         boot_fb->height - SPACES_NAV_HEIGHT);
@@ -138,6 +138,7 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
       active_space = space;
     }
   }
+  klog("spaces: %zu CPU spaces initialized\n", arch_cpu_count());
 
   spaces_nav_fb = fb_alloc(boot_fb, boot_fb->width, SPACES_NAV_HEIGHT);
 }

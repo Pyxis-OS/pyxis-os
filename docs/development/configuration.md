@@ -9,6 +9,19 @@ Kconfiglib into global Python from the repository root:
 sudo python3 -m pip install --break-system-packages -r requirements.txt
 ```
 
+Alternatively, install into a local virtual environment and select its Python
+for each configuration or source-build command:
+
+```sh
+python3 -m venv build/config-venv
+build/config-venv/bin/python3 -m pip install -r requirements.txt
+make menuconfig PYTHON=build/config-venv/bin/python3
+make -j16 image PYTHON=build/config-venv/bin/python3
+```
+
+`make clean` removes `build`, including this virtual environment; recreate it
+after cleaning or keep it outside `build`.
+
 CI installs the same dependency into the existing builder container before the
 ordinary build. No compiler or container rebuild is needed for this change.
 

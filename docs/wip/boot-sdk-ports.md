@@ -298,7 +298,10 @@ extended-HPET fallback is the accepted future direction, deferred from this
 first task. The clock now supports software extension and a menuconfig-editable
 BSP maintenance interval, default 120 timer ticks. Its accepted support limit
 requires less than one advancing-counter wrap between incorporated samples;
-successful native Caelum boot remains unqualified.
+the owner subsequently reached native userspace on all 12 ThinkPad CPUs.
+The [native continuation](thinkpad-kvm-tsc.md#native-bring-up-continuation)
+records the next keyboard blocker and unconfirmed cause; the selected clock-path
+log and native multi-wrap check remain pending.
 
 The separate [hardware-inspection proposal](hardware-inspection.md) adds native
 `lspci`/`lsusb` consumers of read-only inventory and pinned plain-text PCI/USB name

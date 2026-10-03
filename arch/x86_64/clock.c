@@ -94,7 +94,7 @@ void arch_clock_init(void)
   klog("clock: HPET %u-bit counter, %s, period=%u fs\n", counter_bits,
        software_extended ? "software-extended" : "direct", period_fs);
   if (software_extended) {
-    klog("clock: HPET maintenance every %u BSP timer ticks (~%u Hz)\n",
+    klog("clock: HPET maintenance every %u BSP timer ticks; BSP timer frequency %u Hz\n",
          maintenance_ticks, arch_timer_frequency());
   }
 }
