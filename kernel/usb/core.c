@@ -508,7 +508,13 @@ static bool valid_packet(enum usb_speed speed, uint8_t wire, uint16_t *packet)
 static void inspect_device(struct usb_device_record *device, uint64_t deadline)
 {
   device->speed = usb_host_device_speed(device->host);
-  if (!request_ok(device, usb_host_address(device->host, deadline)) ||
+  enum usb_result address = usb_host_address(device->host, deadline);
+  if (address == USB_UNSUPPORTED && device->speed == USB_SPEED_UNKNOWN) {
+    device->incomplete = true;
+    device->detail = "unsupported device speed";
+    return;
+  }
+  if (!request_ok(device, address) ||
       !descriptor(device, USB_DESCRIPTOR_DEVICE, 0, USB_DEVICE_PREFIX_BYTES, deadline)) {
     return;
   }
