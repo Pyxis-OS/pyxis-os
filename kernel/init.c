@@ -1,4 +1,5 @@
 #include <arch/cpu.h>
+#include <arch/clock.h>
 #include <arch/smp.h>
 #include <kernel/init.h>
 #include <kernel/user/launch.h>
@@ -33,16 +34,19 @@
     panic("cannot initialize the TLSF heap");
   }
   klog("mm: kernel VM and heap ready\n");
+  arch_clock_maintain();
 
   enum initrd_result archive_result = initrd_init(&boot->initrd);
   if (archive_result != INITRD_OK) {
     panic("cannot initialize boot archive (error %u)", (unsigned)archive_result);
   }
   klog("initrd: newc archive=%zu bytes, mapped read-only\n", boot->initrd.size);
+  arch_clock_maintain();
 
   klog("PCI: discovery starting\n");
   pci_discover();
   klog("PCI: discovery complete\n");
+  arch_clock_maintain();
 #ifdef CONFIG_XHCI
   xhci_prepare(boot);
 #else
@@ -53,15 +57,19 @@
   virtio_rng_prepare(boot);
   virtio_blk_prepare(boot);
   gpt_prepare();
+  arch_clock_maintain();
 
   boot_start_cpus();
   system_info_init();
+  arch_clock_maintain();
 
   space_init_all(&boot->framebuffer);
+  arch_clock_maintain();
 
   task_init();
   bsp_requests_init();
   klog("tasks: scheduler and BSP request queues ready\n");
+  arch_clock_maintain();
 
 #ifdef CONFIG_XHCI
   xhci_start();
@@ -74,6 +82,7 @@
   gpt_start();
   nativefs_start();
   klog("devices: workers started\n");
+  arch_clock_maintain();
 
   enum mm_result result = net_init();
   if (result != MM_OK) {
@@ -99,6 +108,7 @@
        heap.pools, heap.pool_bytes, heap.live_allocations);
 
   user_launch_initial(boot->command_line);
+  arch_clock_maintain();
   klog("Caelum ready: starting preemptive userspace\n");
   task_schedule();
 }

@@ -21,7 +21,19 @@ default. Edit it directly or run:
 make menuconfig
 ```
 
-The menu is **Pyxis Configuration → Caelum → XHCI**. `CONFIG_XHCI=n` disables
+The options are under **Pyxis Configuration → Caelum**.
+
+**HPET maintenance interval (BSP timer ticks)** sets
+`CONFIG_HPET_MAINTENANCE_TICKS`, default 120 delivered BSP LAPIC timer interrupts.
+At the current nominal 120 Hz this is about one second. It controls maintenance
+of a software-extended 32-bit HPET; direct 64-bit counters need no maintenance
+reads. The value must fit a positive 32-bit countdown. Clock initialization
+rejects a nominal interval of one hardware wrap or longer, using the advertised
+HPET period, but interrupt delays must also remain within the sampling bound.
+Choose an interval well below wrap time; timer deliveries are triggers, not
+elapsed-time accounting. See the [clock contract](../kernel/timekeeping.md).
+
+**XHCI** controls native USB. `CONFIG_XHCI=n` disables
 native controller preparation and worker startup; `CONFIG_XHCI=y` enables them.
 Menuconfig may write the disabled choice as `# CONFIG_XHCI is not set`; that is
 equivalent to `n`. Native xHCI is qualified only in QEMU. See the

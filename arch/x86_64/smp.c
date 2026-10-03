@@ -1,4 +1,5 @@
 #include <arch/apic.h>
+#include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/paging.h>
@@ -45,6 +46,7 @@ void arch_smp_prepare(size_t count, uint32_t bsp_lapic_id)
 
 struct ap_boot *arch_ap_prepare(uint32_t lapic_id)
 {
+  arch_clock_maintain();
   KASSERT(cpu_count < cpu_capacity && lapic_id <= XAPIC_MAX_ID);
   for (size_t i = 0; i < cpu_count; ++i) {
     if (cpus[i]->lapic_id == lapic_id) {
@@ -80,6 +82,7 @@ struct ap_boot *arch_ap_prepare(uint32_t lapic_id)
 
 void arch_ap_wait(void)
 {
+  arch_clock_maintain();
   struct cpu_local *cpu = handoff.cpu;
   uint32_t previous = apic_timer_remaining();
   unsigned periods = 0;
@@ -87,12 +90,16 @@ void arch_ap_wait(void)
    * dispatching interrupts or racing the AP's use of PIT channel 2. */
   while (!atomic_load_explicit(&cpu->online, memory_order_acquire)) {
     uint32_t remaining = apic_timer_remaining();
-    if (remaining > previous && ++periods >= AP_STARTUP_TIMER_PERIODS) {
-      panic("APIC %u startup timed out", cpu->lapic_id);
+    if (remaining > previous) {
+      arch_clock_maintain();
+      if (++periods >= AP_STARTUP_TIMER_PERIODS) {
+        panic("APIC %u startup timed out", cpu->lapic_id);
+      }
     }
     previous = remaining;
     __asm__ volatile("pause");
   }
+  arch_clock_maintain();
   klog("SMP: APIC %u online, stack=%p, timer=%u counts per ~8.33 ms\n",
        cpu->lapic_id, (void *)cpu->stack_top, cpu->timer_count);
 }

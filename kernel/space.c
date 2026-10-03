@@ -98,6 +98,7 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
   screen = boot_fb;
 
   for (size_t i = 0; i < arch_cpu_count(); ++i) {
+    arch_clock_maintain();
     struct space *space = kmalloc(sizeof(*space));
     if (!space) {
       panic("cannot allocate space");

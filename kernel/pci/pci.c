@@ -1,4 +1,5 @@
 #include <arch/pci.h>
+#include <arch/clock.h>
 #include <kernel/log.h>
 #include <kernel/mm/heap.h>
 #include <kernel/pci.h>
@@ -229,6 +230,7 @@ void pci_discover(void)
   for (unsigned next = 0; next < scan.bus_count; ++next) {
     struct pci_bus bus = scan.pending[next];
     for (unsigned device = 0; device < PCI_DEVICE_COUNT; ++device) {
+      arch_clock_maintain();
       struct pci_address address = {bus.number, device, 0};
       if (pci_read16(address, PCI_VENDOR_ID) == PCI_NO_VENDOR) {
         continue;

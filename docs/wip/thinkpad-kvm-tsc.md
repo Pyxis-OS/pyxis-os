@@ -4,8 +4,9 @@ Status: **owner direction accepted, 2026-10-03:** implement software-extended
 32-bit HPET first to continue native ThinkPad bring-up. The intended future
 direction is TSC with extended-HPET fallback; TSC work is deferred. The findings
 below were recorded on 2026-10-02. This document records the implementation
-handoff; the clock code is unchanged and native boot still stops at the HPET
-capability check.
+handoff and implementation validation; software extension is implemented on
+`clock/extend-hpet`, with local validation in progress and native qualification
+still pending.
 
 ## Accepted direction and implementation handoff
 
@@ -26,6 +27,10 @@ source choice is settled; the remaining implementation questions concern the
 sampling and concurrency contract, not whether to choose TSC instead.
 
 - [x] Record the HPET-first decision and deferred TSC-with-fallback direction.
+- [x] Select a menuconfig-editable maintenance interval in BSP LAPIC timer
+  ticks, defaulting to 120 delivered interrupts (nominally one second).
+  This is the owner's 2026-10-03 configuration choice, not elapsed-time
+  accounting. The owner separately accepted the support limit below.
 - [ ] Implement and validate software-extended HPET in a focused code PR.
   Preserve shared monotonic nanoseconds, the initialization epoch, saturation,
   wall-clock anchoring and existing deadline semantics. Keep comparator/legacy
@@ -55,15 +60,54 @@ its [public arch contract](../../arch/x86_64/include/arch/clock.h),
 
 Use the [extension sketch](#software-extension-sketch-costs-and-required-bound)
 as a starting point, not an already approved line-by-line implementation.
-Before coding, state how maintenance ownership and early-boot/runtime sampling
-satisfy the less-than-one-wrap condition, including concurrent and interrupting
-readers. A BSP timer-triggered sample plus explicit coverage before interrupts
-are enabled is a candidate, not an owner-selected mechanism. Identify any
-unsupported pause/suspend/debugger behavior explicitly; the counter alone cannot
-detect or reconstruct a missed full wrap. Resolve a material support-policy
-change with the owner; routine placement and helper choices need no new approval.
+The accepted 2026-10-03 support limit requires less than one advancing-counter
+wrap between successfully incorporated samples, including early boot, runtime,
+stalls and debugger/VM pauses. Reboot after a violating gap; the counter alone
+cannot detect or reconstruct missed wraps. A pause that stops HPET consumes no
+counter-wrap interval. Suspend/resume and migration remain unqualified.
+
+The implementation uses BSP timer-triggered maintenance at the configured
+delivery interval, explicit boot-phase/polling/iteration samples, and a shared
+CAS accumulator for clock and maintenance readers. Retry discards the old
+hardware sample. Individual unsampled operations must complete within the
+accepted progress bound; boot checkpoints do not prove arbitrary stalled
+execution bounded. See the [implemented clock contract](../kernel/timekeeping.md).
 
 ### Implementation validation
+
+Implementation preparation on 2026-10-03 is on branch `clock/extend-hpet`,
+based on main `e7b8933`; the implementation PR has not yet been opened.
+The pinned dependencies are `fs` `a2507317`, `ports` `2f9d55d3`, lwIP
+`a1aadb91` and userspace `0c4743de`. The mechanism is a shared CAS
+accumulator with a fresh hardware sample on every retry, BSP timer-triggered
+maintenance at the configured interval, and explicit early-boot sampling.
+The owner accepted progress within one advancing-counter wrap, with reboot after
+a violating stall or pause.
+
+The unmodified baseline at `e7b8933` built with `make -j16 image` using the
+existing GCC 16.2.0 cross toolchain and pinned Kconfiglib 14.1.0 in a local build
+venv. A Q35/KVM boot used QEMU 10.2.2, `-cpu max`, four cores, 256 MiB,
+`CONFIG_XHCI=n`, VirtIO network and entropy, GTK disabled, and the Fedora raw
+OVMF code/variables pair. The host is the Ryzen 5 PRO 4650U ThinkPad;
+`systemd-detect-virt` reported `none`, so this is host KVM rather than nested KVM.
+Commands ran sequentially in the CPU 3 remote shell without debugger stops:
+
+```text
+iobench read app://share/iobench-small.bin --bytes 32768 --rounds 5
+allocbench pages --rounds 3 --live 64 --size 65536 --profile
+```
+
+The file workload verified its warmup and all five samples. Complete elapsed
+time was 0.085 ms median, 0.084..0.145 ms range; its 1000-call clock loop reported
+20,844 ns/read. Three separate allocation invocations each completed 192
+allocations/releases with zero failures, including cross-CPU memory profiling.
+Elapsed values were 140.200, 138.320 and 138.669 ms; their clock-loop values were
+21,166, 21,462 and 19,863 ns/read. These are baseline observations, not extension
+validation or performance targets. Local untracked records are
+`build/hpet-baseline-build.log`, `build/hpet-baseline-boot.log` and
+`build/hpet-baseline-remote/events.jsonl`. The baseline QEMU and remote-client
+processes have been stopped. Remaining work is matched validation, delivery and
+owner native boot.
 
 Use ordinary `make -j16` builds, interactive QEMU and debugger inspection, then
 an owner-run native boot. Use existing workloads to compare clock-sensitive
