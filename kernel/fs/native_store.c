@@ -521,7 +521,8 @@ static enum call_status writable(struct native_store_pool *pool)
 
 static enum call_status latch_failure(struct native_store_pool *pool, enum call_status status)
 {
-  if (pool->writeback_error == CALL_OK) {
+  /* A terminal failure supersedes a retained recoverable error. */
+  if (!pool->failed) {
     pool->writeback_error = status;
   }
   pool->failed = true;
@@ -1655,10 +1656,13 @@ enum call_status native_store_sync(struct native_store_context *context, struct 
     return status;
   }
   status = flush_files(context, pool);
-  if (status != CALL_OK) {
-    return status;
+  if (!pool->failed) {
+    if (status == CALL_OK) {
+      status = pool->writeback_error;
+    }
+    pool->writeback_error = CALL_OK;
   }
-  return pool->writeback_error;
+  return status;
 }
 
 static enum call_status begin_namespace(struct native_store_context *context, struct native_store_pool *pool, bool flush)
