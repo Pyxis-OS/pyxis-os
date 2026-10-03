@@ -82,7 +82,7 @@ the CPU path reports its ready/self-test result without logging random bytes.
 - [x] Keep the random ABI, shared slots, deadlines and cancellation behavior.
 - [x] Document the hardware trust and ChaCha20 follow-up.
 - [x] Ordinary build and QEMU validation without virtio-rng, plus VirtIO regression.
-- [ ] Owner native PXE confirmation of HTTPS/TCP entropy startup.
+- [x] Owner native PXE confirmation of HTTPS/TCP entropy startup.
 
 **Validation:**
 
