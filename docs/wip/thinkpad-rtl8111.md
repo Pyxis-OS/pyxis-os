@@ -3,9 +3,10 @@
 Status: **plan accepted, 2026-10-03.** The owner approved and merged PR #355 with
 the review note “read and accepted the proposal”, then explicitly authorized
 task 1. [Hardware identification](../devices/rtl8111-hardware.md) is complete;
-driver implementation has not started. [NIC passthrough](../development/thinkpad-nic-passthrough.md)
+controller preparation is implemented. [NIC passthrough](../development/thinkpad-nic-passthrough.md)
 is complete. The owner accepted task 2's firmware/power/initial-state defaults
-in PR #359; the detailed preparation sequence remains proposed.
+in PR #359, then authorized task 2 after merging it. Tasks 1 and 2 are complete;
+network selection and Ethernet I/O remain pending.
 
 ## Goal and machine configuration
 
@@ -61,11 +62,9 @@ ownership work; its scope remains a decision before implementation.
 
 ## Tasks
 
-The five-task outline and planning constraints are accepted. Task 1's proposed
-preparation sequence is documented in the
-[hardware profile](../devices/rtl8111-hardware.md#proposed-bounded-preparation-for-task-2)
-alongside the accepted task 2 choices below. Task 2 has not started; it starts
-only after PR #359 merges and the owner explicitly says to begin.
+The five-task outline and planning constraints are accepted. The
+[hardware profile](../devices/rtl8111-hardware.md#controller-preparation)
+records implemented preparation and accepted choices. Task 3 has not started.
 
 - [x] **1. Identify the hardware.** Begin with the owner's Fedora r8169
   `dmesg`/`ethtool`/`lspci` output, with MAC bytes removed. Record the chip name,
@@ -74,7 +73,7 @@ only after PR #359 merges and the owner explicitly says to begin.
   reset, driver DMA or interrupt enablement. Finish with a documented built-in
   hardware profile and proposed bounded preparation contract; PCI revision alone
   does not identify the MAC implementation.
-- [ ] **2. Prepare the controller.** Implement ownership, quiescence, reset and
+- [x] **2. Prepare the controller.** Implement ownership, quiescence, reset and
   PHY initialization with bounded waits and per-controller state. Account for
   native PXE firmware state as well as VFIO. Leave DMA and delivery disabled
   until worker activation. Finish with a known stopped/prepared state; missing
@@ -133,12 +132,11 @@ for the identified variant, not inherited VirtIO values or architectural limits.
 The host reports I/O BAR0, 4 KiB memory BAR2 and 16 KiB memory BAR4.
 `pci_size_bars()` sizes all memory BARs and skips I/O BARs; `pci_map_bar()` maps
 any sized BAR, including BAR2 and BAR4. Reuse those existing helpers.
-Only xHCI's early `pci_map_bootstrap_bar0()` path is BAR0-specific; BAR2 does not
-require a new mapping helper merely because its index differs. Task 1 identified
-a separate pre-size register-access gap and proposes staged preparation in the
-hardware profile. It confirmed four MSI-X entries with table/PBA in BAR4;
-use the existing MSI-X helper. Entry-zero routing is proposed for task 2;
-actual interrupt delivery remains to be qualified in task 4.
+Task 2 generalized the provisional 4 KiB `pci_map_bootstrap_bar()` helper:
+xHCI selects BAR0, RTL8111 selects BAR2 before sizing, then retains its checked
+register mapping. The existing MSI-X helper maps BAR4's table/PBA; delivery
+remains disabled and function-masked. Entry-zero routing and interrupt delivery
+belong to task 4.
 
 **Accepted task 2 choices:** firmware-free first, with link and sustained traffic
 measured in task 4; disable endpoint ASPM/CLKREQ and run the PHY at full power;
@@ -148,6 +146,11 @@ the controller unavailable while boot continues. The
 [hardware profile](../devices/rtl8111-hardware.md#accepted-task-2-choices) records
 the defaults and conditional firmware import. These are the owner's current
 direction, revisable by the owner; their acceptance does not qualify operation.
+The owner also accepted temporary PCI wake/decode before XID identification only
+with bus mastering off, with prior command/PMCSR restored for unsupported variants.
+Reset-causing D3hot wake is rejected before writing to preserve assigned BARs.
+Variant-specific writes require confirmed XID `541`; uncertain restoration or
+quiescence retains ownership until reboot.
 Keep only the confirmed variant's necessary setup, with bounded failure handling.
 
 ## Accepted validation and boundaries

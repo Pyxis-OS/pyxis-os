@@ -1,8 +1,10 @@
 # ThinkPad RTL8111 hardware profile
 
-Task 1 of the [RTL8111 milestone](../wip/thinkpad-rtl8111.md), recorded
-2026-10-03. This identifies the built-in port and proposes preparation ordering;
-Caelum has no RTL8111 driver yet. Full and partial MAC bytes are omitted.
+Hardware identified in task 1 of the [RTL8111 milestone](../wip/thinkpad-rtl8111.md),
+recorded
+2026-10-03. Caelum prepares the identified built-in controller with RX/TX, DMA
+and delivery disabled; Ethernet I/O is pending. Full and partial MAC bytes are
+omitted.
 
 ## Owner's Fedora capture
 
@@ -25,7 +27,7 @@ Linux reported that it could not disable ASPM because the OS lacked ASPM control
 The dock's `0000:02:00.0` reported `RTL8168ep/8111ep`, XID `502`, link down.
 It is a separate variant; this capture does not qualify its preparation or I/O.
 
-## Caelum-side confirmation
+## Caelum-side identification before driver preparation
 
 GDB stopped the BSP at `boot_start_cpus`, before AP startup, with the RTL function
 unclaimed; ECAM and QEMU monitor `xp` reads issued no hardware writes.
@@ -67,17 +69,25 @@ applies firmware before analog tuning and hardware-derived calibration.
 The [firmware interpreter](https://github.com/torvalds/linux/blob/v6.18/drivers/net/ethernet/realtek/r8169_firmware.c)
 executes register operations, rather than uploading an opaque DMA image.
 Fedora's success with firmware does not qualify operation without it.
-No Linux code or firmware has been imported.
+The implementation uses these pinned sources as hardware-programming references;
+no Linux source or firmware is imported. The Linux reference files are GPL-2.0-only;
+the original Caelum implementation follows the repository's MPL-2.0 licensing.
+PHY wake/reset behavior also follows the v6.18
+[Realtek PHY reference](https://github.com/torvalds/linux/blob/v6.18/drivers/net/phy/realtek/realtek_main.c)
+and [PHY reset reference](https://github.com/torvalds/linux/blob/v6.18/drivers/net/phy/phy_device.c).
 
-## Proposed bounded preparation for task 2
+## Controller preparation
 
 Preparation remains BSP-owned before AP startup, with independent state per
 controller, following [PCI ownership](pci.md) and [SMP ownership](../kernel/smp.md).
-The following is a proposed implementation sequence, not measured reset behavior:
+`rtl8111_prepare` runs before AP startup. It enumerates retained `10ec:8168`
+functions, allocating independent stable state for each candidate:
 
 1. Reserve each candidate with `pci_reserve_device`, preserving firmware command
    state. Existing claim validation rejects enabled MSI/MSI-X. Obtain checked
-   provisional register access, read XID, and leave unsupported variants untouched.
+   provisional BAR2 access and read XID. Unsupported variants receive no
+   variant-specific writes; temporary PCI probe changes are restored before
+   cancellation, under the accepted exception below.
 2. Mask device sources and use the H quiescence/OOB sequence, then reset. Linux's
    `rtl_hw_init_8168g`, `rtl_enable_rxdvgate` and `rtl_hw_reset` are the reference:
    gate receive traffic, wait for FIFO drain, stop RX/TX, leave OOB mode, complete
@@ -86,21 +96,30 @@ The following is a proposed implementation sequence, not measured reset behavior
    result Linux's wrappers discard.
 3. After confirmed quiescence/reset, complete the claim to disable bus mastering
    and INTx; disable I/O and memory decoding with readback. Use `pci_size_bars`
-   and `pci_map_bar` for BAR2/BAR4, retaining exclusive ownership throughout.
-4. Validate provisional accesses against the sized register window. Use existing
-   MSI-X discovery/mapping for the confirmed BAR4 table/PBA and check region
-   disjointness. Propose MSI-X entry zero on the BSP; delivery is qualified in
-   task 4. Re-enable memory decoding while keeping bus mastering, RX/TX and
-   interrupt delivery disabled. Initialize PHY under the accepted firmware/power
+   and `pci_map_bar` for sized resources, retaining exclusive ownership throughout.
+4. Validate and retain the provisional register prefix against the sized BAR2.
+   Use existing MSI-X discovery/mapping for the confirmed BAR4 table/PBA and
+   check region disjointness. Keep MSI-X disabled and function-masked without routing a vector;
+   routing and delivery belong to task 4. Re-enable memory decoding while keeping
+   bus mastering, RX/TX and interrupt delivery disabled. Initialize PHY under the accepted firmware/power
    policy; rings and activation belong to task 4.
 
-The pre-size access is the concrete PCI gap: `pci_map_bar` already supports sized
-BAR2, but `pci_map_bootstrap_bar0` cannot use this controller's I/O BAR0.
-Propose generalizing that provisional helper to a checked caller-selected memory
-BAR, preserving its existing xHCI semantics and bounded 4 KiB prefix. Do not
-probe BAR size while firmware can still DMA, or duplicate ordinary BAR mapping.
+The generalized `pci_map_bootstrap_bar` provides the checked assigned memory-BAR
+prefix needed before sizing; xHCI still selects BAR0. The NIC selects BAR2 and
+retains that bounded 4 KiB mapping after size validation, avoiding a duplicate
+register alias. BAR probing never runs while firmware can still DMA.
 
-Cancel an unchanged reservation after unsupported identity or read-only failure.
+PHY preparation waits 20 ms after power-up and confirms any existing reset
+before tuning. It applies H-family analog calibration without a firmware script,
+then confirms a PHY reset and restarts autonegotiation, preserving speed/duplex
+and pause advertisements. PFM, ALDPS, PLL power saving and EEE advertisement
+are disabled. Link completion is not required: an unplugged cable is valid.
+MAC, ERI and PHY polls propagate timeout/readback failures, with finite monotonic
+budgets; PHY reset has a 600 ms budget. Packet filters, rings and activation
+remain task 4 work.
+
+Restore temporary PCI probe changes and cancel after unsupported identity or
+preparation failure before variant-specific writes.
 After hardware writes, unwind only after confirmed safe stop with message
 interrupts and DMA disabled. If halt/reset is uncertain, retain ownership and
 mappings until reboot, report that controller unavailable and continue boot.
@@ -122,6 +141,14 @@ may be revised by the owner:
   still off before provisional access. An inconsistent state, including bus
   mastering enabled with decoding disabled, leaves that controller unavailable
   while ordinary boot continues.
+- **Identification exception.** The owner permitted temporary PCI wake/decode
+  before reading XID only with bus mastering off. Restore the prior command and
+  writable PMCSR fields if unsupported or probing fails; restoration failure
+  retains ownership. Reject D3hot wake without `NoSoftRst` before writing, since
+  a reset could discard firmware BAR assignments. PME/wake and variant-specific
+  policy changes occur only after XID `541` is confirmed.
 
 These choices do not establish successful firmware-free operation or native
-handoff. Task 2 starts only after this PR merges and the owner says to begin.
+handoff. Task 2 was explicitly authorized after PR #359 merged. Native
+initial-state transitions and cold-start firmware-free traffic remain unqualified; task 4
+measures I/O and task 5 includes owner-run native qualification.
