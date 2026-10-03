@@ -6,6 +6,7 @@
 #include <arch/pci.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
+#include <kernel/mm/heap.h>
 #include <kernel/net/ethernet.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
@@ -48,15 +49,13 @@ _Static_assert(offsetof(struct virtio_net_config, status) == VIRTIO_NET_MAC_BYTE
                sizeof(struct virtio_net_config) == 8,
                "VirtIO network configuration prefix");
 
-/* Discovery survives a failed preparation/reset, unlike the live transport. */
-static bool hardware_present;
-
-static struct {
+struct virtio_net_controller {
+  struct virtio_net_controller *next;
   struct virtio_pci_transport pci;
   uint64_t offered_features, accepted_features;
   struct virtio_queue_info rx_info, tx_info;
   uint8_t mac[VIRTIO_NET_MAC_BYTES];
-  bool link_up, prepared, active, stopping;
+  bool identity_known, link_up, prepared, started, active, stopping;
   struct virtio_net_queue rx, tx;
   uint64_t tx_deadlines[VIRTIO_NET_QUEUE_SIZE];
   uint8_t config_generation;
@@ -65,88 +64,100 @@ static struct {
   bool dma_disabled, interrupts_disabled;
   const char *stop_reason;
   uint64_t interrupts, received, malformed, transmitted, completed, queue_full;
-} network;
+};
 
-static bool sample_network_config(uint8_t mac[VIRTIO_NET_MAC_BYTES], bool *link_up,
-                                  uint8_t *generation)
+static struct virtio_net_controller *controllers;
+static bool inventory_complete;
+
+static bool sample_network_config(struct virtio_net_controller *controller,
+    uint8_t mac[VIRTIO_NET_MAC_BYTES], bool *link_up, uint8_t *generation)
 {
-  volatile struct virtio_pci_common *common = virtio_pci_common(&network.pci);
+  volatile struct virtio_pci_common *common = virtio_pci_common(&controller->pci);
   const volatile struct virtio_net_config *config =
-    (const volatile struct virtio_net_config *)network.pci.device.mapping.address;
+    (const volatile struct virtio_net_config *)controller->pci.device.mapping.address;
   *generation = common->config_generation;
   for (size_t i = 0; i < VIRTIO_NET_MAC_BYTES; ++i) {
     mac[i] = config->mac[i];
   }
   /* Without STATUS, VirtIO specifies that the driver assumes an active link. */
-  *link_up = !(network.accepted_features & VIRTIO_NET_F_STATUS) ||
+  *link_up = !(controller->accepted_features & VIRTIO_NET_F_STATUS) ||
     (config->status & VIRTIO_NET_S_LINK_UP);
   return common->config_generation == *generation;
 }
 
-static bool read_network_config(void)
+static bool read_network_config(struct virtio_net_controller *controller)
 {
-  if ((network.accepted_features & VIRTIO_NET_F_STATUS) &&
-      network.pci.device.length < sizeof(struct virtio_net_config)) {
+  if ((controller->accepted_features & VIRTIO_NET_F_STATUS) &&
+      controller->pci.device.length < sizeof(struct virtio_net_config)) {
     return false;
   }
   uint64_t start = arch_monotonic_ns();
   do {
-    if (sample_network_config(network.mac, &network.link_up, &network.config_generation)) {
+    uint8_t mac[VIRTIO_NET_MAC_BYTES], generation;
+    bool link_up;
+    if (sample_network_config(controller, mac, &link_up, &generation)) {
       unsigned nonzero = 0;
       for (size_t i = 0; i < VIRTIO_NET_MAC_BYTES; ++i) {
-        nonzero |= network.mac[i];
+        nonzero |= mac[i];
       }
-      return nonzero && !(network.mac[0] & VIRTIO_NET_MAC_GROUP_BIT);
+      if (!nonzero || (mac[0] & VIRTIO_NET_MAC_GROUP_BIT)) {
+        return false;
+      }
+      memcpy(controller->mac, mac, sizeof(mac));
+      controller->identity_known = true;
+      controller->link_up = link_up;
+      controller->config_generation = generation;
+      return true;
     }
   } while (arch_monotonic_ns() - start < VIRTIO_CONFIG_TIMEOUT_NS);
   return false;
 }
 
-static const char *negotiate_network(void)
+static const char *negotiate_network(struct virtio_net_controller *controller)
 {
-  volatile struct virtio_pci_common *common = virtio_pci_common(&network.pci);
+  volatile struct virtio_pci_common *common = virtio_pci_common(&controller->pci);
   common->device_status |= VIRTIO_STATUS_ACKNOWLEDGE;
   common->device_status |= VIRTIO_STATUS_DRIVER;
   common->device_feature_select = 0;
   uint64_t low = common->device_feature;
   common->device_feature_select = 1;
-  network.offered_features = low | ((uint64_t)common->device_feature << VIRTIO_FEATURE_WORD_BITS);
-  klog("virtio-net PCI: offered features[63:0]=0x%lx\n", network.offered_features);
+  controller->offered_features = low | ((uint64_t)common->device_feature << VIRTIO_FEATURE_WORD_BITS);
+  klog("virtio-net PCI: offered features[63:0]=0x%lx\n", controller->offered_features);
 
   uint64_t required = VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC;
-  if ((network.offered_features & required) != required) {
+  if ((controller->offered_features & required) != required) {
     return "modern transport and a device-provided MAC are required";
   }
   /* Split queues, physical DMA and complete Ethernet frames. No offloads,
    * merged RX buffers, control queue or multiple queue pairs are negotiated. */
-  network.accepted_features = required | (network.offered_features & VIRTIO_NET_F_STATUS);
+  controller->accepted_features = required | (controller->offered_features & VIRTIO_NET_F_STATUS);
   common->driver_feature_select = 0;
-  common->driver_feature = (uint32_t)network.accepted_features;
+  common->driver_feature = (uint32_t)controller->accepted_features;
   common->driver_feature_select = 1;
-  common->driver_feature = network.accepted_features >> VIRTIO_FEATURE_WORD_BITS;
+  common->driver_feature = controller->accepted_features >> VIRTIO_FEATURE_WORD_BITS;
   common->device_status |= VIRTIO_STATUS_FEATURES_OK;
   unsigned status = VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_FEATURES_OK;
   if (common->device_status != status) {
     return "feature negotiation rejected or device needs reset";
   }
   klog("virtio-net PCI: accepted VERSION_1, MAC%s; FEATURES_OK confirmed\n",
-       network.accepted_features & VIRTIO_NET_F_STATUS ? ", STATUS" : "");
+       controller->accepted_features & VIRTIO_NET_F_STATUS ? ", STATUS" : "");
 
-  if (!read_network_config()) {
+  if (!read_network_config(controller)) {
     return "invalid or unstable network configuration";
   }
   klog("virtio-net PCI: MAC=%x:%x:%x:%x:%x:%x link=%s%s\n",
-       (unsigned)network.mac[0], (unsigned)network.mac[1], (unsigned)network.mac[2],
-       (unsigned)network.mac[3], (unsigned)network.mac[4], (unsigned)network.mac[5],
-       network.link_up ? "up" : "down",
-       network.accepted_features & VIRTIO_NET_F_STATUS ? "" : " (assumed)");
+       (unsigned)controller->mac[0], (unsigned)controller->mac[1], (unsigned)controller->mac[2],
+       (unsigned)controller->mac[3], (unsigned)controller->mac[4], (unsigned)controller->mac[5],
+       controller->link_up ? "up" : "down",
+       controller->accepted_features & VIRTIO_NET_F_STATUS ? "" : " (assumed)");
 
   if (common->num_queues < 2 ||
-      !virtio_pci_inspect_queue(&network.pci, VIRTIO_NET_RX_QUEUE, &network.rx_info) ||
-      !virtio_pci_inspect_queue(&network.pci, VIRTIO_NET_TX_QUEUE, &network.tx_info)) {
+      !virtio_pci_inspect_queue(&controller->pci, VIRTIO_NET_RX_QUEUE, &controller->rx_info) ||
+      !virtio_pci_inspect_queue(&controller->pci, VIRTIO_NET_TX_QUEUE, &controller->tx_info)) {
     return "required RX/TX queue unavailable, enabled or outside notification region";
   }
-  if (!virtio_pci_prepare_msix(&network.pci, APIC_VIRTIO_NET_VECTOR)) {
+  if (!virtio_pci_prepare_msix(&controller->pci, APIC_VIRTIO_NET_VECTOR)) {
     return "MSI-X routing rejected";
   }
   common->queue_select = VIRTIO_NET_RX_QUEUE;
@@ -165,9 +176,10 @@ static const char *negotiate_network(void)
   return NULL;
 }
 
-static bool configure_queue(struct virtio_net_queue *queue)
+static bool configure_queue(struct virtio_net_controller *controller,
+    struct virtio_net_queue *queue)
 {
-  volatile struct virtio_pci_common *common = virtio_pci_common(&network.pci);
+  volatile struct virtio_pci_common *common = virtio_pci_common(&controller->pci);
   common->queue_select = queue->index;
   if (common->queue_enable) {
     return false;
@@ -199,126 +211,178 @@ static bool configure_queue(struct virtio_net_queue *queue)
   return true;
 }
 
-static const char *prepare_queues(void)
+static const char *prepare_queues(struct virtio_net_controller *controller)
 {
-  enum mm_result result = virtio_net_queue_allocate(&network.rx, VIRTIO_NET_RX_QUEUE,
-      network.rx_info.max_size, network.rx_info.notify_address, true);
+  enum mm_result result = virtio_net_queue_allocate(&controller->rx, VIRTIO_NET_RX_QUEUE,
+      controller->rx_info.max_size, controller->rx_info.notify_address, true);
   if (result == MM_OK) {
-    result = virtio_net_queue_allocate(&network.tx, VIRTIO_NET_TX_QUEUE,
-        network.tx_info.max_size, network.tx_info.notify_address, false);
+    result = virtio_net_queue_allocate(&controller->tx, VIRTIO_NET_TX_QUEUE,
+        controller->tx_info.max_size, controller->tx_info.notify_address, false);
   }
   if (result != MM_OK) {
     klog("virtio-net PCI: queue allocation failed (error %u)\n", (unsigned)result);
     return "cannot allocate RX/TX storage";
   }
-  if (!configure_queue(&network.rx) || !configure_queue(&network.tx)) {
+  if (!configure_queue(controller, &controller->rx) || !configure_queue(controller, &controller->tx)) {
     return "queue configuration rejected";
   }
   for (unsigned id = 0; id < VIRTIO_NET_QUEUE_SIZE; ++id) {
-    virtio_net_queue_post(&network.rx, id, VIRTIO_NET_BUFFER_BYTES);
+    virtio_net_queue_post(&controller->rx, id, VIRTIO_NET_BUFFER_BYTES);
   }
   return NULL;
 }
 
-void virtio_net_prepare(const struct boot_info *boot)
+static void prepare_controller(struct virtio_net_controller *controller,
+    struct pci_device *device, const struct boot_info *boot)
 {
-  struct pci_device *device = pci_find_device(VIRTIO_VENDOR_ID,
-      VIRTIO_PCI_DEVICE_BASE + VIRTIO_NET_DEVICE_ID);
-  if (!device) {
-    return;
-  }
-  hardware_present = true;
-  network.pci.name = "virtio-net";
-  if (!virtio_pci_prepare(&network.pci, device, boot, VIRTIO_NET_MAC_BYTES, 2)) {
+  controller->pci.name = "virtio-net";
+  if (!virtio_pci_prepare(&controller->pci, device, boot, VIRTIO_NET_MAC_BYTES, 2)) {
     return;
   }
 
-  const char *failure = negotiate_network();
+  const char *failure = negotiate_network(controller);
   if (!failure) {
-    failure = prepare_queues();
+    failure = prepare_queues(controller);
   }
   if (!failure) {
-    network.prepared = true;
+    controller->prepared = true;
     klog("virtio-net PCI: queues prepared; DMA and DRIVER_OK clear, "
          "awaiting network worker\n");
     return;
   }
 
   klog("virtio-net PCI: %s; marking FAILED and resetting\n", failure);
-  bool interrupts_disabled = virtio_pci_disable_msix(&network.pci);
-  virtio_pci_common(&network.pci)->device_status |= VIRTIO_STATUS_FAILED;
-  bool reset = virtio_pci_reset(&network.pci);
+  bool interrupts_disabled = virtio_pci_disable_msix(&controller->pci);
+  virtio_pci_common(&controller->pci)->device_status |= VIRTIO_STATUS_FAILED;
+  bool reset = virtio_pci_reset(&controller->pci);
   if (!reset || !interrupts_disabled) {
     klog("virtio-net PCI: cleanup unconfirmed (reset=%u MSI-X disabled=%u); "
          "claim and mappings retained until reboot, DMA disabled\n",
          (unsigned)reset, (unsigned)interrupts_disabled);
     return;
   }
-  virtio_net_queue_release(&network.tx);
-  virtio_net_queue_release(&network.rx);
-  pci_release_device(&network.pci.claim);
-  network = (typeof(network)){0};
+  virtio_net_queue_release(&controller->tx);
+  virtio_net_queue_release(&controller->rx);
+  pci_release_device(&controller->pci.claim);
+  controller->pci = (struct virtio_pci_transport){.name = "virtio-net"};
+}
+
+void virtio_net_prepare(const struct boot_info *boot)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  inventory_complete = pci_inventory_state() == PCI_INVENTORY_COMPLETE;
+  for (size_t index = 0; index < pci_device_count(); ++index) {
+    arch_clock_maintain();
+    const struct pci_device *device = pci_device_at(index);
+    if (device->vendor_id != VIRTIO_VENDOR_ID ||
+        device->device_id != VIRTIO_PCI_DEVICE_BASE + VIRTIO_NET_DEVICE_ID) {
+      continue;
+    }
+    struct virtio_net_controller *controller = kmalloc(sizeof(*controller));
+    if (!controller) {
+      inventory_complete = false;
+      klog("virtio-net %x:%x.%u: no memory for controller state\n",
+           device->address.bus, device->address.device, device->address.function);
+      continue;
+    }
+    *controller = (struct virtio_net_controller){.next = controllers};
+    controllers = controller;
+    /* The retained inventory exposes read-only records; transport claiming
+     * changes ownership on the same boot-lifetime record through the PCI API. */
+    prepare_controller(controller, (struct pci_device *)device, boot);
+  }
+}
+
+struct virtio_net_controller *virtio_net_first(void)
+{
+  return controllers;
+}
+
+struct virtio_net_controller *virtio_net_next(const struct virtio_net_controller *controller)
+{
+  return controller ? controller->next : NULL;
+}
+
+const uint8_t *virtio_net_identity_mac(const struct virtio_net_controller *controller)
+{
+  return controller && controller->identity_known ? controller->mac : NULL;
+}
+
+bool virtio_net_inventory_complete(void)
+{
+  return inventory_complete;
 }
 
 void virtio_net_interrupt(void)
 {
   KASSERT(cpu_current() == cpu_bsp());
-  if (network.active) {
-    ++network.interrupts;
+  bool active = false;
+  for (struct virtio_net_controller *controller = controllers; controller;
+       controller = controller->next) {
+    if (controller->active) {
+      ++controller->interrupts;
+      active = true;
+    }
+  }
+  if (active) {
     net_worker_notify();
   }
 }
 
-static void stop_network(const char *reason)
+static void stop_network(struct virtio_net_controller *controller, const char *reason)
 {
   uint64_t flags = cpu_save_interrupts();
-  network.active = false;
-  network.prepared = false;
-  network.config_unstable = false;
-  network.stop_reason = reason;
-  network.interrupts_disabled = virtio_pci_disable_msix(&network.pci);
-  struct pci_claim *claim = &network.pci.claim;
+  controller->active = false;
+  controller->prepared = false;
+  controller->config_unstable = false;
+  controller->stop_reason = reason;
+  controller->interrupts_disabled = virtio_pci_disable_msix(&controller->pci);
+  struct pci_claim *claim = &controller->pci.claim;
   uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
   pci_write16(claim, PCI_COMMAND, command & ~PCI_COMMAND_MASTER);
-  network.dma_disabled = !(pci_read16(claim->device->address, PCI_COMMAND) & PCI_COMMAND_MASTER);
-  virtio_pci_common(&network.pci)->device_status |= VIRTIO_STATUS_FAILED;
-  virtio_pci_common(&network.pci)->device_status = 0;
+  controller->dma_disabled = !(pci_read16(claim->device->address, PCI_COMMAND) & PCI_COMMAND_MASTER);
+  virtio_pci_common(&controller->pci)->device_status |= VIRTIO_STATUS_FAILED;
+  virtio_pci_common(&controller->pci)->device_status = 0;
   cpu_restore_interrupts(flags);
 
-  network.stopping = true;
-  network.reset_deadline = task_deadline_after_ms(VIRTIO_RESET_TIMEOUT_NS / UINT64_C(1000000));
-  network.reset_recheck = 0;
+  controller->stopping = true;
+  controller->reset_deadline = task_deadline_after_ms(VIRTIO_RESET_TIMEOUT_NS / UINT64_C(1000000));
+  controller->reset_recheck = 0;
 }
 
-static void finish_stop(void)
+static void finish_stop(struct virtio_net_controller *controller)
 {
-  if (!task_deadline_expired(network.reset_recheck) &&
-      !task_deadline_expired(network.reset_deadline)) {
+  if (!task_deadline_expired(controller->reset_recheck) &&
+      !task_deadline_expired(controller->reset_deadline)) {
     return;
   }
-  bool reset = virtio_pci_common(&network.pci)->device_status == 0;
-  if (!reset && !task_deadline_expired(network.reset_deadline)) {
-    network.reset_recheck = task_deadline_after_ms(VIRTIO_NET_RECHECK_MS);
+  bool reset = virtio_pci_common(&controller->pci)->device_status == 0;
+  if (!reset && !task_deadline_expired(controller->reset_deadline)) {
+    controller->reset_recheck = task_deadline_after_ms(VIRTIO_NET_RECHECK_MS);
     return;
   }
-  network.stopping = false;
+  controller->stopping = false;
   /* Neither completed DMA nor reset permits unmapping shared kernel storage
    * after AP startup. Keep the claim, rings and buffers until reboot. */
   klog("virtio-net: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
-       "resources retained until reboot\n", network.stop_reason, (unsigned)reset,
-       (unsigned)network.interrupts_disabled, (unsigned)network.dma_disabled);
+       "resources retained until reboot\n", controller->stop_reason, (unsigned)reset,
+       (unsigned)controller->interrupts_disabled, (unsigned)controller->dma_disabled);
 }
 
-void virtio_net_start(void)
+void virtio_net_start(struct virtio_net_controller *controller)
 {
   KASSERT(cpu_current() == cpu_bsp() && net_worker_available());
-  if (!network.prepared) {
+  if (!controller || controller->started) {
+    return;
+  }
+  controller->started = true;
+  if (!controller->prepared) {
     return;
   }
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
-  volatile struct virtio_pci_common *common = virtio_pci_common(&network.pci);
-  struct pci_claim *claim = &network.pci.claim;
+  volatile struct virtio_pci_common *common = virtio_pci_common(&controller->pci);
+  struct pci_claim *claim = &controller->pci.claim;
   bool ready = common->device_status == VIRTIO_NET_READY;
   if (ready) {
     uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
@@ -330,73 +394,76 @@ void virtio_net_start(void)
     ready = common->device_status == (VIRTIO_NET_READY | VIRTIO_STATUS_DRIVER_OK);
   }
   if (ready) {
-    ready = pci_msix_enable(&network.pci.msix);
+    ready = pci_msix_enable(&controller->pci.msix);
   }
-  network.active = ready;
+  controller->active = ready;
   cpu_restore_interrupts(flags);
   if (!ready) {
-    stop_network("activation rejected");
+    stop_network(controller, "activation rejected");
     return;
   }
-  virtio_net_queue_notify(&network.rx);
+  virtio_net_queue_notify(&controller->rx);
   klog("virtio-net: RX/TX active, %u buffers per queue, BSP worker owns completions\n",
        VIRTIO_NET_QUEUE_SIZE);
 }
 
-static bool refresh_network_config(void)
+static bool refresh_network_config(struct virtio_net_controller *controller)
 {
-  volatile struct virtio_pci_common *common = virtio_pci_common(&network.pci);
-  if (!network.config_unstable && common->config_generation == network.config_generation) {
+  volatile struct virtio_pci_common *common = virtio_pci_common(&controller->pci);
+  if (!controller->config_unstable && common->config_generation == controller->config_generation) {
     return true;
   }
-  if (network.config_unstable && !task_deadline_expired(network.config_recheck) &&
-      !task_deadline_expired(network.config_deadline)) {
+  if (controller->config_unstable && !task_deadline_expired(controller->config_recheck) &&
+      !task_deadline_expired(controller->config_deadline)) {
     return true;
   }
   uint8_t mac[VIRTIO_NET_MAC_BYTES], generation;
   bool link_up;
-  if (!sample_network_config(mac, &link_up, &generation)) {
-    if (!network.config_unstable) {
-      network.config_unstable = true;
-      network.config_deadline = task_deadline_after_ms(VIRTIO_CONFIG_TIMEOUT_NS / UINT64_C(1000000));
+  if (!sample_network_config(controller, mac, &link_up, &generation)) {
+    if (!controller->config_unstable) {
+      controller->config_unstable = true;
+      controller->config_deadline = task_deadline_after_ms(VIRTIO_CONFIG_TIMEOUT_NS / UINT64_C(1000000));
     }
-    if (task_deadline_expired(network.config_deadline)) {
-      stop_network("network configuration did not stabilize");
+    if (task_deadline_expired(controller->config_deadline)) {
+      stop_network(controller, "network configuration did not stabilize");
       return false;
     }
-    network.config_recheck = task_deadline_after_ms(VIRTIO_NET_RECHECK_MS);
+    controller->config_recheck = task_deadline_after_ms(VIRTIO_NET_RECHECK_MS);
     return true;
   }
-  if (memcmp(mac, network.mac, sizeof(mac))) {
-    stop_network("device MAC changed");
+  if (memcmp(mac, controller->mac, sizeof(mac))) {
+    stop_network(controller, "device MAC changed");
     return false;
   }
-  if (link_up != network.link_up) {
+  if (link_up != controller->link_up) {
     klog("virtio-net: link %s\n", link_up ? "up" : "down");
   }
-  network.link_up = link_up;
-  network.config_generation = generation;
-  network.config_unstable = false;
+  controller->link_up = link_up;
+  controller->config_generation = generation;
+  controller->config_unstable = false;
   return true;
 }
 
-bool virtio_net_next_deadline(uint64_t *deadline)
+bool virtio_net_next_deadline(struct virtio_net_controller *controller, uint64_t *deadline)
 {
-  if (network.stopping) {
-    *deadline = network.reset_recheck < network.reset_deadline ?
-      network.reset_recheck : network.reset_deadline;
-    return true;
-  }
-  if (!network.active) {
+  if (!controller) {
     return false;
   }
-  bool found = network.config_unstable;
-  uint64_t next = network.config_recheck < network.config_deadline ?
-    network.config_recheck : network.config_deadline;
+  if (controller->stopping) {
+    *deadline = controller->reset_recheck < controller->reset_deadline ?
+      controller->reset_recheck : controller->reset_deadline;
+    return true;
+  }
+  if (!controller->active) {
+    return false;
+  }
+  bool found = controller->config_unstable;
+  uint64_t next = controller->config_recheck < controller->config_deadline ?
+    controller->config_recheck : controller->config_deadline;
   for (unsigned id = 0; id < VIRTIO_NET_QUEUE_SIZE; ++id) {
-    if (network.tx.device_owned[id] && (!found || network.tx_deadlines[id] < next)) {
+    if (controller->tx.device_owned[id] && (!found || controller->tx_deadlines[id] < next)) {
       found = true;
-      next = network.tx_deadlines[id];
+      next = controller->tx_deadlines[id];
     }
   }
   if (found) {
@@ -405,108 +472,107 @@ bool virtio_net_next_deadline(uint64_t *deadline)
   return found;
 }
 
-bool virtio_net_service(void)
+bool virtio_net_service(struct virtio_net_controller *controller)
 {
   KASSERT(cpu_current() == cpu_bsp());
-  if (network.stopping) {
-    finish_stop();
+  if (!controller) {
     return false;
   }
-  if (!network.active) {
+  if (controller->stopping) {
+    finish_stop(controller);
     return false;
   }
-  if (virtio_pci_common(&network.pci)->device_status != (VIRTIO_NET_READY | VIRTIO_STATUS_DRIVER_OK)) {
-    stop_network("device needs reset or status changed");
+  if (!controller->active) {
     return false;
   }
-  if (!refresh_network_config()) {
+  if (virtio_pci_common(&controller->pci)->device_status != (VIRTIO_NET_READY | VIRTIO_STATUS_DRIVER_OK)) {
+    stop_network(controller, "device needs reset or status changed");
+    return false;
+  }
+  if (!refresh_network_config(controller)) {
     return false;
   }
 
   struct virtio_net_completion completed[VIRTIO_NET_QUEUE_SIZE];
   unsigned tx_count, rx_count;
-  if (!virtio_net_queue_complete(&network.tx, completed, &tx_count)) {
-    stop_network("invalid TX completion");
+  if (!virtio_net_queue_complete(&controller->tx, completed, &tx_count)) {
+    stop_network(controller, "invalid TX completion");
     return false;
   }
-  network.completed += tx_count;
+  controller->completed += tx_count;
   for (unsigned id = 0; id < VIRTIO_NET_QUEUE_SIZE; ++id) {
-    if (network.tx.device_owned[id] && task_deadline_expired(network.tx_deadlines[id])) {
-      stop_network("TX completion timed out");
+    if (controller->tx.device_owned[id] && task_deadline_expired(controller->tx_deadlines[id])) {
+      stop_network(controller, "TX completion timed out");
       return false;
     }
   }
 
-  if (!virtio_net_queue_complete(&network.rx, completed, &rx_count)) {
-    stop_network("invalid RX completion");
+  if (!virtio_net_queue_complete(&controller->rx, completed, &rx_count)) {
+    stop_network(controller, "invalid RX completion");
     return false;
   }
   for (unsigned i = 0; i < rx_count; ++i) {
     const struct virtio_net_completion *entry = &completed[i];
-    const struct virtio_net_header *header = virtio_net_queue_buffer(&network.rx, entry->id);
+    const struct virtio_net_header *header = virtio_net_queue_buffer(&controller->rx, entry->id);
     if (entry->length < sizeof(*header) + ETHERNET_HEADER_BYTES ||
         entry->length > sizeof(*header) + ETHERNET_FRAME_MAX ||
         header->gso_type != VIRTIO_NET_GSO_NONE || (header->flags & VIRTIO_NET_HDR_NEEDS_CSUM)) {
-      ++network.malformed;
+      ++controller->malformed;
     } else {
-      ++network.received;
+      ++controller->received;
       /* Protocols borrow this frame only until its RX buffer is reposted. */
       net_ethernet_receive((const uint8_t *)(header + 1), entry->length - sizeof(*header));
     }
-    virtio_net_queue_post(&network.rx, entry->id, VIRTIO_NET_BUFFER_BYTES);
+    virtio_net_queue_post(&controller->rx, entry->id, VIRTIO_NET_BUFFER_BYTES);
   }
   if (rx_count) {
-    virtio_net_queue_notify(&network.rx);
+    virtio_net_queue_notify(&controller->rx);
   }
   return tx_count == VIRTIO_NET_QUEUE_SIZE || rx_count == VIRTIO_NET_QUEUE_SIZE;
 }
 
-enum net_result virtio_net_transmit(const void *frame, size_t length)
+enum net_result virtio_net_transmit(struct virtio_net_controller *controller,
+    const void *frame, size_t length)
 {
   KASSERT(cpu_current() == cpu_bsp());
   if (!frame || length < ETHERNET_HEADER_BYTES || length > ETHERNET_FRAME_MAX) {
     return NET_INVALID;
   }
-  if (!network.active || network.config_unstable || !network.link_up) {
+  if (!controller || !controller->active || controller->config_unstable || !controller->link_up) {
     return NET_UNAVAILABLE;
   }
   unsigned id;
   for (id = 0; id < VIRTIO_NET_QUEUE_SIZE; ++id) {
-    if (!network.tx.device_owned[id]) {
+    if (!controller->tx.device_owned[id]) {
       break;
     }
   }
   if (id == VIRTIO_NET_QUEUE_SIZE) {
-    ++network.queue_full;
+    ++controller->queue_full;
     return NET_QUEUE_FULL;
   }
 
-  struct virtio_net_header *header = virtio_net_queue_buffer(&network.tx, id);
+  struct virtio_net_header *header = virtio_net_queue_buffer(&controller->tx, id);
   *header = (struct virtio_net_header){0};
   memcpy(header + 1, frame, length);
-  network.tx_deadlines[id] = task_deadline_after_ms(VIRTIO_NET_TX_TIMEOUT_MS);
-  virtio_net_queue_post(&network.tx, id, sizeof(*header) + length);
-  virtio_net_queue_notify(&network.tx);
-  ++network.transmitted;
+  controller->tx_deadlines[id] = task_deadline_after_ms(VIRTIO_NET_TX_TIMEOUT_MS);
+  virtio_net_queue_post(&controller->tx, id, sizeof(*header) + length);
+  virtio_net_queue_notify(&controller->tx);
+  ++controller->transmitted;
   return NET_OK;
 }
 
-const uint8_t *virtio_net_mac(void)
+const uint8_t *virtio_net_mac(const struct virtio_net_controller *controller)
 {
-  return network.prepared ? network.mac : NULL;
+  return controller && controller->prepared ? controller->mac : NULL;
 }
 
-bool virtio_net_available(void)
+bool virtio_net_available(const struct virtio_net_controller *controller)
 {
-  return network.active && !network.config_unstable && network.link_up;
+  return controller && controller->active && !controller->config_unstable && controller->link_up;
 }
 
-bool virtio_net_present(void)
+bool virtio_net_ready(const struct virtio_net_controller *controller)
 {
-  return hardware_present;
-}
-
-bool virtio_net_ready(void)
-{
-  return network.active && !network.config_unstable;
+  return controller && controller->active && !controller->config_unstable;
 }

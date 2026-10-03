@@ -5,7 +5,7 @@
 #include <kernel/net/echo.h>
 #include <kernel/net/ipv4.h>
 #include <kernel/task.h>
-#include <kernel/virtio/net.h>
+#include <kernel/net/driver.h>
 #include "wire.h"
 
 #define ARP_NEIGHBOR_LIMIT 16
@@ -152,7 +152,7 @@ void net_arp_clear(enum net_result reason)
 static enum net_result send_arp(uint16_t operation, uint32_t target,
     const uint8_t destination[ETHERNET_ADDRESS_BYTES])
 {
-  const uint8_t *mac = virtio_net_mac();
+  const uint8_t *mac = net_driver_mac();
   if (!mac || !net_ipv4_address()) {
     return NET_UNAVAILABLE;
   }
@@ -177,7 +177,7 @@ enum net_result net_arp_transmit(struct net_packet *packet, uint32_t next_hop,
   if (task_deadline_expired(deadline)) {
     return NET_TIMED_OUT;
   }
-  if (!virtio_net_available()) {
+  if (!net_driver_available()) {
     return NET_UNAVAILABLE;
   }
   struct arp_neighbor *neighbor = find_neighbor(next_hop);
@@ -234,7 +234,7 @@ void net_arp_receive(const uint8_t source[ETHERNET_ADDRESS_BYTES],
     return;
   }
   uint32_t sender = net_read_u32(message->sender_ip);
-  const uint8_t *mac = virtio_net_mac();
+  const uint8_t *mac = net_driver_mac();
   if (!mac || !net_ipv4_address() || net_read_u32(message->target_ip) != net_ipv4_address() ||
       sender == net_ipv4_address() ||
       (sender && !net_ipv4_is_neighbor(sender)) ||
@@ -264,7 +264,7 @@ void net_arp_receive(const uint8_t source[ETHERNET_ADDRESS_BYTES],
 
 void net_arp_service(void)
 {
-  bool available = virtio_net_available();
+  bool available = net_driver_available();
   if (!available) {
     if (link_available) {
       net_arp_clear(NET_UNAVAILABLE);

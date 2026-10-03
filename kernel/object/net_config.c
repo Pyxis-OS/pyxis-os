@@ -23,20 +23,29 @@ struct syscall_result net_config_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation != NET_CONFIG_QUERY && operation != NET_CONFIG_REPLACE && operation != NET_CONFIG_CLEAR) {
+  if (operation != NET_CONFIG_QUERY && operation != NET_CONFIG_REPLACE &&
+      operation != NET_CONFIG_CLEAR && operation != NET_CONFIG_BIND &&
+      operation != NET_CONFIG_LOOKUP) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
-  uint64_t required = operation == NET_CONFIG_QUERY ? NET_CONFIG_RIGHT_READ : NET_CONFIG_RIGHT_WRITE;
+  bool selection = operation == NET_CONFIG_BIND || operation == NET_CONFIG_LOOKUP;
+  bool read_only = operation == NET_CONFIG_QUERY || operation == NET_CONFIG_LOOKUP;
+  uint64_t required = read_only ? NET_CONFIG_RIGHT_READ : NET_CONFIG_RIGHT_WRITE;
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   struct net_config_request request = {0};
+  struct net_selector selector = {0};
   size_t payload_size = operation == NET_CONFIG_REPLACE ? sizeof(request) - sizeof(request.header) : 0;
-  size_t reply_size = operation == NET_CONFIG_QUERY ? sizeof(struct net_config_reply) : 0;
+  if (selection) {
+    payload_size = sizeof(selector);
+  }
+  size_t reply_size = read_only || selection ? sizeof(struct net_config_reply) : 0;
   if (request_size != payload_size || reply_capacity < reply_size) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  if ((payload_size && !copy_from_user(&request.address, request_address, payload_size)) ||
+  void *payload = selection ? (void *)&selector : (void *)&request.address;
+  if ((payload_size && !copy_from_user(payload, request_address, payload_size)) ||
       (reply_size && !user_buffer_check(reply_address, reply_size, USER_BUFFER_WRITE))) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
@@ -44,7 +53,7 @@ struct syscall_result net_config_call(uint64_t rights, uint64_t operation,
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   struct net_config_reply reply;
-  enum call_status status = net_config_exchange(operation, &request, &reply);
+  enum call_status status = net_config_exchange(operation, &request, &selector, &reply);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

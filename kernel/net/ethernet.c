@@ -1,7 +1,7 @@
 #include <kernel/memory.h>
 #include <kernel/net/arp.h>
 #include <kernel/net/ipv4.h>
-#include <kernel/virtio/net.h>
+#include <kernel/net/driver.h>
 #include "wire.h"
 
 #define ETHERNET_FRAME_MIN 60 /* Padding excludes the hardware-supplied FCS. */
@@ -38,8 +38,8 @@ enum net_result net_ethernet_transmit(const uint8_t destination[ETHERNET_ADDRESS
   if (length > net_ethernet.mtu || (length && !payload)) {
     return NET_INVALID;
   }
-  const uint8_t *mac = virtio_net_mac();
-  if (!mac || !virtio_net_available()) {
+  const uint8_t *mac = net_driver_mac();
+  if (!mac || !net_driver_available()) {
     return NET_UNAVAILABLE;
   }
 
@@ -54,7 +54,7 @@ enum net_result net_ethernet_transmit(const uint8_t destination[ETHERNET_ADDRESS
     memset(frame + frame_length, 0, ETHERNET_FRAME_MIN - frame_length);
     frame_length = ETHERNET_FRAME_MIN;
   }
-  return virtio_net_transmit(frame, frame_length);
+  return net_driver_transmit(frame, frame_length);
 }
 
 void net_ethernet_receive(const uint8_t *frame, size_t length)
@@ -64,8 +64,8 @@ void net_ethernet_receive(const uint8_t *frame, size_t length)
     ++ethernet_stats.malformed;
     return;
   }
-  const uint8_t *mac = virtio_net_mac();
-  if (!mac || !virtio_net_available()) {
+  const uint8_t *mac = net_driver_mac();
+  if (!mac || !net_driver_available()) {
     return;
   }
   const struct ethernet_header *header = (const void *)frame;
