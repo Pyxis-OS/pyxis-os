@@ -301,12 +301,14 @@ BSP maintenance interval, default 120 timer ticks. Its accepted support limit
 requires less than one advancing-counter wrap between incorporated samples;
 the owner subsequently reached native userspace on all 12 ThinkPad CPUs.
 The [native continuation](thinkpad-kvm-tsc.md#native-bring-up-continuation)
-records the next keyboard blocker and unconfirmed cause; the selected clock-path
-log and native multi-wrap check remain pending.
+records the native 32-bit/software-extended clock-path log and next keyboard
+blocker; the native multi-wrap check remains pending.
 
 The assigned [ThinkPad keyboard diagnostics](thinkpad-keyboard-diagnostics.md)
 follow separately: name PS/2 setup failures, reduce PCI inventory log noise and
-replay early logs into the Caelum tab before selecting a keyboard fix.
+replay early logs into the Caelum tab. The native result identified an absent
+scan-set query ID; the owner approved a short optional-ID wait after ACKed set-2
+selection, with native input qualification still pending.
 
 The separate [hardware inspection](../devices/hardware-inspection.md) provides native
 `lspci`/`lsusb` consumers of read-only inventory and pinned plain-text PCI/USB name

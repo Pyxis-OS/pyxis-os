@@ -2,9 +2,10 @@
 
 Status: owner assigned a separate follow-up to [HPET PR #341](https://git.internal/PyxisOS/pyxis-os/pulls/341)
 on 2026-10-03. Branch `bringup/keyboard-diagnostics` starts from main `c185e13`,
-which merged its corrected, signed head `7035cd2`. Dependencies use current
-main's pins (`fs` `810d2af6`, ports `2f9d55d3`, lwIP `a1aadb91` and userspace
-`0c4743de`); no dependency or compiler-container change is needed.
+which merged its corrected, signed head `7035cd2`. The follow-up integrates main
+`132aef1` to resolve the milestone-index conflict after #342. Current main's
+pins are `fs` `810d2af6`, ports `a50ae5cc`, lwIP `a1aadb91` and userspace
+`53b6860f`; this task adds no dependency or compiler-container change.
 
 ## Evidence and scope
 
@@ -17,8 +18,23 @@ proves that Caelum received a keyboard IRQ. A setup timeout and a later stall
 remain hypotheses to distinguish.
 
 The owner's Fedora FADT flag is `0x0013`; its 8042 bit is set. The proposed
-clear-FADT-bit probing workaround is withdrawn. No PS/2 protocol change is
-assigned before the failure is identified.
+clear-FADT-bit probing workaround is withdrawn.
+
+The [next owner result on #341](https://git.internal/PyxisOS/pyxis-os/pulls/341#issuecomment-3349)
+shows the whole info boot log retained in the Caelum tab and reports:
+
+```text
+keyboard: PS/2 initialization failed at read scan set (status 0x14, last reply 0xfa); input unavailable
+```
+
+Code inspection establishes that both the set-2 selection (`F0 02`) and query
+(`F0 00`) reached their ACKs; no set-ID byte followed. The owner approved a
+short optional ID wait, retaining failure for a wrong ID or controller error.
+That scoped fallback is now implemented; translation and command ACK policy
+remain unchanged. The relayed native log also records 12 CPUs, 39 PCI functions
+on 8 buses, and `HPET 32-bit counter, software-extended, period=69841278 fs`.
+These are owner observations, not a repeated agent-native run. The precise
+booted revision and multi-wrap clock behavior remain unqualified.
 
 ## Assigned inventory
 
@@ -39,12 +55,18 @@ assigned before the failure is identified.
   capturing after this handoff. Serial stays live without duplicate replay;
   existing early-console and panic ownership remain intact. A 32 KiB buffer
   is an implementation choice, not an architectural minimum.
+- [x] Accept an absent scan-set ID after a short wait when set-2 selection and
+  query commands were ACKed. Reject a wrong ID or controller error. Drain
+  pending query output while scanning is disabled before enabling scanning.
+  The 20 ms duration is an implementation choice; see the
+  [keyboard contract](../devices/keyboard.md).
 - [x] Validate ordinary info/trace builds, interactive QEMU boots and debugger
   inspection of capture/replay state. Check 12 CPUs and a 1920x1080 framebuffer
   where supported. Record exact revisions, configuration and limits, then ask
   the owner to capture the next native keyboard result from the Caelum tab.
-- [ ] Record the owner's next native PXE result, then select any keyboard fix
-  or stall diagnostic from that evidence in a separately agreed scope.
+- [ ] Record native letters, digits, modifiers and extended-key behavior after
+  the optional-query change. If keypress still freezes the system, discuss a
+  separately scoped stall diagnostic from the new evidence.
 
 Replay retains bytes, not terminal scrollback: later output can still scroll
 the retained text off screen. Userspace log access would require a separate
@@ -55,11 +77,12 @@ capability decision and is outside this task.
 Visible heartbeat and AP-watchdog/NMI stall capture are review proposals, not
 assigned implementation. An NMI diagnostic would need an explicit scope and
 panic-display policy; current post-handoff panics are serial-only. Do not add
-either diagnostic, a translation/scancode workaround, USB firmware handoff or
+either diagnostic, a translated set-1 decoder, USB firmware handoff or
 TSC work speculatively.
 
-The new failure message and retained boot log should reveal whether setup
-completes. A Shift-only native keypress is a useful owner observation because
+The failure message and retained boot log identified the missing query ID.
+The next native boot must establish that setup and input work with the fallback.
+A Shift-only native keypress is a useful owner observation because
 it produces no text; it may narrow the failure before console text routing.
 The roughly 15-minute native HPET clock check remains pending until input works.
 
@@ -136,4 +159,6 @@ diagnostics were reviewed by code inspection, not triggered in QEMU; no fault
 injection, diagnostic hooks or new tests were added. The command/retry sequence
 and panic routing were independently reviewed without a concrete finding. All
 validation QEMU/GDB jobs are stopped; the final delivery uses info logging.
-Native evidence and the cause of the keypress-triggered freeze remain pending.
+The subsequent native result above identifies the query timeout. The original
+keypress-triggered freeze remains unexplained, and native input validation after
+the fallback remains pending.

@@ -21,6 +21,20 @@ the BSP. The controller uses untranslated scan set 2, with the auxiliary port
 disabled. `keyboard_available()` is false if firmware reports no usable route
 or controller, or keyboard initialization fails. Serial input is separate.
 
+An ACKed `F0 02` selects scan set 2. Setup then queries the set while scanning
+is disabled. The query commands still require ACKs, but the ID byte is optional:
+the current wait is 20 ms, measured by the initialized monotonic clock and
+checked every 1,024 status polls. A received ID other than `02`, or a controller
+parity/timeout error, fails setup. Absence permits the ACKed selection with an
+info message. Controller output is drained immediately before scanning is
+enabled; a late ID observed there must also be `02`.
+
+This supports firmware that ACKs the query without returning its ID. It does
+not select translated scan set 1. The drain removes pending bytes while scanning
+is stopped; replies delayed until after scanning starts cannot be independently
+identified. The expected late `02` has no set-2 key mapping and produces no event.
+Native validation must confirm letters, digits, modifiers and extended keys.
+
 Space navigation, character mapping and userspace delivery belong to callers;
 the driver installs no bindings or consumer task.
 

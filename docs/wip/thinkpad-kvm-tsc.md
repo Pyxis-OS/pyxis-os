@@ -6,8 +6,9 @@ direction is TSC with extended-HPET fallback; TSC work is deferred. The findings
 below were recorded on 2026-10-02. This document records the implementation
 handoff and implementation validation; software extension is implemented on
 `clock/extend-hpet`, with local validation complete and an owner-observed native
-boot reaching userspace on all 12 CPUs. The selected-path log and native
-multi-wrap clock check remain pending; keyboard input is the next reported
+boot reaching userspace on all 12 CPUs. The owner subsequently captured the
+32-bit/software-extended path log. The native multi-wrap clock check remains
+pending; keyboard input is the next reported
 blocker, with its cause unconfirmed.
 
 ## Accepted direction and implementation handoff
@@ -43,8 +44,8 @@ qualification. TSC stays deferred.
   forced, without misreporting the hardware width.
 - [ ] Record the native result and any next blocker, update the implemented
   timekeeping reference and carry remaining costs/limits into technical debt.
-  Native userspace bring-up is recorded below; the path log and roughly
-  15-minute clock check remain pending because local input is unavailable.
+  Native userspace bring-up and the path log are recorded below; the roughly
+  15-minute clock check remains pending because local input is unavailable.
   Do not start the next hardware or TSC task implicitly.
 
 Start from current main after checking this documentation PR's merge status.
@@ -435,9 +436,11 @@ shows spaces and initial launches for all 12 CPUs, and records
 early console. This is owner-observed evidence relayed in review, not an
 agent-run native qualification.
 
-The early `clock:` line had scrolled off. Reaching userspace establishes progress
-past the previous HPET rejection; it does not independently record the selected
-path or prove native multi-wrap behavior. Capture that line and complete the
+The early `clock:` line initially scrolled off. After the diagnostic follow-up
+replayed the boot log into the Caelum tab, the owner recorded
+`clock: HPET 32-bit counter, software-extended, period=69841278 fs` in the
+[next native result](https://git.internal/PyxisOS/pyxis-os/pulls/341#issuecomment-3349).
+This confirms the selected native path, not multi-wrap behavior. Complete the
 [local-console clock check](#validation-scope-and-owner-handoff) when input is
 available. The roughly 15-minute check has not been performed.
 
@@ -644,8 +647,8 @@ agreement of raw TSC values. See
 
 ## Remaining implementation and future decisions
 
-**For the selected HPET task:** capture the remaining selected-path log and
-roughly 15-minute console check after keyboard access is available. The owner
+**For the selected HPET task:** complete the roughly 15-minute console check
+after keyboard access is available. The owner captured the selected-path log and
 has reached native userspace; the next reported blocker and diagnostic handoff
 are recorded above. Maintenance ownership,
 concurrent-read ordering, saturation and the

@@ -222,6 +222,19 @@ native bring-up needs more retained history.
 Revisit with real-hardware bring-up, if post-boot panics need to be visible
 without serial.
 
+## PS/2 scan-set query compatibility
+
+The ThinkPad ACKs set-2 selection and its query but supplies no set-ID byte.
+[Keyboard setup](devices/keyboard.md) therefore accepts an absent ID after a
+short monotonic wait, keeps wrong observed IDs and controller errors fatal,
+and drains queued output before enabling scanning. The fallback relies on the
+ACKed selection producing untranslated set 2; native character/modifier/extended
+key qualification remains required. A drain cannot identify arbitrary firmware
+replies delayed until after scanning starts, although the expected late `02`
+has no key mapping. Revisit this policy if native input disproves the selection
+or another controller supplies delayed contradictory output. A translated set-1
+decoder is a separate compatibility decision, not part of this fallback.
+
 ## Process termination and Ctrl-C
 
 Process handles are non-owning observers; closing one does not stop execution.
@@ -456,8 +469,9 @@ cost included, but do not establish native performance. The direct profiled
 allocation median was about 2.6% higher, mostly in BSP queue time; its cause
 was not isolated. The owner has reached native userspace on all 12 ThinkPad
 CPUs, as [recorded from a screen photo](wip/thinkpad-kvm-tsc.md#native-bring-up-continuation).
-The selected-path log and native multi-wrap clock check remain pending; missing
-keyboard input is a separate bring-up blocker with an unconfirmed cause.
+The owner recorded the 32-bit/software-extended path log; the native multi-wrap
+clock check remains pending. Missing keyboard input is a separate bring-up
+blocker; the diagnostic follow-up identified an absent scan-set query ID.
 
 The accepted support requirement is strictly less than one advancing-counter
 wrap between incorporated samples, including individual boot operations, long
