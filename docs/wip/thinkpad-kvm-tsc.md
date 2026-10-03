@@ -30,6 +30,10 @@ sampling and concurrency contract, not whether to choose TSC instead.
   Preserve shared monotonic nanoseconds, the initialization epoch, saturation,
   wall-clock anchoring and existing deadline semantics. Keep comparator/legacy
   HPET interrupts disabled and retain the existing LAPIC scheduler timer.
+  Log the hardware counter width, selected direct/software-extension path and
+  advertised period during clock initialization, so the owner can identify the
+  native path on the early console. A locally forced path must be labelled as
+  forced, without misreporting the hardware width.
 - [ ] Record the native result and any next blocker, update the implemented
   timekeeping reference and carry remaining costs/limits into technical debt.
   Do not start the next hardware or TSC task implicitly.
@@ -59,18 +63,68 @@ unsupported pause/suspend/debugger behavior explicitly; the counter alone cannot
 detect or reconstruct a missed full wrap. Resolve a material support-policy
 change with the owner; routine placement and helper choices need no new approval.
 
-Validation should use ordinary `make -j16` builds, interactive QEMU and debugger
-inspection, then the owner's native boot. Check the existing 64-bit path and
-exercise the actual 32-bit extension across multiple wraps, with SMP activity
-and idle periods. A normal QEMU 64-bit HPET boot alone does not cover extension;
-record how the 32-bit path was exercised. Use existing workloads to compare
-clock-sensitive behavior before/after where both revisions can run; native
-pre-change evidence is the panic, not a working performance baseline. Record
-revisions, CPU count, accelerator, durations and measurement variation, and
-separate emulator evidence from physical results. Do not add tests, fault
-injection or boot automation without assignment. Follow the existing
-[USB-image procedure](../development/usb-image.md) for owner-selected boot media;
-this handoff does not select or authorize overwriting a physical drive.
+### Implementation validation
+
+Use ordinary `make -j16` builds, interactive QEMU and debugger inspection, then
+an owner-run native boot. Use existing workloads to compare clock-sensitive
+behavior before/after where both revisions can run; native pre-change evidence
+is the panic, not a working performance baseline. Record revisions, CPU count,
+accelerator, durations and measurement variation. The procedures below are
+planned checks, not completed validation.
+
+**QEMU:** check the unchanged direct 64-bit path, then exercise the actual
+extension implementation across multiple wraps with SMP activity and idle
+periods. [QEMU 10.2.2's HPET](https://github.com/qemu/qemu/blob/v10.2.2/hw/timer/hpet.c)
+advertises a 64-bit main counter. For this task, a temporary uncommitted local
+change selecting the extension path and supplying only the low 32 bits of each
+sample is permitted for manual validation. Merely masking the result of the
+direct path would not exercise extension. Use the same accumulation and
+maintenance code intended for hardware. At the recorded QEMU period of
+10,000,000 fs, low-32-bit wraps occur about every 42.95 seconds; derive the
+interval from the reported period if the configuration differs.
+
+Record the temporary patch and identify its images/results separately. Remove
+it and rebuild before final normal-path/native validation and delivery. This
+exception does not introduce a permanent configuration option, new tests, fault
+injection or boot automation. Use GDB to inspect extension state and maintenance
+execution, recording debugger pauses separately from uninterrupted runs.
+Observation supplements code review of concurrent/interrupting readers; it does
+not prove every interleaving correct.
+
+**Native ThinkPad:** the owner runs the local console; there is no supported
+native NIC/remote-terminal or hardware-debugger path for this check. Follow the
+existing [USB-image procedure](../development/usb-image.md) for owner-selected
+boot media; this handoff does not select a drive to overwrite. Use a normal
+unforced build with `CONFIG_XHCI=n`. Photograph or transcribe the clock-path log
+and any next blocker. If boot reaches an interactive shell, use a phone
+stopwatch for one roughly 15-minute run:
+
+1. Run `date -u` at the prompt and start the stopwatch, recording the displayed
+   seconds and initial offset from an external clock. Firmware-seed accuracy is
+   separate from elapsed-time correctness; Fastfetch's minute-scale uptime is
+   too coarse for this check.
+2. During the first six minutes, run `date -u` repeatedly, every few seconds
+   around the expected first wrap, and compare progression with the stopwatch.
+   If another CPU's shell is available, optionally repeat there too. This is a
+   coarse local-console check, not a continuous concurrent-read workload.
+   Guest [Lua](../userland/lua.md#libraries-and-runtime) has no `os` library, so
+   an `os.time()` loop is not available; no new library or probe is required.
+3. Leave the shells at their prompts for another six minutes, without running
+   commands. The native counter wraps roughly every 300 seconds from clock
+   initialization, so each six-minute interval spans at least one wrap if time
+   advances normally. These durations are observation settings, not kernel limits.
+4. Run `date -u` again around minutes 12–15. Compare the displayed elapsed
+   seconds with the stopwatch; the initial offset should remain approximately
+   stable within manual reading precision (roughly a second or two). Record
+   discrepancies, freezes or backward steps rather than assuming their cause.
+   An error or jump of roughly five minutes is evidence to investigate for a
+   missed or double-counted wrap.
+
+These native observations can expose gross wrap failures. An idle shell still
+has kernel readers such as the presentation task, so passing the idle interval
+alone does not establish maintenance independent of incidental reads. Review
+that ownership/bound explicitly and inspect the maintainer in QEMU. Neither
+native seconds output nor a GDB session proves all SMP ordering properties.
 
 ## Recorded build and boot
 
