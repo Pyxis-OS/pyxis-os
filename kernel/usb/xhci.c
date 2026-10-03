@@ -1664,7 +1664,7 @@ static void controller_worker(void *argument)
   if (!controller->running || controller->failed) {
     return;
   }
-  klog("xHCI %x:%x.%u: boot USB enumeration complete\n",
+  klog("xHCI %x:%x.%u: boot USB enumeration finished\n",
        controller->address.bus, controller->address.device, controller->address.function);
   for (;;) {
     if (!controller_healthy(controller) || !drain_events(controller) ||
