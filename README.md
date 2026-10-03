@@ -58,7 +58,8 @@ installation image and boots it through emulated USB with `make run-usb`.
 [Native filesystem mounts](docs/userland/init.md#native-disk-configuration-and-mounting)
 use `MOUNT_DISK` configuration and an explicit read-only or writable mount in
 trusted init. File/directory sync provides durability; close does not.
-The boot menu defaults to normal startup after five seconds. Its separate
+Normal boot has no menu delay. Set `BOOT_MENU_TIMEOUT=5` when building install
+media to show the menu for five seconds. Its separate
 [Install Pyxis entry](docs/devices/installer-authority.md) grants raw-disk authority
 only to native installer init; the installer executable is not yet packaged.
 See [QEMU troubleshooting](docs/development/qemu.md) for host emulator boot failures.

@@ -22,7 +22,7 @@ mount/iobench image:
 make -j16 image fs-tools CROSS_COMPILE=/path/to/x86_64-unknown-pyxis- \
   PYTHON=/usr/bin/python3 INIT=/path/to/writer-reboot-init.sh \
   INIT_PRIMARY=app://init-idle INIT_CPUS=3=app://init \
-  MOUNT_DISK=12345678-1234-4567-89ab-0123456789ab
+  MOUNT_DISK=12345678-1234-4567-89ab-0123456789ab BOOT_MENU_TIMEOUT=5
 ```
 
 The existing profile mounted `bench` read-write as `data://`, the same volume
@@ -124,3 +124,28 @@ its extracted written file matched the installed 1 MiB fixture.
 
 All validation clients, debuggers and QEMU processes were stopped; the ordinary
 image was restored. Exact submitted-revision CI is reported on the PR.
+
+## Parent review follow-up
+
+The owner-accepted review of [PR 364](https://git.internal/PyxisOS/pyxis-os/pulls/364)
+replaced the fixed menu delay with `BOOT_MENU_TIMEOUT`, default `0`. The samples
+above used the original five-second menu. This follow-up changes configuration
+generation and documentation; disk runtime code and the temporary probe source
+are unchanged.
+
+Manual `make build/limine.conf` produced timeout zero, and
+`make build/limine.conf BOOT_MENU_TIMEOUT=5` produced timeout five. Both retained
+the normal and Install entries with their independent command lines. Shell
+syntax and document/link review passed. Ordinary image assembly with verified
+existing kernel/SDK/userspace/ports bundles passed for both values; the authored
+template change was freshly packed into the archive rather than taken from a
+stale image. A four-CPU, 2 GiB nested-KVM QEMU/OVMF boot showed both entries and
+the countdown at timeout five; manually selecting Install reached native init's
+unpackaged-installer diagnostic. A fresh timeout-zero boot reached the normal
+init selections without showing the menu.
+
+The owner also accepted raw consent inspection with an in-memory committed
+journal overlay and no writes before consent, deferring pool retirement to the
+later live-install flow. These are task-4.3 policy refinements, documented as
+future behavior rather than implemented consent code. The temporary probe and
+protected task-3 experiment directory remain intact.

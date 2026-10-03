@@ -66,7 +66,9 @@ Kernel-only builds do not select or package init.
 
 ## Install boot selection
 
-The Limine menu defaults to normal startup after five seconds. `Install Pyxis`
+The build setting `BOOT_MENU_TIMEOUT` defaults to `0`, booting normally without
+a menu delay. Set `BOOT_MENU_TIMEOUT=5` when building install media to allow menu
+selection. The `Install Pyxis` entry is generated for either timeout and
 adds `boot.install=1`, selecting native `app://init-install.pxe` on the primary
 workload CPU and `app://init-idle` elsewhere, overriding ordinary init selections.
 Only that primary init receives `disks`, `boot_kernel` and `boot_archive`.

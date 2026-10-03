@@ -24,7 +24,8 @@ order; they are inputs to this probe, not production defaults.
 ## Build and prepare
 
 From the repository root, first build the ordinary image and host tools using
-the README commands and the existing compiler. Then:
+the README commands and the existing compiler. Set `BOOT_MENU_TIMEOUT=5` for
+this manual installer-entry run; the ordinary build default is zero. Then:
 
 ```sh
 make -C docs/development/experiments/native-filesystem-task4.2/probe -j16 \

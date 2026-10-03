@@ -11,6 +11,9 @@ valid_image() {
     *[!a-zA-Z0-9_./:+-]*) echo "Unsupported character in init path: $1" >&2; exit 1 ;;
   esac
 }
+case "$BOOT_MENU_TIMEOUT" in
+  ''|*[!0-9]*) echo 'BOOT_MENU_TIMEOUT must be a nonnegative decimal seconds count.' >&2; exit 1 ;;
+esac
 valid_image "$INIT_DEFAULT"
 valid_image "$INIT_PRIMARY"
 command_line="init=$INIT_DEFAULT init.primary=$INIT_PRIMARY"
@@ -46,7 +49,8 @@ if [ "${#command_line}" -gt 4095 ]; then
   exit 1
 fi
 mkdir -p build
-awk -v normal="$command_line" '
+awk -v normal="$command_line" -v timeout="$BOOT_MENU_TIMEOUT" '
+  $0 == "# PYXIS_BOOT_MENU_TIMEOUT" { print "timeout: " timeout; next }
   $0 == "# PYXIS_NORMAL_COMMAND_LINE" { print "  cmdline: " normal; next }
   { print }
 ' boot/limine/limine.conf > build/limine.conf.tmp

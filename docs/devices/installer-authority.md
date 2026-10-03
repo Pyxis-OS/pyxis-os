@@ -1,7 +1,9 @@
 # Installer disk authority
 
-The live image has a separate `Install Pyxis` Limine entry. The menu waits five
-seconds and defaults to normal boot. The install entry adds `boot.install=1`:
+The live image has a separate `Install Pyxis` Limine entry. `BOOT_MENU_TIMEOUT`
+is a build setting, default `0` for immediate normal boot. Build install media
+with `BOOT_MENU_TIMEOUT=5` to show the menu for five seconds. Both entries are
+generated for either value. The install entry adds `boot.install=1`:
 Caelum selects native `app://init-install.pxe` on the primary workload CPU and
 idle init on every other workload CPU. The BSP remains kernel-only on multicore
 boots. Duplicate install options or values other than `1` fail boot.
@@ -26,7 +28,8 @@ closing a FILE frees its wrapper, not the source bytes.
 The [boot manifest](../../boot/initrd.lua) also packages
 `share/installer/BOOTX64.EFI`, `share/installer/limine.conf.template` and Limine's
 license. The template is the source menu configuration, not the generated
-normal-boot command line. These assets are available through read-only `app`.
+normal-boot command line or menu timeout; it contains separate placeholders
+for both. These assets are available through read-only `app`.
 
 Native init opens `app://installer.pxe` and delegates only the disk service,
 the two source files, private memory, input/output, read-only clock and randomness,
@@ -80,7 +83,11 @@ a returned root. The normal configured-GUID mount authority remains separate.
 Mounted pools stay retained for the boot. Opening a volume for inspection can
 therefore prevent a later raw-write claim on the same device even after every
 root closes. There is no pool teardown or installer exception. Installer
-sequencing must respect this exclusion; see the
+sequencing follows the owner-accepted current direction: inspect consent through
+raw reads and the format library, reading COMMITTED journal images as an
+in-memory overlay without modifying the disk. Task 4.3 will implement root
+lookups of `SAFE_TO_WIPE` in every live volume. Rejected consent leaves the disk
+untouched. See the
 [accepted limits](../technical-debt.md#installer-authority-and-retained-pools).
 
 Disk capabilities authorize operations, not selection of a safe target. The raw

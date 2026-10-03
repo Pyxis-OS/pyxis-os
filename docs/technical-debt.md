@@ -582,10 +582,15 @@ Revisit those remaining operations in the assigned installer task.
 Any retained npfs pool blocks an exclusive raw-write claim on its device, even
 when read-only and after all handles close. Opening a volume to inspect a marker
 therefore cannot be followed by raw formatting of that device in the same boot.
-There is no pool teardown or installer bypass. Keep this lifetime visible when
-implementing consent inspection and target selection; changing it requires an
-explicit pool-retirement and ownership contract. Read-only raw handles acquire
-no claim and promise no snapshot against raw writes.
+This is the owner-accepted current direction. There is no pool teardown or
+installer bypass. Task 4.3 will inspect each volume's root marker through raw
+reads and the format library, overlaying a committed journal in memory without
+writing before consent. Rejected consent leaves the disk untouched; accepted
+targets will be wiped rather than receive a persisted replay. Pool retirement
+is a prerequisite of the later live-install flow, which can inspect through
+normal mounts before installing in the same boot. It needs an explicit
+pool-retirement and ownership contract. Read-only raw handles acquire no claim
+and promise no snapshot against raw writes.
 
 Physical-media, power-loss and uncertain-failure evidence remains separate from
 ordinary emulated operation; revisit reliability claims only with corresponding

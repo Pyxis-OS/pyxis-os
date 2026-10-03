@@ -236,12 +236,17 @@ Task-4.2 authority choices accepted 2026-10-03:
 - A writable raw open requires exclusive access: any retained pool or existing
   claim refuses it. The claim blocks new mounts, and release flushes and rescans
   GPT before relinquishing access. Pools remain mounted until reboot.
-- Show the Limine menu for five seconds, defaulting to the normal entry.
+- The initial five-second menu choice is superseded by the owner-accepted PR
+  review refinement: `BOOT_MENU_TIMEOUT` is a build setting, default `0`.
+  Set it to `5` manually for install media; both entries remain generated.
 
 The [implemented authority](../devices/installer-authority.md) keeps consent in
 the trusted installer. Consent inspection must use raw reads and the format
 codecs; opening a pool through the normal mount path retains it and prevents
-formatting in the same boot. Use that path for verification after release.
+formatting in the same boot. The owner accepted this current direction during
+PR review. Task 4.3 will look up each root marker through a committed journal
+overlay in memory, without writes before consent. Use the normal mount path
+for verification after release.
 
 ### Target consent
 
@@ -253,9 +258,11 @@ disposable:
 - **Every** live volume has a regular file named `SAFE_TO_WIPE` in its root.
 - No partition of the disk is mounted, which also excludes the stick Pyxis
   booted from.
-- The journal is EMPTY. A committed journal is not damage: the installer, which
-  already holds write authority, replays it (the same recovery a read-write
-  mount performs), then checks the markers.
+- A committed journal is not damage: the installer reads metadata through its
+  validated journal images as an in-memory overlay, then checks the markers.
+  This owner-accepted review refinement replaces persisted replay before
+  consent. Rejected consent leaves the disk unchanged and recoverable by a
+  read-write mount; accepted targets are wiped, so persisted replay is unnecessary.
 
 A qualifying disk is rebuilt from scratch: a new GPT, ESP and pool, using the
 layout above. The existing layout is not reused. The installer creates
@@ -383,7 +390,9 @@ Not requirements, and not v1. Recorded so they are not designed out:
   which you can inspect disks and the network, then enter the installer when
   ready, as Linux live images do, rather than rebooting into a separate entry.
   This likely needs the new tab bar for spaces. The second Limine entry is the
-  v1 simplification.
+  v1 simplification. Pool retirement is a prerequisite: the current retained
+  normal mounts prevent raw installation in the same boot. Define safe pool
+  retirement and ownership before adding that flow.
 - **Filesystem overlays,** for example a volume overlaid on the boot archive.
   "Root filesystem" was only an illustration; it is not a Pyxis name or design.
 
