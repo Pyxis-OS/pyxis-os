@@ -235,9 +235,10 @@ Accepted 2026-10-02.
 
 The task branch is `fs/native-writer`, based on main `132aef1`, with
 [parent #348](https://git.internal/PyxisOS/pyxis-os/pulls/348). Main `d04c6a6` was
-merged during delivery to preserve concurrent completed work. It uses published
+merged during delivery, followed by main `e7f389e`, to preserve concurrent
+completed work. It uses published
 [filesystem #27](https://git.internal/PyxisOS/pyxis-fs/pulls/27) at `caf8edc`
-and [userland #104](https://git.internal/PyxisOS/pyxis-userland/pulls/104) at `c9d19c2`,
+and [userland #104](https://git.internal/PyxisOS/pyxis-userland/pulls/104) at `d15d782`,
 which preserves current userland main alongside the native changes.
 Merge dependencies before the parent PR. The kernel owns cached data, delayed
 allocation, journal commit/replay/checkpoint and bounded cleanup; the old shared
