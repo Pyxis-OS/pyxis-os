@@ -50,7 +50,7 @@ complete candidate. In the instrumented RAM matrix, measured workload time per
 logical operation was 13–80 ms, against 0.12–0.16 ms for Btrfs, and grew 3–5x from
 1 MiB to 20 MiB of stored data. That figure is window time divided by operations,
 including the host failure simulator, not a per-call latency distribution.
-That is the [overflow-split record](../../fs/docs/overflow-split-measurements.md)
+That is the [overflow-split record](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/overflow-split-measurements.md)
 at filesystem `a250731`. Write volume was already below Btrfs, but at that
 latency every synchronous write would stall the system.
 
@@ -63,8 +63,8 @@ about as much as starting over.
 - No further portable pyxis-fs writer work: no write-efficiency, latency or
   map-planner tasks, and no further measurement matrices. The six superseded
   planning documents were removed with task 3; Git retains their history.
-  Existing [filesystem measurements](../../fs/docs/overflow-split-measurements.md)
-  retain the evidence for the restart without preserving active follow-up plans.
+  The obsolete filesystem docs and measurement records were also removed;
+  Git retains the [evidence for the restart](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/overflow-split-measurements.md).
 - The pyxis-fs writer is never run against a real disk.
 - The [native mounts](../devices/native-readonly-filesystem.md) now use the new
   format and kernel writer; the portable core and obsolete tools are retired.
@@ -236,7 +236,7 @@ Accepted 2026-10-02.
 The task branch is `fs/native-writer`, based on main `132aef1`, with
 [parent #348](https://git.internal/PyxisOS/pyxis-os/pulls/348). Main `d04c6a6` was
 merged during delivery to preserve concurrent completed work. It uses published
-[filesystem #27](https://git.internal/PyxisOS/pyxis-fs/pulls/27) at `4dbf07a`
+[filesystem #27](https://git.internal/PyxisOS/pyxis-fs/pulls/27) at `caf8edc`
 and [userland #104](https://git.internal/PyxisOS/pyxis-userland/pulls/104) at `c9d19c2`,
 which preserves current userland main alongside the native changes.
 Merge dependencies before the parent PR. The kernel owns cached data, delayed
@@ -257,7 +257,16 @@ overlays, scans free words and folds changes only after durable EMPTY. The
 [populated-pool review](../development/experiments/native-filesystem-task3/populated-pool-review.md)
 records the reproduction, ordinary corrected workloads and memory cost. The six
 superseded portable-writer plans and their active references were removed as
-directed by the owner.
+directed by the owner. The obsolete pyxis-fs docs and measurement JSON were
+also removed; the current task-3 experiment directory remains unchanged.
+Allocation now asserts that its transaction has freed no blocks. The guard
+clears only after durable EMPTY or healthy transaction discard. An ordinary
+four-CPU, 256 MiB nested-KVM boot verified repeated truncate/write/sync rounds,
+unlink cleanup and subsequent allocation. GDB observed the flag set with a
+COMMITTED cleanup transaction and cleared after successful checkpoint/EMPTY.
+The stopped pool passed host fsck, and the extracted new file matched the
+installed 1 MiB fixture. Healthy abort and uncertain-failure handling were
+source-reviewed; no failure injection was added.
 
 ## Later ideas
 

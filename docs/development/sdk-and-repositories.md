@@ -97,8 +97,8 @@ history remains in Pyxis.
 [PyxisOS/pyxis-fs](https://git.internal/PyxisOS/pyxis-fs) owns the shared native
 filesystem encoding and Linux host tools. The old portable COW core, its host
 writer/tools and Unity tests were retired when Caelum moved to the native format.
-Historical documents and measurements remain explicitly marked as obsolete.
-They do not authorize further portable-writer work or describe current interfaces.
+Its obsolete documents and measurements were also removed; Git retains their
+history. They do not describe current interfaces or assign further writer work.
 
 The authoritative [format](../../fs/docs/native-format.md) and
 [host tools](../../fs/docs/native-host-tools.md) describe the codecs, source-importing

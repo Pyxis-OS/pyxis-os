@@ -122,10 +122,10 @@ current authority, lifetime, recovery and resource contracts; the
 record ordinary nested-KVM performance, persistence and consumer validation.
 
 The portable COW implementation, tools, tests and six superseded planning documents
-are retired. Its measured costs remain in the filesystem repository's historical
-[RAM baseline](../../fs/docs/ram-baseline.md),
-[sustained map record](../../fs/docs/sustained-map-measurements.md) and
-[overflow-split record](../../fs/docs/overflow-split-measurements.md).
+and obsolete filesystem docs are removed. Git retains its historical
+[RAM baseline](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/ram-baseline.md),
+[sustained map record](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/sustained-map-measurements.md) and
+[overflow-split record](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/overflow-split-measurements.md).
 Those records do not assign further portable-writer work. Crash recovery,
 allocation pressure and physical-media qualification remain unexercised paths,
 not unfinished portable-core tasks. FUSE and installation remain separate.
