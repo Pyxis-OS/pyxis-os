@@ -275,26 +275,23 @@ that function only. Dock Ethernet is the PCI controller at `02:00.0`, sharing
 group 12 with its UARTs, IPMI and EHCI; the same driver family can cover it later
 with revision-specific handling. AX200 Wi-Fi is `03:00.0`.
 
-The router now reserves a fixed address for the built-in port. A static Pyxis
-configuration can use it once the driver exists. MAC addresses and the reserved
-address are intentionally omitted here.
+The router reserves a fixed address for the built-in port. The accepted B0-22
+static profile is recorded in the
+[driver plan](thinkpad-rtl8111.md#goal-and-machine-configuration). These values
+are machine configuration, not a driver contract.
 
 **Passthrough completed (2026-10-03).** The
 [NIC passthrough reference](../development/thinkpad-nic-passthrough.md) records
 the implemented `VFIO_PCI` launcher, Fedora host setup and successful owner/agent
 boots. Pyxis inventories `10ec:8168`, revision `0x15`, without claiming it.
 
-**Follow-up milestone: RTL8111 driver (proposed, unassigned).**
-
-- A Caelum driver for the built-in `05:00.0`, revision `0x15`, exposed as `net0`
-  beside the existing VirtIO NIC path in [networking](../devices/networking.md).
-  Reuse [PCI](../devices/pci.md) claims, BAR mapping and MSI-X handling from xHCI.
-- Static IPv4 using the router's reserved address and gateway. DHCP stays
-  separate, together with broadcast reception and section 3's later ideas.
-- Completion goal: reach Pyxis's remote terminal through the real card in QEMU,
-  then through the same port on a native ThinkPad boot.
-- Dock `02:00.0` support comes later: it has a different revision and shares an
-  IOMMU group with the management chip's other functions.
+**RTL8111 driver plan accepted (2026-10-03).** The
+[milestone](thinkpad-rtl8111.md) starts with MAC/XID and capability identification,
+then preparation, Ethernet I/O, stack integration and VFIO/native qualification.
+State belongs to each controller; the presence of another NIC must not prevent
+the built-in port from working. Interface selection prefers RTL8111 over VirtIO
+when both are present. Dock revision support and multiple active interfaces are
+separate from that preference. Driver implementation has not started.
 
 ## 3. Later idea: reverse remote terminal with broadcast discovery
 

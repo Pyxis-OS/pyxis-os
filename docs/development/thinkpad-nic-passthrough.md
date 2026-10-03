@@ -3,7 +3,7 @@
 The built-in RJ45 controller can be passed from the ThinkPad's Fedora host to
 Pyxis in QEMU/KVM. Launcher support, owner host setup and a first hardware boot
 were completed on 2026-10-03. This provides a development target for the
-[proposed RTL8111 driver](../wip/thinkpad-next-steps.md#2-ethernet-passthrough-to-qemu-then-a-driver);
+[planned RTL8111 driver](../wip/thinkpad-rtl8111.md);
 Pyxis currently inventories the function without claiming it.
 
 ## Hardware and launcher
@@ -127,7 +127,6 @@ functions including the same NIC identity at `00:03.0`. The guest PCI address is
 assigned by QEMU and need not match the host address. These boots qualify
 passthrough and read-only PCI discovery; they do not establish Ethernet I/O.
 
-The card retains its physical MAC, so the router's reservation for the built-in
-port can be used by a future static Pyxis network configuration. The address is
-kept out of this document. The driver proposal and later dock work remain in
-[ThinkPad next steps](../wip/thinkpad-next-steps.md#2-ethernet-passthrough-to-qemu-then-a-driver).
+The card retains its physical MAC. The accepted B0-22 static configuration and
+driver tasks are recorded in the [RTL8111 plan](../wip/thinkpad-rtl8111.md).
+Later dock work is also distinguished from built-in qualification there.
