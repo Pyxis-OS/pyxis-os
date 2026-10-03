@@ -7,10 +7,10 @@ work. It supersedes the pyxis-fs writer plans listed under
 - **Accepted:** [owner decisions](#owner-decisions), [v1 answers](#v1-answers),
   [installation and authority](#installation-and-authority),
   [code, file layout and order](#code-file-layout-and-order) and
-  [focused tasks](#focused-tasks). The [format proposal](native-filesystem-format.md)
-  records accepted format decisions separately from its remaining proposals.
-- **Proposals awaiting the owner:** [writeback details](#proposed-writeback-details),
-  the [pool sketch](#proposed-pool-sketch) and the
+  [focused tasks](#focused-tasks). The completed
+  [format proposal](native-filesystem-format.md) records the accepted on-disk
+  design and record budgets from task 1 (2026-10-03).
+- **Proposals awaiting the owner:** [writeback details](#proposed-writeback-details) and the
   [working method](#proposed-working-method).
 - **Not requirements:** [later ideas](#later-ideas).
 
@@ -140,32 +140,17 @@ Notes for implementation: memory-pressure writeback needs a reclaim hook in
 Caelum's memory management, so it arrives with the page cache. The installer must
 call `sync` before reporting success. Kilo's save should later call `fsync`.
 
-## Proposed pool sketch
+## Accepted pool format
 
-Proposal only. A single-device pool stays ext2-simple, because what makes pools
-complex elsewhere (multiple devices, RAID, copy-on-write snapshots, dedup) is
-left out.
+Task 1's [format proposal](native-filesystem-format.md) replaces the earlier pool
+sketch: one bitmap, 64 volumes with growable inode files, block-pointer mappings,
+simple directories and one metadata journal. It specifies reserved bytes,
+feature handling, crash recovery and cleanup lifetimes. Journal capacity is
+chosen per pool by the installer/formatter, starting at 128 MiB for the 256 GB
+target. Volume starvation remains deferred: working first, space policy later.
 
-- **Pool header** at a fixed location, with a backup copy at the end of the
-  partition. It holds block size, pool size, journal location, feature flags and
-  reserved bytes.
-- **One allocation bitmap for the whole pool.** That is one bit per 4 KiB block,
-  so 8 MiB for 256 GB. A volume owns no block range; it allocates from the
-  shared bitmap.
-- **A small volume table** of fixed-size records: name, ID, root inode, location
-  of the volume's inode file, blocks in use, an optional limit, flags and reserved
-  bytes. Deleting a volume frees its blocks; growing it needs no operation at all.
-  One volume filling the pool and starving the others is explicitly deferred
-  (owner, 2026-10-02): working first, space policy later.
-- **Per-volume inode file.** Each volume's inodes live in a file that grows by
-  allocating from the pool, so there is no inode table fixed at format time.
-- **One pool-wide journal** of fixed size, chosen at format time.
-- **Directories as simple entry lists,** as in ext2. Hashing or trees can come
-  later behind a feature flag.
-
-Consequence: the installer formats the pool natively, so the format library
-links in Pyxis userspace too. That makes three symbol providers: the host,
-Caelum and Pyxis userspace.
+The native installer makes Pyxis userspace the third link-time symbol provider
+for the format library, alongside the host and Caelum.
 
 ## Installation and authority
 
@@ -206,11 +191,11 @@ Accepted 2026-10-02.
 
 ## Focused tasks
 
-1. [ ] **Format proposal.** A short design of the on-disk format: pool header,
+1. [x] **Format proposal.** A short design of the on-disk format: pool header,
    bitmap, volume table, inodes, directories and journal, with reserved bytes and
    feature flags. Owner decisions go at most three per round. The
-   [working proposal](native-filesystem-format.md) records progress; task 1 remains
-   open while the remaining format decisions are discussed.
+   [completed proposal](native-filesystem-format.md) records the accepted choices,
+   record budgets and limits. This is a design, not an implemented filesystem.
 2. [ ] **Format library and host tools.** Structure definitions, encoding and
    decoding with link-time symbols, plus host `mkfs`, `fsck` and inspection.
 3. [ ] **Native read/write in Caelum** on virtio-blk, with persistent in-memory

@@ -1027,6 +1027,26 @@ per-PR suite. See [current coverage and limits](../fs/docs/testing.md). Passing 
 not establish host/device recovery, exhaustive correctness or native guest behavior;
 retain the proofs, ordinary/freestanding builds and eventual guest validation.
 
+## Native filesystem design limits
+
+The [native format proposal](wip/native-filesystem-format.md) accepts these limits
+for the replacement design; they are not implemented behavior. There are 64 volume
+slots, roughly 513 GiB per-file block-pointer capacity, and linear directory lookup.
+Revisit only when a concrete workload exceeds those bounds or lookup becomes costly;
+reserved bytes and feature flags provide extension points. Volumes can exhaust the
+shared pool; quotas and starvation policy remain deferred until a concrete need.
+
+One transaction commits/checkpoints at a time. Cleanup delays space reuse, and
+large shrinking truncates stall further writes/resizes of the affected inode.
+Measure these costs, latency and bytes written when the native writer arrives;
+128 MiB is the initial 256 GB target setting, not a measured optimum or universal
+minimum. Journal capacity is selected per pool and has no v1 resize operation.
+
+Strict unknown-feature/header-conflict checks can require a newer reader or repair.
+A committed journal needs writable replay before opening, so a dirty read-only
+device cannot be mounted. Revisit recovery into RAM or more flexible feature
+compatibility only when an actual recovery/upgrade workflow needs them.
+
 ## Writable filesystem kernel-stack prerequisite
 
 The reviewed task-2 head (`pyxis-fs` `3e63569`) uses approximately 19,104 bytes
