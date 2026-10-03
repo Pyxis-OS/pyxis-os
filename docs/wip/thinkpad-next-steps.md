@@ -18,7 +18,9 @@ Caelum reaches an interactive shell on all 12 CPUs with the full 32 GB:
 - **Display:** occasional tearing in Doom is expected, because nothing is double
   buffered. It is accepted for now.
 
-Remaining native gaps, in the order the owner chose to address them:
+Remaining native gaps, in the order the owner chose to address them (a
+[reverse remote terminal](#3-later-idea-reverse-remote-terminal-with-broadcast-discovery)
+is recorded as a later idea):
 
 1. **No entropy source.** QEMU's virtio-rng doesn't exist on hardware, so
    `random` reads fail. TLS setup fails (`httpfs: TLS setup failed (native
@@ -239,6 +241,49 @@ Add one explicit option, for example `VFIO_PCI=0000:05:00.0`, which adds
   handling from the xHCI work.
 - Develop in QEMU with VFIO, then run natively. Native success also brings the
   remote terminal to the ThinkPad.
+
+## 3. Later idea: reverse remote terminal with broadcast discovery
+
+An owner idea from 2026-10-03, recorded so it isn't designed out. It is not
+assigned, and it comes after the Ethernet driver.
+
+**Idea.** Reverse the remote terminal's direction. A server runs on the
+development host and broadcasts a small UDP beacon about once a second. Pyxis
+listens for it, takes the sender's address and connects to the server over TCP.
+The session then works as today, but Pyxis never listens for connections and
+nobody needs to know its IP address.
+
+**How the discovery works.** The beacon is a UDP datagram to `255.255.255.255`
+or the subnet's broadcast address (Ethernet destination `ff:ff:ff:ff:ff:ff`).
+Every host on the same local segment receives it, and routers don't forward it.
+It carries a protocol tag and version, the server's TCP port and a name. Pyxis
+binds the agreed UDP port and waits.
+
+**Owner decision: no authentication for now.** Like the existing
+[remote terminal](../userland/remote-terminal.md), reverse mode stays
+unauthenticated and unencrypted until Pyxis itself has authentication. A host
+that answers gets the configured shell privileges, so this assumes a trusted LAN.
+Record it in technical debt with that revisit point when implemented.
+
+**Also accepted by the owner (2026-10-03).** Neither is security:
+
+- **Opt-in only.** Reverse mode starts only when the image or init configuration
+  asks for it, never by default.
+- **A non-secret name in the beacon,** which Pyxis is configured to match, so that
+  with several servers or development machines on one network each Pyxis connects
+  to the intended one.
+
+**Prerequisites, from [networking](../devices/networking.md):**
+
+- the Ethernet driver (section 2);
+- an address on the LAN. Today only manual static configuration exists; there is
+  no DHCP;
+- **broadcast reception.** The stack currently discards broadcast and multicast IP
+  traffic. DHCP needs the same capability, so the two belong together.
+
+**Interim, without discovery:** reserve a fixed address for the ThinkPad's MAC in
+the router, configure it statically in the image, and connect from the host in
+the existing direction.
 
 ## Not covered here
 
