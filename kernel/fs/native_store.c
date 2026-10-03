@@ -1237,6 +1237,14 @@ static enum call_status directory_find(struct native_store_context *context, str
   return match ? CALL_OK : CALL_NOT_FOUND;
 }
 
+static bool valid_child(const struct native_store_inode *directory,
+  const struct native_store_inode *child)
+{
+  return child->number != 1 && child->record.kind != PNF_INODE_FREE &&
+    !(child->record.cleanup & PNF_CLEANUP_DETACHED) &&
+    (child->record.kind != PNF_INODE_DIRECTORY || child->record.parent == directory->number);
+}
+
 enum call_status native_store_lookup(struct native_store_context *context, struct native_store_inode *directory,
   const char *name, size_t length, struct native_store_inode **out)
 {
@@ -1252,9 +1260,8 @@ enum call_status native_store_lookup(struct native_store_context *context, struc
   if (status != CALL_OK) {
     return status;
   }
-  if ((*out)->record.kind == PNF_INODE_FREE || (*out)->record.cleanup & PNF_CLEANUP_DETACHED ||
-    entry.inode == 1 || ((*out)->record.kind == PNF_INODE_DIRECTORY &&
-    (*out)->record.parent != directory->number)) {
+  if (!valid_child(directory, *out)) {
+    discard_idle_inode(*out, false);
     *out = NULL;
     return corrupt(context);
   }
@@ -1305,8 +1312,8 @@ enum call_status native_store_enumerate(struct native_store_context *context, st
       if (status != CALL_OK) {
         return status;
       }
-      if (entry->inode == 1 || target->record.kind == PNF_INODE_FREE || target->record.cleanup & PNF_CLEANUP_DETACHED ||
-        (target->record.kind == PNF_INODE_DIRECTORY && target->record.parent != directory->number)) {
+      if (!valid_child(directory, target)) {
+        discard_idle_inode(target, false);
         return corrupt(context);
       }
       discard_idle_inode(target, false);
@@ -1450,7 +1457,7 @@ enum call_status native_store_read(struct native_store_context *context, struct 
     destination += count;
     offset += count;
     length -= count;
-     *read += count;
+    *read += count;
   }
   return CALL_OK;
 }
@@ -1949,16 +1956,18 @@ enum call_status native_store_remove(struct native_store_context *context, struc
   if (status != CALL_OK) {
     return status;
   }
-  if (target->record.cleanup & PNF_CLEANUP_DETACHED || target->number == 1 ||
-    target->record.kind == PNF_INODE_FREE) {
+  if (!valid_child(directory, target)) {
+    discard_idle_inode(target, false);
     return corrupt(context);
   }
   if (kind != DIRECTORY_KIND_ANY && kind != native_store_kind(target)) {
+    discard_idle_inode(target, false);
     return CALL_WRONG_TYPE;
   }
   if (target->record.kind == PNF_INODE_DIRECTORY) {
     status = directory_empty(context, target);
     if (status != CALL_OK) {
+      discard_idle_inode(target, false);
       return status;
     }
   }
@@ -1991,6 +2000,7 @@ enum call_status native_store_remove(struct native_store_context *context, struc
       directory->volume->record = volume_previous;
     }
     namespace_abort(pool, free_previous);
+    discard_idle_inode(target, false);
     return status;
   }
   target->durable = detached;
@@ -2034,11 +2044,17 @@ enum call_status native_store_rename(struct native_store_context *context, struc
   if (status != CALL_OK) {
     return status;
   }
+  if (!valid_child(source, moved)) {
+    discard_idle_inode(moved, false);
+    return corrupt(context);
+  }
   if (moved->record.kind != PNF_INODE_FILE) {
+    discard_idle_inode(moved, false);
     return CALL_WRONG_TYPE;
   }
   if (source == destination && source_length == destination_length &&
     !memcmp(source_name, destination_name, source_length)) {
+    discard_idle_inode(moved, false);
     return CALL_OK;
   }
   status = directory_find(context, destination, destination_name, destination_length,
@@ -2046,16 +2062,30 @@ enum call_status native_store_rename(struct native_store_context *context, struc
   struct native_store_inode *victim = NULL;
   if (status == CALL_OK) {
     if (!replace) {
+      discard_idle_inode(moved, false);
       return CALL_ALREADY_EXISTS;
     }
     status = inode_get(context, destination->volume, destination_entry.inode, &victim);
     if (status != CALL_OK) {
+      discard_idle_inode(moved, false);
       return status;
     }
+    if (!valid_child(destination, victim)) {
+      if (victim != moved) {
+        discard_idle_inode(victim, false);
+      }
+      discard_idle_inode(moved, false);
+      return corrupt(context);
+    }
     if (victim->record.kind != PNF_INODE_FILE || victim == moved) {
+      if (victim != moved) {
+        discard_idle_inode(victim, false);
+      }
+      discard_idle_inode(moved, false);
       return CALL_WRONG_TYPE;
     }
   } else if (status != CALL_NOT_FOUND) {
+    discard_idle_inode(moved, false);
     return status;
   }
   struct pnf_inode source_previous = source->record;
@@ -2101,6 +2131,10 @@ enum call_status native_store_rename(struct native_store_context *context, struc
       }
     }
     namespace_abort(pool, free_previous);
+    discard_idle_inode(moved, false);
+    if (victim) {
+      discard_idle_inode(victim, false);
+    }
     return status;
   }
   source->durable = source->record;
