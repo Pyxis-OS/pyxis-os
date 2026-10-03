@@ -1,17 +1,17 @@
+#include <arch/cpu.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/pci.h>
 #include <kernel/task.h>
 #include <limits.h>
+#include <stdatomic.h>
 #include "core.h"
-#include "bot.h"
+#include "host.h"
 #include "settings.h"
 
 #define USB_REQUEST_GET_DESCRIPTOR 6
-#define USB_REQUEST_SET_CONFIGURATION 9
-#define USB_REQUEST_SET_INTERFACE 11
 #define USB_REQUEST_DEVICE_IN 0x80
-#define USB_REQUEST_INTERFACE_OUT 0x01
 #define USB_DESCRIPTOR_DEVICE 1
 #define USB_DESCRIPTOR_CONFIGURATION 2
 #define USB_DESCRIPTOR_INTERFACE 4
@@ -25,8 +25,6 @@
 #define USB_INTERFACE_BYTES 9
 #define USB_ENDPOINT_BYTES 7
 #define USB_SUPER_COMPANION_BYTES 6
-#define USB_CLASS_INTERFACE 0x00
-#define USB_CLASS_STORAGE 0x08
 #define USB_CLASS_HUB 0x09
 #define USB_ENDPOINT_TYPE_MASK 0x03
 #define USB_ENDPOINT_CONTROL 0x00
@@ -51,33 +49,45 @@
 #define USB_CONFIGURATION_REQUIRED 0x80
 #define USB_BITSET_BYTES 32
 
-enum device_classification { DEVICE_UNKNOWN, DEVICE_UNBOUND, DEVICE_STORAGE_UNSUPPORTED,
-                             DEVICE_BOT_CANDIDATE, DEVICE_INCOMPLETE };
-enum discovery_result { DISCOVERY_NOT_STARTED, DISCOVERY_INCOMPLETE, DISCOVERY_ABSENT,
-                        DISCOVERY_UNSUPPORTED, DISCOVERY_AMBIGUOUS, DISCOVERY_SETUP_FAILED,
-                        DISCOVERY_TRANSPORT_READY };
+#define PCI_CLASS_SERIAL_BUS 0x0c
+#define PCI_SUBCLASS_USB 0x03
+#define PCI_INTERFACE_XHCI 0x30
 
 struct usb_device_record {
+  struct usb_discovery *owner;
   struct usb_host_device *host;
+  struct system_info_usb_device info;
   enum usb_speed speed;
-  enum device_classification classification;
   const char *detail;
-  uint16_t vendor, product;
-  uint8_t device_class, configuration_count;
-  bool storage, incomplete, candidate;
-  struct usb_bot_candidate bot;
+  bool present, incomplete;
 };
 
-/* This retained state is inspectable in GDB. It is worker-owned after the
- * pre-AP allocation phase, and does not publish a registry or media backend. */
-static struct {
+struct usb_discovery {
+  struct usb_host_controller *host;
   struct usb_device_record *devices;
+  struct system_info_usb_interface *interfaces;
   uint8_t *descriptors;
-  size_t capacity;
-  unsigned port_count, candidates, selected_port;
-  enum discovery_result result;
-  bool prepared, published, hardware_failed;
-} discovery;
+  size_t capacity, interface_count, device_count, registry_index;
+  unsigned port_count;
+  bool started, hardware_failed;
+};
+
+struct usb_controller_record {
+  struct system_info_usb_controller info;
+  struct usb_discovery *discovery;
+  size_t pci_index, device_first, interface_first;
+  bool pending;
+};
+
+/* Only the BSP prepares/mutates this registry. Readers acquire its final state
+ * before touching records; no backing or published fact changes afterward. */
+static struct {
+  struct usb_controller_record *controllers;
+  size_t controller_count, pending;
+  struct system_info_usb info;
+  atomic_uint_fast64_t state;
+  bool prepared, incomplete;
+} inventory = { .state = SYSTEM_INFO_USB_UNAVAILABLE };
 
 static uint16_t read16(const uint8_t *bytes)
 {
@@ -135,7 +145,7 @@ static bool request_ok(struct usb_device_record *device, enum usb_result result)
   device->incomplete = true;
   device->detail = "descriptor/control request failed";
   if (result == USB_IO || result == USB_TIMEOUT) {
-    discovery.hardware_failed = true;
+    device->owner->hardware_failed = true;
   }
   return false;
 }
@@ -150,8 +160,8 @@ static bool descriptor(struct usb_device_record *device, uint8_t type, uint8_t i
     .length = length,
   };
   size_t bytes;
-  if (!request_ok(device, control(device, &setup, discovery.descriptors,
-                                 discovery.capacity, &bytes, deadline))) {
+  if (!request_ok(device, control(device, &setup, device->owner->descriptors,
+                                 device->owner->capacity, &bytes, deadline))) {
     return false;
   }
   if (bytes != length) {
@@ -162,59 +172,23 @@ static bool descriptor(struct usb_device_record *device, uint8_t type, uint8_t i
   return true;
 }
 
-static bool known_class(uint8_t class)
-{
-  switch (class) {
-  case USB_CLASS_INTERFACE: /* Null interface class */
-  case 0x01: /* Audio */
-  case 0x02: /* Communications */
-  case 0x03: /* HID */
-  case 0x05: /* Physical */
-  case 0x06: /* Imaging */
-  case 0x07: /* Printer */
-  case USB_CLASS_STORAGE:
-  case USB_CLASS_HUB:
-  case 0x0a: /* Communications data */
-  case 0x0b: /* Smart card */
-  case 0x0d: /* Content security */
-  case 0x0e: /* Video */
-  case 0x0f: /* Personal healthcare */
-  case 0x10: /* Audio/video */
-  case 0x11: /* Billboard */
-  case 0x12: /* Type-C bridge */
-  case 0x13: /* Bulk display */
-  case 0x14: /* MCTP */
-  case 0x3c: /* I3C */
-  case 0xdc: /* Diagnostic */
-  case 0xe0: /* Wireless controller */
-  case 0xef: /* Miscellaneous */
-  case 0xfe: /* Application specific */
-    return true;
-  default:
-    return false;
-  }
-}
-
 static void classify_class(struct usb_device_record *device, uint8_t class)
 {
-  if (class == USB_CLASS_STORAGE) {
-    device->storage = true;
-  } else if (class == USB_CLASS_HUB) {
+  if (class == USB_CLASS_HUB) {
+    device->info.flags |= SYSTEM_INFO_USB_DEVICE_HUB;
     device->incomplete = true;
     device->detail = "hub downstream inventory unavailable";
-  } else if (!known_class(class)) {
-    device->incomplete = true;
-    device->detail = "unclassifiable USB class";
   }
 }
 
 /* The buffer is bounded, so rescanning earlier checked descriptors avoids a
  * 256-by-256 identity table on the 16 KiB kernel stack. */
-static bool duplicate_interface(size_t before, uint8_t number, uint8_t alternate)
+static bool duplicate_interface(struct usb_device_record *device, size_t before,
+                                uint8_t number, uint8_t alternate)
 {
   for (size_t offset = USB_CONFIGURATION_BYTES; offset < before;
-       offset += discovery.descriptors[offset]) {
-    const uint8_t *descriptor = discovery.descriptors + offset;
+       offset += device->owner->descriptors[offset]) {
+    const uint8_t *descriptor = device->owner->descriptors + offset;
     if (descriptor[1] == USB_DESCRIPTOR_INTERFACE &&
         descriptor[2] == number && descriptor[3] == alternate) {
       return true;
@@ -223,13 +197,13 @@ static bool duplicate_interface(size_t before, uint8_t number, uint8_t alternate
   return false;
 }
 
-static bool duplicate_endpoint(size_t before, uint8_t number, uint8_t alternate,
-                                uint8_t address)
+static bool duplicate_endpoint(struct usb_device_record *device, size_t before,
+                               uint8_t number, uint8_t alternate, uint8_t address)
 {
   uint8_t previous_number = 0, previous_alternate = 0;
   for (size_t offset = USB_CONFIGURATION_BYTES; offset < before;
-       offset += discovery.descriptors[offset]) {
-    const uint8_t *descriptor = discovery.descriptors + offset;
+       offset += device->owner->descriptors[offset]) {
+    const uint8_t *descriptor = device->owner->descriptors + offset;
     if (descriptor[1] == USB_DESCRIPTOR_INTERFACE) {
       previous_number = descriptor[2];
       previous_alternate = descriptor[3];
@@ -241,16 +215,17 @@ static bool duplicate_endpoint(size_t before, uint8_t number, uint8_t alternate,
   return false;
 }
 
-static void finish_interface(struct usb_device_record *device, uint8_t interfaces,
-                              uint8_t configuration,
-                              const struct usb_interface_description *interface)
+static bool finish_interface(struct usb_device_record *device,
+                             const struct system_info_usb_interface *interface)
 {
-  struct usb_bot_candidate candidate;
-  if (!device->candidate && usb_bot_match(device->speed, device->device_class,
-                                         interfaces, configuration, interface, &candidate)) {
-    device->candidate = true;
-    device->bot = candidate;
+  struct usb_discovery *discovery = device->owner;
+  if (discovery->interface_count == USB_INTERFACE_BUDGET) {
+    device->detail = "interface inventory exceeds reserved budget";
+    return false;
   }
+  discovery->interfaces[discovery->interface_count++] = *interface;
+  classify_class(device, interface->class);
+  return true;
 }
 
 static bool valid_endpoint(enum usb_speed speed, const uint8_t *endpoint)
@@ -344,10 +319,10 @@ static bool valid_companion(const uint8_t *endpoint, const uint8_t *companion)
 
 static bool parse_configuration(struct usb_device_record *device, size_t total)
 {
-  const uint8_t *header = discovery.descriptors;
+  const uint8_t *header = device->owner->descriptors;
   uint8_t interfaces = header[4], configuration = header[5];
   uint8_t numbers[USB_BITSET_BYTES] = {0}, default_alternates[USB_BITSET_BYTES] = {0};
-  struct usb_interface_description interface = {0};
+  struct system_info_usb_interface interface = { .configuration = configuration };
   unsigned unique_interfaces = 0, endpoints = 0;
   bool have_interface = false;
   uint8_t companion_pending = 0;
@@ -357,7 +332,7 @@ static bool parse_configuration(struct usb_device_record *device, size_t total)
     if (total - offset < 2) {
       return false;
     }
-    const uint8_t *part = discovery.descriptors + offset;
+    const uint8_t *part = device->owner->descriptors + offset;
     size_t length = part[0];
     if (length < 2 || length > total - offset ||
         (companion_pending && part[1] != companion_pending)) {
@@ -366,16 +341,19 @@ static bool parse_configuration(struct usb_device_record *device, size_t total)
     switch (part[1]) {
     case USB_DESCRIPTOR_INTERFACE:
       if (length != USB_INTERFACE_BYTES || part[2] >= interfaces ||
-          duplicate_interface(offset, part[2], part[3])) {
+          duplicate_interface(device, offset, part[2], part[3])) {
         return false;
       }
       if (have_interface) {
         if (endpoints != interface.endpoint_count) {
           return false;
         }
-        finish_interface(device, interfaces, configuration, &interface);
+        if (!finish_interface(device, &interface)) {
+          return false;
+        }
       }
       memset(&interface, 0, sizeof(interface));
+      interface.configuration = configuration;
       interface.number = part[2];
       interface.alternate = part[3];
       interface.endpoint_count = part[4];
@@ -388,7 +366,6 @@ static bool parse_configuration(struct usb_device_record *device, size_t total)
       if (!interface.alternate) {
         bit_set(default_alternates, interface.number);
       }
-      classify_class(device, interface.class);
       endpoints = 0;
       have_interface = true;
       break;
@@ -396,15 +373,9 @@ static bool parse_configuration(struct usb_device_record *device, size_t total)
       if (!have_interface || length < USB_ENDPOINT_BYTES ||
           endpoints >= interface.endpoint_count || !(part[2] & USB_ENDPOINT_NUMBER_MASK) ||
           (part[2] & USB_ENDPOINT_ADDRESS_RESERVED) ||
-          duplicate_endpoint(offset, interface.number, interface.alternate, part[2]) ||
+          duplicate_endpoint(device, offset, interface.number, interface.alternate, part[2]) ||
           !valid_endpoint(device->speed, part)) {
         return false;
-      }
-      uint16_t packet = read16(part + 4);
-      if (endpoints < 2) {
-        interface.endpoints[endpoints].attributes = part[3];
-        interface.endpoints[endpoints].endpoint.address = part[2];
-        interface.endpoints[endpoints].endpoint.max_packet = packet & USB_PACKET_SIZE_MASK;
       }
       ++endpoints;
       last_endpoint = part;
@@ -415,12 +386,6 @@ static bool parse_configuration(struct usb_device_record *device, size_t total)
       if (companion_pending != USB_DESCRIPTOR_SUPER_COMPANION || length != USB_SUPER_COMPANION_BYTES ||
           !valid_companion(last_endpoint, part)) {
         return false;
-      }
-      if (endpoints <= 2) {
-        interface.endpoints[endpoints - 1].companion = true;
-        interface.endpoints[endpoints - 1].companion_attributes = part[3];
-        interface.endpoints[endpoints - 1].bytes_per_interval = read16(part + 4);
-        interface.endpoints[endpoints - 1].endpoint.max_burst = part[2];
       }
       companion_pending =
         (last_endpoint[3] & USB_ENDPOINT_TYPE_MASK) == USB_ENDPOINT_ISOCHRONOUS &&
@@ -452,8 +417,7 @@ static bool parse_configuration(struct usb_device_record *device, size_t total)
       unique_interfaces != interfaces || memcmp(numbers, default_alternates, sizeof(numbers))) {
     return false;
   }
-  finish_interface(device, interfaces, configuration, &interface);
-  return true;
+  return finish_interface(device, &interface);
 }
 
 static bool valid_packet(enum usb_speed speed, uint8_t wire, uint16_t *packet)
@@ -484,7 +448,7 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
     return;
   }
   uint8_t prefix[USB_DEVICE_PREFIX_BYTES];
-  memcpy(prefix, discovery.descriptors, sizeof(prefix));
+  memcpy(prefix, device->owner->descriptors, sizeof(prefix));
   uint16_t packet;
   if (prefix[0] != USB_DEVICE_BYTES || prefix[1] != USB_DESCRIPTOR_DEVICE ||
       !valid_packet(device->speed, prefix[7], &packet)) {
@@ -499,30 +463,31 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
   if (!descriptor(device, USB_DESCRIPTOR_DEVICE, 0, USB_DEVICE_BYTES, deadline)) {
     return;
   }
-  const uint8_t *description = discovery.descriptors;
+  const uint8_t *description = device->owner->descriptors;
   if (memcmp(prefix, description, sizeof(prefix)) || !description[17]) {
     device->incomplete = true;
     device->detail = "invalid or changing device descriptor";
     return;
   }
-  device->vendor = read16(description + 8);
-  device->product = read16(description + 10);
-  device->device_class = description[4];
-  device->configuration_count = description[17];
-  if (device->device_class != USB_CLASS_INTERFACE) {
-    classify_class(device, device->device_class);
-  }
+  device->info.vendor_id = read16(description + 8);
+  device->info.product_id = read16(description + 10);
+  device->info.device_class = description[4];
+  device->info.device_subclass = description[5];
+  device->info.device_protocol = description[6];
+  device->info.configuration_count = description[17];
+  device->info.flags |= SYSTEM_INFO_USB_DEVICE_IDENTIFIED;
+  classify_class(device, device->info.device_class);
 
   uint8_t configurations[USB_BITSET_BYTES] = {0};
-  for (unsigned index = 0; index < device->configuration_count; ++index) {
+  for (unsigned index = 0; index < device->info.configuration_count; ++index) {
     if (!descriptor(device, USB_DESCRIPTOR_CONFIGURATION, index, USB_CONFIGURATION_BYTES, deadline)) {
-      if (discovery.hardware_failed) {
+      if (device->owner->hardware_failed) {
         return;
       }
       continue;
     }
     uint8_t header[USB_CONFIGURATION_BYTES];
-    memcpy(header, discovery.descriptors, sizeof(header));
+    memcpy(header, device->owner->descriptors, sizeof(header));
     size_t total = read16(header + 2);
     if (header[0] != USB_CONFIGURATION_BYTES || header[1] != USB_DESCRIPTOR_CONFIGURATION ||
         total < USB_CONFIGURATION_BYTES || !header[4] || !header[5] ||
@@ -532,164 +497,370 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
       device->detail = "invalid or duplicate configuration header";
       continue;
     }
-    if (total > discovery.capacity) {
+    if (total > device->owner->capacity) {
       device->incomplete = true;
       device->detail = "configuration exceeds reserved descriptor budget";
       continue;
     }
     if (!descriptor(device, USB_DESCRIPTOR_CONFIGURATION, index, total, deadline)) {
-      if (discovery.hardware_failed) {
+      if (device->owner->hardware_failed) {
         return;
       }
       continue;
     }
-    bool previous_candidate = device->candidate;
-    struct usb_bot_candidate previous_bot = device->bot;
-    if (memcmp(header, discovery.descriptors, sizeof(header)) || !parse_configuration(device, total)) {
-      device->candidate = previous_candidate;
-      device->bot = previous_bot;
+    size_t previous_interfaces = device->owner->interface_count;
+    uint8_t previous_flags = device->info.flags;
+    if (memcmp(header, device->owner->descriptors, sizeof(header)) || !parse_configuration(device, total)) {
+      device->owner->interface_count = previous_interfaces;
+      device->info.flags = previous_flags;
       device->incomplete = true;
       device->detail = "malformed or changing configuration descriptors";
     }
   }
 }
 
-static const char *classification_name(enum device_classification classification)
+/* With BSP interrupts disabled, no controller worker can interleave this
+ * final pass. Each pending entry has already stopped writing its records. */
+static void publish_inventory(void)
 {
-  switch (classification) {
-  case DEVICE_UNBOUND: return "unbound";
-  case DEVICE_STORAGE_UNSUPPORTED: return "unsupported storage";
-  case DEVICE_BOT_CANDIDATE: return "provisional SCSI/BOT candidate";
-  case DEVICE_INCOMPLETE: return "incomplete";
-  default: return "unknown";
+  if (inventory.pending ||
+      atomic_load_explicit(&inventory.state, memory_order_relaxed) != SYSTEM_INFO_USB_INITIALIZING) {
+    return;
+  }
+  size_t device_index = 0, interface_index = 0;
+  for (size_t index = 0; index < inventory.controller_count; ++index) {
+    struct usb_controller_record *controller = &inventory.controllers[index];
+    struct usb_discovery *discovery = controller->discovery;
+    controller->device_first = device_index;
+    controller->interface_first = interface_index;
+    if (!discovery) {
+      continue;
+    }
+    for (unsigned port = 0; port < discovery->port_count; ++port) {
+      struct usb_device_record *device = &discovery->devices[port];
+      if (!device->present) {
+        continue;
+      }
+      device->info.controller_index = index;
+      size_t first = device->info.interface_first;
+      for (size_t i = 0; i < device->info.interface_count; ++i) {
+        discovery->interfaces[first + i].device_index = device_index;
+      }
+      device->info.interface_first += interface_index;
+      ++device_index;
+    }
+    interface_index += discovery->interface_count;
+  }
+  inventory.info = (struct system_info_usb) {
+    .state = inventory.incomplete ? SYSTEM_INFO_USB_INCOMPLETE : SYSTEM_INFO_USB_COMPLETE,
+    .controller_count = inventory.controller_count,
+    .device_count = device_index,
+    .interface_count = interface_index,
+  };
+  atomic_store_explicit(&inventory.state, inventory.info.state, memory_order_release);
+}
+
+static bool is_usb_controller(const struct pci_device *device)
+{
+  return device->base_class == PCI_CLASS_SERIAL_BUS && device->subclass == PCI_SUBCLASS_USB;
+}
+
+static void copy_pci_identity(struct system_info_pci_function *reply,
+                              const struct pci_device *device)
+{
+  *reply = (struct system_info_pci_function) {
+    .bus = device->address.bus,
+    .device = device->address.device,
+    .function = device->address.function,
+    .header_type = device->header_type,
+    .vendor_id = device->vendor_id,
+    .device_id = device->device_id,
+    .base_class = device->base_class,
+    .subclass = device->subclass,
+    .interface = device->interface,
+    .revision = device->revision,
+  };
+}
+
+void usb_inventory_prepare(void)
+{
+  if (inventory.prepared) {
+    return;
+  }
+  inventory.prepared = true;
+  atomic_store_explicit(&inventory.state, SYSTEM_INFO_USB_INITIALIZING, memory_order_release);
+  inventory.incomplete = pci_inventory_state() != PCI_INVENTORY_COMPLETE;
+  size_t count = 0;
+  for (size_t i = 0; i < pci_device_count(); ++i) {
+    if (is_usb_controller(pci_device_at(i))) {
+      ++count;
+    }
+  }
+  if (count) {
+    if (count <= SIZE_MAX / sizeof(*inventory.controllers)) {
+      inventory.controllers = kmalloc(count * sizeof(*inventory.controllers));
+    }
+    if (!inventory.controllers) {
+      inventory.incomplete = true;
+      for (size_t i = 0; i < pci_device_count(); ++i) {
+        const struct pci_device *device = pci_device_at(i);
+        if (is_usb_controller(device)) {
+          klog("usb: %x:%x.%u registry allocation failed; controller not retained\n",
+               device->address.bus, device->address.device, device->address.function);
+        }
+      }
+      publish_inventory();
+      return;
+    }
+    memset(inventory.controllers, 0, count * sizeof(*inventory.controllers));
+  }
+  for (size_t i = 0; i < pci_device_count(); ++i) {
+    const struct pci_device *device = pci_device_at(i);
+    if (!is_usb_controller(device)) {
+      continue;
+    }
+    struct usb_controller_record *controller =
+      &inventory.controllers[inventory.controller_count++];
+    copy_pci_identity(&controller->info.pci, device);
+    controller->pci_index = i;
+    if (device->interface == PCI_INTERFACE_XHCI) {
+      controller->pending = true;
+      ++inventory.pending;
+    } else {
+      controller->info.state = SYSTEM_INFO_USB_CONTROLLER_UNSUPPORTED;
+      inventory.incomplete = true;
+      klog("usb: %x:%x.%u host interface %x unsupported\n", device->address.bus,
+           device->address.device, device->address.function, device->interface);
+    }
+  }
+  publish_inventory();
+}
+
+size_t usb_inventory_controller_count(void)
+{
+  return inventory.controller_count;
+}
+
+size_t usb_inventory_pci_index(size_t index)
+{
+  return index < inventory.controller_count ? inventory.controllers[index].pci_index : SIZE_MAX;
+}
+
+struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index)
+{
+  if (!host || index >= inventory.controller_count) {
+    return NULL;
+  }
+  struct usb_controller_record *controller = &inventory.controllers[index];
+  if (!controller->pending || controller->discovery) {
+    return NULL;
+  }
+  unsigned ports = usb_host_port_count(host);
+  size_t capacity = usb_host_control_capacity();
+  controller->info.root_port_count = ports;
+  if (!ports || ports > UINT16_MAX || sizeof(struct usb_device_record) > SIZE_MAX / ports ||
+      capacity < USB_DEVICE_BYTES || capacity > UINT16_MAX) {
+    return NULL;
+  }
+  struct usb_discovery *discovery = kmalloc(sizeof(*discovery));
+  if (!discovery) {
+    return NULL;
+  }
+  memset(discovery, 0, sizeof(*discovery));
+  discovery->registry_index = index;
+  discovery->host = host;
+  discovery->port_count = ports;
+  discovery->capacity = capacity;
+  discovery->devices = kmalloc(ports * sizeof(*discovery->devices));
+  discovery->descriptors = kmalloc(capacity);
+  discovery->interfaces = kmalloc(USB_INTERFACE_BUDGET * sizeof(*discovery->interfaces));
+  if (!discovery->devices || !discovery->descriptors || !discovery->interfaces) {
+    usb_release_prepared(discovery);
+    return NULL;
+  }
+  memset(discovery->devices, 0, ports * sizeof(*discovery->devices));
+  controller->discovery = discovery;
+  return discovery;
+}
+
+void usb_release_prepared(struct usb_discovery *discovery)
+{
+  if (!discovery || discovery->started) {
+    return;
+  }
+  struct usb_controller_record *controller = &inventory.controllers[discovery->registry_index];
+  if (!controller->pending) {
+    return;
+  }
+  if (controller->discovery == discovery) {
+    controller->discovery = NULL;
+  }
+  kfree(discovery->interfaces);
+  kfree(discovery->descriptors);
+  kfree(discovery->devices);
+  kfree(discovery);
+}
+
+/* Capture every boot-present root port before requests can stop the controller. */
+static void capture_ports(struct usb_discovery *discovery)
+{
+  for (unsigned port = 0; port < discovery->port_count; ++port) {
+    struct usb_device_record *device = &discovery->devices[port];
+    device->owner = discovery;
+    device->present = usb_host_port_present(discovery->host, port);
+    if (!device->present) {
+      continue;
+    }
+    ++discovery->device_count;
+    device->host = usb_host_device_at(discovery->host, port);
+    device->info.root_port = port + 1;
+    if (device->host) {
+      device->speed = usb_host_device_speed(device->host);
+      device->info.speed = device->speed;
+    }
   }
 }
 
-bool usb_prepare(void)
+void usb_inventory_controller_failed(size_t index)
 {
-  if (discovery.prepared || discovery.published) {
+  uint64_t flags = cpu_save_interrupts();
+  if (index >= inventory.controller_count || !inventory.controllers[index].pending) {
+    cpu_restore_interrupts(flags);
+    return;
+  }
+  struct usb_controller_record *controller = &inventory.controllers[index];
+  struct usb_discovery *discovery = controller->discovery;
+  if (discovery) {
+    discovery->hardware_failed = true;
+    if (discovery->started) {
+      cpu_restore_interrupts(flags);
+      return;
+    }
+    capture_ports(discovery);
+    for (unsigned port = 0; port < discovery->port_count; ++port) {
+      if (discovery->devices[port].present) {
+        discovery->devices[port].info.flags |= SYSTEM_INFO_USB_DEVICE_INCOMPLETE;
+      }
+    }
+  }
+  controller->info.state = SYSTEM_INFO_USB_CONTROLLER_FAILED;
+  controller->pending = false;
+  inventory.incomplete = true;
+  --inventory.pending;
+  publish_inventory();
+  cpu_restore_interrupts(flags);
+  klog("usb: %x:%x.%u controller discovery failed\n", controller->info.pci.bus,
+       controller->info.pci.device, controller->info.pci.function);
+}
+
+void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
+{
+  if (!discovery || discovery->started ||
+      !inventory.controllers[discovery->registry_index].pending) {
+    return;
+  }
+  discovery->started = true;
+  capture_ports(discovery);
+  bool incomplete = !usb_host_inventory_complete(discovery->host);
+  for (unsigned port = 0; port < discovery->port_count; ++port) {
+    struct usb_device_record *device = &discovery->devices[port];
+    if (!device->present) {
+      continue;
+    }
+    device->info.interface_first = discovery->interface_count;
+    if (!device->host || discovery->hardware_failed || task_deadline_expired(deadline)) {
+      device->incomplete = true;
+      device->detail = "connected port could not be inspected";
+    } else {
+      inspect_device(device, deadline);
+    }
+    device->info.interface_count = discovery->interface_count - device->info.interface_first;
+    if (device->incomplete) {
+      device->info.flags |= SYSTEM_INFO_USB_DEVICE_INCOMPLETE;
+      incomplete = true;
+    }
+    const struct system_info_pci_function *pci =
+      &inventory.controllers[discovery->registry_index].info.pci;
+    klog("usb: %x:%x.%u port %u device %x:%x%s%s\n", pci->bus, pci->device, pci->function,
+         port + 1, device->info.vendor_id, device->info.product_id,
+         device->detail ? ": " : "", device->detail ? device->detail : "");
+  }
+  incomplete |= !usb_host_inventory_complete(discovery->host) || task_deadline_expired(deadline);
+  uint64_t flags = cpu_save_interrupts();
+  struct usb_controller_record *controller = &inventory.controllers[discovery->registry_index];
+  controller->info.state = discovery->hardware_failed ? SYSTEM_INFO_USB_CONTROLLER_FAILED :
+    incomplete ? SYSTEM_INFO_USB_CONTROLLER_INCOMPLETE : SYSTEM_INFO_USB_CONTROLLER_COMPLETE;
+  controller->pending = false;
+  inventory.incomplete |= incomplete || discovery->hardware_failed;
+  --inventory.pending;
+  publish_inventory();
+  cpu_restore_interrupts(flags);
+}
+
+static bool inventory_published(void)
+{
+  uint64_t state = atomic_load_explicit(&inventory.state, memory_order_acquire);
+  return state == SYSTEM_INFO_USB_COMPLETE || state == SYSTEM_INFO_USB_INCOMPLETE;
+}
+
+void usb_inventory_read(struct system_info_usb *reply)
+{
+  uint64_t state = atomic_load_explicit(&inventory.state, memory_order_acquire);
+  if (state == SYSTEM_INFO_USB_COMPLETE || state == SYSTEM_INFO_USB_INCOMPLETE) {
+    *reply = inventory.info;
+  } else {
+    *reply = (struct system_info_usb) { .state = state };
+  }
+}
+
+bool usb_inventory_read_controller(uint64_t index, struct system_info_usb_controller *reply)
+{
+  if (!inventory_published() || index >= inventory.info.controller_count) {
     return false;
   }
-  discovery.port_count = usb_host_port_count();
-  discovery.capacity = usb_host_control_capacity();
-  if (!discovery.port_count || sizeof(*discovery.devices) > SIZE_MAX / discovery.port_count ||
-      discovery.capacity < USB_DEVICE_BYTES || discovery.capacity > UINT16_MAX) {
-    return false;
-  }
-  discovery.devices = kmalloc(discovery.port_count * sizeof(*discovery.devices));
-  discovery.descriptors = kmalloc(discovery.capacity);
-  if (!discovery.devices || !discovery.descriptors) {
-    usb_release_prepared();
-    return false;
-  }
-  memset(discovery.devices, 0, discovery.port_count * sizeof(*discovery.devices));
-  discovery.prepared = true;
+  *reply = inventory.controllers[index].info;
   return true;
 }
 
-void usb_release_prepared(void)
+bool usb_inventory_read_device(uint64_t index, struct system_info_usb_device *reply)
 {
-  if (discovery.published) {
-    return;
-  }
-  kfree(discovery.descriptors);
-  kfree(discovery.devices);
-  memset(&discovery, 0, sizeof(discovery));
-}
-
-static bool configure_candidate(struct usb_device_record *device, uint64_t deadline)
-{
-  struct usb_setup setup = {
-    .request = USB_REQUEST_SET_CONFIGURATION,
-    .value = device->bot.configuration,
-  };
-  size_t bytes;
-  if (!request_ok(device, control(device, &setup, NULL, 0, &bytes, deadline)) || bytes) {
+  if (!inventory_published() || index >= inventory.info.device_count) {
     return false;
   }
-  if (device->bot.alternate) {
-    setup = (struct usb_setup) {
-      .request_type = USB_REQUEST_INTERFACE_OUT,
-      .request = USB_REQUEST_SET_INTERFACE,
-      .value = device->bot.alternate,
-      .index = device->bot.interface,
-    };
-    if (!request_ok(device, control(device, &setup, NULL, 0, &bytes, deadline)) || bytes) {
-      return false;
-    }
-  }
-  return request_ok(device, usb_host_configure_bulk(device->host, device->bot.configuration,
-                    device->bot.interface, device->bot.alternate, device->bot.endpoints, 2, deadline));
-}
-
-void usb_enumerate(uint64_t deadline)
-{
-  if (!discovery.prepared || discovery.published) {
-    return;
-  }
-  discovery.published = true;
-  discovery.result = DISCOVERY_INCOMPLETE;
-  discovery.selected_port = UINT_MAX;
-  bool incomplete = !usb_host_inventory_complete(), unsupported_storage = false;
-
-  for (unsigned index = 0; index < discovery.port_count; ++index) {
-    struct usb_device_record *device = &discovery.devices[index];
-    device->host = usb_host_device_at(index);
-    if (!device->host) {
+  for (size_t i = 0; i < inventory.controller_count; ++i) {
+    const struct usb_controller_record *controller = &inventory.controllers[i];
+    const struct usb_discovery *discovery = controller->discovery;
+    if (!discovery || index < controller->device_first ||
+        index - controller->device_first >= discovery->device_count) {
       continue;
     }
-    inspect_device(device, deadline);
-    if (device->incomplete) {
-      device->classification = DEVICE_INCOMPLETE;
-      incomplete = true;
-    } else if (device->candidate) {
-      device->classification = DEVICE_BOT_CANDIDATE;
-      ++discovery.candidates;
-      discovery.selected_port = index;
-    } else if (device->storage) {
-      device->classification = DEVICE_STORAGE_UNSUPPORTED;
-      unsupported_storage = true;
-    } else {
-      device->classification = DEVICE_UNBOUND;
-    }
-    klog("usb: port %u device %x:%x %s%s%s\n", index + 1,
-         device->vendor, device->product, classification_name(device->classification),
-         device->detail ? ": " : "", device->detail ? device->detail : "");
-    if (discovery.hardware_failed) {
-      incomplete = true;
-      break;
+    size_t local = index - controller->device_first;
+    for (unsigned port = 0; port < discovery->port_count; ++port) {
+      if (discovery->devices[port].present) {
+        if (!local) {
+          *reply = discovery->devices[port].info;
+          return true;
+        }
+        --local;
+      }
     }
   }
-  incomplete |= !usb_host_inventory_complete() || task_deadline_expired(deadline);
-  if (incomplete) {
-    discovery.selected_port = UINT_MAX;
-    klog("usb: discovery incomplete; no transport selected\n");
-    return;
+  return false;
+}
+
+bool usb_inventory_read_interface(uint64_t index, struct system_info_usb_interface *reply)
+{
+  if (!inventory_published() || index >= inventory.info.interface_count) {
+    return false;
   }
-  if (discovery.candidates > 1) {
-    discovery.result = DISCOVERY_AMBIGUOUS;
-    discovery.selected_port = UINT_MAX;
-    klog("usb: discovery ambiguous (%u physical-device candidates)\n", discovery.candidates);
-    return;
+  for (size_t i = 0; i < inventory.controller_count; ++i) {
+    const struct usb_controller_record *controller = &inventory.controllers[i];
+    const struct usb_discovery *discovery = controller->discovery;
+    if (discovery && index >= controller->interface_first &&
+        index - controller->interface_first < discovery->interface_count) {
+      *reply = discovery->interfaces[index - controller->interface_first];
+      return true;
+    }
   }
-  if (!discovery.candidates) {
-    discovery.result = unsupported_storage ? DISCOVERY_UNSUPPORTED : DISCOVERY_ABSENT;
-    klog("usb: discovery %s\n", unsupported_storage ? "unsupported storage" : "storage absent");
-    return;
-  }
-  struct usb_device_record *device = &discovery.devices[discovery.selected_port];
-  klog("usb: selected port %u device %x:%x configuration %u interface %u alternate %u\n",
-       discovery.selected_port + 1, device->vendor, device->product,
-       device->bot.configuration, device->bot.interface, device->bot.alternate);
-  for (unsigned i = 0; i < 2; ++i) {
-    klog("usb: bulk endpoint %x packet %u burst %u\n", device->bot.endpoints[i].address,
-         device->bot.endpoints[i].max_packet, device->bot.endpoints[i].max_burst);
-  }
-  if (!configure_candidate(device, deadline)) {
-    discovery.result = DISCOVERY_SETUP_FAILED;
-    klog("usb: selected transport setup failed; selection retained\n");
-    return;
-  }
-  discovery.result = DISCOVERY_TRANSPORT_READY;
-  klog("usb: provisional SCSI/BOT transport ready; media and LUN setup pending\n");
+  return false;
 }
