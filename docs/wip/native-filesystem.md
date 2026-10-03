@@ -60,18 +60,11 @@ about as much as starting over.
 
 ## What stops
 
-- No further pyxis-fs writer work: no write-efficiency, latency or map-planner
-  tasks, and no further measurement matrices. These plans are superseded and kept
-  only as history:
-  - [writable filesystem core](writable-filesystem-core.md);
-  - [write efficiency](filesystem-write-efficiency.md);
-  - [retirement debt](filesystem-retirement-debt.md);
-  - [overflow split](filesystem-overflow-split.md);
-  - [native persistent volumes](native-persistent-volumes.md);
-  - [pool and persistent filesystem](persistent-storage.md).
-
-  The owner decides separately whether to delete them now or when the
-  replacement lands.
+- No further portable pyxis-fs writer work: no write-efficiency, latency or
+  map-planner tasks, and no further measurement matrices. The six superseded
+  planning documents were removed with task 3; Git retains their history.
+  Existing [filesystem measurements](../../fs/docs/overflow-split-measurements.md)
+  retain the evidence for the restart without preserving active follow-up plans.
 - The pyxis-fs writer is never run against a real disk.
 - The [native mounts](../devices/native-readonly-filesystem.md) now use the new
   format and kernel writer; the portable core and obsolete tools are retired.

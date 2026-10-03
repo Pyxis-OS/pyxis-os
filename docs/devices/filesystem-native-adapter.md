@@ -45,8 +45,9 @@ ceiling. Lookup grants only attenuated child rights. Names are case-sensitive UT
 components of 1–255 bytes, without NUL, slash, `.` or `..`. Parent inode fields
 supply no capability authority and are not exposed as `..` entries.
 
-READ, SIZE and executable capture require file READ. WRITE, RESIZE and file SYNC
-require WRITE; even an empty write reaches the worker's authority/argument checks.
+READ and executable capture require file READ; SIZE accepts READ or WRITE.
+WRITE, RESIZE and file SYNC require WRITE; even an empty write reaches the worker's
+authority/argument checks.
 CREATE/REMOVE and file rename use directory CREATE/REMOVE rights; replacement
 also requires destination REMOVE. Native rename requires the same volume, and
 mixed backends fail BAD_OPERATION. Directory sync requires CREATE or REMOVE.
@@ -122,11 +123,28 @@ Use `VIRTIO_BLK_READONLY=1` only for read-only mounting. Never modify the disk w
 attached. Pool size/journal selection is explicit; the 256 GB target uses at least
 128 MiB of journal. The codec's minimum journal does not prove writer admission.
 
-## Historical task 3 validation
+## Task 3 validation
 
-Native writer runtime validation is pending. The
-[task-3 measurement record](../development/experiments/native-filesystem-task3/README.md)
-contains the obsolete adapter baseline and the planned matched writer measurements.
-Earlier immutable-view/principal-based checks do not qualify this implementation.
+Ordinary builds and interactive four-CPU nested-KVM boots exercised warm reads,
+grow/prepared writes, cached close/reopen, file/directory/disk synchronization,
+resize, creation, rename/replacement, removal, UTF-8 names and native executable
+capture. The [task-3 measurement record](../development/experiments/native-filesystem-task3/README.md)
+contains commands, revisions, repeated intervals and virtual-device byte counts.
+The initial writer's batched grow-write measured a 251.179 ms transfer median and
+207.348 ms sync median; its complete command submitted 7,786,496 target bytes for
+6 MiB of logical data.
+Those are warm nested-VM workload intervals, not owner-host latency or SSD wear.
+
+Clean restart retained the written files; extracted contents matched their source
+and native host fsck passed. Read-only aliases rejected mutation, trusted disk sync
+succeeded, an ordinary remote shell lacked mount authority, and fastfetch queried
+writable and read-only volumes after the userland INFO correction. The native
+USB-image consumer built and checked successfully; no USB boot is claimed.
+
+Committed replay, interrupted cleanup, retained-open unlink, uncertain I/O failure,
+ENOSPC, allocator pressure and read-only-device opening remain source-reviewed,
+not runtime exercised. No crash injection or physical-media qualification was
+performed. Earlier principal/COW checks do not qualify this implementation.
+
 Manual debugger work follows the existing [ownership rules](../development/gdb.md);
 no sleeping worker or engine call may be injected as a stopped debugger call.

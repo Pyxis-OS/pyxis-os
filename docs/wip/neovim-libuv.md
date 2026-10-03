@@ -226,8 +226,9 @@ performance or proof of a completed port.
 
 These are ordered proposals with independently useful consumers. Block storage remains
 the active implementation track. These proposals do not start parallel implementation;
-filesystem metadata work should follow the agreed [storage](persistent-storage.md) and
-[authority](users-and-authority.md) contracts. Each step should end with ordinary
+filesystem metadata work should follow the implemented
+[native filesystem](../devices/filesystem-native-adapter.md) and the deferred
+[authority direction](users-and-authority.md). Each step should end with ordinary
 focused builds, manual runtime use and debugger inspection appropriate to its actual
 change.
 
@@ -252,7 +253,7 @@ change.
 3. **Truthful native file metadata, identity and editor conflict information.** Define
    identity comparison scope/lifetime, file kind/size, modification indication and
    actual access/ownership information across RAM/host and the selected
-   persistent-storage direction. Add conventional wrappers only for supported behavior;
+   native-filesystem direction. Add conventional wrappers only for supported behavior;
    carry forward existing exclusive creation, rename and file/directory sync. Useful
    consumers: alias-safe copy, TCC include identity, navigators and editor overwrite
    checks. General file watches, Unix permissions and broad locking APIs stay deferred

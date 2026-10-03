@@ -4,7 +4,7 @@ Caelum exposes one modern virtio-blk disk through the kernel-only
 [block interface](../../include/kernel/block.h). It supports bounded asynchronous
 reads, writes and flushes. [GPT discovery](gpt.md) publishes an immutable boot-time
 partition map through a separate kernel interface.
-[Native read-only mounts](filesystem-native-adapter.md)
+[Native filesystem mounts](filesystem-native-adapter.md)
 expose directory/file capabilities selected by trusted init, while raw-disk
 authority remains kernel-only.
 
@@ -16,8 +16,8 @@ VirtIO backend.
 The block-storage foundation milestone is complete. Its implemented contracts
 live here, in [shared VirtIO queues](virtio-queues.md) for filesystem, entropy and
 block storage, and in [GPT discovery](gpt.md). The
-[persistent filesystem design](../wip/persistent-storage.md) remains planned;
-completing this foundation does not select or authorize a later milestone.
+[native filesystem](filesystem-native-adapter.md) uses this foundation for its
+implemented format, cache and writer; installation remains separate.
 
 ## Attach a development image
 

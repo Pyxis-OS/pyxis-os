@@ -1,7 +1,8 @@
 # Runtime SMP and independent spaces
 
 Status: agreed milestone direction, 2026-10-01; implementation not started.
-Complete the [writable filesystem core](writable-filesystem-core.md) first.
+The prerequisite [native filesystem writer](../devices/filesystem-native-adapter.md)
+is complete.
 This milestone replaces the earlier proposal to combine CPU-independent spaces
 with multiple threads per process while retaining all BSP services.
 
@@ -218,7 +219,7 @@ record them rather than broadening the milestone without agreement.
 Tasks may be split further for review; do not start the next implicitly. Each PR
 updates current subsystem docs only for behavior it implements.
 
-1. [ ] **Rebase the investigation and capture the baseline.** After writable core
+1. [ ] **Rebase the investigation and capture the baseline.** After native writer
    completion, audit changed worker/memory/lifetime dependencies and record the
    bounded performance set above. Settle session configuration, trusted-init
    affinity authority/handoff, single-CPU defaults and the mapping-growth design

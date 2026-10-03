@@ -392,10 +392,10 @@ host tools and the later physical-preparation procedure.
    prevent a mount requiring durability, never succeed as placeholders. Preserve
    uncertain-outcome and sticky-failure semantics on disconnect/error.
 2. [ ] **Integrate the persistent development loop.** Depends on qualified
-   [writable core](writable-filesystem-core.md) and
-   [native persistent volumes](native-persistent-volumes.md), including their
-   stack, authority and recovery prerequisites. Edit/build/run, checkpoint,
-   reboot and verify persisted files; exercise a separately read-only session.
+   [native filesystem writer](../devices/filesystem-native-adapter.md) and
+   qualification of the USB backend's write/flush/error behavior. Edit/build/run,
+   checkpoint, reboot and verify persisted files; exercise a separately read-only
+   session.
 3. [ ] **Validate the physical installation.** First inspect laptop hardware,
    then select the expendable USB target explicitly. Progress from firmware boot
    to read-only mounting and bounded persistence checks. Record device, firmware,

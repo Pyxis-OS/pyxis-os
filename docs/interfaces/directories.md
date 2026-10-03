@@ -14,7 +14,7 @@ configured disk; no on-disk principal is supplied. Roots require LOOKUP. Mutatio
 rights additionally require mount WRITE; observation independently requires OBSERVE.
 Returned directory/file grants can be attenuated and delegated independently of
 mount authority. Native create/remove/file rename, writes, resizing and sync run
-on the sole kernel filesystem worker. Native FILE_SIZE requires READ.
+on the sole kernel filesystem worker. Native FILE_SIZE accepts READ or WRITE.
 The tree internals below describe the archive/RAM backends.
 
 ## Scoped filesystem information
