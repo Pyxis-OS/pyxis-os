@@ -36,13 +36,16 @@ enum port_state { PORT_ABSENT, PORT_UNSUPPORTED, PORT_CONNECTED, PORT_RESERVED, 
 enum control_state { CONTROL_IDLE, CONTROL_ACTIVE, CONTROL_DONE, CONTROL_HELD };
 struct usb_host_device {
   struct usb_host_controller *controller;
+  struct usb_host_device *parent;
   struct dma_buffer input, output, control_ring, data;
   uintptr_t data_address;
   phys_addr_t data_physical;
-  unsigned port, slot, enqueue;
+  unsigned port, slot, enqueue, downstream_port, depth, hub_ports;
+  uint32_t route;
+  uint8_t raw_speed, tt_slot, tt_port;
   uint16_t packet;
   enum usb_speed speed;
-  bool cycle, addressed;
+  bool cycle, addressed, multi_tt, removed;
   struct {
     enum control_state state;
     uint64_t generation, deadline;
@@ -76,12 +79,15 @@ struct usb_host_controller {
   struct pci_msix msix;
   struct pci_mapping bootstrap, registers;
   struct dma_buffer dcbaa, command_ring, event_ring, erst, scratchpad_array, scratchpads;
+  struct dma_buffer descendant_dma;
   struct xhci_port *ports;
+  struct usb_host_device *descendants;
   uint32_t operational, runtime, doorbells;
   unsigned port_count, slot_count, scratchpad_count, context_bytes;
+  unsigned descendant_capacity, descendants_used;
   unsigned command_enqueue, event_dequeue;
   bool command_cycle, event_cycle, port_power;
-  bool prepared, running, interrupt_ready, notified, failed;
+  bool prepared, running, interrupt_ready, notified, failed, enumerating;
   struct task_wait *wait;
   struct {
     phys_addr_t physical;
@@ -93,6 +99,17 @@ struct usb_host_controller {
 };
 
 static struct usb_host_controller *controllers;
+
+static unsigned device_capacity(const struct usb_host_controller *controller)
+{
+  return controller->port_count + controller->descendant_capacity;
+}
+
+static struct usb_host_device *device_at(struct usb_host_controller *controller, unsigned index)
+{
+  return index < controller->port_count ? &controller->ports[index].device :
+    &controller->descendants[index - controller->port_count];
+}
 
 static uint32_t read32(uintptr_t base, unsigned offset)
 {
@@ -189,6 +206,18 @@ static bool inspect_capabilities(struct usb_host_controller *controller)
   }
   for (unsigned i = 0; i < controller->port_count; ++i) {
     controller->ports[i] = (struct xhci_port){0};
+  }
+  /* Preserve all possible root reservations before budgeting descendants. */
+  unsigned available = controller->slot_count > controller->port_count ?
+    controller->slot_count - controller->port_count : 0;
+  controller->descendant_capacity = available < USB_DESCENDANT_BUDGET ? available : USB_DESCENDANT_BUDGET;
+  if (controller->descendant_capacity) {
+    controller->descendants = kmalloc(controller->descendant_capacity * sizeof(*controller->descendants));
+    if (!controller->descendants) {
+      controller->descendant_capacity = 0;
+      return false;
+    }
+    memset(controller->descendants, 0, controller->descendant_capacity * sizeof(*controller->descendants));
   }
   klog("xHCI %x:%x.%u: version=%x slots=%u ports=%u context=%u scratchpads=%u\n",
        controller->address.bus, controller->address.device, controller->address.function,
@@ -438,6 +467,33 @@ static void initialize_transfer_ring(const struct dma_buffer *ring)
   };
 }
 
+static bool prepare_device_buffers(struct usb_host_device *device, size_t capacity, size_t padding)
+{
+  if (!ring_layout(&device->control_ring)) {
+    return false;
+  }
+  size_t offset = padding ? (-device->data.physical & (XHCI_RING_BOUNDARY - 1)) : 0;
+  if (offset > device->data.bytes || capacity > device->data.bytes - offset ||
+      ((device->data.physical + offset) & (XHCI_RING_BOUNDARY - 1)) > XHCI_RING_BOUNDARY - capacity) {
+    return false;
+  }
+  device->data_address = device->data.address + offset;
+  device->data_physical = device->data.physical + offset;
+  device->cycle = true;
+  initialize_transfer_ring(&device->control_ring);
+  return true;
+}
+
+static struct dma_buffer descendant_dma_slice(const struct dma_buffer *arena, size_t offset, size_t bytes)
+{
+  KASSERT(offset <= arena->bytes && bytes <= arena->bytes - offset);
+  return (struct dma_buffer){
+    .address = arena->address + offset,
+    .physical = arena->physical + offset,
+    .bytes = bytes,
+  };
+}
+
 static bool allocate_devices(struct usb_host_controller *controller)
 {
   size_t capacity = USB_CONTROL_BYTES;
@@ -451,22 +507,43 @@ static bool allocate_devices(struct usb_host_controller *controller)
     struct usb_host_device *device = &controller->ports[i].device;
     device->controller = controller;
     device->port = i;
-    device->cycle = true;
     if (dma_buffer_allocate(&device->input, XHCI_INPUT_CONTEXT_COUNT * controller->context_bytes) != MM_OK ||
         dma_buffer_allocate(&device->output, XHCI_CONTEXT_COUNT * controller->context_bytes) != MM_OK ||
         dma_buffer_allocate(&device->control_ring, PAGE_SIZE) != MM_OK ||
         dma_buffer_allocate(&device->data, capacity + padding) != MM_OK ||
-        !ring_layout(&device->control_ring)) {
+        !prepare_device_buffers(device, capacity, padding)) {
       return false;
     }
-    size_t offset = padding ? (-device->data.physical & (XHCI_RING_BOUNDARY - 1)) : 0;
-    if (offset > device->data.bytes || capacity > device->data.bytes - offset ||
-        ((device->data.physical + offset) & (XHCI_RING_BOUNDARY - 1)) > XHCI_RING_BOUNDARY - capacity) {
+  }
+  if (!controller->descendant_capacity) {
+    return true;
+  }
+  size_t input_bytes =
+    (XHCI_INPUT_CONTEXT_COUNT * controller->context_bytes + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  size_t output_bytes =
+    (XHCI_CONTEXT_COUNT * controller->context_bytes + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  size_t data_bytes = (capacity + padding + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  size_t stride = input_bytes + output_bytes + PAGE_SIZE + data_bytes;
+  if (controller->descendant_capacity > SIZE_MAX / stride ||
+      dma_buffer_allocate(&controller->descendant_dma, controller->descendant_capacity * stride) != MM_OK) {
+    return false;
+  }
+  /* One owned arena avoids spending four VM range records per descendant.
+   * Page-aligned slices are borrowed; only the controller releases the arena. */
+  for (unsigned i = 0; i < controller->descendant_capacity; ++i) {
+    struct usb_host_device *device = &controller->descendants[i];
+    size_t offset = i * stride;
+    device->controller = controller;
+    device->input = descendant_dma_slice(&controller->descendant_dma, offset, input_bytes);
+    offset += input_bytes;
+    device->output = descendant_dma_slice(&controller->descendant_dma, offset, output_bytes);
+    offset += output_bytes;
+    device->control_ring = descendant_dma_slice(&controller->descendant_dma, offset, PAGE_SIZE);
+    offset += PAGE_SIZE;
+    device->data = descendant_dma_slice(&controller->descendant_dma, offset, data_bytes);
+    if (!prepare_device_buffers(device, capacity, padding)) {
       return false;
     }
-    device->data_address = device->data.address + offset;
-    device->data_physical = device->data.physical + offset;
-    initialize_transfer_ring(&device->control_ring);
   }
   return true;
 }
@@ -520,12 +597,16 @@ static void release_boot_resources(struct usb_host_controller *controller)
       dma_buffer_release(&device->input);
     }
   }
+  dma_buffer_release(&controller->descendant_dma);
   dma_buffer_release(&controller->scratchpads);
   dma_buffer_release(&controller->scratchpad_array);
   dma_buffer_release(&controller->erst);
   dma_buffer_release(&controller->event_ring);
   dma_buffer_release(&controller->command_ring);
   dma_buffer_release(&controller->dcbaa);
+  kfree(controller->descendants);
+  controller->descendants = NULL;
+  controller->descendant_capacity = 0;
   kfree(controller->ports);
   controller->ports = NULL;
   if (controller->claim.reserved) {
@@ -697,8 +778,8 @@ static bool consume_command(struct usb_host_controller *controller, const struct
     return false;
   }
   if (controller->command.type == XHCI_TRB_ENABLE_SLOT) {
-    for (unsigned i = 0; i < controller->port_count; ++i) {
-      if (controller->ports[i].slot == slot) {
+    for (unsigned i = 0; i < device_capacity(controller); ++i) {
+      if (device_at(controller, i)->slot == slot) {
         controller->failure = "Enable Slot returned an owned slot";
         return false;
       }
@@ -719,9 +800,9 @@ static bool consume_transfer(struct usb_host_controller *controller, const struc
   unsigned slot = event->control >> XHCI_TRB_SLOT_SHIFT;
   unsigned endpoint = (event->control >> XHCI_EVENT_ENDPOINT_SHIFT) & XHCI_EVENT_ENDPOINT_MASK;
   struct usb_host_device *device = NULL;
-  for (unsigned i = 0; i < controller->port_count; ++i) {
-    if (controller->ports[i].device.slot == slot && slot) {
-      device = &controller->ports[i].device;
+  for (unsigned i = 0; i < device_capacity(controller); ++i) {
+    if (device_at(controller, i)->slot == slot && slot) {
+      device = device_at(controller, i);
       break;
     }
   }
@@ -950,10 +1031,36 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
     port->slot = controller->command.slot;
     port->device.slot = port->slot;
     port->device.speed = port->speeds[port->speed];
+    port->device.raw_speed = port->speed;
     port->state = PORT_RESERVED;
     klog("xHCI %x:%x.%u: root port %u USB %u.%u speed-id=%u slot=%u enabled; addressing pending\n",
          controller->address.bus, controller->address.device, controller->address.function,
          i + 1, port->major, port->minor, port->speed, port->slot);
+  }
+  return true;
+}
+
+static bool retire_root_devices(struct usb_host_controller *controller, unsigned port)
+{
+  for (unsigned i = 0; i < device_capacity(controller); ++i) {
+    struct usb_host_device *device = device_at(controller, i);
+    if (device->slot && !device->removed && device->port == port &&
+        device->request.state == CONTROL_ACTIVE) {
+      controller->failure = "root subtree disappeared during control transfer";
+      return false;
+    }
+  }
+  /* Children are reserved after their parents. Disable them first, retaining
+   * every slot identity and DMA object rather than allowing reuse this boot. */
+  for (unsigned i = device_capacity(controller); i; --i) {
+    struct usb_host_device *device = device_at(controller, i - 1);
+    if (device->slot && !device->removed && device->port == port) {
+      device->removed = true;
+      if (!run_command(controller, XHCI_TRB_DISABLE_SLOT, device->slot, 0,
+                       task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS))) {
+        return false;
+      }
+    }
   }
   return true;
 }
@@ -969,8 +1076,7 @@ static bool update_ports(struct usb_host_controller *controller)
     if (port->state == PORT_RESERVED &&
         (!(status & XHCI_PORT_CONNECTED) || !(status & XHCI_PORT_ENABLED) ||
          (status & (XHCI_PORT_OVER_CURRENT | XHCI_PORT_CONNECT_CHANGE)))) {
-      if (!run_command(controller, XHCI_TRB_DISABLE_SLOT, port->slot, 0,
-                       task_deadline_after_ms(USB_COMMAND_TIMEOUT_MS))) {
+      if (!retire_root_devices(controller, i)) {
         return false;
       }
       port->slot = 0;
@@ -1018,8 +1124,8 @@ static void stop_controller(struct usb_host_controller *controller)
   controller->running = false;
   controller->failed = true;
   usb_inventory_controller_failed(controller->inventory_index);
-  for (unsigned i = 0; i < controller->port_count; ++i) {
-    struct usb_host_device *device = &controller->ports[i].device;
+  for (unsigned i = 0; i < device_capacity(controller); ++i) {
+    struct usb_host_device *device = device_at(controller, i);
     if (device->request.state == CONTROL_ACTIVE) {
       device->request.state = CONTROL_HELD;
       device->request.result = USB_IO;
@@ -1038,10 +1144,15 @@ static void assert_device_owner(const struct usb_host_device *device)
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
   cpu_restore_interrupts(flags);
   bool owned = false;
-  for (unsigned i = 0; i < controller->port_count; ++i) {
-    owned |= device == &controller->ports[i].device;
+  for (unsigned i = 0; i < device_capacity(controller); ++i) {
+    owned |= device == device_at(controller, i);
   }
   KASSERT(owned);
+}
+
+unsigned usb_host_descendant_capacity(const struct usb_host_controller *controller)
+{
+  return controller->descendant_capacity;
 }
 
 unsigned usb_host_port_count(const struct usb_host_controller *controller)
@@ -1098,7 +1209,8 @@ static bool device_present(const struct usb_host_device *device)
 {
   struct usb_host_controller *controller = device->controller;
   uint32_t status = read32(port_register(controller, device->port), 0);
-  return controller->ports[device->port].state == PORT_RESERVED &&
+  return !device->removed && device->slot &&
+    controller->ports[device->port].state == PORT_RESERVED &&
     (status & (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED)) == (XHCI_PORT_CONNECTED | XHCI_PORT_ENABLED) &&
     !(status & (XHCI_PORT_OVER_CURRENT | XHCI_PORT_CONNECT_CHANGE));
 }
@@ -1159,9 +1271,11 @@ enum usb_result usb_host_address(struct usb_host_device *device, uint64_t deadli
   uint32_t *input = (uint32_t *)device->input.address;
   input[1] = 3; /* Slot and EP0 only. */
   uint32_t *slot = input_slot(device);
-  slot[0] = (1u << XHCI_SLOT_ENTRIES_SHIFT) |
-    ((unsigned)controller->ports[device->port].speed << XHCI_SLOT_SPEED_SHIFT);
+  slot[0] = device->route | (1u << XHCI_SLOT_ENTRIES_SHIFT) |
+    ((unsigned)device->raw_speed << XHCI_SLOT_SPEED_SHIFT) |
+    (device->multi_tt ? XHCI_SLOT_MULTI_TT : 0);
   slot[1] = (device->port + 1) << XHCI_SLOT_ROOT_PORT_SHIFT;
+  slot[2] = device->tt_slot | ((unsigned)device->tt_port << XHCI_SLOT_TT_PORT_SHIFT);
   set_control_endpoint(input_endpoint(device, XHCI_ENDPOINT_ZERO),
                        device->packet, device->control_ring.physical);
   volatile uint64_t *dcbaa = (volatile uint64_t *)controller->dcbaa.address;
@@ -1171,6 +1285,110 @@ enum usb_result usb_host_address(struct usb_host_device *device, uint64_t deadli
     device->addressed = true;
   }
   return result;
+}
+
+enum usb_result usb_host_configure_hub(struct usb_host_device *device, unsigned ports,
+                                       unsigned tt_think_time, bool multi_tt, uint64_t deadline)
+{
+  assert_device_owner(device);
+  if (!device_ready(device) || !device->addressed) {
+    return USB_IO;
+  }
+  if (!device->controller->enumerating || device->hub_ports || device->request.state != CONTROL_IDLE) {
+    return USB_BUSY;
+  }
+  if (!ports || ports > UINT8_MAX || tt_think_time > XHCI_SLOT_TT_THINK_MAX ||
+      (device->speed != USB_SPEED_FULL && device->speed != USB_SPEED_HIGH) ||
+      (device->speed != USB_SPEED_HIGH && (tt_think_time || multi_tt))) {
+    return USB_UNSUPPORTED;
+  }
+  memset((void *)device->input.address, 0, device->input.bytes);
+  ((uint32_t *)device->input.address)[1] = 1; /* Slot only; EP0 remains enabled. */
+  uint32_t *slot = input_slot(device);
+  slot[0] = (1u << XHCI_SLOT_ENTRIES_SHIFT) | XHCI_SLOT_HUB |
+    (multi_tt ? XHCI_SLOT_MULTI_TT : 0);
+  slot[1] = ports << XHCI_SLOT_PORTS_SHIFT;
+  slot[2] = tt_think_time << XHCI_SLOT_TT_THINK_SHIFT;
+  /* Evaluate Context cannot update Hub, Number of Ports, MTT or TTT. */
+  enum usb_result result = context_command(device, XHCI_TRB_CONFIGURE_ENDPOINT, deadline);
+  if (result == USB_OK) {
+    device->hub_ports = ports;
+    if (device->speed == USB_SPEED_HIGH) {
+      device->multi_tt = multi_tt;
+    }
+  }
+  return result;
+}
+
+enum usb_result usb_host_attach_child(struct usb_host_device *parent, unsigned port,
+                                      enum usb_speed speed, uint64_t deadline,
+                                      struct usb_host_device **child)
+{
+  assert_device_owner(parent);
+  if (!child) {
+    return USB_INVALID;
+  }
+  *child = NULL;
+  struct usb_host_controller *controller = parent->controller;
+  if (!device_ready(parent) || !parent->addressed) {
+    return USB_IO;
+  }
+  if (!controller->enumerating || parent->request.state != CONTROL_IDLE) {
+    return USB_BUSY;
+  }
+  if (!parent->hub_ports || !port || port > parent->hub_ports ||
+      parent->depth >= XHCI_SLOT_ROUTE_DEPTH ||
+      (speed != USB_SPEED_LOW && speed != USB_SPEED_FULL && speed != USB_SPEED_HIGH) ||
+      (parent->speed != USB_SPEED_HIGH && speed == USB_SPEED_HIGH) ||
+      controller->descendants_used == controller->descendant_capacity) {
+    return USB_UNSUPPORTED;
+  }
+  for (unsigned i = 0; i < controller->descendants_used; ++i) {
+    if (controller->descendants[i].parent == parent && controller->descendants[i].downstream_port == port) {
+      return USB_UNSUPPORTED;
+    }
+  }
+  struct xhci_port *root = &controller->ports[parent->port];
+  unsigned raw_speed = 0;
+  for (unsigned i = 1; i <= XHCI_PORT_SPEED_MASK; ++i) {
+    if (root->speeds[i] == speed) {
+      raw_speed = i;
+      break;
+    }
+  }
+  if (!raw_speed || root->major != 2) {
+    return USB_UNSUPPORTED;
+  }
+  if (task_deadline_expired(deadline)) {
+    return USB_TIMEOUT;
+  }
+  struct usb_host_device *device = &controller->descendants[controller->descendants_used++];
+  device->parent = parent;
+  device->port = parent->port;
+  device->downstream_port = port;
+  device->depth = parent->depth + 1;
+  unsigned route_port = port < XHCI_SLOT_ROUTE_PORT_MAX ? port : XHCI_SLOT_ROUTE_PORT_MAX;
+  device->route = parent->route | (route_port << (parent->depth * XHCI_SLOT_ROUTE_PORT_BITS));
+  device->speed = speed;
+  device->raw_speed = raw_speed;
+  if (speed == USB_SPEED_LOW || speed == USB_SPEED_FULL) {
+    if (parent->speed == USB_SPEED_HIGH) {
+      device->tt_slot = parent->slot;
+      device->tt_port = port;
+      device->multi_tt = parent->multi_tt;
+    } else {
+      device->tt_slot = parent->tt_slot;
+      device->tt_port = parent->tt_port;
+      device->multi_tt = parent->multi_tt;
+    }
+  }
+  if (!run_command(controller, XHCI_TRB_ENABLE_SLOT, root->slot_type, 0, deadline)) {
+    stop_controller(controller);
+    return USB_IO;
+  }
+  device->slot = controller->command.slot;
+  *child = device;
+  return USB_OK;
 }
 
 enum usb_result usb_host_update_packet(struct usb_host_device *device, uint16_t packet, uint64_t deadline)
@@ -1290,8 +1508,8 @@ enum usb_result usb_host_control_submit(struct usb_host_device *device, const st
 
 static bool control_deadlines(struct usb_host_controller *controller)
 {
-  for (unsigned i = 0; i < controller->port_count; ++i) {
-    struct usb_host_device *device = &controller->ports[i].device;
+  for (unsigned i = 0; i < device_capacity(controller); ++i) {
+    struct usb_host_device *device = device_at(controller, i);
     if (device->request.state == CONTROL_ACTIVE &&
         (task_deadline_expired(device->request.deadline) || !device_present(device))) {
       bool expired = task_deadline_expired(device->request.deadline);
@@ -1440,7 +1658,9 @@ static void controller_worker(void *argument)
     stop_controller(controller);
     return;
   }
+  controller->enumerating = true;
   usb_enumerate(controller->discovery, enumeration_deadline);
+  controller->enumerating = false;
   if (!controller->running || controller->failed) {
     return;
   }
