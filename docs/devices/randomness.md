@@ -110,14 +110,16 @@ instructions execute. Both use the 64-bit operand form, including for reads with
 a short final tail.
 
 At worker startup, a bounded self-test obtains four words from each advertised
-instruction. Each word must pass the same checks as runtime output. If either
-advertised instruction fails its self-test, including carry-clear exhaustion,
-the CPU service remains unavailable until reboot. Testing RDRAND independently
-prevents a broken fallback from remaining hidden behind a working RDSEED path.
+instruction independently. Each word must pass the runtime checks. A failed
+instruction, including one exhausting its self-test carry retries, is disabled
+until reboot; testing continues with the others. The CPU service starts if any
+instruction passed. Testing RDRAND independently keeps a broken fallback from
+remaining hidden behind working RDSEED; its failure does not disable healthy
+RDSEED. Each disabled instruction and the surviving source are logged.
 These sample and retry counts are implementation choices, not ABI constants.
 
-For each runtime word, RDSEED gets up to 32 attempts; if absent or all attempts
-clear carry, RDRAND gets up to 10 attempts. Failed attempts use `pause` and never
+For each runtime word, RDSEED gets up to 32 attempts; if absent, disabled or all
+attempts clear carry, healthy RDRAND gets up to 10 attempts. Failed attempts use `pause` and never
 update health history. Exhausting both paths fails that read without partial
 output; future reads may try again. A caller's deadline and cancellation are
 checked between words, and success is checked against the original deadline.
@@ -125,10 +127,19 @@ checked between words, and success is checked against the original deadline.
 A carry-set word of zero, all ones, or a repeat fails the health check. Repeats
 are checked against both the previous accepted word from that instruction and
 the immediately preceding accepted word across instructions. History includes
-the self-test and spans request boundaries and short tails. A health failure
-stops admission and wakes pending callers unavailable until reboot; it never
-tries the other instruction to hide the failure. Complete words are checked
-before their requested bytes enter staging storage. The all-ones check covers
+the self-test and spans request boundaries, discarded refills and short tails.
+Zero, all-ones or a per-instruction repeat disables only that instruction until
+reboot. A repeat of the previous sample from a different instruction disables
+both, because the failure cannot be attributed to just one.
+
+After any runtime health failure, the worker clears the current request's entire
+staging buffer and resets its filled count. If an instruction remains healthy,
+it refills the request from scratch under the original deadline and cancellation
+state. No byte collected before the suspect sample is returned, even if that
+byte came from another instruction. If none remains, admission stops and pending
+callers wake unavailable until reboot. Each instruction can be disabled only
+once, so health recovery adds at most one refill before both are unavailable.
+Complete words are checked before their requested bytes enter staging storage. The all-ones check covers
 the known firmware failure motivating this policy. These checks detect specific
 obvious failures; they do not establish entropy quality or replace hardware
 trust. Bytes and health-history values are never logged.

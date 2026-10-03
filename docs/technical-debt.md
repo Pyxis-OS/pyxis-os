@@ -1362,8 +1362,11 @@ retries and checks for zero, all-ones and repeated words. VirtIO remains preferr
 when present; neither source provides independence from the hardware/hypervisor.
 The CPU boot self-test and runtime checks reject obvious failures, not arbitrary
 bias, malicious hardware or firmware defects. Availability depends on the
-instruction supply; carry-clear exhaustion fails the current read, and a health
-failure requires reboot. See [randomness](devices/randomness.md).
+instruction supply; carry-clear exhaustion fails the current read. A health
+failure disables its instruction until reboot and discards/refills the whole
+request from any healthy survivor. An ambiguous cross-instruction repeat disables
+both. The source is unavailable once no healthy instruction remains. See
+[randomness](devices/randomness.md).
 
 The accepted follow-up is a kernel ChaCha20 generator seeded from these sources.
 Revisit source mixing, reseeding and generator ownership in that task; do not add

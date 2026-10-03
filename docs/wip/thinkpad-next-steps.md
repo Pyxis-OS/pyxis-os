@@ -60,9 +60,12 @@ work.
 - **Health checks, fail closed.** Some Zen 2 firmware returned all-ones from
   RDRAND while still setting carry; Linux tests for this at boot. Reject an
   all-ones or all-zero word, and a word identical to the previous one, and run a
-  short self-test at boot. On failure, `random` reads report the source
-  unavailable. They never return suspect bytes and never fall back to anything
-  predictable. The existing rule that timestamps don't substitute for randomness
+  short self-test at boot. The owner's follow-up decision uses a per-instruction
+  latch: a failure disables its instruction until reboot, while a healthy
+  survivor can serve. A runtime health failure discards and refills the entire
+  current request; a cross-instruction repeat disables both. Without a healthy
+  survivor, reads report unavailable. They never return suspect bytes or anything
+  collected alongside one, and never fall back to predictable data. The existing rule that timestamps don't substitute for randomness
   stands.
 - **Keep the `random` capability unchanged.** Callers see the same interface;
   only the kernel's backing source changes.
@@ -202,21 +205,20 @@ TCP identity entropy errors are gone. Ethernet remains separate unassigned work.
 The ThinkPad has two Realtek RTL8111-family controllers (`10ec:8168`), and they
 differ a lot for passthrough:
 
-| Function | Revision | IOMMU group | Notes |
-| --- | --- | --- | --- |
-| `05:00.0` | 0x15 | 15, alone | Can be passed through cleanly on its own. |
-| `02:00.0` | 0x0e | 12, shared | Multi-function management chip. The group also holds two UARTs (`02:00.1`, `02:00.2`), an IPMI interface (`02:00.3`) and an EHCI controller (`02:00.4`); all five must be passed through together. |
+| Port | Function | Revision | IOMMU group | Notes |
+| --- | --- | --- | --- | --- |
+| Built-in RJ45 | `05:00.0` | 0x15 | 15, alone | Owner's PXE port; pass through this function only. |
+| Dock Ethernet | `02:00.0` | 0x0e | 12, shared | Multi-function management chip. The group also holds two UARTs (`02:00.1`, `02:00.2`), an IPMI interface (`02:00.3`) and an EHCI controller (`02:00.4`); all five must be passed through together. |
 
-**Owner action first: identify which function is the RJ45 port in use.** With
-the cable plugged in, on Fedora:
+**Owner-confirmed mapping (2026-10-03):** the built-in RJ45, also used for
+native PXE boot, is `05:00.0`. It is alone in IOMMU group 15, so passthrough targets
+that function only. Dock Ethernet is the PCI controller at `02:00.0`, sharing
+group 12 with its UARTs, IPMI and EHCI; the same driver family can cover it later
+with revision-specific handling. AX200 Wi-Fi is `03:00.0`.
 
-```sh
-ip -br link
-readlink /sys/class/net/<interface>/device
-```
-
-Ideally it is `05:00.0`. Both are the same chip family, so one driver should
-eventually cover both, though revisions differ in detail.
+The router now reserves a fixed address for the built-in port. A static Pyxis
+configuration can use it once the driver exists. MAC addresses and the reserved
+address are intentionally omitted here.
 
 **Host setup on the ThinkPad's Fedora** (*proposed* steps, owner-run):
 
@@ -225,7 +227,7 @@ eventually cover both, though revisions differ in detail.
   `sudo driverctl set-override 0000:05:00.0 vfio-pci`. Undo with
   `driverctl unset-override`.
 - While it is passed through, Fedora loses that NIC. Use the AX200 Wi-Fi or the
-  dock's USB Ethernet for host networking.
+  dock's Ethernet (`02:00.0`) for host networking.
 - VFIO pins all guest RAM. Either raise the memory-lock limit or run with
   `MEMORY=2G` for driver work; the default is now 8 GiB.
 

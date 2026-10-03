@@ -258,8 +258,14 @@ static bool fill_cpu(void)
     uint64_t word;
     enum arch_random_result result = arch_random_word(&word);
     if (result == ARCH_RANDOM_FAILED) {
-      stop_service("CPU entropy health check failed");
-      return false;
+      memset(call->bytes, 0, sizeof(call->bytes));
+      call->filled = 0;
+      if (!arch_random_enabled(ARCH_RANDOM_RDSEED) && !arch_random_enabled(ARCH_RANDOM_RDRAND)) {
+        stop_service("no healthy CPU entropy instruction");
+        return false;
+      }
+      /* A failed instruction cannot contribute any byte to this request. */
+      continue;
     }
     if (result == ARCH_RANDOM_EMPTY) {
       uint64_t flags = cpu_save_interrupts();
@@ -295,7 +301,9 @@ static void entropy_worker(void *argument)
       return;
     }
     klog("random: CPU %s ready; boot self-test passed\n",
-        arch_random_has_rdseed() ? "RDSEED (RDRAND fallback when supported)" : "RDRAND");
+        arch_random_enabled(ARCH_RANDOM_RDSEED) ?
+            (arch_random_enabled(ARCH_RANDOM_RDRAND) ? "RDSEED (RDRAND fallback)" : "RDSEED") :
+            "RDRAND");
   }
   for (;;) {
     bool worked = expire_calls();

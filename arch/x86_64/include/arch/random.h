@@ -5,13 +5,15 @@
 #include <stdint.h>
 
 enum arch_random_result { ARCH_RANDOM_OK, ARCH_RANDOM_EMPTY, ARCH_RANDOM_FAILED };
+enum arch_random_instruction { ARCH_RANDOM_RDRAND, ARCH_RANDOM_RDSEED, ARCH_RANDOM_INSTRUCTIONS };
 
-/* BSP worker only, including initialization. Tests every advertised instruction
- * that can supply bytes. Health failure remains latched until reboot. */
+/* BSP worker only, including initialization. Test each advertised instruction
+ * independently. A disabled instruction remains disabled until reboot. */
 bool arch_random_init(void);
-bool arch_random_has_rdseed(void);
-/* RDSEED first; only carry-clear exhaustion permits RDRAND fallback.
- * Validates full 64-bit words before returning any bytes to the service. */
+bool arch_random_enabled(enum arch_random_instruction instruction);
+/* RDSEED first; absence, disablement or carry exhaustion permits RDRAND fallback.
+ * FAILED disables at least one instruction. Discard and refill the whole request
+ * before retrying with any remaining instruction. No suspect word is returned. */
 enum arch_random_result arch_random_word(uint64_t *word);
 
 #endif
