@@ -143,7 +143,8 @@ initrd: build/initrd.cpio
 
 # Recursive builds/selected bundles finish before assembly observes their output.
 # Fresh staging removes stale inputs; unchanged contents retain the archive mtime.
-build/initrd.cpio: userspace ports Makefile boot/initrd.lua scripts/stage-tree.lua scripts/assemble-initrd.sh
+build/initrd.cpio: userspace ports Makefile boot/initrd.lua scripts/stage-tree.lua scripts/assemble-initrd.sh \
+                   boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE
 	./scripts/assemble-initrd.sh
 
 check-toolchain:

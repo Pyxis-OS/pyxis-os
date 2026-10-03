@@ -34,6 +34,8 @@
 #include <arch/cpu_local.h>
 #include <arch/smp.h>
 #include <kernel/initrd.h>
+#include <kernel/boot_files.h>
+#include <kernel/object/disk.h>
 #include <kernel/fs/initrd_tree.h>
 #include <kernel/object/directory.h>
 #include <kernel/log.h>
@@ -83,13 +85,15 @@ static enum initrd_result select_image(const char *name, struct initrd_file *ima
 }
 
 void user_launch_init(size_t cpu_index, const char *image_uri,
-    const struct mount_config *mount_config)
+    const struct mount_config *mount_config, bool install)
 {
   KASSERT(arch_cpu_index() == 0);
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
   struct kernel_object *namespace_service = NULL, *terminal_service = NULL;
   struct kernel_object *system_info = NULL;
+  struct kernel_object *disks = NULL;
+  struct file_object *boot_kernel = NULL, *boot_archive = NULL;
   struct file_object *script_file = NULL;
   struct kernel_object *space_control = NULL, *profile = NULL, *pipe = NULL, *service = NULL;
   struct kernel_object *mount = NULL, *echo = NULL, *net_config = NULL, *udp = NULL, *tcp = NULL, *random = NULL;
@@ -197,7 +201,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
     mount = NULL;
   }
   handle_t native_mount_handle = HANDLE_INVALID;
-  if (mount_config->enabled && block_preparation_result() != BLOCK_DEVICE_ABSENT) {
+  if (mount_config->enabled && (block_device_count() || !block_inventory_complete())) {
     mount = mount_create_native(mount_config);
     if (!mount || capability_install(&process->capabilities, mount,
           MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE,
@@ -206,6 +210,28 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
     }
     object_release(mount);
     mount = NULL;
+  }
+  handle_t disks_handle = HANDLE_INVALID;
+  handle_t kernel_handle = HANDLE_INVALID, archive_handle = HANDLE_INVALID;
+  if (install) {
+    disks = disks_create();
+    boot_kernel = file_create_initrd(boot_files_kernel());
+    boot_archive = file_create_initrd(boot_files_archive());
+    if (!disks || !boot_kernel || !boot_archive ||
+        capability_install(&process->capabilities, disks,
+            DISKS_RIGHT_ENUMERATE | DISKS_RIGHT_OPEN, 0, &disks_handle) != CAP_OK ||
+        capability_install(&process->capabilities, &boot_kernel->object,
+            FILE_RIGHT_READ, 0, &kernel_handle) != CAP_OK ||
+        capability_install(&process->capabilities, &boot_archive->object,
+            FILE_RIGHT_READ, 0, &archive_handle) != CAP_OK) {
+      goto fail;
+    }
+    object_release(disks);
+    disks = NULL;
+    object_release(&boot_kernel->object);
+    boot_kernel = NULL;
+    object_release(&boot_archive->object);
+    boot_archive = NULL;
   }
   if (script.data) {
     script_file = file_create_initrd(&script);
@@ -245,7 +271,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[22] = {
+  struct process_binding resources[25] = {
     {"input", input},
     {"output", output},
     {"memory", memory_handle},
@@ -277,6 +303,11 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
   }
   if (native_mount_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"native_mount", native_mount_handle};
+  }
+  if (disks_handle != HANDLE_INVALID) {
+    resources[resource_count++] = (struct process_binding){"disks", disks_handle};
+    resources[resource_count++] = (struct process_binding){"boot_kernel", kernel_handle};
+    resources[resource_count++] = (struct process_binding){"boot_archive", archive_handle};
   }
   const struct process_binding roots[] = {{"app", app}, {"home", home}};
   const char *arguments[] = {script.data ? interpreter : image_uri, image_uri};
@@ -312,6 +343,15 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
   return;
 
 fail:
+  if (disks) {
+    object_release(disks);
+  }
+  if (boot_kernel) {
+    object_release(&boot_kernel->object);
+  }
+  if (boot_archive) {
+    object_release(&boot_archive->object);
+  }
   if (system_info) {
     object_release(system_info);
   }

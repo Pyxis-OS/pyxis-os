@@ -19,7 +19,7 @@ enum file_backing {
 
 /* The short spinlock protects busy and its FIFO. An operation owns busy across
  * BSP allocation waits; all access to data/size/capacity requires that ownership.
- * No shared seek position. Initrd bytes remain owned by the archive. Native
+ * No shared seek position. Immutable boot bytes remain owned by their kernel-lifetime mappings. Native
  * files use only the worker-owned node, never busy or in-memory data. */
 struct file_object {
   struct kernel_object object;
@@ -33,9 +33,9 @@ struct file_object {
   struct task_wait_link *first_waiter, *last_waiter;
 };
 
-/* BSP, IF=0. view must be an immutable view from initrd_lookup(). Copies the
- * view and returns one owned reference, or NULL on allocation failure. The
- * archive owns the backing for the kernel lifetime; destruction frees only
+/* BSP, IF=0. view must borrow immutable kernel-lifetime boot-file storage.
+ * Copies the view and returns one owned reference, or NULL on allocation failure.
+ * The boot mappings own the backing; destruction frees only
  * this wrapper, never the bytes, frames or mapping. */
 struct file_object *file_create_initrd(const struct initrd_file *view);
 

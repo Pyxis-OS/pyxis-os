@@ -46,7 +46,9 @@ if [ "${#command_line}" -gt 4095 ]; then
   exit 1
 fi
 mkdir -p build
-cat boot/limine/limine.conf > build/limine.conf.tmp
-printf '  cmdline: %s\n' "$command_line" >> build/limine.conf.tmp
+awk -v normal="$command_line" '
+  $0 == "# PYXIS_NORMAL_COMMAND_LINE" { print "  cmdline: " normal; next }
+  { print }
+' boot/limine/limine.conf > build/limine.conf.tmp
 cmp -s build/limine.conf.tmp build/limine.conf || mv build/limine.conf.tmp build/limine.conf
 rm -f build/limine.conf.tmp
