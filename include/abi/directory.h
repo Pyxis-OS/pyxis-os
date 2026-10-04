@@ -135,8 +135,8 @@ struct directory_enumerate_reply {
  * BAD_OPERATION. No traversal, new authority or whole-image check occurs.
  * All fields below are available on success. IDs are opaque bytes in filesystem
  * order; name is NUL-terminated with zero padding. No namespace binding is given.
- * Allocatable bytes are (pool blocks - 2) * 4096, excluding the two header blocks but
- * INCLUDING shared metadata/reserves. This is shared pool capacity, never a
+ * Allocatable bytes are (pool blocks - 2) * 4096, excluding the two header blocks
+ * but INCLUDING shared metadata/reserves. This is shared pool capacity, never a
  * volume's writable allowance. Identity, generation and capacity describe the
  * mounted pool; generation is its selected journal sequence. Degraded flags
  * distinguish GPT and filesystem opening.
