@@ -1367,6 +1367,22 @@ mode change is attempted. Revisit compatibility only with natural device
 responses that need a concrete bounded extension; do not infer writable or
 flush support from vendor IDs or successful reads.
 
+Two hardware compatibility watchpoints from merged
+[PR #395](https://git.internal/PyxisOS/pyxis-os/pulls/395) remain deferred.
+A device that cleanly rejects SYNCHRONIZE CACHE stays read-only, including a
+device whose firmware might not use a volatile write cache. Querying its caching
+mode page and reported Write Cache Enable (WCE) state is a possible extension
+guided by device evidence, not an accepted alternative qualification or proof of
+physical durability. Revisit only
+after observing an affected expendable device and settling the write/flush policy.
+
+An optional MODE SENSE or qualification synchronization exchange that breaks
+transport currently fails the whole media probe, even when earlier reads
+succeeded. Returning to read-only service after a successful reset is a proposal;
+it requires an explicit recovery policy and verified healthy transfer ownership
+and reads. Prior read success alone does not establish those conditions. Revisit
+with natural physical-device evidence rather than weakening failure handling now.
+
 The five-second exchange deadline and shared boot-media deadline also bound
 synchronization. A slow genuine flush can retire the device even when the medium
 is capable of persisting data. Revisit those bounds with measured physical
