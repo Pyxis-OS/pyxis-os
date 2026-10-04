@@ -93,7 +93,9 @@ discovered path, unsupported/failure reason and successful geometry/read bytes.
 Storage outcomes are separate from descriptor-inventory completeness.
 
 The [manual bring-up record](../development/usb-storage-bringup.md) describes QEMU
-coverage and remaining limits. Protocol behavior follows [USB BOT 1.0](https://www.usb.org/sites/default/files/usbmassbulk_10.pdf)
+coverage. The [owner-reported ThinkPad follow-up](../targets/t14-gen1-amd/usb-bringup.md#2026-10-04-read-only-storage-and-usb-3-hub-follow-up)
+observed root and USB 3 hub-descendant reads with capacities matching Linux;
+recovery and broader native qualification remain pending. Protocol behavior follows [USB BOT 1.0](https://www.usb.org/sites/default/files/usbmassbulk_10.pdf)
 §§3, 5 and 6, and [xHCI 1.2b](https://cdrdv2-public.intel.com/625472/625472_xHCI_Rev1_2b.pdf)
 §§4.6.6, 4.6.8, 4.6.10 and 4.10.1. SCSI command fields follow the
 [Seagate SCSI reference, Rev. M](https://knowledge.seagate.com/files/staticfiles/support/docs/manual/Interface%20manuals/100293068m.pdf)

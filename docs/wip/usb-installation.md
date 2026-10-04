@@ -2,9 +2,10 @@
 
 Status: Phase A image assembly/USB boot and Phase B.3 enumeration/control
 transfers and internal BOT/SCSI reads implemented, 2026-10-04; USB block access remains pending.
-Native xHCI hardware qualification and storage remain pending. Inspection-first
-work now includes [USB 2 hub traversal](../devices/usb-hubs.md), accepted by the
-owner on 2026-10-03. The [build-time switch](../devices/usb-xhci.md) defaults to disabled;
+Owner-reported [ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md) now
+include root and USB 3 hub-descendant storage reads. Broader hardware/recovery
+qualification and native mounting remain pending. Inspection-first work includes
+[USB 2/3 hub traversal](../devices/usb-hubs.md). The [build-time switch](../devices/usb-xhci.md) defaults to disabled;
 firmware USB boot and archive-backed programs remain available.
 The owner wants a replaceable USB drive as the first
 physical installation target, with QEMU development before laptop validation.
@@ -315,9 +316,10 @@ host tools and the later physical-preparation procedure.
 ### B. Native read-only USB storage
 
 - [x] **Pause native xHCI initialization by default.** Guard preparation and
-  worker startup with the `CONFIG_XHCI` Kconfig option while the ThinkPad profile
-  remains unqualified. The checked-in `.config` defaults to `n`; direct edits or
-  `make menuconfig` can explicitly re-enable QEMU bring-up for a rebuilt image.
+  worker startup with the `CONFIG_XHCI` Kconfig option while broader controller
+  and recovery qualification remain pending. The checked-in `.config` defaults
+  to `n`; direct edits or `make menuconfig` can explicitly re-enable initialization
+  for a rebuilt bring-up image.
 
 1. [x] **Settle controller, request and disk-selection contracts.** Inventory
    current PCI resource/interrupt/DMA facilities and block-interface coupling.
@@ -340,13 +342,15 @@ host tools and the later physical-preparation procedure.
    - [x] Recognize SuperSpeedPlus roots from protocol-version defaults or explicit
      PSI link metadata and inspect their device/configuration descriptors. Expose
      a distinct `super-plus` inventory category without numeric rate/lane fields.
-     Root link recognition precedes the hub traversal slice below; enhanced
-     native link qualification remains pending.
+     Root link recognition precedes the hub traversal slice below; the owner
+     subsequently observed the dock's SuperSpeedPlus hub natively. Broader link
+     qualification remains pending.
    - [x] Traverse boot-present SuperSpeed/SuperSpeedPlus hubs with checked BOS
      speed attributes, USB 3 hub descriptors/depth/status/reset, discovered
      routes and unique controller-profile matching. Keep unsupported links and
-     exhausted branches partial; native validation remains deferred. No storage,
-     hotplug or power-management policy is introduced.
+     exhausted branches partial. The owner subsequently observed the dock's
+     USB 3 hub and storage descendant natively; recovery remains unqualified.
+     Traversal introduces no hotplug or power-management policy.
    The initial BOT matcher/endpoint setup was removed for the inspection-only
    slice; reintroduce class transfers with their first consumer and an explicit
    pre-AP resource policy in B.4.

@@ -1,4 +1,6 @@
-# Native USB inventory observation
+# Native USB bring-up observations
+
+## 2026-10-03 inventory snapshot
 
 The owner reported this ThinkPad T14 Gen 1 AMD run on 2026-10-03, from image
 revision `d04c6a65a9fe5b318cd4f36f79efaaa56a3c2030`, with the dock attached.
@@ -8,7 +10,7 @@ not an agent-run native measurement or a complete hardware qualification.
 The exact build flags and firmware boot method were not supplied; the output
 establishes that native xHCI initialization was enabled.
 
-## Observed controllers and devices
+### Observed controllers and devices
 
 All three xHCI functions produced device records. `lspci` retained the same USB
 PCI identities as the [Linux inventory](notes.md#usb-controllers-and-observed-port-routes).
@@ -46,9 +48,10 @@ The owner confirmed that `0781:55a3` is a different stick from the documented
 `0781:55a9`. The older stick remains attached through the dock's uninspected
 SuperSpeed branch. Its identity was not observed by Caelum in this run.
 The direct stick advertises Bulk-Only Transport, but descriptor enumeration does
-not establish readable media; native USB block transfers remain unimplemented.
+not establish readable media; native USB block transfers were
+unimplemented in that image.
 
-## Retained log evidence and interpretation
+### Retained log evidence and interpretation
 
 Selected owner-supplied lines, before diagnostic wording corrections:
 
@@ -85,3 +88,48 @@ hotplug, delayed attachment, every controller/firmware profile, USB storage or
 SuperSpeed hub traversal. The checked-in `CONFIG_XHCI=n` remains appropriate
 until broader qualification is agreed. See [USB 2 hub bring-up](../../development/usb-hub-bringup.md)
 for the separate agent-run QEMU observations.
+
+## 2026-10-04 read-only storage and USB 3 hub follow-up
+
+The owner reported a native PXE boot with `CONFIG_XHCI=y`, dock attached and two
+SanDisk sticks, relayed by Claude in [PR #379](https://git.internal/PyxisOS/pyxis-os/pulls/379).
+The PR review covers `420b5d226181436e69740a11fe3884dc478c8f10`; the native
+image's Git revision and dependency pins were not supplied. This is owner-reported
+execution evidence, not an independently repeated agent measurement.
+
+Retained storage lines:
+
+```text
+usb-bot: 7:0.3 port 6: read-only probe ready: read-only BOT first-span and final-block probe complete
+usb-bot: 7:0.3 port 6: blocks=60088320 block-bytes=512 read-bytes=66048
+usb-bot: 7:0.4 port 5.1: read-only probe ready: read-only BOT first-span and final-block probe complete
+usb-bot: 7:0.4 port 5.1: blocks=240328704 block-bytes=512 read-bytes=66048
+```
+
+| Controller/path | Observed route | Blocks × block bytes | Byte capacity |
+| --- | --- | --- | ---: |
+| `07:00.3`, `6` | Built-in port, SuperSpeed root, nominal 32 GB stick | 60088320 × 512 | 30765219840 |
+| `07:00.4`, `5.1` | Dock USB 3 hub descendant at SuperSpeed, nominal 128 GB stick | 240328704 × 512 | 123048296448 |
+
+Both capacities match the owner's Linux `lsblk -b` results. Each probe reported
+completion of the first 65536-byte span and final 512-byte block. Native byte
+samples and known-content comparisons were not supplied; this establishes
+successful command completion and consistent geometry, not full-media integrity.
+The paths are observations of this boot and do not define selection or socket
+identity.
+
+The owner reported the dock's root-port-5 hub as Lenovo `17ef:3070`, at
+`super-plus` speed. Its SuperSpeed descendant advertised BOT at alternate 0 and
+UAS (protocol `62`) at alternate 1; the probe selected BOT. This exercises USB 3
+hub traversal and the default BOT alternate, not selection of a nonzero alternate.
+The earlier unidentified root-port-5 observation is now this identified hub.
+Both AMD controller records were complete. The Renesas camera, fingerprint
+reader, Bluetooth, dock high-speed hubs, keyboard and audio still enumerated.
+`lsusb` exited 1 because Realtek DASH EHCI `02:00.4` remains unsupported.
+
+This adds native read-only media and USB 3 hub-path evidence to the earlier
+inventory snapshot. It does not execute stall, transaction-translator cleanup or
+reset recovery; no errors occurred. Full/low-speed storage behind a high-speed
+hub, low-speed descendants, hotplug, writes, flushes and broader firmware/controller
+profiles remain unqualified. The checked-in `CONFIG_XHCI=n` default is unchanged.
+Test built-in ports before dock paths when collecting future recovery evidence.

@@ -4,8 +4,8 @@
 [BOT/SCSI probe](../devices/usb-storage.md), based on `9cbb0d3`. The implementation
 commit adding this record identifies the measured source. Submodule pins were
 fs `d352c7e`, ports `bf7667c`, userspace `d730e4f`, lwIP `a1aadb9`; none changed.
-ThinkPad testing remains deferred. No tests, fault injection or boot automation
-were added.
+Native results were subsequently [reported by the owner](../targets/t14-gen1-amd/usb-bringup.md#2026-10-04-read-only-storage-and-usb-3-hub-follow-up).
+No tests, fault injection or boot automation were added.
 
 ## Build and machine
 
@@ -116,4 +116,7 @@ nonzero alternate selection, ring wrap, corrupt events or physical removal.
 Those paths received source/spec review; no forced-error evidence is claimed.
 USB 3 hubs and SuperSpeedPlus remain unexecuted profiles in QEMU. Existing
 SET_SEL/SET_ISOCH_DELAY omissions mean this is not full USB 3 conformance.
-Native ThinkPad storage and write/flush/durability behavior remain unqualified.
+The owner-reported ThinkPad follow-up observed successful reads from a root disk
+and a disk behind the dock's USB 3 hub, with capacities matching Linux. Recovery
+was not exercised; native byte-sample verification was not supplied. Broader native qualification and
+write/flush/durability behavior remain pending.

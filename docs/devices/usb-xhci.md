@@ -7,7 +7,8 @@ kernel makes no xHCI claim or DMA allocation. Enable XHCI under Caelum in
 [`make menuconfig`](../development/configuration.md), or set `CONFIG_XHCI=y`
 directly in `.config`, and rebuild to resume explicit QEMU bring-up.
 Every discovered xHCI function is inspected independently when enabled.
-Native hardware remains unqualified.
+Owner-reported ThinkPad inventory and reads provide limited native evidence;
+broader controller and recovery qualification remain pending.
 Firmware can still load the kernel and boot archive from USB.
 
 When enabled, Caelum prepares each discovered PCI xHCI function and its own
@@ -16,7 +17,8 @@ slots/contexts for boot-present root-port devices and bounded hub descendants.
 addresses them, checks descriptors and publishes a read-only boot inventory.
 [Read-only BOT/SCSI probes](usb-storage.md) consume bounded bulk transfers; USB block access remains pending. The archive-backed shell and existing VirtIO block behavior remain available.
 [Phase B](../wip/usb-installation.md#b-native-read-only-usb-storage) tracks those
-remaining layers. QEMU is the temporary target; physical hardware is unqualified.
+remaining layers. [Native observations](../targets/t14-gen1-amd/usb-bringup.md)
+cover the owner's ThinkPad profiles; they do not establish broad hardware qualification.
 
 ## Preparation and activation
 

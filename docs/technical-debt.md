@@ -1094,11 +1094,14 @@ monotonic duration from the current wall clock.
 ## xHCI hardware profile and runtime retention
 
 Native xHCI initialization is [disabled by default](devices/usb-xhci.md) while
-ThinkPad qualification is paused. Firmware USB boot remains available, but
-Caelum USB enumeration is unavailable. Revisit the default after the physical hardware profile has been qualified.
+broader controller and recovery qualification remain pending. Firmware USB boot
+remains available; Caelum enumeration and storage probes require an explicit
+`CONFIG_XHCI=y` image. Limited owner-reported native reads do not change that
+default. Revisit it after physical hardware qualification is agreed.
 
-The [initial controller](devices/usb-xhci.md) is qualified only against QEMU's
-PCI xHCI profile, now with multiple independently discovered controllers. It requires firmware memory decoding enabled for a
+The [initial controller](devices/usb-xhci.md) has agent-run QEMU coverage and
+limited owner-reported ThinkPad evidence, with independently discovered
+controllers. It requires firmware memory decoding enabled for a
 page-aligned BAR0 prefix, interpreted extended capabilities within that 4 KiB
 prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles,
 power management and insertion after the startup snapshot are unsupported.
@@ -1106,8 +1109,9 @@ QEMU advertises zero scratchpads and 32-byte contexts. An
 [owner-reported ThinkPad run](targets/t14-gen1-amd/usb-bringup.md) observed
 nonzero scratchpads and 64-byte contexts; nondefault PSI mappings and BIOS
 ownership handoff remain unmeasured paths. This first native snapshot does not
-establish broad controller qualification. Enumeration publishes root devices and bounded USB 2 hub descendants;
-USB 3 hub execution remains unqualified; USB block access remains pending.
+establish broad controller qualification. The later owner-reported run also
+traversed the dock's USB 3 hub and completed root/descendant storage probes.
+Recovery remains unexecuted; USB block access remains pending.
 
 USB 2 root-port reset has no explicit connect-debounce interval. The startup snapshot
 waits 20 ms only after the driver powers a port; it has no separate link-settling
@@ -1170,15 +1174,15 @@ controller. Pool allocation failure can fail that controller's preparation.
 Revisit the budget and root reservation policy with actual topology/resource
 requirements, without runtime mapping or allocation outside the VM contract.
 The shared startup deadline can expire on large trees; exhausted branches are
-partial. USB 3 hub traversal and low-speed hardware paths remain unqualified.
-The first owner-reported ThinkPad snapshot exercised full-speed descendants
-behind high-speed hubs; recovery and broader TT qualification remain pending.
-QEMU's built-in hub exercises full-speed descendants only. SuperSpeedPlus root
-recognition uses discovered protocol metadata, but QEMU's current devices do not
-exercise that link profile; native address/descriptor qualification is pending.
-USB 3 hub traversal is source/spec-reviewed, with QEMU USB 2 regression coverage;
-no USB 3 hub execution coverage is claimed. The ThinkPad recheck is deferred
-while the owner works on its NIC. Revisit with the next available native run.
+partial. Low-speed hardware paths remain unqualified. The first owner-reported
+ThinkPad snapshot exercised full-speed descendants behind high-speed hubs;
+recovery and broader TT qualification remain pending. QEMU's built-in hub
+exercises full-speed descendants only. SuperSpeedPlus root recognition uses
+discovered protocol metadata; QEMU does not exercise that profile. The subsequent
+[owner-reported native run](targets/t14-gen1-amd/usb-bringup.md#2026-10-04-read-only-storage-and-usb-3-hub-follow-up)
+identified the dock's SuperSpeedPlus USB 3 hub and completed reads from its
+SuperSpeed storage descendant. Additional link/firmware profiles and recovery
+remain unqualified; revisit them with further native evidence.
 Only standard symmetric Gen1/Gen2 one/two-lane downstream links are attached.
 Absent/ambiguous controller profiles remain partial; revisit with actual profile
 evidence rather than picking a speed ID. Categorical inventory
@@ -1204,7 +1208,9 @@ interface, no streams, and one LUN. Multiple LUNs, other interface shapes and
 observed READ CAPACITY (16) protection-enabled geometry remain unsupported. It registers no block device,
 mounts nothing and performs no writes or flushes. Revisit those limits in their
 focused integration/qualification tasks. NOT READY media retain sense and fail
-immediately; bounded UNIT ATTENTION retries do not implement a spin-up policy.
+immediately, including NOT READY / 04h/01h (becoming ready); bounded UNIT
+ATTENTION retries do not implement a spin-up policy. Revisit a bounded wait only
+if natural device evidence requires it, within the existing media deadline.
 
 USB 3 inspection omits SET_SEL and SET_ISOCH_DELAY, which the specification
 requires during full enumeration. EP0 routing/descriptor inspection does not
