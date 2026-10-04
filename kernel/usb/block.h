@@ -9,7 +9,7 @@ struct usb_block_pool;
 struct usb_block_device;
 
 /* BSP/IF=0 before AP startup. Metadata covers every inspected candidate;
- * captured read buffers cover the bounded supported-storage admission pool. */
+ * captured I/O buffers cover the bounded supported-storage admission pool. */
 struct usb_block_pool *usb_block_prepare(struct usb_host_controller *host, size_t candidate_capacity);
 void usb_block_release_prepared(struct usb_block_pool *pool);
 /* BSP/IF=0 after the owning controller worker's terminal media setup. No allocation. */
