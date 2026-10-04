@@ -281,7 +281,7 @@ The accepted next networking milestone is
 | SDL2 and graphical applications | A native software-rendered SDL2 backend supports a selected GrafX2 edit/save workflow. | Probe the pinned application first; settle input/presentation and image-library needs. zlib/libpng are useful shared candidates. Compositor and GPU support stay separate. |
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
-| Quake | A selected software-rendered port runs single-player or a demo. | Host/target compile probe, libc, display, input and timing gaps. Audio and multiplayer can follow; no GPU prerequisite. |
+| Quake | A selected software-rendered port runs single-player or a demo. | Planned together with mouse input in [mouse input and Quake](mouse-and-quake.md) (quakegeneric). Audio and multiplayer can follow; no GPU prerequisite. |
 | Native disk storage | The [block-storage foundation](../devices/block-storage.md), [native format/tools](../devices/filesystem-readonly.md) and [kernel cache/writer](../devices/filesystem-native-adapter.md) are complete. | Installation and crash/physical-media qualification remain separate; FUSE remains later. |
 
 The [application port candidates](application-ports.md) include longer-term
