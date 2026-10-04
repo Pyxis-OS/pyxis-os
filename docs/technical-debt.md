@@ -632,6 +632,15 @@ requires reading every record before eligibility is known; inspection retains
 descriptors rather than the whole log. Revisit with measured large-log workloads
 or a concrete need for whole-filesystem qualification.
 
+Update recognition validates allocation bitmaps, live catalog records and the
+system inode file/root/cleanup chain against writable-mount admission. It does
+not run a whole-pool ownership check or read ordinary file contents. Its bounded
+FAT32 reader follows required paths on the fixed 512 MiB ESP, with at most
+64 KiB of configuration and 64 bytes of revision text. It checks traversed FAT
+copies/chains, not every unrelated file. Revisit these bounds when supporting a
+new installed layout or general FAT service; whole-pool checking remains fsck's
+role. A selected committed journal is refused without loading or replaying it.
+
 Installation writes fresh metadata and boot files; it does not securely erase
 free space. An interrupted write can leave a partial disk, without rollback or
 automatic repair. The ordinary QEMU success/refusal cases and host structural

@@ -17,12 +17,13 @@ new build, the files are unchanged, and host `fsck.npfs` passes.
 ## Starting point
 
 - **Everything that changes lives on the ESP.** Programs ship inside the boot
-  archive, so an installed system's software is exactly four files on the
+  archive, so an installed system's software and its revision record occupy five files on the
   FAT32 ESP:
   - Limine's `EFI/BOOT/BOOTX64.EFI`;
   - `boot/caelum.elf`;
   - `boot/initrd.cpio`;
-  - `boot/limine/limine.conf`.
+  - `boot/limine/limine.conf`;
+  - `boot/revision` (new installations; older installations may omit it).
 
   The npfs pool holds only the user's data, in its `system` volume.
 - **The [native installer](../userland/installer.md) already does the hard parts:**
@@ -58,7 +59,7 @@ Accepted 2026-10-04, with the defaults below.
 
 ## Tasks
 
-- [ ] **1. Recognize installations and choose an action.**
+- [x] **1. Recognize installations and choose an action.**
   - **The first screen** offers **1 Install** and **2 Update**. Install leads to today's Proceed / Read the room screen, unchanged.
   - **A disk is an installation** when it has:
     - a validated protective GPT with the installer's layout;
@@ -69,6 +70,7 @@ Accepted 2026-10-04, with the defaults below.
   - **Finish when:** in QEMU, Update lists a fresh install and a finalized install with `system://` files as candidates; refuses a blank disk, a foreign GPT and a pool with a committed journal, each with a clear reason; and cancelling makes no writes.
 
 - [ ] **2. Rewrite the ESP and verify.**
+  - **Review follow-up ([#396](https://git.internal/PyxisOS/pyxis-os/pulls/396)):** task 1 currently refuses damaged ESPs, which would also refuse a disk interrupted during ESP rewriting. Task 2 must allow Update to rebuild that ESP using the healthy installer-layout GPT and compatible empty-journal pool as the recovery anchor. ESP inspection should supply revision/identity information when readable; a valid configuration naming a different disk still refuses. This change belongs with task 2's interrupted-update qualification.
   - **Confirmation:** after `update`, check eligibility again under exclusive raw access before the first write.
   - **Writes:** re-create the ESP's FAT32 inside the existing partition, write the live system's boot files and a `limine.conf` generated from the template with the disk's existing GUID (timeout zero, no Install entry), then flush.
   - **Untouched:** the pool and the GPT.
@@ -80,6 +82,29 @@ Accepted 2026-10-04, with the defaults below.
     - an update interrupted mid-write (QEMU killed) is recovered by re-running Update from the live media.
 
   The native run waits for writable USB storage ([USB C.1](usb-installation.md)).
+
+## Implemented task 1
+
+The action menu and read-only Update inspection are implemented. Selecting a
+candidate reports inspection complete and nothing written; task 2 remains
+unimplemented. New installs write and byte-verify `boot/revision`, using the
+running kernel's SYSTEM_INFO revision. Missing/empty/nonprintable revision text
+shows `unknown`; structural or I/O failures refuse inspection.
+
+Accepted 2026-10-04: one valid npfs header with a damaged peer is eligible when
+writable mount accepts it. Inspection also follows kernel control selection and
+writable feature/journal-capacity admission; the shared mount ABI minimum is
+18 journal images. Damaged or conflicting GPT copies are refused. Recognition
+requires exactly the current ESP/pool geometry, a live `system` volume, and
+complete boot command-line tokens naming installed init and this disk GUID.
+Pool validation follows writable opener metadata checks rather than whole-pool
+fsck. FAT recognition accepts extra unrelated files and changed incidental
+formatting, while validating required chains and mirrored FAT entries.
+
+[QEMU qualification](../development/experiments/system-updates-task1/README.md)
+covers both candidate types, the three required refusal cases, revision recording
+and cancellation without writes. Physical media and interrupted ESP rewriting
+are not qualified by task 1.
 
 ## Out of scope
 

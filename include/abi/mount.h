@@ -15,6 +15,10 @@
 #define MOUNT_ACCESS_READ_ONLY UINT64_C(0)
 #define MOUNT_ACCESS_READ_WRITE UINT64_C(1)
 
+/* Writable native pools need room for the largest namespace transaction.
+ * Raw installers use this same requirement when checking pool compatibility. */
+#define MOUNT_NPFS_MIN_JOURNAL_IMAGES 18u
+
 /* Selects the returned grant, never a global backend mode. READ_ONLY grants
  * LOOKUP | ENUMERATE | READ_FILES; READ_WRITE grants all DIRECTORY_CONTENT_RIGHTS.
  * Write authority permits attempts, not a promise of backend/host writability.

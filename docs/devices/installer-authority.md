@@ -33,10 +33,13 @@ for both. These assets are available through read-only `app`.
 
 Native init opens `app://installer.pxe` and delegates only the disk service,
 the two source files, private memory, input/output, read-only clock and randomness,
-read-only `app`, and standard streams. It waits for the child and reports its
+read-only `app`, read-only SYSTEM_INFO and standard streams. SYSTEM_INFO supplies
+the live kernel build revision for display and the installed ESP record. It waits for the child and reports its
 completion. It delegates no launcher, writable home, mount, host, network or
 display authority. The packaged [native installer](../userland/installer.md)
-implements consent, formatting, installation and read-back verification.
+implements consent, formatting, installation, read-back verification and
+read-only Update candidate inspection. Update inspection uses only raw reads;
+it never opens a volume or acquires a write claim.
 
 ## Inventory and raw access
 
