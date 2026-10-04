@@ -1510,13 +1510,16 @@ static void log_device(const struct usb_device_record *device)
     return;
   }
   klog("usb-bot: %x:%x.%u port %s: %s%s%s\n", pci->bus, pci->device,
-       pci->function, cursor, storage->state == USB_BOT_READY ? "read-only probe ready" :
+       pci->function, cursor, storage->state == USB_BOT_READY ? "media probe ready" :
        storage->state == USB_BOT_UNSUPPORTED ? "unsupported" : "failed",
        storage->detail ? ": " : "", storage->detail ? storage->detail : "");
   if (storage->state == USB_BOT_READY) {
     klog("usb-bot: %x:%x.%u port %s: blocks=%llu block-bytes=%u read-bytes=%llu\n",
          pci->bus, pci->device, pci->function, cursor, (unsigned long long)storage->blocks,
          storage->block_bytes, (unsigned long long)storage->read_bytes);
+    klog("usb-bot: %x:%x.%u port %s: writable=%u flush=%u; %s\n",
+         pci->bus, pci->device, pci->function, cursor, storage->writable,
+         storage->flush_supported, storage->write_detail);
   }
 }
 

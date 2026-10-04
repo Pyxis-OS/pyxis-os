@@ -80,7 +80,7 @@ void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket 
 /* BSP/IF=0. Notify the owning controller worker without allocating. */
 void usb_host_notify(struct usb_host_controller *controller);
 
-/* Class binding during boot, with retained runtime reads. A bounded pool reserves
+/* Class binding during boot, with retained runtime I/O. A bounded pool reserves
  * two bulk rings and one captured transfer buffer per admitted device before AP
  * startup. Transfers are serialized on the owning worker; failure never copies
  * a read destination. A stall retains its span until bulk_clear retires it. */
@@ -92,8 +92,9 @@ enum usb_result usb_host_configure_bulk(struct usb_host_device *device,
 enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t endpoint,
                                        const void *outbound, void *destination, size_t length,
                                        uint64_t deadline, size_t *actual, bool *submitted);
-/* Optionally collect captured stalled input after successful retirement, before
- * another transfer can reuse its buffer. Recovery failure leaves it untouched. */
+/* Report stalled IN/OUT bytes after successful retirement. Optionally copy IN
+ * bytes before another transfer can reuse its buffer. Recovery failure leaves
+ * the caller destination untouched. */
 enum usb_result usb_host_bulk_clear(struct usb_host_device *device, uint8_t endpoint,
                                    void *destination, size_t capacity, size_t *actual, uint64_t deadline);
 
