@@ -48,25 +48,19 @@ live medium and boot from the target. Reinstall requires another live-media
 boot because verification retains the pool until reboot. Delete
 `system://SAFE_TO_WIPE` and sync that directory to mark the installation final.
 
-The first screen also offers **Update**. This first implementation lists and
-selects existing installations, then reports that inspection completed without
-writing. ESP replacement and typed `update` confirmation remain
-[task 2](../wip/system-updates.md). Update requires healthy matching GPT copies
-with the exact installer layout, a writable-mount-compatible pool with an empty
-selected journal and a live `system` volume, and FAT32 boot configuration naming
-this disk GUID and installed init. A valid pool header/control copy can survive
-a damaged peer, following kernel admission. A committed journal is refused:
-boot the installed system once to recover it, then update. No wipe marker is
-needed, and inspection never mounts, replays or writes the pool.
+The first screen also offers **Update**. It lists eligible installations and
+installed/live revisions, then requires the exact word `update`. Update preserves
+the GPT and npfs pool, rechecks eligibility under exclusive raw access, replaces
+the whole ESP, flushes and releases the claim, byte-verifies the boot files and
+reopens `system` read-only before reporting `updated`. Healthy installer-layout
+GPT and a compatible empty-journal pool also permit rebuilding a damaged or
+missing ESP; readable foreign disk bindings and raw I/O/allocation failures
+refuse. A selected committed journal must first be recovered by booting the
+installed system. No wipe marker is needed. See
+[system updates](system-updates.md) for admission, recovery and qualification.
 
-Update shows both the live kernel revision and the installed `boot/revision`;
-older installations without this record show `unknown`. The bounded FAT reader
-checks the required directory/file chains and mirrored FAT entries, without
-requiring a pristine fresh-writer byte layout or rejecting unrelated files.
-See the [task-1 qualification](../development/experiments/system-updates-task1/README.md).
-
-This writes allocated metadata and boot-file storage, without secure erasure of
-free space. A failed mutation may leave a partial disk; the failure message
+Installation writes allocated metadata and boot-file storage, without secure
+erasure of free space. A failed installation may leave a partial disk; the failure message
 directs you to run the installer again and choose **Read the room**. Boot the
 live image again first; the same consent vetoes still apply. There is no automatic
 retry, rollback or repair. V1 uses existing writable disk drivers and supports logical
@@ -76,7 +70,8 @@ firmware-variable updater. See the
 and [remaining limits](../technical-debt.md#installer-inspection-and-recovery-limits).
 Merged-main [QEMU end-to-end qualification](../development/experiments/native-filesystem-task5/README.md)
 includes USB-backed live-media loading and CPU entropy. Native ThinkPad
-installation is deferred until writable USB storage is available.
+installation remains deferred: qualified USB write/flush support is implemented,
+but installer USB raw authority and physical qualification remain pending.
 The [program reference](../../userspace/installer/README.md) describes its SDK
 boundary; the [format and host tools](../../fs/docs/npfs-host-tools.md) remain
 owned by pyxis-fs.

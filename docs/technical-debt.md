@@ -632,18 +632,27 @@ requires reading every record before eligibility is known; inspection retains
 descriptors rather than the whole log. Revisit with measured large-log workloads
 or a concrete need for whole-filesystem qualification.
 
-Update recognition validates allocation bitmaps, live catalog records and the
-system inode file/root/cleanup chain against writable-mount admission. It does
-not run a whole-pool ownership check or read ordinary file contents. Its bounded
+[System-update inspection](userland/system-updates.md) validates allocation
+bitmaps, live catalog records and the system inode file/root/cleanup chain
+against writable-mount admission. It does not run a whole-pool ownership check
+or read ordinary file contents. Its bounded
 FAT32 reader follows required paths on the fixed 512 MiB ESP, with at most
 64 KiB of configuration and 64 bytes of revision text. It checks traversed FAT
-copies/chains, not every unrelated file. Revisit these bounds when supporting a
-new installed layout or general FAT service; whole-pool checking remains fsck's
+copies/chains, not every unrelated file. Healthy GPT and a compatible empty-journal
+pool permit rebuilding missing/damaged ESP contents; readable foreign/invalid
+disk bindings and raw I/O/allocation failures still refuse. The optional revision
+record cannot override configuration binding checks. Revisit these bounds when
+supporting a new installed layout or general FAT service; whole-pool checking remains fsck's
 role. A selected committed journal is refused without loading or replaying it.
 
 Installation writes fresh metadata and boot files; it does not securely erase
-free space. An interrupted write can leave a partial disk, without rollback or
-automatic repair. The ordinary QEMU success/refusal cases and host structural
+free space. Update replaces the whole ESP, discarding unrelated ESP files, with
+no fallback entry. An interrupted ESP replacement can be rebuilt by booting live
+media again and choosing Update while the GPT and pool remain eligible; see the
+[QEMU recovery record](development/experiments/system-updates-task2/README.md).
+Revisit the absence of fallback/atomic replacement with a separately agreed
+in-system update design. An interrupted installation can leave a partial disk,
+without rollback or automatic repair. The ordinary QEMU success/refusal cases and host structural
 checks do not qualify power loss, uncertain I/O, USB/NVMe or physical firmware.
 Revisit those limits with the assigned end-to-end hardware task and separately
 authorized recovery validation.
@@ -652,8 +661,10 @@ The owner deferred native ThinkPad installation on 2026-10-04 while completing
 [task-5 QEMU
 qualification](development/experiments/native-filesystem-task5/README.md).
 VirtIO and per-device qualified USB now support writable native mounts. USB
-write/cache synchronization is implemented for C.1; physical writable mounting
-and durability qualification remain pending. Resume the physical step with an
+write/cache synchronization is implemented for C.1; installer raw-disk authority
+remains VirtIO-only, and physical writable mounting, installation/update and
+durability qualification remain pending. USB raw authority needs its own focused
+integration before it can enable the installer. Resume the physical step with an
 explicitly selected expendable target after the QEMU integration stages. The
 internal NVMe remains unsupported.
 

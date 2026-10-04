@@ -220,9 +220,12 @@ The [native format contract](../../fs/docs/npfs-format.md),
 [kernel adapter](../devices/filesystem-native-adapter.md) describe implemented
 behavior. BSP request separation is complete. FUSE is not a prerequisite.
 
-[System updates](system-updates.md) are accepted. The installer gains an
-**Update** choice that rewrites an installation's ESP from newer live media and
-leaves its npfs pool untouched.
+[System updates](../userland/system-updates.md) are implemented and QEMU-qualified.
+The installer's **Update** choice replaces the ESP from newer live media while
+preserving GPT identities and the npfs pool. Healthy GPT and compatible
+empty-journal pool metadata anchor interrupted ESP recovery. Physical
+installation/update qualification and USB installer raw authority remain
+[deferred](../technical-debt.md#installer-inspection-and-recovery-limits).
 
 The [USB installation proposal](usb-installation.md) records a replaceable SanDisk
 target and QEMU-first stages: boot Limine/kernel/archive from a FAT32 EFI partition,
