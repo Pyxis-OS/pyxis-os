@@ -208,7 +208,11 @@ Accepted 2026-10-03.
    `limine.conf` template ship in the boot archive.
 3. **Layout.** A 512 MiB ESP, then the rest of the disk is the pool. The journal
    is at least 128 MiB on the 256 GB target, scaled down for small QEMU disks.
-   The installer creates one volume, `system`.
+   The installer creates one volume, `system`. The owner subsequently accepted
+   an editable installation prompt: prefill ceil(pool bytes / 128), rounded up
+   to MiB, with an 8 MiB default minimum and **1 GiB default cap**. Explicit
+   choices can be 1–1024 MiB if metadata/bootstrap files fit; a 256 GB disk
+   defaults to 1 GiB.
 4. **Starting it, for now.** A second Limine entry, "Install Pyxis", selects an
    install init. That init starts the installer in the first user space and is
    the only init that passes it the disk authority; the normal entry never
@@ -220,9 +224,11 @@ Accepted 2026-10-03.
       [target consent](#target-consent)).
    2. A list of every disk, and why each one does or doesn't qualify.
    3. With one eligible disk, its size, GUID and the volumes that will be
-      destroyed, and a typed `wipe` to continue. With several, the user picks one
+      destroyed. With several, the user picks one
       by number first.
-   4. Installation, then a read-back check: the ESP files are compared byte for
+   4. An editable journal size prefilled with the standard value, then typed
+      `wipe` after displaying the proposed layout.
+   5. Installation, then a read-back check: the ESP files are compared byte for
       byte with their sources, the pool is reopened read-only through the normal
       mount path, and every volume is checked for its marker. Only then does it
       report "installed".
@@ -230,7 +236,9 @@ Accepted 2026-10-03.
    both placeholders in `share/installer/limine.conf.template` with timeout `0`
    and the normal command line, and leaves out the "Install Pyxis" entry. An
    installed system boots straight into Pyxis; install media are the only way
-   into install mode.
+   into install mode. Fixed `init-installed` mounts partition 2's `system`
+   read-write at `system://`, then starts the ordinary local session. Home
+   remains RAM-backed.
 
 ### Kernel authority choices
 
@@ -249,7 +257,7 @@ The [implemented authority](../devices/installer-authority.md) keeps consent in
 the trusted installer. Consent inspection must use raw reads and the format
 codecs; opening a pool through the normal mount path retains it and prevents
 formatting in the same boot. The owner accepted this current direction during
-PR review. Task 4.3 will look up each root marker through a committed journal
+PR review. The installer looks up each root marker through a committed journal
 overlay in memory, without writes before consent. Use the normal mount path
 for verification after release.
 
@@ -258,8 +266,8 @@ for verification after release.
 Accepted 2026-10-03. A disk qualifies only when its owner has marked it as
 disposable:
 
-- It has a GPT and a partition holding an npfs pool with at least one live
-  volume.
+- It has a validated protective GPT and at least one recognized npfs pool.
+  Every recognized pool has at least one live volume.
 - **Every** live volume has a regular file named `SAFE_TO_WIPE` in its root.
 - No partition of the disk is mounted, which also excludes the stick Pyxis
   booted from.
@@ -278,8 +286,10 @@ The first disk is prepared on the host: `make usb-image` (which also places the
 markers), then `dd` to the stick. Host tools work on image files, not block
 devices.
 
-**Read the room** makes every disk eligible except mounted disks and npfs
-installs that are verifiably final (all volumes readable, no markers). This
+**Read the room** widens consent eligibility while keeping the operational and
+raw-access exclusions. It refuses npfs pools that are verifiably final (nonempty, all volumes readable, no regular
+markers). **Any final pool vetoes the entire disk**, even if another pool is
+marked or damaged; accepted by the owner for task 4.3. This
 covers:
 - blank disks;
 - foreign layouts, such as a store-bought FAT32 stick;
@@ -328,7 +338,7 @@ Accepted 2026-10-02.
    record latency, bytes and ordinary validation from the start. Final owner
    policies are implemented; crash injection and physical-media qualification
    were not assigned.
-4. [ ] **Installer.** Follows the [installer decisions](#installer-decisions)
+4. [x] **Installer.** Follows the [installer decisions](#installer-decisions)
    and [target consent](#target-consent), as three focused PRs:
    1. [x] **Rename to npfs**: a mechanical rename across pyxis-fs and the parent,
       with no behavior change. `make usb-image` places the `SAFE_TO_WIPE`
@@ -341,10 +351,12 @@ Accepted 2026-10-02.
       native init. Multiple VirtIO disks, exclusive raw claims and release-time
       GPT rescans are implemented; see the [authority reference](../devices/installer-authority.md)
       and [validation/probe](../development/experiments/native-filesystem-task4.2/README.md).
-      The probe is temporary until task 4.3; the ordinary image does not package it.
-   3. [ ] **Installer program**: the interactive flow, GPT, a fresh FAT32 ESP,
+      Task 4.3 removes the temporary probe; its historical source remains linked
+      from the validation record.
+   3. [x] **Installer program**: the interactive flow, GPT, a fresh FAT32 ESP,
       npfs formatting and the read-back check, with userspace as the third
-      link-time symbol provider.
+      link-time symbol provider. See the [implemented installer](../userland/installer.md)
+      and [task-4.3 validation](../development/experiments/native-filesystem-task4.3/README.md).
 5. [ ] **End to end:** install and boot in QEMU, then on the ThinkPad.
 
 ## Task-3 delivery

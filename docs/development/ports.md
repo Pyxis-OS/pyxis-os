@@ -224,10 +224,10 @@ and ordered patch provenance. No compiler-container rebuild is needed.
 
 `app://sdk` contains:
 
-- `usr/include`: shared libc/libpyxis/libterm and ABI/P1F headers.
-- `usr/lib`: `crt0.o`, libc, libterm, libpyxis and target libgcc archives.
+- `usr/include`: shared libc/libpyxis/libterm, ABI/P1F and npfs format headers.
+- `usr/lib`: `crt0.o`, libc, libterm, libpyxis, npfs format and target libgcc archives.
 - `lib/tcc`: libtcc1 and private `stddef.h`, `stdarg.h`, `stdbool.h`, `float.h`.
-- `share`: TLSF/musl/TCC licenses and notices, TCC source pin and patches, and
+- `share`: TLSF/musl/TCC/npfs licenses and notices, TCC source pin and patches, and
   the selected toolchain's hashes, patches and runtime licensing.
 - `manifest.txt`: SDK provenance plus the ports bundle's source and dependency record.
 

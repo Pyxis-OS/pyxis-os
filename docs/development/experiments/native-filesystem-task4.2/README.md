@@ -41,7 +41,7 @@ QEMU 10.2.2 ran on nested KVM with q35, `-cpu max`, four CPUs
   The original ELF view was 2,815,920 bytes and the probe archive 20,830,208 bytes
   at that observation; these sizes are artifact properties, not format limits.
 - The manually selected `Install Pyxis` menu entry launched native init and
-  the [temporary probe](probe/README.md). Five disposable devices covered two
+  the [temporary probe](https://git.internal/PyxisOS/pyxis-os/src/commit/f8b12a7/docs/development/experiments/native-filesystem-task4.2/probe/README.md). Five disposable devices covered two
   independent prepared 512-byte disks, a read-only blank disk, an unsupported
   transitional device and a modern blank 4 KiB device. Every probe group passed.
   GDB then observed no remaining raw claims and two retained pools on different
@@ -65,7 +65,8 @@ QEMU 10.2.2 ran on nested KVM with q35, `-cpu max`, four CPUs
   Selecting the executable name therefore did not grant raw authority.
 
 The owner requested retaining the temporary probe source for review until
-task 4.3 writes the installer. Its manual build/packaging instructions are
+task 4.3 writes the installer. Task 4.3 removed it; the historical source and
+manual build/packaging instructions remain available through the link above,
 separate from the normal image and CI. No fault injection or boot/output
 automation was added. Failure-latch, publication-window and deferred-cleanup
 paths were source-reviewed; ordinary success runs do not establish failure or

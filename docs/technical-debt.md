@@ -574,16 +574,14 @@ recovery policy; no automatic repair is available.
 ## Installer authority and retained pools
 
 The [installer disk service](devices/installer-authority.md) supplies explicit raw
-claims and immutable boot sources, but `installer.pxe` is not yet packaged. It
-does not implement target consent, formatting or installation. The trusted
-installer must establish consent; the kernel does not interpret `SAFE_TO_WIPE`.
-Revisit those remaining operations in the assigned installer task.
+claims and immutable boot sources. The [native installer](userland/installer.md)
+establishes target consent; the kernel does not interpret `SAFE_TO_WIPE`.
 
 Any retained npfs pool blocks an exclusive raw-write claim on its device, even
 when read-only and after all handles close. Opening a volume to inspect a marker
 therefore cannot be followed by raw formatting of that device in the same boot.
 This is the owner-accepted current direction. There is no pool teardown or
-installer bypass. Task 4.3 will inspect each volume's root marker through raw
+installer bypass. The installer inspects each volume's root marker through raw
 reads and the format library, overlaying a committed journal in memory without
 writing before consent. Rejected consent leaves the disk untouched; accepted
 targets will be wiped rather than receive a persisted replay. Pool retirement
@@ -595,6 +593,22 @@ and promise no snapshot against raw writes.
 Physical-media, power-loss and uncertain-failure evidence remains separate from
 ordinary emulated operation; revisit reliability claims only with corresponding
 validation.
+
+## Installer inspection and recovery limits
+
+Consent validates GPT, npfs headers and the complete committed journal, then
+checks allocation/mappings encountered on root-marker paths. It does not prove
+whole-filesystem ownership or inspect unrelated files. A large committed log
+requires reading every record before eligibility is known; inspection retains
+descriptors rather than the whole log. Revisit with measured large-log workloads
+or a concrete need for whole-filesystem qualification.
+
+Installation writes fresh metadata and boot files; it does not securely erase
+free space. An interrupted write can leave a partial disk, without rollback or
+automatic repair. The ordinary QEMU success/refusal cases and host structural
+checks do not qualify power loss, uncertain I/O, USB/NVMe or physical firmware.
+Revisit those limits with the assigned end-to-end hardware task and separately
+authorized recovery validation.
 
 ## USB image updates and firmware qualification
 

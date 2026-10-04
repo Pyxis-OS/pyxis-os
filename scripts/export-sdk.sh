@@ -16,6 +16,7 @@ case "${1:-}" in
     cp include/remote/*.h "$staging/remote/"
     cp userspace/include/*.h "$staging/"
     cp -R userspace/libc/include/. "$staging/"
+    cp -R fs/include/pyxis_fs "$staging/"
     if ! diff -qr "$staging" "$sdk/sysroot/usr/include" >/dev/null 2>&1; then
       rm -rf "$sdk/sysroot/usr/include"
       mv "$staging" "$sdk/sysroot/usr/include"
@@ -49,6 +50,7 @@ case "${1:-}" in
       install -C -m 644 "build/runtime/$library.a" "$sdk/sysroot/usr/lib/$library.a"
     done
     install -C -m 644 build/runtime/libc/start.o "$sdk/sysroot/usr/lib/crt0.o"
+    install -C -m 644 build/npfs-sdk/libnpfs-format.a "$sdk/sysroot/usr/lib/libnpfs-format.a"
     install -C -m 644 userspace/linker.ld "$sdk/sysroot/usr/lib/pyxis.ld"
     install -C -m 755 build/tools/elf2pxe "$sdk/bin/elf2pxe"
     # tlsf.h carries the complete upstream license; do not export its API.
@@ -56,6 +58,8 @@ case "${1:-}" in
     install -C -m 644 userspace/third_party/tlsf/UPSTREAM.md "$sdk/share/licenses/tlsf-upstream.md"
     install -C -m 644 userspace/third_party/musl/COPYRIGHT "$sdk/share/licenses/musl-COPYRIGHT"
     install -C -m 644 userspace/third_party/musl/UPSTREAM.md "$sdk/share/licenses/musl-upstream.md"
+    mkdir -p "$sdk/share/licenses/npfs"
+    install -C -m 644 fs/LICENSE fs/LICENSING.md "$sdk/share/licenses/npfs/"
     {
       printf 'pyxis_revision=%s\n' "$(git rev-parse HEAD)"
       if [ -n "$(git status --porcelain)" ]; then
@@ -68,6 +72,12 @@ case "${1:-}" in
         printf 'userland_state=modified\n'
       else
         printf 'userland_state=clean\n'
+      fi
+      printf 'fs_revision=%s\n' "$(git -C fs rev-parse HEAD)"
+      if [ -n "$(git -C fs status --porcelain)" ]; then
+        printf 'fs_state=modified\n'
+      else
+        printf 'fs_state=clean\n'
       fi
       printf 'compiler_target=%s\n' "$("${CROSS_COMPILE:-x86_64-unknown-pyxis-}gcc" -dumpmachine)"
       printf 'compiler_version=%s\n' "$("${CROSS_COMPILE:-x86_64-unknown-pyxis-}gcc" -dumpfullversion)"

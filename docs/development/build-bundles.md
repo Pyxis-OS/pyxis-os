@@ -17,7 +17,9 @@ or repeated checkouts.
 Archives are written to `build/bundles/{kernel,sdk,userspace,ports}.tar`.
 Each also contains its `build/bundle-info` record and payload checksum list.
 SDK includes the headers, startup objects and runtime libraries built from the
-pinned userland source; the userland target builds applications, not those libraries.
+pinned userland source, plus the pinned target npfs codec archive/header/license.
+Its provenance includes the filesystem revision and local state. The userland
+target builds applications, not those libraries.
 The compiler stays in the prebuilt container and is not rebuilt by the workflow.
 The SDK includes the host converter and is intended for the current Linux x86-64
 build host. Consolidating the jobs does not change bundle formats or local reuse.
@@ -73,7 +75,8 @@ boundary or proof that arbitrary kernel implementation changes preserve behavior
 
 Kernel source builds require the pinned lwIP and filesystem-format submodules. Their
 revisions, local state and change hashes are recorded in the kernel bundle;
-`make fs-tools` remains an opt-in host build outside these bundles.
+SDK source builds also require the filesystem-format submodule and record it
+in SDK provenance. `make fs-tools` remains an opt-in host build outside these bundles.
 
 Normal source builds still use their existing dependencies. A TCC source/patch
 change requires rebuilding TCC; CI reuse avoids repeating an already completed

@@ -10,7 +10,7 @@ Userland's `make install` owns its selected programs, `init` and assets, exporti
 licenses and TCC support files into `build/ports-root`. Host port tools stay out
 of the guest tree.
 
-`boot/initrd.lua` combines those trees with the SDK's target headers, runtime
+`boot/initrd.lua` combines those trees with the SDK's target headers, runtime and npfs format
 archives, toolchain notices and provenance. It adds the selected Doom data and
 optional init override, plus Limine's EFI executable, source configuration
 template and license for the trusted installer. The root Makefile only
