@@ -121,12 +121,35 @@ pool opening refuses a committed journal; writable opening validates and replays
 it before exposing records. Unknown required features prevent opening; unknown
 read-only-compatible features prevent writes and replay.
 
+For boot-present USB BOT media, enable `CONFIG_XHCI=y` and attach the existing
+image read-only. An ISO can select its actual disk GUID without rebuilding that
+USB image. For the sample image, trusted init can use:
+
+```sh
+#!app://shell.pxe
+mount --partition 2 --volume usb-test --read-only usb://
+namespace create
+service start text app://textfs.pxe
+session app://session.pxe --configure-network --start-remote-services
+```
+
+Build with `make image INIT=/tmp/init-usb.sh INIT_CPUS= MOUNT_DISK=<actual-GPT-GUID>`
+and attach the selected disk through xHCI; see the
+[USB storage bring-up record](../development/usb-storage-bringup.md).
+USB writes, flushes and public raw-disk access remain unavailable. Do not request
+a writable USB mount. `usb://bin/cat.pxe usb://README.txt` captures the executable
+through the delegated file grant before launching it.
+
 Every trusted workload init receives the same configured disk scope. The
 `native_mount` resource is issued unless inventory establishes hardware absence.
-Incomplete discovery, unsupported hardware and setup failures retain
-a failing authority. Mount waits for per-device GPT discovery, selects the unique
-matching configured GUID, rejects duplicate matches, and selects a one-based
-partition entry and volume name. A live raw claim prevents opening that device.
+Pending discovery retains the scope rather than caching a permanent failure.
+Mount waits for sealed discovery and all terminal GPT scans, selects the sole
+observed matching GUID, rejects duplicate observed matches, and selects a
+one-based partition entry and volume name. A known unique match may mount under
+partial discovery, including unsupported EHCI; unseen disks could conceal
+another matching GUID. No match is NOT_FOUND for complete discovery and
+UNAVAILABLE for partial discovery. Selected-device failures do not fall back.
+A live raw claim prevents opening that device.
 `MOUNT_RIGHT_OPEN_ROOT`, `MOUNT_RIGHT_OBSERVE` and `MOUNT_RIGHT_WRITE` are independent:
 requesting root mutation rights requires WRITE; requesting filesystem information
 requires OBSERVE. `--no-info` omits observation. `--optional` skips only missing

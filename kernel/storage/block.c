@@ -16,7 +16,7 @@ struct block_device {
 };
 
 static struct block_device *devices;
-static size_t device_count, device_capacity, native_count;
+static size_t device_count, device_capacity, installer_count;
 static bool retained;
 
 static void assert_client_context(void)
@@ -58,7 +58,7 @@ void block_prepare(void)
     };
     virtio_blk_set_id(i, id);
   }
-  native_count = device_count;
+  installer_count = device_count;
 }
 
 size_t block_registry_capacity(void)
@@ -130,30 +130,23 @@ enum block_preparation block_preparation_result(block_device_id id)
   return device ? device->preparation : BLOCK_DEVICE_INVALID;
 }
 
-/* Native filesystem and installer authority retain their qualified backend
- * domain while USB block/GPT access is being brought up inside the kernel. */
-size_t block_native_device_count(void)
+/* Installer raw-disk authority remains scoped to its qualified VirtIO backend. */
+block_device_id block_installer_device_at(size_t index)
 {
   assert_client_context();
-  return native_count;
+  return index < installer_count ? (block_device_id)index + 1 : BLOCK_DEVICE_ID_NONE;
 }
 
-block_device_id block_native_device_at(size_t index)
+bool block_installer_inventory_complete(void)
 {
   assert_client_context();
-  return index < native_count ? (block_device_id)index + 1 : BLOCK_DEVICE_ID_NONE;
+  return installer_count == virtio_blk_device_count() && virtio_blk_inventory_complete();
 }
 
-bool block_native_inventory_complete(void)
+bool block_installer_device(block_device_id id)
 {
   assert_client_context();
-  return native_count == virtio_blk_device_count() && virtio_blk_inventory_complete();
-}
-
-bool block_native_device(block_device_id id)
-{
-  assert_client_context();
-  return id && id <= native_count;
+  return id && id <= installer_count;
 }
 
 enum block_result block_get_info(block_device_id id, struct block_info *info)

@@ -246,17 +246,17 @@ enum call_status disk_perform(struct npfs_store_context *context, struct npfs_jo
 {
   npfs_require_worker();
   uint64_t flags = cpu_save_interrupts();
-  bool complete = block_native_inventory_complete();
+  bool complete = block_installer_inventory_complete();
   if (job->operation == NPFS_RAW_INFO && !job->device) {
-    job->device = block_native_device_at(job->offset);
+    job->device = block_installer_device_at(job->offset);
   }
   enum block_preparation preparation = block_preparation_result(job->device);
-  bool native = block_native_device(job->device);
+  bool installer = block_installer_device(job->device);
   cpu_restore_interrupts(flags);
   if (!complete) {
     return CALL_UNAVAILABLE;
   }
-  if (preparation == BLOCK_DEVICE_INVALID || !native) {
+  if (preparation == BLOCK_DEVICE_INVALID || !installer) {
     return CALL_NOT_FOUND;
   }
   if (job->operation == NPFS_RAW_INFO) {

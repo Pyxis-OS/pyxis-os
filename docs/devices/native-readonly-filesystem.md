@@ -13,10 +13,12 @@ The authoritative [encoding](../../fs/docs/npfs-format.md) and
 
 ## Configure and delegate
 
-Set `MOUNT_DISK=<canonical-GPT-GUID>` for image assembly. No principal is supplied.
-Absent configuration disables native mount authority; malformed or duplicate
-configuration fails. Attach the selected disk explicitly with `VIRTIO_BLK_IMAGE`;
-`VIRTIO_BLK_READONLY=1` permits only read-only use. Startup does not probe volumes.
+Set `MOUNT_DISK=<canonical-GPT-GUID>` for image assembly. No principal is
+supplied. Absent configuration disables native mount authority; malformed or
+duplicate configuration fails. Attach the selected disk explicitly.
+`VIRTIO_BLK_IMAGE` supports VirtIO, with `VIRTIO_BLK_READONLY=1` for read-only
+use. Enabled xHCI also supports boot-present USB BOT disks through discovered
+controllers and hubs; USB mounts are read-only. Startup does not probe volumes.
 
 `MOUNT_OPEN_VOLUME` requires OPEN_ROOT and takes a one-based GPT entry, counted
 volume name and exact directory rights including LOOKUP. CREATE, WRITE_FILES or
@@ -24,14 +26,19 @@ REMOVE additionally require mount WRITE. FILESYSTEM_INFO independently requires
 mount OBSERVE. WRITE authorizes an attempt; device and feature restrictions can
 still refuse it. Pool/volume IDs identify storage and confer no authority.
 
-The configured GUID selects among all per-device GPT snapshots; it does not
-authenticate contents. Duplicate matching disk GUIDs are an error. A complete
-empty inventory omits authority; incomplete discovery and present but unusable
-hardware retain a failing authority. Optional mounting suppresses only absent
-authority. A live installer raw claim prevents mounts on its device. The GPT
-type is not a filesystem selector, and failure does not probe another partition. Namespace binding names
-belong to the caller, outside the disk format. Applications receive only explicitly
-delegated roots and cannot reacquire withheld rights through a parent inode.
+The configured GUID selects among all per-device GPT snapshots after sealed boot
+discovery and terminal scans; it does not authenticate contents. Duplicate
+matching disk GUIDs are an error. A complete empty inventory at scope creation
+omits authority. Pending or partial discovery retains the configured scope; the
+sole observed valid GUID match may mount even when discovery is incomplete.
+Missing devices could conceal a duplicate GUID. Without a match, complete
+discovery reports NOT_FOUND and partial discovery reports UNAVAILABLE.
+Selected-device errors never choose another disk. Optional mounting suppresses
+only absent authority. A live installer raw claim prevents mounts on its device.
+The GPT type is not a filesystem selector, and failure does not probe another
+partition. Namespace binding names belong to the caller, outside the disk
+format. Applications receive only explicitly delegated roots and cannot
+reacquire withheld rights through a parent inode.
 
 Prepare and check a standalone pool before copying it into its GPT extent; see
 [disposable disks](filesystem-native-adapter.md#prepare-a-disposable-disk).

@@ -357,9 +357,9 @@ static bool request_sense(struct usb_bot *bot, void *scratch, uint64_t overall)
 }
 
 static bool require_command(struct usb_bot *bot, const uint8_t *cdb, unsigned cdb_bytes,
-                            void *scratch, size_t length, size_t *bytes, uint64_t overall, bool *submitted)
+                            void *scratch, size_t length, size_t *bytes, uint64_t overall)
 {
-  enum bot_command_result result = command(bot, cdb, cdb_bytes, scratch, length, bytes, overall, submitted);
+  enum bot_command_result result = command(bot, cdb, cdb_bytes, scratch, length, bytes, overall, NULL);
   if (result == BOT_COMMAND_OK) {
     return true;
   }
@@ -396,7 +396,7 @@ static bool capacity(struct usb_bot *bot, void *scratch, uint64_t overall)
 {
   uint8_t cdb[16] = { SCSI_READ_CAPACITY_10 };
   size_t bytes;
-  if (!require_command(bot, cdb, 10, scratch, SCSI_CAPACITY_10_BYTES, &bytes, overall, NULL)) {
+  if (!require_command(bot, cdb, 10, scratch, SCSI_CAPACITY_10_BYTES, &bytes, overall)) {
     return false;
   }
   if (bytes != SCSI_CAPACITY_10_BYTES) {
@@ -410,7 +410,7 @@ static bool capacity(struct usb_bot *bot, void *scratch, uint64_t overall)
     cdb[0] = SCSI_SERVICE_ACTION_IN_16;
     cdb[1] = SCSI_READ_CAPACITY_16_ACTION;
     write_big(cdb + 10, SCSI_CAPACITY_16_BYTES, 4);
-    if (!require_command(bot, cdb, sizeof(cdb), scratch, SCSI_CAPACITY_16_BYTES, &bytes, overall, NULL)) {
+    if (!require_command(bot, cdb, sizeof(cdb), scratch, SCSI_CAPACITY_16_BYTES, &bytes, overall)) {
       return false;
     }
     if (bytes != SCSI_CAPACITY_16_BYTES) {
@@ -436,14 +436,19 @@ static bool capacity(struct usb_bot *bot, void *scratch, uint64_t overall)
   return true;
 }
 
-static bool read_blocks(struct usb_bot *bot, uint64_t lba, uint32_t count, void *scratch,
-                        size_t scratch_bytes, uint64_t overall, bool *submitted)
+enum usb_bot_read_result usb_bot_read(struct usb_bot *bot, uint64_t lba, uint32_t count, void *scratch,
+    size_t scratch_bytes, uint64_t overall, bool *submitted)
 {
+  if (!bot || !bot->host || !bot->configuration || !scratch ||
+      bot->state == USB_BOT_FAILED || bot->state == USB_BOT_UNSUPPORTED) {
+    return USB_BOT_READ_FAILED;
+  }
   if (!count || !bot->block_bytes || lba >= bot->blocks || count > bot->blocks - lba ||
       count > scratch_bytes / bot->block_bytes || count > USB_BULK_BYTES / bot->block_bytes ||
       (!bot->wide && (count > UINT16_MAX || lba > UINT32_MAX ||
                      count - 1 > UINT32_MAX - lba))) {
-    return fail(bot, "private SCSI read range exceeds geometry or transfer bound");
+    fail(bot, "private SCSI read range exceeds geometry or transfer bound");
+    return USB_BOT_READ_FAILED;
   }
   uint8_t cdb[16] = {0};
   unsigned cdb_bytes;
@@ -459,15 +464,20 @@ static bool read_blocks(struct usb_bot *bot, uint64_t lba, uint32_t count, void 
     cdb_bytes = 10;
   }
   size_t expected = (size_t)count * bot->block_bytes, bytes;
-  if (!require_command(bot, cdb, cdb_bytes, scratch, expected, &bytes, overall, submitted)) {
-    return false;
+  enum bot_command_result result = command(bot, cdb, cdb_bytes, scratch, expected, &bytes, overall, submitted);
+  if (result == BOT_COMMAND_REJECTED && request_sense(bot, scratch, overall)) {
+    return USB_BOT_READ_CLEAN_REJECTED;
+  }
+  if (result != BOT_COMMAND_OK) {
+    return bot->timed_out ? USB_BOT_READ_TIMED_OUT : USB_BOT_READ_FAILED;
   }
   if (bytes != expected) {
-    return fail(bot, "SCSI read did not return the complete requested blocks");
+    fail(bot, "SCSI read did not return the complete requested blocks");
+    return USB_BOT_READ_FAILED;
   }
   ++bot->reads;
   bot->read_bytes += bytes;
-  return true;
+  return USB_BOT_READ_OK;
 }
 
 bool usb_bot_probe(struct usb_bot *bot, void *scratch, size_t scratch_bytes, uint64_t overall)
@@ -513,7 +523,7 @@ bool usb_bot_probe(struct usb_bot *bot, void *scratch, size_t scratch_bytes, uin
     return unsupported(bot, "BOT multiple LUNs are deferred");
   }
   uint8_t cdb[6] = { SCSI_INQUIRY, 0, 0, 0, SCSI_INQUIRY_BYTES, 0 };
-  if (!require_command(bot, cdb, sizeof(cdb), scratch, SCSI_INQUIRY_BYTES, &bytes, overall, NULL)) {
+  if (!require_command(bot, cdb, sizeof(cdb), scratch, SCSI_INQUIRY_BYTES, &bytes, overall)) {
     return false;
   }
   const uint8_t *inquiry = scratch;
@@ -531,28 +541,23 @@ bool usb_bot_probe(struct usb_bot *bot, void *scratch, size_t scratch_bytes, uin
   if (bot->blocks < count) {
     count = bot->blocks;
   }
-  if (!read_blocks(bot, 0, count, scratch, scratch_bytes, overall, NULL)) {
+  enum usb_bot_read_result read_result = usb_bot_read(bot, 0, count, scratch, scratch_bytes, overall, NULL);
+  if (read_result != USB_BOT_READ_OK) {
+    if (read_result == USB_BOT_READ_CLEAN_REJECTED) {
+      fail(bot, "SCSI command rejected; sense retained");
+    }
     return false;
   }
   memcpy(bot->first_sample, scratch, sizeof(bot->first_sample));
-  if (!read_blocks(bot, bot->blocks - 1, 1, scratch, scratch_bytes, overall, NULL)) {
+  read_result = usb_bot_read(bot, bot->blocks - 1, 1, scratch, scratch_bytes, overall, NULL);
+  if (read_result != USB_BOT_READ_OK) {
+    if (read_result == USB_BOT_READ_CLEAN_REJECTED) {
+      fail(bot, "SCSI command rejected; sense retained");
+    }
     return false;
   }
   memcpy(bot->last_sample, scratch, sizeof(bot->last_sample));
   bot->state = USB_BOT_READY;
   bot->detail = "read-only BOT first-span and final-block probe complete";
   return true;
-}
-
-enum usb_result usb_bot_read(struct usb_bot *bot, uint64_t first_block, uint32_t block_count,
-    void *scratch, size_t scratch_bytes, uint64_t deadline, bool *submitted)
-{
-  if (!bot || bot->state != USB_BOT_READY || !scratch) {
-    return USB_IO;
-  }
-  bot->timed_out = false;
-  if (read_blocks(bot, first_block, block_count, scratch, scratch_bytes, deadline, submitted)) {
-    return USB_OK;
-  }
-  return bot->timed_out ? USB_TIMEOUT : USB_IO;
 }

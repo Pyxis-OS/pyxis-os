@@ -259,3 +259,150 @@ restored.
 
 ThinkPad B.5 testing remains deferred. The earlier owner-reported B.4 results
 are not qualification of this new block/GPT integration.
+
+## 2026-10-04: configured read-only USB mounts
+
+Baseline `4b5e256` was captured before edits; implementation `27e6367` includes
+both configured USB mount authority and the accepted runtime READ-rejection
+follow-up from [PR #384](https://git.internal/PyxisOS/pyxis-os/pulls/384).
+Submodule pins were fs `d352c7e`, ports `bf7667c`, userspace `ad1d53a`, and lwIP
+`a1aadb9`; none changed. Ordinary enabled and default-disabled `make -j16 image`
+builds passed using the existing compiler. No tests, fault injection, CI changes
+or boot automation were added.
+
+### Matched discovery observations
+
+Both revisions used `CONFIG_XHCI=y`, packaged init defaults and no `MOUNT_DISK`.
+Three fresh QEMU processes per revision used private fresh OVMF variables, the
+common QEMU arguments above, and these identical attachments:
+
+```sh
+-device qemu-xhci,id=usb,p2=2,p3=2 \
+-device usb-hub,bus=usb.0,port=1,ports=4 \
+-device usb-kbd,bus=usb.0,port=1.3 \
+-drive if=none,id=usb_disk,format=raw,readonly=on,file=build/pyxis-usb.img \
+-device usb-storage,bus=usb.0,port=1.2,drive=usb_disk \
+-drive if=none,id=virtio_disk,format=raw,readonly=on,file=/home/chronium/tmp/usb-bot-disk-a.raw \
+-device virtio-blk-pci,drive=virtio_disk,disable-legacy=on \
+-device ich9-usb-ehci1,id=ehci
+```
+
+The saved baseline/final ISO and ELF pairs supplied each revision's unchanged
+inputs. This is the same four-vCPU, 8 GiB q35/KVM agent environment described
+above, not a native ThinkPad measurement. Boot-ready serial resource counters
+and post-discovery debugger counters gave:
+
+| Observation | Baseline samples | Implementation samples |
+| --- | --- | --- |
+| xHCI commands | 8, 8, 8 | 8, 8, 8 |
+| xHCI consumed events | 94, 95, 95 | 95, 89, 95 |
+| VirtIO published/completed reads | 3/3 each | 3/3 each |
+| USB GPT status | HEALTHY each | HEALTHY each |
+| PMM allocated frames | 5208 each | 5208 each |
+| VM backed pages / range records | 4605 / 93 each | 4605 / 93 each |
+| TLSF pools / reserved bytes | 6 / 2691072 each | 6 / 2691072 each |
+
+Command/read counts and reserved resources did not vary. Event counts varied by
+one before and six after, including asynchronous port activity. These are work
+and reservation observations, not latency or throughput measurements. The old
+revision withheld USB mount authority, so it supplies no working USB filesystem
+throughput baseline. Remote named `lsusb` retained the hub, storage and keyboard
+observations and exited 1 solely because EHCI was unsupported in both revisions.
+
+### USB files, delegation and executable capture
+
+The existing 512-byte image retained the observed disk GUID
+`254CA48F-2CF8-4E45-A844-CA22C685D8AB`, partition 2 at block 264192 with 782336
+blocks, and the populated `usb-test` volume. It was never regenerated or changed
+while attached. The GUID, sizes, names and paths here are fixture observations,
+not kernel selection constants. A temporary trusted init contained:
+
+```sh
+#!app://shell.pxe
+title --optional "USB read-only"
+mount --partition 2 --volume usb-test --read-only usb://
+namespace create
+service start text app://textfs.pxe
+session app://session.pxe --configure-network --start-remote-services
+```
+
+The ISO build selected that script without rebuilding the USB image:
+
+```sh
+make -j16 image INIT=/home/chronium/tmp/init-usb-readonly.sh INIT_CPUS= \
+  MOUNT_DISK=254ca48f-2cf8-4e45-a844-ca22c685d8ab
+```
+
+With the same hub/EHCI/marker-only VirtIO attachments, ordinary remote commands
+used the existing client:
+
+```sh
+build/tools/pyxis-remote --machine --no-shell-echo --columns 100 --rows 35 \
+  127.0.0.1 24567
+```
+
+`ls usb://` listed `bin/`, `README.txt` and `SAFE_TO_WIPE`. Both
+`cat usb://README.txt` and `usb://bin/cat.pxe usb://README.txt` displayed the sample
+text and exited 0. The latter captured and launched the native executable from
+the USB-backed file grant. `fastfetch` exited 0 and reported npfs read-only mode
+with the observed 381.99 MiB shared-pool capacity. The unrelated VirtIO GPT was
+ABSENT; partial EHCI inventory did not veto the observed unique USB GUID.
+
+`cat app://init > usb://new.txt` was denied during redirection, before launch.
+`rm usb://SAFE_TO_WIPE` and `sync usb://` were denied and exited 1; the final
+listing retained the original entries. Initial attempts using unpackaged `echo`
+and `printf` did not exercise redirection and were replaced by the packaged
+`cat` command. GDB observed pool device 2, the expected partition extent,
+`store->writable=false`, BOT READY and free captured slots. After file and
+executable reads, retained BOT counters were 113 reads, 542720 read bytes and
+116 commands; no USB write or flush path was supplied.
+
+### Geometry and failure policy
+
+A separate populated 4 KiB image reused the earlier 4 KiB GPT metadata fixture.
+A host-side copy read each image's partition-2 extent and copied the sample pool
+into the destination extent; both had the same byte offset and capacity. The
+original images were preserved and no attached image was edited. QEMU used a
+root attachment with `p2=1,p3=1` and
+`logical_block_size=4096,physical_block_size=4096`, alongside unsupported EHCI.
+The same configured-GUID ISO mounted device 1: 131072 logical blocks, partition
+2 at 33024 with 97792 blocks, max transfer 65536 bytes, writable/flush false.
+Both file reads and captured executable launch exited 0; `fastfetch` again
+reported read-only mode. This exercises filesystem reads with discovered device
+geometry and a different attachment shape.
+
+Two fresh-process boots used `-S` and a GDB hardware breakpoint at `complete_job`
+for `job->operation == NPFS_ROOT`, without modifying guest state:
+
+- A trusted init requesting `--read-write` on the root-attached USB disk returned
+  CALL_READ_ONLY, with no retained pool and BOT still READY.
+- The read-only init with the same GUID observed through both USB and VirtIO
+  returned CALL_IO. Both GPT snapshots were HEALTHY; no pool opened and no device
+  was selected. All backing attachments were read-only.
+
+The accepted clean READ rejection followed by valid REQUEST SENSE now fails
+only that ticket with BLOCK_IO_ERROR and retains READY. Genuine transport or
+protocol errors, failed/malformed sense, failed recovery and timeouts retain the
+existing sticky device/controller failure behavior; probe-time READ rejection
+remains a setup failure. These error branches received source review only;
+no natural rejected READ occurred in these QEMU boots. Missing-match complete
+versus partial status, scan deadlines, selected-device failure propagation and
+installer raw-USB exclusion were also source-reviewed, without forced failures.
+
+### VirtIO preservation and default configuration
+
+A fresh boot used a private writable copy of the sample image through VirtIO,
+an unrelated root-attached marker-only USB disk, and unsupported EHCI. Trusted
+init selected the same observed GUID and mounted `data://` read-write. File
+reads and captured executable launch exited 0. Copying `app://init` into
+`data://copied-init`, file sync, matching SHA-256 hashes, removal and directory
+sync all succeeded. GDB observed the selected VirtIO pool writable on device 1,
+with HEALTHY VirtIO GPT and ABSENT USB GPT. No USB write was attempted.
+
+The checkout restored `CONFIG_XHCI=n` and packaged init/default image settings.
+The default-disabled image reached the remote shell with the matched discovery
+attachments. GDB confirmed no xHCI controllers and only the VirtIO block device;
+`lsusb` reported unavailable inventory and exited 1. All task-owned QEMU and
+GDB processes were closed. USB writes/flush, public raw USB access, hotplug and
+physical filesystem qualification remain deferred. ThinkPad mount testing is
+still deferred; earlier owner-reported BOT reads do not qualify this integration.

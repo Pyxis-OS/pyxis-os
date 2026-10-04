@@ -3,9 +3,10 @@
 With `CONFIG_XHCI=y`, Caelum independently probes supported boot-present storage
 on each discovered xHCI controller, including traversed hub descendants. The
 checked-in default remains `n`. Supported disks register with the kernel-only [block interface](block-storage.md)
-and receive [GPT snapshots](gpt.md). Native filesystem and installer authority
-remain scoped to VirtIO in this slice; USB registration grants no public raw-disk
-or mount access. Writes, cache flushes, hotplug and native storage qualification
+and receive [GPT snapshots](gpt.md). Trusted init can open USB-backed npfs volumes
+read-only using configured GUID authority, then delegate ordinary directory/file
+grants. Installer raw-disk authority remains VirtIO-only; USB registration grants
+no public raw-disk access. Writes, cache flushes, hotplug and native storage qualification
 remain separate work.
 
 ## Binding and preparation
@@ -107,9 +108,15 @@ read pointer and no allocation or new mapping in these operations.
 
 Wait timeout does not consume or cancel a ticket. Abandonment cancels queued
 work or releases a completed slot; active work retains its slot until the owning
-exchange returns, even when its client abandons it. A read failure stops admission
-on that device and completes its queued reads as unavailable, without replaying
-the failed read. Controller quarantine independently stops admission and queued
+exchange returns, even when its client abandons it. The owner-accepted read policy
+distinguishes a valid READ rejection followed by
+valid REQUEST SENSE from transport failure. A clean rejection completes only
+that request with `BLOCK_IO_ERROR`, retains sense, and keeps READY admission for
+later reads; it never replays the rejected command. Failed/malformed sense,
+transport/protocol failure, failed recovery and timeout retire the device and
+complete queued reads as unavailable. Probe-time READ rejection remains a terminal
+setup failure: the initial probe must establish usable media before registration.
+Controller quarantine independently stops admission and queued
 work on all its disks; the active exchange retires through its worker, and unsafe
 host DMA stays retained until reboot. Other controllers and VirtIO continue.
 Preparation facts and GPT snapshots remain immutable after later I/O failure.
@@ -120,6 +127,36 @@ scans retained USB candidates sequentially through ordinary block tickets. READY
 media can publish maps even when aggregate USB discovery is partial. Each actual
 scan retains the existing thirty-second admission/read deadline. Existing VirtIO
 scans start immediately and keep their separate scratch/worker lifetime.
+
+## Read-only mount authority
+
+Configured `mount.disk` authority searches the full retained registry. A GUID
+request waits for sealed boot discovery and terminal GPT snapshots, then selects
+exactly one observed HEALTHY/DEGRADED match. Duplicate observed GUIDs fail.
+Unrelated terminal GPT errors do not prevent a matching usable disk; failures
+from the selected disk, partition or volume propagate without fallback.
+
+The owner accepted observed uniqueness under partial discovery. Unsupported
+EHCI and uninspected branches remain visible through `lsusb`; an unseen disk
+could conceal another copy of the GUID. A matching observed disk may still
+mount. No match returns NOT_FOUND for complete discovery and UNAVAILABLE for
+partial discovery, avoiding a false claim of absence. Discovery and scanning
+consume the existing mount operation's absolute deadline.
+
+Init receives the configured mount scope when devices are known or discovery
+cannot establish absence. Pending discovery never caches a permanent failure
+in the mount object. Only a complete empty inventory at scope creation omits
+authority; a retained pending scope may later fail to find a match. `--optional`
+still skips only missing authority, rather than suppressing mount errors.
+
+Trusted init selects the GPT entry and volume and requests read-only directory
+rights. The existing filesystem engine refuses writable USB opens and committed
+journals that require replay; it performs no write or flush on this backend.
+Returned roots carry the selected boot ID and remain independently retained
+through delegation and executable capture. USB addresses, routes, GUIDs and
+volume names do not give an application mount or raw-block authority. Installer
+enumeration, explicit device opens and disk-volume inspection remain VirtIO-only
+through the separate `block_installer_*` view.
 
 ## Media and retained results
 

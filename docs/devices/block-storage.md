@@ -14,10 +14,12 @@ facts; each backend retains its own queues, buffers and workers. The
 [USB backend](usb-storage.md) supports per-device read-only requests across
 inspected controllers and hubs. Its candidates append during boot discovery;
 `block_discovery_finished()` seals that inventory independently of whether
-discovery was exhaustive. The qualified native filesystem/installer view remains
-VirtIO-only until the separate USB mount integration. The `block_native_*`
-queries expose that authority domain without letting partial USB discovery
-disable existing VirtIO grants.
+discovery was exhaustive. Configured native mount authority uses the full
+registry after discovery and GPT scans finish, permitting a unique observed GUID
+match under partial discovery. `block_inventory_complete()` controls initial
+absence and no-match diagnosis rather than disabling prepared disks. The
+installer remains VirtIO-only through the separate `block_installer_*` view;
+USB public raw access is deferred.
 
 The block-storage foundation milestone is complete. Its implemented contracts
 live here, in [shared VirtIO queues](virtio-queues.md) for filesystem, entropy and
@@ -60,8 +62,8 @@ Generic allocation, mapping or transport setup failures use SETUP_FAILED rather
 than claiming unsupported hardware. Only a complete inventory with no recognized
 candidate establishes absence; a later `block_get_info()` failure establishes
 neither absence nor the preparation reason. Configured native mount authority
-is omitted only for a complete empty qualified authority domain; other failures remain visible and
-cannot be suppressed by an optional mount. A READY result describes preparation,
+is omitted only for a complete empty inventory at scope creation; other failures
+remain visible and cannot be suppressed by an optional mount. A READY result describes preparation,
 not a promise that the transport remains operational.
 
 ## Geometry and capacity

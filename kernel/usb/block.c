@@ -329,13 +329,13 @@ void usb_block_process(struct usb_block_pool *pool)
       }
       slot->state = USB_BLOCK_ACTIVE;
       cpu_restore_interrupts(flags);
-      enum usb_result outcome = usb_bot_read(device->bot, slot->first_block, slot->block_count,
+      enum usb_bot_read_result outcome = usb_bot_read(device->bot, slot->first_block, slot->block_count,
           slot->data, USB_BULK_BYTES, task_deadline_after_ms(USB_BOT_TIMEOUT_MS), &slot->completion.submitted);
       flags = cpu_save_interrupts();
-      enum block_result result = outcome == USB_TIMEOUT ? BLOCK_TIMED_OUT :
-        outcome != USB_OK ? BLOCK_IO_ERROR : pool->failed ? BLOCK_UNAVAILABLE : BLOCK_OK;
+      enum block_result result = outcome == USB_BOT_READ_TIMED_OUT ? BLOCK_TIMED_OUT :
+        outcome != USB_BOT_READ_OK ? BLOCK_IO_ERROR : pool->failed ? BLOCK_UNAVAILABLE : BLOCK_OK;
       finish_slot(slot, result);
-      if (result != BLOCK_OK) {
+      if (outcome == USB_BOT_READ_FAILED || outcome == USB_BOT_READ_TIMED_OUT || pool->failed) {
         fail_device(device);
       }
       cpu_restore_interrupts(flags);

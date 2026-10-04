@@ -2,10 +2,11 @@
 
 Status: Phase A image assembly/USB boot and Phase B.3 enumeration/control
 transfers, BOT/SCSI reads and kernel block/GPT integration implemented,
-2026-10-04; USB mounting remains pending.
+2026-10-04; native read-only USB mounts are implemented. Write/flush and broader
+physical qualification remain pending.
 Owner-reported [ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md) now
 include root and USB 3 hub-descendant storage reads. Broader hardware/recovery
-qualification and native mounting remain pending. Inspection-first work includes
+qualification of native mounting remains pending. Inspection-first work includes
 [USB 2/3 hub traversal](../devices/usb-hubs.md). The [build-time switch](../devices/usb-xhci.md) defaults to disabled;
 firmware USB boot and archive-backed programs remain available.
 The owner wants a replaceable USB drive as the first
@@ -138,7 +139,8 @@ USB boot inventory; neither tool nor its benchmark is a boot-image prerequisite.
 The owner accepted per-device read-only support on 2026-10-04, superseding
 unique supported-disk selection and the earlier single-controller backend
 proposal. B.4 introduced a kernel-internal BOT/SCSI probe; the first B.5 slice adds
-kernel block registration and GPT discovery. Mount authority remains separate.
+kernel block registration and GPT discovery. Configured read-only mount authority
+now covers observed USB disks.
 Physical qualification remains Phase C.
 
 ### Selection and authority
@@ -163,15 +165,15 @@ controller, while other controllers continue.
 The internal read-only boot probe retains private geometry, sense, counters and
 byte samples. Terminal candidates now register with the kernel block interface,
 including individual unsupported/setup-failure results; supported devices serve
-queued reads and GPT discovery. There are no writes, USB mounts or public USB
-raw-disk operations in this slice. Enabling `CONFIG_XHCI` enables these consumers;
-the checked-in default remains `n`.
+queued reads and GPT discovery. Configured GUID authority now supports native
+read-only USB mounts. USB writes and public raw-disk operations remain deferred.
+Enabling `CONFIG_XHCI` enables these consumers; the checked-in default remains `n`.
 
 Block integration must preserve today's stable per-device IDs, explicit disk
 handles and native mount authority. USB addresses, topology, serial numbers and
-GUID knowledge grant no filesystem authority. B.5 preserves the qualified
-VirtIO-only native/installer authority domain until
-its separate read-only USB mount slice; the old global `block.backend` and
+GUID knowledge grant no filesystem authority. B.5 preserves a separate VirtIO-only
+installer domain while configured native GUID authority searches the full
+registry; the old global `block.backend` and
 unique-disk policy are superseded, not implemented requirements.
 
 ### Controller resources and startup
@@ -236,7 +238,8 @@ and exhaustive discovery are separate queries. GPT waits for sealed discovery
 and scans USB media sequentially through ordinary block tickets, with one shared
 pre-AP scratch allocation. Partial USB discovery does not disable individually
 READY disks or existing VirtIO authority. Private queues, DMA and recovery stay
-with each backend; USB mount/public raw authority remains deferred.
+with each backend. Configured USB read-only mount authority is implemented;
+public raw USB authority remains deferred.
 
 ### Requests, deadlines and failure ownership
 
@@ -375,12 +378,19 @@ host tools and the later physical-preparation procedure.
    candidates through the per-device block contract; use bounded asynchronous
    read tickets and retain per-device setup/failure outcomes. Seal boot discovery
    separately from completeness, preserving usable devices under partial inventory.
-   Native filesystem/installer grants remain VirtIO-only in this slice.
-6. [ ] **Integrate read-only USB mounting.** Reuse GPT, filesystem core and native
+   Installer disk grants remain VirtIO-only; configured filesystem mounts use
+   the full registry in the following task.
+6. [x] **Integrate read-only USB mounting.** Reuse GPT, filesystem core and native
    object interfaces, preserving explicit device authority. Trusted init selects
    partition, volume and binding within supplied disk authority; programs receive
    directory/file grants, not ambient raw-disk access. Read known files and launch
    a captured executable from the USB-backed volume in QEMU.
+   The owner accepted selection of the sole observed valid GUID match after
+   sealed discovery and terminal GPT scans, even under partial discovery. Duplicate
+   observed matches and selected-device errors fail. Without a match, complete
+   discovery reports NOT_FOUND and partial discovery reports UNAVAILABLE. Unseen
+   devices could conceal another matching GUID; this accepted limit does not
+   grant USB writes or public raw-disk access.
 
 ### C. Persistent USB installation and hardware validation
 
@@ -397,16 +407,21 @@ host tools and the later physical-preparation procedure.
    then select the expendable USB target explicitly. Progress from firmware boot
    to read-only mounting and bounded persistence checks. Record device, firmware,
    topology and observed differences. An orderly reboot is not a power-loss test.
+   Include the deferred [configured-mount discovery latency measurement](../technical-debt.md#configured-mount-discovery-latency)
+   on the first native USB mount boot.
 
 ## Remaining assignment and qualification decisions
 
 - Phase A and B.3 enumeration/control transfers are implemented; B.1 records the
   accepted per-device read-only contract. Enumeration publishes root devices and
   supported USB 2/3 hub descendants. B.4 adds an internal BOT/SCSI media probe;
-  B.5 read-only USB mount integration remains pending. Writable
+  B.5 read-only mount integration is implemented. Writable
   work and its roadmap ordering remain unassigned.
 - Image update/preservation ownership remains open for persistent installation.
   Read-only disk selection does not qualify a write target or authenticate media.
+- The [GUID/boot-device identity follow-up](../technical-debt.md#configured-guid-and-boot-device-identity)
+  is deferred until internal-disk installation support; boot-device preference
+  remains a proposal, and current observed-uniqueness selection is unchanged.
 - If the physical target requires hubs, firmware capabilities outside the
   bootstrap prefix or another unsupported controller feature, inspect and discuss
   that expansion before changing the initial hardware profile.

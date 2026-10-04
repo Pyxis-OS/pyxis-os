@@ -2,7 +2,6 @@
 #include <arch/smp.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/fs/npfs.h>
-#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/mount.h>
@@ -16,7 +15,6 @@ struct mount_object {
   struct kernel_object object;
   enum mount_backend backend;
   struct mount_config config;
-  enum call_status setup_status;
 };
 
 static void destroy_mount(struct kernel_object *object)
@@ -39,7 +37,6 @@ struct kernel_object *mount_create(void)
 struct kernel_object *mount_create_native(const struct mount_config *config)
 {
   KASSERT(arch_cpu_index() == 0 && config->enabled);
-  bool complete = block_native_inventory_complete();
   struct mount_object *mount = kmalloc(sizeof(*mount));
   if (!mount) {
     return NULL;
@@ -47,17 +44,13 @@ struct kernel_object *mount_create_native(const struct mount_config *config)
   *mount = (struct mount_object){
     .backend = MOUNT_NATIVE,
     .config = *config,
-    .setup_status = complete ? CALL_OK : CALL_UNAVAILABLE,
   };
   object_init(&mount->object, OBJECT_MOUNT, destroy_mount);
-  if (mount->setup_status != CALL_OK) {
-    klog("mount: configured native authority has incomplete block inventory\n");
-  }
   return &mount->object;
 }
 
 static enum call_status open_native(const struct gpt_guid *disk, block_device_id device,
-    enum call_status setup_status, uint64_t rights,
+    uint64_t rights,
     uintptr_t request_address, size_t request_size, struct kernel_object **root,
     uint64_t *directory_rights)
 {
@@ -88,10 +81,6 @@ static enum call_status open_native(const struct gpt_guid *disk, block_device_id
     return CALL_BAD_REQUEST;
   }
   name[open.name_length] = '\0';
-  if (setup_status != CALL_OK) {
-    return setup_status;
-  }
-
   struct npfs_request *request = npfs_request_prepare(NPFS_ROOT);
   if (disk) {
     request->job.disk = *disk;
@@ -174,9 +163,6 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
     if (request_size) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
-    if (mount->setup_status != CALL_OK) {
-      return (struct syscall_result){mount->setup_status, 0};
-    }
     struct npfs_request *request = npfs_request_prepare(NPFS_DISK_SYNC);
     request->job.disk = mount->config.disk;
     npfs_request_submit_and_wait(request);
@@ -200,7 +186,7 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
   struct kernel_object *root = NULL;
   uint64_t directory_rights = 0;
   enum call_status status = mount->backend == MOUNT_NATIVE ?
-      open_native(&mount->config.disk, BLOCK_DEVICE_ID_NONE, mount->setup_status, rights,
+      open_native(&mount->config.disk, BLOCK_DEVICE_ID_NONE, rights,
           request_address, request_size, &root, &directory_rights) :
       open_host(request_address, request_size, &root, &directory_rights);
   if (status != CALL_OK) {
@@ -224,7 +210,7 @@ struct syscall_result mount_open_device(block_device_id device,
   }
   struct kernel_object *root = NULL;
   uint64_t directory_rights = 0;
-  enum call_status status = open_native(NULL, device, CALL_OK,
+  enum call_status status = open_native(NULL, device,
       MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE, request_address, request_size,
       &root, &directory_rights);
   if (status != CALL_OK) {

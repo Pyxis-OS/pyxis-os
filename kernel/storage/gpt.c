@@ -50,7 +50,7 @@ struct gpt_device {
 
 static struct gpt_device *devices;
 static size_t device_count;
-static size_t native_count;
+static size_t initial_count;
 static struct gpt_scratch *usb_scratch;
 static bool usb_scan_failed;
 
@@ -398,7 +398,7 @@ static void scan_disk(void *argument)
 
 void gpt_prepare(void)
 {
-  native_count = block_native_device_count();
+  initial_count = block_device_count();
   device_count = block_registry_capacity();
   if (!device_count) {
     return;
@@ -413,13 +413,13 @@ void gpt_prepare(void)
   memset(devices, 0, device_count * sizeof(*devices));
   for (size_t i = 0; i < device_count; ++i) {
     devices[i].id = (block_device_id)i + 1;
-    if (i < native_count) {
+    if (i < initial_count) {
       devices[i].scratch = kmalloc(sizeof(*devices[i].scratch));
     } else {
       devices[i].shared_scratch = true;
     }
   }
-  if (device_count > native_count) {
+  if (device_count > initial_count) {
     usb_scratch = kmalloc(sizeof(*usb_scratch));
   }
 }
@@ -462,7 +462,7 @@ static void scan_usb_disks(void *argument)
   size_t count = block_device_count();
   KASSERT(count <= device_count);
   cpu_restore_interrupts(flags);
-  for (size_t i = native_count; i < count; ++i) {
+  for (size_t i = initial_count; i < count; ++i) {
     struct gpt_device *scan = &devices[i];
     flags = cpu_save_interrupts();
     scan->scratch = usb_scratch;
@@ -480,13 +480,13 @@ static void scan_usb_disks(void *argument)
 
 void gpt_start(void)
 {
-  for (size_t i = 0; devices && i < native_count; ++i) {
+  for (size_t i = 0; devices && i < initial_count; ++i) {
     struct gpt_device *scan = &devices[i];
     if (prepare_scan(scan) && kernel_task_create(scan_disk, scan) != MM_OK) {
       publish(scan, GPT_NO_MEMORY);
     }
   }
-  if (devices && device_count > native_count &&
+  if (devices && device_count > initial_count &&
       kernel_task_create(scan_usb_disks, NULL) != MM_OK) {
     usb_scan_failed = true;
     kfree(usb_scratch);
@@ -503,7 +503,7 @@ const struct gpt_snapshot *gpt_get_snapshot(block_device_id id)
   if (block_preparation_result(id) == BLOCK_DEVICE_INVALID) {
     return NULL;
   }
-  if (!devices || (id > native_count && usb_scan_failed)) {
+  if (!devices || (id > initial_count && usb_scan_failed)) {
     return &no_memory;
   }
   return scan && scan->published ? &scan->snapshot : NULL;

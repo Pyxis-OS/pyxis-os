@@ -11,8 +11,11 @@ are discovered asynchronously, so their snapshot capacity is reserved before AP
 startup. A coordinator waits for terminal USB discovery (including partial
 inventories), then uses one shared scratch buffer to scan each candidate through
 ordinary block tickets. Individually READY USB media can publish maps while
-aggregate discovery remains incomplete. USB maps are kernel observations and
-supply no native mount or installer grant in this slice.
+aggregate discovery remains incomplete. USB maps are observations, not grants.
+Configured GUID authority can select a unique observed USB/VirtIO match for
+native mounting; installer raw USB access remains deferred. Mount selection
+waits for all terminal boot scan results, including unrelated failed/unsupported
+candidates.
 
 ## Execution and lifetime
 
