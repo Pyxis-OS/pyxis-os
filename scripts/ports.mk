@@ -6,6 +6,10 @@ DOOM_INPUTS := $(wildcard ports/doom/*.lua ports/doom/Makefile ports/doom/*.c \
                          ports/doom/patches/*.patch) ports/ports.lua ports/build.lua
 DOOM_IMAGE := build/ports/doom/stage/bin/doom.pxe
 DOOM_LICENSE := build/ports/doom/stage/share/licenses/doom/LICENSE
+QUAKE_INPUTS := $(wildcard ports/quake/*.lua ports/quake/Makefile ports/quake/*.c \
+                          ports/quake/*.h ports/quake/patches/*.patch) ports/ports.lua ports/build.lua
+QUAKE_IMAGE := build/ports/quake/stage/bin/quake.pxe
+QUAKE_LICENSE := build/ports/quake/stage/share/licenses/quake/LICENSE
 
 TCC_INPUTS := $(wildcard ports/*.lua ports/tcc/*.lua ports/tcc/Makefile ports/tcc/patches/*.patch)
 SDK_INPUTS := $(shell find build/sdk -type f)
@@ -74,7 +78,8 @@ MBEDTLS_OUTPUTS := $(addprefix build/ports/mbedtls/stage/,dev/lib/libmbedtls.a \
   share/licenses/mbedtls/PORT-NOTICE)
 
 .PHONY: all
-all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(DOOM_IMAGE) $(DOOM_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
+all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(DOOM_IMAGE) $(DOOM_LICENSE) $(QUAKE_IMAGE) $(QUAKE_LICENSE) \
+     $(KILO_IMAGE) $(KILO_LICENSE) \
      $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) \
      $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
 
@@ -105,6 +110,12 @@ $(DOOM_IMAGE) $(DOOM_LICENSE) &: $(DOOM_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
 	rm -rf build/ports/doom
 	$(LUA) ports/build.lua doom --sdk $(abspath build/sdk) --work $(abspath build/ports/doom)
+
+$(QUAKE_IMAGE) $(QUAKE_LICENSE) &: $(QUAKE_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	@command -v $(LUA) >/dev/null 2>&1 || { \
+	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
+	rm -rf build/ports/quake
+	$(LUA) ports/build.lua quake --sdk $(abspath build/sdk) --work $(abspath build/ports/quake)
 
 # This recipe builds host zic and data only; target SDK changes do not alter TZif.
 $(TZDATA_OUTPUTS) &: $(TZDATA_INPUTS) scripts/ports.mk
