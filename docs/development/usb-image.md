@@ -58,9 +58,9 @@ space after the ESP. Thus its size is `USB_IMAGE_MIB - USB_ESP_MIB - 2` MiB.
 The pool type is an image metadata convention introduced by this builder.
 [GPT discovery](../devices/gpt.md) preserves type GUIDs without inferring
 authority; [native mounts](../devices/native-readonly-filesystem.md) still select
-an explicit disk identity, partition entry and volume. The sample supports
-read-only validation, not a persistent home volume. `SAFE_TO_WIPE` is
-a regular empty file in the volume root, marking every volume this builder creates
+an explicit disk identity, partition entry and volume. The sample seeds storage
+validation; it is not mounted as a persistent home volume by default.
+`SAFE_TO_WIPE` is a regular empty file in the volume root, marking every volume this builder creates
 as disposable for the installer. Removing the marker makes the volume final;
 see the [installer consent rules](../wip/native-filesystem.md#target-consent).
 
@@ -113,8 +113,15 @@ the existing USB image without replacing it. Firmware image loading alone does
 not demonstrate native USB I/O. The supplied `run-usb`/`debug-usb` launchers
 keep their raw attachment read-only. Writable QEMU validation uses an explicitly
 selected private image copy and writable attachment with `--read-write` init;
-see the [manual storage record](usb-storage-bringup.md). Physical writable use
-remains deferred.
+see the [manual storage record](usb-storage-bringup.md) and
+[persistent USB development walkthrough](edit-build-run.md#persistent-usb-development).
+Keep that private disk copy across QEMU runs and build the separately booted
+ISO with its actual GUID. Rebuilding the ISO can change the kernel, archive or
+trusted init without replacing the persistent disk. `usb-image` replaces
+`build/pyxis-usb.img`; do not use that output as the persistent disk or copy a
+newly assembled image over the private copy holding saved files.
+The firmware-boot launchers remain read-only; the walkthrough uses a separate
+manual writable attachment. Physical writable use remains deferred.
 
 ## Prepare a selected physical target later
 

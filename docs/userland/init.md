@@ -143,7 +143,9 @@ write-failed disks refuse writable opening. Qualified USB mounts use the existin
 filesystem write, sync and replay path. Installer/public raw USB access remains
 deferred, and physical write qualification is separate.
 `usb://bin/cat.pxe usb://README.txt` captures the executable through the delegated
-file grant before launching it.
+file grant before launching it. The
+[persistent USB development walkthrough](../development/edit-build-run.md#persistent-usb-development)
+shows editing, compiling, explicit sync and reuse of the same private disk.
 
 Every trusted workload init receives the same configured disk scope. The
 `native_mount` resource is issued unless inventory establishes hardware absence.
