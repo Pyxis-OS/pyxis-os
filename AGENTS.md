@@ -44,6 +44,11 @@
   Solve concrete needs without forcing POSIX compatibility, novelty for its own
   sake, or another OS's architecture. Port through native interfaces; do not bend
   the kernel around an individual application or add successful fake operations.
+- Libc is one of those native interfaces. A port that needs a standard function
+  (ISO C, or a proven extension such as `mkdir`) gets it in userland libc, built
+  on native objects; do not hand-roll capability calls in the port instead. Do
+  not add kernel mechanisms only to satisfy POSIX semantics, such as POSIX-shaped
+  thread syscalls. See [libc portability](docs/userland/libc-portability.md).
 - Keep configuration, authored data, draft values, benchmark parameters, machine
   properties and implementation choices distinct from architectural contracts.
   Before adding a validator or assertion, identify the deliberate contract that
