@@ -15,6 +15,8 @@ struct config_call {
   struct net_config_request request;
   struct net_selector selector;
   struct net_config_reply reply;
+  uint32_t after_id;
+  struct net_controller_reply controller_reply;
   enum call_status status;
   struct task_wait *wait;
   bool cancelled;
@@ -39,7 +41,8 @@ static void unlock_pending(void)
 
 enum call_status net_config_exchange(uint64_t operation,
     const struct net_config_request *request, const struct net_selector *selector,
-    struct net_config_reply *reply)
+    struct net_config_reply *reply, uint32_t after_id,
+    struct net_controller_reply *controller_reply)
 {
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!net_worker_available()) {
@@ -60,7 +63,7 @@ enum call_status net_config_exchange(uint64_t operation,
   struct task_wait *wait = task_wait_prepare();
   *call = (struct config_call){
     .state = CONFIG_QUEUED, .operation = operation, .request = *request,
-    .selector = *selector, .wait = wait,
+    .selector = *selector, .after_id = after_id, .wait = wait,
   };
   unlock_pending();
   net_worker_notify();
@@ -84,6 +87,9 @@ enum call_status net_config_exchange(uint64_t operation,
       operation == NET_CONFIG_BIND || operation == NET_CONFIG_LOOKUP)) {
     *reply = call->reply;
   }
+  if (status == CALL_OK && operation == NET_CONFIG_NEXT_CONTROLLER) {
+    *controller_reply = call->controller_reply;
+  }
   call->state = CONFIG_FREE;
   unlock_pending();
   return status;
@@ -96,6 +102,9 @@ static enum call_status configure(struct config_call *call)
     return CALL_BAD_REQUEST;
   }
   switch (call->operation) {
+  case NET_CONFIG_NEXT_CONTROLLER:
+    net_driver_next_controller(call->after_id, &call->controller_reply);
+    return CALL_OK;
   case NET_CONFIG_QUERY:
     net_ipv4_snapshot(&call->reply);
     call->reply.dns_server = chosen_dns;

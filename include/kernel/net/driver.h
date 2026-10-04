@@ -12,6 +12,9 @@ enum call_status net_driver_bind(const struct net_selector *selector);
 enum call_status net_driver_lookup(const struct net_selector *selector,
     struct net_config_reply *reply);
 void net_driver_snapshot(struct net_config_reply *reply);
+/* Read-only, fresh carrier snapshot in ascending opaque boot-local ID order. */
+void net_driver_next_controller(uint32_t after_id,
+    struct net_controller_reply *reply);
 
 /* Worker, IF=1, including unavailable/stopping transports. Service keeps the
  * driver's existing bounded batch/yield semantics. Deadline also accepts IF=0.
