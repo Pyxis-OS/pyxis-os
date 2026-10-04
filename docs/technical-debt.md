@@ -984,7 +984,12 @@ The userspace root selection remains bounded to 16 entries within existing
 Uncertain backing failure and allocation pressure retain source-review coverage.
 Committed-journal recovery has been exercised at runtime; see the
 [adapter qualification](devices/filesystem-native-adapter.md#task-3-validation).
-That does not qualify arbitrary interrupted cleanup or storage failure. The
+The [disk-full and retained-open deletion follow-up](development/experiments/npfs-runtime-qualification/README.md)
+also exercises delayed ENOSPC, background retention, one-time error reporting and
+recovery after freeing space, complete reads after unlink, final-close reclamation
+and pending detached cleanup after an unclean writable restart. The last case
+stops before reclamation while a handle is still open; it does not qualify
+arbitrary interruption during a cleanup batch or storage failure. The
 [populated-pool review](development/experiments/native-filesystem-task3/populated-pool-review.md)
 reproduced the old allocation timeout and validated the retained-bitmap correction.
 No fault injection or physical-media validation
@@ -1024,8 +1029,10 @@ detect every later metadata corruption once it is cleared. Revisit metadata
 checksums when integrity needs justify a feature-gated layout change. Committed
 replay has been exercised at runtime; see the
 [adapter qualification](devices/filesystem-native-adapter.md#task-3-validation).
-Interrupted cleanup and arbitrary failure points remain source-reviewed.
-Broader qualification waits until explicitly assigned. Host tools require unchanged
+Pending detached cleanup across an unclean writable restart has runtime coverage
+in the [follow-up record](development/experiments/npfs-runtime-qualification/README.md).
+Arbitrary mid-batch cleanup interruption and failure points remain source-reviewed;
+broader qualification waits until explicitly assigned. Host tools require unchanged
 standalone regular images and cooperating locks, stage replay payloads in memory,
 and do not repair arbitrary damage or reclaim cleanup lists. Large images/volumes
 can exhaust host checker memory. Physical-media wear remains unmeasured; native operation latency and QEMU target
