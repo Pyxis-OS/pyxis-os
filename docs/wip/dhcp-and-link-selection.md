@@ -150,7 +150,9 @@ Accepted 2026-10-04:
 
 In progress: kernel DNS code `2175849`, userland `67548c4`
 ([dependency #114](https://git.internal/PyxisOS/pyxis-userland/pulls/114)), branch
-`net/dhcp-client`. Task 2 remains unchecked pending native qualification.
+`net/dhcp-client`. Task 2 remains unchecked pending native qualification. The owner chose to leave
+[parent #380](https://git.internal/PyxisOS/pyxis-os/pulls/380) and dependency
+#114 as drafts for later cold/PXE qualification.
 The default profile requests a VirtIO lease; private native profiles retain their
 MAC selector and use `dhcp = true`. Ordinary image builds passed. No compiler
 container rebuild is needed.
@@ -202,7 +204,7 @@ Earlier attempts transmitted a checksum-valid DISCOVER but saw no OFFER. The
 repeat at `6912f11` acquired `.50/24` in a debugger-assisted run; an unprofiled
 repeat at `67548c4` also acquired `.50`, with remote 5/5 gateway replies, dig via
 chosen DNS `1.1.1.1`, and HTTPS `example.com` all passing. The chosen DNS was not
-separately distinguished between lease option 6 and fallback in the native run.
+separately distinguished between lease option 6 and fallback in the passthrough run.
 
 No pre-assignment unicast receive exception has been added. Because the client
 clears IPv4 before acquisition and only the limited broadcast is accepted while
