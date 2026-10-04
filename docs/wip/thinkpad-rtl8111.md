@@ -6,8 +6,8 @@ task 1. [Hardware identification](../devices/rtl8111-hardware.md) is complete;
 controller preparation is implemented. [NIC passthrough](../development/thinkpad-nic-passthrough.md)
 is complete. The owner accepted task 2's firmware/power/initial-state defaults
 in PR #359, then authorized task 2 after merging it. Tasks 1–4 are complete;
-operation qualification in task 5 is in progress. Its native cold boot and
-dock-attached checks remain pending; see the task 5 handoff below.
+task 5 qualification is complete, including the owner-reported native cold/PXE
+boot with the dock attached on 2026-10-04.
 
 ## Goal and machine configuration
 
@@ -102,7 +102,7 @@ recorded below.
   validated completions and interrupts serviced through the existing BSP network
   worker. Connect RTL8111 to the selection layer from task 3. Finish with ARP and
   gateway ping through the built-in port profile and clear buffer ownership.
-- [ ] **5. Qualify operation.** Exercise existing UDP/TCP tools, remote terminal,
+- [x] **5. Qualify operation.** Exercise existing UDP/TCP tools, remote terminal,
   link changes and sustained traffic, then native boot. Finish with the built-in
   port working in VFIO and natively, including with the dock attached.
 
@@ -199,13 +199,32 @@ Remote terminal, three `10.0.2.2` pings and UDP echo passed through VirtIO.
 Both image builds passed; no kernel warning was emitted. No new tests or CI jobs
 were added. QEMU, GDB and host echo/transfer jobs are stopped.
 
-Remaining owner check: cold native/PXE boot with the dock attached, using
-`build/rtl-task5-native/caelum.elf` and
-`build/rtl-task5-native/initrd.cpio` saved from the private-profile build above.
-Record whether the FIFO recovery-reset message appears, supported XID `541`
-activation, unsupported `502` diagnosis, gateway ping and an external remote
-connection. Fedora's Wi-Fi peer stops when this host reboots, so native UDP/TCP
-workloads need another LAN peer. Native completion is not yet claimed.
+Native completion is owner-reported in [PR #368](https://git.internal/PyxisOS/pyxis-os/pulls/368)
+on 2026-10-04, from the saved private-profile pair on a cold/PXE boot with the
+dock attached. XID `541` prepared and activated, XID `502` was diagnosed as
+unsupported without variant-specific writes, and link rose after activation.
+No FIFO recovery-reset message appeared. This demonstrates the observed UEFI
+handoff; it does not establish every firmware or power state.
+
+The wired desktop at `192.168.0.213` received 7/7 ping replies from
+`192.168.0.50`: first reply 3.4 ms, subsequent replies 0.58–0.68 ms. Through the
+remote terminal at `192.168.0.50:2323`, the owner ran
+`ttcp -t -p 5001 -n 8192 -l 8192 192.168.0.213` against the desktop's `socat` sink.
+The guest reported 67,108,864 bytes in 2.192838 seconds, 29.186 MiB/s including
+closure. Desktop `wc -c /tmp/rx.bin` confirmed 67,108,864 bytes; content was not
+hashed. The firewall exception was temporary.
+
+The same native boot fetched `https://example.com` through `cat` and piped
+`cat https://duckduckgo.com | sha256sum`. These owner observations exercise name
+lookup, outbound TCP/TLS, native HTTPS reads and the shell pipeline. The hash is
+an observed page snapshot, not a stable expected value or an independent content
+integrity check. Native and VFIO timings use different peers/environments; their
+roughly elevenfold difference does not isolate Wi-Fi, VFIO/QEMU or stack costs.
+
+The remote-terminal completion goal is met in VFIO and natively with the dock
+attached. Native unplug and device-owned TX at carrier loss remain unobserved;
+only XID `541` is supported, addressing is static, and line-rate throughput is
+unqualified. No further owner action is required for this milestone.
 
 ### Task 1 owner capture
 
