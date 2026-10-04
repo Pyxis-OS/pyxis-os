@@ -99,3 +99,30 @@ in task 4.3; these success runs establish function, not performance. The kernel
 storage path is unchanged by this task; existing task-3/4.2 measurements remain
 in their original records and are not presented as new measurements. Revisit
 installer inspection costs with ordinary large-log workloads when needed.
+
+## Final integration and geometry refinement
+
+Main's RTL8111/network-profile merge `eaeb417` was incorporated in parent
+`119ad0e`. A full source image/fs-tools build passed with clean parent and
+userland `4d133b0` inputs in the SDK manifest. The 4 KiB target was reinstalled
+normally with the 12 MiB default, reported `installed` and booted alone from
+fresh OVMF variables to the local session with net0 configured. Kernel storage
+code was unchanged by this merge. Existing parent CI run 774 passed build and
+filesystem jobs for `119ad0e`.
+
+Documentation review then found an overstatement of supported sector sizes.
+Kernel GPT rescan supports only 512 and 4096 bytes. Published userland `06812bc`
+aligns installer admission with that boundary before raw opening; documentation
+now names those sizes. A full ordinary image rebuild passed with that revision
+and the local parent gitlink/doc update. This does not change admitted 512/4096
+write paths. A manual Read-the-room boot with one marked 4 KiB disk and blank
+1024/2048-byte-sector candidates excluded both latter devices: the existing
+VirtIO driver rejected their setup, so this run did not directly reach the new
+geometry guard. Source review confirms the explicit guard before raw access.
+The 4 KiB target remained eligible; Ctrl+C cancelled the prefilled journal
+prompt and all three full-image hashes stayed unchanged. The finding and its
+resolution are recorded on parent PR369 with dependency PR109 linked.
+
+Final parent updates after these runs change only the published userland pin
+and documentation. The exact submitted revision's existing CI status is reported
+on PR369; userland has no standalone Actions tasks. No owner merge was performed.

@@ -48,7 +48,7 @@ boot because verification retains the pool until reboot. Delete
 This writes allocated metadata and boot-file storage, without secure erasure of
 free space. A failed mutation may leave a partial disk; there is no retry,
 rollback or repair. V1 uses existing writable disk drivers and supports logical
-sector sizes 512, 1024, 2048 and 4096. It adds no general FAT driver or
+sector sizes 512 and 4096, matching kernel GPT discovery/rescan. It adds no general FAT driver or
 firmware-variable updater. See the
 [validation record](../development/experiments/native-filesystem-task4.3/README.md)
 and [remaining limits](../technical-debt.md#installer-inspection-and-recovery-limits).
