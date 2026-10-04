@@ -407,6 +407,8 @@ host tools and the later physical-preparation procedure.
    then select the expendable USB target explicitly. Progress from firmware boot
    to read-only mounting and bounded persistence checks. Record device, firmware,
    topology and observed differences. An orderly reboot is not a power-loss test.
+   Include the deferred [configured-mount discovery latency measurement](../technical-debt.md#configured-mount-discovery-latency)
+   on the first native USB mount boot.
 
 ## Remaining assignment and qualification decisions
 
@@ -417,6 +419,9 @@ host tools and the later physical-preparation procedure.
   work and its roadmap ordering remain unassigned.
 - Image update/preservation ownership remains open for persistent installation.
   Read-only disk selection does not qualify a write target or authenticate media.
+- The [GUID/boot-device identity follow-up](../technical-debt.md#configured-guid-and-boot-device-identity)
+  is deferred until internal-disk installation support; boot-device preference
+  remains a proposal, and current observed-uniqueness selection is unchanged.
 - If the physical target requires hubs, firmware capabilities outside the
   bootstrap prefix or another unsupported controller feature, inspect and discuss
   that expansion before changing the initial hardware profile.

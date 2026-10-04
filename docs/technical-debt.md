@@ -952,6 +952,39 @@ unlimited IPC waits, and queued work can compound that delay. Cancellation canno
 interrupt a blocking network operation instantly. Revisit with asynchronous
 service work and wait sets; no worker-process or thread framework is included.
 
+## Configured mount discovery latency
+
+Deferred by the owner on 2026-10-04 from the non-blocking review of
+[PR #389](https://git.internal/PyxisOS/pyxis-os/pulls/389), revision `0d82e57`.
+With `CONFIG_XHCI=y`, configured GUID mounts wait for sealed boot discovery
+across all controllers and terminal GPT scans, even when the selected disk is
+VirtIO. Slow USB discovery can delay a startup mount such as `system://`, or
+exhaust its deadline. Enumeration and mount requests have existing 30-second
+budgets; waiting does not provide an additional mount budget.
+
+The native startup cost has not been measured. On the first native USB mount
+boot, record discovery completion, GPT scan completion and mount readiness,
+including the controller/topology and target backend. Revisit any latency policy
+with those measurements while preserving duplicate-GUID detection and explicit
+partial-discovery results.
+
+## Configured GUID and boot-device identity
+
+Deferred by the owner on 2026-10-04 from the same
+[PR #389 review](https://git.internal/PyxisOS/pyxis-os/pulls/389), revision `0d82e57`.
+The accepted observed-uniqueness policy intentionally permits the sole observed
+matching GUID under partial discovery. If an intended internal system disk is
+not observed because it is not ready or lacks a driver, removable media carrying
+that GUID can instead supply `system://`. If both matching disks are observed,
+the duplicate prevents mounting and can block startup. A GUID does not
+authenticate a disk or its contents.
+
+Revisit selection before supporting installed systems on NVMe or another
+internal-disk backend. Preferring the boot device's identity is a review proposal,
+not an accepted or implemented replacement policy; its discovery, authority and
+lifetime contract still need discussion. Current read-only USB boot selection
+remains unchanged.
+
 ## Native mount design limits
 
 [Native mounts](devices/native-readonly-filesystem.md) select one configured GPT
