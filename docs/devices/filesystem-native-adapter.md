@@ -84,6 +84,13 @@ make those blocks reusable before durable EMPTY. A successful checkpoint or
 healthy transaction discard clears that guard. Pressure
 cannot evict the bitmap, and read-only mounts retain it for later writable upgrade.
 
+The worker also keeps a [bounded metadata read cache](npfs-metadata-cache.md)
+for directory, inode-file and indirect pages. Up to 512 KiB/pool is allocated
+lazily and best effort; pressure discards these clean pages. Journal overlays,
+checkpoint invalidation and allocation invalidation preserve coherence. The
+[matched warm-open measurements](../development/experiments/npfs-metadata-cache/README.md)
+record its observed effect and remaining qualification gaps.
+
 The worker maintains dirty data and one pool-wide metadata redo transaction.
 File/directory synchronization commits the whole current pool transaction after
 ordered data; mount synchronization covers pools on its configured disk. Durable
@@ -117,6 +124,12 @@ them. An unacknowledged error from earlier writeback, such as a background flush
 can still be reported once after writeback succeeds; a later sync can then
 succeed once all dirty data is durable. Terminal uncertainty is never acknowledged
 away for the boot.
+
+Contiguous file writeback uses an optional 128 KiB gathering buffer, released by
+pressure maintenance; allocation failure keeps single-block writes available.
+Journal payload and adjacent checkpoint images use contiguous transfers without
+changing durability fences. The [matched measurements](../development/experiments/npfs-io-runs/README.md)
+record fewer requests and lower sync latency on emulated storage.
 
 Checked partition-relative I/O supports 512-byte and 4 KiB device blocks, including
 unaligned partition starts on 512-byte media. Transfers obey device limits and

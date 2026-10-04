@@ -963,8 +963,9 @@ need and explicit synchronization, shared-mapping and dirty-data ownership.
 
 The worker admits 32 jobs with a cooperative 30-second deadline. Adapter storage
 has a 1 MiB/1,024-wrapper limit; pool metadata, the free-inode list and caches are
-separate. Each pool can retain 4 MiB of cached file payload plus entry metadata,
-and a writable pool reserves up to 520 KiB for 128 journal images and encoding
+separate. Each pool can retain 4 MiB of cached file payload plus entry metadata.
+A separate metadata read cache can retain 512 KiB plus physical-home keys.
+A writable pool reserves up to 520 KiB for 128 journal images and encoding
 buffers. These are implementation bounds, not format limits or aggregate memory
 admission. The retained allocation bitmap needs one bit per pool block, rounded
 to 4 KiB: 32 KiB for a 1 GiB pool, about 8 MiB for 256 GiB. Mount reads and
@@ -983,10 +984,20 @@ backing remains mapped under the existing heap policy. Revisit reclaim granulari
 and admission only with measured pressure workloads and BSP ownership intact.
 
 All native reads and writes traverse the BSP worker, including cache hits.
-Metadata lookup remains linear and is not generally cached. The
-data, journal payload and checkpoint paths still wait for single-block transfers.
-Revisit contiguous transfer batching with a concrete latency budget and measured
-consumer workload. The
+Directory lookup remains linear; directory, inode-file and indirect pages now
+have a best-effort [128-page clean cache](devices/npfs-metadata-cache.md).
+Its physical-home lookup is linear too, and pressure can discard every page.
+[Matched measurements](development/experiments/npfs-metadata-cache/README.md)
+show lower warm-open time without a payload/sync improvement; revisit indexing
+or cache size with a representative larger working set.
+
+Contiguous file data and journal payload now use bounded runs; checkpoint groups
+adjacent homes already adjacent in scratch. An optional 128 KiB/pool gathering
+buffer is best effort and pressure-reclaimable. Device limits can split those
+runs; fragmented writes still wait on separate requests. The
+[matched batching record](development/experiments/npfs-io-runs/README.md) measures
+sync and request-count changes on VirtIO; revisit broader request scheduling or
+reordering with a measured consumer workload. The
 [task-3 measurements](development/experiments/native-filesystem-task3/README.md)
 distinguish this scheduling/I/O cost from RAM file calls. Revisit only when an
 actual consumer needs lower latency. Executable capture permits one image of up

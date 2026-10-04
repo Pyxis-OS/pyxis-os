@@ -17,6 +17,10 @@
 #define STORE_CLEANUP_IMAGES 10u
 #define STORE_CLEANUP_MAPPINGS 64u
 #define STORE_BITMAP_READ_BLOCKS 128u
+#define STORE_WRITE_RUN_BLOCKS 32u
+#define STORE_METADATA_CHUNKS 4u
+#define STORE_METADATA_CHUNK_PAGES 32u
+#define STORE_METADATA_PAGES (STORE_METADATA_CHUNKS * STORE_METADATA_CHUNK_PAGES)
 
 _Static_assert(STORE_IMAGES_MAX <= NPFS_DESCRIPTORS_PER_BLOCK,
   "native journal writes one descriptor block");
@@ -57,6 +61,10 @@ struct store_cache_chunk {
   struct store_cache_entry entries[STORE_CHUNK_ENTRIES];
 };
 
+struct store_metadata_chunk {
+  uint8_t pages[STORE_METADATA_CHUNK_PAGES][NPFS_BLOCK_SIZE];
+};
+
 struct store_image {
   uint64_t home;
   uint32_t kind;
@@ -76,11 +84,15 @@ struct npfs_store_pool {
   struct npfs_volume catalog[NPFS_VOLUME_COUNT];
   struct npfs_store_volume *volumes;
   struct store_cache_chunk *cache[STORE_CACHE_CHUNKS];
+  struct store_metadata_chunk *metadata_cache[STORE_METADATA_CHUNKS];
+  uint64_t metadata_homes[STORE_METADATA_PAGES];
+  unsigned metadata_next;
   struct store_image images[STORE_IMAGES_MAX];
   uint32_t image_count, image_capacity;
   bool freed_in_transaction;
   uintptr_t scratch;
   size_t scratch_bytes;
+  uintptr_t write_run;
   /* Retained mount storage; journal images overlay this durable bitmap base. */
   uintptr_t bitmap;
   size_t bitmap_bytes;
@@ -272,6 +284,70 @@ static enum call_status read_block(struct npfs_store_context *context, struct np
   return transport(context, pool, BLOCK_READ, home, 1, bytes);
 }
 
+static uint8_t *metadata_cache_find(struct npfs_store_pool *pool, uint64_t home)
+{
+  KASSERT(home);
+  for (unsigned i = 0; i < STORE_METADATA_PAGES; i++) {
+    if (pool->metadata_homes[i] == home) {
+      return pool->metadata_cache[i / STORE_METADATA_CHUNK_PAGES]->pages[
+        i % STORE_METADATA_CHUNK_PAGES];
+    }
+  }
+  return NULL;
+}
+
+static void metadata_cache_invalidate(struct npfs_store_pool *pool, uint64_t home)
+{
+  for (unsigned i = 0; i < STORE_METADATA_PAGES; i++) {
+    if (pool->metadata_homes[i] == home) {
+      pool->metadata_homes[i] = 0;
+    }
+  }
+}
+
+static void metadata_cache_store(struct npfs_store_pool *pool, uint64_t home, const void *bytes)
+{
+  for (unsigned attempt = 0; attempt < STORE_METADATA_CHUNKS; attempt++) {
+    unsigned index = (pool->metadata_next + attempt * STORE_METADATA_CHUNK_PAGES) %
+      STORE_METADATA_PAGES;
+    unsigned chunk = index / STORE_METADATA_CHUNK_PAGES;
+    if (!pool->metadata_cache[chunk]) {
+      uintptr_t address;
+      if (store_vm_allocate(sizeof(struct store_metadata_chunk), &address) != CALL_OK) {
+        continue;
+      }
+      pool->metadata_cache[chunk] = (void *)address;
+    }
+    memcpy(pool->metadata_cache[chunk]->pages[index % STORE_METADATA_CHUNK_PAGES],
+      bytes, NPFS_BLOCK_SIZE);
+    pool->metadata_homes[index] = home;
+    pool->metadata_next = (index + 1) % STORE_METADATA_PAGES;
+    return;
+  }
+}
+
+static enum call_status read_metadata_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
+  uint64_t home, void *bytes)
+{
+  /* Cache only the durable base; transaction images always take precedence. */
+  for (unsigned i = 0; i < pool->image_count; i++) {
+    if (pool->images[i].home == home) {
+      memcpy(bytes, image_bytes(pool, i), NPFS_BLOCK_SIZE);
+      return CALL_OK;
+    }
+  }
+  const uint8_t *cached = metadata_cache_find(pool, home);
+  if (cached) {
+    memcpy(bytes, cached, NPFS_BLOCK_SIZE);
+    return CALL_OK;
+  }
+  enum call_status status = read_block(context, pool, home, bytes);
+  if (status == CALL_OK) {
+    metadata_cache_store(pool, home, bytes);
+  }
+  return status;
+}
+
 static enum call_status edit_block(struct npfs_store_context *context, struct npfs_store_pool *pool,
   uint64_t home, uint32_t kind, bool fresh, uint8_t **out)
 {
@@ -294,7 +370,13 @@ static enum call_status edit_block(struct npfs_store_context *context, struct np
     memset(bytes, 0, NPFS_BLOCK_SIZE);
   }
   else {
-    status = read_block(context, pool, home, bytes);
+    if (kind == NPFS_METADATA_INODES || kind == NPFS_METADATA_DIRECTORY ||
+      kind == NPFS_METADATA_INDIRECT) {
+      status = read_metadata_block(context, pool, home, bytes);
+    }
+    else {
+      status = read_block(context, pool, home, bytes);
+    }
   }
   if (status != CALL_OK) {
     return status;
@@ -345,7 +427,7 @@ static enum call_status map_read(struct npfs_store_context *context, struct npfs
     if (status != CALL_OK) {
       return status;
     }
-    status = read_block(context, pool, block, pool->io[0]);
+    status = read_metadata_block(context, pool, block, pool->io[0]);
     if (status != CALL_OK) {
       return status;
     }
@@ -383,6 +465,8 @@ static enum call_status bitmap_change(struct npfs_store_context *context, struct
       return corrupt(context);
     }
     pool->free_blocks--;
+    /* A physical home may have belonged to metadata before its last free. */
+    metadata_cache_invalidate(pool, block);
   } else {
     pool->free_blocks++;
     pool->freed_in_transaction = true;
@@ -607,9 +691,9 @@ static enum call_status commit(struct npfs_store_context *context, struct npfs_s
   control.payload_crc = npfs_crc_finish(crc);
   enum call_status status = transport(context, pool, BLOCK_WRITE,
     pool->header.journal_start + 2, 1, descriptor_bytes);
-  for (unsigned i = 0; status == CALL_OK && i < pool->image_count; i++) {
-    status = transport(context, pool, BLOCK_WRITE, pool->header.journal_start + 3 + i,
-      1, image_bytes(pool, i));
+  if (status == CALL_OK) {
+    status = transport(context, pool, BLOCK_WRITE, pool->header.journal_start + 3,
+      pool->image_count, image_bytes(pool, 0));
   }
   if (status == CALL_OK) {
     status = transport(context, pool, BLOCK_FLUSH, 0, 0, NULL);
@@ -646,12 +730,18 @@ static enum call_status checkpoint(struct npfs_store_context *context, struct np
   if (pool->control.sequence == UINT64_MAX) {
     return latch_failure(pool, CALL_LIMIT);
   }
-  for (unsigned i = 0; i < pool->image_count; i++) {
+  for (unsigned i = 0; i < pool->image_count;) {
+    unsigned count = 1;
+    while (count < pool->image_count - i &&
+      pool->images[i + count].home == pool->images[i].home + count) {
+      count++;
+    }
     enum call_status status = transport(context, pool, BLOCK_WRITE, pool->images[i].home,
-      1, image_bytes(pool, i));
+      count, image_bytes(pool, i));
     if (status != CALL_OK) {
       return latch_failure(pool, status);
     }
+    i += count;
   }
   enum call_status status = transport(context, pool, BLOCK_FLUSH, 0, 0, NULL);
   if (status != CALL_OK) {
@@ -676,6 +766,7 @@ static enum call_status checkpoint(struct npfs_store_context *context, struct np
   pool->control_slot = slot;
   /* Reuse becomes safe only after the newer EMPTY control is durable. */
   for (unsigned i = 0; i < pool->image_count; i++) {
+    metadata_cache_invalidate(pool, pool->images[i].home);
     if (pool->images[i].kind == NPFS_METADATA_BITMAP) {
       KASSERT(pool->bitmap_loaded);
       memcpy((uint8_t *)pool->bitmap +
@@ -1078,7 +1169,7 @@ static enum call_status inode_record_read(struct npfs_store_context *context, st
   if (!block) {
     return corrupt(context);
   }
-  status = read_block(context, volume->pool, block, volume->pool->io[0]);
+  status = read_metadata_block(context, volume->pool, block, volume->pool->io[0]);
   if (status != CALL_OK) {
     return status;
   }
@@ -1285,7 +1376,7 @@ static enum call_status directory_record(struct npfs_store_context *context, str
   if (!physical) {
     return corrupt(context);
   }
-  status = read_block(context, pool, physical, pool->io[0]);
+  status = read_metadata_block(context, pool, physical, pool->io[0]);
   if (status != CALL_OK) {
     return status;
   }
@@ -1574,6 +1665,10 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
   if (status != CALL_OK) {
     return status;
   }
+  if (!pool->write_run && next_dirty(inode)) {
+    /* Batching is optional; allocation pressure keeps the single-block path. */
+    (void)store_vm_allocate(STORE_WRITE_RUN_BLOCKS * NPFS_BLOCK_SIZE, &pool->write_run);
+  }
   while (inode->size_dirty || next_dirty(inode)) {
     status = checkpoint(context, pool);
     if (status != CALL_OK) {
@@ -1582,6 +1677,7 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
     struct npfs_inode previous = inode->record;
     uint64_t previous_free = pool->free_blocks;
     struct store_cache_entry *written[STORE_IMAGES_MAX];
+    uint64_t physical_blocks[STORE_IMAGES_MAX];
     unsigned written_count = 0;
     struct store_cache_entry *entry = next_dirty(inode);
     while (entry && pool->image_capacity - pool->image_count >= 10 && written_count < STORE_IMAGES_MAX) {
@@ -1590,14 +1686,32 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
       if (status != CALL_OK) {
         break;
       }
-      status = transport(context, pool, BLOCK_WRITE, physical, 1, entry->bytes);
-      if (status != CALL_OK) {
-        latch_failure(pool, status);
-        break;
-      }
       entry->dirty = false;
+      physical_blocks[written_count] = physical;
       written[written_count++] = entry;
       entry = next_dirty(inode);
+    }
+    for (unsigned i = 0; status == CALL_OK && i < written_count;) {
+      unsigned count = 1;
+      if (pool->write_run) {
+        while (count < written_count - i && count < STORE_WRITE_RUN_BLOCKS &&
+          physical_blocks[i + count] == physical_blocks[i] + count) {
+          count++;
+        }
+      }
+      void *bytes = written[i]->bytes;
+      if (count > 1) {
+        bytes = (void *)pool->write_run;
+        for (unsigned j = 0; j < count; j++) {
+          memcpy((uint8_t *)bytes + (size_t)j * NPFS_BLOCK_SIZE,
+            written[i + j]->bytes, NPFS_BLOCK_SIZE);
+        }
+      }
+      status = transport(context, pool, BLOCK_WRITE, physical_blocks[i], count, bytes);
+      if (status != CALL_OK) {
+        latch_failure(pool, status);
+      }
+      i += count;
     }
     if (status == CALL_OK) {
       struct npfs_inode durable = inode->record;
@@ -2284,7 +2398,7 @@ static enum call_status highest_mapping(struct npfs_store_context *context, stru
       if (status != CALL_OK) {
         return status;
       }
-      status = read_block(context, pool, frame->block, pool->io[0]);
+      status = read_metadata_block(context, pool, frame->block, pool->io[0]);
       if (status != CALL_OK) {
         return status;
       }
@@ -2706,6 +2820,14 @@ enum call_status npfs_store_maintain(struct npfs_store_context *context, struct 
     status = flush_files(context, pool);
   }
   if (pressure) {
+    store_vm_free(pool->write_run, STORE_WRITE_RUN_BLOCKS * NPFS_BLOCK_SIZE);
+    pool->write_run = 0;
+    for (unsigned chunk = 0; chunk < STORE_METADATA_CHUNKS; chunk++) {
+      store_vm_free((uintptr_t)pool->metadata_cache[chunk], sizeof(struct store_metadata_chunk));
+      pool->metadata_cache[chunk] = NULL;
+    }
+    memset(pool->metadata_homes, 0, sizeof(pool->metadata_homes));
+    pool->metadata_next = 0;
     for (struct npfs_store_volume *volume = pool->volumes; volume; volume = volume->next) {
       struct npfs_store_inode *inode = volume->inodes;
       while (inode) {
