@@ -22,6 +22,8 @@ struct config_call {
 
 static struct config_call pending[CONFIG_PENDING_LIMIT];
 static atomic_bool pending_locked;
+/* Only the network worker reads or writes the userspace-selected value. */
+static uint32_t chosen_dns;
 
 static void lock_pending(void)
 {
@@ -89,14 +91,20 @@ enum call_status net_config_exchange(uint64_t operation,
 
 static enum call_status configure(struct config_call *call)
 {
+  if ((call->operation == NET_CONFIG_REPLACE || call->operation == NET_CONFIG_SET_DNS) &&
+      (!(call->request.dns_server >> 24) || call->request.dns_server >= UINT32_C(0xe0000000))) {
+    return CALL_BAD_REQUEST;
+  }
   switch (call->operation) {
   case NET_CONFIG_QUERY:
     net_ipv4_snapshot(&call->reply);
+    call->reply.dns_server = chosen_dns;
     return CALL_OK;
   case NET_CONFIG_BIND: {
     enum call_status status = net_driver_bind(&call->selector);
     if (status == CALL_OK) {
       net_ipv4_snapshot(&call->reply);
+      call->reply.dns_server = chosen_dns;
     }
     return status;
   }
@@ -105,16 +113,24 @@ static enum call_status configure(struct config_call *call)
     if (status == CALL_OK && (call->reply.flags & NET_CONFIG_BOUND)) {
       net_ipv4_snapshot(&call->reply);
     }
+    if (status == CALL_OK) {
+      call->reply.dns_server = chosen_dns;
+    }
     return status;
   }
   case NET_CONFIG_CLEAR:
     net_ipv4_clear();
     return CALL_OK;
+  case NET_CONFIG_SET_DNS:
+    chosen_dns = call->request.dns_server;
+    return CALL_OK;
   case NET_CONFIG_REPLACE: {
     enum net_result result = net_ipv4_configure(call->request.address,
         call->request.prefix, call->request.gateway);
     switch (result) {
-    case NET_OK: return CALL_OK;
+    case NET_OK:
+      chosen_dns = call->request.dns_server;
+      return CALL_OK;
     case NET_INVALID: return CALL_BAD_REQUEST;
     default: return CALL_UNAVAILABLE;
     }
