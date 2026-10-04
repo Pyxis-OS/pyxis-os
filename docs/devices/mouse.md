@@ -37,10 +37,14 @@ attempted.
    the port test returns 0. A single-port controller would pass mouse commands
    to the keyboard, so this check precedes them.
 3. After the keyboard selects scan set 2, and before it starts scanning, the
-   auxiliary port is enabled and the mouse is reset (up to 1 s for its
-   self-test), set to defaults, and probed for an IntelliMouse wheel (sample
-   rates 200, 100, 80, then device ID 3). The sample rate returns to 100.
-   Other replies wait up to 100 ms.
+   auxiliary port is enabled and the mouse is reset, set to defaults, and
+   probed for an IntelliMouse wheel (sample rates 200, 100, 80, then device
+   ID 3). The sample rate returns to 100. Reset waits up to 4 s for its ACK and
+   again for its self-test result, and other replies up to 500 ms. These are
+   Linux libps2's bounds: Synaptics devices such as the ThinkPad's touchpad
+   finish the reset before ACKing it. A responsive device costs nothing extra;
+   a port with no device can add about 4 s to boot before the mouse is marked
+   unavailable.
 4. After keyboard scanning starts, the mouse enables reporting. Keyboard bytes
    that arrive while waiting for its ACK enter the keyboard queue. IRQ 12 is
    unmasked last.

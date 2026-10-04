@@ -83,8 +83,11 @@ Accepted 2026-10-04, with the defaults below.
   - Enable the auxiliary port and route aux bytes separately from keyboard bytes
     by the controller status bit.
   - Bounded setup: reset, defaults, the wheel probe, then enable reporting. The
-    owner accepted up to 1 s for the reset self-test and 100 ms for other
-    replies, run synchronously during boot.
+    owner first accepted 1 s for the reset self-test and 100 ms for other
+    replies, then on 2026-10-04 switched to Linux libps2's bounds: 4 s for the
+    reset ACK and self-test, and 500 ms for other replies, run synchronously
+    during boot. The ThinkPad's Synaptics touchpad ACKs a reset only after
+    finishing it.
   - Packet synchronisation (byte 0 bit 3) and overflow handling, with discards
     counted.
   - **A mouse failure leaves the mouse unavailable and must never affect the

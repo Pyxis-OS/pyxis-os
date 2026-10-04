@@ -15,8 +15,10 @@
 #define MOUSE_SELF_TEST_PASSED 0xaa
 #define MOUSE_ID_WHEEL 0x03
 #define MOUSE_DEFAULT_SAMPLE_RATE 100
-#define MOUSE_REPLY_TIMEOUT_NS UINT64_C(100000000)
-#define MOUSE_RESET_TIMEOUT_NS UINT64_C(1000000000)
+/* Linux libps2 bounds: Synaptics devices, like the ThinkPad's touchpad,
+ * finish the reset before ACKing it, so reset needs the long bound. */
+#define MOUSE_REPLY_TIMEOUT_NS UINT64_C(500000000)
+#define MOUSE_RESET_TIMEOUT_NS UINT64_C(4000000000)
 #define MOUSE_STANDARD_PACKET_BYTES 3
 #define MOUSE_WHEEL_PACKET_BYTES 4
 #define PACKET_LEFT (1u << 0)
@@ -45,7 +47,7 @@ static size_t packet_index;
 /* Diagnostic counts for debugger inspection; they never affect decoding. */
 static uint64_t unsynchronized_bytes, overflowed_packets, lost_inputs;
 
-static bool mouse_command(struct ps2_setup *setup, uint8_t command)
+static bool mouse_command_timeout(struct ps2_setup *setup, uint8_t command, uint64_t timeout_ns)
 {
   for (unsigned attempt = 0; attempt < PS2_COMMAND_ATTEMPTS; ++attempt) {
     if (!ps2_write_command(setup, PS2_WRITE_AUXILIARY) || !ps2_write_data(setup, command)) {
@@ -54,7 +56,7 @@ static bool mouse_command(struct ps2_setup *setup, uint8_t command)
     /* Firmware may have left reporting on; its packets can precede the ACK. */
     for (unsigned i = 0; i < PS2_DRAIN_LIMIT; ++i) {
       uint8_t reply;
-      if (ps2_read_reply(setup, PS2_AUXILIARY_CHANNEL, &reply, MOUSE_REPLY_TIMEOUT_NS) !=
+      if (ps2_read_reply(setup, PS2_AUXILIARY_CHANNEL, &reply, timeout_ns) !=
           PS2_REPLY_RECEIVED || reply == MOUSE_ERROR) {
         return false;
       }
@@ -67,6 +69,11 @@ static bool mouse_command(struct ps2_setup *setup, uint8_t command)
     }
   }
   return false;
+}
+
+static bool mouse_command(struct ps2_setup *setup, uint8_t command)
+{
+  return mouse_command_timeout(setup, command, MOUSE_REPLY_TIMEOUT_NS);
 }
 
 static bool read_mouse_reply(struct ps2_setup *setup, uint8_t *reply, uint64_t timeout_ns)
@@ -83,7 +90,7 @@ bool mouse_configure(struct ps2_setup *setup)
 {
   uint8_t reply, id;
   setup->step = "reset";
-  if (!mouse_command(setup, MOUSE_RESET)) {
+  if (!mouse_command_timeout(setup, MOUSE_RESET, MOUSE_RESET_TIMEOUT_NS)) {
     return false;
   }
   setup->step = "reset self-test";

@@ -268,6 +268,9 @@ static bool configure_keyboard(struct ps2_setup *setup, uint8_t *config, bool *m
     auxiliary = probe_auxiliary(&probe);
     if (!auxiliary) {
       log_mouse_failure(&probe);
+      /* The probe may have stopped after enabling the port. Disable it again
+       * so a streaming device cannot keep the drain below from completing. */
+      ps2_write_command(&probe, PS2_DISABLE_AUXILIARY);
     }
     /* A failed probe can leave a late controller reply behind. */
     setup->step = "drain auxiliary probe";
