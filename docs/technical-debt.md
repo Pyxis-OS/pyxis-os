@@ -624,17 +624,25 @@ if owner-run native qualification encounters this state.
 
 The [RTL8111 I/O path](devices/rtl8111-hardware.md#ethernet-io) supports XID `541`
 only. Each prepared controller retains two contiguous 68 KiB ring allocations
-and one page for hardware tally snapshots;
-unselected hardware stays inactive. Runtime failure attempts reset and disables
+and one page for hardware tally snapshots; unselected hardware stays inactive.
+Runtime failure attempts reset and disables
 DMA/delivery but retains claims, buffers and shared mappings until reboot. The
 first binding has no fallback or controller switching. Revisit reclamation with
 a concrete teardown and SMP invalidation contract.
 
-Firmware-free initial traffic through VFIO does not qualify cold-start native
-reliability, every PHY speed or sustained operation. No jumbo-frame reassembly,
-offloads, firmware interpreter or automatic restart is implemented. Task 5 owns
-link/sustained/native qualification; a measured firmware requirement would need
-the separately accepted focused import with provenance and redistribution terms.
+[Qualification](development/rtl8111-qualification.md) covers sustained VFIO
+traffic and an owner-run native cold/PXE boot with the dock attached, without
+imported firmware. Native unplug, device-owned TX at carrier loss, every PHY
+speed and gigabit line rate remain unqualified. The native wired result and VFIO
+Wi-Fi results have different environments and cannot isolate a throughput
+bottleneck. Revisit those limits with a concrete reproduction or a separately
+assigned measurement task. No jumbo-frame reassembly, offloads, firmware
+interpreter or automatic restart is implemented; a measured firmware requirement
+would need a focused import with provenance and redistribution terms.
+
+Hardware tallies are accessible only through the internal GDB capture helper.
+Revisit that diagnostic interface when a network status command is assigned;
+there is no public statistics ABI or periodic tally polling today.
 
 ## Virtio-net runtime resource retention
 

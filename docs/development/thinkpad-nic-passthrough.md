@@ -3,7 +3,7 @@
 The built-in RJ45 controller can be passed from the ThinkPad's Fedora host to
 Pyxis in QEMU/KVM. Launcher support, owner host setup and a first hardware boot
 were completed on 2026-10-03. This provides a development target for the
-[RTL8111 driver](../wip/thinkpad-rtl8111.md), which supports XID `0x541` packet I/O.
+[RTL8111 driver](../devices/rtl8111.md), which supports XID `0x541` packet I/O.
 
 ## Hardware and launcher
 
@@ -138,5 +138,6 @@ assigned by QEMU and need not match the host address. These boots qualify
 passthrough and read-only PCI discovery; they do not establish Ethernet I/O.
 
 The card retains its physical MAC. The owner-confirmed built-in port profile and
-driver outline are recorded in the [RTL8111 plan](../wip/thinkpad-rtl8111.md).
-Later dock work is also distinguished from built-in qualification there.
+configuration are recorded in the [RTL8111 reference](../devices/rtl8111.md).
+[Qualification results](rtl8111-qualification.md) cover built-in I/O through VFIO
+and natively with the dock attached; the dock-facing XID `502` remains unsupported.
