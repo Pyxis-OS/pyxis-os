@@ -17,7 +17,7 @@ static bool wait_phy_access(struct rtl8111_controller *controller, bool read)
   return false;
 }
 
-static bool phy_read(struct rtl8111_controller *controller, unsigned address, uint16_t *value)
+bool rtl_phy_read(struct rtl8111_controller *controller, unsigned address, uint16_t *value)
 {
   rtl_write32(controller, RTL_PHY_OCP, address << RTL_OCP_ADDRESS_SHIFT);
   if (!wait_phy_access(controller, true)) {
@@ -38,7 +38,7 @@ static bool phy_modify(struct rtl8111_controller *controller, unsigned address,
                        uint16_t clear, uint16_t set)
 {
   uint16_t value;
-  return phy_read(controller, address, &value) &&
+  return rtl_phy_read(controller, address, &value) &&
     phy_write(controller, address, (value & ~clear) | set);
 }
 
@@ -54,7 +54,7 @@ static bool wait_reset(struct rtl8111_controller *controller)
   uint64_t start = arch_monotonic_ns();
   do {
     uint16_t control;
-    if (!phy_read(controller, RTL_PHY_CONTROL, &control) || control == UINT16_MAX) {
+    if (!rtl_phy_read(controller, RTL_PHY_CONTROL, &control) || control == UINT16_MAX) {
       return false;
     }
     if (!(control & RTL_PHY_CONTROL_RESET)) {
@@ -69,7 +69,7 @@ static bool wait_reset(struct rtl8111_controller *controller)
 bool rtl_phy_prepare(struct rtl8111_controller *controller)
 {
   uint16_t control;
-  if (!phy_read(controller, RTL_PHY_CONTROL, &control) || control == UINT16_MAX ||
+  if (!rtl_phy_read(controller, RTL_PHY_CONTROL, &control) || control == UINT16_MAX ||
       !phy_write(controller, RTL_PHY_CONTROL, control & ~RTL_PHY_CONTROL_POWER_DOWN)) {
     return false;
   }
@@ -97,7 +97,7 @@ bool rtl_phy_prepare(struct rtl8111_controller *controller)
     return false;
   }
   uint16_t lpf;
-  if (!phy_read(controller, RTL_PHY_TX_LPF_SAMPLE, &lpf)) {
+  if (!rtl_phy_read(controller, RTL_PHY_TX_LPF_SAMPLE, &lpf)) {
     return false;
   }
   lpf &= RTL_PHY_TX_LPF_MASK;
@@ -118,11 +118,11 @@ bool rtl_phy_prepare(struct rtl8111_controller *controller)
   }
 
   uint16_t eee, power;
-  return phy_read(controller, RTL_PHY_EEE_ADVERTISE, &eee) && !eee &&
-    phy_read(controller, RTL_PHY_POWER, &power) &&
+  return rtl_phy_read(controller, RTL_PHY_EEE_ADVERTISE, &eee) && !eee &&
+    rtl_phy_read(controller, RTL_PHY_POWER, &power) &&
     !(power & (RTL_PHY_PLL_OFF | RTL_PHY_ALDPS)) &&
-    phy_read(controller, RTL_PHY_10M_POWER, &power) && !(power & RTL_PHY_PFM) &&
-    phy_read(controller, RTL_PHY_CONTROL, &control) &&
+    rtl_phy_read(controller, RTL_PHY_10M_POWER, &power) && !(power & RTL_PHY_PFM) &&
+    rtl_phy_read(controller, RTL_PHY_CONTROL, &control) &&
     (control & RTL_PHY_CONTROL_AUTONEG) &&
     !(control & (RTL_PHY_CONTROL_RESET | RTL_PHY_CONTROL_POWER_DOWN | RTL_PHY_CONTROL_ISOLATE));
 }

@@ -1,14 +1,18 @@
 #include <arch/clock.h>
+#include <arch/apic.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/pci.h>
 #include <kernel/log.h>
 #include <kernel/mm/heap.h>
 #include <kernel/net/rtl8111.h>
+#include <kernel/net/ethernet.h>
 #include <kernel/panic.h>
 #include "internal.h"
+#include "io_setup.h"
 
 static struct rtl8111_controller *controllers;
+static bool inventory_complete;
 
 void rtl_delay(uint64_t ns)
 {
@@ -100,13 +104,26 @@ static const char *quiesce(struct rtl8111_controller *controller)
   rtl_write16(controller, RTL_INTERRUPT_STATUS, UINT16_MAX);
   rtl_write32(controller, RTL_MISC, rtl_read32(controller, RTL_MISC) | RTL_MISC_RX_GATE);
   rtl_delay(RTL_RX_GATE_SETTLE_NS);
-  if (!wait32(controller, RTL_TX_CONFIG, RTL_TX_FIFO_EMPTY,
-                RTL_TX_FIFO_EMPTY, RTL_FIFO_TIMEOUT_NS)) {
-    return "TX FIFO did not drain";
-  }
-  if (!wait8(controller, RTL_MCU, RTL_MCU_FIFO_EMPTY,
-               RTL_MCU_FIFO_EMPTY, RTL_FIFO_TIMEOUT_NS)) {
-    return "RX/TX FIFOs did not drain";
+  bool drained = wait32(controller, RTL_TX_CONFIG, RTL_TX_FIFO_EMPTY,
+                        RTL_TX_FIFO_EMPTY, RTL_FIFO_TIMEOUT_NS) &&
+    wait8(controller, RTL_MCU, RTL_MCU_FIFO_EMPTY, RTL_MCU_FIFO_EMPTY, RTL_FIFO_TIMEOUT_NS);
+  if (!drained) {
+    /* Reset halts the identified controller and discards inherited FIFOs.
+     * No driver buffers or ring addresses have been published at this point. */
+    rtl_write8(controller, RTL_CHIP_COMMAND, RTL_COMMAND_RESET);
+    if (!wait8(controller, RTL_CHIP_COMMAND, RTL_COMMAND_RESET | RTL_COMMAND_RX | RTL_COMMAND_TX,
+                 0, RTL_RESET_TIMEOUT_NS)) {
+      return "FIFO recovery reset did not confirm stopped RX/TX";
+    }
+    rtl_write32(controller, RTL_MISC, rtl_read32(controller, RTL_MISC) | RTL_MISC_RX_GATE);
+    rtl_delay(RTL_RX_GATE_SETTLE_NS);
+    if (!wait32(controller, RTL_TX_CONFIG, RTL_TX_FIFO_EMPTY,
+                  RTL_TX_FIFO_EMPTY, RTL_FIFO_TIMEOUT_NS) ||
+        !wait8(controller, RTL_MCU, RTL_MCU_FIFO_EMPTY,
+                 RTL_MCU_FIFO_EMPTY, RTL_FIFO_TIMEOUT_NS)) {
+      return "FIFOs did not drain after confirmed recovery reset";
+    }
+    klog("rtl8111: previous FIFOs cleared by confirmed recovery reset\n");
   }
   rtl_write8(controller, RTL_CHIP_COMMAND,
              rtl_read8(controller, RTL_CHIP_COMMAND) & ~(RTL_COMMAND_TX | RTL_COMMAND_RX));
@@ -207,8 +224,16 @@ static const char *prepare_controller(struct rtl8111_controller *controller,
     return "register read failed";
   }
   controller->xid = (tx >> RTL_XID_SHIFT) & RTL_XID_MASK;
+  controller->identified = true;
   if (controller->xid != RTL_XID_8168H) {
     return "unsupported XID; no variant-specific writes";
+  }
+  for (unsigned i = 0; i < sizeof(controller->mac); ++i) {
+    controller->mac[i] = rtl_read8(controller, i);
+  }
+  controller->identity_known = net_ethernet_is_unicast(controller->mac);
+  if (!controller->identity_known) {
+    return "invalid boot-loaded MAC identity";
   }
   if (!find_power_capabilities(controller)) {
     return "missing or invalid power/PCIe capability";
@@ -259,6 +284,20 @@ static const char *prepare_controller(struct rtl8111_controller *controller,
       rtl_read16(controller, RTL_INTERRUPT_MASK)) {
     return "controller did not remain stopped";
   }
+  if (rtl_ring_allocate(&controller->rx, true) != MM_OK ||
+      rtl_ring_allocate(&controller->tx, false) != MM_OK) {
+    return "cannot allocate RX/TX rings";
+  }
+  if (!rtl_io_prepare(controller, controller->rx.storage.physical,
+                      controller->tx.storage.physical) ||
+      !pci_msix_prepare(&controller->msix, APIC_RTL8111_VECTOR)) {
+    return "MAC/ring or interrupt route preparation failed";
+  }
+  for (unsigned i = 0; i < sizeof(controller->mac); ++i) {
+    if (rtl_read8(controller, i) != controller->mac[i]) {
+      return "MAC identity changed during preparation";
+    }
+  }
   controller->prepared = true;
   return NULL;
 }
@@ -276,6 +315,10 @@ static bool release_failed_controller(struct rtl8111_controller *controller)
   if (!claim->reserved && controller->quiesced && !claim->dma_started &&
       (pci_read16(claim->device->address, PCI_COMMAND) &
        (PCI_COMMAND_MASTER | PCI_COMMAND_INTX_DISABLE)) == PCI_COMMAND_INTX_DISABLE) {
+    if (controller->msix.table.mapping.address &&
+        !pci_msix_disable(&controller->msix)) {
+      return false;
+    }
     for (unsigned i = 0; i < claim->capability_count; ++i) {
       unsigned offset = claim->capabilities[i];
       unsigned id = pci_read8(claim->device->address, offset);
@@ -294,6 +337,7 @@ static bool release_failed_controller(struct rtl8111_controller *controller)
 void rtl8111_prepare(const struct boot_info *boot)
 {
   KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  inventory_complete = pci_inventory_state() == PCI_INVENTORY_COMPLETE;
   for (size_t index = 0; index < pci_device_count(); ++index) {
     arch_clock_maintain();
     const struct pci_device *device = pci_device_at(index);
@@ -303,12 +347,14 @@ void rtl8111_prepare(const struct boot_info *boot)
     struct pci_address address = device->address;
     struct rtl8111_controller *controller = kmalloc(sizeof(*controller));
     if (!controller) {
+      inventory_complete = false;
       klog("rtl8111 %x:%x.%u: no memory for controller state\n",
            address.bus, address.device, address.function);
       continue;
     }
     *controller = (struct rtl8111_controller){0};
     if (!pci_reserve_device_at(index, &controller->claim)) {
+      inventory_complete = false;
       klog("rtl8111 %x:%x.%u: cannot reserve function; unavailable\n",
            address.bus, address.device, address.function);
       kfree(controller);
@@ -319,11 +365,22 @@ void rtl8111_prepare(const struct boot_info *boot)
       klog("rtl8111 %x:%x.%u XID=%x: %s\n",
            address.bus, address.device, address.function, controller->xid, failure);
       if (release_failed_controller(controller)) {
-        kfree(controller);
-        continue;
+        rtl_ring_release(&controller->tx);
+        rtl_ring_release(&controller->rx);
+        if (controller->xid != RTL_XID_8168H) {
+          if (!controller->identified) {
+            inventory_complete = false;
+          }
+          kfree(controller);
+          continue;
+        }
+      } else {
+        klog("rtl8111 %x:%x.%u: ownership retained until reboot\n",
+             address.bus, address.device, address.function);
       }
-      klog("rtl8111 %x:%x.%u: ownership retained until reboot\n",
-           address.bus, address.device, address.function);
+      if (!controller->identified) {
+        inventory_complete = false;
+      }
     } else {
       klog("rtl8111 %x:%x.%u XID=%x: firmware-free PHY prepared; "
            "RX/TX, DMA and delivery disabled\n", address.bus, address.device,
@@ -332,4 +389,28 @@ void rtl8111_prepare(const struct boot_info *boot)
     controller->next = controllers;
     controllers = controller;
   }
+}
+
+bool rtl8111_inventory_complete(void)
+{
+  return inventory_complete;
+}
+
+struct rtl8111_controller *rtl8111_next(const struct rtl8111_controller *controller)
+{
+  struct rtl8111_controller *next = controller ? controller->next : controllers;
+  while (next && next->xid != RTL_XID_8168H) {
+    next = next->next;
+  }
+  return next;
+}
+
+struct rtl8111_controller *rtl8111_first(void)
+{
+  return rtl8111_next(NULL);
+}
+
+const uint8_t *rtl8111_identity_mac(const struct rtl8111_controller *controller)
+{
+  return controller && controller->identity_known ? controller->mac : NULL;
 }

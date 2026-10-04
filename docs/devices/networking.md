@@ -468,8 +468,18 @@ Every `net0` table requires exactly one of `driver = "virtio"` or `mac`, a local
 supplied nonzero unicast address written as six colon-separated hex pairs.
 Driver selection must be unique; use a MAC selector when multiple VirtIO
 controllers exist. No real MAC bytes belong in committed profiles or captures.
-RTL8111 is prepared independently but has no selection-layer I/O implementation
-yet, so its MAC cannot bind `net0` in this milestone task.
+The supported RTL8111 XID `541` also binds by MAC. Identified unsupported RTL
+XIDs are diagnosed during probing and excluded from selectable candidates;
+otherwise the native XID `502` port would block every MAC match with unknown
+identity. Supported controllers with unknown identity and incomplete discovery
+still prevent MAC selection. `driver = "virtio"` searches only VirtIO.
+
+Use [the image profile override](../development/configuration.md#image-network-profile)
+`NETWORK_CONFIG=/private/path/network.lua` to package a local MAC profile without
+editing the userspace checkout. The built-in ThinkPad profile uses the owner's
+MAC, `192.168.0.50/24` and gateway `192.168.0.1`; the packaged profile above remains
+the default. [RTL8111 I/O](rtl8111-hardware.md#ethernet-io) describes hardware
+ownership and qualification limits.
 
 This is manual static configuration, not DHCP. The kernel and driver contain no
 QEMU address defaults. An omitted gateway means no default route. Addresses use

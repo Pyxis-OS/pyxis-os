@@ -82,6 +82,26 @@ the default. `scripts/configure-boot.sh` fills the timeout and normal command-li
 placeholders in the authored template. This rebuilds boot configuration/image
 inputs, not the compiler.
 
+## Image network profile
+
+`NETWORK_CONFIG` selects a local Lua network profile for image assembly:
+
+```sh
+make -j16 image NETWORK_CONFIG=/private/path/network.lua
+make -j16 usb-image NETWORK_CONFIG=/private/path/network.lua
+```
+
+Assembly replaces `config/network.lua` in the initrd with the supplied regular
+file, without modifying the userspace checkout or its staged bundle. The session
+launcher reads it as `app://config/network.lua`; see
+[network configuration](../devices/networking.md#boot-configuration-and-use)
+for the profile fields and selector policy. Keep hardware MAC selectors in this
+local file, outside the repository and published captures.
+
+Pass the setting on each image build that needs it. With no override, assembly
+uses the packaged VirtIO profile again. This changes image contents only; it
+does not rebuild the compiler or change kernel configuration.
+
 ## Build outputs and bundles
 
 Each kernel source build reads `.config` through Kconfiglib and generates

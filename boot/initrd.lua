@@ -19,6 +19,9 @@ return function(inputs)
   if inputs.init ~= "" then
     entries[#entries + 1] = { file = inputs.init, at = "init", replace = true }
   end
+  if inputs.network_config ~= "" then
+    entries[#entries + 1] = { file = inputs.network_config, at = "config/network.lua", replace = true }
+  end
 
   local wad = inputs.wad
   if wad == "" then
