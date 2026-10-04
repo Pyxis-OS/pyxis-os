@@ -136,6 +136,17 @@ the same virtual read count; this does not establish latency or physical-device
 performance. No profiling was enabled. Exclusive revalidation after confirmation
 is additional work, followed by full ESP writing and byte verification.
 
+## Submitted integration build
+
+A full source build from parent `b67365d48cbd` and published userland `bb4fd66`
+passed with the normal five-second live menu. Its ISO booted the installer,
+recognized the updated target and displayed installed `91bf91d4a0fb` and live
+`b67365d48cbd`. Cancelling at typed confirmation made zero target writes or
+flushes. Existing build and filesystem CI passed for that submitted parent
+revision. Userland has no configured Actions tasks; `fj pr status` could not
+parse its empty aggregate status, while `fj actions tasks` returned zero tasks.
+Subsequent qualification-document edits do not alter the executable behavior.
+
 ## Review and limits
 
 Independent read-only review found and then confirmed fixes for optional revision
