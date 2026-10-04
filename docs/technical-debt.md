@@ -515,6 +515,19 @@ QuakeC strings outside the hunk use a 512-entry engine-string table; overflowing
 it stops the game with an error. Revisit these when persistent storage or a
 second data set makes them matter.
 
+## vi port limits
+
+[BusyBox vi](userland/vi.md) displays ASCII only and searches literally, because
+Pyxis has no Unicode-capable renderer or `regex.h`. Saves keep upstream's
+in-place write followed by `ftruncate`, so a short write or crash can leave a
+truncated or mixed file. Revisit with atomic replacement or a durable-save
+policy alongside the [native filesystem](wip/native-filesystem.md) work.
+`:!` and shell filters need a native launch adapter, and the read-only marker
+probes WRITE authority because truthful file metadata does not exist yet. The
+recipe's libbb adapter covers only vi's helpers; BusyBox less will extend it.
+Input EOF exits and loses unsaved edits, as upstream does; Kilo handles that
+case explicitly.
+
 ## Virtio-fs runtime resource retention
 
 The first [virtio-fs transport](devices/virtio-fs.md) reserves queue storage and device

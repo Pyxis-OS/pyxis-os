@@ -21,6 +21,9 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | zlib | Reusable compression/decompression, followed by a concrete consumer such as PNG loading. |
 | libpng | PNG decoding/encoding for viewers, drawing tools and screenshots; depends on zlib. |
 | SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. |
+| vi | [Implemented BusyBox vi port](../userland/vi.md), packaged in the normal image as the first modal editor before Neovim, with libc `ftruncate` and literal search. |
+| Links | A text web browser for reading HTML documentation offline, then online. Links 2.x does its own terminal handling, without curses. Start with local files only (path mapping, plus libc `stat` and directory reading). HTTP needs a libc socket layer over the native TCP endpoints and an Mbed TLS backend in place of OpenSSL; that comes later. Lynx (needs curses), w3m (needs a garbage collector) and ELinks (larger) are the alternatives. |
+| less | BusyBox `less` after Links: a pager for logs, command output and plain text. It shares BusyBox's support library and terminal handling with the vi port, so it should add little new platform work. |
 | PDCurses | Investigate a native libterm backend for terminal applications, using its documented platform hooks for drawing, input, cursor control and delays. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
 | awk | Text filtering, field processing and small scripts; select an implementation after a libc/dependency probe. |
@@ -28,6 +31,14 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | grep, tail, wc, sort, hexdump | Small everyday commands that remain useful alongside awk. Decide which to port or implement separately; this is not a commitment to a complete Unix utility suite. |
 | jq | JSON inspection and transformation, initially on local files. Audit libc/math and the selected regex configuration/dependency. |
 | pup | A Go command-line HTML parser and CSS-selector tool, with JSON output for pipelines. It is a small Go utility candidate; see the [Go runtime direction](toolchains-and-runtimes.md#go-cross-compiler-then-hosted-go-toolchain). |
+
+The owner queued **vi, then Links, then less** on 2026-10-04. The goal is
+offline development on Pyxis: reading documentation such as the Java SE 8
+Virtual Machine Specification with only what Pyxis provides. The specification
+is about 400 linked pages, too many to print, and Links pages through documents
+itself. Docs can stay open in the read-only space while development continues
+in its own space. Each port still starts with its own investigation and
+decisions, as vi did.
 
 SDL2 means an upstream library port with a Pyxis platform backend, not a growing
 collection of lookalike SDL functions. Begin with the subsystems a selected

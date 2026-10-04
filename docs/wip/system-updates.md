@@ -70,6 +70,7 @@ Accepted 2026-10-04, with the defaults below.
   - **Finish when:** in QEMU, Update lists a fresh install and a finalized install with `system://` files as candidates; refuses a blank disk, a foreign GPT and a pool with a committed journal, each with a clear reason; and cancelling makes no writes.
 
 - [ ] **2. Rewrite the ESP and verify.**
+  - **Review follow-up ([#396](https://git.internal/PyxisOS/pyxis-os/pulls/396)):** task 1 currently refuses damaged ESPs, which would also refuse a disk interrupted during ESP rewriting. Task 2 must allow Update to rebuild that ESP using the healthy installer-layout GPT and compatible empty-journal pool as the recovery anchor. ESP inspection should supply revision/identity information when readable; a valid configuration naming a different disk still refuses. This change belongs with task 2's interrupted-update qualification.
   - **Confirmation:** after `update`, check eligibility again under exclusive raw access before the first write.
   - **Writes:** re-create the ESP's FAT32 inside the existing partition, write the live system's boot files and a `limine.conf` generated from the template with the disk's existing GUID (timeout zero, no Install entry), then flush.
   - **Untouched:** the pool and the GPT.
