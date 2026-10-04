@@ -113,6 +113,34 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Current focus and later candidates
 
+### Kernel focus: runtime SMP
+
+Owner direction, 2026-10-04. The [runtime SMP milestone](scheduling-and-threads.md)
+is the next kernel work. It touches the scheduler, launch and process lifetime,
+private memory and the heap, presentation and input routing, and the
+BSP-owned service rules. Other kernel feature tracks therefore pause at these
+exits, so SMP has a stable base:
+
+- **Filesystem:** after [system updates](system-updates.md) task 2.
+- **USB:** after "USB storage works": C.1 writes and flushes merged, and a
+  native ThinkPad check of read-only boot, the writable mount and the C.1
+  review notes. C.2 and C.3 of the [USB plan](usb-installation.md) then wait.
+- **Networking:** after the current link-selection task. Native lease-renewal
+  qualification can wait.
+
+Fixes for major problems found by ThinkPad validation remain allowed in any
+track. Ports may continue when they need only userland and libc additions, not
+new kernel facilities; for example vi, [Links](links.md) and less.
+
+The first SMP step is a spike: task 1 of the milestone, which rebases the
+investigation, captures the baseline and settles its open decisions. It starts
+when resources allow and no major kernel work conflicts. A throwaway prototype
+branch is not part of task 1 unless the owner asks for one.
+
+After SMP, the candidates are dynamic space creation (the new tab and its
+launch flow), a file navigator and multiplexing. The scrolling space bar itself
+is part of SMP task 2.
+
 The [native filesystem milestone](native-filesystem.md) has completed format-only
 codecs, host tools and the Caelum-owned cache/writer. Trusted init selects explicit
 read-only or writable roots; native file, directory and configured-disk sync
