@@ -17,10 +17,10 @@
 #define IO_APIC_LEVEL_TRIGGERED (1u << 15)
 #define IO_APIC_MASKED (1u << 16)
 
-static struct keyboard_irq_route keyboard_route;
-static uint32_t keyboard_register;
-static uint32_t keyboard_entry;
-static bool initialized;
+static struct isa_irq_route keyboard_route, mouse_route;
+static uint32_t keyboard_register, mouse_register;
+static uint32_t keyboard_entry, mouse_entry;
+static bool initialized, mouse_initialized;
 
 static uint32_t io_apic_read(uint32_t reg)
 {
@@ -34,10 +34,22 @@ static void io_apic_write(uint32_t reg, uint32_t value)
   *(volatile uint32_t *)(IO_APIC_BASE + IO_APIC_WINDOW) = value;
 }
 
+static uint32_t redirection_entry(const struct isa_irq_route *route, uint8_t vector)
+{
+  uint32_t entry = vector;
+  if (route->active_low) {
+    entry |= IO_APIC_ACTIVE_LOW;
+  }
+  if (route->level_triggered) {
+    entry |= IO_APIC_LEVEL_TRIGGERED;
+  }
+  return entry;
+}
+
 void io_apic_prepare(const struct boot_info *boot)
 {
-  if (!acpi_keyboard_route(boot, &keyboard_route)) {
-    keyboard_route = (struct keyboard_irq_route){0};
+  if (!acpi_ps2_routes(boot, &keyboard_route, &mouse_route)) {
+    keyboard_route = mouse_route = (struct isa_irq_route){0};
   }
 }
 
@@ -67,13 +79,7 @@ bool io_apic_init(void)
   }
 
   keyboard_register = IO_APIC_REDIRECTION_BASE + pin * IO_APIC_REDIRECTION_REGISTERS;
-  keyboard_entry = APIC_KEYBOARD_VECTOR;
-  if (keyboard_route.active_low) {
-    keyboard_entry |= IO_APIC_ACTIVE_LOW;
-  }
-  if (keyboard_route.level_triggered) {
-    keyboard_entry |= IO_APIC_LEVEL_TRIGGERED;
-  }
+  keyboard_entry = redirection_entry(&keyboard_route, APIC_KEYBOARD_VECTOR);
 
   /* Fixed delivery, physical destination: all keyboard interrupts go to the
    * BSP. Keep the route masked until the controller and receive queue are ready. */
@@ -82,6 +88,25 @@ bool io_apic_init(void)
   initialized = true;
   klog("keyboard: IRQ 1 -> GSI %u, I/O APIC input %u -> BSP APIC %u\n",
        keyboard_route.gsi, pin, apic_id());
+
+  /* Only the keyboard's controller is mapped. A mouse input elsewhere, beyond
+   * its entries or shared with the keyboard leaves the mouse unavailable. */
+  unsigned mouse_pin = mouse_route.gsi - mouse_route.gsi_base;
+  if (!mouse_route.io_apic_physical) {
+    klog("mouse: no ACPI IRQ 12 route; mouse unavailable\n");
+  } else if (mouse_route.io_apic_physical != keyboard_route.io_apic_physical ||
+             mouse_pin > max_entry || mouse_route.gsi == keyboard_route.gsi) {
+    klog("mouse: unsupported IRQ 12 route to GSI %u; mouse unavailable\n",
+         mouse_route.gsi);
+  } else {
+    mouse_register = IO_APIC_REDIRECTION_BASE + mouse_pin * IO_APIC_REDIRECTION_REGISTERS;
+    mouse_entry = redirection_entry(&mouse_route, APIC_MOUSE_VECTOR);
+    io_apic_write(mouse_register + 1, apic_id() << IO_APIC_DESTINATION_SHIFT);
+    io_apic_write(mouse_register, mouse_entry | IO_APIC_MASKED);
+    mouse_initialized = true;
+    klog("mouse: IRQ 12 -> GSI %u, I/O APIC input %u -> BSP APIC %u\n",
+         mouse_route.gsi, mouse_pin, apic_id());
+  }
   return true;
 }
 
@@ -89,4 +114,15 @@ void io_apic_keyboard_enable(void)
 {
   KASSERT(initialized);
   io_apic_write(keyboard_register, keyboard_entry);
+}
+
+bool io_apic_mouse_available(void)
+{
+  return mouse_initialized;
+}
+
+void io_apic_mouse_enable(void)
+{
+  KASSERT(mouse_initialized);
+  io_apic_write(mouse_register, mouse_entry);
 }

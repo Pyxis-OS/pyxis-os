@@ -22,6 +22,7 @@
 #include <kernel/memory.h>
 #include <kernel/task.h>
 #include <kernel/keyboard.h>
+#include <kernel/mouse.h>
 #include <kernel/object/console.h>
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
@@ -349,6 +350,15 @@ static void handle_space_input(void)
   }
 }
 
+static void handle_pointer_input(void)
+{
+  struct mouse_event event;
+  /* Nothing routes pointer input yet; draining keeps the device queue from
+   * overflowing into a reset on every packet. */
+  while (mouse_read_event(&event)) {
+  }
+}
+
 void space_present_task(void *argument)
 {
   (void)argument;
@@ -356,6 +366,7 @@ void space_present_task(void *argument)
 
   for (;;) {
     handle_space_input();
+    handle_pointer_input();
     space_present();
     deadline += PRESENT_INTERVAL_NS;
     uint64_t now = arch_monotonic_ns();

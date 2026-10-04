@@ -1212,3 +1212,12 @@ both. The source is unavailable once no healthy instruction remains. See
 The accepted follow-up is a kernel ChaCha20 generator seeded from these sources.
 Revisit source mixing, reseeding and generator ownership in that task; do not add
 predictable fallback bytes or treat the current checks as entropy certification.
+
+## PS/2 mouse synchronization and routing
+
+The [PS/2 mouse](devices/mouse.md) realigns packets only by the first byte's
+always-set bit. A byte lost inside the device can yield wrong motion or buttons
+for a few packets before a misaligned first byte is rejected. Its IRQ 12 route
+must share the keyboard's I/O APIC; firmware that places it elsewhere leaves the
+mouse unavailable. Reconsider these when native packets show drift that a short
+inter-byte timeout would catch, or a target routes IRQ 12 to another I/O APIC.
