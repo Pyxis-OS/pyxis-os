@@ -70,7 +70,7 @@ redirection and last-stage success. The shell checks the whole command line and
 opens every image before redirect targets, opens redirects before truncating,
 and closes temporary endpoints before waiting for every child. Redirects override
 pipe defaults. Only the first stage with console stdin receives named terminal
-input and keyboard grants. Ordinary stages receive no launcher or pipe-creation
+input, keyboard and pointer grants. Ordinary stages receive no launcher or pipe-creation
 authority; shebang adaptation does not add authority.
 
 [Head](shell.md#bounded-input-with-head) copies ten lines by default, or the

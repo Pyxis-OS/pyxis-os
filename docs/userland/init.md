@@ -250,8 +250,8 @@ the selected init URI as `argv[1]`, and a READ resource named `script`.
 Interpreter lookup stays inside the boot archive and does not recursively
 interpret scripts. LF/CRLF and bounds follow the [script-launch contract](script-launch.md).
 
-Each workload init receives its space's title, terminal, display and keyboard
-grants, private memory, launch, clock, randomness, networking services and
+Each workload init receives its space's title, terminal, display, keyboard and
+pointer grants, private memory, launch, clock, randomness, networking services and
 network configuration, caller-scoped [memory profiling](../development/allocation-profiling.md), explicit
 [endpoint creation](../interfaces/endpoints.md) through the `service` resource,
 read-only app and writable home roots, an initial `home://` working directory and

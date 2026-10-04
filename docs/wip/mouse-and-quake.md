@@ -108,9 +108,18 @@ Accepted 2026-10-04, with the defaults below.
       relative motion;
     - right: a black-on-white drawing pad that sets a pixel at that position
       on each event while the left button is held, with no other functions.
+  - Accepted 2026-10-04: a button held across acquisition, a focus change or
+    a reset is withheld until pressed again, as keys are; a full queue merges
+    motion into the newest event with unchanged buttons and otherwise resets;
+    the test program draws a position marker over the pad without drawing it
+    into the pad.
   - **Finish when:** a consumer receives motion, wheel and buttons only while
     focused, and releases state on focus loss or reset; and the owner sees
     TrackPoint and touchpad events natively in the test program.
+  - **Status:** implemented; see [pointer sessions](../devices/mouse.md#userspace-pointer-sessions).
+    QEMU checks passed (TCG; the host's QEMU crashed loading the ISO under
+    KVM). Awaiting the owner's native check, which also covers task 1's boot log
+    and unchanged keyboard while the ThinkPad cannot boot Pyxis.
 - [ ] **3. Quake port** (ports repository, plus image packaging in the parent).
   - Pinned quakegeneric with a Pyxis adapter:
     - 8-bit palette conversion and integer scaling, as in Doom;
