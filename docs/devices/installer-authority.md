@@ -33,15 +33,19 @@ for both. These assets are available through read-only `app`.
 
 Native init opens `app://installer.pxe` and delegates only the disk service,
 the two source files, private memory, input/output, read-only clock and randomness,
-read-only `app`, and standard streams. It waits for the child and reports its
+read-only `app`, read-only SYSTEM_INFO and standard streams. SYSTEM_INFO supplies
+the live kernel build revision for display and the installed ESP record. It waits for the child and reports its
 completion. It delegates no launcher, writable home, mount, host, network or
 display authority. The packaged [native installer](../userland/installer.md)
-implements consent, formatting, installation and read-back verification.
+implements consent, formatting, installation, read-back verification and
+read-only Update candidate inspection. Update inspection uses only raw reads;
+it never opens a volume or acquires a write claim.
 
 ## Inventory and raw access
 
-Installer disk authority remains VirtIO-only; configured read-only USB mounting
-uses the separate native GUID authority.
+Installer disk authority remains VirtIO-only; configured USB mounting, including
+explicitly writable mounts on qualified disks, uses the separate native GUID
+authority.
 
 [`include/abi/disk.h`](../../include/abi/disk.h) defines two native protocols.
 DISKS ENUMERATE requires ENUMERATE and takes a zero-based inventory index; it
@@ -97,5 +101,6 @@ kernel service does not check `SAFE_TO_WIPE`, authenticate contents or interpret
 partition names as consent. Target preparation and explicit consent belong to
 the trusted installer. The installer selects the sole eligible disk automatically or asks for a disk
 number when several qualify, then requires typed `wipe`. The installer does not
-expose USB raw access or USB write/flush support. AHCI, NVMe, hotplug,
+expose USB raw access. Qualified USB write/flush support is available only
+through configured native mounts and the kernel block interface. AHCI, NVMe, hotplug,
 physical-media qualification and power-loss validation remain outside this interface. See [block storage](block-storage.md) and [GPT discovery](gpt.md).

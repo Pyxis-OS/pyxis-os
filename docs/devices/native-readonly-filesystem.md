@@ -18,7 +18,10 @@ supplied. Absent configuration disables native mount authority; malformed or
 duplicate configuration fails. Attach the selected disk explicitly.
 `VIRTIO_BLK_IMAGE` supports VirtIO, with `VIRTIO_BLK_READONLY=1` for read-only
 use. Enabled xHCI also supports boot-present USB BOT disks through discovered
-controllers and hubs; USB mounts are read-only. Startup does not probe volumes.
+controllers and hubs. USB disks with known clear write protection and successful
+blocking cache-synchronization qualification support explicitly requested
+writable mounts; other healthy disks retain read-only mounts. Startup does not
+probe volumes.
 
 `MOUNT_OPEN_VOLUME` requires OPEN_ROOT and takes a one-based GPT entry, counted
 volume name and exact directory rights including LOOKUP. CREATE, WRITE_FILES or

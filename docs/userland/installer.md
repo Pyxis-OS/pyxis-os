@@ -6,7 +6,7 @@ It runs through trusted install init with the explicit
 [disk and boot-file grants](../devices/installer-authority.md). Source files are
 already in RAM; installing does not require a driver for the live medium.
 
-Choose **Proceed with installation** for marked development disks or **Read the
+Choose **Install** first, then **Proceed with installation** for marked development disks or **Read the
 room** to include blank, foreign, partially marked and damaged contents. The
 installer lists every disk and explains eligibility. It selects a sole eligible
 disk or asks for its displayed number when several qualify, then shows size,
@@ -35,7 +35,7 @@ Installation rebuilds the whole selected disk: a fresh GPT, a 512 MiB FAT32 ESP
 starting at 1 MiB, then an npfs pool extending to the aligned end before backup
 GPT metadata. The pool has one `system` volume with an empty regular root marker.
 Limine is at `EFI/BOOT/BOOTX64.EFI`; the original kernel, whole boot archive and
-configuration are under `boot`. The installed configuration fills the packaged
+configuration and a newline-terminated kernel `revision` record are under `boot`. The installed configuration fills the packaged
 template with timeout zero and the new disk GUID, and omits the installer entry
 and any global `default_entry`.
 Fixed `init-installed` mounts partition 2's system volume read-write as
@@ -47,6 +47,23 @@ marker verification. Only then does the program report `installed`. Remove the
 live medium and boot from the target. Reinstall requires another live-media
 boot because verification retains the pool until reboot. Delete
 `system://SAFE_TO_WIPE` and sync that directory to mark the installation final.
+
+The first screen also offers **Update**. This first implementation lists and
+selects existing installations, then reports that inspection completed without
+writing. ESP replacement and typed `update` confirmation remain
+[task 2](../wip/system-updates.md). Update requires healthy matching GPT copies
+with the exact installer layout, a writable-mount-compatible pool with an empty
+selected journal and a live `system` volume, and FAT32 boot configuration naming
+this disk GUID and installed init. A valid pool header/control copy can survive
+a damaged peer, following kernel admission. A committed journal is refused:
+boot the installed system once to recover it, then update. No wipe marker is
+needed, and inspection never mounts, replays or writes the pool.
+
+Update shows both the live kernel revision and the installed `boot/revision`;
+older installations without this record show `unknown`. The bounded FAT reader
+checks the required directory/file chains and mirrored FAT entries, without
+requiring a pristine fresh-writer byte layout or rejecting unrelated files.
+See the [task-1 qualification](../development/experiments/system-updates-task1/README.md).
 
 This writes allocated metadata and boot-file storage, without secure erasure of
 free space. A failed mutation may leave a partial disk; the failure message

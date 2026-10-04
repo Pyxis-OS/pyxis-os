@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 #include "npfs_store.h"
 
+#include <abi/mount.h>
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/log.h>
@@ -11,7 +12,6 @@
 #include <kernel/task.h>
 
 #define STORE_IMAGES_MAX 128u
-#define STORE_NAMESPACE_IMAGES 18u
 #define STORE_CACHE_CHUNKS 4u
 #define STORE_CHUNK_ENTRIES 256u
 #define STORE_CLEANUP_IMAGES 10u
@@ -945,7 +945,7 @@ static enum call_status prepare_writable(struct npfs_store_context *context, str
     return CALL_READ_ONLY;
   }
   uint64_t capacity = npfs_journal_capacity(pool->header.journal_blocks);
-  if (capacity < STORE_NAMESPACE_IMAGES) {
+  if (capacity < MOUNT_NPFS_MIN_JOURNAL_IMAGES) {
     return CALL_LIMIT;
   }
   pool->image_capacity = capacity < STORE_IMAGES_MAX ? (unsigned)capacity : STORE_IMAGES_MAX;
