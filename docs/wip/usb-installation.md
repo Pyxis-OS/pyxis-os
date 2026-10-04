@@ -3,8 +3,9 @@
 Status: Phase A image assembly/USB boot and Phase B.3 enumeration/control
 transfers, BOT/SCSI reads and kernel block/GPT integration implemented,
 2026-10-04; native USB mounts and Phase C.1 write/flush support are implemented.
-Qualified disks support explicitly requested writable mounts. The broader
-persistent development loop and physical qualification remain pending.
+Qualified disks support explicitly requested writable mounts. Phase C.2's
+QEMU persistent edit/build/run loop is qualified; physical validation remains
+pending.
 Owner-reported [ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md) now
 include root and USB 3 hub-descendant storage reads. Broader hardware/recovery
 qualification of native mounting remains pending. Inspection-first work includes
@@ -15,8 +16,9 @@ physical installation target, with QEMU development before laptop validation.
 Implemented image behavior lives in the [USB image reference](../development/usb-image.md).
 Phase B follows the read-only contracts below. Implemented controller behavior
 lives in the [xHCI reference](../devices/usb-xhci.md), with checked discovery and
-request ownership in [USB enumeration](../devices/usb-enumeration.md). Persistent
-installation and physical validation remain unassigned. This document does not
+request ownership in [USB enumeration](../devices/usb-enumeration.md). The
+[persistent development walkthrough](../development/edit-build-run.md#persistent-usb-development)
+keeps a private QEMU disk across sessions. Physical validation remains unassigned. This document does not
 authorize physical writes or reorder the active filesystem, spaces/SMP and
 display work.
 
@@ -411,17 +413,25 @@ host tools and the later physical-preparation procedure.
    [QEMU qualification record](../development/usb-storage-bringup.md#2026-10-04-qualified-writes-and-cache-synchronization).
    Error/recovery branches remain source-reviewed without forced-error validation;
    QEMU persistence does not qualify physical durability.
-2. [ ] **Integrate the persistent development loop.** Depends on qualified
-   [native filesystem writer](../devices/filesystem-native-adapter.md) and
-   qualification of the USB backend's write/flush/error behavior. Edit/build/run,
-   checkpoint, reboot and verify persisted files; exercise a separately read-only
-   session.
+2. [x] **Integrate the persistent development loop.** Existing Kilo, TCC,
+   configured USB mounts and the native writer support source/object/executable
+   files under a delegated USB root. Manual QEMU sessions edited, built and ran
+   two program versions, explicitly synced the pool, then reopened matching
+   files and launched/rebuilt after a fresh process. Separate read-only grant
+   and read-only attachment sessions retained reads and execution while denying
+   mutations. The [walkthrough](../development/edit-build-run.md#persistent-usb-development)
+   preserves a private disk while rebuilding only the ISO; the
+   [qualification record](../development/usb-storage-bringup.md#persistent-usb-development-loop-c2)
+   includes revisions, configuration, hashes and host structural inspection.
+   No runtime, authority or installer changes were needed.
 3. [ ] **Validate the physical installation.** First inspect laptop hardware,
    then select the expendable USB target explicitly. Progress from firmware boot
    to read-only mounting and bounded persistence checks. Record device, firmware,
    topology and observed differences. An orderly reboot is not a power-loss test.
    Include the deferred [configured-mount discovery latency measurement](../technical-debt.md#configured-mount-discovery-latency)
-   on the first native USB mount boot.
+   on the first native USB mount boot and the
+   [write-qualification compatibility notes](../technical-debt.md#usb-writable-media-qualification-limits)
+   if the selected device rejects or disrupts optional qualification commands.
 
 ## Remaining assignment and qualification decisions
 
@@ -429,8 +439,8 @@ host tools and the later physical-preparation procedure.
   accepted per-device read-only contract. Enumeration publishes root devices and
   supported USB 2/3 hub descendants. B.4 adds an internal BOT/SCSI media probe;
   B.5 read-only mount integration and C.1 qualified writes/flushes are implemented.
-  C.2 persistent development-loop integration and C.3 physical validation remain
-  unassigned; native ThinkPad testing is deferred.
+  C.2's QEMU persistent development loop is qualified. C.3 physical validation
+  remains unassigned; native ThinkPad testing is deferred.
 - Image update/preservation ownership remains open for persistent installation.
   Read-only disk selection does not qualify a write target or authenticate media.
 - The [GUID/boot-device identity follow-up](../technical-debt.md#configured-guid-and-boot-device-identity)

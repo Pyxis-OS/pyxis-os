@@ -573,3 +573,133 @@ execution. Normal filesystem write/sync traffic exercised WRITE (10)/(16) and
 blocking flush; no deliberate disconnect, stall or power-loss experiment was
 performed. Hotplug and physical writable mounts remain deferred. Native ThinkPad
 testing is still deferred, and the accepted GUID/discovery limits are unchanged.
+
+## Persistent USB development loop (C.2)
+
+Manual qualification on 2026-10-04 used main `91bf91d`, containing merged C.1
+PR #395. Pins were fs `d352c7e`, ports `55b6f8e`, userspace `61cad34`, lwIP
+`a1aadb9`. None changed in this task. Kilo, TCC, native filesystem and USB runtime
+sources were unchanged: C.2 adds the
+[development walkthrough](edit-build-run.md#persistent-usb-development),
+qualification record and milestone completion. There is no performance change
+or timing comparison claimed.
+
+### Build and disk selection
+
+Ordinary `make -j16 image` built writable and read-only trusted-init variants
+with `CONFIG_XHCI=y`, `INIT_CPUS=` and the actual configured disk GUID. The
+checkout subsequently restored `CONFIG_XHCI=n` and packaged init/default image
+settings; that ordinary image build also passed. `make -j16 fs-tools` and
+`make -C tools remote` passed. Existing vendored Quake warnings occurred in the
+full source build, with no kernel warnings. The existing cross compiler was
+used; no compiler container, public ABI, dependency pin or build workflow changed.
+
+The initial disk was a sparse private copy of the original sample image,
+`/home/chronium/tmp/usb-c2-development.raw`. Its observed GUID was
+`254ca48f-2cf8-4e45-a844-ca22c685d8ab`, capacity 1048576 blocks of 512 bytes.
+Entry 2 began at 264192 with 782336 blocks and contained volume `usb-test`.
+This is a chosen fixture, not an image-size or topology contract. Trusted init
+used the walkthrough's script with `--read-write usb://`, then handed off to
+the existing network/session services. The ISO booted independently of the
+disk's EFI partition. No image builder or formatter ran against that private
+disk after work began, and the original sample image's full hash remained intact.
+
+QEMU 10.2.2 from `/tmp/pyxis-qemu-ahci-fix/build` used q35/KVM, `-cpu max`, four
+vCPUs (one socket/four cores/one thread), 8 GiB RAM, UTC RTC, matching
+`/usr/share/OVMF/OVMF_CODE.fd` and a fresh private variables file for each
+process. VirtIO net and rng were enabled, with host loopback 24567 forwarded to
+guest 2323. No VirtIO disk or host filesystem export was attached. These are
+agent/nested-KVM observations, not native ThinkPad results.
+
+The first process used `qemu-xhci,p2=2,p3=2`, a four-port USB 2 hub on bus port
+1, the selected disk on `1.2`, a keyboard on `1.3`, and unsupported EHCI. The
+native inventory reported the disk at discovered path `3.2`; `lsusb` retained
+EHCI and exited 1 for partial inventory. The usable observed GUID still mounted.
+The fresh processes used `qemu-xhci,p2=1,p3=1` and direct root attachment at bus
+port 1, with EHCI retained. Writable disk attachments used `cache=writeback`;
+the final media-protected process used `readonly=on` instead. Serial logs,
+remote terminal events and debugger observations were captured manually under
+`/home/chronium/tmp`; no tests, fault injection or boot/output automation were added.
+
+### Editor, compiler and checkpoint
+
+The existing machine client was kept open for interactive Kilo input, with
+100 columns and 35 rows. Foreground input went to Kilo until it quit; command
+completion events were checked before the next stage. The guest created
+`usb://work`, changed into it and entered the walkthrough's C program in Kilo.
+Ctrl-S saved it and Ctrl-Q quit. `tcc hello.c -o hello.pxe` exited 0, and
+`./hello.pxe` printed `Hello from USB, first build` and exited 0.
+
+Kilo reopened the same source. Its search selected `first`, which was replaced
+with `second`; save and quit succeeded. The second build used:
+
+```text
+tcc -c hello.c -o hello.o
+tcc hello.o -o hello.pxe
+./hello.pxe
+sync usb://work/hello.c usb://work/hello.o usb://work/hello.pxe usb://work usb://
+sha256sum hello.c hello.o hello.pxe
+```
+
+All exited 0; the executable printed the second message. GDB then observed
+BOT READY, writable/flush true, `write_failed=false`, 92 writes / 548864 bytes
+and 53 synchronizations including boot qualification. The journal was EMPTY
+(sequence 27), with no writeback error. QEMU was closed through its monitor
+after successful synchronization; it was not suspended as the persistence check.
+Sync's contract is durable COMMITTED, while background checkpointing makes
+the journal EMPTY. The observed EMPTY state permitted later read-only opening;
+sync success alone is not a guarantee that an immediate read-only open will
+succeed. The walkthrough includes writable recovery before a read-only retry
+when the existing replay-required diagnostic occurs.
+
+### Fresh-process persistence and read-only use
+
+A fresh writable process used the same disk with the direct root attachment.
+Reading source, hashing the three saved artifacts and launching the saved
+executable all exited 0. Hashes matched the prior process. TCC compiled the
+persisted source into a new `rebuilt.pxe`, which also printed the second message.
+Directory sync succeeded; GDB observed an EMPTY journal (sequence 31) and no
+writeback error. The direct-source build and earlier object-link build have
+different executable hashes; byte-identical compiler output is not the
+persistence contract.
+
+The next fresh process used a read-only trusted mount with the disk still
+writable, separating grant attenuation from media protection. GDB observed
+device writable/flush true but the mounted pool writable false. Reads, hashes
+and saved executable launch passed. Creating a directory, removing or renaming
+the source, and TCC output to the existing USB executable each failed with
+permission denial and status 1. TCC could still read USB source, compile into
+RAM-backed `home://` and run that output successfully. Kilo displayed
+`Can't save! I/O error: Permission denied` for a buffer edit. The edit was
+discarded with its repeated quit confirmation; editor exit 0 did not mean a
+successful save. Saved file hashes remained unchanged. BOT recorded zero writes
+and only the one boot qualification synchronization.
+
+A final fresh process used both read-only mount and `readonly=on` attachment.
+Source/hash reads, saved executable launch and compilation into `home://` all
+passed; output to `usb://work/blocked.pxe` failed with permission denial.
+GDB observed writable/flush false, zero writes/flushes and a read-only pool.
+Both read-only processes left the whole private disk's hash unchanged.
+
+### Detached host inspection and limits
+
+After closing QEMU, the actual GPT pool extent was extracted. Existing
+`fsck.npfs` reported `structural check passed` without replay; `npfs-inspect`
+listed and extracted the retained source, object and two executables. The source
+matched the authored second program byte-for-byte, including its final blank
+line. Host hashes matched those captured in the guest:
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `work/hello.c` | 92 | `147aa8ff44324428526d2b1f75a28d94ce2f2a3ac55f142dd1ab1d8e36c5962f` |
+| `work/hello.o` | 1337 | `137d32462551b476e846d0e397a9ad8f21dcf7424da63258f4a593ca73a0cb40` |
+| `work/hello.pxe` | 51765 | `a119417a857eb2506e32e795472372e6c97a537c9cf918ba93ab130bf1fcd02a` |
+| `work/rebuilt.pxe` | 51765 | `be6cef5c496042c3a36d054d301789a2554f888ffe71c898e51a7880b48985a0` |
+
+This qualifies the manual QEMU development loop and orderly synchronized
+persistence. It adds no atomic editor/compiler save, hotplug, raw USB installer
+access, physical write qualification or power-loss claim. The two merged C.1
+[hardware compatibility watchpoints](../technical-debt.md#usb-writable-media-qualification-limits)
+are retained for evidence-guided physical follow-up. C.3 and ThinkPad testing
+remain deferred. All task-owned QEMU, remote client and debugger processes were
+closed, and the checked-in configuration remains unchanged.

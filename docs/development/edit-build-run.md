@@ -43,13 +43,164 @@ child exit status. Kilo saves by truncating and rewriting, so a failed save can
 also leave partial content.
 
 Sources, objects and executables in `home://` are RAM-backed and disappear on
-reboot. For opt-in persistence, use the [writable host export](../devices/virtio-fs.md#persistent-development-walkthrough)
-and keep source and output under `host://`. `app://`, including `app://sdk`, is
+reboot. For opt-in persistence, use the [USB workflow below](#persistent-usb-development)
+or a [writable host export](../devices/virtio-fs.md#persistent-development-walkthrough),
+keeping source and output under the corresponding root. `app://`, including `app://sdk`, is
 read-only. Atomic Kilo saves, a package manager and toolchain self-hosting
 remain unsupported. GCC continues to build maintained OS/userland sources.
 
 See [TCC's contract and limits](../userland/tcc.md), [Kilo controls](ports.md#editing-in-pyxis)
 and [terminal behavior](../userland/terminal.md) for details.
+
+## Persistent USB development
+
+An explicitly configured USB-backed npfs volume can hold source, objects and
+native executable output across boots. The compiler and SDK stay in the read-only
+archive; `home://` stays RAM-backed. This QEMU walkthrough uses a private disk
+copy and a separately booted ISO. Physical writes remain deferred to the
+[hardware qualification stage](../wip/usb-installation.md#c-persistent-usb-installation-and-hardware-validation).
+
+### Select and mount a private disk
+
+Start with an existing [sample USB image](usb-image.md), assembled once before
+storing work. While it is detached, copy it to a separate file:
+
+```sh
+usb_disk=/tmp/pyxis-usb-development.raw
+cp --sparse=always build/pyxis-usb.img "$usb_disk"
+LC_ALL=C sgdisk -p "$usb_disk"
+```
+
+Set the shell variable `usb_guid` to that file's displayed Disk identifier
+(GUID). The builder generates it; do not reuse a GUID from a different image.
+The sample has npfs in GPT entry 2, volume `usb-test`. Other prepared disks must
+use their actual entry and volume. Attach only the selected copy, since duplicate
+observed GUIDs prevent mounting. Keep this copy for later sessions: `usb-image`
+replaces `build/pyxis-usb.img`, and copying a fresh image over the development
+file would discard saved work.
+
+Enable `CONFIG_XHCI=y` in `.config` or menuconfig. Save this trusted script as
+`/tmp/init-usb-development.sh`:
+
+```sh
+#!app://shell.pxe
+mount --partition 2 --volume usb-test --read-write usb://
+namespace create
+service start text app://textfs.pxe
+session app://session.pxe --configure-network --start-remote-services
+```
+
+Build the separate ISO and existing remote client:
+
+```sh
+make -j16 image INIT=/tmp/init-usb-development.sh INIT_CPUS= MOUNT_DISK="$usb_guid"
+make -C tools remote
+```
+
+The explicit mount requires configured GUID authority, known clear write
+protection and successful blocking cache synchronization. Failure stops init;
+it does not silently select another disk or fall back to RAM. The session receives
+ordinary directory/file grants, with no mount or raw installer authority.
+See the [USB storage contract](../devices/usb-storage.md).
+
+### Launch and develop
+
+Use matching OVMF files and the QEMU binary available on your host. For example:
+
+```sh
+QEMU=qemu-system-x86_64
+OVMF_CODE=/usr/share/OVMF/OVMF_CODE.fd
+OVMF_VARS=/usr/share/OVMF/OVMF_VARS.fd
+cp "$OVMF_VARS" /tmp/pyxis-usb-vars.fd
+"$QEMU" -machine q35 -accel kvm -cpu max \
+  -smp cpus=4,sockets=1,cores=4,threads=1 -m 8G -rtc base=utc \
+  -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
+  -drive if=pflash,format=raw,unit=1,file=/tmp/pyxis-usb-vars.fd \
+  -cdrom build/pyxis.iso -boot d -display none -serial mon:stdio \
+  -netdev user,id=net,hostfwd=tcp:127.0.0.1:24567-10.0.2.15:2323 \
+  -device virtio-net-pci,netdev=net,disable-legacy=on \
+  -object rng-random,id=rng,filename=/dev/urandom \
+  -device virtio-rng-pci,rng=rng,disable-legacy=on \
+  -device qemu-xhci,id=usb,p2=1,p3=1 \
+  -drive if=none,id=usb_disk,format=raw,cache=writeback,file="$usb_disk" \
+  -device usb-storage,bus=usb.0,port=1,drive=usb_disk
+```
+
+The supplied `run-usb` launcher attaches its disk read-only; this manual command
+explicitly permits writes to the private copy. No VirtIO disk or host filesystem
+export is attached. Controller and device identities are discovered; the QEMU
+port arguments describe this example's virtual wiring.
+
+In another host terminal, connect with
+`build/tools/pyxis-remote 127.0.0.1 24567`. In the first guest session:
+
+```text
+mkdir usb://work
+cd usb://work
+kilo hello.c
+```
+
+Enter the program above, using `Hello from USB, first build` as its message.
+Save with Ctrl-S, quit with Ctrl-Q, then run:
+
+```text
+tcc hello.c -o hello.pxe
+./hello.pxe
+kilo hello.c
+```
+
+Change the message to `Hello from USB, second build`, save and quit. An object
+build exercises the same persistent paths:
+
+```text
+tcc -c hello.c -o hello.o
+tcc hello.o -o hello.pxe
+./hello.pxe
+sync usb://work/hello.c usb://work/hello.o usb://work/hello.pxe usb://work usb://
+sha256sum hello.c hello.o hello.pxe
+```
+
+Check each compiler and sync result before proceeding. Successful save, close
+or compilation alone does not establish persistence. Native file/directory
+sync commits the current pool and completes the backend's ordered flush. A
+successful sync reaches durable COMMITTED; background checkpointing later makes
+the journal EMPTY. A failed compile may leave an older or partial output; Kilo's truncate/rewrite
+save is not atomic.
+
+### Restart and inspect read-only
+
+After successful sync, exit the remote shell and stop QEMU with Ctrl-a x in its
+serial terminal. Start a fresh process with the same disk file, creating fresh
+OVMF variables again. Do not copy or format the disk again. In the guest:
+
+```text
+cd usb://work
+cat hello.c
+sha256sum hello.c hello.o hello.pxe
+./hello.pxe
+```
+
+The saved source, hashes and second message should match the earlier session.
+You can reopen Kilo and rebuild again without rebuilding the ISO or disk.
+
+For a separate read-only session, stop QEMU, change the trusted script's mount
+to `--read-only`, then rebuild only the ISO with the same `MOUNT_DISK` and init
+selection. In the QEMU command replace the USB drive's `cache=writeback` with
+`readonly=on`. Reads and saved executable launch remain available; saving edits,
+creating files or compiling output onto `usb://` is denied. A read-only pool
+requires an EMPTY journal and refuses a committed journal requiring replay.
+Successful sync alone does not guarantee immediate read-only-open readiness.
+If init reports replay required, stop QEMU and restore both the writable init and
+writable attachment. Open the volume once for recovery, let replay/checkpoint
+complete without new edits, then stop and retry the read-only session. See the
+[native journal contract](../devices/filesystem-native-adapter.md#writeback-recovery-and-errors)
+for the completion points. No host process may modify an attached disk.
+
+The [C.2 qualification record](usb-storage-bringup.md#persistent-usb-development-loop-c2)
+records manual editor/compiler, restart and read-only observations. An orderly
+QEMU restart is not a physical cache or power-loss qualification. Restore
+`CONFIG_XHCI=n` and run `make image` without init/mount overrides to return to
+the checked-in boot defaults.
 
 ## Use a remote terminal
 

@@ -117,8 +117,9 @@ see the [manual storage record](usb-storage-bringup.md) and
 [persistent USB development walkthrough](edit-build-run.md#persistent-usb-development).
 Keep that private disk copy across QEMU runs and build the separately booted
 ISO with its actual GUID. Rebuilding the ISO can change the kernel, archive or
-trusted init without replacing the persistent disk. Do not rerun `usb-image`
-against the private copy: successful assembly replaces its pool and saved files.
+trusted init without replacing the persistent disk. `usb-image` replaces
+`build/pyxis-usb.img`; do not use that output as the persistent disk or copy a
+newly assembled image over the private copy holding saved files.
 The firmware-boot launchers remain read-only; the walkthrough uses a separate
 manual writable attachment. Physical writable use remains deferred.
 
