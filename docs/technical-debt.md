@@ -1291,3 +1291,13 @@ for a few packets before a misaligned first byte is rejected. Its IRQ 12 route
 must share the keyboard's I/O APIC; firmware that places it elsewhere leaves the
 mouse unavailable. Reconsider these when native packets show drift that a short
 inter-byte timeout would catch, or a target routes IRQ 12 to another I/O APIC.
+
+Only that PS/2 stream is supported. On the ThinkPad the touchpad stays in its
+firmware relative mode, with no scrolling or multi-finger input, and TrackPoint
+motion arrives mixed into the same stream. USB HID mice need configured
+interrupt endpoints, which xHCI does not set up yet, plus a HID boot-protocol
+driver; they fit best after USB storage's endpoint work. Pointer sessions are
+relative only: there is no on-screen cursor or absolute positioning. Doom has no
+mouse support yet, although pointer sessions would allow it. Revisit Synaptics
+absolute mode when gestures or scrolling are wanted, and USB mice after bulk
+endpoints exist.

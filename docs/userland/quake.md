@@ -85,12 +85,14 @@ seconds and frames per second to the console and the shell's terminal.
 | Configuration | Samples (fps) | Median |
 | --- | --- | --- |
 | QEMU 10.2.2/KVM, 4 CPUs, nested VM, development host, 2026-10-04 | 1617.0, 1653.0, 1622.7, 1351.3, 1588.1, 1592.1, 1598.2 | 1598.2 |
+| Native ThinkPad T14 Gen 1 AMD, PXE, owner, 2026-10-04 | 634.2 (969 frames, 1.5 s) | — |
 
 That run booted the ISO as a read-only virtio disk, because this host's stock
 QEMU crashed reading it through AHCI. A review run through the CD-ROM path with
 the AHCI-fixed QEMU (see [QEMU troubleshooting](../development/qemu.md#ahci-cd-rom-crash-before-kernel-entry)) measured
-1660.5 fps. Native ThinkPad results belong here once the
-owner records them.
+1660.5 fps. Natively the owner played with both the touchpad and the TrackPoint;
+that sample is a single run. The VM figures come from a faster host and are not a
+prediction of native speed.
 
 ## Boundaries
 
