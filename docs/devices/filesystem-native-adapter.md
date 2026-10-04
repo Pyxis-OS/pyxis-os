@@ -164,7 +164,10 @@ dd if=/tmp/native-pool.raw of=/tmp/native-disk.raw bs=512 seek=2049 \
 Configure that GUID through `MOUNT_DISK` and attach the disk with `VIRTIO_BLK_IMAGE`.
 Use `VIRTIO_BLK_READONLY=1` only for read-only mounting. Never modify the disk while
 attached. Pool size/journal selection is explicit; the 256 GB target uses at least
-128 MiB of journal. The codec's minimum journal does not prove writer admission.
+128 MiB of journal. The codec's minimum journal does not prove writer admission. Writable admission
+requires `MOUNT_NPFS_MIN_JOURNAL_IMAGES` (18) from the mount ABI, covering the
+largest namespace transaction. The kernel writer and raw installer compatibility
+inspection share this requirement.
 
 ## Task 3 validation
 
