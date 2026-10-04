@@ -3,8 +3,13 @@
 The matched feature comparison uses Pyxis `68729a3`, userland `2b23085`, ports `2c1448a`,
 and the existing effective Kconfig. Base `1320d89` adds documentation only to that baseline.
 After: kernel `3f6c6e2`, userspace `fbc52d0` (integrated in `88a123f`), before
-integrating concurrent vi/installer/libc main updates. Those updates touch no
-network source; the combined tree receives a separate ordinary build/boot check.
+integrating concurrent vi/libc main updates. The final dependency was rebased on
+the exact userland revision selected by parent main, excluding unrelated installer
+work. Network source is identical between measured userland `fbc52d0` and the
+submitted `27d395c`. The combined tree at `4f34453` (userland `27d395c`, ports
+`55b6f8e`) passed a separate full image build and stock QEMU boot: gateway ping
+returned 3/3 replies, DNS resolved `duckduckgo.com`, and HTTPS `example.com`
+returned its page. Those checks are separate from the matched measurements.
 The comparison uses installed QEMU, host KVM, four CPUs, 2 GiB, modern VirtIO
 net/RNG, stock user networking and fresh matching raw OVMF variables. Traffic
 runs have no debugger, packet capture or simultaneous build.
