@@ -226,6 +226,11 @@ Accepted 2026-10-03.
       byte with their sources, the pool is reopened read-only through the normal
       mount path, and every volume is checked for its marker. Only then does it
       report "installed".
+6. **The installed disk's boot menu** (accepted 2026-10-04). The installer fills
+   both placeholders in `share/installer/limine.conf.template` with timeout `0`
+   and the normal command line, and leaves out the "Install Pyxis" entry. An
+   installed system boots straight into Pyxis; install media are the only way
+   into install mode.
 
 ### Kernel authority choices
 
