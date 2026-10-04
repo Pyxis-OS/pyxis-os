@@ -964,7 +964,8 @@ need and explicit synchronization, shared-mapping and dirty-data ownership.
 The worker admits 32 jobs with a cooperative 30-second deadline. Adapter storage
 has a 1 MiB/1,024-wrapper limit; pool metadata, the free-inode list and caches are
 separate. Each pool can retain 4 MiB of cached file payload plus entry metadata,
-and a writable pool reserves up to 520 KiB for 128 journal images and encoding
+a separate metadata read cache can retain 512 KiB plus physical-home keys, and
+a writable pool reserves up to 520 KiB for 128 journal images and encoding
 buffers. These are implementation bounds, not format limits or aggregate memory
 admission. The retained allocation bitmap needs one bit per pool block, rounded
 to 4 KiB: 32 KiB for a 1 GiB pool, about 8 MiB for 256 GiB. Mount reads and
@@ -983,7 +984,12 @@ backing remains mapped under the existing heap policy. Revisit reclaim granulari
 and admission only with measured pressure workloads and BSP ownership intact.
 
 All native reads and writes traverse the BSP worker, including cache hits.
-Metadata lookup remains linear and is not generally cached. The
+Directory lookup remains linear; directory, inode-file and indirect pages now
+have a best-effort [128-page clean cache](devices/npfs-metadata-cache.md).
+Its physical-home lookup is linear too, and pressure can discard every page.
+[Matched measurements](development/experiments/npfs-metadata-cache/README.md)
+show lower warm-open time without a payload/sync improvement; revisit indexing
+or cache size with a representative larger working set. The
 data, journal payload and checkpoint paths still wait for single-block transfers.
 Revisit contiguous transfer batching with a concrete latency budget and measured
 consumer workload. The

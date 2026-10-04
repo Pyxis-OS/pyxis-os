@@ -84,6 +84,13 @@ make those blocks reusable before durable EMPTY. A successful checkpoint or
 healthy transaction discard clears that guard. Pressure
 cannot evict the bitmap, and read-only mounts retain it for later writable upgrade.
 
+The worker also keeps a [bounded metadata read cache](npfs-metadata-cache.md)
+for directory, inode-file and indirect pages. Up to 512 KiB/pool is allocated
+lazily and best effort; pressure discards these clean pages. Journal overlays,
+checkpoint invalidation and allocation invalidation preserve coherence. The
+[matched warm-open measurements](../development/experiments/npfs-metadata-cache/README.md)
+record its observed effect and remaining qualification gaps.
+
 The worker maintains dirty data and one pool-wide metadata redo transaction.
 File/directory synchronization commits the whole current pool transaction after
 ordered data; mount synchronization covers pools on its configured disk. Durable
