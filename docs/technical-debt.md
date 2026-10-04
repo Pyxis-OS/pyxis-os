@@ -983,7 +983,8 @@ backing remains mapped under the existing heap policy. Revisit reclaim granulari
 and admission only with measured pressure workloads and BSP ownership intact.
 
 All native reads and writes traverse the BSP worker, including cache hits.
-Metadata lookup remains linear and is not generally cached. Contiguous file data and journal payload now use bounded runs; checkpoint groups
+Metadata lookup remains linear and is not generally cached. Contiguous file data
+and journal payload now use bounded runs; checkpoint groups
 adjacent homes already adjacent in scratch. An optional 128 KiB/pool gathering
 buffer is best effort and pressure-reclaimable. Device limits can split those
 runs; fragmented writes still wait on separate requests. The
