@@ -10,6 +10,10 @@ QUAKE_INPUTS := $(wildcard ports/quake/*.lua ports/quake/Makefile ports/quake/*.
                           ports/quake/*.h ports/quake/patches/*.patch) ports/ports.lua ports/build.lua
 QUAKE_IMAGE := build/ports/quake/stage/bin/quake.pxe
 QUAKE_LICENSE := build/ports/quake/stage/share/licenses/quake/LICENSE
+BUSYBOX_INPUTS := $(wildcard ports/busybox/*.lua ports/busybox/Makefile ports/busybox/*.c \
+                            ports/busybox/*.h ports/busybox/patches/*.patch) ports/ports.lua ports/build.lua
+BUSYBOX_IMAGE := build/ports/busybox/stage/bin/vi.pxe
+BUSYBOX_LICENSE := build/ports/busybox/stage/share/licenses/busybox/LICENSE
 
 TCC_INPUTS := $(wildcard ports/*.lua ports/tcc/*.lua ports/tcc/Makefile ports/tcc/patches/*.patch)
 SDK_INPUTS := $(shell find build/sdk -type f)
@@ -79,7 +83,7 @@ MBEDTLS_OUTPUTS := $(addprefix build/ports/mbedtls/stage/,dev/lib/libmbedtls.a \
 
 .PHONY: all
 all: $(MBEDTLS_OUTPUTS) $(PICOHTTPPARSER_OUTPUTS) $(DOOM_IMAGE) $(DOOM_LICENSE) $(QUAKE_IMAGE) $(QUAKE_LICENSE) \
-     $(KILO_IMAGE) $(KILO_LICENSE) \
+     $(BUSYBOX_IMAGE) $(BUSYBOX_LICENSE) $(KILO_IMAGE) $(KILO_LICENSE) \
      $(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) $(TCC_OUTPUTS) $(TZDATA_OUTPUTS) $(SBASE_OUTPUTS) \
      $(CA_CERTIFICATES_OUTPUTS) $(PCIIDS_OUTPUTS) $(USBIDS_OUTPUTS) $(FASTFETCH_OUTPUTS)
 
@@ -128,6 +132,12 @@ $(TZDATA_OUTPUTS) &: $(TZDATA_INPUTS) scripts/ports.mk
 $(CA_CERTIFICATES_OUTPUTS) &: $(CA_CERTIFICATES_INPUTS) scripts/ports.mk
 	rm -rf build/ports/ca-certificates
 	$(LUA) ports/build.lua ca-certificates --sdk $(abspath build/sdk) --work $(abspath build/ports/ca-certificates)
+
+$(BUSYBOX_IMAGE) $(BUSYBOX_LICENSE) &: $(BUSYBOX_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+	@command -v $(LUA) >/dev/null 2>&1 || { \
+	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
+	rm -rf build/ports/busybox
+	$(LUA) ports/build.lua busybox --sdk $(abspath build/sdk) --work $(abspath build/ports/busybox)
 
 # The pinned PCI ID text is independent of target SDK contents.
 $(PCIIDS_OUTPUTS) &: $(PCIIDS_INPUTS) scripts/ports.mk
