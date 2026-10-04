@@ -22,8 +22,11 @@ preparation remains visible but cannot be selected automatically.
 
 An optional `prefer = {"MAC", ...}` array ranks currently eligible candidates
 by the first matching entry. Missing or unlinked entries do not delay others;
-duplicates are harmless. After preference rank, RTL8111 precedes VirtIO, then
-ascending opaque boot-local controller ID breaks ties. IDs do not depend on MAC
+duplicates are harmless. After preference rank, ascending boot-local controller
+ID breaks ties, following PCI inventory order. IDs are the retained PCI
+inventory position plus one; that inventory currently stores records in reverse
+scan order, so this is not ascending bus/device/function order.
+There is no driver-family preference. IDs do not depend on MAC
 uniqueness, so two controllers with identical MACs can still be distinguished.
 Use the private [image profile override](../development/configuration.md#image-network-profile)
 for machine-specific addresses; no real MAC belongs in the packaged profile.

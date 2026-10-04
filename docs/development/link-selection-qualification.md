@@ -4,7 +4,8 @@ The matched feature comparison uses Pyxis `68729a3`, userland `2b23085`, ports `
 and the existing effective Kconfig. Base `1320d89` adds documentation only to that baseline.
 After: kernel `3f6c6e2`, userspace `fbc52d0` (integrated in `88a123f`), before
 integrating concurrent vi/libc, USB and installer main updates. Network source is
-identical between measured userland `fbc52d0` and submitted `084bb7e`.
+identical between measured userland `fbc52d0` and integrated `084bb7e`; the
+subsequent tie-policy review is qualified separately below.
 The combined tree at `7b60c95` (userland `084bb7e`, ports `55b6f8e`) passed a
 separate full image build and stock QEMU boot: gateway ping returned 3/3 replies,
 DNS resolved `duckduckgo.com`, and HTTPS `example.com` returned its page.
@@ -109,7 +110,7 @@ with zero IPv4 after the foreground budget. Restoring carrier applied the author
 3/3 gateway replies. Static configuration stayed applied after the waiting setup
 process completed.
 
-Final code booted the built-in RTL8168h/XID `541` through existing VFIO host
+Before the tie-policy review, the built-in RTL8168h/XID `541` booted through existing VFIO host
 function `0000:05:00.0`, with `VIRTIO_NET=0`, four CPUs, 2 GiB, KVM and VirtIO
 RNG. Host driver binding and unlimited memlock were already configured; the
 launcher changed neither. Before binding, READ returned RTL family and flags
@@ -127,3 +128,18 @@ wait for an unlinked RTL port ahead of already-linked VirtIO.
 
 Native cold/PXE qualification has not been run for this change. Existing RTL qualification with the dock attached
 does not establish support for dock-facing DASH XID `502`.
+
+## Tie-policy review
+
+Userland `b4d0bca` removes the driver-family rank: the profile preference list
+comes first, then ascending controller ID (retained PCI inventory order). An
+ordinary full image build passed with parent `01fa067` and this userland revision.
+A fresh four-CPU, 2 GiB KVM boot used the stock link/DHCP profile with no `prefer`
+and two modern VirtIO NICs at `00:03.0` and `00:04.0`, each with a separate user
+backend. At the natural BIND breakpoint, both devices reported STATUS `0x1`
+(link up) and remained inactive. Selection chose ID 4 at `00:04.0` over ID 5 at
+`00:03.0`; BIND returned CALL_OK and retained ID 4. This also confirms that the
+current retained inventory is reverse scan order, not ascending PCI address.
+DHCP and the remote terminal worked through the selected NIC; gateway ping
+returned 3/3 replies and DNS resolved `duckduckgo.com` using `10.0.2.3`.
+The matched traffic samples above precede this policy-only follow-up.

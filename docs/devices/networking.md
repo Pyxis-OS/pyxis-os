@@ -480,8 +480,9 @@ Every `net0` table requires exactly one of `select = "link"`,
 `driver = "virtio"` or `mac`, a locally supplied nonzero unicast address written
 as six colon-separated hex pairs. Link selection optionally accepts an ordered
 `prefer = {"MAC", ...}` list; it ranks currently linked candidates by that list,
-then RTL8111 before VirtIO, then stable boot-local ID. It does not wait for an
-unlinked preferred port. See [selection and waiting](net0-selection.md).
+then ascending boot-local controller ID (PCI inventory order). It does not wait
+for an unlinked preferred port. See [selection and waiting](net0-selection.md)
+for the inventory order and binding rules.
 Driver selection must be unique; use a MAC selector when multiple VirtIO
 controllers exist. No real MAC bytes belong in committed profiles or captures.
 The supported RTL8111 XID `541` also binds by MAC. Identified unsupported RTL
