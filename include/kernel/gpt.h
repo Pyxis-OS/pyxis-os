@@ -40,7 +40,9 @@ struct gpt_snapshot {
 };
 
 /* BSP/IF=0. Prepare bounded scratch before AP startup; start once after the
- * block worker is created and task_init() has completed. No disk writes. */
+ * block workers are created and task_init() has completed. VirtIO scans start
+ * immediately; USB scans follow terminal boot discovery, including partial
+ * inventories. No disk writes. */
 void gpt_prepare(void);
 void gpt_start(void);
 

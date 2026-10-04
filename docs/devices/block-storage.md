@@ -1,18 +1,23 @@
 # Internal block storage
 
-Caelum inventories modern virtio-blk disks through the kernel-only
+Caelum inventories VirtIO and USB BOT/SCSI disks through the kernel-only
 [block interface](../../include/kernel/block.h). It supports bounded asynchronous
-reads, writes and flushes. [GPT discovery](gpt.md) publishes a partition-map
+reads; VirtIO also supports writes and flushes. [GPT discovery](gpt.md) publishes a partition-map
 snapshot per device through a separate kernel interface.
 [Native filesystem mounts](filesystem-native-adapter.md)
 expose directory/file capabilities selected by trusted init. A separate
 [installer disk service](installer-authority.md) delegates bounded raw access
 only to the trusted install path.
 
-The [Phase B.1 USB contract](../wip/usb-installation.md#phase-b1-read-only-contract)
-defines the planned explicit backend selection and asynchronous preparation
-barrier needed for USB integration. The behavior below describes the implemented
-VirtIO backend.
+The dispatcher in `kernel/storage/block.c` owns boot IDs and terminal setup
+facts; each backend retains its own queues, buffers and workers. The
+[USB backend](usb-storage.md) supports per-device read-only requests across
+inspected controllers and hubs. Its candidates append during boot discovery;
+`block_discovery_finished()` seals that inventory independently of whether
+discovery was exhaustive. The qualified native filesystem/installer view remains
+VirtIO-only until the separate USB mount integration. The `block_native_*`
+queries expose that authority domain without letting partial USB discovery
+disable existing VirtIO grants.
 
 The block-storage foundation milestone is complete. Its implemented contracts
 live here, in [shared VirtIO queues](virtio-queues.md) for filesystem, entropy and
@@ -38,7 +43,7 @@ Writable attachment permits authorized clients to modify the supplied image.
 Installer raw claims exclude retained mounted pools and refresh GPT on release.
 External host mutation while attached remains unsupported.
 
-The guest retains every recognized candidate in a complete PCI inventory and
+The guest retains every recognized VirtIO candidate in the PCI inventory and
 prepares modern devices independently. A known transitional virtio-blk device
 remains listed as unsupported; it does not disable a supported neighbour.
 Writable devices must offer flush support. Read-only devices support reads;
@@ -46,14 +51,16 @@ writes and flushes return `BLOCK_READ_ONLY`.
 
 `block_device_count()` and `block_device_at()` enumerate stable nonzero boot IDs;
 zero means no device. `block_inventory_complete()` distinguishes a complete empty
-inventory from failed discovery. Incomplete discovery enables no device.
+inventory from pending or failed discovery. Incomplete discovery does not
+disable individually prepared devices. Before discovery finishes, zero known
+USB candidates does not establish absence.
 `block_preparation_result(id)` retains each candidate's immutable READY,
 UNSUPPORTED or SETUP_FAILED reason; invalid IDs return INVALID.
 Generic allocation, mapping or transport setup failures use SETUP_FAILED rather
 than claiming unsupported hardware. Only a complete inventory with no recognized
 candidate establishes absence; a later `block_get_info()` failure establishes
 neither absence nor the preparation reason. Configured native mount authority
-is omitted only for a complete empty inventory; other failures remain visible and
+is omitted only for a complete empty qualified authority domain; other failures remain visible and
 cannot be suppressed by an optional mount. A READY result describes preparation,
 not a promise that the transport remains operational.
 

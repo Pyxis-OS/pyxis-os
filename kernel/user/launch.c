@@ -205,7 +205,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
     mount = NULL;
   }
   handle_t native_mount_handle = HANDLE_INVALID;
-  if (mount_config->enabled && (block_device_count() || !block_inventory_complete())) {
+  if (mount_config->enabled && (block_native_device_count() || !block_native_inventory_complete())) {
     mount = mount_create_native(mount_config);
     if (!mount || capability_install(&process->capabilities, mount,
           MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE,

@@ -112,7 +112,7 @@ static enum call_status select_partition(struct npfs_store_context *context,
     struct block_info *device, bool *degraded)
 {
   uint64_t inventory_flags = cpu_save_interrupts();
-  bool complete = block_inventory_complete();
+  bool complete = block_native_inventory_complete();
   cpu_restore_interrupts(inventory_flags);
   if (!complete) {
     return CALL_UNAVAILABLE;
@@ -128,8 +128,8 @@ static enum call_status select_partition(struct npfs_store_context *context,
     bool pending = false;
     selected_id = BLOCK_DEVICE_ID_NONE;
     uint64_t flags = cpu_save_interrupts();
-    for (size_t i = 0; i < block_device_count(); ++i) {
-      block_device_id id = block_device_at(i);
+    for (size_t i = 0; i < block_native_device_count(); ++i) {
+      block_device_id id = block_native_device_at(i);
       if (job->device && job->device != id) {
         continue;
       }
