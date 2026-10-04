@@ -989,10 +989,15 @@ have a best-effort [128-page clean cache](devices/npfs-metadata-cache.md).
 Its physical-home lookup is linear too, and pressure can discard every page.
 [Matched measurements](development/experiments/npfs-metadata-cache/README.md)
 show lower warm-open time without a payload/sync improvement; revisit indexing
-or cache size with a representative larger working set. The
-data, journal payload and checkpoint paths still wait for single-block transfers.
-Revisit contiguous transfer batching with a concrete latency budget and measured
-consumer workload. The
+or cache size with a representative larger working set.
+
+Contiguous file data and journal payload now use bounded runs; checkpoint groups
+adjacent homes already adjacent in scratch. An optional 128 KiB/pool gathering
+buffer is best effort and pressure-reclaimable. Device limits can split those
+runs; fragmented writes still wait on separate requests. The
+[matched batching record](development/experiments/npfs-io-runs/README.md) measures
+sync and request-count changes on VirtIO; revisit broader request scheduling or
+reordering with a measured consumer workload. The
 [task-3 measurements](development/experiments/native-filesystem-task3/README.md)
 distinguish this scheduling/I/O cost from RAM file calls. Revisit only when an
 actual consumer needs lower latency. Executable capture permits one image of up

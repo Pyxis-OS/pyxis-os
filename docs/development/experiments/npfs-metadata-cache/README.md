@@ -92,7 +92,7 @@ exit
 
 All succeeded, including lookup of the renamed contents and reuse after removal.
 The baseline's extra small creates happened after the matched read command.
-Complete decoded records are [baseline.txt](baseline.txt) and
+Complete decoded records are [the shared baseline record](../npfs-io-runs/baseline.txt) and
 [metadata.txt](metadata.txt).
 
 ## Results and limits
