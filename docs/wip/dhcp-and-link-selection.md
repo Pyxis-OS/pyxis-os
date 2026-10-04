@@ -148,7 +148,7 @@ Accepted 2026-10-04:
 
 ## Task 2 implementation and qualification
 
-In progress: kernel DNS code `2175849`, userland `6912f11`
+In progress: kernel DNS code `2175849`, userland `67548c4`
 ([dependency #114](https://git.internal/PyxisOS/pyxis-userland/pulls/114)), branch
 `net/dhcp-client`. Task 2 remains unchecked pending native qualification.
 The default profile requests a VirtIO lease; private native profiles retain their
@@ -164,24 +164,62 @@ HTTPS `example.com` fetched successfully. Non-owner provider scripts now wait
 for the initial chosen DNS before launching; static REPLACE publishes IPv4 and
 DNS together without prepublishing DNS before validation.
 
+Matched unprofiled traffic used baseline main `8842a97`/userland `68c5f4b`
+(static `.15/24`, gateway `.2`) and task-2 kernel code `2175849`/userland
+`6912f11` (DHCP supplies the same address/route). Both boots used four CPUs,
+2 GiB RAM, host KVM and VirtIO user networking, with no debugger or packet filter
+attached. Commands:
+
+```sh
+QEMU_DISPLAY=none MEMORY=2G CPUS=4 ACCEL=kvm VIRTIO_NET=1 TCP_FORWARD=2323:2323 \
+  OVMF_CODE=/usr/share/edk2/ovmf/OVMF_CODE.fd \
+  OVMF_VARS=/usr/share/edk2/ovmf/OVMF_VARS.fd scripts/run-qemu.sh run
+# Host loopback sinks:
+socat -T10 UDP4-RECVFROM:18080,bind=127.0.0.1,reuseaddr,fork EXEC:/bin/cat
+socat -u TCP4-LISTEN:5001,bind=127.0.0.1,reuseaddr,fork OPEN:<capture>,creat,trunc
+# Guest remote shell:
+ping -c 5 10.0.2.2
+ping -c 3 127.0.0.1
+udp-send 10.0.2.15 10.0.2.2 18080 "DHCP acquisition baseline"
+ttcp -t -n8192 -l8192 10.0.2.2  # three separate runs
+```
+
+Both boots returned 5/5 gateway and 3/3 loopback replies and the same 25-byte UDP
+payload. TCP before: 29.544828, 29.816208, 29.969068 s; after: 30.231474,
+30.114651, 29.982472 s. Means: 29.776701 versus 30.109532 s, **+1.12%**;
+baseline spread 0.424240 s, after spread 0.249002 s. The mean increase is smaller
+than the baseline run spread; these samples do not establish its cause. No
+steady-state packet-path change is involved in the DNS store/launch work. The
+final TCP sink contained 67,108,864 bytes; no content hash was checked. Final
+remote dig and HTTPS also passed at userland `6912f11`.
+
 The RTL passthrough attempt uses the same host/configuration as task 1 (dock
 connected, private built-in-port selector, `VFIO_PCI=0000:05:00.0`, VirtIO net
-disabled). Initial PHY negotiation exposed an early send failure; the client now
-keeps transient local send failures within its bounded retry schedule. The repeat
-transmitted one DISCOVER after link-up and completed its TX descriptor. GDB dump
-inspection confirmed valid IPv4/UDP checksums, source `0.0.0.0:68`, destination
-`255.255.255.255:67`, broadcast flag and MAC matching the selected private profile.
-No OFFER reached IPv4 during acquisition. No pre-assignment unicast receive
-exception has been added. The owner confirms DHCP is active with gateway `.1`
-and reservations `.50` for the built-in port and `.52` for the other port.
-Router-side capture and owner cold/PXE qualification remain necessary.
+disabled). Initial PHY negotiation exposed an early local send failure. Failed
+local sends now retain the current retry stage; only successful transmission
+advances the backoff. The first successful REQUEST supplies the lease origin.
+Earlier attempts transmitted a checksum-valid DISCOVER but saw no OFFER. The
+repeat at `6912f11` acquired `.50/24` in a debugger-assisted run; an unprofiled
+repeat at `67548c4` also acquired `.50`, with remote 5/5 gateway replies, dig via
+chosen DNS `1.1.1.1`, and HTTPS `example.com` all passing. The chosen DNS was not
+separately distinguished between lease option 6 and fallback in the native run.
+
+No pre-assignment unicast receive exception has been added. Because the client
+clears IPv4 before acquisition and only the limited broadcast is accepted while
+unassigned, successful acquisition establishes that these replies used a
+compatible broadcast IP destination; it does not qualify other servers' behavior.
+The owner confirms DHCP is active with gateway `.1` and reservations `.50` for
+the built-in port and `.52` for the other port. Cold/PXE qualification remains
+necessary. The existing receiver limitation stays documented for servers ignoring
+the broadcast flag.
 
 Native handoff: `build/dhcp-task2-native.tar.gz`, matching kernel/initrd/ISO with
 the private DHCP selector and README instructions. SHA-256:
-`7adb16a22a4d7a48729d441370e5e9c239669ef5e2fbb4392c729d549e0adca1`.
-This archive is prepared for diagnosis/qualification, not marked native-qualified.
-It contains code `2175849` and userland `6912f11`; later documentation/gitlink
-integration does not change their executable sources.
+`0bab25ce4467caff8263b84f440897c5abc27c8a94e5bed057e2c684d1380e23`.
+This archive is prepared for owner qualification, not marked native-qualified.
+It contains code `2175849` and userland `67548c4`; later documentation/gitlink
+integration does not change their executable sources. All agent QEMU, GDB,
+remote-client and host listener processes are cleaned up before handoff.
 
 ## Task 1 qualification and handoff
 
