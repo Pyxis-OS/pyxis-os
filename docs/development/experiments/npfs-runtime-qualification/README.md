@@ -52,8 +52,10 @@ session app://session.pxe --configure-network --start-remote-services
 
 `INIT_PRIMARY=app://init-idle INIT_CPUS=3=app://init` places the workload/server
 on CPU 3 and leaves CPUs 1 and 2 idle. `MOUNT_DISK` is
-`12345678-1234-4567-89ab-0123456789ab`. QEMU 10.2.2 with the existing AHCI fix
-uses q35, nested KVM, `-cpu max`, four CPUs, 256 MiB RAM, modern writable VirtIO
+`12345678-1234-4567-89ab-0123456789ab`. QEMU 10.2.2 with upstream fix
+`d9f78431d8ebdc2d03ad74461138c1c9eb076aa5` (cancel in-flight buffered reads on
+AHCI command-engine restart) uses q35, nested KVM, `-cpu max`, four CPUs,
+256 MiB RAM, modern writable VirtIO
 block with `cache=writeback`, VirtIO net and RNG, and OVMF code/variables from
 `/usr/share/edk2/ovmf`. Fresh variables are used per boot. Native xHCI is disabled
 and the flush interval remains 30 seconds. The live ISO, variables, standalone
@@ -76,7 +78,13 @@ cp build/pyxis.iso /dev/shm/pyxis-npfs-next/live.iso
 cp /usr/share/edk2/ovmf/OVMF_VARS.fd /dev/shm/pyxis-npfs-next/vars-b1.fd
 ```
 
-The manual B1 launch was:
+The binary below is a temporary local build of `v10.2.2` with that upstream patch;
+replace its path with your equivalent QEMU build. The
+[AHCI boot-crash reference](../../qemu.md#ahci-cd-rom-crash-before-kernel-entry)
+links the patch and explains the intermittent stock `ahci_pio_transfer` crash
+before kernel entry. A successful stock KVM retry does not establish a fix.
+TCG can be used for comparison, but was not used for these runs and does not
+correct the AHCI lifetime bug. The manual B1 launch was:
 
 ```sh
 /tmp/pyxis-qemu-ahci-fix/build/qemu-system-x86_64 \

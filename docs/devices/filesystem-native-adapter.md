@@ -111,9 +111,12 @@ to recover; the call still returns READ_ONLY. Unknown required features reject
 opening; unknown read-only-compatible features forbid replay and other writes.
 Uncertain write or flush failure stops mutation and retains dirty state/error.
 Structural fsck is separate from local opening and traversed-record validation.
-Sync acknowledges recoverable retained writeback errors when reporting them;
-later success requires all dirty data to be durable. Ongoing failures still fail
-each sync attempt. Terminal uncertainty is never acknowledged away for the boot.
+Each sync retries dirty writeback, so a still-full pool reports NO_SPACE on every
+failed attempt. Sync acknowledges recoverable retained errors when reporting
+them. An unacknowledged error from earlier writeback, such as a background flush,
+can still be reported once after writeback succeeds; a later sync can then
+succeed once all dirty data is durable. Terminal uncertainty is never acknowledged
+away for the boot.
 
 Checked partition-relative I/O supports 512-byte and 4 KiB device blocks, including
 unaligned partition starts on 512-byte media. Transfers obey device limits and
