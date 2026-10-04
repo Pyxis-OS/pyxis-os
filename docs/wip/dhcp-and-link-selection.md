@@ -1,9 +1,11 @@
 # DHCP and link-based net0 selection
 
-Status: **proposal, 2026-10-04.** The owner's direction is accepted: after the
-RTL8111 milestone, add DHCP, then let `net0` bind whichever port has link and get
-its address over it. Everything else below is a proposal. The three
-[decisions](#decisions-for-the-owner) have defaults, and any of them can be deferred.
+Status: **accepted, 2026-10-04.** After the RTL8111 milestone, add DHCP, then
+let `net0` bind whichever port has link and get its address over it. The owner
+accepted the defaults for all three [decisions](#owner-decisions) and the DHCP
+tasks below. The [link-selection milestone](#next-milestone-bind-whichever-port-has-link)
+is a sketch whose decisions are settled when it starts. Any decision can be
+revised later by the owner.
 
 ## Goal
 
@@ -59,22 +61,24 @@ needs the same broadcast reception, so it can follow this milestone cheaply.
   ```
   The existing selectors (`driver`, `mac`) and their bind-once rule are unchanged.
 
-## Decisions for the owner
+## Owner decisions
+
+Accepted 2026-10-04, with the defaults below.
 
 1. **Where the client runs.**
-   - *Default:* userspace, in the session's network setup, as above. The kernel
+   - Userspace, in the session's network setup, as above. The kernel
      only gains the right-gated broadcast endpoint.
    - The alternative is a kernel DHCP client. lwIP has one, but in Pyxis lwIP only
      carries TCP, and lease policy is userspace work.
 2. **Lease lifecycle.**
-   - *Default:* follow RFC 2131 timers. Renew by unicast at T1 and rebind by
+   - Follow RFC 2131 timers. Renew by unicast at T1 and rebind by
      broadcast at T2. At expiry, clear the IPv4 settings (the binding stays) and
      restart discovery.
    - No lease is saved across reboots. Pyxis may have no writable storage, and
      discovery takes a second.
    - No ARP conflict probe in v1; record it as a limitation.
 3. **DNS server precedence.**
-   - *Default:* an explicit `dns.server` in the profile wins. Otherwise use the
+   - An explicit `dns.server` in the profile wins. Otherwise use the
      first server from the lease (option 6), and fall back to `1.1.1.1`.
    - Programs see DNS through `DNS_SERVER`, which is set when the session launches
      them. So the session waits a bounded time (about 10 s) for the first lease
