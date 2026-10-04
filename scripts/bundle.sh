@@ -72,6 +72,7 @@ case "$action" in
           ;;
         sdk)
           source_info userland userspace
+          source_info fs fs
           printf 'abi_sha256=%s\n' "$(interface_id build/sdk/sysroot/usr/include)"
           ;;
         userspace|ports)
