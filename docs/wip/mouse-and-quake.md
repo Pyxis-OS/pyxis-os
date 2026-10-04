@@ -65,6 +65,8 @@ Accepted 2026-10-04, with the defaults below.
    - Events are **relative**: raw dx, dy and wheel counts plus button state, with
      no acceleration (applications scale) and no on-screen cursor or absolute
      coordinates in v1.
+   - **Signs follow the display** (owner, 2026-10-04): +dx is right, +dy is
+     down and +wheel scrolls toward the user.
    - When the queue is full, motion is merged into the last motion event instead
      of dropping events.
 3. **Packaging and scope of the port.**
@@ -77,23 +79,35 @@ Accepted 2026-10-04, with the defaults below.
 
 ## Tasks
 
-- [ ] **1. PS/2 mouse driver** (kernel).
+- [x] **1. PS/2 mouse driver** (kernel). Implemented; see [mouse input](../devices/mouse.md).
   - Enable the auxiliary port and route aux bytes separately from keyboard bytes
     by the controller status bit.
-  - Bounded setup: reset, defaults, the wheel probe, then enable reporting.
+  - Bounded setup: reset, defaults, the wheel probe, then enable reporting. The
+    owner accepted up to 1 s for the reset self-test and 100 ms for other
+    replies, run synchronously during boot.
   - Packet synchronisation (byte 0 bit 3) and overflow handling, with discards
     counted.
   - **A mouse failure leaves the mouse unavailable and must never affect the
     keyboard or boot.** That is the hard rule, given the ThinkPad's keyboard
-    history.
-  - **Finish when:** motion, buttons and the wheel are seen in QEMU (kernel log
-    and debugger), and the owner sees TrackPoint events natively.
-- [ ] **2. Pointer sessions** (ABI, kernel, libpyxis).
+    history. If keyboard setup fails, the mouse is not attempted.
+  - **Finished:** motion, buttons and the wheel were seen in QEMU through the
+    debugger, and a mouse setup failure forced from GDB left the keyboard
+    working. The kernel only drains events until task 2, so the owner's
+    TrackPoint check moved to the task 2 test program. Natively, this task's
+    image needs only the boot log's mouse lines and an unchanged keyboard.
+- [ ] **2. Pointer sessions** (ABI, kernel, libpyxis, plus a userspace test program).
   - The session contract from decision 2, with the same focus and space-switch
     rules as keyboard sessions.
   - Document it beside the keyboard contract.
+  - A small mouse test program (owner, 2026-10-04), split 30/70:
+    - left: the buttons, changing colour while pressed; the scroll direction
+      while scrolling; and the absolute position on screen, accumulated from
+      relative motion;
+    - right: a black-on-white drawing pad that sets a pixel at that position
+      on each event while the left button is held, with no other functions.
   - **Finish when:** a consumer receives motion, wheel and buttons only while
-    focused, and releases state on focus loss or reset.
+    focused, and releases state on focus loss or reset; and the owner sees
+    TrackPoint and touchpad events natively in the test program.
 - [ ] **3. Quake port** (ports repository, plus image packaging in the parent).
   - Pinned quakegeneric with a Pyxis adapter:
     - 8-bit palette conversion and integer scaling, as in Doom;
