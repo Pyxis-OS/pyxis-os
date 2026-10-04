@@ -17,8 +17,10 @@ decodes them. If bytes are lost, the next read reports `KEY_STATE_RESET` with
 consumer too. A false return leaves the event unchanged.
 
 Initialization uses ACPI to find the keyboard's I/O APIC route and directs it to
-the BSP. The controller uses untranslated scan set 2, with the auxiliary port
-disabled. `keyboard_available()` is false if firmware reports no usable route
+the BSP. The controller uses untranslated scan set 2. The auxiliary port carries
+the [mouse](mouse.md); controller bytes are routed by the status register's
+auxiliary bit, and a mouse failure never affects keyboard setup.
+`keyboard_available()` is false if firmware reports no usable route
 or controller, or keyboard initialization fails. Serial input is separate.
 
 An ACKed `F0 02` selects scan set 2. Setup then queries the set while scanning

@@ -3,7 +3,7 @@
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/descriptors.h>
-#include <arch/keyboard.h>
+#include <arch/ps2.h>
 #include <kernel/log.h>
 #include <kernel/net/rtl8111.h>
 #include <kernel/panic.h>
@@ -120,8 +120,8 @@ void interrupt_handler(struct exception_frame *frame)
     finish_interrupt(frame);
     return;
   }
-  if (frame->vector == APIC_KEYBOARD_VECTOR) {
-    ps2_keyboard_interrupt();
+  if (frame->vector == APIC_KEYBOARD_VECTOR || frame->vector == APIC_MOUSE_VECTOR) {
+    ps2_interrupt();
     finish_interrupt(frame);
     return;
   }
