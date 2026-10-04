@@ -5,9 +5,10 @@ counts and button state through
 [`mouse_read_event()`](../../include/kernel/mouse.h). One BSP kernel task
 consumes them; the call is nonblocking and preserves interrupt state. This is
 QEMU's default mouse. On the ThinkPad, the Synaptics touchpad in its firmware
-relative mode reports as a standard PS/2 mouse, and TrackPoint motion is
-expected to arrive through the same stream. Synaptics absolute mode and USB HID
-mice are not supported.
+relative mode reports as a standard PS/2 mouse without a wheel (device ID 0).
+TrackPoint motion and buttons arrive through the same stream, and firmware
+tap-to-click and tap-and-drag work; there is no scrolling in this mode.
+Synaptics absolute mode and USB HID mice are not supported.
 
 Events carry raw device counts without acceleration. Signs follow the display:
 +dx is right, +dy is down and +wheel scrolls toward the user. The device's own
@@ -138,8 +139,8 @@ and right buttons, coloured while held; an up or down arrow for half a second
 after a wheel step away from or toward the user; and the position. The position
 starts at the screen centre, moves one pixel per device count and is clamped to
 the screen. The right 70% is a white drawing pad: each input event with the left
-button held sets one black pixel at the position. A red marker shows the
-position without drawing into the pad. Escape releases the sessions and returns
+button held sets one black pixel at the position, so fast strokes are dotted
+rather than lost. A red marker shows the position without drawing into the pad. Escape releases the sessions and returns
 to the shell.
 
 It polls both input sessions every 10 ms while focused and blocks on the
