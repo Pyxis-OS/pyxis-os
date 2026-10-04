@@ -1,167 +1,121 @@
-# Small vi port investigation
+# vi
 
-Status: investigation complete. BusyBox vi is the selected candidate, and the
-[decisions](#agreed-decisions) below were agreed on 2026-10-04. The port itself
-has not started. This compares small vi implementations as the first modal
-editor, ahead of [Neovim](neovim-libuv.md). Kilo stays the current editor.
+The image includes BusyBox vi at `app://vi.pxe`, with its GPL-2.0-only license
+at `app://share/licenses/busybox/LICENSE`. The shell resolves `vi` to it. It is
+the first modal editor, ahead of [Neovim](../wip/neovim-libuv.md); Kilo remains
+available. The [recipe notes](../../ports/busybox/README.md) record the source
+pin, both patches and the adapter.
 
-## Candidates and evidence
+```text
+vi hello.c
+vi -R host://notes.txt
+vi -c 'set ts=4' home://a.txt home://b.txt
+```
 
-| Candidate | Pinned revision | License |
-| --- | --- | --- |
-| [BusyBox][bb] `editors/vi.c` | `f96d33d28a1f70fda5f27d221d5012b1ac0b7dad` (2026-10-04) | GPL-2.0-only |
-| [toybox][tb] `toys/pending/vi.c` | `b7ec52ac35e075caffca5d330995d44e8dbfc8c3` (0.8.14) | 0BSD |
-| [neatvi][nv], as a standalone reference | `26e9cadbf3828807a35bbe71f19e323e97b27439` (2026-09-28) | ISC |
+Relative paths use the inherited working directory. vi draws on the named
+`input`/`output` console grants through libterm, as Kilo does. It holds
+[Ctrl+C passthrough](foreground-interruption.md) for the whole session, so the
+shell cannot terminate it and discard unsaved edits. It runs on the framebuffer
+console and through the [remote terminal](remote-terminal.md).
 
-How the evidence was gathered:
+## Supported editing
 
-- **Host builds (measured).** Each candidate was built natively on Fedora
-  x86-64 with glibc. BusyBox and toybox used `allnoconfig` with only vi
-  enabled. BusyBox was built in three vi feature sets. neatvi used its default
-  Makefile. `nm -u` on the vi object, and on the linked binary, lists the
-  imported libc and platform symbols.
-- **Pyxis compile probe (measured, BusyBox only).** BusyBox `vi.c` was
-  cross-compiled with the proposed feature set below, minus screen-size queries
-  (one more adapter helper). It used the SDK exported from Pyxis `68729a3`
-  (userspace `2b23085`). A scratch header stood in for
-  `libbb.h` and declared only the libbb helpers vi references. The probe was
-  never linked, packaged or booted.
-- **Source inspection** covers terminal escapes, file I/O and process use.
-  Recent maintenance is commits touching the vi source since 2022-01-01: 20 for
-  BusyBox (latest 2026-08-31) and 27 for toybox (latest 2026-03-04).
+The build enables:
 
-Host object sizes come from each project's own flags, so read them as
-approximate. BusyBox `vi.o` with every feature enabled has 21.7 KB of text.
-Toybox `vi.o` has 12.5 KB. neatvi's objects total 147 KB of text, and its
-stripped binary is 180 KB with LSP support.
+- counts, operators with motions, registers and marks;
+- dot repeat and undo with its queue;
+- literal search with `/`, `?`, `n` and `N`, and `:s` substitution;
+- `:set` options, multiple files with `:n`, `:e`, `:r` and `:w NAME`;
+- read-only viewing (`-R`) and startup commands from `-c` or `EXINIT`.
 
-## Relevant Pyxis surface
+Arrows, Home/End, Delete and Page Up/Down come from libterm's key decoder, and
+a standalone Escape is recognized after 100 ms. The screen size is re-read
+at each redraw.
 
-Inspected in userspace `2b23085`:
+## How the port maps onto Pyxis
 
-- **Terminal input.** libterm already provides raw, non-echoing byte input. It
-  offers `term_read_key` with a 100 ms escape-sequence gap (a standalone Escape
-  returns 27) and `term_read_key_timeout`. `term_size` reports dimensions.
-  [Passthrough](../userland/foreground-interruption.md) keeps Ctrl+C away from
-  an editor holding unsaved edits, as Kilo does.
-- **Terminal output.** It supports a [VT subset](../userland/terminal.md#tty-output-controls):
-  absolute and relative cursor movement, erase line/screen, cursor visibility,
-  and reverse/colour SGR. Other controls are ignored. That includes scroll
-  regions, insert/delete line and the alternate screen.
-- **libc files.** libc has `open`, `read`, `write` and `close` with
-  `O_RDONLY`, `O_WRONLY`, `O_CREAT` and `O_TRUNC`. It also has stdio with
-  `fseek`/`ftell`, atomic replacing `rename`, `mkdir`, `setjmp` and `getenv`.
-  Native files support `FILE_SIZE` and `FILE_RESIZE`.
-- **Absent.** termios, `poll`, signals, `stat`/`fstat`/`access`, `ftruncate`,
-  `mmap`, `<regex.h>`, wide-character functions, `system`/fork/exec and user IDs.
+Only `editors/vi.c` is built. A recipe-local `libbb.h`, feature header and
+adapter replace BusyBox's Kconfig and libbb. The adapter covers only the
+helpers vi references, so another BusyBox applet would extend it. The
+patch changes only the Unix-specific parts:
 
-## Findings
+| Upstream | Pyxis |
+| --- | --- |
+| termios raw/cooked mode, `VERASE` | libterm passthrough; console input is already raw. BS and DEL both erase. |
+| `poll` on stdin | A timed libterm key read that keeps the key for the next read |
+| stdout drawing, alternate screen | Buffered output to the named console, flushed before waiting for input. The screen is cleared on start and exit. |
+| `fstat` size and `S_ISREG` | Read to EOF. Opening a directory fails with its native error. |
+| `access(W_OK)` and mode bits | `[Readonly]` when the file cannot be opened for WRITE now |
+| `stat` before `:w NAME` | Refuse unless opening NAME reports ENOENT; `:w!` overrides |
+| `~/.exrc` owner/mode check | Not read; `EXINIT` still works |
 
-| | BusyBox vi | toybox vi | neatvi |
-| --- | --- | --- | --- |
-| Structure | One file; about 30 small libbb helpers | One file in `pending`, default off; toybox lib for terminal, lists and I/O | 20 files; own regex, LSP client, UTF-8 and bidi rendering |
-| Terminal output needed | CUP, EL, ED, reverse SGR; alternate screen (ignored) | Insert/delete line for scrolling, bold/dim SGR, alternate screen | Scroll regions, insert/delete line, CHA |
-| Search | Built-in literal search; regex optional | `regcomp`/`regexec` always required | Own regex |
-| File loading | `fstat` size, `S_ISREG`, `access(W_OK)` read-only warning | `mmap(MAP_SHARED)` of the file as piece-table storage; `stat` for mode | `read` |
-| Save | Write in place, then `ftruncate` | `.swp` file, then `rename` | Write with truncate |
-| Text model | Bytes; optional 8-bit display | UTF-8 with `wcwidth` | UTF-8 and bidi |
-| Processes | `:!cmd` via `system` (configurable off) | None | fork/exec/pipe for `!` filters and LSP; `AF_UNIX` socket |
-| Completeness | Counts, operators with motions, registers, marks, undo queue, dot repeat, `:s`, `:set`, multiple files, `:r`, read-only view | Core editing; source TODOs note vertical movement losing the cursor column | Broad vi/ex plus windows, syntax colouring, keymaps |
+Userland libc gained `ftruncate` over native `FILE_RESIZE`, plus `memrchr`,
+`strchrnul` and `stpcpy`. A save keeps upstream's order: open without
+truncation, write, then truncate to the bytes written. Fastfetch now uses the
+libc `memrchr` instead of its bundled fallback.
 
-The BusyBox Pyxis probe reached exactly the gaps the host import list predicted:
+Patch 0002 fixes an upstream defect: the per-file read-only bit was never
+cleared, so after one read-only file every later `:n`/`:e` file was also
+treated as read-only.
 
-- termios state in `rawmode`/`cookmode`, including `VERASE`;
-- `poll` in `mysleep`, which checks whether input is already waiting;
-- `stat`, `fstat`, `S_ISREG`, `access`, `getuid` and the `S_IW*` bits, used by
-  file loading, the read-only warning and `.exrc` ownership;
-- `ftruncate` after a save;
-- the string functions `memrchr`, `strchrnul` and `stpcpy`.
+## Limits
 
-Nothing else in `vi.c` failed against the SDK headers.
+- **Display:** ASCII only. Control characters display as `^X`, and bytes above
+  127 display as `.`.
+- **Search:** literal, because there is no `regex.h`.
+- **Shell:** there is no `:!` and no shell filters.
+- **Screen size:** a change takes effect at the next redraw, since there is no
+  resize notification.
+- **Saves:** not atomic. A short write leaves the file overwritten and
+  truncated at that point, and a crash between the write and the resize can
+  leave old trailing bytes.
+- **Input EOF and failures:** input EOF ends vi as upstream does, losing unsaved
+  edits; this comes from source inspection and was not exercised. Allocation or
+  terminal output failure also exits and loses unsaved edits.
 
-**Toybox.** A port would replace its mmap storage with heap loading, which
-changes the piece-table ownership the save path relies on. It would also need a
-regex library before search works at all. It brings UTF-8 width handling that
-the byte-oriented terminal cannot yet render truthfully. Toybox lists the
-command as unfinished, and the visible gaps would land on Pyxis users.
+See [technical debt](../technical-debt.md#vi-port-limits) for revisit points.
 
-**neatvi.** It is the most complete editor here and avoids system regex. Its
-renderer, however, depends on terminal operations Pyxis ignores. Running it
-correctly needs either renderer patches throughout or new
-[terminal-session work](storage-and-terminal-agenda.md). Its process and LSP
-features would need separate disabling, and its UTF-8/bidi model exceeds the
-current terminal.
+## Why BusyBox
 
-## Recommendation: BusyBox vi
+The selection compared BusyBox `f96d33d`, toybox `b7ec52a` and neatvi `26e9cad`
+using host import analysis and a compile probe against the Pyxis SDK.
 
-BusyBox vi is the easiest to port without reshaping Pyxis around it:
+- **BusyBox** was chosen. It draws with cursor positioning, line/screen erase
+  and reverse video, all inside the existing [VT subset](terminal.md#tty-output-controls).
+  Its missing facilities sat in a few small functions, and Kconfig disables
+  regex, signals and `:!` cleanly.
+- **toybox** was rejected. Its vi is unfinished upstream, keeps the file
+  memory-mapped as piece-table storage, always requires regex and assumes UTF-8
+  widths.
+- **neatvi** was rejected. It needs scroll regions and insert/delete line,
+  which the terminal ignores, and uses fork/exec and sockets for filters and LSP.
 
-- its screen model is full-line redraws within the existing VT subset;
-- every missing facility sits in a few small, identifiable functions;
-- its Kconfig switches can omit regex, signals and shell escapes without
-  patching code.
+The owner agreed on 2026-10-04 to use BusyBox, keep upstream's
+write-then-truncate save via a libc `ftruncate`, and add the string functions to
+libc. `stat`, `fstat` and `access` stay out of libc until truthful file metadata
+exists.
 
-GPL-2.0-only is acceptable under the existing
-[ports licensing](../../ports/LICENSING.md) precedent set by Doom and Quake.
-It must stage its license, and the recipe and patches give corresponding source.
+## Validation
 
-### Proposed first-port scope
+The validation build used pyxis-os sources identical outside `docs/` to
+`aef3c26`, userland `877d04f` and ports `55b6f8e`, with `make -j16 image` and no
+compiler warnings in vi. It booted four CPUs under
+nested KVM with patched QEMU 10.2.2, virtio-net and a virtio-fs export. The
+following was exercised:
 
-**Build.** A recipe compiles only `editors/vi.c` with a port-local GPL-2.0 libbb
-adapter. That follows the precedent of Quake's `sys_pyxis.c`. The adapter
-supplies the referenced helpers (allocation, `full_read`/`full_write`, option
-parsing, list and string helpers) instead of building BusyBox's own Kbuild and
-libbb. It stages `bin/vi.pxe` and the license, resolved by the shell as `vi`.
+- **Remote terminal (100×29):**
+  - editing, search, `:w` on `host://`; the file shrank from 33 to 25 bytes
+    with no stale tail;
+  - the `:q` guard, then `:w NAME` creating a file and refusing to replace it
+    on the second try;
+  - Ctrl+C delivered to vi as input;
+  - `[Readonly]` and the denied `:w!` on `app://`;
+  - `-R`, ordered `-c` commands and `:n` across files;
+  - yank/put with counts, dot repeat, undo, `:s`, `:set` and `:features`;
+  - a `:/pattern/` address and `:list`, plus fastfetch using libc `memrchr`.
+- **Large file:** the 1.67 MB, 43,261-line `app://share/hwdata/pci.ids` opened
+  in under 0.5 s, including the polling interval, and `G` reached the end.
+- **Framebuffer console (QEMU `sendkey`):** full-screen drawing, arrows, `A`,
+  Escape and `:wq` to `host://`, with a clean prompt after exit.
 
-**Features on:** colon commands, yank/marks, search, dot repeat, read-only mode,
-`:set` options, undo with its queue, verbose status, and screen-size queries.
-Without signals, BusyBox re-queries the size at each redraw, which maps to
-`term_size`. Without this feature it assumes 80×24.
-
-**Features off:** regex search, signals, terminal size probing, `:!` execution
-and 8-bit display. `.exrc` loading is disabled because its safety check is a
-Unix owner/permission test. `EXINIT` can still provide startup commands.
-
-**Terminal adaptation.**
-
-- `rawmode`/`cookmode` become libterm session setup, holding passthrough for the
-  whole session.
-- `read_key` maps libterm keys to BusyBox key codes.
-- `mysleep` becomes a timed key read that retains at most one pending key.
-- Exit clears the screen and restores the cursor, since there is no alternate
-  screen. Backspace accepts both BS and DEL instead of reading `VERASE`.
-
-**File adaptation.** Load files by reading to EOF. A file that cannot be
-reopened for writing reports the failure at save time, rather than predicting
-it from Unix mode bits. Truthful metadata stays the separate
-[metadata direction](neovim-libuv.md#proposed-bounded-native-milestones). Errors
-report through vi's status line.
-
-**Limits to state.** ASCII-only display, size changes noticed only at the next
-redraw, no regex `:s` or `/`, no shell filters, and no crash-safe save beyond
-what the selected save behaviour provides.
-
-**Validation.** An ordinary build, then interactive QEMU editing on `home://`
-and writable `host://`, plus a remote terminal session. Use the debugger only
-if needed. Record the image size change.
-
-## Agreed decisions
-
-Agreed on 2026-10-04:
-
-1. **Candidate.** BusyBox vi. Toybox vi and neatvi are not pursued.
-2. **Save behaviour.** Add a libc `ftruncate` over native `FILE_RESIZE` and keep
-   upstream's write-then-truncate order. Truncating before writing, as Kilo
-   does, and a temporary file followed by atomic `rename` were not chosen.
-3. **String functions.** Add `memrchr`, `strchrnul` and `stpcpy` to userland
-   libc, per the [portability rule](../userland/libc-portability.md), rather
-   than rewriting the call sites in the port patch. `stat`, `fstat` and
-   `access` stay patched out until truthful metadata exists. No fake mode bits
-   or user IDs.
-
-The libc additions belong in userland and land before the ports recipe that
-uses them.
-
-[bb]: https://git.busybox.net/busybox/tree/editors/vi.c?id=f96d33d28a1f70fda5f27d221d5012b1ac0b7dad
-[tb]: https://github.com/landley/toybox/blob/b7ec52ac35e075caffca5d330995d44e8dbfc8c3/toys/pending/vi.c
-[nv]: https://github.com/aligrudi/neatvi/tree/26e9cadbf3828807a35bbe71f19e323e97b27439
+`vi.pxe` is 96,720 bytes; Kilo's is 68,960.
