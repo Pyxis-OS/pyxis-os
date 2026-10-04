@@ -26,6 +26,7 @@ UDP_FORWARD ?=
 export VIRTIO_FS_SOCKET VIRTIO_NET TCP_FORWARD UDP_FORWARD VIRTIO_RNG VIRTIO_BLK_IMAGE VIRTIO_BLK_READONLY
 export VFIO_PCI
 INIT ?=
+NETWORK_CONFIG ?=
 INIT_DEFAULT ?= app://init-idle
 INIT_PRIMARY ?= app://init
 INIT_CPUS ?= 2=app://init-readonly 3=app://init-remote
@@ -39,7 +40,7 @@ $(error PREBUILT accepts kernel sdk userspace ports)
 endif
 DOOM_WAD ?=
 DOOM_DEMOS ?=
-export INIT DOOM_WAD DOOM_DEMOS
+export INIT NETWORK_CONFIG DOOM_WAD DOOM_DEMOS
 
 LOG_LEVEL ?= info
 ifeq ($(LOG_LEVEL),trace)

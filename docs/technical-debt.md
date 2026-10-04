@@ -634,6 +634,21 @@ and the temporary identity probe saves only Command/PMCSR. Such a controller
 remains unavailable while boot continues. Revisit PCI configuration restoration
 if owner-run native qualification encounters this state.
 
+## RTL8111 runtime limits
+
+The [RTL8111 I/O path](devices/rtl8111-hardware.md#ethernet-io) supports XID `541`
+only. Each prepared controller retains two contiguous 68 KiB DMA allocations;
+unselected hardware stays inactive. Runtime failure attempts reset and disables
+DMA/delivery but retains claims, buffers and shared mappings until reboot. The
+first binding has no fallback or controller switching. Revisit reclamation with
+a concrete teardown and SMP invalidation contract.
+
+Firmware-free initial traffic through VFIO does not qualify cold-start native
+reliability, every PHY speed or sustained operation. No jumbo-frame reassembly,
+offloads, firmware interpreter or automatic restart is implemented. Task 5 owns
+link/sustained/native qualification; a measured firmware requirement would need
+the separately accepted focused import with provenance and redistribution terms.
+
 ## Virtio-net runtime resource retention
 
 The external interface's first unique configuration binding lasts until reboot.

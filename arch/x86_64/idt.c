@@ -5,6 +5,7 @@
 #include <arch/descriptors.h>
 #include <arch/keyboard.h>
 #include <kernel/log.h>
+#include <kernel/net/rtl8111.h>
 #include <kernel/panic.h>
 #include <kernel/user.h>
 #include <kernel/task.h>
@@ -89,6 +90,11 @@ static void finish_interrupt(const struct exception_frame *frame)
 
 void interrupt_handler(struct exception_frame *frame)
 {
+  if (frame->vector == APIC_RTL8111_VECTOR) {
+    rtl8111_interrupt();
+    finish_interrupt(frame);
+    return;
+  }
   if (frame->vector == APIC_XHCI_VECTOR) {
     xhci_interrupt();
     finish_interrupt(frame);
