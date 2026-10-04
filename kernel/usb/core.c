@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <stdatomic.h>
 #include "core.h"
+#include "bot.h"
 #include "host.h"
 #include "settings.h"
 
@@ -141,6 +142,7 @@
 struct usb_device_record {
   struct usb_discovery *owner;
   struct usb_host_device *host;
+  struct usb_bot storage;
   struct system_info_usb_device info;
   enum usb_speed speed;
   const char *detail;
@@ -154,7 +156,7 @@ struct usb_discovery {
   struct usb_host_controller *host;
   struct usb_device_record *devices;
   struct system_info_usb_interface *interfaces;
-  uint8_t *descriptors;
+  uint8_t *descriptors, *storage_scratch;
   size_t capacity, interface_count, device_count, registry_index;
   unsigned port_count, device_capacity;
   bool started, hardware_failed;
@@ -652,6 +654,8 @@ static void inspect_device(struct usb_device_record *device, uint64_t deadline)
       device->detail = "malformed or changing configuration descriptors";
     } else {
       select_hub_configuration(device, total);
+      device->storage.host = device->host;
+      usb_bot_select(&device->storage, device->owner->descriptors, total, device->speed);
     }
   }
 }
@@ -819,8 +823,9 @@ struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index
   discovery->capacity = capacity;
   discovery->devices = kmalloc(discovery->device_capacity * sizeof(*discovery->devices));
   discovery->descriptors = kmalloc(capacity);
+  discovery->storage_scratch = kmalloc(USB_BULK_BYTES);
   discovery->interfaces = kmalloc(USB_INTERFACE_BUDGET * sizeof(*discovery->interfaces));
-  if (!discovery->devices || !discovery->descriptors || !discovery->interfaces) {
+  if (!discovery->devices || !discovery->descriptors || !discovery->storage_scratch || !discovery->interfaces) {
     usb_release_prepared(discovery);
     return NULL;
   }
@@ -842,6 +847,7 @@ void usb_release_prepared(struct usb_discovery *discovery)
     controller->discovery = NULL;
   }
   kfree(discovery->interfaces);
+  kfree(discovery->storage_scratch);
   kfree(discovery->descriptors);
   kfree(discovery->devices);
   kfree(discovery);
@@ -1491,6 +1497,19 @@ static void log_device(const struct usb_device_record *device)
        pci->function, cursor, device->info.vendor_id, device->info.product_id,
        device->incomplete ? " (incomplete)" : "", device->detail ? ": " : "",
        device->detail ? device->detail : "");
+  const struct usb_bot *storage = &device->storage;
+  if (storage->state == USB_BOT_UNBOUND) {
+    return;
+  }
+  klog("usb-bot: %x:%x.%u port %s: %s%s%s\n", pci->bus, pci->device,
+       pci->function, cursor, storage->state == USB_BOT_READY ? "read-only probe ready" :
+       storage->state == USB_BOT_UNSUPPORTED ? "unsupported" : "failed",
+       storage->detail ? ": " : "", storage->detail ? storage->detail : "");
+  if (storage->state == USB_BOT_READY) {
+    klog("usb-bot: %x:%x.%u port %s: blocks=%llu block-bytes=%u read-bytes=%llu\n",
+         pci->bus, pci->device, pci->function, cursor, (unsigned long long)storage->blocks,
+         storage->block_bytes, (unsigned long long)storage->read_bytes);
+  }
 }
 
 void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
@@ -1523,6 +1542,18 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
     if (device->incomplete) {
       device->info.flags |= SYSTEM_INFO_USB_DEVICE_INCOMPLETE;
       incomplete = true;
+    }
+  }
+  for (size_t index = 0; index < discovery->device_count; ++index) {
+    struct usb_device_record *device = &discovery->devices[index];
+    struct usb_bot *storage = &device->storage;
+    if (storage->configuration) {
+      if (device->incomplete || discovery->hardware_failed || task_deadline_expired(deadline)) {
+        storage->state = USB_BOT_FAILED;
+        storage->detail = "storage probe skipped after incomplete inspection or controller setup";
+      } else {
+        usb_bot_probe(storage, discovery->storage_scratch, USB_BULK_BYTES, deadline);
+      }
     }
     log_device(device);
   }

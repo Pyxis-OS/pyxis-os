@@ -24,7 +24,7 @@ struct usb_link {
 #define USB_SUPER_LANE_BPS 5000000000ULL
 #define USB_GEN2_LANE_BPS 10000000000ULL
 
-enum usb_result { USB_OK, USB_BUSY, USB_INVALID, USB_IO, USB_TIMEOUT, USB_UNSUPPORTED, USB_STALE };
+enum usb_result { USB_OK, USB_BUSY, USB_INVALID, USB_IO, USB_TIMEOUT, USB_UNSUPPORTED, USB_STALE, USB_STALL };
 
 struct usb_host_controller;
 struct usb_host_device;
@@ -34,6 +34,10 @@ struct usb_setup {
 };
 struct usb_ticket { uint64_t generation; };
 struct usb_completion { enum usb_result result; size_t bytes; };
+struct usb_bulk_endpoint {
+  uint8_t address, burst;
+  uint16_t packet;
+};
 
 /* Private BSP controller-worker interfaces. Records and buffers are prepared
  * before AP startup and retained at runtime. Indices cover advertised root ports;
@@ -72,5 +76,20 @@ enum usb_result usb_host_control_wait(struct usb_host_device *device, struct usb
 enum usb_result usb_host_control_take(struct usb_host_device *device, struct usb_ticket ticket,
                                       void *destination, size_t capacity, struct usb_completion *completion);
 void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket ticket);
+
+/* Boot-only class binding. A bounded pool reserves two bulk rings and one
+ * captured transfer buffer per admitted device before AP startup. Transfers are
+ * serialized on the owning worker; failure never copies a read destination.
+ * A stall retains the halted endpoint until bulk_clear retires it safely. */
+enum usb_result usb_host_configure_bulk(struct usb_host_device *device,
+                                        const struct usb_bulk_endpoint *in,
+                                        const struct usb_bulk_endpoint *out, uint64_t deadline);
+enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t endpoint,
+                                       const void *outbound, void *destination, size_t length,
+                                       uint64_t deadline, size_t *actual);
+/* Optionally collect captured stalled input after successful retirement, before
+ * another transfer can reuse its buffer. Recovery failure leaves it untouched. */
+enum usb_result usb_host_bulk_clear(struct usb_host_device *device, uint8_t endpoint,
+                                   void *destination, size_t capacity, size_t *actual, uint64_t deadline);
 
 #endif

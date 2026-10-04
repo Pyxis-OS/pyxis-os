@@ -2,18 +2,18 @@
 
 Caelum addresses boot-present root devices and supported hub descendants on every prepared xHCI
 controller and publishes an immutable read-only boot snapshot for native
-[lsusb](../userland/lsusb.md). It does not configure a storage transport or expose
-USB block access. [The installation milestone](../wip/usb-installation.md#b-native-read-only-usb-storage)
-tracks class/media work. Physical hardware is unqualified.
+[lsusb](../userland/lsusb.md). Supported storage also receives an internal
+[read-only BOT/SCSI probe](usb-storage.md); USB block access remains pending. [The installation milestone](../wip/usb-installation.md#b-native-read-only-usb-storage)
+tracks class/media work. [Owner-reported ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md)
+cover specific native profiles; broader hardware and recovery qualification remain pending.
 
 ## Boundaries and preparation
 
 `kernel/usb/xhci.c` owns controller commands, contexts, endpoint rings, DMA and
 transfer-event interpretation. `core.c` owns USB requests, descriptor traversal,
-inventory completeness and immutable observation publication. There is no BOT
-matcher or class-transfer path in the inventory slice. No class is selected
-from a vendor ID.
-Classes other than supported hubs remain unbound. Their standard
+inventory completeness and immutable observation publication. `bot.c` owns
+storage matching, SCSI commands and BOT recovery. No class is selected from a
+vendor ID. Classes other than supported hubs and storage remain unbound. Their standard
 descriptor structure is checked without configuring endpoints or interpreting
 class reports. [USB hubs](usb-hubs.md) are configured for boot traversal;
 unsupported hubs or uninspected descendants make inventory partial.
@@ -71,11 +71,12 @@ descriptor version. Supported SuperSpeed and SuperSpeedPlus hubs expose boot des
 The SSP isochronous companion is structurally traversed; its link-dependent
 byte budget remains uninterpreted without non-control endpoint scheduling.
 
-Only supported hubs receive SET_CONFIGURATION and xHCI Slot hub metadata.
-There is no SET_INTERFACE, non-control endpoint binding or BOT device selection. The unused matcher, bulk-endpoint setup
-and bulk-ring allocations were removed. Class transfers belong with their first
-consumer and an explicit resource-preparation policy. Selection across multiple
-controllers needs its own storage contract; observation does not choose a disk.
+Supported hubs receive SET_CONFIGURATION and xHCI Slot hub metadata.
+Completely inspected supported storage can select its first BOT configuration
+and alternate, configure bulk endpoints and run the private media probe after
+hub traversal. [Storage preparation](usb-storage.md#binding-and-preparation)
+reserves its own bounded pool before AP startup. Observation does not grant disk
+or filesystem authority; storage outcomes remain private and per device.
 
 ## Snapshot publication
 
@@ -111,8 +112,10 @@ only actual successful inbound bytes. Failure leaves the destination untouched.
 
 Wait timeout does not consume or cancel the request. Abandonment removes client
 ownership while active hardware work retains its ring span/data buffer; successful
-terminal completion can later retire it. A request deadline, early transfer error
-or unexpected removal during active work stops the controller and retains the
+terminal completion can later retire it. An owned STALL can safely retire the
+old sequence through Reset Endpoint, TT cleanup and Set TR Dequeue before reuse.
+A request deadline, other early transfer error or unexpected removal during
+active work stops the controller and retains the
 unresolved span. Halt, interrupt masking or disabling bus mastering alone cannot
 justify recycling it. All runtime backing remains until reboot, including after
 successful completion. Idle port removal still retires that device independently.
