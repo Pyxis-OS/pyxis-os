@@ -176,3 +176,41 @@ No new tests, self-tests, fault injection or automation were added. Disk-full,
 allocator pressure, arbitrary crash points, uncertain writes and physical media
 are not qualified by these runs; healthy/terminal rollback remains source-reviewed.
 The protected task-3 measurements were not changed.
+
+## Combined stack and current-main integration
+
+The PRs are stacked in merge order #382 (I/O runs), #386 (metadata cache),
+#387 (namespace writeback). The combined kernel at `d8eb88a`, still on main
+`b352a1d`, passed the same grow/prepared/read commands with five samples each,
+followed by `sync data://` and normal remote exit. It used a fresh copy of the
+initial disk, the same default 30-second interval and the same QEMU options,
+substituting `combined` in the file names. Stopped-pool fsck and extracted
+grow/prepared comparisons passed. [combined.txt](combined.txt) retains the output;
+this confirms integration, not attribution of one item's performance to another.
+
+Main then advanced through `4b5e256` (USB block registration/GPT integration).
+It was merged into #382 and carried through both dependent branches without
+changing any submodule pins. A rebuilt warning-free kernel/image at `d5956f9`
+booted the already-written combined disk, with fresh OVMF variables, default
+30-second flushing and xHCI disabled. The QEMU command substituted
+`current-main-combined.iso`, `current-main-combined-vars.fd` and
+`current-main-combined-serial.txt`, retaining `combined-disk.raw`. It ran:
+
+```text
+iobench read data://grow.bin --buffer 4088 --rounds 1
+cat app://share/iobench.bin > data://integration.bin
+date > data://independent.txt
+mv data://integration.bin data://integration-renamed.bin
+sync data://
+exit
+```
+
+The warmup/sample verified the persisted grow file. After creating
+`independent.txt`, GDB showed the unrelated integration file still dirty with
+live size 1048576 and durable size zero. Rename and sync succeeded, the client
+reported complete draining, and QEMU was quit. Host fsck passed again; extracted
+`integration-renamed.bin` matched the installed fixture with `cmp`.
+[current-main-combined.txt](current-main-combined.txt) is the complete output.
+This is a persistence/integration check, not a new matched performance comparison
+against the changed main or a qualification of its USB backend. All task-owned
+QEMU, debugger and remote-client processes were stopped.
