@@ -364,7 +364,9 @@ static void handle_pointer_input(void)
   while (mouse_read_event(&event)) {
     uint64_t flags = cpu_save_interrupts();
     if (event.reset) {
-      device_buttons = 0;
+      /* The device was not reset, so a button may still be held. Treat all as
+       * held: each must be released and pressed again before it counts. */
+      device_buttons = MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT | MOUSE_BUTTON_MIDDLE;
       for (size_t i = arch_cpu_count() > 1 ? 1 : 0; i < arch_cpu_count(); ++i) {
         pointer_reset_input(arch_cpu_at(i)->space->pointer);
       }
