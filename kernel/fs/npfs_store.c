@@ -17,6 +17,7 @@
 #define STORE_CLEANUP_IMAGES 10u
 #define STORE_CLEANUP_MAPPINGS 64u
 #define STORE_BITMAP_READ_BLOCKS 128u
+#define STORE_WRITE_RUN_BLOCKS 32u
 
 _Static_assert(STORE_IMAGES_MAX <= NPFS_DESCRIPTORS_PER_BLOCK,
   "native journal writes one descriptor block");
@@ -81,6 +82,7 @@ struct npfs_store_pool {
   bool freed_in_transaction;
   uintptr_t scratch;
   size_t scratch_bytes;
+  uintptr_t write_run;
   /* Retained mount storage; journal images overlay this durable bitmap base. */
   uintptr_t bitmap;
   size_t bitmap_bytes;
@@ -607,9 +609,9 @@ static enum call_status commit(struct npfs_store_context *context, struct npfs_s
   control.payload_crc = npfs_crc_finish(crc);
   enum call_status status = transport(context, pool, BLOCK_WRITE,
     pool->header.journal_start + 2, 1, descriptor_bytes);
-  for (unsigned i = 0; status == CALL_OK && i < pool->image_count; i++) {
-    status = transport(context, pool, BLOCK_WRITE, pool->header.journal_start + 3 + i,
-      1, image_bytes(pool, i));
+  if (status == CALL_OK) {
+    status = transport(context, pool, BLOCK_WRITE, pool->header.journal_start + 3,
+      pool->image_count, image_bytes(pool, 0));
   }
   if (status == CALL_OK) {
     status = transport(context, pool, BLOCK_FLUSH, 0, 0, NULL);
@@ -646,12 +648,18 @@ static enum call_status checkpoint(struct npfs_store_context *context, struct np
   if (pool->control.sequence == UINT64_MAX) {
     return latch_failure(pool, CALL_LIMIT);
   }
-  for (unsigned i = 0; i < pool->image_count; i++) {
+  for (unsigned i = 0; i < pool->image_count;) {
+    unsigned count = 1;
+    while (count < pool->image_count - i &&
+      pool->images[i + count].home == pool->images[i].home + count) {
+      count++;
+    }
     enum call_status status = transport(context, pool, BLOCK_WRITE, pool->images[i].home,
-      1, image_bytes(pool, i));
+      count, image_bytes(pool, i));
     if (status != CALL_OK) {
       return latch_failure(pool, status);
     }
+    i += count;
   }
   enum call_status status = transport(context, pool, BLOCK_FLUSH, 0, 0, NULL);
   if (status != CALL_OK) {
@@ -1574,6 +1582,10 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
   if (status != CALL_OK) {
     return status;
   }
+  if (!pool->write_run && next_dirty(inode)) {
+    /* Batching is optional; allocation pressure keeps the single-block path. */
+    (void)store_vm_allocate(STORE_WRITE_RUN_BLOCKS * NPFS_BLOCK_SIZE, &pool->write_run);
+  }
   while (inode->size_dirty || next_dirty(inode)) {
     status = checkpoint(context, pool);
     if (status != CALL_OK) {
@@ -1582,6 +1594,7 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
     struct npfs_inode previous = inode->record;
     uint64_t previous_free = pool->free_blocks;
     struct store_cache_entry *written[STORE_IMAGES_MAX];
+    uint64_t physical_blocks[STORE_IMAGES_MAX];
     unsigned written_count = 0;
     struct store_cache_entry *entry = next_dirty(inode);
     while (entry && pool->image_capacity - pool->image_count >= 10 && written_count < STORE_IMAGES_MAX) {
@@ -1590,14 +1603,32 @@ static enum call_status flush_inode(struct npfs_store_context *context, struct n
       if (status != CALL_OK) {
         break;
       }
-      status = transport(context, pool, BLOCK_WRITE, physical, 1, entry->bytes);
-      if (status != CALL_OK) {
-        latch_failure(pool, status);
-        break;
-      }
       entry->dirty = false;
+      physical_blocks[written_count] = physical;
       written[written_count++] = entry;
       entry = next_dirty(inode);
+    }
+    for (unsigned i = 0; status == CALL_OK && i < written_count;) {
+      unsigned count = 1;
+      if (pool->write_run) {
+        while (count < written_count - i && count < STORE_WRITE_RUN_BLOCKS &&
+          physical_blocks[i + count] == physical_blocks[i] + count) {
+          count++;
+        }
+      }
+      void *bytes = written[i]->bytes;
+      if (count > 1) {
+        bytes = (void *)pool->write_run;
+        for (unsigned j = 0; j < count; j++) {
+          memcpy((uint8_t *)bytes + (size_t)j * NPFS_BLOCK_SIZE,
+            written[i + j]->bytes, NPFS_BLOCK_SIZE);
+        }
+      }
+      status = transport(context, pool, BLOCK_WRITE, physical_blocks[i], count, bytes);
+      if (status != CALL_OK) {
+        latch_failure(pool, status);
+      }
+      i += count;
     }
     if (status == CALL_OK) {
       struct npfs_inode durable = inode->record;
@@ -2698,6 +2729,8 @@ enum call_status npfs_store_maintain(struct npfs_store_context *context, struct 
     status = flush_files(context, pool);
   }
   if (pressure) {
+    store_vm_free(pool->write_run, STORE_WRITE_RUN_BLOCKS * NPFS_BLOCK_SIZE);
+    pool->write_run = 0;
     for (struct npfs_store_volume *volume = pool->volumes; volume; volume = volume->next) {
       struct npfs_store_inode *inode = volume->inodes;
       while (inode) {
