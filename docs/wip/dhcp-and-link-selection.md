@@ -86,6 +86,24 @@ Accepted 2026-10-04, with the defaults below.
    - A DNS server that changes at renewal reaches only newly launched programs.
      Record that as a limitation.
 
+## Task 1 endpoint decisions
+
+Accepted 2026-10-04:
+
+- A wildcard binding may share its port with an ordinary net0 binding. Concrete
+  unicast takes precedence; broadcast goes only to the wildcard. Each binding
+  remains exclusive within its own address/port space; loopback stays independent.
+- Wildcard endpoints survive IPv4 replacement and clearing, retaining queued
+  datagrams and pending receives. Sends use the current address, including zero
+  only for limited broadcast while unassigned. Configuration changes still cancel
+  ARP-pending sends. Applications own interpretation of already received data.
+- Add a manual trusted `session --udp-broadcast PORT` handoff to `udp-echo` for
+  qualification before the DHCP client exists. Only trusted setup receives the
+  creation right; the echo child receives an opened endpoint. Its replies use
+  limited broadcast, so the same handoff works before address assignment. The
+  owner also accepted `--udp-unassigned`: explicitly clear IPv4 after opening
+  the endpoint, retaining its binding, to qualify zero-source sends.
+
 ## Tasks
 
 - [ ] **1. Broadcast reception and the broadcast endpoint** (kernel, ABI).
@@ -110,6 +128,56 @@ Accepted 2026-10-04, with the defaults below.
     renewal, rebind after the server stops answering, and clean expiry. The
     server could be the host's existing `dnsmasq` on a QEMU tap network, run
     manually with no new automation.
+
+## Task 1 qualification and handoff
+
+Kernel implementation: `285167e`; userspace: `e8363bd`
+([dependency PR #110](https://git.internal/PyxisOS/pyxis-userland/pulls/110)).
+Baseline: main `7955f59`, userspace `06812bc`. Ordinary image builds passed.
+No compiler-container rebuild is required. Task 1 remains unchecked pending
+owner-run native PXE reception; no DHCP client or link selection has started.
+
+Matched before/after runs used host KVM, four CPUs, 2 GiB RAM, the RTL8111 at
+`0000:05:00.0` through VFIO, VirtIO networking disabled, and the same private
+`.50/24`, gateway `.1` profile. The receiving host used Wi-Fi at `.51`; these
+measurements are not wired throughput or native ThinkPad results. Builds used
+`make -j16 image PYTHON=build/hpet-config-venv/bin/python3
+CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis-
+NETWORK_CONFIG=<private profile>`. Boots used `scripts/run-qemu.sh run` with
+`QEMU_DISPLAY=none MEMORY=2G CPUS=4 ACCEL=kvm VFIO_PCI=0000:05:00.0
+VIRTIO_NET=0` and the matching `/usr/share/edk2/ovmf/OVMF_{CODE,VARS}.fd` pair.
+
+| Check | Baseline | Task 1 |
+| --- | --- | --- |
+| `ping -c 5 192.168.0.1` | 5/5; mean 0.783 ms | 5/5; mean 0.703 ms |
+| `ping -c 3 127.0.0.1` | 3/3 | 3/3 |
+| UDP port-18080 echo on `.51` | 23-byte payload returned | Same payload returned |
+| Three 64 MiB TCP sends, seconds | 25.081756, 26.625992, 25.633783 | 25.333539, 25.629350, 25.476032 |
+
+UDP used `udp-send 192.168.0.50 192.168.0.51 18080 "DHCP broadcast baseline"`
+and host `socat -T10 UDP4-RECVFROM:18080,bind=192.168.0.51,reuseaddr,fork
+EXEC:/bin/cat`. TCP used `ttcp -t -n 8192 -l 8192 192.168.0.51` and host
+`socat -u TCP4-LISTEN:5001,bind=192.168.0.51,reuseaddr,fork
+OPEN:<capture>,creat,trunc`. The final sink contained 67,108,864 bytes; no content
+hash was checked. TCP mean changed by -1.17%, below the baseline's 1.54-second
+sample range. These traffic runs were unprofiled and had no debugger attached.
+
+With the explicit broadcast init handoff and GDB attached, LAN UDP to
+`255.255.255.255:19000` and `192.168.0.255:19000` returned intact limited-broadcast
+echoes from `.50`. A simultaneous ordinary `.50:19000` endpoint stayed available
+for unicast, whose reply was unicast; after it closed, unicast fell through to
+wildcard and produced a broadcast echo. Host `IP_PKTINFO` distinguished reply
+destinations. Ordinary limited/subnet-broadcast sends returned BAD_REQUEST.
+GDB observed wildcard address zero, BOUND state, and no bad UDP checksums.
+
+With `--udp-unassigned`, GDB observed IPv4 address/prefix zero and the same
+wildcard binding still BOUND. LAN normal, empty and odd-length datagrams returned
+intact from `0.0.0.0:19000` to limited broadcast. Queue retention across a later
+address change and source-zero receive rejection were inspected in code, not
+separately exercised. Local captures use `build/dhcp-task1-*`. QEMU/debugger jobs
+have been cleaned up. The native archive and its manual instructions will be
+provided with the draft integration PR; repeat broadcast/ordinary coexistence
+there before checking off task 1.
 
 ## Next milestone: bind whichever port has link
 
