@@ -215,6 +215,10 @@ The [native format contract](../../fs/docs/npfs-format.md),
 [kernel adapter](../devices/filesystem-native-adapter.md) describe implemented
 behavior. BSP request separation is complete. FUSE is not a prerequisite.
 
+[System updates](system-updates.md) are accepted. The installer gains an
+**Update** choice that rewrites an installation's ESP from newer live media and
+leaves its npfs pool untouched.
+
 The [USB installation proposal](usb-installation.md) records a replaceable SanDisk
 target and QEMU-first stages: boot Limine/kernel/archive from a FAT32 EFI partition,
 add xHCI/Bulk-Only read-only access to a separate Pyxis pool, then integrate native
