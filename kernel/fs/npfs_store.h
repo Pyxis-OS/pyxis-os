@@ -56,9 +56,9 @@ enum call_status npfs_store_read(struct npfs_store_context *context,
     struct npfs_store_inode *inode, uint64_t offset, void *bytes,
     size_t capacity, size_t *read);
 uint64_t npfs_store_size(const struct npfs_store_inode *inode);
-/* Create/rename flush prior dirty files before privately preparing an indivisible
- * metadata commit. Remove uses durable target metadata and can free space while
- * delayed-allocation file writeback is blocked. */
+/* Namespace edits reach an indivisible durable metadata commit without flushing
+ * cached files. Remove and rename replacement detach the last durable target
+ * record, retaining unpublished contents for open handles and later writeback. */
 enum call_status npfs_store_create(struct npfs_store_context *context,
     struct npfs_store_inode *directory, const char *name, size_t length,
     uint64_t kind, struct npfs_store_inode **out);
@@ -72,6 +72,8 @@ enum call_status npfs_store_rename(struct npfs_store_context *context,
 enum call_status npfs_store_write(struct npfs_store_context *context,
     struct npfs_store_inode *inode, uint64_t offset, const void *bytes,
     size_t length, size_t *written);
+/* Growth is cached. Shrink flushes only this inode before its durable size commit;
+ * cached writes to unrelated files remain pending for sync or maintenance. */
 enum call_status npfs_store_resize(struct npfs_store_context *context,
     struct npfs_store_inode *inode, uint64_t size);
 /* Whole-current-pool durability returns at COMMITTED. Background maintenance
