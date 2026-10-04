@@ -7,16 +7,18 @@ kernel makes no xHCI claim or DMA allocation. Enable XHCI under Caelum in
 [`make menuconfig`](../development/configuration.md), or set `CONFIG_XHCI=y`
 directly in `.config`, and rebuild to resume explicit QEMU bring-up.
 Every discovered xHCI function is inspected independently when enabled.
-Native hardware remains unqualified.
+Owner-reported ThinkPad inventory and reads provide limited native evidence;
+broader controller and recovery qualification remain pending.
 Firmware can still load the kernel and boot archive from USB.
 
 When enabled, Caelum prepares each discovered PCI xHCI function and its own
 slots/contexts for boot-present root-port devices and bounded hub descendants.
 [USB enumeration](usb-enumeration.md)
 addresses them, checks descriptors and publishes a read-only boot inventory.
-USB block access remains pending. The archive-backed shell and existing VirtIO block behavior remain available.
+[Read-only BOT/SCSI probes](usb-storage.md) consume bounded bulk transfers; USB block access remains pending. The archive-backed shell and existing VirtIO block behavior remain available.
 [Phase B](../wip/usb-installation.md#b-native-read-only-usb-storage) tracks those
-remaining layers. QEMU is the temporary target; physical hardware is unqualified.
+remaining layers. [Native observations](../targets/t14-gen1-amd/usb-bringup.md)
+cover the owner's ThinkPad profiles; they do not establish broad hardware qualification.
 
 ## Preparation and activation
 
@@ -107,15 +109,16 @@ its output context in DCBAA and configures EP0. Output contexts belong to hardwa
 input contexts are constructed independently and remain immutable until command
 completion. The input Slot advertises only EP0; Configuration Information Enable
 is left disabled and Input Control configuration/interface/alternate fields remain
-zero. Ordinary device enumeration does not send configuration/alternate requests or
-bind non-control endpoints. Supported hubs receive Slot-only Configure Endpoint
-metadata for [boot traversal](usb-hubs.md). No unused bulk rings are allocated.
-Every inspectable device receives an address/descriptor record; classes other than supported hubs remain unbound.
+zero. Supported hubs receive Slot-only Configure Endpoint metadata for
+[boot traversal](usb-hubs.md). Supported storage configures its checked bulk
+endpoints from a separate pre-AP device pool for an internal read-only probe.
+Every inspectable device receives an address/descriptor record; other classes
+remain unbound.
 
 A connection change after the snapshot retires that startup candidate. Loss of
 an enabled reserved port runs Disable Slot after prior command completion, then
 keeps that port retired until reboot. It does not stop unrelated ports when that
-device has no active request; removal during active control work fails the
+device has no active request; removal during active transfer work fails the
 controller and retains unresolved DMA. Later
 insertion cannot inherit a reservation. Writes acknowledge only observed PORTSC
 changes and preserve neutral power/wake fields; they never echo PED or reset bits.
