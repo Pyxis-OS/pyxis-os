@@ -229,10 +229,11 @@ The later inspection-first slice discovers controllers independently and publish
 root-device observations and [hub descendants](../devices/usb-hubs.md)
 with an internal [read-only BOT/SCSI media probe](../devices/usb-storage.md)
 for independently supported disks. The first B.5 slice registers kernel-only
-USB block devices with bounded read tickets and GPT discovery; read-only USB
-mount authority remains pending and writable work is unassigned. Reusable controller/USB/class/block
-boundaries are required, without
-speculative driver frameworks. This does not reorder filesystem core, spaces/SMP
+USB block devices with bounded read tickets and GPT discovery. Configured read-only
+USB mounts now use the sole observed GUID match after discovery/scan completion,
+including partial inventories. Writable work remains unassigned. Reusable
+controller/USB/class/block boundaries are required, without speculative driver
+frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.
 
 The [ThinkPad KVM and invariant-TSC investigation](thinkpad-kvm-tsc.md) records

@@ -57,8 +57,8 @@ space after the ESP. Thus its size is `USB_IMAGE_MIB - USB_ESP_MIB - 2` MiB.
 The pool type is an image metadata convention introduced by this builder.
 [GPT discovery](../devices/gpt.md) preserves type GUIDs without inferring
 authority; [native mounts](../devices/native-readonly-filesystem.md) still select
-an explicit disk identity, partition entry and volume. The sample is intended
-for later read-only validation, not a persistent home volume. `SAFE_TO_WIPE` is
+an explicit disk identity, partition entry and volume. The sample supports
+read-only validation, not a persistent home volume. `SAFE_TO_WIPE` is
 a regular empty file in the volume root, marking every volume this builder creates
 as disposable for the installer. Removing the marker makes the volume final;
 see the [installer consent rules](../wip/native-filesystem.md#target-consent).
@@ -101,9 +101,14 @@ support. `debug-usb` pauses with GDB on `127.0.0.1:1234`, as described in the
 [debugger guide](gdb.md). Ordinary `make run` and `make debug` retain ISO boot.
 
 After firmware boot, exercise `app://` programs and RAM-backed `home://` in the
-shell. The kernel prepares xHCI but has no USB storage driver yet, so the sample pool is not
-mounted and absence of a block backend is expected. USB boot demonstrates
-firmware image loading; it does not demonstrate native USB I/O.
+shell. The checked-in `CONFIG_XHCI=n` leaves kernel USB access disabled. With
+xHCI enabled, supported boot-present BOT disks provide native read-only block
+reads and GPT discovery. The default init does not mount this sample volume;
+configure its actual `MOUNT_DISK` GUID and an explicit trusted read-only mount
+as described in [init configuration](../userland/init.md#native-disk-configuration-and-mounting).
+Image assembly chooses a fresh GUID, so an ISO validation image can configure
+the existing USB image without replacing it. Firmware image loading alone does
+not demonstrate native USB I/O.
 
 ## Prepare a selected physical target later
 

@@ -611,11 +611,13 @@ Revisit those limits with the assigned end-to-end hardware task and separately
 authorized recovery validation.
 
 The owner deferred native ThinkPad installation on 2026-10-04 while completing
-[task-5 QEMU qualification](development/experiments/native-filesystem-task5/README.md).
-Current writable storage is VirtIO only; USB enumeration/firmware loading does
-not supply qualified native filesystem reads, USB writes or flush. Resume the physical step after
-the USB storage/backend write-and-cache-synchronization work, with an explicitly
-selected expendable target. The internal NVMe remains unsupported.
+[task-5 QEMU
+qualification](development/experiments/native-filesystem-task5/README.md).
+Current writable storage is VirtIO only; USB read-only block/filesystem access
+has QEMU coverage, while native mount qualification, USB writes and flush remain
+pending. Resume the physical step after the USB storage/backend
+write-and-cache-synchronization work, with an explicitly selected expendable
+target. The internal NVMe remains unsupported.
 
 ## USB image updates and firmware qualification
 
@@ -1171,8 +1173,9 @@ using an initial 4 KiB descriptor/control budget. A larger configuration makes
 inventory incomplete. The initial arena retains up to 512 validated interface
 records per controller; overflow is partial. Unknown/vendor classes are valid
 unbound observations. Revisit these bounds with concrete descriptor/topology requirements. Storage
-probing now uses accepted per-device support across controllers. Block registration
-and native mount authority remain a separate integration task.
+probing, kernel block registration and read-only mount authority now use accepted
+per-device support across controllers. Writes and broader physical qualification
+remain separate work.
 
 All advertised ports receive input/output contexts and an EP0 ring/control buffer
 before AP startup. With the current 4 KiB buffer and 4 KiB allocations, this adds
@@ -1228,14 +1231,23 @@ with natural device evidence; physical USB qualification remains separate.
 
 The [BOT/SCSI probe](devices/usb-storage.md) accepts one non-composite BOT
 interface, no streams, and one LUN. Multiple LUNs, other interface shapes and
-observed READ CAPACITY (16) protection-enabled geometry remain unsupported. Terminal candidates now register kernel block devices and support read-only
-GPT discovery. Native mount/installer authority stays VirtIO-only; USB public
-raw access, mounting, writes and flushes remain deferred. Two captured read
-slots per supported disk and snapshot capacity are reserved before AP startup;
-GPT USB scans share one scratch buffer. Revisit the pre-AP reservation cost
-with measured topology/resource requirements and the mount integration. Revisit those limits in their
-focused integration/qualification tasks. NOT READY media retain sense and fail
-immediately, including NOT READY / 04h/01h (becoming ready); bounded UNIT
+observed READ CAPACITY (16) protection-enabled geometry remain unsupported.
+Terminal candidates now register kernel block devices and support read-only GPT
+discovery. Configured native GUID authority supports read-only USB mounts after
+sealed discovery and terminal GPT scans. Observed uniqueness is accepted under
+partial discovery; unseen disks may conceal another matching GUID. Duplicate
+observed matches fail, and selected-disk errors never fall back. Installer raw
+authority remains VirtIO-only; USB public raw access, writes and flushes are
+deferred. Two captured read slots per supported disk and snapshot capacity are
+reserved before AP startup; GPT USB scans share one scratch buffer. Revisit the
+pre-AP reservation cost with measured topology/resource requirements and later
+native qualification. Revisit those limits in their focused
+integration/qualification tasks. Runtime READ rejection with valid sense now
+fails only its ticket; healthy transport remains READY. Failed sense, real
+transport failure, timeout and unsafe host states remain terminal. These
+rejection/failure paths have source review only; revisit with natural media
+errors rather than forced-error validation. NOT READY media retain sense and
+fail immediately, including NOT READY / 04h/01h (becoming ready); bounded UNIT
 ATTENTION retries do not implement a spin-up policy. Revisit a bounded wait only
 if natural device evidence requires it, within the existing media deadline.
 
