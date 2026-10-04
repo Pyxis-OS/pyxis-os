@@ -196,6 +196,9 @@ Kilo and machine-readable command completion; framebuffer screenshots remain for
 graphical work. See [terminal sessions](../userland/terminal-sessions.md) and
 [execution groups](../interfaces/execution-groups.md) for the underlying contracts.
 Authentication, a multiplexer and process threads remain separate work.
+[File transfer through the remote terminal](remote-file-transfer.md) is accepted
+and not started: single-file upload and download with kitty's transfer
+protocol, then drag-and-drop upload.
 [Foreground interruption](../userland/foreground-interruption.md) is
 implemented: Ctrl+C terminates a running foreground command or pipeline through
 process-level termination, shell-armed interrupt events and a minimal
