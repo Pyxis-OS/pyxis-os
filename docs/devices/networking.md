@@ -518,21 +518,12 @@ Launchers query it with READ authority and supply canonical
 Existing programs retain their startup environment. No kernel resolver or DHCP
 policy is involved, and ordinary programs receive no configuration write rights.
 
-DHCP acquisition uses a port-68 wildcard endpoint, a random transaction ID and
-the BOOTP broadcast flag. It accepts matching OFFER/ACK packets from port 67,
-selects one server, and validates the ACK's mask, route and lease options before
-replacement. Replies need to be broadcast before assignment; servers ignoring
-the flag are unsupported by the current receive rule. Invalid T1/T2 ordering
-uses the half-lease and seven-eighths defaults without rejecting an otherwise
-usable lease. A lease rejected by REPLACE leaves net0 unassigned and permits
-the local session to start with profile or fallback DNS; authored static
-configuration errors remain fatal. Acquisition sends its
-first DISCOVER immediately to fit the approximately ten-second startup budget;
-retries use randomized exponential delays clipped to that budget. Failure leaves
-net0 unassigned and starts the local session offline. The remote service keeps
-waiting for an assigned address. Task 2 does not yet renew or expire successful
-leases; reboot before expiry until task 3 supplies maintenance. See the
-[accepted limits](../technical-debt.md#dhcp-acquisition-before-lease-maintenance).
+[DHCP](dhcp.md) uses a port-68 wildcard endpoint, random transactions and a
+monotonic clock. Initial acquisition stays within approximately ten seconds;
+timeout starts the local session offline while discovery continues in the
+trusted setup session. The same session maintains renewal, rebind and expiry
+independently of its successor. The remote launcher waits for an assigned
+address. See the [client limits](../technical-debt.md#dhcp-maintainer-and-client-limits).
 
 Direct-init applications that bypass session do not receive a synthesized
 `DNS_SERVER`. The [dig client](#dns-queries-with-dig) also defaults to `1.1.1.1`
@@ -874,9 +865,9 @@ Trusted init can separately delegate a bound listener to the
 ## Further networking work
 
 Connected UDP, multicast, fragmentation, IPv6, asynchronous send and waiting
-on multiple objects remain outside this implementation. DHCP now has the narrow
-unconfigured-source/broadcast primitive and userspace acquisition; lease
-maintenance remains in the [DHCP milestone](../wip/dhcp-and-link-selection.md).
+on multiple objects remain outside this implementation. [DHCP](dhcp.md) has the
+narrow unconfigured-source/broadcast primitive and userspace lease maintenance.
+[Link selection](../wip/net0-link-selection.md) remains a separate proposal.
 DNS queries, hostname ping and [native TCP listeners/streams](tcp.md) are implemented.
 Readiness and remote-terminal application protocols remain future work.
 ICMP errors and generic UDP ephemeral-port selection are
