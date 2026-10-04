@@ -224,8 +224,11 @@ This opt-in handoff replaces that init's shell and does not expose a remote shel
 
 Trusted network setup uses UDP BROADCAST authority for [DHCP](../devices/dhcp.md).
 Its setup session remains alive after successor handoff and shell exit to maintain
-leases or continue discovery after an initial offline timeout. It closes unrelated
-bootstrap grants and input, retaining only maintenance and diagnostic authority.
+leases or continue link selection/discovery after an initial offline timeout.
+Pending DHCP selection retains UDP creation authority until binding and opening
+the endpoint, then closes it. Pending static selection exits after applying settings.
+It closes unrelated bootstrap grants and input, retaining only maintenance
+and diagnostic authority.
 Ordinary local and remote sessions receive UDP OPEN and NET_CONFIG READ only;
 launchers read chosen DNS for new child environments without configuring net0.
 The temporary manual broadcast echo handoff has been removed.

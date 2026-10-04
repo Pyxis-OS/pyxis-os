@@ -99,7 +99,7 @@ for the profile fields and selector policy. Keep hardware MAC selectors in this
 local file, outside the repository and published captures.
 
 Pass the setting on each image build that needs it. With no override, assembly
-uses the packaged VirtIO profile again. This changes image contents only; it
+uses the packaged link-selection profile again. This changes image contents only; it
 does not rebuild the compiler or change kernel configuration.
 
 ## Build outputs and bundles

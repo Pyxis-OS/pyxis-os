@@ -50,7 +50,8 @@ further CPUs run idle init scripts. Navigation currently shows four tabs. A sing
 The shell starts at `home://`, which is RAM-backed and lost on reboot. `app://`
 contains the read-only boot archive. Optional [virtio-fs setup](docs/devices/virtio-fs.md)
 provides persistent `host://` files and executable loading; no overlay is needed.
-Networking is opt-in with `VIRTIO_NET=1`; see [network setup](docs/devices/networking.md).
+`VIRTIO_NET=1` adds a QEMU NIC; see [network setup](docs/devices/networking.md)
+for initial link selection and explicit profiles.
 [Block storage](docs/devices/block-storage.md) is opt-in with
 `VIRTIO_BLK_IMAGE=/path/to/disk.raw`.
 The opt-in [raw USB image](docs/development/usb-image.md) builds a FAT32/GPT

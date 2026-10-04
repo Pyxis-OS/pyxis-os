@@ -403,7 +403,7 @@ References: [ARP](https://www.rfc-editor.org/rfc/rfc826.html),
 ## Native configuration capability
 
 The worker owns one external binding, `net0`. Ethernet, ARP, IPv4 and worker
-dispatch use `include/kernel/net/driver.h`; VirtIO is its only implementation.
+dispatch use `include/kernel/net/driver.h`, implemented by VirtIO and RTL8111.
 Drivers retain controller state and buffer ownership. A binding lasts until
 reboot, including after link loss or transport failure; there is no automatic
 fallback. IPv4 settings remain a separate authority-owned state.
@@ -426,6 +426,12 @@ grant authority. [The tagged protocol](../../include/abi/net_config.h) uses CALL
   discovery/identity. Failed matching preserves the binding. Rebinding the same
   controller is idempotent; a unique failed controller can be bound and reports
   PRESENT without READY. `NET_CONFIG_BOUND` identifies the bound controller.
+- `NET_CONFIG_NEXT_CONTROLLER` requires READ and enumerates supported retained
+  controllers, including unbound preparation and fresh reported carrier. Opaque
+  IDs identify exact controllers independently of MAC uniqueness.
+  `NET_SELECT_LINKED_CONTROLLER` binds an ID only after complete discovery and a
+  fresh prepared/up-carrier check. A failed check leaves net0 unbound; activation
+  failure after commitment retains the binding. See [link selection](net0-selection.md).
 - `NET_CONFIG_REPLACE` requires WRITE and an existing binding, and supplies the complete address, prefix
   and optional gateway together with the chosen DNS server. Invalid fields return `CALL_BAD_REQUEST` without mutation;
   an unusable device returns `CALL_UNAVAILABLE`. A link-down prepared device can
@@ -436,7 +442,8 @@ grant authority. [The tagged protocol](../../include/abi/net_config.h) uses CALL
   server, including before binding or assignment. The kernel stores this value;
   DHCP and DNS precedence remain userspace policy.
 
-Libpyxis exposes query, lookup, bind, replace, clear and DNS-selection helpers.
+Libpyxis exposes query, controller enumeration, lookup, bind, replace, clear and
+DNS-selection helpers.
 Query clears caller output on failure. Scalar requests are captured and reply
 storage checked before parking the user task. Eight shared slots bound calls;
 exhaustion returns `CALL_QUEUE_FULL`. The worker processes each finite operation
@@ -457,20 +464,24 @@ there is no per-space network isolation.
 ## Boot configuration and use
 
 The session launcher reads `app://config/network.lua`, installed from
-`userspace/config/network.lua`. The packaged QEMU user-network settings are:
+`userspace/config/network.lua`. The packaged profile selects a linked controller:
 
 ```lua
 return {
   net0 = {
-    driver = "virtio",
+    select = "link",
     optional = true,
     dhcp = true,
   },
 }
 ```
 
-Every `net0` table requires exactly one of `driver = "virtio"` or `mac`, a locally
-supplied nonzero unicast address written as six colon-separated hex pairs.
+Every `net0` table requires exactly one of `select = "link"`,
+`driver = "virtio"` or `mac`, a locally supplied nonzero unicast address written
+as six colon-separated hex pairs. Link selection optionally accepts an ordered
+`prefer = {"MAC", ...}` list; it ranks currently linked candidates by that list,
+then RTL8111 before VirtIO, then stable boot-local ID. It does not wait for an
+unlinked preferred port. See [selection and waiting](net0-selection.md).
 Driver selection must be unique; use a MAC selector when multiple VirtIO
 controllers exist. No real MAC bytes belong in committed profiles or captures.
 The supported RTL8111 XID `541` also binds by MAC. Identified unsupported RTL
@@ -497,8 +508,10 @@ and gateway relationships when applying replacement.
 A missing file or missing `net0` leaves existing binding/settings alone (unbound on
 fresh boot). `net0 = false` explicitly clears IPv4 settings, retaining the binding.
 `optional` defaults to false;
-true permits an absent NIC, but does not hide transport failure. A required absent
-device or invalid configuration prevents shell launch. A present but unavailable
+true permits an absent explicit selector, but does not hide transport failure.
+Link selection waits regardless of `optional`, starting the local shell offline
+after approximately ten seconds if no eligible controller is available. A required
+absent explicit device or invalid configuration prevents shell launch. A present but unavailable
 device or other runtime setup failure is diagnosed and the shell remains available
 for recovery. A launcher without the configuration grant reports that it is keeping
 current settings; this allows a later unprivileged session handoff.
@@ -519,8 +532,8 @@ Existing programs retain their startup environment. No kernel resolver or DHCP
 policy is involved, and ordinary programs receive no configuration write rights.
 
 [DHCP](dhcp.md) uses a port-68 wildcard endpoint, random transactions and a
-monotonic clock. Initial acquisition stays within approximately ten seconds;
-timeout starts the local session offline while discovery continues in the
+monotonic clock. Link selection and initial acquisition share approximately ten
+seconds; timeout starts the local session offline while discovery continues in the
 trusted setup session. The same session maintains renewal, rebind and expiry
 independently of its successor. The remote launcher waits for an assigned
 address. See the [client limits](../technical-debt.md#dhcp-maintainer-and-client-limits).
@@ -532,7 +545,7 @@ when that variable is absent and accepts an explicit numeric server override.
 Session and network configuration use the same restricted [Lua evaluator](../userland/lua.md#embedding-and-session-configuration).
 Both files are read before applying settings. When requested, network setup
 precedes terminal changes and shell launch; later failure does not roll back
-an applied address or route. There is no live reload, supervision or automatic retry. The default init
+an applied address or route. There is no live profile reload or controller rebinding. The default init
 still mounts optional `host://` before the session handoff.
 
 ```sh
@@ -870,7 +883,8 @@ Trusted init can separately delegate a bound listener to the
 Connected UDP, multicast, fragmentation, IPv6, asynchronous send and waiting
 on multiple objects remain outside this implementation. [DHCP](dhcp.md) has the
 narrow unconfigured-source/broadcast primitive and userspace lease maintenance.
-[Link selection](../wip/net0-link-selection.md) remains a separate proposal.
+[Initial link selection](net0-selection.md) is implemented; runtime controller
+rebinding remains separate work.
 DNS queries, hostname ping and [native TCP listeners/streams](tcp.md) are implemented.
 Readiness and remote-terminal application protocols remain future work.
 ICMP errors and generic UDP ephemeral-port selection are
