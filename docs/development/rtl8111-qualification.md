@@ -184,9 +184,12 @@ hashed. The firewall exception was temporary.
 
 The same native boot fetched `https://example.com` through `cat` and piped
 `cat https://duckduckgo.com | sha256sum`. These owner observations exercise name
-lookup, outbound TCP/TLS, native HTTPS reads and the shell pipeline. The hash is
-an observed page snapshot, not a stable expected value or an independent content
-integrity check. Native and VFIO timings use different peers/environments; their
+lookup, outbound TCP/TLS, native HTTPS reads and the shell pipeline. The owner
+independently fetched the DuckDuckGo response with desktop `curl | sha256sum`
+and confirmed the same SHA-256 as the native fetch. This verifies content
+integrity for that observed response; the page digest is not a stable fixture.
+The separate 64 MiB `ttcp` payload has byte-count verification only.
+Native and VFIO timings use different peers/environments; their
 roughly elevenfold difference does not isolate Wi-Fi, VFIO/QEMU or stack costs.
 Native CPU count and repeated throughput samples were not reported, so this
 single native result is functional evidence rather than a matched performance
