@@ -1,11 +1,14 @@
-# Links port investigation
+# Links port
 
-Status: investigation complete; no implementation is selected or authorized.
-Links is next in the [queue](application-ports.md) (vi, then Links, then less)
-for reading HTML documentation offline, such as the Java SE 8 Virtual Machine
-Specification, without leaving Pyxis. This document scopes a first slice that
-reads local files only and lists the decisions to make before porting. HTTP
-and HTTPS are later slices.
+Status: investigation complete. The [decisions](#agreed-decisions) were agreed
+on 2026-10-04; the port has not started. Links is next in the
+[queue](application-ports.md) (vi, then Links, then less). The goal is reading
+HTML documentation such as the Java SE 8 Virtual Machine Specification without
+leaving Pyxis.
+
+In this port Links loads every page through libc `fopen`, GET only. Local files,
+`system://` and the `http://`/`https://` providers all use that one path. Links'
+own sockets, DNS and OpenSSL are not used.
 
 ## Source and evidence
 
@@ -43,6 +46,9 @@ Links isolates each platform in `os_dep.h` and `os_depx.h`.
   keyboard and honours timer deadlines.
 - **Feature switches.** `os_dep.h` turns off asynchronous DNS, fork-on-exit,
   file-security checks and SMB, and selects drive-prefixed paths for DOS.
+- **Protocols.** `url.c` maps each scheme to a handler. `file://` is
+  free-syntax, so everything after `file://` is path data. Relative links are
+  joined by `join_urls`.
 - **Directory listings.** `file.c` shows rights, link counts and owners only
   when a platform defines `FS_UNIX_RIGHTS`, `FS_UNIX_HARDLINKS` and
   `FS_UNIX_USERS`. Dates need `strftime`. Without those, a listing is kind,
@@ -59,31 +65,71 @@ Links isolates each platform in `os_dep.h` and `os_depx.h`.
 - **Character sets.** Links converts page text to the terminal's charset. With
   an ASCII terminal it substitutes approximations for non-ASCII characters, so
   UTF-8 specifications stay readable on today's renderer.
+- **TLS.** HTTPS in Links uses about 100 distinct OpenSSL symbols, mainly in
+  `https.c` (904 lines) and `connect.c`. This port does not need them.
 
 ## The Pyxis gap
 
 The 77 missing symbols fall into three groups:
 
-| Group | Symbols | First-slice treatment |
+| Group | Symbols | Treatment |
 | --- | --- | --- |
 | Platform layer, as on DOS | `select`, `poll`, `pipe`, `dup`/`dup2`, `fcntl`, `fork`/`exec*`/`waitpid`/`system`/`setpgid`/`kill`/`raise`, signals, termios, `ioctl`, rlimits, `sysconf`/`getpagesize`, `uname`/`gethostname`/`getpid`, `mallopt`/`malloc_trim`, locale | Redirect or switch off in a Pyxis platform block |
-| Networking | `socket`, `connect`, `bind`, `listen`, `accept`, `get/setsockopt`, `getsockname`, `getaddrinfo`/`freeaddrinfo`, `inet_ntop`/`inet_pton` | Deferred to the HTTP slice |
-| Local files and time | `opendir`/`readdir`/`closedir`/`dirfd`, `stat`/`lstat`/`fstat`, `getcwd`/`chdir`, `lseek`, `unlink`, `fsync`, `access`, `readlink`, `tempnam`, `strcspn`, `strftime`, `timegm`, `clock_gettime`/`gettimeofday`, plus download-only `chmod`, `utimes` and `fallocate` | Needed, or patched around (below) |
+| Networking | `socket`, `connect`, `bind`, `listen`, `accept`, `get/setsockopt`, `getsockname`, `getaddrinfo`/`freeaddrinfo`, `inet_ntop`/`inet_pton` | Not needed: the `http://` and `https://` providers fetch through `fopen` |
+| Local files and time | `opendir`/`readdir`/`closedir`/`dirfd`, `stat`/`lstat`/`fstat`, `access`, `getcwd`/`chdir`, `lseek`, `unlink`, `fsync`, `readlink`, `tempnam`, `strcspn`, `strftime`, `timegm`, `clock_gettime`/`gettimeofday`, plus download-only `chmod`, `utimes` and `fallocate` | Added to libc ([decision 2](#agreed-decisions)) or patched around |
 
 Relevant native facts:
 
-- **Waiting.** [`wait_many`](../devices/tcp.md) waits on TCP, terminal
-  attachments, processes and groups. Console and terminal input accept only
-  INTERRUPT, on an armed handle, so a program cannot wait for keystrokes and
-  sockets in one call. Console reads do take a deadline, through libterm's
-  timed read.
+- **Waiting.** [`wait_many`](../devices/tcp.md) cannot wait for console input;
+  console and terminal input accept only INTERRUPT, on an armed handle.
+  Console reads do take a deadline, through libterm's timed read. With
+  networking behind `fopen`, Links only ever waits for keys and timers.
 - **Directory metadata.** Native enumeration returns each name with a kind:
-  file, directory, symlink, other or unknown. Files report their size. There
-  are no timestamps, owners or permission bits.
+  file, directory, symlink, other or unknown. Lookup opens only files and
+  directories and never follows symlinks. Files report their size. There are
+  no timestamps, owners or permission bits.
+- **Providers.** [Scheme providers](../userland/http-fetch.md) open their full
+  URI through the namespace. The HTTP(S) provider returns bytes only for
+  status 200 (204 is empty) and never follows redirects.
 - **Working directory.** It is a retained chain of directory capabilities. The
   startup display path is a description, not authority.
 
-## Proposed first slice: local files
+## Agreed decisions
+
+Agreed on 2026-10-04, after the [review](https://git.internal/PyxisOS/pyxis-os/pulls/397):
+
+1. **Every page load goes through libc `fopen`, GET only.** This replaces
+   the earlier URL-mapping proposals.
+   - **One handler:** a generic Pyxis protocol handler opens the URL with
+     `fopen` and reads its bytes, so `host://`, `home://`, `system://`, `http://`
+     and `https://` behave alike. Links' own `http`/`https`/`ftp` handlers, DNS,
+     sockets and OpenSSL are not used.
+   - **Unknown schemes:** any `scheme://` missing from Links' protocol table
+     goes to this handler and is treated as hierarchical, so relative links
+     resolve against it.
+   - **Directories:** a native directory is listed through libc `opendir` and
+     `stat`, using Links' existing listing generator.
+   - **No content type:** HTML is detected by sniffing for `<html` or similar,
+     falling back to the file extension.
+2. **libc metadata.**
+   - **Directories:** `opendir`/`readdir`/`closedir` with `d_name` and
+     `d_type` from native enumeration.
+   - **`stat`/`fstat`:** a deliberately narrow `struct stat` holding only
+     `st_mode` file-type bits and `st_size`. There are no permission, owner,
+     link or time fields, so a consumer needing them fails to compile instead
+     of reading invented values. Links' date column is patched to stay blank.
+   - **`access`:** `F_OK`, `R_OK` and `W_OK`, implemented as opens with the
+     matching rights. A later vi follow-up can then drop its two adapter probes.
+   - **Also:** `strcspn`, `lseek`, `unlink` and `fsync`.
+   - **`lstat` and `readlink`:** lookup never follows symlinks, so `lstat`
+     behaves exactly as `stat`, and both fail for a symlink entry with the
+     native error. `readdir` still reports such entries as `DT_LNK`. `readlink`
+     fails with a real error, because there is no native link-reading
+     operation.
+3. **Event model.** Use the DOS-style single-process loop. Local and HTTP(S)
+   browsing ship together, since both are `fopen`.
+
+## Port scope
 
 **Platform.** Add a `PYXIS` block to `os_dep.h`/`os_depx.h`, keyed on the
 compiler's `__pyxis__`, and a `pyxis.c` modelled on `dos.c`:
@@ -97,10 +143,12 @@ compiler's `__pyxis__`, and a `pyxis.c` modelled on `dos.c`:
   as Kilo and vi do. The size comes from `term_size`; there is no resize
   notification.
 - **Switched off.** Fork, signals, AF_UNIX sharing, async DNS, SMB and file
-  security. File loading stays synchronous.
+  security.
 
-**Files.** Use Links' existing `file://` handling, with the URL mapping from
-decision 1. Directory listings show kind, size and name only.
+**Loading.** The Pyxis handler runs synchronously in the main loop. It checks
+whether a path names a directory: if so, it uses the listing generator;
+otherwise it reads through `fopen`. Provider URIs do not support directory
+operations, so they always go through `fopen`.
 
 **Configuration.** `~/.links2` needs `HOME`, `mkdir` and save-by-rename. Either
 store it under `home://` or run without saved configuration. This is a routine
@@ -108,31 +156,28 @@ choice, settled during implementation.
 
 **Limits to state.**
 
-- **Content:** ASCII display, with non-ASCII characters approximated; no images.
-- **Network:** no HTTP, HTTPS or downloads.
-- **External programs:** none.
+- **Blocking loads:** every load blocks the UI, network fetches included. Only
+  the HTTP provider's own deadlines bound them.
+- **HTTP behaviour:**
+  - redirects and statuses other than 200/204 surface as open errors;
+  - GET forms work as URLs with a query string; there is no POST;
+  - there are no cookies or custom request headers.
+- **Content type:** detected by sniffing or extension. A charset comes from
+  the page's own `<meta>` or Links' default.
+- **Display:** ASCII, with non-ASCII characters approximated; no images.
+- **Programs:** no downloads to external programs.
 - **Screen size:** fixed; no resize notification.
 
-**Validation.** An ordinary build, then interactive QEMU browsing of a local
-HTML tree on `host://`: links, tables, frames, back/forward, search and
-directory listings. Use the remote terminal and the framebuffer, as with vi,
-and record the image size.
+**Validation.** Browse a local mirror of the Java SE 8 JVM specification HTML,
+for example on `host://`, interactively through the remote terminal and the
+framebuffer, as with vi. Also open an `https://` page, a native directory
+listing and an error case such as a redirect. Record the image size.
 
-**Sizing (estimate).** Links has 73 C files. The platform file is new; the
-core patches are the platform headers, `file.c`'s date column and the
-command-line URL translation. For scale, `dos.c` is 852 lines including its
-PC-specific screen and mouse code.
-
-## Later slices
-
-- **HTTP.** Needs libc sockets over the native TCP endpoints, and a way to wait
-  for console input and sockets together. Without a native extension, the
-  loop would alternate a zero-timeout console poll with short `wait_many`
-  deadlines, adding latency and wake-ups. That native question belongs with
-  the [event-wait direction](neovim-libuv.md#proposed-bounded-native-milestones).
-- **HTTPS.** Links uses about 100 distinct OpenSSL symbols, mainly in `https.c`
-  (904 lines) and `connect.c`. An Mbed TLS backend over userland `libtls` is a
-  substantial rewrite of its own.
+**Sizing (estimate).** Links has 73 C files. The platform file and the Pyxis
+protocol handler are new. The core patches are the platform headers, the
+protocol table's fallback, `file.c`'s date column and command-line URL
+handling. For scale, `dos.c` is 852 lines including its PC-specific screen and
+mouse code.
 
 ## Alternatives
 
@@ -141,33 +186,9 @@ garbage collector, and ELinks is larger and also built on `select`. None of
 them removes the event-loop or metadata questions, so these were not
 re-measured.
 
-## Decisions before implementation
+## Known limit: response metadata
 
-1. **Local URL mapping.** Proposed default: Links keeps standard `file://` URLs,
-   and the platform layer translates `file:///ROOT/rest` to the Pyxis path
-   `ROOT://rest` at `open`/`opendir`/`stat`. Command-line arguments such as
-   `links host://jvms/index.html` are translated the same way, and relative
-   arguments use the startup display path. Every `file://` special case,
-   including security checks and relative-link joining, keeps working
-   unchanged.
-   - **Alternative A:** register Pyxis roots as Links protocols, so native URLs
-     such as `host://jvms/index.html` appear. That needs changes wherever Links
-     special-cases `file://`.
-   - **Alternative B:** embed Pyxis paths inside `file://`, as DOS does with
-     drive letters. Path normalization would then need patching for the inner
-     `//`.
-2. **File metadata in libc.** Proposed default:
-   - **Directories:** add `opendir`/`readdir`/`closedir` with `d_name` and
-     `d_type` from native enumeration.
-   - **`stat`/`fstat`:** add them with a deliberately narrow `struct stat` that
-     holds only `st_mode` file-type bits and `st_size`. There are no permission,
-     owner, link or time fields, so a consumer needing them fails to compile
-     instead of reading invented values. Links' date column is then patched to
-     stay blank.
-   - **Alternative:** keep `stat` out of libc and patch `file.c` onto native
-     lookups.
-   - **Also:** the routine additions `strcspn`, `lseek`, `unlink` and `fsync`.
-3. **Event model and scope.** Proposed default: ship the local-files slice with
-   the DOS-style single-process loop, and defer HTTP until console-plus-socket
-   waiting is decided natively. The alternative is to settle that native wait
-   first and port local and HTTP browsing together.
+`fopen` gives a program no response metadata: no media type, status or
+redirect target. The native OPEN reply already carries an optional media type.
+Exposing that kind of metadata to programs in a way that fits Pyxis is future
+design work; see [technical debt](../technical-debt.md#response-metadata-through-fopen).
