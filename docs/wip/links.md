@@ -159,7 +159,8 @@ choice, settled during implementation.
 - **Blocking loads:** every load blocks the UI, network fetches included. Only
   the HTTP provider's own deadlines bound them.
 - **HTTP behaviour:**
-  - redirects and statuses other than 200/204 surface as open errors;
+  - redirects and statuses other than 200/204 surface as open errors
+    (see [HTTP redirects](../technical-debt.md#http-redirects));
   - GET forms work as URLs with a query string; there is no POST;
   - there are no cookies or custom request headers.
 - **Content type:** detected by sniffing or extension. A charset comes from

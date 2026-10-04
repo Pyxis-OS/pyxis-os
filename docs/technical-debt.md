@@ -930,16 +930,6 @@ this does not bound queueing or invocation through the shared file/open helpers.
 Revisit caller-controlled bounded file/open waits alongside cancellation/wait
 sets; do not introduce hidden retries or an arbitrary global timeout. Existing endpoint APIs already support explicit deadlines.
 
-## Response metadata through fopen
-
-Programs reading a provider URI through libc `fopen` receive only bytes: no
-media type, HTTP status or redirect target. The native OPEN reply already
-carries an optional media type, and providers retain the final HTTP status, but
-neither reaches a program. The [Links port](wip/links.md) therefore sniffs
-content and reports a redirect only as an open error. Revisit with a way to
-expose response metadata to programs that fits Pyxis, alongside
-[discoverable resource representations](wip/userspace-scheme-providers.md#discoverable-resource-representations).
-
 ## HTTP framing compatibility
 
 The [initial HTTP library](userland/http-fetch.md) deliberately rejects duplicate or list
