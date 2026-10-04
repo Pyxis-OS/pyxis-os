@@ -111,6 +111,15 @@ name fails unless another entry has been created there. Roots and final `.` or
 Nonempty directories report ENOTEMPTY. This is nonrecursive removal, without
 unlink/rmdir syscall adapters. Persistent storage remains separate work.
 
+## Directory creation
+
+`mkdir(path, mode)` from `<sys/stat.h>` creates one directory through the
+parent's CREATE right, using the same startup roots and initial directory chain
+as fopen. `mode` has no effect: native directories carry no permission bits. A
+trailing slash is accepted; roots and a final `.` or `..` are rejected. An
+existing name of either kind fails with EEXIST and a missing parent with ENOENT;
+parents are not created. The new directory's handle is closed before return.
+
 ## Rename
 
 `rename(old_path, new_path)` performs atomic file rename/replacement through the
@@ -272,6 +281,30 @@ position and both indicators. A write on an update stream drops read-ahead
 first, so no `fseek` is needed between reading and writing. ISO C requires one;
 omitting it is a Pyxis guarantee, not portable behavior.
 
+## Pushback and scanning
+
+`ungetc` keeps one byte per FILE, returned before any further input, including
+read-ahead. A second `ungetc` before a read fails, and `EOF` is never pushed.
+It clears the EOF indicator, and `ftell` reports one less (not below zero).
+A successful `fseek` (a `SEEK_CUR` offset counts from the position before the
+pushback), input `fflush` and any write discard it. Pushback belongs to the
+FILE: descriptor reads never see it.
+
+`fscanf`, `scanf`, `sscanf` and their `v` forms read through `fgetc` with that
+one byte of lookahead. They support whitespace and ordinary-character
+directives, `%%`, and the narrow conversions `d i u o x X p`, `a e f g` (and
+capitals), `s`, `c`, `[` and `n`, with `*` suppression, a nonzero width and the
+lengths `hh h l ll j z t L`. Scansets accept a leading `^`, a leading `]` and
+`a-z` ranges. Integers convert through `strtoll`/`strtoull` (overflow saturates)
+and floats through `strtof`/`strtod`/`strtold`. A field that is only a prefix
+of a number, such as `0x` or `1e+`, is consumed and fails the directive. Numeric
+fields stop after 511 characters, as if limited by a width.
+
+The result counts assignments; it is EOF if input ends or a read fails before
+the first conversion completes. A malformed or unsupported conversion, including
+wide `%ls`, `%lc` and `%l[`, stops with EINVAL and the same result rule. Input is
+locale-free ASCII.
+
 ## Standard streams, formatting and exit
 
 Startup supplies independent stdin, stdout and stderr bindings. Each declares
@@ -346,6 +379,9 @@ there is no locale state. Conversion uses the pinned musl algorithm with an
 approximately 8 KiB stack workspace, honors the active FP rounding mode, and
 does not allocate. Large padding on a bounded destination is counted without
 iterating through discarded bytes. Kernel formatting remains integer-only.
+
+`sprintf` and `vsprintf` use the same formatter without a destination bound;
+the caller's buffer must hold the whole result and its NUL. Prefer `snprintf`.
 
 `asprintf` and `vasprintf` use the same formatter and INT_MAX result-count limit.
 Success returns the character count excluding NUL and transfers malloc-owned,

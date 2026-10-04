@@ -138,6 +138,18 @@ Accepted 2026-10-04, with the defaults below.
   - Pin and license the shareware data, and add the `QUAKE_DATA` override.
   - **Finish when:** the completion goal above is met, with the `timedemo demo1`
     frame rate recorded in QEMU and natively.
+  - Accepted 2026-10-04:
+    - QuakeC strings use a Quakespasm-style engine-string table on 64 bits;
+    - generated files go to `home://quake/id1` through a `-writedir` patch;
+    - a first run binds the middle button to the next weapon;
+    - standard functions the port needs are added to libc: `mkdir`, musl's
+      `sin`/`cos`/`tan`/`atan`/`atan2`/`ceil`/`sqrt`, `sprintf`, `vsprintf`,
+      `strcat`, `rand`, `atof`, `ungetc` and the scanf family;
+    - the video mode stays 320x240, with a resolution switcher as later work.
+  - **Status:** implemented; see [Quake](../userland/quake.md). In QEMU (KVM,
+    4 CPUs, nested VM), `timedemo demo1` gave a median of 1598 fps over seven
+    runs. E1M1 plays with mouse look, and save/load, configuration and retail
+    `QUAKE_DATA` work. Awaiting the owner's native ThinkPad run and `timedemo`.
 
 Task 1 can start immediately. Task 3's non-mouse parts (build, display,
 keyboard, data) can proceed in parallel with tasks 1 and 2.

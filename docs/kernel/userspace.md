@@ -197,6 +197,11 @@ No conversion leaves the end pointer at the input; successful calls leave
 decimal conversion without reliable range diagnostics. No locale state or
 floating conversion is added by these functions.
 
+`atof` is `strtod` without an end pointer. `rand` returns 0 through `RAND_MAX`
+(32767) from ISO C's example linear congruential generator; the sequence starts
+as if `srand(1)` had been called. It suits games and simple sampling, not
+security. `strcat` appends to an existing NUL-terminated string.
+
 `qsort` is an in-place, unstable heapsort: O(n log n) comparisons, constant
 stack use, no allocation or recursion. Comparators receive pointers to array
 elements and return a negative, zero or positive result.
@@ -223,9 +228,11 @@ The x87/MXCSR control modes and status remain as they were at `longjmp`, followi
 This libc saves only the callee-saved integer registers, stack pointer and return
 address; it adds no signal-mask handling or kernel context-switch interface.
 
-The `<math.h>` subset provides `floor`, `fmod`, `pow`, `frexp`, `ldexp`, `scalbn`,
-`fabs`, `scalbnl`, `ldexpl`, `fmodl`, `fabsl`, `copysignl` and `frexpl`, built from
-pinned musl sources. They are in libc and need no `-lm`. The SDK uses SSE2
+The `<math.h>` subset provides `floor`, `ceil`, `fmod`, `pow`, `sqrt`, `sin`, `cos`,
+`tan`, `atan`, `atan2`, `frexp`, `ldexp`, `scalbn`, `fabs`, `scalbnl`, `ldexpl`,
+`fmodl`, `fabsl`, `copysignl` and `frexpl`, built from pinned musl sources.
+`sqrt` uses SSE2 `sqrtsd`; the trigonometric functions take radians and reduce
+arguments of any magnitude exactly modulo pi/2. They are in libc and need no `-lm`. The SDK uses SSE2
 float/double evaluation and x87 80-bit long double. `floor` rounds downward;
 `fmod` and `fmodl` use a quotient truncated toward zero. Scaling follows the
 active rounding mode. Errors use floating-point exception flags

@@ -103,7 +103,8 @@ remain independent of that port.
 The [Doom port](../userland/doom.md) uses the mapped display, keyboard sessions and
 monotonic clock for single-player gameplay and demo playback. Images include
 shareware data; local retail WADs and demos are optional overrides. PCI/VirtIO
-is not a prerequisite.
+is not a prerequisite. The [Quake port](../userland/quake.md) adds pointer
+sessions for mouse look, shareware data and a `QUAKE_DATA` override.
 
 VirtIO driver order is agreed: virtio-fs, then virtio-net, then virtio-blk.
 An opt-in [host-backed development overlay](host-development-overlay.md)
