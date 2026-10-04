@@ -130,7 +130,7 @@ struct usb_host_controller {
   struct {
     phys_addr_t physical;
     unsigned type, slot, completion;
-    bool pending;
+    bool pending, timed_out;
   } command;
   uint64_t interrupts, commands_completed, events_consumed;
   const char *failure;
@@ -872,6 +872,18 @@ void xhci_interrupt(void)
   }
 }
 
+void usb_host_notify(struct usb_host_controller *controller)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  controller->notified = true;
+  struct task_wait *wait = controller->wait;
+  controller->wait = NULL;
+  if (wait) {
+    task_wait_wake(wait);
+  }
+}
+
 static void wait_activity(struct usb_host_controller *controller, uint64_t deadline)
 {
   uint64_t flags = cpu_save_interrupts();
@@ -1060,7 +1072,9 @@ static bool controller_healthy(struct usb_host_controller *controller)
 static bool run_command_flags(struct usb_host_controller *controller, unsigned type, unsigned argument, phys_addr_t parameter, uint32_t flags, uint64_t deadline)
 {
   KASSERT(!controller->command.pending);
+  controller->command.timed_out = false;
   if (task_deadline_expired(deadline)) {
+    controller->command.timed_out = true;
     controller->failure = "controller command deadline expired before admission";
     return false;
   }
@@ -1098,6 +1112,7 @@ static bool run_command_flags(struct usb_host_controller *controller, unsigned t
       return true;
     }
     if (task_deadline_expired(deadline)) {
+      controller->command.timed_out = true;
       controller->failure = "controller command deadline expired";
       return false;
     }
@@ -1453,8 +1468,9 @@ static enum usb_result context_command(struct usb_host_device *device, unsigned 
   struct usb_host_controller *controller = device->controller;
   dma_write_barrier();
   if (!run_command(controller, type, device->slot, device->input.physical, deadline)) {
+    enum usb_result result = controller->command.timed_out ? USB_TIMEOUT : USB_IO;
     stop_controller(controller);
-    return USB_IO;
+    return result;
   }
   return USB_OK;
 }
@@ -2063,11 +2079,17 @@ enum usb_result usb_host_bulk_clear(struct usb_host_device *device, uint8_t addr
     return USB_IO;
   }
   if (endpoint->halted &&
-      (!endpoint_command(device, XHCI_TRB_RESET_ENDPOINT, endpoint->dci, 0, deadline) ||
-       !clear_tt(device, address, false, deadline))) {
+      !endpoint_command(device, XHCI_TRB_RESET_ENDPOINT, endpoint->dci, 0, deadline)) {
+    enum usb_result result = controller->command.timed_out ? USB_TIMEOUT : USB_IO;
     controller->failure = "bulk stall retirement failed";
     stop_controller(controller);
-    return USB_IO;
+    return result;
+  }
+  if (endpoint->halted && !clear_tt(device, address, false, deadline)) {
+    enum usb_result result = task_deadline_expired(deadline) ? USB_TIMEOUT : USB_IO;
+    controller->failure = "bulk transaction translator retirement failed";
+    stop_controller(controller);
+    return result;
   }
   struct usb_setup setup = {
     .request_type = USB_REQUEST_ENDPOINT_OUT,
@@ -2075,10 +2097,11 @@ enum usb_result usb_host_bulk_clear(struct usb_host_device *device, uint8_t addr
     .value = USB_FEATURE_ENDPOINT_HALT,
     .index = address,
   };
-  if (host_control(device, &setup, deadline) != USB_OK) {
+  enum usb_result result = host_control(device, &setup, deadline);
+  if (result != USB_OK) {
     controller->failure = "bulk endpoint halt clear failed";
     stop_controller(controller);
-    return USB_IO;
+    return result;
   }
   /* A completed single-TRB TD proves Running:Idle; a reset stalled endpoint is
    * Stopped. Drop+Add resets host toggle state for either case, including the
@@ -2091,7 +2114,7 @@ enum usb_result usb_host_bulk_clear(struct usb_host_device *device, uint8_t addr
   dma_read_barrier();
   memcpy(input_slot(device), (const void *)device->output.address, controller->context_bytes);
   set_bulk_endpoint(device, endpoint);
-  enum usb_result result = context_command(device, XHCI_TRB_CONFIGURE_ENDPOINT, deadline);
+  result = context_command(device, XHCI_TRB_CONFIGURE_ENDPOINT, deadline);
   if (result == USB_OK) {
     endpoint->halted = false;
     if (stalled) {
@@ -2110,7 +2133,7 @@ enum usb_result usb_host_bulk_clear(struct usb_host_device *device, uint8_t addr
 
 enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t address,
                                        const void *outbound, void *destination, size_t length,
-                                       uint64_t deadline, size_t *actual)
+                                       uint64_t deadline, size_t *actual, bool *submitted)
 {
   assert_device_owner(device);
   struct usb_host_controller *controller = device->controller;
@@ -2133,6 +2156,7 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
   if (!inbound) {
     memcpy((void *)bulk->data_address, outbound, length);
   }
+  uint64_t flags = cpu_save_interrupts();
   unsigned index = endpoint->enqueue;
   bool cycle = endpoint->cycle;
   bulk->active = endpoint;
@@ -2154,9 +2178,14 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
   }
   dma_write_barrier();
   ring[index].control = control | (cycle ? XHCI_TRB_CYCLE : 0);
+  if (submitted) {
+    *submitted = true;
+  }
   dma_write_barrier();
   write32(controller->registers.address, controller->doorbells + device->slot * XHCI_DOORBELL_BYTES,
           endpoint->dci);
+  cpu_restore_interrupts(flags);
+  bool timed_out = false;
   while (bulk->state == CONTROL_ACTIVE) {
     if (!controller_healthy(controller) || !drain_events(controller) || !control_deadlines(controller)) {
       stop_controller(controller);
@@ -2165,7 +2194,8 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
     if (bulk->state != CONTROL_ACTIVE) {
       break;
     }
-    if (task_deadline_expired(deadline) || !device_present(device)) {
+    timed_out = task_deadline_expired(deadline);
+    if (timed_out || !device_present(device)) {
       controller->failure = "bulk transfer timeout or device removal";
       stop_controller(controller);
       break;
@@ -2173,7 +2203,7 @@ enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t a
     uint64_t poll = task_deadline_after_ms(USB_WORKER_POLL_MS);
     wait_activity(controller, poll < deadline ? poll : deadline);
   }
-  enum usb_result result = bulk->result;
+  enum usb_result result = timed_out ? USB_TIMEOUT : bulk->result;
   if (bulk->state == CONTROL_DONE) {
     if (inbound) {
       dma_read_barrier();
@@ -2260,6 +2290,14 @@ static void controller_worker(void *argument)
   for (;;) {
     if (!controller_healthy(controller) || !drain_events(controller) ||
         !control_deadlines(controller) || !update_ports(controller)) {
+      stop_controller(controller);
+      return;
+    }
+    usb_storage_process(controller->discovery);
+    if (!controller->running || controller->failed) {
+      return;
+    }
+    if (!controller_healthy(controller)) {
       stop_controller(controller);
       return;
     }

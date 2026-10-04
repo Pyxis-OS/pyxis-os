@@ -613,7 +613,7 @@ authorized recovery validation.
 The owner deferred native ThinkPad installation on 2026-10-04 while completing
 [task-5 QEMU qualification](development/experiments/native-filesystem-task5/README.md).
 Current writable storage is VirtIO only; USB enumeration/firmware loading does
-not supply native block reads, writes or flush. Resume the physical step after
+not supply qualified native filesystem reads, USB writes or flush. Resume the physical step after
 the USB storage/backend write-and-cache-synchronization work, with an explicitly
 selected expendable target. The internal NVMe remains unsupported.
 
@@ -1218,16 +1218,22 @@ Each device admits one active control request; each admitted BOT device also
 serializes private bulk exchanges. Owned stalls have bounded endpoint recovery,
 including TT cleanup and safe dequeue retirement. Other early errors, deadlines
 or removal during active work stop the whole controller and retain unresolved
-DMA until reboot. BOT probes now execute 512/4096-byte media reads and large-LBA
-SCSI commands in QEMU, including hub descendants and multiple controllers.
+DMA until reboot. BOT probes and registered kernel block reads execute 512/4096-byte media reads
+and large-LBA SCSI commands in QEMU, including hub descendants and multiple
+controllers. GPT waits for terminal USB discovery and scans retained candidates
+without treating partial discovery as a global I/O failure.
 Stall/TT/reset recovery, active abandonment, ring wrap and nonzero alternate
 selection remain source/spec-reviewed without forced-error validation. Revisit
 with natural device evidence; physical USB qualification remains separate.
 
 The [BOT/SCSI probe](devices/usb-storage.md) accepts one non-composite BOT
 interface, no streams, and one LUN. Multiple LUNs, other interface shapes and
-observed READ CAPACITY (16) protection-enabled geometry remain unsupported. It registers no block device,
-mounts nothing and performs no writes or flushes. Revisit those limits in their
+observed READ CAPACITY (16) protection-enabled geometry remain unsupported. Terminal candidates now register kernel block devices and support read-only
+GPT discovery. Native mount/installer authority stays VirtIO-only; USB public
+raw access, mounting, writes and flushes remain deferred. Two captured read
+slots per supported disk and snapshot capacity are reserved before AP startup;
+GPT USB scans share one scratch buffer. Revisit the pre-AP reservation cost
+with measured topology/resource requirements and the mount integration. Revisit those limits in their
 focused integration/qualification tasks. NOT READY media retain sense and fail
 immediately, including NOT READY / 04h/01h (becoming ready); bounded UNIT
 ATTENTION retries do not implement a spin-up policy. Revisit a bounded wait only

@@ -6,6 +6,14 @@ publishes a partition-map snapshot per device through
 It does not repair GPT, choose a filesystem, mount partitions, grant access or
 provide a partition I/O wrapper or userspace ABI.
 
+VirtIO scans start immediately after their workers are created. USB candidates
+are discovered asynchronously, so their snapshot capacity is reserved before AP
+startup. A coordinator waits for terminal USB discovery (including partial
+inventories), then uses one shared scratch buffer to scan each candidate through
+ordinary block tickets. Individually READY USB media can publish maps while
+aggregate discovery remains incomplete. USB maps are kernel observations and
+supply no native mount or installer grant in this slice.
+
 ## Execution and lifetime
 
 `gpt_prepare()` reserves bounded scratch per device before AP startup. After the
