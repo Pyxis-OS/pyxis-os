@@ -962,7 +962,8 @@ they are implemented, settle:
 - **Hops:** a bounded hop count, with loop detection.
 - **Schemes:** HTTPS never redirects to plain HTTP. Whether HTTP may upgrade to
   HTTPS is part of the same decision.
-- **Location:** a relative `Location` resolves against the request URL.
+- **Location:** a relative `Location` resolves against the URL of the request
+  that received it, which is the current hop's URL after earlier redirects.
 - **Methods:** methods are GET only today, so 303 versus 307/308 method rules
   can wait for non-GET requests.
 - **Request data across origins:** credentials and other request headers are
@@ -970,8 +971,22 @@ they are implemented, settle:
   [scheme provider notes](wip/userspace-scheme-providers.md).
 - **The final URL:** the consumer must learn where it ended up. A browser
   resolves relative links against the final URL, not the one it asked for.
-  This ties redirects to exposing response metadata (media type, status, final
-  location) to programs, which is also deferred.
+  Delivering it to programs that read through `fopen` belongs to
+  [response metadata through fopen](#response-metadata-through-fopen).
+
+## Response metadata through fopen
+
+A program reading a provider URI through libc `fopen` receives only bytes. It
+gets no media type, HTTP status or, once redirects exist, final URL. The native
+OPEN reply already carries an optional media type, and the providers retain
+the final HTTP status, but neither reaches the program. The planned
+[Links port](wip/links.md) therefore detects HTML by sniffing or file extension,
+and shows a rejected status only as an open error.
+
+Revisit with a way to expose response metadata to programs that fits Pyxis,
+alongside [discoverable resource representations](wip/userspace-scheme-providers.md#discoverable-resource-representations).
+Following redirects is a separate deferral, recorded in
+[HTTP redirects](#http-redirects).
 
 ## HTTPS trust and platform limits
 
