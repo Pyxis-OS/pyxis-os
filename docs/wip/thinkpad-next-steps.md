@@ -277,21 +277,21 @@ with revision-specific handling. AX200 Wi-Fi is `03:00.0`.
 
 The router reserves a fixed address for the built-in port. Its owner-confirmed
 static profile is recorded in the
-[driver plan](thinkpad-rtl8111.md#goal-and-machine-configuration). These values
+[driver reference](../devices/rtl8111.md#selection-and-machine-configuration). These values
 are machine configuration, not a driver contract.
 
 **Passthrough completed (2026-10-03).** The
 [NIC passthrough reference](../development/thinkpad-nic-passthrough.md) records
 the implemented `VFIO_PCI` launcher, Fedora host setup and successful owner/agent
-boots. Pyxis inventories `10ec:8168`, revision `0x15`, without claiming it.
+boots. The subsequent driver identifies supported hardware by TxConfig XID.
 
-**RTL8111 five-task outline approved (2026-10-03).** The
-[milestone](thinkpad-rtl8111.md) records the review's revised order: owner Fedora
-capture and Caelum identification, preparation, the VirtIO selection refactor,
-RTL8111 I/O, then VFIO/native qualification. The owner directs configuration to
-choose the interface; there is no automatic RTL8111 preference. The per-controller
-model, dock revision support, ownership details and hardware references remain
-proposals pending confirmation. Driver implementation and task 1 have not started.
+**RTL8111 completed (2026-10-04).** The
+[driver reference](../devices/rtl8111.md) records implemented selection and I/O.
+The built-in XID `541` serves the remote terminal through VFIO and on the owner's
+native cold/PXE boot with the dock attached; the dock-facing XID `502` remains
+unsupported. [Qualification](../development/rtl8111-qualification.md) records
+traffic, link changes and native HTTPS. Configuration chooses the interface,
+without automatic preference or an exactly-one-NIC restriction.
 
 ## 3. Later idea: reverse remote terminal with broadcast discovery
 

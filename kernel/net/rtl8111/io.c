@@ -153,8 +153,16 @@ bool rtl8111_service(struct rtl8111_controller *controller)
     return false;
   }
   bool link = phy & RTL_PHY_LINK;
+  bool link_returned = link && !controller->link_up;
   if (link != controller->link_up) {
     controller->link_up = link;
+    if (link) {
+      uint64_t deadline = task_deadline_after_ms(RTL_TX_TIMEOUT_MS);
+      for (unsigned i = 0; i < controller->tx.outstanding; ++i) {
+        unsigned id = (controller->tx.consumer + i) % RTL_RING_COUNT;
+        controller->tx_deadlines[id] = deadline;
+      }
+    }
     klog("rtl8111: link %s\n", link ? "up" : "down");
   }
 
@@ -177,11 +185,12 @@ bool rtl8111_service(struct rtl8111_controller *controller)
     ++tx_count;
     ++controller->completed;
   }
-  if (tx->outstanding && task_deadline_expired(controller->tx_deadlines[tx->consumer])) {
+  /* Carrier loss does not revoke device ownership or consume the TX timeout. */
+  if (link && tx->outstanding && task_deadline_expired(controller->tx_deadlines[tx->consumer])) {
     stop_controller(controller, "TX completion timed out");
     return false;
   }
-  if (tx_count && tx->outstanding) {
+  if (link && (tx_count || link_returned) && tx->outstanding) {
     /* Closely spaced kicks can be lost on this family. */
     dma_full_barrier();
     rtl_write8(controller, RTL_TX_POLL, RTL_TX_POLL_NORMAL);
@@ -241,7 +250,7 @@ bool rtl8111_next_deadline(struct rtl8111_controller *controller, uint64_t *dead
       controller->reset_recheck : controller->reset_deadline;
     return true;
   }
-  if (controller->active && controller->tx.outstanding) {
+  if (controller->active && controller->link_up && controller->tx.outstanding) {
     *deadline = controller->tx_deadlines[controller->tx.consumer];
     return true;
   }

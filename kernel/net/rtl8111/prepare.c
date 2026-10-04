@@ -288,6 +288,9 @@ static const char *prepare_controller(struct rtl8111_controller *controller,
       rtl_ring_allocate(&controller->tx, false) != MM_OK) {
     return "cannot allocate RX/TX rings";
   }
+  if (dma_buffer_allocate(&controller->counters, sizeof(struct rtl_counters)) != MM_OK) {
+    return "cannot allocate tally counters";
+  }
   if (!rtl_io_prepare(controller, controller->rx.storage.physical,
                       controller->tx.storage.physical) ||
       !pci_msix_prepare(&controller->msix, APIC_RTL8111_VECTOR)) {
@@ -365,6 +368,8 @@ void rtl8111_prepare(const struct boot_info *boot)
       klog("rtl8111 %x:%x.%u XID=%x: %s\n",
            address.bus, address.device, address.function, controller->xid, failure);
       if (release_failed_controller(controller)) {
+        /* Confirmed quiescence and bus mastering off make stale DMA addresses harmless. */
+        dma_buffer_release(&controller->counters);
         rtl_ring_release(&controller->tx);
         rtl_ring_release(&controller->rx);
         if (controller->xid != RTL_XID_8168H) {

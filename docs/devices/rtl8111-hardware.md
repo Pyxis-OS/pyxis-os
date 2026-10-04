@@ -1,9 +1,9 @@
 # ThinkPad RTL8111 hardware profile
 
-Hardware identified in task 1 of the [RTL8111 milestone](../wip/thinkpad-rtl8111.md),
-recorded 2026-10-03. Caelum prepares the identified built-in controller with RX/TX, DMA
-and delivery disabled; Ethernet I/O is pending. Full and partial MAC bytes are
-omitted.
+Hardware identified on 2026-10-03. The [RTL8111 driver](rtl8111.md) prepares and
+services the built-in controller; [qualification](../development/rtl8111-qualification.md)
+covers VFIO and the owner-run native cold/PXE boot with the dock attached.
+Full and partial MAC bytes are omitted.
 
 ## Owner's Fedora capture
 
@@ -130,13 +130,12 @@ interrupts and DMA disabled. If halt/reset is uncertain, retain ownership and
 mappings until reboot, report that controller unavailable and continue boot.
 A timeout does not establish that hardware has relinquished DMA ownership.
 
-## Accepted task 2 choices
+## Firmware and power policy
 
-The owner accepted these defaults in PR #359; they are the current direction and
-may be revised by the owner:
+The owner accepted these defaults in PR #359:
 
-- **Firmware-free first.** Tasks 4–5 measure initial and sustained traffic without
-  `rtl8168h-2.fw`. Only if those measurements show it is needed, add the pinned
+- **Firmware-free.** Qualified traffic uses no `rtl8168h-2.fw`. If a future
+  hardware requirement is measured, add the pinned
   linux-firmware file, its redistribution license and a small interpreter in a
   focused PR.
 - **Power.** Disable ASPM and CLKREQ in the endpoint's PCIe Link Control during
@@ -158,8 +157,10 @@ The owner subsequently reported native UEFI/PXE preparation success in
 prepared state and XID `502`, with DASH enabled, was identified and released
 without variant-specific writes. This is owner-reported evidence of that
 firmware handoff, not a measurement of every initial power/decode state.
-VFIO link and initial traffic are measured in task 4; cold-start firmware-free
-reliability and owner-run native I/O qualification remain task 5 work.
+The owner subsequently qualified native I/O from a cold/PXE boot with the dock
+attached in [PR #368](https://git.internal/PyxisOS/pyxis-os/pulls/368).
+That boot required no FIFO recovery reset; the warm VFIO handoff did.
+These observed paths do not qualify every firmware or initial power state.
 
 
 ## Ethernet I/O
@@ -195,8 +196,11 @@ The mask includes RX/TX completion/error and link change for MAC46.
 TX copies into the next CPU-owned buffer, zero-pads short frames to 60 bytes,
 publishes metadata before OWN, and kicks the normal queue. OWN clearing permits
 reuse; it does not establish delivery. Pending TX has a five-second completion
-budget. RX observes OWN clear before acquiring payload bytes, validates the
-fixed address, EOR, flags and byte bounds, strips the four-byte FCS, lends valid
+budget while carrier is up. Link loss suspends these deadlines without changing
+descriptor ownership. On carrier return the worker gives every pending descriptor
+a fresh five seconds and kicks the normal queue; a stall with carrier up still
+stops the controller until reboot. RX observes OWN clear before acquiring payload
+bytes, validates the fixed address, EOR, flags and byte bounds, strips the four-byte FCS, lends valid
 bytes synchronously to Ethernet and reposts afterward. Error, oversized and
 fragmented frames are dropped without accessing payload. The reference's
 `RxMaxSize = 0x4000` is a permissive length filter; each descriptor's 2048-byte
@@ -207,6 +211,26 @@ checks completion with a finite deadline. Neither timeout nor reset frees or
 reposts outstanding storage. Claims, rings and shared mappings remain until
 reboot, and configuration cannot switch or fall back to another controller.
 A response that stops TX also stops the enclosing RX service before reposting.
+
+### Hardware counter inspection
+
+Preparation reserves one additional page for the 64-byte RTL8168H tally payload.
+`rtl8111_capture_counters` is an internal debugger helper, with no periodic polling
+or userspace interface. Call it on the stopped BSP in kernel context with IF=0,
+outside interrupt handlers and locks, following [GDB guidance](../development/gdb.md).
+It requests a DMA snapshot through CounterAddrHigh/Low and waits at most 10 ms.
+It returns a `const struct rtl_counters *` only after completion; failure or a
+still-busy dump returns null. The returned payload stays valid until another
+capture starts. A failed dump preserves the allocation but its contents must
+not be read. Runtime storage remains until reboot.
+
+The tally includes `rx_missed`, a 16-bit hardware count of packets missed by the
+receiver, alongside packet and error counts. Record raw snapshots before and
+after sustained workloads. This is narrower than claiming loss-free operation:
+counter wrap/saturation behavior and background traffic must be considered.
+The MAC46 interrupt mask stays unchanged; masked/coalesced overflow interrupts
+cannot substitute for a hardware packet count. Layout and dump ordering follow
+the [Linux v6.18 tally implementation](https://github.com/torvalds/linux/blob/v6.18/drivers/net/ethernet/realtek/r8169_main.c).
 
 Register and descriptor facts follow the pinned
 [Linux v6.18 MAC46 start sequence](https://github.com/torvalds/linux/blob/v6.18/drivers/net/ethernet/realtek/r8169_main.c#L3371-L3430),

@@ -19,8 +19,10 @@ data and probe artifacts live with the corresponding development or userland
 reference. The filesystem encoding and host-tool contracts, and port-specific
 notes, remain authoritative in their separately versioned repositories.
 
-The [ThinkPad RTL8111 hardware profile](devices/rtl8111-hardware.md) records
-identified hardware and implemented controller preparation; Ethernet I/O is pending.
+The [RTL8111 driver](devices/rtl8111.md) supports the ThinkPad's built-in port.
+Its [hardware profile](devices/rtl8111-hardware.md) records ownership and register
+contracts; [qualification](development/rtl8111-qualification.md) covers VFIO and
+the owner-run native cold/PXE boot with the dock attached.
 
 ## Work in progress
 

@@ -267,13 +267,12 @@ when present, RDSEED with RDRAND fallback otherwise, ChaCha20 later), then
 Ethernet through VFIO passthrough to QEMU and a driver. The
 [NIC passthrough reference](../development/thinkpad-nic-passthrough.md) records
 the implemented launcher, host setup and successful owner/agent hardware boots.
-The owner accepted the [RTL8111 plan](thinkpad-rtl8111.md).
-[Hardware identification](../devices/rtl8111-hardware.md) is complete from the
-owner's Fedora capture and Caelum-side confirmation. Configuration chooses the
-interface. Controller preparation is implemented with bounded waits and
-firmware-free PHY setup; RTL DMA and delivery remain disabled. Explicit selector
-ABI/configuration and driver-neutral dispatch are implemented with VirtIO as the
-only connected driver. RTL8111 Ethernet I/O and native qualification remain.
+The [RTL8111 driver](../devices/rtl8111.md) milestone is complete: configuration
+selects the interface, and the built-in port serves the remote terminal through
+VFIO and natively with the dock attached. The
+[qualification report](../development/rtl8111-qualification.md) records sustained
+traffic, link checks and the owner-run native PXE/HTTPS results. The dock-facing
+XID `502` remains unsupported.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
