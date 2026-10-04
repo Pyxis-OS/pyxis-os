@@ -963,9 +963,9 @@ need and explicit synchronization, shared-mapping and dirty-data ownership.
 
 The worker admits 32 jobs with a cooperative 30-second deadline. Adapter storage
 has a 1 MiB/1,024-wrapper limit; pool metadata, the free-inode list and caches are
-separate. Each pool can retain 4 MiB of cached file payload plus entry metadata,
-a separate metadata read cache can retain 512 KiB plus physical-home keys, and
-a writable pool reserves up to 520 KiB for 128 journal images and encoding
+separate. Each pool can retain 4 MiB of cached file payload plus entry metadata.
+A separate metadata read cache can retain 512 KiB plus physical-home keys.
+A writable pool reserves up to 520 KiB for 128 journal images and encoding
 buffers. These are implementation bounds, not format limits or aggregate memory
 admission. The retained allocation bitmap needs one bit per pool block, rounded
 to 4 KiB: 32 KiB for a 1 GiB pool, about 8 MiB for 256 GiB. Mount reads and
