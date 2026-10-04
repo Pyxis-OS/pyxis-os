@@ -8,6 +8,8 @@
 #include <stdatomic.h>
 #include "core.h"
 #include "bot.h"
+#include "block.h"
+#include "../storage/block_registry.h"
 #include "host.h"
 #include "settings.h"
 
@@ -157,6 +159,7 @@ struct usb_discovery {
   struct usb_device_record *devices;
   struct system_info_usb_interface *interfaces;
   uint8_t *descriptors, *storage_scratch;
+  struct usb_block_pool *storage_pool;
   size_t capacity, interface_count, device_count, registry_index;
   unsigned port_count, device_capacity;
   bool started, hardware_failed;
@@ -824,6 +827,7 @@ struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index
   discovery->devices = kmalloc(discovery->device_capacity * sizeof(*discovery->devices));
   discovery->descriptors = kmalloc(capacity);
   discovery->storage_scratch = kmalloc(USB_BULK_BYTES);
+  discovery->storage_pool = usb_block_prepare(host, discovery->device_capacity);
   discovery->interfaces = kmalloc(USB_INTERFACE_BUDGET * sizeof(*discovery->interfaces));
   if (!discovery->devices || !discovery->descriptors || !discovery->storage_scratch || !discovery->interfaces) {
     usb_release_prepared(discovery);
@@ -847,6 +851,7 @@ void usb_release_prepared(struct usb_discovery *discovery)
     controller->discovery = NULL;
   }
   kfree(discovery->interfaces);
+  usb_block_release_prepared(discovery->storage_pool);
   kfree(discovery->storage_scratch);
   kfree(discovery->descriptors);
   kfree(discovery->devices);
@@ -1441,6 +1446,9 @@ static void capture_ports(struct usb_discovery *discovery)
 void usb_inventory_controller_failed(size_t index)
 {
   uint64_t flags = cpu_save_interrupts();
+  if (index < inventory.controller_count && inventory.controllers[index].discovery) {
+    usb_block_fail(inventory.controllers[index].discovery->storage_pool);
+  }
   if (index >= inventory.controller_count || !inventory.controllers[index].pending) {
     cpu_restore_interrupts(flags);
     return;
@@ -1556,6 +1564,11 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
       }
     }
     log_device(device);
+    if (storage->state != USB_BOT_UNBOUND) {
+      uint64_t flags = cpu_save_interrupts();
+      block_register_usb(usb_block_bind(discovery->storage_pool, storage));
+      cpu_restore_interrupts(flags);
+    }
   }
   incomplete |= !usb_host_inventory_complete(discovery->host) || task_deadline_expired(deadline);
   uint64_t flags = cpu_save_interrupts();
@@ -1567,6 +1580,28 @@ void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)
   --inventory.pending;
   publish_inventory();
   cpu_restore_interrupts(flags);
+}
+
+size_t usb_storage_capacity(void)
+{
+  size_t capacity = 0;
+  for (size_t index = 0; index < inventory.controller_count; ++index) {
+    const struct usb_discovery *discovery = inventory.controllers[index].discovery;
+    if (discovery) {
+      if (discovery->device_capacity > SIZE_MAX - capacity) {
+        return SIZE_MAX;
+      }
+      capacity += discovery->device_capacity;
+    }
+  }
+  return capacity;
+}
+
+void usb_storage_process(struct usb_discovery *discovery)
+{
+  if (discovery) {
+    usb_block_process(discovery->storage_pool);
+  }
 }
 
 static bool inventory_published(void)

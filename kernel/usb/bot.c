@@ -241,11 +241,13 @@ static enum bot_command_result broken(struct usb_bot *bot, const char *detail)
 
 static enum bot_command_result command(struct usb_bot *bot, const uint8_t *cdb,
                                        unsigned cdb_bytes, void *data, size_t length,
-                                       size_t *relevant, uint64_t overall)
+                                       size_t *relevant, uint64_t overall, bool *submitted)
 {
+  bot->timed_out = false;
   *relevant = 0;
   uint64_t deadline = bounded_deadline(overall, USB_BOT_TIMEOUT_MS);
   if (task_deadline_expired(deadline)) {
+    bot->timed_out = true;
     fail(bot, "BOT command deadline expired before admission");
     return BOT_COMMAND_BROKEN;
   }
@@ -264,32 +266,39 @@ static enum bot_command_result command(struct usb_bot *bot, const uint8_t *cdb,
   ++bot->commands;
   size_t actual;
   enum usb_result result = usb_host_bulk_transfer(bot->host, bot->out.address, cbw, NULL,
-                                                 sizeof(cbw), deadline, &actual);
+                                                 sizeof(cbw), deadline, &actual, submitted);
   if (result != USB_OK || actual != sizeof(cbw)) {
+    bot->timed_out = result == USB_TIMEOUT;
     return broken(bot, "BOT command wrapper transfer failed");
   }
   size_t received = 0;
   if (length) {
-    result = usb_host_bulk_transfer(bot->host, bot->in.address, NULL, data, length, deadline, &received);
+    result = usb_host_bulk_transfer(bot->host, bot->in.address, NULL, data, length, deadline, &received, NULL);
     if (result == USB_STALL) {
       received = 0;
-      if (usb_host_bulk_clear(bot->host, bot->in.address, data, length, &received, deadline) != USB_OK) {
+      result = usb_host_bulk_clear(bot->host, bot->in.address, data, length, &received, deadline);
+      if (result != USB_OK) {
+        bot->timed_out = result == USB_TIMEOUT;
         return broken(bot, "BOT data halt could not be cleared");
       }
     } else if (result != USB_OK || received > length) {
+      bot->timed_out = result == USB_TIMEOUT;
       return broken(bot, "BOT data transfer failed");
     }
   }
   uint8_t csw[BOT_CSW_BYTES];
-  result = usb_host_bulk_transfer(bot->host, bot->in.address, NULL, csw, sizeof(csw), deadline, &actual);
+  result = usb_host_bulk_transfer(bot->host, bot->in.address, NULL, csw, sizeof(csw), deadline, &actual, NULL);
   if (result == USB_STALL) {
-    if (usb_host_bulk_clear(bot->host, bot->in.address, NULL, 0, NULL, deadline) != USB_OK) {
+    result = usb_host_bulk_clear(bot->host, bot->in.address, NULL, 0, NULL, deadline);
+    if (result != USB_OK) {
+      bot->timed_out = result == USB_TIMEOUT;
       return broken(bot, "BOT status halt could not be cleared");
     }
-    result = usb_host_bulk_transfer(bot->host, bot->in.address, NULL, csw, sizeof(csw), deadline, &actual);
+    result = usb_host_bulk_transfer(bot->host, bot->in.address, NULL, csw, sizeof(csw), deadline, &actual, NULL);
   }
   if (result != USB_OK || actual != sizeof(csw) || little32(csw) != BOT_CSW_SIGNATURE ||
       little32(csw + 4) != tag) {
+    bot->timed_out = result == USB_TIMEOUT;
     return broken(bot, "invalid BOT status wrapper");
   }
   uint32_t residue = little32(csw + 8);
@@ -315,7 +324,7 @@ static bool request_sense(struct usb_bot *bot, void *scratch, uint64_t overall)
   uint8_t cdb[6] = { SCSI_REQUEST_SENSE, 0, 0, 0, SCSI_SENSE_BYTES, 0 };
   size_t bytes;
   bot->sense_valid = false;
-  if (command(bot, cdb, sizeof(cdb), scratch, SCSI_SENSE_BYTES, &bytes, overall) != BOT_COMMAND_OK) {
+  if (command(bot, cdb, sizeof(cdb), scratch, SCSI_SENSE_BYTES, &bytes, overall, NULL) != BOT_COMMAND_OK) {
     if (bot->state != USB_BOT_FAILED) {
       fail(bot, "SCSI REQUEST SENSE failed");
     }
@@ -348,9 +357,9 @@ static bool request_sense(struct usb_bot *bot, void *scratch, uint64_t overall)
 }
 
 static bool require_command(struct usb_bot *bot, const uint8_t *cdb, unsigned cdb_bytes,
-                            void *scratch, size_t length, size_t *bytes, uint64_t overall)
+                            void *scratch, size_t length, size_t *bytes, uint64_t overall, bool *submitted)
 {
-  enum bot_command_result result = command(bot, cdb, cdb_bytes, scratch, length, bytes, overall);
+  enum bot_command_result result = command(bot, cdb, cdb_bytes, scratch, length, bytes, overall, submitted);
   if (result == BOT_COMMAND_OK) {
     return true;
   }
@@ -365,7 +374,7 @@ static bool ready(struct usb_bot *bot, void *scratch, uint64_t overall)
   uint8_t cdb[6] = { SCSI_TEST_UNIT_READY };
   for (unsigned attempt = 0; attempt < BOT_READY_ATTEMPTS; ++attempt) {
     size_t bytes;
-    enum bot_command_result result = command(bot, cdb, sizeof(cdb), NULL, 0, &bytes, overall);
+    enum bot_command_result result = command(bot, cdb, sizeof(cdb), NULL, 0, &bytes, overall, NULL);
     if (result == BOT_COMMAND_OK) {
       return true;
     }
@@ -387,7 +396,7 @@ static bool capacity(struct usb_bot *bot, void *scratch, uint64_t overall)
 {
   uint8_t cdb[16] = { SCSI_READ_CAPACITY_10 };
   size_t bytes;
-  if (!require_command(bot, cdb, 10, scratch, SCSI_CAPACITY_10_BYTES, &bytes, overall)) {
+  if (!require_command(bot, cdb, 10, scratch, SCSI_CAPACITY_10_BYTES, &bytes, overall, NULL)) {
     return false;
   }
   if (bytes != SCSI_CAPACITY_10_BYTES) {
@@ -401,7 +410,7 @@ static bool capacity(struct usb_bot *bot, void *scratch, uint64_t overall)
     cdb[0] = SCSI_SERVICE_ACTION_IN_16;
     cdb[1] = SCSI_READ_CAPACITY_16_ACTION;
     write_big(cdb + 10, SCSI_CAPACITY_16_BYTES, 4);
-    if (!require_command(bot, cdb, sizeof(cdb), scratch, SCSI_CAPACITY_16_BYTES, &bytes, overall)) {
+    if (!require_command(bot, cdb, sizeof(cdb), scratch, SCSI_CAPACITY_16_BYTES, &bytes, overall, NULL)) {
       return false;
     }
     if (bytes != SCSI_CAPACITY_16_BYTES) {
@@ -428,7 +437,7 @@ static bool capacity(struct usb_bot *bot, void *scratch, uint64_t overall)
 }
 
 static bool read_blocks(struct usb_bot *bot, uint64_t lba, uint32_t count, void *scratch,
-                        size_t scratch_bytes, uint64_t overall)
+                        size_t scratch_bytes, uint64_t overall, bool *submitted)
 {
   if (!count || !bot->block_bytes || lba >= bot->blocks || count > bot->blocks - lba ||
       count > scratch_bytes / bot->block_bytes || count > USB_BULK_BYTES / bot->block_bytes ||
@@ -450,7 +459,7 @@ static bool read_blocks(struct usb_bot *bot, uint64_t lba, uint32_t count, void 
     cdb_bytes = 10;
   }
   size_t expected = (size_t)count * bot->block_bytes, bytes;
-  if (!require_command(bot, cdb, cdb_bytes, scratch, expected, &bytes, overall)) {
+  if (!require_command(bot, cdb, cdb_bytes, scratch, expected, &bytes, overall, submitted)) {
     return false;
   }
   if (bytes != expected) {
@@ -504,7 +513,7 @@ bool usb_bot_probe(struct usb_bot *bot, void *scratch, size_t scratch_bytes, uin
     return unsupported(bot, "BOT multiple LUNs are deferred");
   }
   uint8_t cdb[6] = { SCSI_INQUIRY, 0, 0, 0, SCSI_INQUIRY_BYTES, 0 };
-  if (!require_command(bot, cdb, sizeof(cdb), scratch, SCSI_INQUIRY_BYTES, &bytes, overall)) {
+  if (!require_command(bot, cdb, sizeof(cdb), scratch, SCSI_INQUIRY_BYTES, &bytes, overall, NULL)) {
     return false;
   }
   const uint8_t *inquiry = scratch;
@@ -522,15 +531,28 @@ bool usb_bot_probe(struct usb_bot *bot, void *scratch, size_t scratch_bytes, uin
   if (bot->blocks < count) {
     count = bot->blocks;
   }
-  if (!read_blocks(bot, 0, count, scratch, scratch_bytes, overall)) {
+  if (!read_blocks(bot, 0, count, scratch, scratch_bytes, overall, NULL)) {
     return false;
   }
   memcpy(bot->first_sample, scratch, sizeof(bot->first_sample));
-  if (!read_blocks(bot, bot->blocks - 1, 1, scratch, scratch_bytes, overall)) {
+  if (!read_blocks(bot, bot->blocks - 1, 1, scratch, scratch_bytes, overall, NULL)) {
     return false;
   }
   memcpy(bot->last_sample, scratch, sizeof(bot->last_sample));
   bot->state = USB_BOT_READY;
   bot->detail = "read-only BOT first-span and final-block probe complete";
   return true;
+}
+
+enum usb_result usb_bot_read(struct usb_bot *bot, uint64_t first_block, uint32_t block_count,
+    void *scratch, size_t scratch_bytes, uint64_t deadline, bool *submitted)
+{
+  if (!bot || bot->state != USB_BOT_READY || !scratch) {
+    return USB_IO;
+  }
+  bot->timed_out = false;
+  if (read_blocks(bot, first_block, block_count, scratch, scratch_bytes, deadline, submitted)) {
+    return USB_OK;
+  }
+  return bot->timed_out ? USB_TIMEOUT : USB_IO;
 }

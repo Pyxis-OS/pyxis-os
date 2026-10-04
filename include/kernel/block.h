@@ -28,14 +28,24 @@ enum block_preparation {
   BLOCK_DEVICE_AMBIGUOUS, BLOCK_INVENTORY_INCOMPLETE, BLOCK_DEVICE_INVALID,
 };
 
-/* BSP/IF=0 after preparation. Inventory IDs and setup results are immutable for
- * the boot, including unsupported/failed candidates. An incomplete inventory
- * enables no device. Out-of-range enumeration returns NONE; bad IDs return
- * INVALID. Unavailable I/O does not establish absent hardware. */
+/* BSP/IF=0 after preparation. Terminal USB candidates are appended during boot
+ * discovery; existing IDs and setup results never change. Discovery finished
+ * seals the inventory, including unsupported/failed candidates. Incomplete
+ * discovery does not disable individually prepared devices. Out-of-range
+ * enumeration returns NONE; bad IDs return INVALID. Unavailable I/O does not
+ * establish absent hardware. */
 size_t block_device_count(void);
 block_device_id block_device_at(size_t index);
+bool block_discovery_finished(void);
 bool block_inventory_complete(void);
 enum block_preparation block_preparation_result(block_device_id device);
+
+/* The currently qualified native filesystem/installer authority domain remains
+ * VirtIO-only. USB registration and GPT inspection grant no public disk access. */
+size_t block_native_device_count(void);
+block_device_id block_native_device_at(size_t index);
+bool block_native_inventory_complete(void);
+bool block_native_device(block_device_id device);
 
 struct block_info {
   uint64_t block_count;

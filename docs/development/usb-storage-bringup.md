@@ -120,3 +120,142 @@ The owner-reported ThinkPad follow-up observed successful reads from a root disk
 and a disk behind the dock's USB 3 hub, with capacities matching Linux. Recovery
 was not exercised; native byte-sample verification was not supplied. Broader native qualification and
 write/flush/durability behavior remain pending.
+
+## 2026-10-04 kernel block registration and GPT follow-up
+
+Baseline `b352a1d` and implementation `3cfa63f` used fs `d352c7e`, ports
+`bf7667c`, userspace `ad1d53a`, and lwIP `a1aadb9`. No gitlinks changed in this
+PR. Ordinary `make -j16 sdk image usb-image USB_IMAGE_MIB=512 USB_ESP_MIB=128`
+built the enabled baseline and disposable 512 MiB GPT image. Changed builds
+used `make -j16 image` with `CONFIG_XHCI=y`, followed by the restored default
+`CONFIG_XHCI=n`. Changed kernel sources compiled without warnings; existing
+vendored sbase/Doom warnings occurred when ports rebuilt. The compiler/container
+was reused. No tests, fault injection or boot/output automation were added.
+
+The guest used the same QEMU 10.2.2 binary, q35/KVM, four vCPUs, 8 GiB RAM,
+OVMF files, network, RNG and common arguments recorded above. These are local
+agent-environment measurements, not owner-host or native performance results.
+The baseline was rebuilt in an isolated checkout for its later samples, using
+verified SDK/userland/ports bundles from the same pinned sources. Kernel source
+builds used their own revision; no changed kernel was reused as a baseline.
+
+### Matched fresh-process boots
+
+The first baseline boot preceded implementation. Three baseline and three
+implementation samples each used a fresh QEMU process and private OVMF variable
+file. Monitor resets that produced no new boot logs were excluded. Storage and
+controller arguments were identical:
+
+```sh
+-device qemu-xhci,id=usb,p2=2,p3=2 \
+-device usb-hub,bus=usb.0,port=1,ports=4 \
+-device usb-kbd,bus=usb.0,port=1.3 \
+-drive if=none,id=usb_disk,format=raw,readonly=on,file=build/pyxis-usb.img \
+-device usb-storage,bus=usb.0,port=1.2,drive=usb_disk \
+-drive if=none,id=virtio_disk,format=raw,readonly=on,file=/home/chronium/tmp/usb-bot-disk-a.raw \
+-device virtio-blk-pci,drive=virtio_disk,disable-legacy=on \
+-device ich9-usb-ehci1,id=ehci
+```
+
+The baseline had one block device (VirtIO) and only the private USB media probe.
+The implementation retained two READY block devices. USB device 2 published
+`GPT_HEALTHY`, matching `sgdisk -p`: disk GUID
+`254CA48F-2CF8-4E45-A844-CA22C685D8AB`, entries 1/2 at blocks 2048/264192,
+with 262144/782336 blocks respectively. These media identities and sizes are
+fixture observations, not selection policy or driver constants.
+
+USB descriptor inventory remained partial solely because EHCI was unsupported;
+its xHCI record, hub, storage and keyboard were complete. Named remote `lsusb`
+exited 1 in both builds and retained the same observations. Despite aggregate
+partial USB inventory, the USB GPT reads and the VirtIO disk's three GPT reads
+completed. VirtIO's marker-only image correctly published `GPT_ABSENT`.
+
+Debugger commands included:
+
+```text
+p 'xhci.c'::controllers->commands_completed
+p 'xhci.c'::controllers->events_consumed
+p 'blk.c'::devices[0].published
+p 'blk.c'::devices[0].completed
+p 'kernel/storage/block.c'::device_count
+p 'kernel/storage/block.c'::devices[1].usb->slots
+p 'gpt.c'::devices[1].snapshot
+```
+
+| Observation after scans | Baseline samples | Implementation samples |
+| --- | --- | --- |
+| xHCI commands | 8, 8, 8 | 8, 8, 8 |
+| xHCI consumed events | 79, 81, 80 | 94, 93, 94 |
+| VirtIO published/completed reads | 3/3 in each | 3/3 in each |
+| USB SCSI commands / reads | 5 / 2 | 10 / 7 |
+| USB bytes read including probe | 66048 | 100352 |
+
+Event variation was two events in the baseline and one in the implementation;
+these counts include asynchronous port events. The additional successful USB
+work is five GPT reads (34304 bytes), each with a CBW/data/CSW exchange. The last
+collected slot was FREE, generation 5, with successful 16384-byte completion and
+`submitted=true`; no caller destination remained in worker state.
+
+Boot-ready resource counters were stable across each set of samples:
+
+| Resource | Baseline | Implementation |
+| --- | --- | --- |
+| PMM allocated frames | 4674 | 5208 |
+| VM backed pages / range records | 4072 / 88 | 4605 / 93 |
+| TLSF pools / reserved bytes | 2 / 524288 | 6 / 2691072 |
+
+This records work and reservation cost, not latency or throughput. The old
+backend supplied no public-ticket USB throughput baseline. Source inspection
+accounts for an additional 512 KiB captured-buffer budget per prepared controller,
+candidate/snapshot metadata covering discovered root/descendant capacity, and
+one approximately 132 KiB shared USB GPT scratch buffer. Scratch is freed after
+initial scans; retained snapshot/slot storage and heap backing remain. Larger
+controller trees increase metadata reservations; those bounds are independent
+of the ThinkPad topology and image defaults.
+
+### Geometry, independent candidates and controllers
+
+A separate fresh-process boot used two xHCI controllers, the same full-speed hub
+and keyboard, one VirtIO disk, and unsupported EHCI. The first xHCI used
+`p2=3,p3=3` with these USB attachments:
+
+- Port 2: a 512 MiB GPT metadata fixture exposed with
+  `logical_block_size=4096,physical_block_size=4096`. Its metadata used 4096-byte
+  header/array locations and logical extents with recomputed CRCs; it copied no
+  filesystem payload. Device 3 reported 131072 blocks and `GPT_HEALTHY`, with
+  entries at 256/33024 and lengths 32768/97792 blocks.
+- Port 3: `usb-bot,id=multi` with two `scsi-hd` devices at target 0, LUNs 0 and 1.
+  Device 4 retained `BLOCK_DEVICE_UNSUPPORTED` and `GPT_UNAVAILABLE`; it did not
+  prevent any supported disk from completing.
+- Hub port 1.2: the sparse 3 TiB + 32 MiB marker-only image from the earlier
+  bring-up. Device 5 reported 6442516480 blocks and `GPT_ABSENT`. Its final block
+  ticket completed a 512-byte READ (16) at LBA 6442516479, with `submitted=true`.
+
+The second xHCI used `p2=1,p3=1` and a root attachment of the original 512-byte
+GPT image. Device 2 independently published `GPT_HEALTHY`. The 512-byte and
+4 KiB GPT fixtures intentionally retained the same disk GUID; internal discovery
+published both physical devices without deduplicating them or granting mounts.
+VirtIO device 1 again published `GPT_ABSENT`. Named `lsusb` retained six devices
+and exited 1 due to EHCI. No controller, root/child path, vendor or sampled
+capacity was used to select a block backend.
+
+### Limits and next slice
+
+Ordinary GPT consumers exercised submit, wait and successful exact-byte
+collection through both backends, including hub routing and large LBAs. Slot
+exhaustion, active abandonment, timeout, stall/TT/reset recovery and physical
+removal received source review only; no forced-error execution is claimed.
+No public USB disk grants, USB filesystem mounts, executable launch, writes or
+flushes were added. Existing VirtIO authority uses its own complete inventory
+view, so partial/pending USB discovery does not disable that domain. The next
+B.5 slice must deliberately integrate USB mount authority and validate reads and
+executable launch; it must preserve explicit IDs and ambiguity handling.
+The restored default-disabled image also reached the remote shell in the same
+attachment configuration. It retained only the VirtIO block device and its
+`GPT_ABSENT` snapshot; GDB confirmed the xHCI controller list was NULL. `lsusb`
+reported unavailable inventory and exited 1. All task-owned QEMU/debugger jobs
+were closed, and both validation checkouts had their default configuration
+restored.
+
+ThinkPad B.5 testing remains deferred. The earlier owner-reported B.4 results
+are not qualification of this new block/GPT integration.
