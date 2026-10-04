@@ -3,7 +3,9 @@
 The broadcast endpoint and acquisition milestones were qualified in QEMU,
 RTL8111 passthrough and owner-run native cold/PXE boots with the dock attached.
 [Parent #374](https://git.internal/PyxisOS/pyxis-os/pulls/374) records native
-broadcast delivery, concrete-first same-port unicast and wildcard fallback.
+broadcast delivery and the former concrete-first same-port sharing rule. The
+owner replaced that sharing policy with exclusive wildcard net0 ports in task 3;
+the historical sharing qualification describes the earlier implementation.
 [Parent #380](https://git.internal/PyxisOS/pyxis-os/pulls/380) records two native
 DHCP cold boots, gateway ping, DNS and HTTPS. The owner recalls the reserved
 `.50`; the native DNS result (`1.1.1.1`) equals fallback and does not distinguish

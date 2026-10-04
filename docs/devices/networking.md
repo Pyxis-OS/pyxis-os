@@ -549,7 +549,7 @@ The backend gateway is the first diagnostic target; an external timeout alone
 does not identify a guest-stack failure.
 
 The initial networking milestone is complete. DHCP uses the privileged UDP
-broadcast primitive below and userspace acquisition; lease maintenance remains pending. [DNS](../userland/dns.md) is complete;
+broadcast primitive below and [userspace lease maintenance](dhcp.md). [DNS](../userland/dns.md) is complete;
 [TCP listeners and streams](tcp.md) are available through native capabilities.
 IPv6, richer routing, network
 isolation and website hosting remain separate scopes in
@@ -564,8 +564,10 @@ Trusted session handoff preserves those rights for network setup. Ordinary local
 and remote shells and their children receive OPEN alone, independently of echo
 and configuration authority. The service authorizes binding any available port on an
 explicit local IPv4 address: any address in `127/8`, or the configured NIC address.
-The separate BROADCAST right permits wildcard net0 bindings. A wildcard may share
-a port with a concrete binding; each address/port binding itself remains exclusive.
+The separate BROADCAST right permits wildcard net0 bindings. A wildcard owns
+its port on net0 exclusively: opening an ordinary binding on its port, or a
+wildcard on an ordinary net0 binding's port, returns `CALL_BUSY`. Loopback stays
+independent. Duplicate address/port bindings return `CALL_ALREADY_EXISTS`.
 There is no privileged-port distinction.
 The port namespace and resource bounds are system-wide, not isolated by space.
 
@@ -576,7 +578,8 @@ The port namespace and resource bounds are system-wide, not isolated by space.
   Success returns an owned endpoint handle and its bound address/port/state.
   A duplicate active address/port returns `CALL_ALREADY_EXISTS`; an address that
   is not currently local returns `CALL_UNAVAILABLE`. The same port can be bound
-  on different local addresses.
+  on different local addresses, except for a wildcard/concrete net0 conflict,
+  which returns `CALL_BUSY`. Ephemeral selection skips both kinds of conflict.
 - `UDP_OPEN_ROUTE` uses the same service, OPEN right, request layout and reply
   as OPEN, but the request address is a destination. The worker selects a local
   source through the existing IPv4 routing policy and binds it in the same
@@ -588,10 +591,10 @@ The port namespace and resource bounds are system-wide, not isolated by space.
 - `UDP_OPEN_BROADCAST` requires BROADCAST, with zero address/reserved fields in
   the existing open request. It binds net0's port while retaining address zero
   in INSPECT; net0 must already be bound, but need not have an assigned address.
-  Port zero selects an ephemeral port in the wildcard namespace. It receives
-  UDP to the current interface address, limited broadcast or local subnet
-  broadcast. A concrete binding takes precedence for interface unicast; broadcast
-  reaches only the wildcard. `127/8` destinations never select a wildcard.
+  Port zero selects an ephemeral port free of ordinary net0 and wildcard
+  bindings. An existing ordinary net0 binding on the requested port returns
+  `CALL_BUSY`. It receives UDP to the current interface address, limited broadcast
+  or local subnet broadcast. `127/8` destinations never select a wildcard.
 - `UDP_INSPECT` on `PROTOCOL_UDP` requires INSPECT and returns the original bound
   address/port and current state: BOUND, SHUTDOWN or UNAVAILABLE. This succeeds
   on stopped endpoints too. BOUND describes the binding, not NIC carrier.

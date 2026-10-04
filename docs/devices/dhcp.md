@@ -62,9 +62,10 @@ server authentication or runtime controller rebinding. While unassigned, the
 kernel accepts broadcast replies rather than unicast to the offered address;
 a server that ignores the BOOTP broadcast flag may therefore fail acquisition.
 
-Wildcard and ordinary UDP bindings may share a port, with concrete unicast taking
-precedence. Ordinary applications must leave net0 UDP port 68 unused during DHCP
-so they cannot intercept renewal replies.
+The wildcard endpoint owns port 68 on net0 exclusively. Ordinary opens on its
+port return `CALL_BUSY`; opening a wildcard on an ordinary net0 binding's port
+also returns `CALL_BUSY`. This generic rule replaces the earlier shared-port
+policy (owner decision, 2026-10-04). Loopback bindings remain independent.
 
 Detected fatal errors and failed successor handoff attempt to clear settings
 before closing the endpoint. Unexpected maintainer failure or an indefinite

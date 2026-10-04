@@ -733,11 +733,6 @@ no independent kernel lease-expiry backstop; reboot is required. Revisit this
 limit with explicit supervision or kernel deadline ownership, rather than two
 uncoordinated lease authorities.
 
-Ordinary applications must leave net0 UDP port 68 unused during DHCP. Accepted
-wildcard/concrete sharing gives concrete unicast precedence, so an ordinary
-binding could intercept renewal replies. Revisit reservation policy with a
-consumer that needs concurrent use of that port.
-
 DHCP does not probe address conflicts or persist leases across reboots. Newly
 launched programs receive current chosen DNS; existing programs retain their
 startup DNS_SERVER. Revisit conflict detection for networks with competing

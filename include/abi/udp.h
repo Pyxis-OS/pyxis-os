@@ -36,12 +36,13 @@
  * unavailable interface UNAVAILABLE. Opening does not send packets or do ARP.
  * OPEN_BROADCAST requires BROADCAST authority and address zero. It binds net0
  * without requiring an assigned IPv4 address; net0 must already be bound. The
- * returned local address stays zero across configuration changes. One wildcard
- * binding per port may coexist with concrete bindings: concrete unicast wins,
- * otherwise wildcard receives net0 unicast, limited and local subnet broadcast.
- * Loopback destinations never select a wildcard endpoint. /31 and /32 have no
- * subnet broadcast.
- * Port zero selects a free ephemeral port in the requested binding space.
+ * returned local address stays zero across configuration changes. A wildcard
+ * owns its port on net0 exclusively: a concrete binding conflicts with a
+ * wildcard in either opening order (BUSY). Duplicate address/port is
+ * ALREADY_EXISTS. Loopback bindings remain independent. A wildcard receives
+ * net0 unicast, limited and local subnet broadcast; loopback destinations never
+ * select it. /31 and /32 have no subnet broadcast.
+ * Port zero selects an ephemeral port without either kind of conflict.
  * No reuse within one binding, or privileged-port distinction.
  * Success returns a new endpoint with UDP_RIGHTS; copies share its lifetime. */
 struct udp_open_request {
