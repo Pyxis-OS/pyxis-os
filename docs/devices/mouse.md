@@ -5,9 +5,10 @@ counts and button state through
 [`mouse_read_event()`](../../include/kernel/mouse.h). One BSP kernel task
 consumes them; the call is nonblocking and preserves interrupt state. This is
 QEMU's default mouse. On the ThinkPad, the Synaptics touchpad in its firmware
-relative mode reports as a standard PS/2 mouse, and TrackPoint motion is
-expected to arrive through the same stream. Synaptics absolute mode and USB HID
-mice are not supported.
+relative mode reports as a standard PS/2 mouse without a wheel (device ID 0).
+TrackPoint motion and buttons arrive through the same stream, and firmware
+tap-to-click and tap-and-drag work; there is no scrolling in this mode.
+Synaptics absolute mode and USB HID mice are not supported.
 
 Events carry raw device counts without acceleration. Signs follow the display:
 +dx is right, +dy is down and +wheel scrolls toward the user. The device's own
@@ -15,8 +16,8 @@ Events carry raw device counts without acceleration. Signs follow the display:
 buttons after the packet. QEMU and some devices also send a packet with all
 deltas zero, for example when a wheel step ends.
 
-No consumer exists yet: the presentation task drains and discards events until
-[pointer sessions](../wip/mouse-and-quake.md) route them to applications.
+The presentation task drains these events and routes them to the active space's
+[pointer session](#userspace-pointer-sessions).
 
 ## Controller and setup
 
@@ -78,5 +79,70 @@ moves right and up, `mouse_move 0 0 1` is one wheel step away from the user,
 and `mouse_button 1`, `2` and `4` press left, right and middle (`0` releases).
 Under KVM, a hardware breakpoint on the instruction after `mouse_read_event()`
 returns in `handle_pointer_input()`, conditioned on a true result, can print
-each event. Under nested KVM on the development host, a hardware breakpoint set
-before boot crashed QEMU; use `ACCEL=tcg` to stop inside setup.
+each event. A hardware breakpoint set before boot can stop inside setup.
+
+## Userspace pointer sessions
+
+Each space owns a pointer object. Boot gives each workload init a named `pointer`
+grant, and the shell and session launcher forward it wherever they forward
+`keyboard`: to a pipeline's first stage when its stdin is a console. Its `INPUT`
+right authorizes [the pointer protocol](../../include/abi/pointer.h), restricted
+to processes in the object's own space. Libpyxis provides `pointer_acquire`,
+`pointer_read` and `pointer_release` in `<pointer.h>`.
+
+ACQUIRE, READ and RELEASE follow the [keyboard session](keyboard.md#userspace-keyboard-sessions)
+rules: exclusive acquisition by one process (`CALL_BUSY` otherwise, including
+for the owner), `CALL_UNAVAILABLE` without a working mouse, process ownership
+independent of handles, release on RELEASE or process exit, and blocking or
+`POINTER_READ_POLL` reads of one 24-byte event. Pointer, keyboard and display
+sessions are independent; a game acquires each it needs. There is no
+cross-session wait, so an application reading both input sessions polls or
+blocks on one of them.
+
+`POINTER_INPUT` events carry the device's relative counts with the signs above,
+plus the buttons held after the event. There is no absolute position,
+acceleration or on-screen cursor. A packet that changes nothing for the session,
+such as QEMU's zero wheel-release packet, produces no event.
+
+### Focus, held buttons and loss
+
+Only the active space receives input; the log space on multicore boots receives
+none. Switching spaces discards the old session's queued events and publishes
+`POINTER_FOCUS_LOST`; the new session receives `POINTER_FOCUS_GAINED`. Each
+event's `POINTER_EVENT_FOCUSED` flag records focus when it was queued.
+Control events carry no motion or buttons. Applications release all held
+buttons on any focus or `POINTER_STATE_RESET` event.
+
+A button counts as held for a session only after a press it observed. A button
+held across acquisition, a focus change or a reset is withheld until it is
+released and pressed again, so a drag begun in another space cannot arrive as a
+held button. Presses are judged against the device's previous packet, not the
+session's.
+
+The queue holds 64 events. When it is full, a new event with the same buttons
+as the newest `POINTER_INPUT` event adds its motion and wheel into that event,
+saturating at the 32-bit limits. Any other event discards the queue, clears held
+buttons and queues `POINTER_STATE_RESET`. Device loss resets every application
+space's session the same way. These notifications wake a blocked reader even
+while its space is inactive.
+
+Routing, ownership and the queue share a per-object lock. All callers hold
+IF=0; lock order is pointer, then scheduler queues. No allocation, user copy or
+context switch occurs under the pointer lock. Space switching and event
+delivery run on the BSP; session calls can run on APs.
+
+## Mouse test program
+
+`mousetest` shows pointer input and needs named `display`, `keyboard`,
+`pointer` and `clock` grants. The left 30% of the screen shows the left, middle
+and right buttons, coloured while held; an up or down arrow for half a second
+after a wheel step away from or toward the user; and the position. The position
+starts at the screen centre, moves one pixel per device count and is clamped to
+the screen. The right 70% is a white drawing pad: each input event with the left
+button held sets one black pixel at the position, so fast strokes are dotted
+rather than lost. A red marker shows the position without drawing into the pad. Escape releases the sessions and returns
+to the shell.
+
+It polls both input sessions every 10 ms while focused and blocks on the
+keyboard session while unfocused. Its text uses a built-in 5x7 font with only
+the digits and letters it displays.

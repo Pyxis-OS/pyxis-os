@@ -14,7 +14,7 @@ handoffs for this first milestone.
 ## Current programs
 
 Normal boot starts the [shell](../userland/shell.md) at home:// with terminal, launcher,
-memory, display, clock, keyboard, optional [space-title authority](../userland/init.md#space-titles)
+memory, display, clock, keyboard, pointer, optional [space-title authority](../userland/init.md#space-titles)
 and app/home root grants. It launches foreground utilities
 with explicit resources, waits for completion and returns to its prompt. Its space and TTY
 survive shell exit; no supervisor restarts it.
@@ -43,7 +43,7 @@ transfer independently. The endpoint exchange still uses directly supplied grant
 ## Objects, capabilities and handles
 
 An object is the underlying resource: a console, file, directory, memory
-service, display, clock, keyboard, launcher, process-control object or endpoint. A capability
+service, display, clock, keyboard, pointer, launcher, process-control object or endpoint. A capability
 grants particular operations on that object. A handle is an opaque, process-local
 value naming an entry in the process's capability
 table. The kernel entry holds the object reference and rights; userspace cannot

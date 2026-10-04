@@ -14,6 +14,7 @@
 #include <abi/echo.h>
 #include <abi/net_config.h>
 #include <abi/keyboard.h>
+#include <abi/pointer.h>
 #include <abi/clock.h>
 #include <abi/system_info.h>
 #include <abi/display.h>
@@ -70,6 +71,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_CLOCK;
   case OBJECT_KEYBOARD:
     return PROTOCOL_KEYBOARD;
+  case OBJECT_POINTER:
+    return PROTOCOL_POINTER;
   case OBJECT_MOUNT:
     return PROTOCOL_MOUNT;
   case OBJECT_DISKS:
@@ -197,6 +200,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~PROCESS_RIGHTS);
   case OBJECT_KEYBOARD:
     return !(rights & ~KEYBOARD_RIGHT_INPUT);
+  case OBJECT_POINTER:
+    return !(rights & ~POINTER_RIGHT_INPUT);
   case OBJECT_MOUNT:
     return !(rights & ~(MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE | MOUNT_RIGHT_WRITE));
   case OBJECT_DISKS:

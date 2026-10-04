@@ -98,7 +98,7 @@ Accepted 2026-10-04, with the defaults below.
     working. The kernel only drains events until task 2, so the owner's
     TrackPoint check moved to the task 2 test program. Natively, this task's
     image needs only the boot log's mouse lines and an unchanged keyboard.
-- [ ] **2. Pointer sessions** (ABI, kernel, libpyxis, plus a userspace test program).
+- [x] **2. Pointer sessions** (ABI, kernel, libpyxis, plus a userspace test program).
   - The session contract from decision 2, with the same focus and space-switch
     rules as keyboard sessions.
   - Document it beside the keyboard contract.
@@ -108,9 +108,26 @@ Accepted 2026-10-04, with the defaults below.
       relative motion;
     - right: a black-on-white drawing pad that sets a pixel at that position
       on each event while the left button is held, with no other functions.
+  - Accepted 2026-10-04: a button held across acquisition, a focus change or
+    a reset is withheld until pressed again, as keys are; a full queue merges
+    motion into the newest event with unchanged buttons and otherwise resets;
+    the test program draws a position marker over the pad without drawing it
+    into the pad.
   - **Finish when:** a consumer receives motion, wheel and buttons only while
     focused, and releases state on focus loss or reset; and the owner sees
     TrackPoint and touchpad events natively in the test program.
+  - **Finished:** see [pointer sessions](../devices/mouse.md#userspace-pointer-sessions).
+    QEMU checks passed. On 2026-10-04 the owner checked natively on the
+    ThinkPad (PXE), which also covered task 1:
+    - the mouse reports device ID 0, no wheel, and 3-byte packets;
+    - the keyboard is unchanged;
+    - in `mousetest`, the touchpad and TrackPoint both move correctly;
+    - left, middle and right work on the TrackPoint buttons and the touchpad
+      areas, and firmware tap-to-click and tap-and-drag work;
+    - a button held through a space switch is withheld until pressed again.
+
+    The wheel could not be tested natively: there is no wheel, TrackPoint
+    scrolling or two-finger scrolling in this mode.
 - [ ] **3. Quake port** (ports repository, plus image packaging in the parent).
   - Pinned quakegeneric with a Pyxis adapter:
     - 8-bit palette conversion and integer scaling, as in Doom;

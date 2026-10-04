@@ -193,8 +193,8 @@ executable, then opens all redirect targets in written order. Input must exist;
 output is opened or created without truncation. Only after every target is open
 are output files truncated, in written order, and the child launched. The child
 receives independent native file grants, not filenames to reopen. Temporary shell
-handles close after launch or failure. `<` withholds terminal input and keyboard
-grants; the separate terminal-output grant remains available for explicit terminal
+handles close after launch or failure. `<` withholds terminal input, keyboard and
+pointer grants; the separate terminal-output grant remains available for explicit terminal
 operations. Unredirected standard streams retain their inherited bindings.
 
 A syntax error or missing executable path does not touch redirect targets. A later
@@ -293,7 +293,7 @@ separately. Explicit redirects override that stage's defaults:
   pipeline's byte stream independent of stderr.
 
 Only the first stage, when its selected stdin is a console, receives named
-terminal-input and keyboard grants. Other stages cannot bypass their stdin with
+terminal-input, keyboard and pointer grants. Other stages cannot bypass their stdin with
 those grants. Separate terminal-output and display capabilities retain the
 ordinary child policy. Programs explicitly using those capabilities can still
 write to or draw on the terminal. Ordinary stages receive neither launcher nor
