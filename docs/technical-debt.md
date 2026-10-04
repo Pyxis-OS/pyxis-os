@@ -623,7 +623,8 @@ if owner-run native qualification encounters this state.
 ## RTL8111 runtime limits
 
 The [RTL8111 I/O path](devices/rtl8111-hardware.md#ethernet-io) supports XID `541`
-only. Each prepared controller retains two contiguous 68 KiB DMA allocations;
+only. Each prepared controller retains two contiguous 68 KiB ring allocations
+and one page for hardware tally snapshots;
 unselected hardware stays inactive. Runtime failure attempts reset and disables
 DMA/delivery but retains claims, buffers and shared mappings until reboot. The
 first binding has no fallback or controller switching. Revisit reclamation with

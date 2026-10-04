@@ -3,8 +3,7 @@
 The built-in RJ45 controller can be passed from the ThinkPad's Fedora host to
 Pyxis in QEMU/KVM. Launcher support, owner host setup and a first hardware boot
 were completed on 2026-10-03. This provides a development target for the
-[planned RTL8111 driver](../wip/thinkpad-rtl8111.md);
-Pyxis currently inventories the function without claiming it.
+[RTL8111 driver](../wip/thinkpad-rtl8111.md), which supports XID `0x541` packet I/O.
 
 ## Hardware and launcher
 
@@ -20,6 +19,17 @@ make run VFIO_PCI=0000:05:00.0 MEMORY=2G CPUS=4
 Select matching OVMF paths for Fedora: `OVMF_CODE=/usr/share/edk2/ovmf/OVMF_CODE.fd`
 and `OVMF_VARS=/usr/share/edk2/ovmf/OVMF_VARS.fd` on the qualified host. Set
 `CROSS_COMPILE` to the installed Pyxis toolchain prefix if it is outside `PATH`.
+
+For RTL or native/PXE boots, embed a private network profile selecting the built-in
+MAC, with address `192.168.0.50/24` and gateway `192.168.0.1`:
+
+```sh
+make -j16 image NETWORK_CONFIG=/private/network.lua
+make run VFIO_PCI=0000:05:00.0 VIRTIO_NET=0 MEMORY=2G CPUS=4 NETWORK_CONFIG=/private/network.lua
+```
+
+The stock profile selects VirtIO. The same private profile is needed when building
+the ELF and initrd for native/PXE boot; keep its MAC outside version control.
 
 `VFIO_PCI` is empty by default. Its address validation, read-only host preflight
 checks, memory-limit handling and availability across launch modes are described

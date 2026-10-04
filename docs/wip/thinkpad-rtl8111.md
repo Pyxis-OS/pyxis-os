@@ -6,7 +6,8 @@ task 1. [Hardware identification](../devices/rtl8111-hardware.md) is complete;
 controller preparation is implemented. [NIC passthrough](../development/thinkpad-nic-passthrough.md)
 is complete. The owner accepted task 2's firmware/power/initial-state defaults
 in PR #359, then authorized task 2 after merging it. Tasks 1–4 are complete;
-operation qualification in task 5 remains pending.
+operation qualification in task 5 is in progress. Its native cold boot and
+dock-attached checks remain pending; see the task 5 handoff below.
 
 ## Goal and machine configuration
 
@@ -104,6 +105,106 @@ recorded below.
 - [ ] **5. Qualify operation.** Exercise existing UDP/TCP tools, remote terminal,
   link changes and sustained traffic, then native boot. Finish with the built-in
   port working in VFIO and natively, including with the dock attached.
+
+### Task 5 qualification and handoff
+
+Branch `net/rtl8111-qualification` starts at merged main `eaeb417` (#367).
+Driver changes are `36c45f2`; qualification used its source files from the
+working tree before the commit (the kernel reports base `eaeb417`). The saved
+qualified ELF has SHA-256
+`7d7ef29474273998338f47fdd5a9fea481c0a1796dfe26bbf43a6738bec5878b`.
+Dependency pins are unchanged, including userspace
+`08e3c4b4a1385a6da978d64eced2c4aece528237`. The owner accepted suspending pending
+TX deadlines while carrier is down, with a fresh five-second budget on return.
+The worker preserves OWN and the binding throughout; carrier-up stalls still
+stop until reboot. Internal tally capture adds one retained DMA page per
+controller, without periodic polling or a userspace ABI.
+
+Matched runs on the bare ThinkPad host used QEMU 10.2.2/KVM, 4 CPUs, 2 GiB,
+`VFIO_PCI=0000:05:00.0`, `VIRTIO_NET=0`, Fedora's OVMF pair, the private built-in
+profile and the stock init. Configuration kept HPET maintenance at 120 ticks,
+NPFS flush at 30 seconds and xHCI disabled. The peer was the same host on Wi-Fi
+at `192.168.0.51`; these results do not measure the port's 1 Gbps ceiling.
+
+```sh
+make -j16 image PYTHON=build/hpet-config-venv/bin/python3 \
+  CROSS_COMPILE=/home/chronium/opt/pyxis-cross/bin/x86_64-unknown-pyxis- \
+  NETWORK_CONFIG=/tmp/pyxis-thinkpad-network.lua
+```
+
+Host `socat -u TCP4-LISTEN:5001,bind=192.168.0.51,reuseaddr OPEN:<capture>,creat,trunc`
+received guest `ttcp -t -n 8192 -l 8192 192.168.0.51`, three times per revision.
+Independent host byte counts were 67,108,864 for all six transfers, and their
+SHA-256 values matched. Timing includes TCP closure:
+
+| Revision | Seconds, three runs | Mean seconds | Range seconds |
+| --- | --- | --- | --- |
+| `eaeb417` baseline | 25.107563, 24.645992, 24.734602 | 24.829386 | 0.461571 |
+| `36c45f2` | 24.736208, 25.213221, 25.092571 | 25.014000 | 0.477013 |
+
+The mean rose 0.74%; the difference is smaller than within-revision variation.
+Both revisions passed gateway ping and the existing UDP echo tool. The updated
+revision also passed loopback ping; all commands ran through the real-port
+remote terminal at `192.168.0.50:2323`.
+
+On the baseline the owner unplugged during an 8 GiB `ttcp` request and replugged
+after about ten seconds. Link down/up was observed, the NIC stayed active and
+new gateway ping succeeded. At subsequent debugger inspection 191,830 submitted
+TX descriptors had all completed, with none outstanding and no malformed RX.
+This run did not observe device-owned TX during carrier loss and did not
+reproduce a permanent stop. The long transfer was cancelled after inspection.
+
+Hardware tally snapshots on `36c45f2` before/after the three TX runs showed
+`rx_missed=91` unchanged, with zero TX/RX/alignment errors. This count was
+inherited from earlier VFIO runs; qualification does not reset it. For receive,
+host `socat -u OPEN:<64-MiB-capture> TCP4-LISTEN:5002,bind=192.168.0.51,reuseaddr`
+served the same payload to guest `tcp 192.168.0.51 5002 | sha256sum`.
+All three 64 MiB receive runs returned the host payload's SHA-256. After them,
+`rx_missed` was still 91 and hardware TX/RX/alignment errors were still zero:
+
+| Snapshot | TX packets | RX packets | RX missed |
+| --- | --- | --- | --- |
+| Before TX workloads | 442,937 | 95,476 | 91 |
+| After TX / before RX | 819,770 | 175,301 | 91 |
+| After RX | 1,055,272 | 557,313 | 91 |
+
+The worker had received 461,868 frames with zero malformed completions and no
+outstanding TX at the final snapshot. These bounded runs give no evidence for
+increasing the 32-entry rings. They do not establish line-rate capacity or rule
+out a full wrap of the 16-bit counter.
+
+The owner repeated the ten-second unplug on `36c45f2` during another 8 GiB
+`ttcp` request. A breakpoint in the carrier-down branch observed zero TX
+outstanding, descriptor OWN clear and the controller active, then immediately
+resumed service. After replug the controller remained active with no stop reason;
+1,184,275 submitted descriptors had completed and RX malformed remained zero.
+A new remote session passed three gateway pings and UDP echo. This checks link
+recovery but leaves the device-owned TX case unobserved. The long transfer was
+cancelled after inspection.
+
+GDB snapshots stop the BSP in scheduler code with kernel mappings and IF=0,
+outside locks. On this GDB/QEMU combination an ordinary injected call's dummy
+return executed a non-executable stack address and halted the guest; that boot
+was discarded. Qualification instead uses an executable return breakpoint,
+preserving/restoring the caller registers and stack. Counter stops are between
+workloads, not during timed transfers. The final untimed link check used a
+one-shot breakpoint to read ownership at the carrier-down branch. Raw captures
+remain under ignored `build/rtl-task5-*`.
+
+A separate stock-profile boot kept both VirtIO and the real RTL present
+(`VIRTIO_NET=1`, `TCP_FORWARD=2323:2323`, same CPU/RAM/KVM configuration).
+VirtIO activated while the RTL remained prepared with DMA/delivery disabled.
+Remote terminal, three `10.0.2.2` pings and UDP echo passed through VirtIO.
+Both image builds passed; no kernel warning was emitted. No new tests or CI jobs
+were added. QEMU, GDB and host echo/transfer jobs are stopped.
+
+Remaining owner check: cold native/PXE boot with the dock attached, using
+`build/rtl-task5-native/caelum.elf` and
+`build/rtl-task5-native/initrd.cpio` saved from the private-profile build above.
+Record whether the FIFO recovery-reset message appears, supported XID `541`
+activation, unsupported `502` diagnosis, gateway ping and an external remote
+connection. Fedora's Wi-Fi peer stops when this host reboots, so native UDP/TCP
+workloads need another LAN peer. Native completion is not yet claimed.
 
 ### Task 1 owner capture
 

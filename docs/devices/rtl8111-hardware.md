@@ -195,7 +195,10 @@ The mask includes RX/TX completion/error and link change for MAC46.
 TX copies into the next CPU-owned buffer, zero-pads short frames to 60 bytes,
 publishes metadata before OWN, and kicks the normal queue. OWN clearing permits
 reuse; it does not establish delivery. Pending TX has a five-second completion
-budget. RX observes OWN clear before acquiring payload bytes, validates the
+budget while carrier is up. Link loss suspends these deadlines without changing
+descriptor ownership. On carrier return the worker gives every pending descriptor
+a fresh five seconds and kicks the normal queue; a stall with carrier up still
+stops the controller until reboot. RX observes OWN clear before acquiring payload bytes, validates the
 fixed address, EOR, flags and byte bounds, strips the four-byte FCS, lends valid
 bytes synchronously to Ethernet and reposts afterward. Error, oversized and
 fragmented frames are dropped without accessing payload. The reference's
@@ -207,6 +210,26 @@ checks completion with a finite deadline. Neither timeout nor reset frees or
 reposts outstanding storage. Claims, rings and shared mappings remain until
 reboot, and configuration cannot switch or fall back to another controller.
 A response that stops TX also stops the enclosing RX service before reposting.
+
+### Hardware counter inspection
+
+Preparation reserves one additional page for the 64-byte RTL8168H tally payload.
+`rtl8111_capture_counters` is an internal debugger helper, with no periodic polling
+or userspace interface. Call it on the stopped BSP in kernel context with IF=0,
+outside interrupt handlers and locks, following [GDB guidance](../development/gdb.md).
+It requests a DMA snapshot through CounterAddrHigh/Low and waits at most 10 ms.
+It returns a `const struct rtl_counters *` only after completion; failure or a
+still-busy dump returns null. The returned payload stays valid until another
+capture starts. A failed dump preserves the allocation but its contents must
+not be read. Runtime storage remains until reboot.
+
+The tally includes `rx_missed`, a 16-bit hardware count of packets missed by the
+receiver, alongside packet and error counts. Record raw snapshots before and
+after sustained workloads. This is narrower than claiming loss-free operation:
+counter wrap/saturation behavior and background traffic must be considered.
+The MAC46 interrupt mask stays unchanged; masked/coalesced overflow interrupts
+cannot substitute for a hardware packet count. Layout and dump ordering follow
+the [Linux v6.18 tally implementation](https://github.com/torvalds/linux/blob/v6.18/drivers/net/ethernet/realtek/r8169_main.c).
 
 Register and descriptor facts follow the pinned
 [Linux v6.18 MAC46 start sequence](https://github.com/torvalds/linux/blob/v6.18/drivers/net/ethernet/realtek/r8169_main.c#L3371-L3430),
