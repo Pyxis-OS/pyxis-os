@@ -42,6 +42,7 @@
 #define PROTOCOL_SYSTEM_INFO UINT64_C(35)
 #define PROTOCOL_DISKS UINT64_C(36)
 #define PROTOCOL_DISK UINT64_C(37)
+#define PROTOCOL_POINTER UINT64_C(38)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

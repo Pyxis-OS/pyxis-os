@@ -14,6 +14,7 @@
 #include <kernel/block.h>
 #include <kernel/virtio/pci.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/pointer.h>
 #include <kernel/object/space.h>
 #include <kernel/object/profile.h>
 #include <abi/clock.h>
@@ -138,7 +139,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
   }
 
   handle_t input, output, memory_handle, launcher_handle, display_handle, app, home;
-  handle_t clock_handle, keyboard_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
+  handle_t clock_handle, keyboard_handle, pointer_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
   handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
   handle_t system_info_handle;
   handle_t script_handle = HANDLE_INVALID;
@@ -158,6 +159,8 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
       capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, 0, &memory_handle) != CAP_OK ||
       capability_install(&process->capabilities, &process->space->keyboard->object,
           KEYBOARD_RIGHT_INPUT, 0, &keyboard_handle) != CAP_OK ||
+      capability_install(&process->capabilities, &process->space->pointer->object,
+          POINTER_RIGHT_INPUT, 0, &pointer_handle) != CAP_OK ||
       capability_install(&process->capabilities, net_config, NET_CONFIG_RIGHTS, 0, &net_config_handle) != CAP_OK ||
       capability_install(&process->capabilities, random, RANDOM_RIGHT_READ, 0, &random_handle) != CAP_OK ||
       capability_install(&process->capabilities, tcp, TCP_SERVICE_RIGHTS, 0, &tcp_handle) != CAP_OK ||
@@ -272,7 +275,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[25] = {
+  struct process_binding resources[26] = {
     {"input", input},
     {"output", output},
     {"memory", memory_handle},
@@ -286,13 +289,14 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
     {"random", random_handle},
     {"net_config", net_config_handle},
     {"keyboard", keyboard_handle},
+    {"pointer", pointer_handle},
     {"profile", profile_handle},
     {"pipe", pipe_handle},
     {"service", service_handle},
     {"namespace_service", namespace_service_handle},
     {"terminal", terminal_service_handle},
   };
-  size_t resource_count = 18;
+  size_t resource_count = 19;
   if (space_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"space", space_handle};
   }

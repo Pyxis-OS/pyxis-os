@@ -22,9 +22,11 @@
 #include <kernel/memory.h>
 #include <kernel/task.h>
 #include <kernel/keyboard.h>
+#include <kernel/mouse.h>
 #include <kernel/object/console.h>
 #include <kernel/object/display.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/pointer.h>
 
 #define PRESENT_INTERVAL_NS UINT64_C(16666667)
 
@@ -129,6 +131,11 @@ void space_init_all(const struct boot_framebuffer *boot_fb)
     space->keyboard = keyboard_create(space, i == 0);
     if (!space->keyboard) {
       panic("cannot allocate space keyboard");
+    }
+
+    space->pointer = pointer_create(space, i == 0);
+    if (!space->pointer) {
+      panic("cannot allocate space pointer");
     }
 
     arch_cpu_at(i)->space = space;
@@ -349,6 +356,33 @@ static void handle_space_input(void)
   }
 }
 
+static void handle_pointer_input(void)
+{
+  static uint32_t device_buttons;
+  struct mouse_event event;
+
+  while (mouse_read_event(&event)) {
+    uint64_t flags = cpu_save_interrupts();
+    if (event.reset) {
+      /* The device was not reset, so a button may still be held. Treat all as
+       * held: each must be released and pressed again before it counts. */
+      device_buttons = MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT | MOUSE_BUTTON_MIDDLE;
+      for (size_t i = arch_cpu_count() > 1 ? 1 : 0; i < arch_cpu_count(); ++i) {
+        pointer_reset_input(arch_cpu_at(i)->space->pointer);
+      }
+    } else {
+      /* Presses are judged against the device, not a space, so a button held
+       * across a space switch is not new to the space that gains focus. */
+      uint32_t pressed = event.buttons & ~device_buttons;
+      device_buttons = event.buttons;
+      if (arch_cpu_count() == 1 || active_space != arch_cpu_at(0)->space) {
+        pointer_route_event(active_space->pointer, &event, pressed);
+      }
+    }
+    cpu_restore_interrupts(flags);
+  }
+}
+
 void space_present_task(void *argument)
 {
   (void)argument;
@@ -356,6 +390,7 @@ void space_present_task(void *argument)
 
   for (;;) {
     handle_space_input();
+    handle_pointer_input();
     space_present();
     deadline += PRESENT_INTERVAL_NS;
     uint64_t now = arch_monotonic_ns();
@@ -375,8 +410,10 @@ void space_switch(size_t index)
     struct space *next = arch_cpu_at(index)->space;
     if (next != active_space) {
       keyboard_focus(active_space->keyboard, false);
+      pointer_focus(active_space->pointer, false);
       active_space = next;
       keyboard_focus(next->keyboard, true);
+      pointer_focus(next->pointer, true);
     }
   }
   cpu_restore_interrupts(flags);

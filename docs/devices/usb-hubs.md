@@ -6,15 +6,17 @@ USB 2 supports low/full/high-speed children; USB 3 supports standard symmetric
 Gen1/Gen2 links with one or two lanes. Hotplug, power management and storage
 binding remain outside this slice. The first
 [owner-reported ThinkPad run](../targets/t14-gen1-amd/usb-bringup.md) exercised
-full-speed descendants behind high-speed hubs; broader native qualification
-remains pending.
+full-speed descendants behind high-speed hubs. A later owner-reported run also
+traversed the dock's SuperSpeedPlus hub and completed reads from a SuperSpeed
+storage descendant. Recovery and broader native qualification remain pending.
 
 The core activates the first fully checked ordinary hub configuration in
 descriptor order, with one interface and a hub interrupt IN endpoint. USB 3 hubs
 use device protocol 3 and default interface protocol 0, with an endpoint companion.
 Multi-TT
 hubs use their required single-TT default alternate; no SET_INTERFACE is sent.
-Other classes remain unbound. Hub activation gives system_info READ clients no
+Other classes remain outside hub traversal; supported storage has a separate
+[read-only probe](usb-storage.md). Hub activation gives system_info READ clients no
 transfer or reset authority.
 
 Hub class requests use EP0. The core checks the variable-length USB 2 hub

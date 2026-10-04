@@ -153,7 +153,9 @@ Implemented: kernel DNS code `2175849`, userland `901b343`
 `net/dhcp-client`. QEMU, RTL passthrough and owner native cold/PXE qualification
 are complete. Review follow-ups are on
 [parent #380](https://git.internal/PyxisOS/pyxis-os/pulls/380) and dependency
-#114; merge the dependency first. Task 3 has not started.
+#114. The dependency is merged; the integration now pins userland main
+`ad1d53a`, including the resolved pointer/network runtime helpers, and incorporates
+parent main `0e422f4`. Task 3 has not started.
 The default profile requests a VirtIO lease; private native profiles retain their
 MAC selector and use `dhcp = true`. Ordinary image builds passed. No compiler
 container rebuild is needed.

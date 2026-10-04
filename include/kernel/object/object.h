@@ -44,6 +44,7 @@ enum object_type {
   OBJECT_SYSTEM_INFO = 37,
   OBJECT_DISKS = 38,
   OBJECT_DISK = 39,
+  OBJECT_POINTER = 40,
 };
 
 struct execution_group;
