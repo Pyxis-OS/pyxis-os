@@ -1,7 +1,7 @@
 # Link-based net0 selection
 
-Status: proposal. DHCP is implemented; these decisions are settled when this milestone starts. It is
-an opt-in selector mode beside `driver` and `mac`, for example
+Status: proposal. DHCP is implemented; these decisions are settled when this
+milestone starts. It is an opt-in selector mode beside `driver` and `mac`, for example
 `net0 = { select = "link", dhcp = true }`.
 
 - **Link for unbound controllers.** Today only the bound controller reports link.
@@ -20,4 +20,3 @@ identification, preparation and management-firmware coordination (see the
 [RTL8111 driver](../devices/rtl8111.md) limits). Suggested order: DHCP, then
 optionally the dock controller, then link selection. Link selection can go first
 if it's wanted for QEMU setups with several NICs.
-

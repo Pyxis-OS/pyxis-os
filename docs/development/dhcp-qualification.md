@@ -104,3 +104,17 @@ Baseline TCP seconds: 30.086819, 30.229522, 30.410405; mean 30.242249,
 spread 0.323586. Gateway ping returned 5/5 (mean 0.705 ms), loopback 3/3,
 and the 25-byte UDP payload returned intact. The final TCP sink contained
 67,108,864 bytes; no content hash was checked.
+
+After TCP seconds: 30.199953, 30.368392, 30.100458; mean 30.222934,
+spread 0.267934, a -0.064% mean change. This difference is smaller than either
+run spread and does not establish a throughput change. After gateway ping
+returned 5/5 (mean 1.357 ms), loopback 3/3 (mean 0.324 ms), and the same UDP
+payload returned intact. These small ping samples include scheduling variation
+and do not establish a latency regression. The final TCP sink again contained
+67,108,864 bytes; no content hash was checked. Captures are local
+`build/dhcp-task3-{baseline,after}-*` artifacts.
+
+Final stock-profile DNS reported `10.0.2.3`, NOERROR and an answer for
+`duckduckgo.com`; HTTPS `example.com` returned its page, both with exit status
+zero. All agent QEMU, debugger, remote-client, dnsmasq, tcpdump and host sink
+processes were stopped after qualification.
