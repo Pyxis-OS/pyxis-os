@@ -18,6 +18,8 @@ void usb_inventory_controller_failed(size_t index);
 struct usb_discovery *usb_prepare(struct usb_host_controller *host, size_t index);
 void usb_release_prepared(struct usb_discovery *discovery);
 void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline);
+size_t usb_storage_capacity(void);
+void usb_storage_process(struct usb_discovery *discovery);
 
 /* Acquire publication before copying immutable records on any CPU. */
 void usb_inventory_read(struct system_info_usb *reply);

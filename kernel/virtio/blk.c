@@ -98,28 +98,45 @@ static void assert_client_context(void)
 
 static struct blk_device *find_device(block_device_id id)
 {
-  return id && id <= device_count ? &devices[id - 1] : NULL;
+  if (id == BLOCK_DEVICE_ID_NONE) {
+    return NULL;
+  }
+  for (size_t i = 0; i < device_count; ++i) {
+    if (devices[i].id == id) {
+      return &devices[i];
+    }
+  }
+  return NULL;
 }
 
-size_t block_device_count(void)
+size_t virtio_blk_device_count(void)
 {
   assert_client_context();
   return device_count;
 }
 
-block_device_id block_device_at(size_t index)
+block_device_id virtio_blk_device_at(size_t index)
 {
   assert_client_context();
   return index < device_count ? devices[index].id : BLOCK_DEVICE_ID_NONE;
 }
 
-bool block_inventory_complete(void)
+void virtio_blk_set_id(size_t index, block_device_id id)
+{
+  assert_client_context();
+  KASSERT(index < device_count && id != BLOCK_DEVICE_ID_NONE);
+  struct blk_device *disk = &devices[index];
+  KASSERT(!disk->active && !disk->accepting);
+  disk->id = id;
+}
+
+bool virtio_blk_inventory_complete(void)
 {
   assert_client_context();
   return inventory_complete;
 }
 
-enum block_preparation block_preparation_result(block_device_id id)
+enum block_preparation virtio_blk_preparation_result(block_device_id id)
 {
   assert_client_context();
   struct blk_device *disk = find_device(id);
@@ -324,7 +341,7 @@ static struct blk_slot *find_ticket(struct blk_device *disk, const struct block_
       slot->generation == ticket->generation ? slot : NULL;
 }
 
-enum block_result block_get_info(block_device_id id, struct block_info *info)
+enum block_result virtio_blk_get_info(block_device_id id, struct block_info *info)
 {
   assert_client_context();
   struct blk_device *disk = find_device(id);
@@ -338,7 +355,7 @@ enum block_result block_get_info(block_device_id id, struct block_info *info)
   return BLOCK_OK;
 }
 
-enum block_result block_submit(block_device_id id, enum block_operation operation,
+enum block_result virtio_blk_submit(block_device_id id, enum block_operation operation,
     uint64_t first_block, uint32_t block_count, const void *write_bytes,
     struct block_ticket *ticket)
 {
@@ -394,7 +411,7 @@ enum block_result block_submit(block_device_id id, enum block_operation operatio
   return BLOCK_OK;
 }
 
-enum block_result block_collect(const struct block_ticket *ticket, void *read_bytes,
+enum block_result virtio_blk_collect(const struct block_ticket *ticket, void *read_bytes,
     size_t read_capacity, struct block_completion *completion)
 {
   assert_client_context();
@@ -421,7 +438,7 @@ enum block_result block_collect(const struct block_ticket *ticket, void *read_by
   return BLOCK_OK;
 }
 
-enum block_result block_abandon(const struct block_ticket *ticket)
+enum block_result virtio_blk_abandon(const struct block_ticket *ticket)
 {
   assert_client_context();
   struct blk_device *disk = ticket ? find_device(ticket->device) : NULL;
@@ -444,7 +461,7 @@ enum block_result block_abandon(const struct block_ticket *ticket)
   return BLOCK_OK;
 }
 
-enum block_result block_wait(const struct block_ticket *ticket, uint64_t deadline_ns)
+enum block_result virtio_blk_wait(const struct block_ticket *ticket, uint64_t deadline_ns)
 {
   KASSERT(cpu_current() == cpu_bsp());
   uint64_t flags = cpu_save_interrupts();
@@ -848,16 +865,13 @@ void virtio_blk_prepare(const struct boot_info *boot)
     }
     struct blk_device *disk = &devices[index];
     disk->id = (block_device_id)++index;
-    disk->preparation = BLOCK_INVENTORY_INCOMPLETE;
     klog("virtio-blk %u: PCI %x:%x.%u\n", disk->id, device->address.bus,
          device->address.device, device->address.function);
-    if (inventory_complete) {
-      /* Transport preparation acquires the mutable claim on this boot record. */
-      prepare_device(disk, (struct pci_device *)device, boot);
-    }
+    /* Transport preparation acquires the mutable claim on this boot record. */
+    prepare_device(disk, (struct pci_device *)device, boot);
   }
   if (!inventory_complete) {
-    klog("virtio-blk: incomplete PCI inventory; block I/O unavailable\n");
+    klog("virtio-blk: incomplete PCI inventory; known candidates prepared independently\n");
   } else if (!count) {
     klog("virtio-blk: no candidate device; block I/O unavailable\n");
   }

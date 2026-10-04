@@ -1,10 +1,12 @@
-# USB BOT/SCSI read-only probes
+# USB BOT/SCSI read-only storage
 
 With `CONFIG_XHCI=y`, Caelum independently probes supported boot-present storage
 on each discovered xHCI controller, including traversed hub descendants. The
-checked-in default remains `n`. This is a kernel-internal boot consumer: USB disks
-are not registered with the public block API or mounted. Writes, cache flushes,
-hotplug and native storage qualification remain separate work.
+checked-in default remains `n`. Supported disks register with the kernel-only [block interface](block-storage.md)
+and receive [GPT snapshots](gpt.md). Native filesystem and installer authority
+remain scoped to VirtIO in this slice; USB registration grants no public raw-disk
+or mount access. Writes, cache flushes, hotplug and native storage qualification
+remain separate work.
 
 ## Binding and preparation
 
@@ -32,7 +34,12 @@ slices; with current choices it occupies 528 KiB and one mapping. The USB core
 also reserves one 64 KiB non-DMA read scratch buffer per controller. Admission
 exhaustion is explicit. Admitted entries remain associated with their original
 device even after setup failure; resources and records remain until reboot.
-These are resource choices independent of image sizes and physical topology.
+The block backend additionally reserves two 64 KiB captured read buffers per
+supported device (512 KiB per controller at the current four-device budget),
+and candidate metadata covering the retained root/descendant inventory. Failed
+buffer preparation yields a terminal SETUP_FAILED candidate without discarding
+descriptor observations. These are resource choices independent of image sizes
+and physical topology.
 
 ## Transfers and recovery
 
@@ -67,12 +74,52 @@ error requires reset recovery. Reset ordering is class reset, Bulk-In halt clear
 then Bulk-Out halt clear, including the non-stalled pipe. Recovery never turns a
 failed command into success or replays the read.
 
-Each exchange has a five-second absolute deadline bounded by the controller's
-thirty-second boot enumeration/media deadline. Reset recovery has its own
+Each exchange has a five-second absolute deadline. During boot probing it is
+also bounded by the controller's thirty-second enumeration/media deadline. Reset recovery has its own
 five-second absolute deadline; retries do not restart the exchange deadline.
 Unsafe host recovery, timeout, removal during active work or corrupt events
 quarantine that controller and retain unresolved DMA. A class failure abandons
 its device; other controllers continue independently.
+
+## Block registration and queued reads
+
+The shared block registry reserves metadata before AP startup and assigns a
+nonzero boot ID to each terminal storage candidate. VirtIO candidates register
+first; USB candidates append as controller workers finish their probes. IDs and
+preparation results never change or get reused. Discovery is sealed when all
+controllers reach terminal boot outcomes, including failed or unsupported ones.
+A finished partial inventory remains explicitly incomplete while individually
+READY devices can accept requests. No global disk winner or fallback exists.
+
+Every READY USB device reports its checked geometry, a 64 KiB transfer limit,
+two request slots, `writable=false` and `flush_supported=false`. WRITE and FLUSH
+return `BLOCK_READ_ONLY`. Submission validates the whole logical-block range,
+reserves a slot and wakes the owning xHCI worker. Queued, active and completed
+uncollected reads all count against the slot limit. Reads run in admission order
+per device; each worker invocation processes at most two per device.
+
+The controller worker issues one BOT exchange at a time into a captured slot
+buffer. `submitted` becomes true at the READ command's CBW TRB publication;
+subsequent sense/recovery commands do not change that fact. Collection copies
+the exact requested bytes only after successful whole-command completion.
+Failure leaves the caller's destination untouched. There is no retained caller
+read pointer and no allocation or new mapping in these operations.
+
+Wait timeout does not consume or cancel a ticket. Abandonment cancels queued
+work or releases a completed slot; active work retains its slot until the owning
+exchange returns, even when its client abandons it. A read failure stops admission
+on that device and completes its queued reads as unavailable, without replaying
+the failed read. Controller quarantine independently stops admission and queued
+work on all its disks; the active exchange retires through its worker, and unsafe
+host DMA stays retained until reboot. Other controllers and VirtIO continue.
+Preparation facts and GPT snapshots remain immutable after later I/O failure.
+
+GPT reserves snapshot capacity before AP startup and one shared additional
+scratch buffer for USB. Its coordinator waits for sealed boot discovery, then
+scans retained USB candidates sequentially through ordinary block tickets. READY
+media can publish maps even when aggregate USB discovery is partial. Each actual
+scan retains the existing thirty-second admission/read deadline. Existing VirtIO
+scans start immediately and keep their separate scratch/worker lifetime.
 
 ## Media and retained results
 

@@ -27,6 +27,7 @@
 #include <kernel/service/request.h>
 #include <kernel/space.h>
 #include <kernel-config.h>
+#include "storage/block_registry.h"
 
 [[noreturn]] void kernel_init(const struct boot_info *boot)
 {
@@ -66,6 +67,7 @@
   rtl8111_prepare(boot);
   random_prepare(boot);
   virtio_blk_prepare(boot);
+  block_prepare();
   gpt_prepare();
   arch_clock_maintain();
 
