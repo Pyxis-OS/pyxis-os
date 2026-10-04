@@ -522,7 +522,11 @@ DHCP acquisition uses a port-68 wildcard endpoint, a random transaction ID and
 the BOOTP broadcast flag. It accepts matching OFFER/ACK packets from port 67,
 selects one server, and validates the ACK's mask, route and lease options before
 replacement. Replies need to be broadcast before assignment; servers ignoring
-the flag are unsupported by the current receive rule. Acquisition sends its
+the flag are unsupported by the current receive rule. Invalid T1/T2 ordering
+uses the half-lease and seven-eighths defaults without rejecting an otherwise
+usable lease. A lease rejected by REPLACE leaves net0 unassigned and permits
+the local session to start with profile or fallback DNS; authored static
+configuration errors remain fatal. Acquisition sends its
 first DISCOVER immediately to fit the approximately ten-second startup budget;
 retries use randomized exponential delays clipped to that budget. Failure leaves
 net0 unassigned and starts the local session offline. The remote service keeps

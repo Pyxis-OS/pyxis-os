@@ -131,7 +131,7 @@ Accepted 2026-10-04:
     right-holding endpoint in QEMU and natively, while ordinary endpoints still
     ignore it.
   - Capture the existing ping/UDP/TCP baseline before and after.
-- [ ] **2. The DHCP client and configuration syntax** (userspace).
+- [x] **2. The DHCP client and configuration syntax** (userspace).
   - Discovery and request, applying the lease, and DNS precedence.
   - The session waits for the first lease. Remote startup already waits for the
     configuration owner to assign an address.
@@ -148,11 +148,12 @@ Accepted 2026-10-04:
 
 ## Task 2 implementation and qualification
 
-In progress: kernel DNS code `2175849`, userland `67548c4`
+Implemented: kernel DNS code `2175849`, userland `901b343`
 ([dependency #114](https://git.internal/PyxisOS/pyxis-userland/pulls/114)), branch
-`net/dhcp-client`. Task 2 remains unchecked pending native qualification. The owner chose to leave
+`net/dhcp-client`. QEMU, RTL passthrough and owner native cold/PXE qualification
+are complete. Review follow-ups are on
 [parent #380](https://git.internal/PyxisOS/pyxis-os/pulls/380) and dependency
-#114 as drafts for later cold/PXE qualification.
+#114; merge the dependency first. Task 3 has not started.
 The default profile requests a VirtIO lease; private native profiles retain their
 MAC selector and use `dhcp = true`. Ordinary image builds passed. No compiler
 container rebuild is needed.
@@ -165,6 +166,25 @@ IPv4 and chosen DNS. Remote `dig duckduckgo.com` reported the lease server;
 HTTPS `example.com` fetched successfully. Non-owner provider scripts now wait
 for the initial chosen DNS before launching; static REPLACE publishes IPv4 and
 DNS together without prepublishing DNS before validation.
+
+Review follow-ups keep a rejected server-supplied lease from blocking local
+startup: DHCP REPLACE BAD_REQUEST continues offline and publishes profile or
+fallback DNS, while authored static configuration errors remain fatal. Invalid
+T1/T2 ordering uses both half-lease and seven-eighths defaults; malformed option
+encoding still rejects the packet. These error paths were checked in code, not
+exercised with injected replies. Ordinary build and QEMU acquisition/DNS/HTTPS
+checks passed with these fixes at userland `901b343`.
+
+The owner's native results, relayed by Claude on #380, used the task-2 archive
+on the ThinkPad T14 AMD built-in RTL8168h through PXE. Both cold boots acquired
+a lease; the owner recalls the reserved `.50`, without a captured console line.
+Gateway ping returned 4/4 replies (0.36–3.5 ms), `dig example.com` reported
+`1.1.1.1`, NOERROR and two answers, and HTTPS `example.com` returned the page.
+The router supplies `1.1.1.1` first and `0.0.0.1` second; only the first DNS
+entry is used, and its equality with fallback means this native result does
+not distinguish the DNS source. QEMU's `10.0.2.3` result does. Faster local-send
+retries remain an optional future improvement after the two successful cold
+boots; the accepted approximately ten-second acquisition bound is unchanged.
 
 Matched unprofiled traffic used baseline main `8842a97`/userland `68c5f4b`
 (static `.15/24`, gateway `.2`) and task-2 kernel code `2175849`/userland
@@ -211,16 +231,17 @@ clears IPv4 before acquisition and only the limited broadcast is accepted while
 unassigned, successful acquisition establishes that these replies used a
 compatible broadcast IP destination; it does not qualify other servers' behavior.
 The owner confirms DHCP is active with gateway `.1` and reservations `.50` for
-the built-in port and `.52` for the other port. Cold/PXE qualification remains
-necessary. The existing receiver limitation stays documented for servers ignoring
+the built-in port and `.52` for the other port. The existing receiver limitation
+stays documented for servers ignoring
 the broadcast flag.
 
 Native handoff: `build/dhcp-task2-native.tar.gz`, matching kernel/initrd/ISO with
 the private DHCP selector and README instructions. SHA-256:
 `0bab25ce4467caff8263b84f440897c5abc27c8a94e5bed057e2c684d1380e23`.
-This archive is prepared for owner qualification, not marked native-qualified.
+This is the archive used for the owner's successful native qualification.
 It contains code `2175849` and userland `67548c4`; later documentation/gitlink
-integration does not change their executable sources. All agent QEMU, GDB,
+integration and the `901b343` error-handling changes are separate from that
+qualified snapshot. All agent QEMU, GDB,
 remote-client and host listener processes are cleaned up before handoff.
 
 ## Task 1 qualification and handoff
