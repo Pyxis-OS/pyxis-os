@@ -98,11 +98,17 @@ COMMITTED is the completion point. Checkpointing and durable EMPTY precede reuse
 of journal space and freed blocks. Cleanup updates pointers and bitmap together
 in bounded batches, retaining persistent list membership through completion.
 
-Creation, rename and shrinking resize conservatively flush prior dirty pool data
-before their namespace/size transaction. Their success already reaches COMMITTED,
-so these operations can wait for unrelated writes or fail on delayed allocation.
-Remove instead stages the target's last durable record with DETACHED, preserving
-retained cached contents while allowing space recovery after disk-full writeback.
+Creation and rename without replacement commit namespace metadata without flushing
+cached files. Replacement rename first flushes the moved file, so a cached save
+cannot replace durable contents with an empty or partial file after a crash.
+Remove and rename replacement stage the victim's last durable record with
+DETACHED, preserving cached contents for retained handles. Shrinking resize flushes
+only its target before committing the smaller size; its own delayed allocation
+can still fail.
+Successful namespace/size transactions reach durable COMMITTED. Unrelated dirty
+files wait for sync or background/cache-pressure writeback. The
+[namespace qualification](../development/experiments/npfs-namespace-writeback/README.md)
+records the changed I/O coupling and retained-open dirty replacement.
 Cleanup reclaims at most 64 mappings and ten metadata images per transaction.
 
 Delayed allocation happens at writeback. Periodic full flushing defaults to 30

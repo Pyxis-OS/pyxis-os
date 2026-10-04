@@ -1069,6 +1069,15 @@ shared pool; quotas and starvation policy remain deferred until a concrete need.
 
 One transaction commits/checkpoints at a time. Cleanup delays space reuse, and
 large shrinking truncates stall further writes/resizes of the affected inode.
+Create and file rename no longer flush unrelated cached files. Replacement
+rename flushes the moved file before discarding the old name; shrink flushes its
+target. Both can still fail on that file's delayed allocation. Rename without
+replacement makes the directory edit durable without synchronizing moved-file
+contents. Cache exhaustion and explicit/background sync still flush the pool.
+The [namespace record](development/experiments/npfs-namespace-writeback/README.md)
+checks this separation and retained-open dirty replacement. Revisit target-only
+shrink writeback if a concrete workload needs to truncate despite its own disk-full
+writeback error, with an explicit partial-block and pending-growth contract.
 The accepted sync completion point is durable COMMITTED; checkpointing continues
 in the background before the next commit. The writer's free-inode list avoids
 per-create scans but adds mount-time work and memory usage.

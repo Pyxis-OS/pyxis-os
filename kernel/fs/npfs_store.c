@@ -1865,12 +1865,9 @@ enum call_status npfs_store_sync(struct npfs_store_context *context, struct npfs
   return status;
 }
 
-static enum call_status begin_namespace(struct npfs_store_context *context, struct npfs_store_pool *pool, bool flush)
+static enum call_status begin_namespace(struct npfs_store_context *context, struct npfs_store_pool *pool)
 {
   enum call_status status = writable(pool);
-  if (status == CALL_OK && flush) {
-    status = flush_files(context, pool);
-  }
   if (status == CALL_OK) {
     status = checkpoint(context, pool);
   }
@@ -2027,7 +2024,7 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
   }
   struct npfs_store_volume *volume = directory->volume;
   struct npfs_store_pool *pool = volume->pool;
-  enum call_status status = begin_namespace(context, pool, true);
+  enum call_status status = begin_namespace(context, pool);
   if (status != CALL_OK) {
     return status;
   }
@@ -2153,7 +2150,7 @@ enum call_status npfs_store_remove(struct npfs_store_context *context, struct np
     return CALL_NOT_FOUND;
   }
   struct npfs_store_pool *pool = directory->volume->pool;
-  enum call_status status = begin_namespace(context, pool, false);
+  enum call_status status = begin_namespace(context, pool);
   if (status != CALL_OK) {
     return status;
   }
@@ -2241,7 +2238,7 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
     return CALL_NOT_FOUND;
   }
   struct npfs_store_pool *pool = source->volume->pool;
-  enum call_status status = begin_namespace(context, pool, true);
+  enum call_status status = writable(pool);
   if (status != CALL_OK) {
     return status;
   }
@@ -2300,9 +2297,22 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
     discard_idle_inode(moved, false);
     return status;
   }
+  /* Replacement must make the new contents durable before losing the old name. */
+  status = victim ? flush_inode(context, moved) : CALL_OK;
+  if (status == CALL_OK) {
+    status = begin_namespace(context, pool);
+  }
+  if (status != CALL_OK) {
+    discard_idle_inode(moved, false);
+    if (victim) {
+      discard_idle_inode(victim, false);
+    }
+    return status;
+  }
   struct npfs_inode source_previous = source->record;
   struct npfs_inode destination_previous = destination->record;
   struct npfs_inode victim_previous = victim ? victim->record : (struct npfs_inode){0};
+  struct npfs_inode detached = victim ? victim->durable : (struct npfs_inode){0};
   struct npfs_volume volume_previous = source->volume->record;
   uint64_t free_previous = pool->free_blocks;
   if (victim) {
@@ -2311,7 +2321,12 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
       status = cleanup_link(context, victim, NPFS_CLEANUP_DETACHED);
     }
     if (status == CALL_OK) {
-      status = stage_inode(context, victim);
+      /* Detachment must not publish cached growth before its data is durable.
+       * The moved inode is unchanged by the directory transaction. */
+      detached.cleanup = victim->record.cleanup;
+      detached.cleanup_next = victim->record.cleanup_next;
+      detached.parent = 0;
+      status = stage_inode_record(context, victim, &detached);
     }
   } else {
     status = CALL_OK;
@@ -2356,7 +2371,7 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
     destination->generation = ++next_generation;
   }
   if (victim) {
-    victim->durable = victim->record;
+    victim->durable = detached;
   }
   discard_idle_inode(moved, false);
   return CALL_OK;
@@ -2751,7 +2766,12 @@ enum call_status npfs_store_resize(struct npfs_store_context *context, struct np
     touch_inode(context, &inode->record, false);
     return CALL_OK;
   }
-  status = begin_namespace(context, pool, true);
+  /* Preserve pending growth and retained partial-block writes before committing
+   * the smaller size. Unrelated cached files are outside this transaction. */
+  status = flush_inode(context, inode);
+  if (status == CALL_OK) {
+    status = begin_namespace(context, pool);
+  }
   if (status != CALL_OK) {
     return status;
   }
