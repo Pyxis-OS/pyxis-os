@@ -1,9 +1,9 @@
 # Small vi port investigation
 
-Status: investigation complete; no implementation is selected or authorized.
-This compares small vi implementations as the first modal editor, ahead of
-[Neovim](neovim-libuv.md). It recommends one candidate and lists the decisions to
-make before a port. Kilo stays the current editor.
+Status: investigation complete. BusyBox vi is the selected candidate, and the
+[decisions](#agreed-decisions) below were agreed on 2026-10-04. The port itself
+has not started. This compares small vi implementations as the first modal
+editor, ahead of [Neovim](neovim-libuv.md). Kilo stays the current editor.
 
 ## Candidates and evidence
 
@@ -145,21 +145,22 @@ what the selected save behaviour provides.
 and writable `host://`, plus a remote terminal session. Use the debugger only
 if needed. Record the image size change.
 
-## Decisions before implementation
+## Agreed decisions
 
-1. **Candidate.** BusyBox vi (proposed default), toybox vi, or neatvi with
-   terminal work first.
-2. **Save behaviour.** Proposed default: add a libc `ftruncate` over native
-   `FILE_RESIZE`, keeping upstream's write-then-truncate order. Alternatives are
-   `O_TRUNC` before writing, as Kilo does, or a temporary file followed by
-   atomic `rename`. The rename option needs create authority in the parent and
-   changes upstream behaviour.
-3. **String functions.** Proposed default: add `memrchr`, `strchrnul` and
-   `stpcpy` to userland libc, per the
-   [portability rule](../userland/libc-portability.md). The alternative is
-   rewriting those three call sites in the port patch. Either way, `stat`,
-   `fstat` and `access` stay patched out until truthful metadata exists. No fake
-   mode bits or user IDs.
+Agreed on 2026-10-04:
+
+1. **Candidate.** BusyBox vi. Toybox vi and neatvi are not pursued.
+2. **Save behaviour.** Add a libc `ftruncate` over native `FILE_RESIZE` and keep
+   upstream's write-then-truncate order. Truncating before writing, as Kilo
+   does, and a temporary file followed by atomic `rename` were not chosen.
+3. **String functions.** Add `memrchr`, `strchrnul` and `stpcpy` to userland
+   libc, per the [portability rule](../userland/libc-portability.md), rather
+   than rewriting the call sites in the port patch. `stat`, `fstat` and
+   `access` stay patched out until truthful metadata exists. No fake mode bits
+   or user IDs.
+
+The libc additions belong in userland and land before the ports recipe that
+uses them.
 
 [bb]: https://git.busybox.net/busybox/tree/editors/vi.c?id=f96d33d28a1f70fda5f27d221d5012b1ac0b7dad
 [tb]: https://github.com/landley/toybox/blob/b7ec52ac35e075caffca5d330995d44e8dbfc8c3/toys/pending/vi.c

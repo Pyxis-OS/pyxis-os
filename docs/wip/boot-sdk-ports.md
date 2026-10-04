@@ -190,8 +190,8 @@ The initial [Neovim/libuv investigation](neovim-libuv.md) is complete, with pinn
 evidence and header probes; its proposed native event, threading, metadata and
 terminal milestones remain deferred. No Neovim build or runtime compatibility
 is claimed. The LLVM investigation remains separate future work.
-The [small vi investigation](small-vi.md) recommends porting BusyBox vi as the
-first modal editor before Neovim. No vi port is selected yet.
+The [small vi investigation](small-vi.md) selects BusyBox vi as the first modal
+editor before Neovim, with its port decisions agreed. The port has not started.
 
 After native filesystem writer completion, the agreed
 [runtime SMP milestone](scheduling-and-threads.md) separates spaces and boot sessions

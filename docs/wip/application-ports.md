@@ -21,7 +21,7 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | zlib | Reusable compression/decompression, followed by a concrete consumer such as PNG loading. |
 | libpng | PNG decoding/encoding for viewers, drawing tools and screenshots; depends on zlib. |
 | SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. |
-| vi | A small modal editor before Neovim. The [vi investigation](small-vi.md) compares BusyBox, toybox and neatvi and recommends BusyBox vi; candidate, save behaviour and libc additions await decisions. |
+| vi | A small modal editor before Neovim. The [vi investigation](small-vi.md) compares BusyBox, toybox and neatvi and selects BusyBox vi, with save behaviour and libc additions agreed; the port has not started. |
 | PDCurses | Investigate a native libterm backend for terminal applications, using its documented platform hooks for drawing, input, cursor control and delays. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
 | awk | Text filtering, field processing and small scripts; select an implementation after a libc/dependency probe. |
