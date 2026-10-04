@@ -77,16 +77,21 @@ enum usb_result usb_host_control_take(struct usb_host_device *device, struct usb
                                       void *destination, size_t capacity, struct usb_completion *completion);
 void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket ticket);
 
-/* Boot-only class binding. A bounded pool reserves two bulk rings and one
- * captured transfer buffer per admitted device before AP startup. Transfers are
- * serialized on the owning worker; failure never copies a read destination.
- * A stall retains the halted endpoint until bulk_clear retires it safely. */
+/* BSP/IF=0. Notify the owning controller worker without allocating. */
+void usb_host_notify(struct usb_host_controller *controller);
+
+/* Class binding during boot, with retained runtime reads. A bounded pool reserves
+ * two bulk rings and one captured transfer buffer per admitted device before AP
+ * startup. Transfers are serialized on the owning worker; failure never copies
+ * a read destination. A stall retains its span until bulk_clear retires it. */
 enum usb_result usb_host_configure_bulk(struct usb_host_device *device,
                                         const struct usb_bulk_endpoint *in,
                                         const struct usb_bulk_endpoint *out, uint64_t deadline);
+/* submitted is optional, borrowed only until return, and sticky: set with IF=0
+ * at Normal TRB publication, before any wait or doorbell. */
 enum usb_result usb_host_bulk_transfer(struct usb_host_device *device, uint8_t endpoint,
                                        const void *outbound, void *destination, size_t length,
-                                       uint64_t deadline, size_t *actual);
+                                       uint64_t deadline, size_t *actual, bool *submitted);
 /* Optionally collect captured stalled input after successful retirement, before
  * another transfer can reuse its buffer. Recovery failure leaves it untouched. */
 enum usb_result usb_host_bulk_clear(struct usb_host_device *device, uint8_t endpoint,

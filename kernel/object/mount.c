@@ -39,7 +39,7 @@ struct kernel_object *mount_create(void)
 struct kernel_object *mount_create_native(const struct mount_config *config)
 {
   KASSERT(arch_cpu_index() == 0 && config->enabled);
-  bool complete = block_inventory_complete();
+  bool complete = block_native_inventory_complete();
   struct mount_object *mount = kmalloc(sizeof(*mount));
   if (!mount) {
     return NULL;

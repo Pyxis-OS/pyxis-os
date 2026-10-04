@@ -1,7 +1,8 @@
 # Libc portability over the native ABI
 
-Libc targets ISO C: standard headers and functions should follow the ISO C
-contract, and gaps are recorded rather than approximated. The descriptor layer
+Libc targets ISO C, plus the [proven extensions](#which-standard-functions-belong-in-libc)
+below: standard headers and functions follow their standard contract, and gaps
+are recorded rather than approximated. The descriptor layer
 (`open`, `read`, `write`, `close`) is a bounded portability surface for ported
 software, not Unix emulation. The kernel, libpyxis and native interfaces remain
 capability-based and deliberately non-Unix; libc adapts them rather than
@@ -23,6 +24,21 @@ Ordinary library behavior belongs in shared libc adapters where possible.
 Application patches cover platform integration and explicitly restricted
 features; missing semantics are recorded as limitations rather than successful
 stubs. Existing ports are not retroactively rewritten by this milestone.
+
+## Which standard functions belong in libc
+
+Owner decision, 2026-10-04: libc provides ISO C plus extensions that have proven
+useful, such as POSIX `mkdir`, implemented with native constructs. A port that
+needs such a function gets it added here, resolving paths through startup roots
+and the working directory like `fopen`, `remove` and `rename`. The port then
+calls the standard function rather than its own capability code.
+
+The test is whether the function maps onto objects and operations that already
+exist. Creating a directory does; POSIX threads, `fork` and signals do not. Those
+need a native design first. No kernel mechanism is added only to satisfy a POSIX
+contract. Arguments with no native meaning are documented as such. For example,
+`mkdir`'s `mode` has no effect because npfs has no permissions. Missing authority
+or support returns a real error, never a successful stub.
 
 ## Ownership and stdio integration
 

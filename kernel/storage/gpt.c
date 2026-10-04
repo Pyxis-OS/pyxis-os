@@ -7,6 +7,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include "block_registry.h"
 
 #define GPT_ARRAY_LIMIT 65536u
 #define GPT_ARRAY_RESERVE 16384u
@@ -15,6 +16,7 @@
 #define GPT_ENTRY_BYTES 128u
 #define GPT_REVISION UINT32_C(0x00010000)
 #define GPT_SCAN_TIMEOUT_MS 30000u
+#define GPT_DISCOVERY_POLL_MS 10u
 #define GPT_CRC_POLYNOMIAL UINT32_C(0xedb88320)
 #define GPT_RESERVED_ATTRIBUTES UINT64_C(0x0000fffffffffff8)
 #define MBR_SIGNATURE UINT16_C(0xaa55)
@@ -43,11 +45,14 @@ struct gpt_device {
   struct block_info device;
   struct gpt_snapshot snapshot;
   struct gpt_scratch *scratch;
-  bool published;
+  bool published, shared_scratch;
 };
 
 static struct gpt_device *devices;
 static size_t device_count;
+static size_t native_count;
+static struct gpt_scratch *usb_scratch;
+static bool usb_scan_failed;
 
 static struct gpt_device *find_device(block_device_id id)
 {
@@ -357,7 +362,9 @@ static void publish(struct gpt_device *scan, enum gpt_status status)
   };
   uint64_t flags = cpu_save_interrupts();
   scan->snapshot.status = status;
-  kfree(scan->scratch);
+  if (!scan->shared_scratch) {
+    kfree(scan->scratch);
+  }
   scan->scratch = NULL;
   scan->published = true;
   cpu_restore_interrupts(flags);
@@ -391,19 +398,29 @@ static void scan_disk(void *argument)
 
 void gpt_prepare(void)
 {
-  device_count = block_device_count();
+  native_count = block_native_device_count();
+  device_count = block_registry_capacity();
   if (!device_count) {
     return;
   }
-  devices = kmalloc(device_count * sizeof(*devices));
+  if (device_count <= SIZE_MAX / sizeof(*devices)) {
+    devices = kmalloc(device_count * sizeof(*devices));
+  }
   if (!devices) {
     device_count = 0;
     return;
   }
   memset(devices, 0, device_count * sizeof(*devices));
   for (size_t i = 0; i < device_count; ++i) {
-    devices[i].id = block_device_at(i);
-    devices[i].scratch = kmalloc(sizeof(*devices[i].scratch));
+    devices[i].id = (block_device_id)i + 1;
+    if (i < native_count) {
+      devices[i].scratch = kmalloc(sizeof(*devices[i].scratch));
+    } else {
+      devices[i].shared_scratch = true;
+    }
+  }
+  if (device_count > native_count) {
+    usb_scratch = kmalloc(sizeof(*usb_scratch));
   }
 }
 
@@ -429,13 +446,51 @@ static bool prepare_scan(struct gpt_device *scan)
   return true;
 }
 
+static void scan_usb_disks(void *argument)
+{
+  (void)argument;
+  for (;;) {
+    uint64_t flags = cpu_save_interrupts();
+    bool finished = block_discovery_finished();
+    cpu_restore_interrupts(flags);
+    if (finished) {
+      break;
+    }
+    kernel_task_sleep_until(task_deadline_after_ms(GPT_DISCOVERY_POLL_MS));
+  }
+  uint64_t flags = cpu_save_interrupts();
+  size_t count = block_device_count();
+  KASSERT(count <= device_count);
+  cpu_restore_interrupts(flags);
+  for (size_t i = native_count; i < count; ++i) {
+    struct gpt_device *scan = &devices[i];
+    flags = cpu_save_interrupts();
+    scan->scratch = usb_scratch;
+    bool ready = prepare_scan(scan);
+    cpu_restore_interrupts(flags);
+    if (ready) {
+      scan_disk(scan);
+    }
+  }
+  flags = cpu_save_interrupts();
+  kfree(usb_scratch);
+  usb_scratch = NULL;
+  cpu_restore_interrupts(flags);
+}
+
 void gpt_start(void)
 {
-  for (size_t i = 0; i < device_count; ++i) {
+  for (size_t i = 0; devices && i < native_count; ++i) {
     struct gpt_device *scan = &devices[i];
     if (prepare_scan(scan) && kernel_task_create(scan_disk, scan) != MM_OK) {
       publish(scan, GPT_NO_MEMORY);
     }
+  }
+  if (devices && device_count > native_count &&
+      kernel_task_create(scan_usb_disks, NULL) != MM_OK) {
+    usb_scan_failed = true;
+    kfree(usb_scratch);
+    usb_scratch = NULL;
   }
 }
 
@@ -445,7 +500,10 @@ const struct gpt_snapshot *gpt_get_snapshot(block_device_id id)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct gpt_device *scan = find_device(id);
   static const struct gpt_snapshot no_memory = {.status = GPT_NO_MEMORY};
-  if (!devices && block_device_count() && block_preparation_result(id) != BLOCK_DEVICE_INVALID) {
+  if (block_preparation_result(id) == BLOCK_DEVICE_INVALID) {
+    return NULL;
+  }
+  if (!devices || (id > native_count && usb_scan_failed)) {
     return &no_memory;
   }
   return scan && scan->published ? &scan->snapshot : NULL;
@@ -463,6 +521,7 @@ enum gpt_status gpt_rescan(block_device_id id)
   }
   KASSERT(!scan->scratch);
   scan->scratch = kmalloc(sizeof(*scan->scratch));
+  scan->shared_scratch = false;
   bool ready = prepare_scan(scan);
   cpu_restore_interrupts(flags);
   if (ready) {

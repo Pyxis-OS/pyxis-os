@@ -1,7 +1,8 @@
 # USB boot and first physical installation
 
 Status: Phase A image assembly/USB boot and Phase B.3 enumeration/control
-transfers and internal BOT/SCSI reads implemented, 2026-10-04; USB block access remains pending.
+transfers, BOT/SCSI reads and kernel block/GPT integration implemented,
+2026-10-04; USB mounting remains pending.
 Owner-reported [ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md) now
 include root and USB 3 hub-descendant storage reads. Broader hardware/recovery
 qualification and native mounting remain pending. Inspection-first work includes
@@ -136,7 +137,8 @@ USB boot inventory; neither tool nor its benchmark is a boot-image prerequisite.
 
 The owner accepted per-device read-only support on 2026-10-04, superseding
 unique supported-disk selection and the earlier single-controller backend
-proposal. B.4 introduces a kernel-internal BOT/SCSI probe; B.5 remains separate.
+proposal. B.4 introduced a kernel-internal BOT/SCSI probe; the first B.5 slice adds
+kernel block registration and GPT discovery. Mount authority remains separate.
 Physical qualification remains Phase C.
 
 ### Selection and authority
@@ -158,15 +160,18 @@ candidate or choose another disk in its place. Unsupported media and command
 failures retain individual diagnostics; unsafe host errors can quarantine their
 controller, while other controllers continue.
 
-The first consumer is an internal read-only boot probe with retained private
-geometry, sense, counters and byte samples. There are no writes, mounts, public
-raw-disk operations or USB block-device registration in this slice. Enabling
-`CONFIG_XHCI` enables this probe; the checked-in default remains `n`.
+The internal read-only boot probe retains private geometry, sense, counters and
+byte samples. Terminal candidates now register with the kernel block interface,
+including individual unsupported/setup-failure results; supported devices serve
+queued reads and GPT discovery. There are no writes, USB mounts or public USB
+raw-disk operations in this slice. Enabling `CONFIG_XHCI` enables these consumers;
+the checked-in default remains `n`.
 
 Block integration must preserve today's stable per-device IDs, explicit disk
 handles and native mount authority. USB addresses, topology, serial numbers and
-GUID knowledge grant no filesystem authority. The block preparation, readiness
-and mount dispatch contract belongs to B.5; the old global `block.backend` and
+GUID knowledge grant no filesystem authority. B.5 preserves the qualified
+VirtIO-only native/installer authority domain until
+its separate read-only USB mount slice; the old global `block.backend` and
 unique-disk policy are superseded, not implemented requirements.
 
 ### Controller resources and startup
@@ -225,11 +230,13 @@ enumeration. IRQ handling acknowledges activity and wakes the worker; parsing,
 commands, recovery and logging remain worker work. Today's BSP affinity follows
 current APIs and is not a permanent USB ownership requirement.
 
-USB block registration and mounting remain B.5. That integration must expose
-per-device preparation separately from later availability, preserve explicit
-failure reasons and use the existing block readiness wait before GPT/native
-mount authority. Private transport queues, DMA and recovery stay with each
-backend. No new block dispatch or public authority is introduced by B.4.
+The first B.5 slice registers terminal candidates without allocation, preserving
+per-device preparation separately from later availability. Sealed boot discovery
+and exhaustive discovery are separate queries. GPT waits for sealed discovery
+and scans USB media sequentially through ordinary block tickets, with one shared
+pre-AP scratch allocation. Partial USB discovery does not disable individually
+READY disks or existing VirtIO authority. Private queues, DMA and recovery stay
+with each backend; USB mount/public raw authority remains deferred.
 
 ### Requests, deadlines and failure ownership
 
@@ -251,7 +258,10 @@ this boot. Each owning worker runs synchronous private transfers, capturing
 outbound bytes and retaining no caller read destination. One exchange runs at a
 time per interface, as required by
 [BOT section 3.4](https://www.usb.org/sites/default/files/usbmassbulk_10.pdf).
-Public block-request slots and ticket collection belong to B.5.
+B.5 adds two captured read slots per supported device before AP startup. Queued,
+active and completed-uncollected requests count against that budget; the owning
+controller worker serializes the exchanges and collection copies only successful
+whole reads. No caller read pointer is retained.
 
 Initial deadline choices are one second for firmware handoff and controller
 halt/reset, five seconds for a controller command or control transfer and for
@@ -263,7 +273,7 @@ one place when coded; changing them does not change the ownership contract.
 Reassess them against measured QEMU/device behavior, without freezing them or
 image sizes in unit-test expectations.
 
-For B.5, preserve the [block ticket contract](../devices/block-storage.md#tickets-and-caller-ownership):
+B.5 preserves the [block ticket contract](../devices/block-storage.md#tickets-and-caller-ownership):
 caller wait timeout neither cancels nor consumes; successful read collection
 copies exactly the requested bytes, and failure leaves caller storage untouched.
 Set `submitted` when the BOT command first becomes device-visible. Report
@@ -361,9 +371,13 @@ host tools and the later physical-preparation procedure.
    without freeing DMA storage until device access has safely ended.
    Implemented as an internal per-device [read-only media probe](../devices/usb-storage.md);
    [QEMU bring-up](../development/usb-storage-bringup.md) records coverage and limits.
-5. [ ] **Integrate block access and read-only mounting.** Register USB disks through
-   the current per-device block contract, preserving explicit device authority.
-   Reuse GPT, filesystem core and native object interfaces. Trusted init selects
+5. [x] **Integrate kernel block reads and GPT discovery.** Register terminal USB
+   candidates through the per-device block contract; use bounded asynchronous
+   read tickets and retain per-device setup/failure outcomes. Seal boot discovery
+   separately from completeness, preserving usable devices under partial inventory.
+   Native filesystem/installer grants remain VirtIO-only in this slice.
+6. [ ] **Integrate read-only USB mounting.** Reuse GPT, filesystem core and native
+   object interfaces, preserving explicit device authority. Trusted init selects
    partition, volume and binding within supplied disk authority; programs receive
    directory/file grants, not ambient raw-disk access. Read known files and launch
    a captured executable from the USB-backed volume in QEMU.
@@ -389,7 +403,7 @@ host tools and the later physical-preparation procedure.
 - Phase A and B.3 enumeration/control transfers are implemented; B.1 records the
   accepted per-device read-only contract. Enumeration publishes root devices and
   supported USB 2/3 hub descendants. B.4 adds an internal BOT/SCSI media probe;
-  B.5 native block integration remains pending. Writable
+  B.5 read-only USB mount integration remains pending. Writable
   work and its roadmap ordering remain unassigned.
 - Image update/preservation ownership remains open for persistent installation.
   Read-only disk selection does not qualify a write target or authenticate media.
