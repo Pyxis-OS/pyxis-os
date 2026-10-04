@@ -53,4 +53,3 @@ inode=15 size=1048576 durable_size=0 size_dirty=1 refs=0 cleanup=0
 inode=3 size=0 durable_size=0 size_dirty=0 refs=0 cleanup=0
 inode=1 size=4096 durable_size=4096 size_dirty=0 refs=1 cleanup=0
 [Inferior 1 (process 1) detached]
-
