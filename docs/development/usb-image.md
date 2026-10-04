@@ -3,7 +3,8 @@
 The opt-in `usb-image` target assembles a GPT disk image at
 `build/pyxis-usb.img`. Firmware loads the pinned Limine EFI loader, Caelum and
 the matching boot archive from FAT32. Programs then use the archive in RAM.
-Caelum USB storage access belongs to [Phase B](../wip/usb-installation.md#b-native-read-only-usb-storage).
+Caelum USB reads and qualified writes use the separate
+[native storage backend](../devices/usb-storage.md).
 
 ## Build and layout
 
@@ -102,13 +103,18 @@ support. `debug-usb` pauses with GDB on `127.0.0.1:1234`, as described in the
 
 After firmware boot, exercise `app://` programs and RAM-backed `home://` in the
 shell. The checked-in `CONFIG_XHCI=n` leaves kernel USB access disabled. With
-xHCI enabled, supported boot-present BOT disks provide native read-only block
-reads and GPT discovery. The default init does not mount this sample volume;
+xHCI enabled, supported boot-present BOT disks provide native block reads and
+GPT discovery. Qualified disks also support explicitly authorized writes and
+ordered cache flushes. The default init does not mount this sample volume;
 configure its actual `MOUNT_DISK` GUID and an explicit trusted read-only mount
 as described in [init configuration](../userland/init.md#native-disk-configuration-and-mounting).
 Image assembly chooses a fresh GUID, so an ISO validation image can configure
 the existing USB image without replacing it. Firmware image loading alone does
-not demonstrate native USB I/O.
+not demonstrate native USB I/O. The supplied `run-usb`/`debug-usb` launchers
+keep their raw attachment read-only. Writable QEMU validation uses an explicitly
+selected private image copy and writable attachment with `--read-write` init;
+see the [manual storage record](usb-storage-bringup.md). Physical writable use
+remains deferred.
 
 ## Prepare a selected physical target later
 

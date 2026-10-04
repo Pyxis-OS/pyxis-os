@@ -1,4 +1,4 @@
-# Read-only USB storage bring-up
+# USB storage bring-up
 
 2026-10-04: manual QEMU validation of the internal per-device
 [BOT/SCSI probe](../devices/usb-storage.md), based on `9cbb0d3`. The implementation
@@ -406,3 +406,170 @@ attachments. GDB confirmed no xHCI controllers and only the VirtIO block device;
 GDB processes were closed. USB writes/flush, public raw USB access, hotplug and
 physical filesystem qualification remain deferred. ThinkPad mount testing is
 still deferred; earlier owner-reported BOT reads do not qualify this integration.
+
+## 2026-10-04: qualified writes and cache synchronization
+
+Phase C.1 adds captured WRITE (10)/(16), ordered blocking whole-medium
+SYNCHRONIZE CACHE (10), protection/cache qualification and explicitly requested
+writable GUID mounts. The measured baseline was `68729a3`; final kernel sources
+were `87e3a00`. Pins were fs `d352c7e`, ports `2c1448a`, userspace `2b23085`,
+lwIP `a1aadb9`, unchanged by this task. The checked-in xHCI default remains off.
+The [storage reference](../devices/usb-storage.md) describes the implemented
+ownership and qualification contracts.
+
+### Builds and common configuration
+
+Ordinary `make -j16 image` passed with xHCI enabled and disabled. Enabled variants
+used the trusted init shown in the preceding mount record, replacing
+`--read-only` with `--read-write` for writable runs. `MOUNT_DISK` selected the
+sample image's observed GUID, `254ca48f-2cf8-4e45-a844-ca22c685d8ab`, and
+`INIT_CPUS=` selected one session. `make -j16 fs-tools` and `make -C tools remote`
+passed. Changed kernel sources compiled without warnings; rebuilt vendored Quake
+sources emitted existing warnings. The existing cross compiler was used, with
+no compiler-container rebuild or dependency update.
+
+All runs used the preceding QEMU 10.2.2 q35/KVM configuration: `-cpu max`, four
+vCPUs, 8 GiB RAM, matching OVMF code and fresh private vars, ISO boot, virtio-net
+with the existing remote client and virtio-rng. These are nested/agent-environment
+results, not native ThinkPad measurements. Serial logs, remote command results
+and GDB observations were captured manually under `/home/chronium/tmp`.
+No tests, self-tests, fault injection or boot/output automation were added.
+
+### Matched read-only baseline
+
+Three fresh baseline boots and three fresh final boots used identical attachments:
+`qemu-xhci,p2=2,p3=2`, a four-port USB 2 hub at root port 1, the original sample
+disk at `1.2`, keyboard at `1.3`, an unrelated marker-only VirtIO disk and
+unsupported EHCI. Both disk attachments were read-only. The command workload
+was `lsusb`, `cat usb://README.txt`, captured `usb://bin/cat.pxe usb://README.txt`
+and `fastfetch`. File/executable/report commands exited 0; `lsusb` exited 1 for
+the retained unsupported EHCI record. GDB collected counters after commands,
+without a profiler. Each metric was identical across its three boots:
+
+| Observation | Baseline | Final |
+| --- | ---: | ---: |
+| xHCI commands / events | 8 / 187 | 8 / 190 |
+| BOT commands / reads | 41 / 38 | 42 / 38 |
+| BOT read bytes | 235520 | 235520 |
+| BOT writes / flushes | 0 / 0 | 0 / 0 |
+| VirtIO published / completed | 3 / 3 | 3 / 3 |
+| PMM allocated frames | 5218 | 5218 |
+| VM reserved pages | 15902 | 15904 |
+| VM backed pages / range records | 4605 / 93 | 4605 / 93 |
+| TLSF pools / pool bytes | 6 / 2691072 | 6 / 2691072 |
+
+Final protection was known and set, with BOT READY and writable/flush false.
+The one new MODE SENSE command accounts for three additional transfer events.
+Backing and pool costs did not increase; two more virtual pages were reserved.
+This is a workload/resource comparison, not a boot-latency measurement.
+
+### Writable 512-byte hub disk
+
+A sparse private copy, `usb-write-pool-512.raw`, replaced only the USB backing
+attachment, with `cache=writeback` and no `readonly=on`. The original sample
+image remained untouched. Discovered geometry was 1048576 logical blocks of
+512 bytes; GPT entry 2 began at 264192 and contained 782336 blocks. These are
+fixture observations, not driver limits or topology assumptions. MODE SENSE
+reported WP clear and blocking synchronization succeeded. GDB observed a writable
+npfs pool, BOT READY, writable/flush true and `write_failed=false`.
+
+Ordinary shell operations copied `app://init` to `usb://saved-init`, synced it,
+compared SHA-256 hashes, wrote and verified the existing 1 MiB iobench fixture,
+renamed the init copy, removed a benchmark file and synced the directory. The
+same file contents, rename and removal survived a fresh QEMU process using the
+same private disk. Captured USB executable launch also succeeded after reboot.
+The final mutation observation recorded 555 successful writes, 10547200 written
+bytes and 249 successful synchronizations, including the boot qualification
+command. The npfs journal was EMPTY, with no retained writeback error.
+
+For the reported timing run, the existing unprofiled command was:
+
+```text
+iobench write usb://bench-measured.bin --buffer 65536 --rounds 3 --sync
+sha256sum app://share/iobench.bin usb://bench-measured.bin
+```
+
+After one warmup, each verified 1 MiB sample used 258 native file-write calls
+(257 short writes under the existing native file-call bound):
+
+| Sample | Transfer ms | File sync ms |
+| --- | ---: | ---: |
+| 1 | 274.884 | 96.425 |
+| 2 | 272.911 | 94.590 |
+| 3 | 279.981 | 95.020 |
+
+Transfer median was 274.884 ms, range 272.911–279.981 ms, 3.638 MiB/s at the
+median. Sync median was 95.020 ms, range 94.590–96.425 ms. No GDB stop or kernel
+profiling occurred during these samples. An earlier debugger-perturbed timing
+run was discarded; repeating its existing filename correctly failed exclusive
+creation, so the measured run used a fresh name. There was no working USB write
+baseline before C.1; these figures establish initial QEMU behavior, not a
+throughput regression comparison or physical flush latency.
+
+### 4 KiB and wide-LBA disks
+
+A separate populated private image, `usb-write-pool-4k.raw`, attached directly
+to root port 1 with `qemu-xhci,p2=1,p3=1` and
+`usb-storage,logical_block_size=4096,physical_block_size=4096`. No VirtIO disk
+was required. Discovered geometry was 131072 logical blocks, with entry 2 at
+33024 for 97792 blocks. Init copying, file sync, fixture writes and matching
+hashes succeeded. GDB observed writable/flush true, `write_failed=false`, BOT
+READY, 264 writes / 5201920 bytes and 117 synchronizations including qualification.
+
+The same unprofiled iobench command, using `usb://bench-4k.bin`, reported three
+verified samples after warmup: transfer 273.020, 262.777 and 274.874 ms; sync
+71.216, 71.900 and 94.448 ms. Transfer median was 273.020 ms, range
+262.777–274.874 ms, 3.663 MiB/s; sync median 71.900 ms, range 71.216–94.448 ms.
+A fresh process with a read-only attachment and read-only init reopened the
+files. The benchmark hash matched the archive fixture; a write redirection
+was refused by the delegated read-only directory grant. The persisted init copy
+matched the earlier writable init, whose contents differ from the reboot's
+read-only init.
+
+A third sparse private image, `usb-write-pool-wide.raw`, had 6442516480 logical
+512-byte blocks and only GPT entry 2, starting at 4294969344 for 782336 blocks.
+The existing populated pool was copied into that exact-size extent; no large
+capacity allocation or new filesystem format was needed. An initial larger
+extent was corrected to match the copied pool's declared size before the usable
+mount run. Attachment was direct root port 1, without a VirtIO disk. GDB
+observed `wide=true` and a natural `usb_bot_write` at LBA 4294969456 for eight
+blocks, selecting WRITE (16) above the 32-bit boundary. File copying, sync,
+matching hashes and captured executable launch exited 0. A fresh read-only
+process reopened the file with its expected hash. Whole-medium SYNCHRONIZE
+CACHE (10) succeeded on this wide medium too.
+
+After closing each QEMU process, the pool extent was extracted using its actual
+GPT entry. Existing `fsck.npfs` reported a successful structural check for all
+three images, without replay. Existing `npfs-inspect` extracted the persisted
+files, and host `cmp` matched the writable init and benchmark fixture bytes.
+These checks establish orderly QEMU persistence, not power-loss durability.
+
+### Refusal, coexistence and default configuration
+
+A trusted writable init against the original read-only USB attachment returned
+`CALL_READ_ONLY` at its natural root operation. GDB observed known WP set,
+writable/flush false, BOT READY, no writes and no synchronizations. This refusal
+did not poison transport. The read-only filesystem remains usable under the
+matched workload above.
+
+With a private writable VirtIO copy selected by the same configured GUID and an
+unrelated read-only USB marker disk, copying init, file sync, matching hashes,
+removal and directory sync all exited 0. The retained pool used device 1,
+VirtIO's eight request slots, writable/flush true and an EMPTY journal. The
+existing installer/public raw view was not changed.
+
+The checkout restored `CONFIG_XHCI=n`, packaged init and default image settings.
+The default image reached the remote shell with the matched discovery
+attachments. `fastfetch` exited 0; `lsusb` reported unavailable inventory and
+exited 1. GDB confirmed no xHCI controller records and only the VirtIO block
+device. All task-owned QEMU and GDB processes were closed.
+
+### Limits
+
+Mutation failure/abandonment, queued mutation rejection after failure, concurrent
+flush fences, MODE SENSE (10) fallback, unsupported synchronization and malformed
+capability responses were inspected in code/spec review, without forced-error
+execution. Normal filesystem write/sync traffic exercised WRITE (10)/(16) and
+blocking flush; no deliberate disconnect, stall or power-loss experiment was
+performed. Hotplug and physical writable mounts remain deferred. Native ThinkPad
+testing is still deferred, and the accepted GUID/discovery limits are unchanged.

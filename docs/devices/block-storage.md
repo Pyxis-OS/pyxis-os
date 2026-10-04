@@ -2,7 +2,8 @@
 
 Caelum inventories VirtIO and USB BOT/SCSI disks through the kernel-only
 [block interface](../../include/kernel/block.h). It supports bounded asynchronous
-reads; VirtIO also supports writes and flushes. [GPT discovery](gpt.md) publishes a partition-map
+reads, writes and ordered flushes; USB writes require per-device protection and
+cache-synchronization qualification. [GPT discovery](gpt.md) publishes a partition-map
 snapshot per device through a separate kernel interface.
 [Native filesystem mounts](filesystem-native-adapter.md)
 expose directory/file capabilities selected by trusted init. A separate
@@ -11,8 +12,9 @@ only to the trusted install path.
 
 The dispatcher in `kernel/storage/block.c` owns boot IDs and terminal setup
 facts; each backend retains its own queues, buffers and workers. The
-[USB backend](usb-storage.md) supports per-device read-only requests across
-inspected controllers and hubs. Its candidates append during boot discovery;
+[USB backend](usb-storage.md) supports per-device requests across
+inspected controllers and hubs, retaining reads on healthy unqualified media.
+Its candidates append during boot discovery;
 `block_discovery_finished()` seals that inventory independently of whether
 discovery was exhaustive. Configured native mount authority uses the full
 registry after discovery and GPT scans finish, permitting a unique observed GUID
@@ -70,16 +72,23 @@ not a promise that the transport remains operational.
 
 `block_get_info(id)` reports logical block size and count, maximum transfer bytes,
 request slots, writable/flush support and the latched write-failure state.
-Logical blocks are 512 bytes or 4 KiB. The driver translates block addresses to
-VirtIO's fixed 512-byte sector units. Zero capacity, partial logical blocks,
-unsupported sizes and unusable advertised transfer limits are rejected.
+Logical blocks are 512 bytes or 4 KiB. VirtIO translates block addresses to its
+fixed 512-byte sector units; USB uses the device's logical-block addresses. Zero
+capacity, partial logical blocks, unsupported sizes and unusable advertised
+transfer limits are rejected.
 
-Each prepared device uses one split queue with 32 descriptors, reduced to its
-smaller supported size. There are at most eight request slots, reduced when the
+Each prepared VirtIO device uses one split queue with 32 descriptors, reduced
+to its smaller supported size. There are at most eight request slots, reduced when the
 queue cannot hold three descriptors per slot. Each slot has its own control and
 data DMA allocations. Transfers are at most 64 KiB, reduced by the advertised
 segment-size limit and rounded down to whole logical blocks. Ring storage,
 ownership bookkeeping, DMA buffers and mappings are prepared before AP startup.
+
+USB instead reserves two captured 64 KiB I/O slots per supported device before
+AP startup and serializes BOT exchanges through its owning controller worker.
+Both writable and flush flags require known WP-clear media and a completed real
+blocking cache synchronization; unknown or unsupported capabilities retain
+read-only service when transport is healthy. See [USB storage](usb-storage.md).
 
 The slot budget includes queued, device-owned and completed-but-uncollected
 requests. Exhaustion returns `BLOCK_FULL` immediately. Submission, collection,
@@ -96,7 +105,7 @@ collected or abandoned while that client is waiting on it.
 `block_submit(id, ...)` validates operation, range and transfer bounds before
 admission.
 Reads and writes require a nonzero count of logical blocks. Writes copy caller
-bytes into the reserved DMA slot before returning. Reads retain no caller
+bytes into reserved backend storage before returning. Reads retain no caller
 destination pointer. Flush takes zero start/count and no data pointer. Successful
 admission returns a device/slot/generation ticket; stale generations cannot
 identify a reused slot. Rejection changes neither the output ticket nor the device.
@@ -138,7 +147,12 @@ the request. A failed write or flush latches `write_failed` until reboot. Furthe
 writes and flushes, including admitted work not yet published, fail with
 `BLOCK_WRITE_FAILED`; reads can continue while the transport is healthy. Requests
 already published retain their own completion outcomes. There is no automatic
-retry or successful later flush that clears the latch.
+retry or successful later flush that clears the latch. Abandoning a published
+mutation also latches failure. USB records publication at the original CBW and
+preserves its slot until the owning exchange returns.
+
+The following reset/watchdog details describe VirtIO; USB uses its bounded BOT
+recovery and controller quarantine described in [USB storage](usb-storage.md).
 
 Malformed completions, unexpected device status/configuration changes and a
 five-second device request watchdog stop the transport until reboot. Pending

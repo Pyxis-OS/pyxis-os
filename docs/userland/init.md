@@ -136,9 +136,14 @@ session app://session.pxe --configure-network --start-remote-services
 Build with `make image INIT=/tmp/init-usb.sh INIT_CPUS= MOUNT_DISK=<actual-GPT-GUID>`
 and attach the selected disk through xHCI; see the
 [USB storage bring-up record](../development/usb-storage-bringup.md).
-USB writes, flushes and public raw-disk access remain unavailable. Do not request
-a writable USB mount. `usb://bin/cat.pxe usb://README.txt` captures the executable
-through the delegated file grant before launching it.
+For explicitly writable attachment of a selected disposable image, init can
+request `--read-write` instead. The mount requires known WP-clear media and
+successful blocking cache-synchronization qualification; unqualified or latched
+write-failed disks refuse writable opening. Qualified USB mounts use the existing
+filesystem write, sync and replay path. Installer/public raw USB access remains
+deferred, and physical write qualification is separate.
+`usb://bin/cat.pxe usb://README.txt` captures the executable through the delegated
+file grant before launching it.
 
 Every trusted workload init receives the same configured disk scope. The
 `native_mount` resource is issued unless inventory establishes hardware absence.
