@@ -8,7 +8,7 @@ recognition and revision recording, not ESP updates or complete bootability.
 
 Parent baseline: `f104a0948432` (accepted update plan). Changed sources are this
 PR's mount ABI/kernel admission constant and userland
-`bcb91c7` (executable source at `dcb5804`, followed
+`bcb91c7e03a8da9914646a8d773bc7646d465f3b` (executable source at `dcb5804`, followed
 only by its README). Unchanged pins: fs `d352c7e11c5e`, ports `2c1448a26eb5`,
 lwIP `a1aadb91a503`. Baseline userland was `2b23085e5f82`.
 
@@ -72,6 +72,17 @@ files, including the pending journal. This also preserves the finalized file.
 ![Candidate list](candidates.png)
 
 ![Cancellation](cancelled.png)
+
+A final full source build from submitted parent `65ade91f4120` and published
+userland `bcb91c7e03a8` passed. Booting that ISO with only the fresh fixture
+selected the sole candidate automatically, displayed installed `f104a0948432`
+and live `65ade91f4120`, printed `Update inspection complete. Nothing was
+written.`, and exited with status 0. Target writes/flushes remained zero, and its
+full-file SHA-256 still matched. Subsequent documentation changes do not alter
+the implementation qualified here. All validation QEMU/debugger/client jobs
+were stopped.
+
+![Selection from the submitted build](selected.png)
 
 ## Existing Install comparison
 
