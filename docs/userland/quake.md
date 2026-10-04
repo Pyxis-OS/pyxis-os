@@ -60,6 +60,9 @@ keyboard and pointer sessions and releases them on quit or a fatal error;
 process cleanup also handles a fault. Pointer counts reach Quake unscaled, so
 Quake's `sensitivity` setting is the only scale.
 
+The console reports `Unknown command "volume"` at startup: the default
+configuration sets a sound variable that this soundless build does not have.
+
 Rendering uses a 320x240 game buffer scaled by the largest integer that fits
 the content area, with black borders, converting the 8-bit palette to the
 display's channel shifts. Presentation keeps the single-buffer contract, so
@@ -83,8 +86,10 @@ seconds and frames per second to the console and the shell's terminal.
 | --- | --- | --- |
 | QEMU 10.2.2/KVM, 4 CPUs, nested VM, development host, 2026-10-04 | 1617.0, 1653.0, 1622.7, 1351.3, 1588.1, 1592.1, 1598.2 | 1598.2 |
 
-That run booted the ISO as a read-only virtio disk, because this host's QEMU
-crashed reading it through AHCI. Native ThinkPad results belong here once the
+That run booted the ISO as a read-only virtio disk, because this host's stock
+QEMU crashed reading it through AHCI. A review run through the CD-ROM path with
+the AHCI-fixed QEMU (see [QEMU troubleshooting](../development/qemu.md#ahci-cd-rom-crash-before-kernel-entry)) measured
+1660.5 fps. Native ThinkPad results belong here once the
 owner records them.
 
 ## Boundaries

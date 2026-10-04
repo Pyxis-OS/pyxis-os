@@ -116,9 +116,9 @@ unlink/rmdir syscall adapters. Persistent storage remains separate work.
 `mkdir(path, mode)` from `<sys/stat.h>` creates one directory through the
 parent's CREATE right, using the same startup roots and initial directory chain
 as fopen. `mode` has no effect: native directories carry no permission bits. A
-trailing slash is accepted; roots and a final `.` or `..` are rejected. An
-existing name of either kind fails with EEXIST and a missing parent with ENOENT;
-parents are not created. The new directory's handle is closed before return.
+trailing slash is accepted. An existing name of either kind fails with EEXIST,
+as does a root or a final `.` or `..` that names an existing directory. A
+missing parent fails with ENOENT; parents are not created. The new directory's handle is closed before return.
 
 ## Rename
 
