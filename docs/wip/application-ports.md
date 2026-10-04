@@ -22,7 +22,7 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | libpng | PNG decoding/encoding for viewers, drawing tools and screenshots; depends on zlib. |
 | SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. |
 | vi | [Implemented BusyBox vi port](../userland/vi.md), packaged in the normal image as the first modal editor before Neovim, with libc `ftruncate` and literal search. |
-| Links | A text web browser for reading HTML documentation offline, then online. The [Links port plan](links.md) loads every page through libc `fopen` (GET only), so local files and the HTTP(S) providers work alike; its decisions are agreed. Links 2.x does its own terminal handling, without curses. Start with local files only (path mapping, plus libc `stat` and directory reading). HTTP needs a libc socket layer over the native TCP endpoints and an Mbed TLS backend in place of OpenSSL; that comes later. Lynx (needs curses), w3m (needs a garbage collector) and ELinks (larger) are the alternatives. |
+| Links | [Implemented Links 2.30 port](../userland/links.md), packaged in the normal image as a text web browser. Every page loads through libc, so local files, directory listings and the HTTP(S) providers work alike, with libc directory reading and a narrow `stat`. |
 | less | BusyBox `less` after Links: a pager for logs, command output and plain text. It shares BusyBox's support library and terminal handling with the vi port, so it should add little new platform work. |
 | PDCurses | Investigate a native libterm backend for terminal applications, using its documented platform hooks for drawing, input, cursor control and delays. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
@@ -32,7 +32,8 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | jq | JSON inspection and transformation, initially on local files. Audit libc/math and the selected regex configuration/dependency. |
 | pup | A Go command-line HTML parser and CSS-selector tool, with JSON output for pipelines. It is a small Go utility candidate; see the [Go runtime direction](toolchains-and-runtimes.md#go-cross-compiler-then-hosted-go-toolchain). |
 
-The owner queued **vi, then Links, then less** on 2026-10-04. The goal is
+The owner queued **vi, then Links, then less** on 2026-10-04; vi and Links are
+complete. The goal is
 offline development on Pyxis: reading documentation such as the Java SE 8
 Virtual Machine Specification with only what Pyxis provides. The specification
 is about 400 linked pages, too many to print, and Links pages through documents
