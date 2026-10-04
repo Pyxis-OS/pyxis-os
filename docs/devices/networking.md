@@ -415,7 +415,8 @@ grant authority. [The tagged protocol](../../include/abi/net_config.h) uses CALL
 - `NET_CONFIG_QUERY` requires READ and inspects the current binding. An unbound
   snapshot has zero flags, MAC and IPv4 settings. A bound snapshot reports
   presence, transport readiness, usable link, assigned address/prefix/gateway,
-  MTU and MAC.
+  MTU, MAC and the userspace-chosen DNS server. DNS is available even when
+  unbound and is zero until selected by userspace.
 - `NET_CONFIG_LOOKUP` requires READ and resolves a `net_selector` without binding
   or activating hardware. `NET_CONFIG_BIND` requires WRITE and binds the unique
   match, then attempts activation; both return a snapshot. `NET_SELECT_VIRTIO`
@@ -426,13 +427,16 @@ grant authority. [The tagged protocol](../../include/abi/net_config.h) uses CALL
   controller is idempotent; a unique failed controller can be bound and reports
   PRESENT without READY. `NET_CONFIG_BOUND` identifies the bound controller.
 - `NET_CONFIG_REPLACE` requires WRITE and an existing binding, and supplies the complete address, prefix
-  and optional gateway. Invalid fields return `CALL_BAD_REQUEST` without mutation;
+  and optional gateway together with the chosen DNS server. Invalid fields return `CALL_BAD_REQUEST` without mutation;
   an unusable device returns `CALL_UNAVAILABLE`. A link-down prepared device can
   still be configured.
 - `NET_CONFIG_CLEAR` requires WRITE and removes settings and ARP state, retaining
-  the binding. It works without a NIC and returns no data, as does replacement.
+  the binding and chosen DNS. It works without a NIC and returns no data, as does replacement.
+- `NET_CONFIG_SET_DNS` requires WRITE and changes only the chosen unicast IPv4
+  server, including before binding or assignment. The kernel stores this value;
+  DHCP and DNS precedence remain userspace policy.
 
-Libpyxis exposes query, lookup, bind, replace and clear helpers.
+Libpyxis exposes query, lookup, bind, replace, clear and DNS-selection helpers.
 Query clears caller output on failure. Scalar requests are captured and reply
 storage checked before parking the user task. Eight shared slots bound calls;
 exhaustion returns `CALL_QUEUE_FULL`. The worker processes each finite operation
@@ -443,9 +447,9 @@ grant does not cancel a blocked call. No new syscall or scheduler queue is added
 
 The init shell passes this grant only through its explicit `session` handoff.
 The session launcher consumes it for setup only with `--configure-network`
-and does not pass it to the interactive shell. The development init requests
+and passes READ alone to launchers and interactive shells for DNS snapshots. The development init requests
 setup; other packaged init scripts leave shared network settings alone. Ordinary
-commands inherit echo authority, never configuration authority.
+commands inherit echo authority, never configuration write authority.
 This is delegation policy in those programs, not a restriction on a trusted holder
 intentionally granting its capability elsewhere. Interfaces remain system-wide;
 there is no per-space network isolation.
@@ -457,13 +461,10 @@ The session launcher reads `app://config/network.lua`, installed from
 
 ```lua
 return {
-  dns = { server = "1.1.1.1" },
   net0 = {
     driver = "virtio",
     optional = true,
-    address = "10.0.2.15",
-    prefix = 24,
-    gateway = "10.0.2.2",
+    dhcp = true,
   },
 }
 ```
@@ -481,12 +482,14 @@ still prevent MAC selection. `driver = "virtio"` searches only VirtIO.
 Use [the image profile override](../development/configuration.md#image-network-profile)
 `NETWORK_CONFIG=/private/path/network.lua` to package a local MAC profile without
 editing the userspace checkout. The built-in ThinkPad profile uses the owner's
-MAC, `192.168.0.50/24` and gateway `192.168.0.1`; the packaged profile above remains
-the default. [RTL8111 I/O](rtl8111-hardware.md#ethernet-io) describes hardware
+MAC with `dhcp = true`; its router reservation assigns `192.168.0.50/24`
+and gateway `192.168.0.1`. The packaged profile above remains the default. [RTL8111 I/O](rtl8111-hardware.md#ethernet-io) describes hardware
 ownership and qualification limits.
 
-This is manual static configuration, not DHCP. The kernel and driver contain no
-QEMU address defaults. An omitted gateway means no default route. Addresses use
+A table with `dhcp = true` excludes `address`, `prefix` and `gateway`. Static
+configuration remains available with those fields and no enabled DHCP setting.
+The kernel and driver contain no QEMU address defaults. In static configuration,
+an omitted gateway means no default route. Addresses use
 four decimal octets; no DNS, shorthand or embedded NUL bytes. Unknown keys,
 incorrect types and prefixes outside 1..32 are errors. The kernel validates subnet
 and gateway relationships when applying replacement.
@@ -500,20 +503,36 @@ device or other runtime setup failure is diagnosed and the shell remains availab
 for recovery. A launcher without the configuration grant reports that it is keeping
 current settings; this allows a later unprivileged session handoff.
 
-The optional `dns` table accepts only `server`, a numeric IPv4 string. Session
-exports it as `DNS_SERVER` in canonical dotted decimal, replacing any inherited
-entry. Missing files, `dns` or `server` select `1.1.1.1`; empty strings, wrong
-types, unknown keys, malformed addresses and embedded NUL bytes are errors.
-Addresses in 0/8, multicast and reserved high ranges (224/4 and above) are
-rejected; loopback is allowed for a future local resolver. This is address
-validation, not a check that a server is reachable or speaks DNS.
+The optional `dns` table accepts only `server`, a numeric IPv4 string. An
+explicit server wins over DHCP; otherwise the first lease DNS server wins, with
+`1.1.1.1` as fallback. Empty strings, wrong types, unknown keys, malformed
+addresses and embedded NUL bytes are errors. Addresses in 0/8, multicast and
+reserved high ranges (224/4 and above) are rejected; loopback is allowed for a
+future local resolver. Validation does not establish reachability.
 
-DNS selection is independent of `net0`, NIC presence and network-configuration
-authority. `net0 = false` still exports the selected resolver. Both settings
-are decoded before network/terminal changes or shell launch; invalid DNS
-configuration prevents those effects. The resolver address is userspace policy:
-it is not sent to the kernel, and startup performs no DNS query or NIC enabling.
-Shell launches inherit it through the existing environment forwarding.
+Trusted network setup publishes the chosen DNS independently of IPv4 assignment.
+On DHCP success, REPLACE publishes the lease address/route and chosen DNS
+atomically. Non-owner provider scripts wait at most ten seconds for the initial choice.
+Launchers query it with READ authority and supply canonical
+`DNS_SERVER` to each new local or remote program, replacing an inherited value.
+Existing programs retain their startup environment. No kernel resolver or DHCP
+policy is involved, and ordinary programs receive no configuration write rights.
+
+DHCP acquisition uses a port-68 wildcard endpoint, a random transaction ID and
+the BOOTP broadcast flag. It accepts matching OFFER/ACK packets from port 67,
+selects one server, and validates the ACK's mask, route and lease options before
+replacement. Replies need to be broadcast before assignment; servers ignoring
+the flag are unsupported by the current receive rule. Invalid T1/T2 ordering
+uses the half-lease and seven-eighths defaults without rejecting an otherwise
+usable lease. A lease rejected by REPLACE leaves net0 unassigned and permits
+the local session to start with profile or fallback DNS; authored static
+configuration errors remain fatal. Acquisition sends its
+first DISCOVER immediately to fit the approximately ten-second startup budget;
+retries use randomized exponential delays clipped to that budget. Failure leaves
+net0 unassigned and starts the local session offline. The remote service keeps
+waiting for an assigned address. Task 2 does not yet renew or expire successful
+leases; reboot before expiry until task 3 supplies maintenance. See the
+[accepted limits](../technical-debt.md#dhcp-acquisition-before-lease-maintenance).
 
 Direct-init applications that bypass session do not receive a synthesized
 `DNS_SERVER`. The [dig client](#dns-queries-with-dig) also defaults to `1.1.1.1`
@@ -539,7 +558,7 @@ The backend gateway is the first diagnostic target; an external timeout alone
 does not identify a guest-stack failure.
 
 The initial networking milestone is complete. DHCP uses the privileged UDP
-broadcast primitive below and still needs userspace lease handling/deadlines. [DNS](../userland/dns.md) is complete;
+broadcast primitive below and userspace acquisition; lease maintenance remains pending. [DNS](../userland/dns.md) is complete;
 [TCP listeners and streams](tcp.md) are available through native capabilities.
 IPv6, richer routing, network
 isolation and website hosting remain separate scopes in
@@ -712,8 +731,8 @@ broadcast sends copy directly to Ethernet broadcast without ARP. Other sends
 require ordinary net0 unicast routing and an assigned source; loopback and
 subnet-broadcast sends are unsupported for wildcard endpoints. ARP-pending
 sends still fail on configuration changes. There is no fragmentation, reassembly, multicast,
-retransmission, delivery/order guarantee or duplicate suppression. DHCP and TCP
-remain separate work; the DNS client below owns its bounded query retries.
+retransmission, delivery/order guarantee or duplicate suppression. DHCP and the
+DNS client own their bounded retries above this datagram service.
 
 
 ## UDP tools
@@ -736,16 +755,6 @@ successfully after thirty seconds without an arrival or N successful echoes
 server unsuccessfully. Packets with source port zero cannot be replied to and
 are skipped. A count limit still has the idle timeout. Neither tool requires
 terminal input, and neither runs by default.
-
-Trusted init may use `session app://session.pxe --configure-network
---udp-broadcast PORT [--udp-count N]` instead of its interactive shell. Session
-creates one wildcard endpoint and launches `udp-echo --endpoint` with only
-INSPECT/SEND/RECEIVE on that endpoint, memory, clock and output streams. The
-child gets no creation service, launcher, roots or configuration authority. It
-echoes by limited broadcast, preserving payload and destination port. No such
-handoff runs in the stock init scripts. The optional `--udp-unassigned` flag
-clears IPv4 after opening the endpoint while retaining the net0 binding. It
-requires configuration authority and is valid only with `--udp-broadcast`.
 
 ### Loopback pair
 
@@ -775,7 +784,7 @@ separate terminal:
 socat -T 10 UDP4-RECVFROM:18080,bind=127.0.0.1,reuseaddr,fork EXEC:/bin/cat
 ```
 
-Boot with `make run CPUS=4 VIRTIO_NET=1`. With the stock static configuration:
+Boot with `make run CPUS=4 VIRTIO_NET=1`. With the stock QEMU DHCP lease:
 
 ```text
 udp-send 10.0.2.15 10.0.2.2 18080 "hello from Pyxis"
@@ -866,8 +875,8 @@ Trusted init can separately delegate a bound listener to the
 
 Connected UDP, multicast, fragmentation, IPv6, asynchronous send and waiting
 on multiple objects remain outside this implementation. DHCP now has the narrow
-unconfigured-source/broadcast primitive; userspace lease handling and deadlines
-remain in the [DHCP milestone](../wip/dhcp-and-link-selection.md).
+unconfigured-source/broadcast primitive and userspace acquisition; lease
+maintenance remains in the [DHCP milestone](../wip/dhcp-and-link-selection.md).
 DNS queries, hostname ping and [native TCP listeners/streams](tcp.md) are implemented.
 Readiness and remote-terminal application protocols remain future work.
 ICMP errors and generic UDP ephemeral-port selection are

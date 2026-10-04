@@ -60,9 +60,9 @@ Both files are decoded before applying settings. The network consumer owns its
 [configuration policy and authority](../devices/networking.md#boot-configuration-and-use).
 When requested, network application precedes the first terminal change. The
 launcher preserves the startup environment except that it replaces `TZ` with the selected timezone
-and `DNS_SERVER` with the selected resolver's numeric IPv4 address (default
-`1.1.1.1`). DNS selection applies even without a NIC or configuration authority;
-it does not perform a lookup or change kernel settings. It forwards the
+and `DNS_SERVER` with the shared chosen resolver's numeric IPv4 address. Without
+a published choice it uses profile DNS or `1.1.1.1`. Trusted setup publishes its
+DNS choice even without IPv4 assignment; startup performs no DNS lookup. It forwards the
 input/output, memory and launcher grants; app/home and optional
 host roots with their actual queried grants;
 the working-directory chain and display path; and optional display, clock,
@@ -72,7 +72,9 @@ namespace-creation authority is forwarded explicitly through trusted session
 handoff. Ordinary shell children receive namespace LOOKUP only.
 The init shell explicitly delegates `net_config` through session handoff only.
 The launcher applies network settings only with `--configure-network`, then
-leaves that authority out of the interactive shell. The read-only init omits
+passes READ alone to the interactive shell for later child DNS snapshots.
+Non-owner provider scripts wait within the initial ten-second setup budget before
+launching providers. The read-only init omits
 the option, so starting its session does not reconfigure the shared NIC. DNS
 and terminal/environment configuration are still read and applied per session.
 It also does not forward mount authority, arbitrary named resources or the

@@ -724,6 +724,20 @@ adds its own session supervision and closing-output deadline; the echo consumer
 retains its simpler semantics. Revisit echo-client expiration only if a concrete
 consumer needs it.
 
+## DHCP acquisition before lease maintenance
+
+Task 2 temporarily performs only bounded boot-time acquisition, as accepted by
+the owner on 2026-10-04. A successful lease stays configured until reboot even
+if its lease time expires; acquisition failure continues offline and does not
+retry in the background. This image must be rebooted before a finite lease
+expires. Task 3 adds renewal, rebind, expiry and rediscovery and removes this
+limit. See the [DHCP milestone](wip/dhcp-and-link-selection.md).
+
+DHCP v1 does not probe for address conflicts before applying an ACK, and keeps no
+lease across reboots. Newly launched programs receive the current chosen DNS;
+existing programs retain their startup DNS_SERVER. Revisit conflict detection
+when networks with competing static addresses need support.
+
 ## UDP ICMP errors and ephemeral selection
 
 The first [UDP implementation](devices/networking.md#udp-datagrams-and-deadlines) silently
