@@ -1,7 +1,7 @@
 # USB boot and first physical installation
 
 Status: Phase A image assembly/USB boot and Phase B.3 enumeration/control
-transfers implemented, 2026-10-02; BOT/SCSI media and block access remain pending.
+transfers and internal BOT/SCSI reads implemented, 2026-10-04; USB block access remains pending.
 Native xHCI hardware qualification and storage remain pending. Inspection-first
 work now includes [USB 2 hub traversal](../devices/usb-hubs.md), accepted by the
 owner on 2026-10-03. The [build-time switch](../devices/usb-xhci.md) defaults to disabled;
@@ -133,73 +133,47 @@ USB boot inventory; neither tool nor its benchmark is a boot-image prerequisite.
 
 ## Phase B.1 read-only contract
 
-The owner accepted unique supported-disk selection, failing on ambiguity. The
-following design is the accepted implementation contract for the read-only
-milestone. B.2 implements its controller slice; the rest remains pending.
-Its first consumer is the directly attached QEMU disk. The later accepted
-inspection-first slice now handles multiple controllers and does not configure
-a BOT transport. Before resuming B.4, settle how unique supported-disk selection
-spans those controllers; the single-controller profile below is the earlier
-storage proposal, not an inventory requirement. Physical qualification remains Phase C.
+The owner accepted per-device read-only support on 2026-10-04, superseding
+unique supported-disk selection and the earlier single-controller backend
+proposal. B.4 introduces a kernel-internal BOT/SCSI probe; B.5 remains separate.
+Physical qualification remains Phase C.
 
 ### Selection and authority
 
-Add a kernel command-line setting `block.backend=virtio-blk|usb-bot`, parsed
-before device preparation. Omission selects the existing VirtIO profile. Invalid
-or duplicate settings fail configuration. One parsed setting owns selection for
-the boot; later init configuration must not parse a second copy of that state.
-Selecting USB never falls back to VirtIO after absence, unsupported hardware,
-ambiguity or failure. Inventory in the unselected backend does not choose the
-disk or make selected-backend discovery ambiguous.
+Inspect supported boot-present devices independently across discovered xHCI
+controllers and traversed hubs. Each physical device contributes at most one
+storage candidate. Select the first supported configuration and alternate in
+validated descriptor order: one non-composite interface, SCSI transparent command
+set (`08/06/50`), exactly one Bulk-In and one Bulk-Out endpoint, no streams, and
+only LUN 0. Multiple LUNs and unsupported shapes have explicit per-device results.
+BOT/UAS alternative configurations can select BOT; values and endpoint identities
+come from descriptors. Unrelated classes stay unbound. No vendor, controller,
+port number or sampled capacity selects a disk.
 
-USB requires exactly one xHCI PCI function in a complete inventory, matched by
-class/subclass/programming interface rather than vendor/product identifiers.
-Inspect boot-present devices on its advertised supported root ports. Exactly one
-supported SCSI/Bulk-Only storage interface selects the disk; multiple candidates
-are ambiguous. Select the candidate before media-capacity setup, so a setup error
-cannot silently make another disk win. The initial storage profile accepts one
-non-composite interface and one logical unit, LUN 0. Multiple logical units or
-unsupported interface shapes produce an explicit unsupported result. Descriptor
-selection must allow the target's BOT/UAS alternate settings, selecting BOT.
+Incomplete device inspection prevents binding that device. An incomplete branch
+or unsupported controller remains visible in `lsusb`, while inspected supported
+devices can be probed independently. A failed media probe does not remove its
+candidate or choose another disk in its place. Unsupported media and command
+failures retain individual diagnostics; unsafe host errors can quarantine their
+controller, while other controllers continue.
 
-For B.3, the owner accepted inspecting every advertised configuration within
-bounded descriptor storage, then choosing the first supported one-interface
-SCSI/Bulk-Only configuration and alternate setting in descriptor order. Each
-physical device contributes at most one candidate; its alternate configurations
-are not additional disks. Configuration values, interface numbers and alternate
-numbers come from descriptors. Unreadable/unclassifiable descriptors or exhausted
-bounds still make discovery incomplete, even after a candidate was found.
+The first consumer is an internal read-only boot probe with retained private
+geometry, sense, counters and byte samples. There are no writes, mounts, public
+raw-disk operations or USB block-device registration in this slice. Enabling
+`CONFIG_XHCI` enables this probe; the checked-in default remains `n`.
 
-A positively identified unrelated class stays unbound. A mouse alongside the
-disk must work as that case. Per-device unsupported results do not automatically
-fail the backend. Keep these final selection outcomes distinct:
-
-| Completed discovery | Selected-backend outcome |
-| --- | --- |
-| One supported disk, with unrelated classes or fully classified unsupported storage | Select that disk; retain the other devices' unsupported/unbound diagnostics. |
-| Several supported disks | Ambiguous; select none. |
-| No supported disk, with recognized unsupported storage | Unsupported, not absent. |
-| No storage candidate, with all connected devices classified | Absent. |
-| A hub with uninspected downstream devices, unclassifiable descriptors or exhausted classification resources | Incomplete; a discovered supported disk cannot bypass this result. |
-
-The initial policy treats a connected unsupported hub as incomplete relevant
-inventory, because its downstream storage is unknown. Absence and uniqueness
-both require complete discovery. Setup failure after identifying the selected
-candidate remains setup failure; it cannot silently remove that candidate.
-
-The existing `mount.disk` GPT GUID verifies the selected disk after discovery;
-it does not select among several disks. Existing principal, partition, volume
-and binding checks remain with native mounting and trusted init. USB addresses,
-ports, serial numbers and GUID knowledge grant no filesystem authority. The
-selected backing stays fixed for the boot. Replacement media cannot inherit live
-tickets, GPT metadata or native pools through reconnection.
+Block integration must preserve today's stable per-device IDs, explicit disk
+handles and native mount authority. USB addresses, topology, serial numbers and
+GUID knowledge grant no filesystem authority. The block preparation, readiness
+and mount dispatch contract belongs to B.5; the old global `block.backend` and
+unique-disk policy are superseded, not implemented requirements.
 
 ### Controller resources and startup
 
 The current [PCI inventory](../devices/pci.md) retains class fields and exposes
 read-only indexed records after the native `lspci` integration. Reuse those
-fields for a narrow class-based selector that returns the unique claimable
-function and preserves unavailable/incomplete/ambiguous outcomes. The remaining
+fields to inspect each class-matched function independently, retaining explicit
+unsupported and failed outcomes. The remaining
 resource requirements are initial MMIO access before BAR sizing and shared
 MSI-X mechanics. B.2 now provides these with the xHCI consumer.
 The initial controller profile is PCI xHCI 1.x with firmware-assigned memory
@@ -250,20 +224,11 @@ enumeration. IRQ handling acknowledges activity and wakes the worker; parsing,
 commands, recovery and logging remain worker work. Today's BSP affinity follows
 current APIs and is not a permanent USB ownership requirement.
 
-Publish a final block preparation result only after enumeration, disk selection
-and geometry setup finish or fail. Pending setup is not absence. GPT currently
-queries geometry immediately in `gpt_start()`; USB integration must introduce a
-bounded readiness wait before that query and before native mount authority is
-created. Preserve the immutable preparation reason separately from later I/O
-availability. Configured authority is omitted only for confirmed disk absence;
-present-but-unusable and incomplete discovery remain visible failures.
-
-The public block API is already transport-neutral in shape; its implementation
-currently lives entirely in `kernel/virtio/blk.c`. Move selected-backend dispatch
-into `kernel/storage/block.c` as USB becomes its first additional consumer. Keep
-request queues, tickets, DMA and recovery with each backend. Immutable selection
-allows the existing single-device tickets, GPT snapshot and native pool identities
-to remain sufficient; a driver registry or multi-disk interface is unnecessary.
+USB block registration and mounting remain B.5. That integration must expose
+per-device preparation separately from later availability, preserve explicit
+failure reasons and use the existing block readiness wait before GPT/native
+mount authority. Private transport queues, DMA and recovery stay with each
+backend. No new block dispatch or public authority is introduced by B.4.
 
 ### Requests, deadlines and failure ownership
 
@@ -276,19 +241,20 @@ software generation alone cannot identify a stale hardware event carrying a
 reused ring address. Class-specific expected lengths and short-transfer handling
 stay above xHCI.
 
-For the initial storage implementation, start with two admitted block-request
-slots, each with a reserved buffer and a 64 KiB maximum read. Queued, active and
-completed-but-uncollected work all count against this budget. BOT runs one
-command/data/status exchange at a time per interface, as required by
+The first class consumer reserves four device entries per controller, each with
+two bulk ring pages and one boundary-aligned transfer buffer for reads up to
+64 KiB. One controller-owned DMA arena avoids multiplying VM range records.
+A controller also reserves one non-DMA read scratch buffer before AP startup.
+A failed admission is explicit; entries are never recycled for another device
+this boot. Each owning worker runs synchronous private transfers, capturing
+outbound bytes and retaining no caller read destination. One exchange runs at a
+time per interface, as required by
 [BOT section 3.4](https://www.usb.org/sites/default/files/usbmassbulk_10.pdf).
-Reserve control, command and status storage independently so recovery cannot
-depend on a client releasing a completed block slot. Derive other ring and
-descriptor budgets during controller implementation and document their limits;
-exhaustion must not silently skip ports or descriptors needed for selection.
+Public block-request slots and ticket collection belong to B.5.
 
 Initial deadline choices are one second for firmware handoff and controller
 halt/reset, five seconds for a controller command or control transfer and for
-an entire BOT exchange, and thirty seconds for enumeration/selected-media setup.
+an entire BOT exchange, and thirty seconds for enumeration/media setup.
 Protocol-directed status retry shares the exchange deadline. Recovery has its
 own five-second absolute bound. Retries never restart a deadline. These values,
 slot count and buffer size are starting implementation choices, maintained in
@@ -296,7 +262,7 @@ one place when coded; changing them does not change the ownership contract.
 Reassess them against measured QEMU/device behavior, without freezing them or
 image sizes in unit-test expectations.
 
-Preserve the [block ticket contract](../devices/block-storage.md#tickets-and-caller-ownership):
+For B.5, preserve the [block ticket contract](../devices/block-storage.md#tickets-and-caller-ownership):
 caller wait timeout neither cancels nor consumes; successful read collection
 copies exactly the requested bytes, and failure leaves caller storage untouched.
 Set `submitted` when the BOT command first becomes device-visible. Report
@@ -313,8 +279,9 @@ establish safe dequeue/retirement before reuse or restart. Endpoint stall handli
 belongs to USB; required BOT reset and clear-halt ordering belongs to mass storage.
 A recovered channel does
 not turn the failed block read into success or authorize an automatic block retry.
-Unexpected removal, controller protocol corruption, device-work timeout or
-failed recovery stops the selected backing for the boot and fails pending work.
+Unexpected removal, controller protocol corruption or device-work timeout stops
+the affected controller for this boot. A failed class recovery abandons that
+device; unsafe host recovery also stops its controller.
 Disabling PCI bus mastering or masking an interrupt alone is not proof that all
 device ownership returned. Unresolved DMA storage cannot be reused.
 
@@ -383,13 +350,15 @@ host tools and the later physical-preparation procedure.
    The initial BOT matcher/endpoint setup was removed for the inspection-only
    slice; reintroduce class transfers with their first consumer and an explicit
    pre-AP resource policy in B.4.
-4. [ ] **Implement Bulk-Only/SCSI reads.** Identify media, obtain capacity and
+4. [x] **Implement Bulk-Only/SCSI reads.** Identify media, obtain capacity and
    logical-block geometry, report command failures and read bounded block ranges.
    Handle short transfers, stalls, protocol status and required reset recovery.
    Keep IRQ work short; timeouts or unexpected removal must fail pending work
    without freeing DMA storage until device access has safely ended.
-5. [ ] **Integrate block access and read-only mounting.** Generalize the current
-   single-virtio-blk selection only as needed for an explicitly selected backend.
+   Implemented as an internal per-device [read-only media probe](../devices/usb-storage.md);
+   [QEMU bring-up](../development/usb-storage-bringup.md) records coverage and limits.
+5. [ ] **Integrate block access and read-only mounting.** Register USB disks through
+   the current per-device block contract, preserving explicit device authority.
    Reuse GPT, filesystem core and native object interfaces. Trusted init selects
    partition, volume and binding within supplied disk authority; programs receive
    directory/file grants, not ambient raw-disk access. Read known files and launch
@@ -413,11 +382,10 @@ host tools and the later physical-preparation procedure.
 
 ## Remaining assignment and qualification decisions
 
-- Phase A and B.3 enumeration/control transfers are implemented; B.1 defines the
-  read-only contract. Inspection-first enumeration now publishes root devices and USB 2 hub descendants
-  without configuring a storage transport. Multi-controller disk selection must be settled
-  before B.4 establishes LUN/media support. BOT/SCSI reads and native integration
-  remain pending. Writable
+- Phase A and B.3 enumeration/control transfers are implemented; B.1 records the
+  accepted per-device read-only contract. Enumeration publishes root devices and
+  supported USB 2/3 hub descendants. B.4 adds an internal BOT/SCSI media probe;
+  B.5 native block integration remains pending. Writable
   work and its roadmap ordering remain unassigned.
 - Image update/preservation ownership remains open for persistent installation.
   Read-only disk selection does not qualify a write target or authenticate media.

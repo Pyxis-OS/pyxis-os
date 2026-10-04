@@ -1100,14 +1100,14 @@ Caelum USB enumeration is unavailable. Revisit the default after the physical ha
 The [initial controller](devices/usb-xhci.md) is qualified only against QEMU's
 PCI xHCI profile, now with multiple independently discovered controllers. It requires firmware memory decoding enabled for a
 page-aligned BAR0 prefix, interpreted extended capabilities within that 4 KiB
-prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles, SuperSpeed hubs,
+prefix, 64-bit DMA, 4 KiB pages and MSI-X. Other profiles,
 power management and insertion after the startup snapshot are unsupported.
 QEMU advertises zero scratchpads and 32-byte contexts. An
 [owner-reported ThinkPad run](targets/t14-gen1-amd/usb-bringup.md) observed
 nonzero scratchpads and 64-byte contexts; nondefault PSI mappings and BIOS
 ownership handoff remain unmeasured paths. This first native snapshot does not
 establish broad controller qualification. Enumeration publishes root devices and bounded USB 2 hub descendants;
-SuperSpeed hubs, LUN/media support and USB block access remain pending.
+USB 3 hub execution remains unqualified; USB block access remains pending.
 
 USB 2 root-port reset has no explicit connect-debounce interval. The startup snapshot
 waits 20 ms only after the driver powers a port; it has no separate link-settling
@@ -1146,7 +1146,8 @@ using an initial 4 KiB descriptor/control budget. A larger configuration makes
 inventory incomplete. The initial arena retains up to 512 validated interface
 records per controller; overflow is partial. Unknown/vendor classes are valid
 unbound observations. Revisit these bounds with concrete descriptor/topology requirements. Storage
-selection across controllers must be settled separately before class/media work.
+probing now uses accepted per-device support across controllers. Block registration
+and native mount authority remain a separate integration task.
 
 All advertised ports receive input/output contexts and an EP0 ring/control buffer
 before AP startup. With the current 4 KiB buffer and 4 KiB allocations, this adds
@@ -1155,9 +1156,11 @@ per port, BOT matcher and endpoint setup were removed from the inventory slice.
 This fits QEMU's eight-port profile but consumes the shared VM range budget and
 can fail preparation on larger controllers. Revisit boot inventory/resource
 preparation with physical port-count evidence; runtime allocation/reclamation
-requires the VM ownership work rather than allocator locks. Reintroduce class
-transfers with a concrete consumer and an explicit pre-AP resource policy, rather
-than restoring unused reservations for future work.
+requires the VM ownership work rather than allocator locks. The first BOT consumer
+now reserves a separate four-device bulk pool per controller in one 528 KiB DMA
+arena, plus a 64 KiB non-DMA read scratch buffer. Exhaustion is an explicit
+per-device unsupported result. Unused storage backing remains until reboot.
+Revisit these bounds with concrete multi-device workload/resource evidence.
 
 Hub discovery uses a pre-AP descendant pool, initially 32 per controller,
 capped by advertised Slot capacity after reserving possible roots. One owned DMA
@@ -1186,14 +1189,22 @@ retains their slots/backing until reboot. Revisit this with separately scoped
 hotplug/lifetime work. Root removal still retires the retained subtree, and
 active request errors quarantine the controller.
 
-The first implementation bounds each device to one active control request. Early
-errors, deadlines or removal during active work stop the whole controller and
-retain unresolved DMA until reboot. There is no endpoint-local recovery yet.
-The inventory client configures supported hubs but leaves other classes unbound;
-short packets, active abandonment, early errors, ring wrap and nonzero alternate
-selection follow reviewed source/spec rules but have no synthetic validation.
-Revisit with an actual class-transfer workload in BOT/SCSI work, keeping hardware
-ownership explicit. Physical USB qualification remains separate.
+Each device admits one active control request; each admitted BOT device also
+serializes private bulk exchanges. Owned stalls have bounded endpoint recovery,
+including TT cleanup and safe dequeue retirement. Other early errors, deadlines
+or removal during active work stop the whole controller and retain unresolved
+DMA until reboot. BOT probes now execute 512/4096-byte media reads and large-LBA
+SCSI commands in QEMU, including hub descendants and multiple controllers.
+Stall/TT/reset recovery, active abandonment, ring wrap and nonzero alternate
+selection remain source/spec-reviewed without forced-error validation. Revisit
+with natural device evidence; physical USB qualification remains separate.
+
+The [BOT/SCSI probe](devices/usb-storage.md) accepts one non-composite BOT
+interface, no streams, and one LUN. Multiple LUNs, other interface shapes and
+observed READ CAPACITY (16) protection-enabled geometry remain unsupported. It registers no block device,
+mounts nothing and performs no writes or flushes. Revisit those limits in their
+focused integration/qualification tasks. NOT READY media retain sense and fail
+immediately; bounded UNIT ATTENTION retries do not implement a spin-up policy.
 
 USB 3 inspection omits SET_SEL and SET_ISOCH_DELAY, which the specification
 requires during full enumeration. EP0 routing/descriptor inspection does not

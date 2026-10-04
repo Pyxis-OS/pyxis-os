@@ -220,15 +220,16 @@ add xHCI/Bulk-Only read-only access to a separate Pyxis pool, then integrate nat
 persistence and validate the ThinkPad. Real-device passthrough is an intermediate
 check, not validation of the laptop controller. Boot-image Phase A now provides
 an opt-in [raw image and emulated USB launch](../development/usb-image.md);
-Phase B.1 now defines explicit backend/unique-disk selection, controller resource
+Phase B.1 now records per-device storage support, controller resource
 preparation, bounded requests and failure ownership. Phase B.2 adds
 [controller ownership, rings, MSI-X and root-port slot reservations](../devices/usb-xhci.md).
 Phase B.3 adds [checked enumeration and control requests](../devices/usb-enumeration.md),
 including SuperSpeedPlus root link recognition.
 The later inspection-first slice discovers controllers independently and publishes
 root-device observations and [hub descendants](../devices/usb-hubs.md)
-without selecting/configuring a storage transport. BOT/SCSI reads and native block integration
-remain pending; writable work is unassigned. Reusable controller/USB/class/block
+with an internal [read-only BOT/SCSI media probe](../devices/usb-storage.md)
+for independently supported disks. Native block integration remains pending;
+writable work is unassigned. Reusable controller/USB/class/block
 boundaries are required, without
 speculative driver frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.
