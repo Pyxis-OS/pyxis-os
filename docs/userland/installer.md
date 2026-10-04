@@ -52,6 +52,9 @@ sector sizes 512 and 4096, matching kernel GPT discovery/rescan. It adds no gene
 firmware-variable updater. See the
 [validation record](../development/experiments/native-filesystem-task4.3/README.md)
 and [remaining limits](../technical-debt.md#installer-inspection-and-recovery-limits).
+Merged-main [QEMU end-to-end qualification](../development/experiments/native-filesystem-task5/README.md)
+includes USB-backed live-media loading and CPU entropy. Native ThinkPad
+installation is deferred until writable USB storage is available.
 The [program reference](../../userspace/installer/README.md) describes its SDK
 boundary; the [format and host tools](../../fs/docs/npfs-host-tools.md) remain
 owned by pyxis-fs.

@@ -610,6 +610,13 @@ checks do not qualify power loss, uncertain I/O, USB/NVMe or physical firmware.
 Revisit those limits with the assigned end-to-end hardware task and separately
 authorized recovery validation.
 
+The owner deferred native ThinkPad installation on 2026-10-04 while completing
+[task-5 QEMU qualification](development/experiments/native-filesystem-task5/README.md).
+Current writable storage is VirtIO only; USB enumeration/firmware loading does
+not supply native block reads, writes or flush. Resume the physical step after
+the USB storage/backend write-and-cache-synchronization work, with an explicitly
+selected expendable target. The internal NVMe remains unsupported.
+
 ## USB image updates and firmware qualification
 
 The [raw USB image builder](development/usb-image.md) creates fresh images and
