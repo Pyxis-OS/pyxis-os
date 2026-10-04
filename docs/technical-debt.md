@@ -949,6 +949,30 @@ body limit. Close-delimited responses cannot prove whether an orderly EOF was
 intended to end the content. Revisit these restrictions when expanding HTTP client
 compatibility; do not silently accept ambiguous framing or publish partial bodies.
 
+## HTTP redirects
+
+The [HTTP and HTTPS providers](userland/http-fetch.md) never follow redirects. A 3xx
+response is a rejected final status, so opening a moved page fails even when
+the server names its new location. Browsing through `fopen`, such as the
+planned [Links port](wip/links.md), meets this on ordinary sites.
+
+Deferred by the owner on 2026-10-04: redirects are wanted, but not yet. When
+they are implemented, settle:
+
+- **Hops:** a bounded hop count, with loop detection.
+- **Schemes:** HTTPS never redirects to plain HTTP. Whether HTTP may upgrade to
+  HTTPS is part of the same decision.
+- **Location:** a relative `Location` resolves against the request URL.
+- **Methods:** methods are GET only today, so 303 versus 307/308 method rules
+  can wait for non-GET requests.
+- **Request data across origins:** credentials and other request headers are
+  not carried to a different origin. See the
+  [scheme provider notes](wip/userspace-scheme-providers.md).
+- **The final URL:** the consumer must learn where it ended up. A browser
+  resolves relative links against the final URL, not the one it asked for.
+  This ties redirects to exposing response metadata (media type, status, final
+  location) to programs, which is also deferred.
+
 ## HTTPS trust and platform limits
 
 The [HTTPS provider](userland/https.md) uses a pinned Mozilla-derived PEM export, which
