@@ -111,9 +111,36 @@ and real write/cache-synchronization work in the
 explicitly then; the internal Fedora disk has not been touched. No physical-media
 or power-loss claim follows from these QEMU runs.
 
-This task changes documentation only, so it introduces no performance-affecting
-implementation and no matched performance claim. No tests, fault injection, CI,
+The original qualification changed documentation only and made no matched
+performance claim. No tests, fault injection, CI,
 validation programs or boot/output automation were added. Interaction used
 manual monitor keystrokes/screenshots and ordinary shell/host tools. All QEMU
 and debugger jobs were stopped. The original checkout and task-3 experiment
 records were preserved.
+
+## Installer review follow-ups
+
+Parent #371 additionally pins userland `d730e4f` from
+[userland #111](https://git.internal/PyxisOS/pyxis-userland/pulls/111), addressing
+the blank-disk wording and template note on #371 and partial-failure guidance
+left from #369. Consent eligibility and veto rules are unchanged. The recovery
+hint requires booting the live image again before choosing Read the room; source
+review checked its attempted-write guard and reboot requirement. No write
+failure was induced, so this is not runtime failure/recovery qualification.
+
+Full source image and USB builds passed with the same compiler, Lua tools and
+kernel configuration. A temporary local template line `default_entry: 2` selected
+Install Pyxis for a manual QEMU run (q35, nested KVM, four CPUs, 2 GiB, no VirtIO
+RNG). Read-only USB live media and two 2 GiB, 512-byte-sector VirtIO targets were
+attached. The zeroed target was listed as `blank disk: no partition table`; the
+other had nonzero unpartitioned contents and kept the unrecognized-layout reason.
+Installing the blank target with the 12 MiB default succeeded. The other target's
+whole-disk SHA-256 remained unchanged. Stopped-target GPT, FAT and npfs checks
+passed, with the same GPT end-alignment advisory as above.
+
+Read-back installed configuration had timeout zero, the new GUID and
+`init-installed`, with neither `default_entry` nor the Install entry. A target-only
+boot with fresh OVMF variables reached the ordinary local prompt. The temporary
+template edit was reverted; ordinary timeout-zero image assembly was restored.
+These follow-ups do not replace the earlier persistence measurements or the
+deferred physical validation. All QEMU jobs were stopped.

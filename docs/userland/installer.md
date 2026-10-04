@@ -11,6 +11,8 @@ room** to include blank, foreign, partially marked and damaged contents. The
 installer lists every disk and explains eligibility. It selects a sole eligible
 disk or asks for its displayed number when several qualify, then shows size,
 GUID and escaped labels of the volumes that will be destroyed.
+A zeroed first sector with neither GPT header present is listed as blank;
+this describes partition metadata, not a scan of every disk byte.
 
 Normal installation requires a validated protective GPT, at least one recognized
 npfs pool, a nonempty set of live volumes in every such pool and a regular root
@@ -34,7 +36,8 @@ starting at 1 MiB, then an npfs pool extending to the aligned end before backup
 GPT metadata. The pool has one `system` volume with an empty regular root marker.
 Limine is at `EFI/BOOT/BOOTX64.EFI`; the original kernel, whole boot archive and
 configuration are under `boot`. The installed configuration fills the packaged
-template with timeout zero and the new disk GUID, and omits the installer entry.
+template with timeout zero and the new disk GUID, and omits the installer entry
+and any global `default_entry`.
 Fixed `init-installed` mounts partition 2's system volume read-write as
 `system://` and starts the ordinary local session. Home stays RAM-backed.
 
@@ -46,8 +49,10 @@ boot because verification retains the pool until reboot. Delete
 `system://SAFE_TO_WIPE` and sync that directory to mark the installation final.
 
 This writes allocated metadata and boot-file storage, without secure erasure of
-free space. A failed mutation may leave a partial disk; there is no retry,
-rollback or repair. V1 uses existing writable disk drivers and supports logical
+free space. A failed mutation may leave a partial disk; the failure message
+directs you to run the installer again and choose **Read the room**. Boot the
+live image again first; the same consent vetoes still apply. There is no automatic
+retry, rollback or repair. V1 uses existing writable disk drivers and supports logical
 sector sizes 512 and 4096, matching kernel GPT discovery/rescan. It adds no general FAT driver or
 firmware-variable updater. See the
 [validation record](../development/experiments/native-filesystem-task4.3/README.md)
