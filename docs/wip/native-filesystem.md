@@ -357,7 +357,15 @@ Accepted 2026-10-02.
       npfs formatting and the read-back check, with userspace as the third
       link-time symbol provider. See the [implemented installer](../userland/installer.md)
       and [task-4.3 validation](../development/experiments/native-filesystem-task4.3/README.md).
-5. [ ] **End to end:** install and boot in QEMU, then on the ThinkPad.
+5. [ ] **End to end:**
+   - [x] Install and boot in QEMU on merged main, including USB-backed live
+     media, CPU entropy without VirtIO RNG and synchronized persistent files.
+     See [task-5 qualification](../development/experiments/native-filesystem-task5/README.md).
+   - [ ] Native ThinkPad installation/boot, **deferred by the owner, 2026-10-04**,
+     until writable USB storage is available. USB descriptor enumeration and
+     firmware boot are implemented; native mass-storage reads, block integration
+     and real write/flush support remain in the [USB milestone](usb-installation.md).
+     No NVMe backend exists. The QEMU result does not close physical qualification.
 
 ## Task-3 delivery
 
