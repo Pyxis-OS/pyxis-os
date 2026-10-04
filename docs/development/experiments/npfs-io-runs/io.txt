@@ -1,0 +1,65 @@
+iobench write: source=generated output=data://grow.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 35385 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=201570090 ns (201.570 ms); 4.961 MiB/s
+  file_sync=35681960 ns (35.682 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=189913690 ns (189.914 ms); 5.266 MiB/s
+  file_sync=35081930 ns (35.082 ms)
+sample 3: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=219783050 ns (219.783 ms); 4.550 MiB/s
+  file_sync=37255820 ns (37.256 ms)
+sample 4: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=203041640 ns (203.042 ms); 4.925 MiB/s
+  file_sync=35812820 ns (35.813 ms)
+sample 5: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=195181040 ns (195.181 ms); 5.123 MiB/s
+  file_sync=35229830 ns (35.230 ms)
+Output retained: data://grow.bin
+Transfer summary: 5 verified samples; elapsed median=201.570 ms range=189.914..219.783 ms; throughput at median elapsed=4.961 MiB/s
+File sync summary: 5 verified samples; elapsed median=35.682 ms range=35.082..37.256 ms
+{"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://prepared.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 35455 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=prepared overwrite sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=143104950 ns (143.105 ms); 6.988 MiB/s
+  file_sync=25106810 ns (25.107 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=144728820 ns (144.729 ms); 6.909 MiB/s
+  file_sync=25285650 ns (25.286 ms)
+sample 3: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=150026840 ns (150.027 ms); 6.665 MiB/s
+  file_sync=25384510 ns (25.385 ms)
+sample 4: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=144698810 ns (144.699 ms); 6.911 MiB/s
+  file_sync=25886270 ns (25.886 ms)
+sample 5: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=143901050 ns (143.901 ms); 6.949 MiB/s
+  file_sync=24901650 ns (24.902 ms)
+Output retained: data://prepared.bin
+Transfer summary: 5 verified samples; elapsed median=144.699 ms range=143.105..150.027 ms; throughput at median elapsed=6.911 MiB/s
+File sync summary: 5 verified samples; elapsed median=25.286 ms range=24.902..25.886 ms
+{"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+{"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+{"type": "command_complete", "command": 4, "kind": "builtin", "status": 0}
+{"type": "final", "cause": "shell_exit", "process_reason": 1, "process_reason_name": "exited", "exit_status": 0, "drain": "complete"}
