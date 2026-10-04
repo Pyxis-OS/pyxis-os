@@ -81,6 +81,31 @@ were reviewed in code, not exercised with injected packets or faults. Native
 renewal/rebind/expiry is not yet qualified; prior native results establish
 acquisition rather than this lifecycle.
 
+## Exclusive wildcard ports follow-up
+
+The owner decision relayed on [#385](https://git.internal/PyxisOS/pyxis-os/pulls/385)
+replaces shared wildcard/concrete net0 ports with exclusive wildcard ownership.
+Kernel change `a8ea000` checks both explicit open orders and excludes conflicts
+from ephemeral selection, without special-casing port 68. The reverse opening
+order and ephemeral conflict selection were inspected in code.
+
+An ordinary image build and another manual four-CPU, 2 GiB, host-KVM TAP run
+used that kernel change with userland `9880d21` and the same real 120-second
+dnsmasq recipe. `udp-echo 10.77.0.50 68` failed with status 9 (`CALL_BUSY`) while
+DHCP held port 68. A simultaneous loopback `udp-echo 127.0.0.1 68 --count 1`
+accepted and returned the intact 16-byte payload `loopback port 68` from
+`udp-send`; its namespace remains independent.
+
+Capture showed a unicast REQUEST/ACK at T1, followed by another renewal using
+a new transaction. GDB found unchanged `.50/24`, gateway/DNS `.1`, and the
+maintainer sleeping to its renewed deadline; the remote connection remained
+usable for a fresh successful `dig lease.pyxis.test`. The earlier TCP measurements
+below predate this open-path correction; no packet delivery path changed.
+
+Userland `e0636dc` additionally changes the BUSY diagnostic to `Endpoint or port
+busy`, because the prior pending-call-only description was misleading for an
+open conflict. Lease protocol code is unchanged.
+
 ## Matched traffic
 
 Baseline: parent `f0001f0`/userland `ad1d53a`, whose source tree matches merged
