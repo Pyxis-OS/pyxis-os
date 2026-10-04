@@ -21,7 +21,7 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | zlib | Reusable compression/decompression, followed by a concrete consumer such as PNG loading. |
 | libpng | PNG decoding/encoding for viewers, drawing tools and screenshots; depends on zlib. |
 | SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. |
-| vi | A small modal editor before Neovim. The [vi investigation](small-vi.md) compares BusyBox, toybox and neatvi and selects BusyBox vi, with save behaviour and libc additions agreed; the port has not started. |
+| vi | [Implemented BusyBox vi port](../userland/vi.md), packaged in the normal image as the first modal editor before Neovim, with libc `ftruncate` and literal search. |
 | Links | A text web browser for reading HTML documentation offline, then online. Links 2.x does its own terminal handling, without curses. Start with local files only (path mapping, plus libc `stat` and directory reading). HTTP needs a libc socket layer over the native TCP endpoints and an Mbed TLS backend in place of OpenSSL; that comes later. Lynx (needs curses), w3m (needs a garbage collector) and ELinks (larger) are the alternatives. |
 | less | BusyBox `less` after Links: a pager for logs, command output and plain text. It shares BusyBox's support library and terminal handling with the vi port, so it should add little new platform work. |
 | PDCurses | Investigate a native libterm backend for terminal applications, using its documented platform hooks for drawing, input, cursor control and delays. |

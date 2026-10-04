@@ -212,6 +212,11 @@ stack with a reserved, unmapped guard page below it and no automatic growth.
 
 The same editor runs through the [remote host client](../userland/remote-terminal.md).
 Native writable disk storage and atomic replacement remain separate work.
+[BusyBox vi](../userland/vi.md) is packaged at `app://vi.pxe` with its GPL-2.0-only
+license at `app://share/licenses/busybox/LICENSE`, and the shell resolves `vi`
+to it. It is a modal alternative to Kilo, with the same terminal grants and
+Ctrl+C passthrough; see the [recipe notes](../../ports/busybox/README.md).
+
 The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and TCC;
 [guest Lua](../userland/lua.md) is independent of the host recipe runner.
 
