@@ -199,7 +199,10 @@ with only that listener, memory, clock and output streams. Bootstrap init has
 separate TCP LISTEN authority; ordinary session startup delegates only CONNECT.
 This opt-in handoff replaces that init's shell and does not expose a remote shell.
 
-Trusted network setup uses UDP BROADCAST authority for DHCP acquisition.
+Trusted network setup uses UDP BROADCAST authority for [DHCP](../devices/dhcp.md).
+Its setup session remains alive after successor handoff and shell exit to maintain
+leases or continue discovery after an initial offline timeout. It closes unrelated
+bootstrap grants and input, retaining only maintenance and diagnostic authority.
 Ordinary local and remote sessions receive UDP OPEN and NET_CONFIG READ only;
 launchers read chosen DNS for new child environments without configuring net0.
 The temporary manual broadcast echo handoff has been removed.

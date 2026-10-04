@@ -81,11 +81,13 @@ It also does not forward mount authority, arbitrary named resources or the
 interpreter's script handle.
 
 The kernel copies launch metadata before returning. The launcher closes its
-child observer and exits without waiting or reading input; the shell owns its
-copied grants and environment. Tab spacing belongs to the shared TTY and survives
-that exit. If applying spacing fails, no shell is launched; any already-applied network
-settings remain. If shell launch
-fails afterward, the applied spacing remains; there is no rollback or supervisor.
+child observer without waiting or reading input; the shell owns its copied
+grants and environment. Static setup then exits. A DHCP owner instead retains
+its maintenance resources and stays alive independently of shell exit; see
+[DHCP](../devices/dhcp.md). Tab spacing belongs to the shared TTY and survives
+launcher exit. If applying spacing or shell launch fails, no shell starts and
+DHCP cleanup attempts to clear its settings. Applied spacing and static network
+settings have no rollback.
 `make run INIT=build/userspace/shell.pxe` bypasses configured startup for recovery.
 The packaged config remains present but is not evaluated. Live reload and
 per-user/space configuration policy remain deferred.

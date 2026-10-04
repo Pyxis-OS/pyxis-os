@@ -276,8 +276,9 @@ VFIO and natively with the dock attached. The
 [qualification report](../development/rtl8111-qualification.md) records sustained
 traffic, link checks and the owner-run native PXE/HTTPS results. The dock-facing
 XID `502` remains unsupported.
-The accepted next networking milestone is
-[DHCP](dhcp-and-link-selection.md); link-based `net0` selection remains a later sketch.
+[DHCP](../devices/dhcp.md) provides acquisition and lease maintenance;
+[qualification](../development/dhcp-qualification.md) records its coverage.
+[Link-based net0 selection](net0-link-selection.md) remains a later proposal.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |
