@@ -1,5 +1,6 @@
 #include <kernel/object/endpoint.h>
 #include <kernel/object/keyboard.h>
+#include <kernel/object/pointer.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/private.h>
@@ -43,6 +44,7 @@ enum mm_result process_destroy(struct process *process)
   }
 
   keyboard_process_exit(process);
+  pointer_process_exit(process);
   display_process_exit(process);
   enum mm_result result = vm_space_destroy(process->address_space);
   if (result != MM_OK) {

@@ -14,6 +14,7 @@
 struct console_object;
 struct display_object;
 struct keyboard_object;
+struct pointer_object;
 
 struct space
 {
@@ -22,6 +23,7 @@ struct space
   struct framebuffer *fb;
   struct tty *tty;
   struct keyboard_object *keyboard; /* Space retains the initial reference. */
+  struct pointer_object *pointer; /* Space retains the initial reference. */
   struct display_object *display; /* Space retains the initial reference. */
   struct console_object *console; /* Space retains the initial reference. */
 };
@@ -34,7 +36,7 @@ bool space_set_title(struct space *space, const char *title, size_t length);
 void space_present();
 /* BSP kernel-task entry; argument is unused. */
 void space_present_task(void *argument);
-/* BSP only, preserves IF. Updates keyboard focus together with selection. */
+/* BSP only, preserves IF. Updates keyboard and pointer focus together with selection. */
 void space_switch(size_t index);
 
 #endif // PYXIS_OS_SPACE_H
