@@ -120,6 +120,7 @@ The worker preserves OWN and the binding throughout; carrier-up stalls still
 stop until reboot. Internal tally capture adds one retained DMA page per
 controller, without periodic polling or a userspace ABI.
 
+The owner confirmed that the dock was connected throughout these checks.
 Matched runs on the bare ThinkPad host used QEMU 10.2.2/KVM, 4 CPUs, 2 GiB,
 `VFIO_PCI=0000:05:00.0`, `VIRTIO_NET=0`, Fedora's OVMF pair, the private built-in
 profile and the stock init. Configuration kept HPET maintenance at 120 ticks,
