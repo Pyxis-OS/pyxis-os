@@ -398,7 +398,7 @@ bool net_udp_service_io(void)
 void net_udp_deliver(uint32_t source, uint32_t destination, uint16_t port,
     const uint8_t *message, size_t length)
 {
-  struct udp_endpoint *endpoint = net_udp_find_endpoint(destination, port);
+  struct udp_endpoint *endpoint = net_udp_find_receiver(destination, port);
   if (!endpoint) {
     ++udp_receive_stats.unbound;
     return;

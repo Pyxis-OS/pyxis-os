@@ -20,11 +20,12 @@ struct udp_endpoint {
   struct udp_endpoint *retired_next;
   struct execution_group *cleanup_group; /* Worker retirement's pending token. */
   struct udp_endpoint_info local;
+  bool broadcast;
   struct udp_datagram received[UDP_RECEIVE_QUEUE_LIMIT];
   size_t receive_head, receive_count;
 };
 
-struct udp_endpoint *net_udp_find_endpoint(uint32_t address, uint16_t port);
+struct udp_endpoint *net_udp_find_receiver(uint32_t address, uint16_t port);
 bool net_udp_service_io(void);
 void net_udp_stop_io(struct udp_endpoint *endpoint, enum call_status status);
 void net_udp_discard_received(struct udp_endpoint *endpoint);

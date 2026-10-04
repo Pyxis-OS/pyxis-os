@@ -5,8 +5,10 @@
 #include <abi/message.h>
 
 #define UDP_SERVICE_RIGHT_OPEN (UINT64_C(1) << 0)
+#define UDP_SERVICE_RIGHT_BROADCAST (UINT64_C(1) << 1)
 #define UDP_OPEN UINT64_C(1)
 #define UDP_OPEN_ROUTE UINT64_C(2)
+#define UDP_OPEN_BROADCAST UINT64_C(3)
 
 #define UDP_RIGHT_INSPECT (UINT64_C(1) << 0)
 #define UDP_RIGHT_SEND (UINT64_C(1) << 1)
@@ -25,14 +27,22 @@
 #define UDP_STATE_SHUTDOWN UINT32_C(2)
 #define UDP_STATE_UNAVAILABLE UINT32_C(3)
 
-/* Both open operations use PROTOCOL_UDP_SERVICE and OPEN authority;
+/* OPEN and OPEN_ROUTE use PROTOCOL_UDP_SERVICE and OPEN authority;
  * address/port are host-order integers. OPEN binds an explicit 127/8 address or
  * the assigned NIC address. OPEN_ROUTE treats address as the destination and
  * selects a concrete local address through routing, then binds in the same
  * worker operation. The destination is not retained or a restriction on peers.
  * Invalid destinations are BAD_REQUEST, missing routes NO_ROUTE, and an
  * unavailable interface UNAVAILABLE. Opening does not send packets or do ARP.
- * Port zero selects a free ephemeral port. No wildcard, reuse or privileged-port distinction.
+ * OPEN_BROADCAST requires BROADCAST authority and address zero. It binds net0
+ * without requiring an assigned IPv4 address; net0 must already be bound. The
+ * returned local address stays zero across configuration changes. One wildcard
+ * binding per port may coexist with concrete bindings: concrete unicast wins,
+ * otherwise wildcard receives net0 unicast, limited and local subnet broadcast.
+ * Loopback destinations never select a wildcard endpoint. /31 and /32 have no
+ * subnet broadcast.
+ * Port zero selects a free ephemeral port in the requested binding space.
+ * No reuse within one binding, or privileged-port distinction.
  * Success returns a new endpoint with UDP_RIGHTS; copies share its lifetime. */
 struct udp_open_request {
   struct message_header header;
@@ -58,11 +68,17 @@ struct udp_open_reply {
  * rights. INSPECT returns udp_endpoint_info even after shutdown/invalidation.
  * SHUTDOWN returns no bytes, is idempotent and releases the binding before
  * success. Closing a handle only releases that reference; final cleanup is
- * deferred to the worker. Removed addresses never revive old endpoints.
+ * deferred to the worker. Removed addresses never revive concrete endpoints.
+ * Wildcard endpoints survive address replacement/clear, retaining received
+ * datagrams and pending receives. ARP-pending sends still fail on replacement/clear.
  * Errors leave reply storage untouched. */
 /* SEND requires SEND, copies one complete payload and returns no bytes.
  * Success means local-queue/NIC acceptance, not remote delivery. Destination
  * port must be nonzero; zero-length payloads are valid. Oversize is CALL_LIMIT.
+ * Wildcard sends use the current net0 address. Limited broadcast uses Ethernet
+ * broadcast directly, with source zero only when unassigned. Other destinations
+ * require an assigned address and ordinary net0 unicast routing; no loopback.
+ * Ordinary endpoints cannot send broadcast. Subnet-broadcast sending is unsupported.
  * Deadlines use CLOCK_NOW's monotonic epoch and include queue/ARP time. Past
  * deadlines time out even if work could otherwise complete immediately. */
 struct udp_send_request {
@@ -98,7 +114,7 @@ struct udp_receive_reply {
  * another returns BUSY. Eight send and sixteen receive slots are independent of
  * control slots; exhaustion is QUEUE_FULL. Completion retains its slot until
  * the caller resumes. SHUTDOWN wakes pending I/O with ENDPOINT_CLOSED; address
- * removal wakes it with UNAVAILABLE and discards queued data. */
+ * removal wakes concrete endpoints with UNAVAILABLE and discards their queued data. */
 _Static_assert(sizeof(struct udp_send_request) == 48, "UDP send request");
 _Static_assert(sizeof(struct udp_receive_request) == 40, "UDP receive request");
 _Static_assert(sizeof(struct udp_receive_reply) == 16, "UDP receive reply");

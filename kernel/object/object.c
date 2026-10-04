@@ -212,7 +212,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_TCP_LISTENER:
     return !(rights & ~TCP_LISTENER_RIGHTS);
   case OBJECT_UDP_SERVICE:
-    return !(rights & ~UDP_SERVICE_RIGHT_OPEN);
+    return !(rights & ~(UDP_SERVICE_RIGHT_OPEN | UDP_SERVICE_RIGHT_BROADCAST));
   case OBJECT_UDP:
     return !(rights & ~UDP_RIGHTS);
   case OBJECT_NET_CONFIG:

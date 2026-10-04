@@ -9,6 +9,7 @@
 #define IPV4_PROTOCOL_ICMP 1
 #define IPV4_PROTOCOL_TCP 6
 #define IPV4_PROTOCOL_UDP 17
+#define IPV4_LIMITED_BROADCAST UINT32_MAX
 #define IPV4_LOOPBACK_ADDRESS UINT32_C(0x7f000001)
 
 struct ipv4_route {
@@ -39,6 +40,7 @@ void net_ipv4_snapshot(struct net_config_reply *reply);
 uint32_t net_ipv4_address(void);
 bool net_ipv4_is_neighbor(uint32_t address);
 bool net_ipv4_is_loopback(uint32_t address);
+bool net_ipv4_is_broadcast(uint32_t address);
 /* A zero source selects one; a supplied source must belong to the chosen route.
  * Loopback and the assigned NIC address are delivered locally even if link down. */
 enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
@@ -50,6 +52,12 @@ enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
 enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
     uint32_t destination, uint8_t protocol, uint64_t deadline, struct ipv4_completion completion);
 
+/* Worker, IF=1. Only the privileged UDP endpoint uses this path. Source must
+ * equal the current net0 address (zero only when unassigned). Sends limited
+ * broadcast directly, without ARP. Same packet ownership as transmit above. */
+enum net_result net_ipv4_transmit_udp_broadcast(struct net_packet *packet, uint32_t source,
+    uint64_t deadline, struct ipv4_completion completion);
+
 /* Worker, IF=1. Submit an already complete IPv4 datagram without rewriting
  * headers. Validates its shape/checksum and rechecks source/route authority.
  * Success consumes the packet; failure leaves it unchanged and caller-owned. */
@@ -59,7 +67,7 @@ enum net_result net_ipv4_submit(struct net_packet *packet, uint64_t deadline,
 void net_ipv4_cancel_tcp(uint64_t generation);
 
 /* Worker, IF=1. Borrows bytes only for the call, including DMA-backed RX bytes. */
-void net_ipv4_receive(const struct net_interface *interface,
+void net_ipv4_receive(const struct net_interface *interface, bool link_broadcast,
     const uint8_t *data, size_t length);
 
 #endif

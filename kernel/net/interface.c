@@ -191,7 +191,7 @@ static void wait_for_work(void)
 static void receive_packet(struct net_packet *packet)
 {
   ++loopback.received;
-  net_ipv4_receive(&net_loopback, packet->data, packet->length);
+  net_ipv4_receive(&net_loopback, false, packet->data, packet->length);
 
   uint64_t flags = cpu_save_interrupts();
   net_packet_release(packet);
