@@ -724,19 +724,22 @@ adds its own session supervision and closing-output deadline; the echo consumer
 retains its simpler semantics. Revisit echo-client expiration only if a concrete
 consumer needs it.
 
-## DHCP acquisition before lease maintenance
+## DHCP maintainer and client limits
 
-Task 2 temporarily performs only bounded boot-time acquisition, as accepted by
-the owner on 2026-10-04. A successful lease stays configured until reboot even
-if its lease time expires; acquisition failure continues offline and does not
-retry in the background. This image must be rebooted before a finite lease
-expires. Task 3 adds renewal, rebind, expiry and rediscovery and removes this
-limit. See the [DHCP milestone](wip/dhcp-and-link-selection.md).
+[DHCP](devices/dhcp.md) renewal, rebind, expiry and background discovery live in
+the trusted setup session. Detected failures attempt to clear IPv4 before
+stopping. An unexpected maintainer fault or indefinite scheduling stall leaves
+no independent kernel lease-expiry backstop; reboot is required. Revisit this
+limit with explicit supervision or kernel deadline ownership, rather than two
+uncoordinated lease authorities.
 
-DHCP v1 does not probe for address conflicts before applying an ACK, and keeps no
-lease across reboots. Newly launched programs receive the current chosen DNS;
-existing programs retain their startup DNS_SERVER. Revisit conflict detection
-when networks with competing static addresses need support.
+DHCP does not probe address conflicts or persist leases across reboots. Newly
+launched programs receive current chosen DNS; existing programs retain their
+startup DNS_SERVER. Revisit conflict detection for networks with competing
+static addresses. Unassigned input accepts broadcast replies, so a server that
+ignores the BOOTP broadcast flag can prevent acquisition. Clearing or replacing
+IPv4 invalidates concrete endpoints and listeners; DHCP reacquisition does not
+restart services holding those listeners.
 
 ## UDP ICMP errors and ephemeral selection
 

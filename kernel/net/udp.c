@@ -133,12 +133,30 @@ struct udp_endpoint *net_udp_find_receiver(uint32_t address, uint16_t port)
   return NULL;
 }
 
+/* Wildcard and concrete net0 bindings exclude one another; loopback is independent. */
+static enum call_status binding_status(uint32_t address, uint16_t port)
+{
+  for (struct udp_endpoint *endpoint = endpoints; endpoint; endpoint = endpoint->next) {
+    if (endpoint->local.state != UDP_STATE_BOUND || endpoint->local.port != port) {
+      continue;
+    }
+    if (endpoint->local.address == address) {
+      return CALL_ALREADY_EXISTS;
+    }
+    if (!net_ipv4_is_loopback(address) && !net_ipv4_is_loopback(endpoint->local.address) &&
+        (!address || endpoint->broadcast)) {
+      return CALL_BUSY;
+    }
+  }
+  return CALL_OK;
+}
+
 static uint16_t ephemeral_port(uint32_t address)
 {
   for (unsigned i = UDP_EPHEMERAL_FIRST; i <= UDP_EPHEMERAL_LAST; ++i) {
     uint16_t port = next_ephemeral;
     next_ephemeral = port == UDP_EPHEMERAL_LAST ? UDP_EPHEMERAL_FIRST : port + 1;
-    if (!find_binding(address, port)) {
+    if (binding_status(address, port) == CALL_OK) {
       return port;
     }
   }
@@ -156,8 +174,11 @@ static enum call_status open_endpoint(struct udp_control *call)
       call->address != net_ipv4_address())) {
     return CALL_UNAVAILABLE;
   }
-  if (call->port && find_binding(call->address, call->port)) {
-    return CALL_ALREADY_EXISTS;
+  if (call->port) {
+    enum call_status status = binding_status(call->address, call->port);
+    if (status != CALL_OK) {
+      return status;
+    }
   }
   if (endpoint_count == UDP_ENDPOINT_LIMIT) {
     return CALL_LIMIT;
