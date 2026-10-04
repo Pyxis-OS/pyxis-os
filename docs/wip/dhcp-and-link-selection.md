@@ -106,7 +106,7 @@ Accepted 2026-10-04:
 
 ## Tasks
 
-- [ ] **1. Broadcast reception and the broadcast endpoint** (kernel, ABI).
+- [x] **1. Broadcast reception and the broadcast endpoint** (kernel, ABI).
   - The new right and the endpoint rules above, with unconfigured-source sends
     limited to the unassigned state.
   - Ordinary endpoints are unchanged.
@@ -134,8 +134,10 @@ Accepted 2026-10-04:
 Kernel implementation: `285167e`; userspace: `e8363bd`
 ([dependency PR #110](https://git.internal/PyxisOS/pyxis-userland/pulls/110)).
 Baseline: main `7955f59`, userspace `06812bc`. Ordinary image builds passed.
-No compiler-container rebuild is required. Task 1 remains unchecked pending
-owner-run native PXE reception; no DHCP client or link selection has started.
+The integration pin is now merged userland `68c5f4b`, containing both broadcast
+setup #110 and installer follow-ups #111. Networking sources are unchanged from
+the qualified `e8363bd`. No compiler-container rebuild is required. Task 1 is
+complete; no DHCP client or link selection has started.
 
 Matched before/after runs used host KVM, four CPUs, 2 GiB RAM, the RTL8111 at
 `0000:05:00.0` through VFIO, VirtIO networking disabled, and the same private
@@ -175,9 +177,28 @@ wildcard binding still BOUND. LAN normal, empty and odd-length datagrams returne
 intact from `0.0.0.0:19000` to limited broadcast. Queue retention across a later
 address change and source-zero receive rejection were inspected in code, not
 separately exercised. Local captures use `build/dhcp-task1-*`. QEMU/debugger jobs
-have been cleaned up. The native archive and its manual instructions will be
-provided with the draft integration PR; repeat broadcast/ordinary coexistence
-there before checking off task 1.
+have been cleaned up.
+
+Owner-run native cold/PXE qualification on 2026-10-04 used the
+`dhcp-task1-native` archive, the built-in RTL8168h, `.50/24`, and desktop `.213`.
+Nine LAN broadcasts returned intact from `.50:19000` to `255.255.255.255`
+(desktop `IP_PKTINFO`). With an ordinary endpoint on the same port, unicast
+returned to `.213`; after that endpoint closed, unicast returned by limited
+broadcast through the wildcard. This confirms native reception, ordinary
+broadcast exclusion, concrete-first delivery and wildcard fallback. Native
+subnet-broadcast and zero-source runs were not reported; those remain covered
+by the QEMU/VFIO checks. Results and the blocker-free review are on
+[integration PR #374](https://git.internal/PyxisOS/pyxis-os/pulls/374).
+
+## Review notes for task 2
+
+- Set the accepted BOOTP broadcast flag first. While unassigned, input still
+  drops unicast IP destinations even when Ethernet names our MAC. If a server
+  or relay ignores the flag and qualification shows a missing OFFER/ACK, inspect
+  its destination before proposing a narrow receive exception. Such an exception
+  is not implemented or accepted here.
+- Once the client exists, decide whether to retain the manual broadcast handoff
+  as a diagnostic or remove it. Task 1 does not settle that later choice.
 
 ## Next milestone: bind whichever port has link
 
