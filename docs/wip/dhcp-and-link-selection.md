@@ -104,6 +104,23 @@ Accepted 2026-10-04:
   owner also accepted `--udp-unassigned`: explicitly clear IPv4 after opening
   the endpoint, retaining its binding, to qualify zero-source sends.
 
+## Task 2 decisions
+
+Accepted 2026-10-04:
+
+- Acquisition runs synchronously for at most about ten seconds. On timeout the
+  local session continues offline with profile DNS or fallback. Successful leases
+  remain configured until reboot; task 3 removes this temporary lifecycle limit.
+- Userspace chooses DNS; NET_CONFIG stores the chosen server and reports it with
+  READ authority. REPLACE publishes address/route/DNS together. SET_DNS changes
+  only DNS, including before assignment; CLEAR preserves the chosen server.
+  Non-owner provider scripts wait within the same initial acquisition budget
+  before their first launch. Local and remote launch paths read the current value
+  for each new program.
+  Existing programs retain their startup environment.
+- Remove the task-1 manual broadcast session/echo handoff once DHCP acquisition
+  works. The broadcast endpoint and its authority separation remain.
+
 ## Tasks
 
 - [x] **1. Broadcast reception and the broadcast endpoint** (kernel, ABI).
@@ -129,6 +146,43 @@ Accepted 2026-10-04:
     server could be the host's existing `dnsmasq` on a QEMU tap network, run
     manually with no new automation.
 
+## Task 2 implementation and qualification
+
+In progress: kernel DNS code `2175849`, userland `6912f11`
+([dependency #114](https://git.internal/PyxisOS/pyxis-userland/pulls/114)), branch
+`net/dhcp-client`. Task 2 remains unchecked pending native qualification.
+The default profile requests a VirtIO lease; private native profiles retain their
+MAC selector and use `dhcp = true`. Ordinary image builds passed. No compiler
+container rebuild is needed.
+
+Host-KVM QEMU with four CPUs, 2 GiB RAM and VirtIO user networking completed
+DISCOVER/OFFER/REQUEST/ACK: address `10.0.2.15/24`, gateway `10.0.2.2`, DNS
+`10.0.2.3`, lease 86400 seconds. Packet inspection confirmed both client messages
+use source zero, limited broadcast and the BOOTP broadcast flag. GDB confirmed
+IPv4 and chosen DNS. Remote `dig duckduckgo.com` reported the lease server;
+HTTPS `example.com` fetched successfully. Non-owner provider scripts now wait
+for the initial chosen DNS before launching; static REPLACE publishes IPv4 and
+DNS together without prepublishing DNS before validation.
+
+The RTL passthrough attempt uses the same host/configuration as task 1 (dock
+connected, private built-in-port selector, `VFIO_PCI=0000:05:00.0`, VirtIO net
+disabled). Initial PHY negotiation exposed an early send failure; the client now
+keeps transient local send failures within its bounded retry schedule. The repeat
+transmitted one DISCOVER after link-up and completed its TX descriptor. GDB dump
+inspection confirmed valid IPv4/UDP checksums, source `0.0.0.0:68`, destination
+`255.255.255.255:67`, broadcast flag and MAC matching the selected private profile.
+No OFFER reached IPv4 during acquisition. No pre-assignment unicast receive
+exception has been added. The owner confirms DHCP is active with gateway `.1`
+and reservations `.50` for the built-in port and `.52` for the other port.
+Router-side capture and owner cold/PXE qualification remain necessary.
+
+Native handoff: `build/dhcp-task2-native.tar.gz`, matching kernel/initrd/ISO with
+the private DHCP selector and README instructions. SHA-256:
+`7adb16a22a4d7a48729d441370e5e9c239669ef5e2fbb4392c729d549e0adca1`.
+This archive is prepared for diagnosis/qualification, not marked native-qualified.
+It contains code `2175849` and userland `6912f11`; later documentation/gitlink
+integration does not change their executable sources.
+
 ## Task 1 qualification and handoff
 
 Kernel implementation: `285167e`; userspace: `e8363bd`
@@ -137,7 +191,7 @@ Baseline: main `7955f59`, userspace `06812bc`. Ordinary image builds passed.
 The integration pin is now merged userland `68c5f4b`, containing both broadcast
 setup #110 and installer follow-ups #111. Networking sources are unchanged from
 the qualified `e8363bd`. No compiler-container rebuild is required. Task 1 is
-complete; no DHCP client or link selection has started.
+complete; task 2 is in progress on `net/dhcp-client`. Link selection has not started.
 
 Matched before/after runs used host KVM, four CPUs, 2 GiB RAM, the RTL8111 at
 `0000:05:00.0` through VFIO, VirtIO networking disabled, and the same private

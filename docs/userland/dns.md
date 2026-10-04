@@ -14,13 +14,13 @@ Session reads the optional `dns` table alongside `net0` in
 dns = { server = "1.1.1.1" },
 ```
 
-The packaged setting, missing configuration and omitted server all select
-`1.1.1.1`. Empty or malformed values are errors. Session validates network and
-DNS configuration before applying it or launching the shell, then replaces any
-inherited `DNS_SERVER` with the selected numeric unicast IPv4 address. Children
-inherit that environment normally. This does not enable a missing NIC, change
-network authority or perform a boot-time lookup. See
-[session configuration](session-configuration.md).
+An explicit profile server wins over DHCP. Without one, the first lease DNS
+server wins, falling back to `1.1.1.1`. Empty or malformed values are errors.
+Trusted session setup chooses the server and publishes it through NET_CONFIG;
+the kernel only stores it. Local and remote launchers use READ snapshots to
+supply `DNS_SERVER` to each new program. Existing programs keep their startup
+value. Startup performs no DNS query. See
+[network configuration](../devices/networking.md#boot-configuration-and-use).
 
 Both clients use `DNS_SERVER`, falling back to `1.1.1.1` only when it is absent;
 empty values remain errors. This also supports direct-init use without session.
