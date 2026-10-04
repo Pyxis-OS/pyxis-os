@@ -21,13 +21,13 @@ again after pulling a parent commit that changes the pin. Commit and publish
 dependency changes in their repository before committing the corresponding gitlink
 in Pyxis. A submodule checkout may be detached; create a branch there before
 starting work. Local uncommitted source edits are usable for development;
-the exported SDK manifest records dirty userland inputs.
+the exported SDK manifest records dirty userland and filesystem inputs.
 
 Kernel source builds require the pinned native filesystem format library.
 `make -j16 fs-tools` builds `build/fs-tools/libnpfs-format.a`,
 `mkfs.npfs`, `fsck.npfs` and `npfs-inspect`.
 Caelum owns the native cache and writer; the shared library owns codecs only.
-SDK builds do not require this submodule. See the
+SDK source builds also require it to export the target codec archive and header. See the
 [native host-tool guide](../../fs/docs/npfs-host-tools.md) for source import,
 inspection, extraction and structural checking.
 
@@ -61,8 +61,9 @@ the checked-out revision or dependency pins.
 | pyxis-fs | Native filesystem format codecs and Linux formatter, checker and inspector/extractor |
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
-the pinned userland runtime, then installs startup, libraries, linker support
-and elf2pxe into `build/sdk`. `make userspace` builds applications against that
+the pinned userland runtime and target codecs, then installs startup, libraries,
+linker support, the pinned target `libnpfs-format.a`, its public header and license, and elf2pxe
+into `build/sdk`. `make userspace` builds applications against that
 SDK and the Lua, HTTP-parser and TLS libraries exported by `make ports`. Ports consumes only the SDK,
 so building it before userland introduces no cycle. `make image`
 includes both in initrd and ISO assembly. The parent passes
@@ -78,7 +79,9 @@ See [the port boundary](../devices/lwip.md) for worker and packet ownership.
 
 The filesystem build rules remain in Pyxis under `kernel/fs/build.mk`. Kernel
 source builds compile only the format library with freestanding flags and private
-includes. The kernel bundle records its revision and local state alongside lwIP.
+includes. `scripts/npfs-sdk.mk` builds the same codecs against target SDK headers
+for applications, with its own object directory and configuration tracking.
+The kernel bundle records its revision and local state alongside lwIP.
 
 The public ABI remains authoritative in Pyxis. Userland consumes it through the
 SDK, with no kernel-private include paths or copied ABI headers. The shared
@@ -104,8 +107,10 @@ The authoritative [format](../../fs/docs/npfs-format.md) and
 [host tools](../../fs/docs/npfs-host-tools.md) describe the codecs, source-importing
 formatter, journal replay and structural checker. Pyxis owns capabilities,
 namespace integration, the cache, writeback and kernel recovery. The library has
-no allocator, I/O or callback tables; the host and Caelum provide its two memory
-symbols at link time. SDK and ports remain independent of this library.
+no allocator, I/O or callback tables; the host, Caelum and native installer
+provide its two memory symbols at link time. The SDK exports the target archive
+and records its filesystem revision/local state. Ports consumes that complete
+SDK without accessing filesystem sources.
 
 The existing `Filesystem / host-contract (pull_request)` job in pyxis-fs and
 Pyxis's `filesystem` dependency job now build the native library and host tools.
@@ -120,7 +125,7 @@ No new tests, workflows or compiler-container rebuild are required.
 The prebuilt [Pyxis toolchain](../../toolchain/README.md) uses an external SDK
 sysroot. Ordinary runtime, header, startup or linker-script changes ship in the
 SDK; compiler patches and target/runtime conventions can require rebuilding the
-container. SDK manifests identify both repository revisions and compiler/host
+container. SDK manifests identify all three source repository revisions and compiler/host
 identities without introducing an ABI compatibility version.
 
 Userland-specific CI, dispatch orchestration and SDK artifact exchange remain

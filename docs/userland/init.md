@@ -77,11 +77,16 @@ these resources.
 
 Native installer init explicitly delegates its bounded installer resources to
 `app://installer.pxe`, waits for completion and reports its result. The installer
-is not yet packaged, so this entry currently reports installation unavailable;
-it does not open a shell or silently format a disk. See
+is packaged and implements the [interactive installation flow](installer.md). See
 [installer authority](../devices/installer-authority.md) for the source-file,
 raw-claim and handoff contracts. These resources do not enter ordinary session
 or child launch automatically.
+
+The installed configuration selects fixed `app://init-installed`, which mounts
+partition 2's `system` volume read-write as `system://`, starts the ordinary local
+session and configures networking when available. `home://` remains RAM-backed.
+Other workload CPUs run idle init. Installed disks use timeout zero and omit the
+installer entry; enter install mode through live media.
 
 ## Native disk configuration and mounting
 

@@ -4,20 +4,21 @@
 [toolchain](../../toolchain/README.md). `make userspace` builds that SDK first, then
 the ports development files and applications against it; `make image` continues through initrd and ISO assembly.
 GCC and binutils remain prebuilt; image builds also build the guest TCC port. Initialize the [userspace submodule](sdk-and-repositories.md)
-with `git submodule update --init userspace` before building the SDK.
+and filesystem submodules with `git submodule update --init userspace fs` before
+building the SDK.
 
 ## Contents and ownership
 
 | SDK path | Contents |
 | --- | --- |
-| `sysroot/usr/include` | libc, libpyxis and libterm headers, plus public `abi/` and `pxe/` headers |
-| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libgcc.a` and `pyxis.ld` |
+| `sysroot/usr/include` | libc, libpyxis and libterm headers, plus public `abi/`, `pxe/` and `pyxis_fs/npfs.h` headers |
+| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libnpfs-format.a`, `libgcc.a` and `pyxis.ld` |
 | `bin/elf2pxe` | Host executable for converting the linked ELF to PXE |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
-| `share/licenses` | TLSF and musl licenses and adaptation records |
+| `share/licenses` | TLSF and musl licenses/adaptation records and the npfs MPL-2.0 license |
 | `share/toolchain` | Installed toolchain source hashes, patches, GPLv3 and GCC Runtime Library Exception |
-| `manifest.txt` | Pyxis and userland revisions/dirty states, compiler/linker identities, libgcc hash and host identity |
+| `manifest.txt` | Pyxis, userland and filesystem revisions/dirty states, compiler/linker identities, libgcc hash and host identity |
 
 The compiler supplies its own builtin headers. SDK export copies its target
 libgcc archive and installed `share/pyxis-toolchain` provenance into the SDK;
@@ -111,7 +112,9 @@ x86_64-unknown-pyxis-gcc --sysroot=/path/to/sdk/sysroot \
 /path/to/sdk/bin/elf2pxe --format p1f -o program.pxe program.elf
 ```
 
-Add `-lterm` when using terminal helpers. The target defaults to x87/SSE2 and
+Add `-lterm` when using terminal helpers. Format-library consumers explicitly
+link `libnpfs-format.a` and supply `npfs_memory_copy` and `npfs_memory_zero`;
+this archive supplies encoding only, without allocation or disk operations. The target defaults to x87/SSE2 and
 no red zone; the SDK explicitly selects baseline `-march=x86-64`. AVX remains
 unsupported. Use the rebuilt FP-capable Pyxis compiler: the earlier compiler
 forced general registers and omitted floating-point libgcc helpers. This produces
@@ -141,7 +144,8 @@ in `home://` or other explicitly granted directories.
 The root build first exports public headers and compiler settings, then invokes
 `userspace/runtime.mk` to build startup and the three libraries under
 `build/runtime`. It installs those outputs, linker support and the host converter
-before invoking the separate application build. This avoids a dependency cycle
+alongside the target npfs codecs built by `scripts/npfs-sdk.mk`, before invoking
+the separate application build. This avoids a dependency cycle
 between SDK production and applications.
 
 For focused runtime work, run `make sdk-headers`, then:

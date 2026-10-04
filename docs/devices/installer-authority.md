@@ -35,9 +35,8 @@ Native init opens `app://installer.pxe` and delegates only the disk service,
 the two source files, private memory, input/output, read-only clock and randomness,
 read-only `app`, and standard streams. It waits for the child and reports its
 completion. It delegates no launcher, writable home, mount, host, network or
-display authority. The installer executable is not yet packaged; missing it
-reports installation unavailable and exits unsuccessfully without mutation.
-This authority foundation does not implement formatting or installation.
+display authority. The packaged [native installer](../userland/installer.md)
+implements consent, formatting, installation and read-back verification.
 
 ## Inventory and raw access
 
@@ -85,14 +84,15 @@ therefore prevent a later raw-write claim on the same device even after every
 root closes. There is no pool teardown or installer exception. Installer
 sequencing follows the owner-accepted current direction: inspect consent through
 raw reads and the format library, reading COMMITTED journal images as an
-in-memory overlay without modifying the disk. Task 4.3 will implement root
-lookups of `SAFE_TO_WIPE` in every live volume. Rejected consent leaves the disk
+in-memory overlay without modifying the disk. The installer looks up regular
+root `SAFE_TO_WIPE` markers in every live volume. Rejected consent leaves the disk
 untouched. See the
 [accepted limits](../technical-debt.md#installer-authority-and-retained-pools).
 
 Disk capabilities authorize operations, not selection of a safe target. The raw
 kernel service does not check `SAFE_TO_WIPE`, authenticate contents or interpret
 partition names as consent. Target preparation and explicit consent belong to
-the trusted installer. No default target is chosen. This task does not add USB,
+the trusted installer. The installer selects the sole eligible disk automatically or asks for a disk
+number when several qualify, then requires typed `wipe`. This interface adds no USB,
 AHCI or NVMe block drivers, hotplug, physical-media qualification or power-loss
 validation. See [block storage](block-storage.md) and [GPT discovery](gpt.md).

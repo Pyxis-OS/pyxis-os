@@ -17,7 +17,7 @@ buffer. Capacity includes the terminating NUL. Successful input excludes the
 newline; cancellation, EOF, input loss and errors clear the buffer and return zero
 length. Ctrl+C cancels this line locally, moves to a fresh line and returns
 `TERM_LINE_CANCELLED`; it is not a signal and does not terminate the process.
-Both line helpers hold a [passthrough handle](#interrupt-arming-and-passthrough)
+The line helpers hold a [passthrough handle](#interrupt-arming-and-passthrough)
 while editing, so an armed shell does not terminate a program for Ctrl+C typed
 at its prompt. `term_passthrough()` exposes the same request for other
 programs.
@@ -27,6 +27,12 @@ Actual terminal input EOF also returns TERM_LINE_EOF, discarding any unfinished
 line. The key decoder reports TERM_KEY_EOF even during an incomplete escape
 sequence; hangup remains ENDPOINT_CLOSED. The shell exits successfully on EOF; Lua also accepts it at a continuation
 prompt, discarding the unfinished chunk and exiting.
+
+`term_read_line_initial` also borrows a disjoint, NUL-terminated printable ASCII
+initial value. It starts with that value visible and the cursor at its end; the
+caller can edit or submit it. It must fit both the buffer and display limit.
+All non-success results discard the initial text just as they discard typed
+text. The existing line helpers start empty.
 
 Editing supports insertion, Backspace, Delete, Left/Right, Home/End and Enter.
 A steady underline cursor marks the editing position, including the blank cell

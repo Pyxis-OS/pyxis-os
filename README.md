@@ -60,8 +60,9 @@ use `MOUNT_DISK` configuration and an explicit read-only or writable mount in
 trusted init. File/directory sync provides durability; close does not.
 Normal boot has no menu delay. Set `BOOT_MENU_TIMEOUT=5` when building install
 media to show the menu for five seconds. Its separate
-[Install Pyxis entry](docs/devices/installer-authority.md) grants raw-disk authority
-only to native installer init; the installer executable is not yet packaged.
+[Install Pyxis entry](docs/userland/installer.md) launches the native installer
+with raw-disk authority through trusted init. Installation rebuilds the selected
+disk after consent and typed `wipe`; installed normal boot mounts `system://`.
 See [QEMU troubleshooting](docs/development/qemu.md) for host emulator boot failures.
 The [shell guide](docs/userland/shell.md) and [edit/build/run walkthrough](docs/development/edit-build-run.md)
 cover ordinary guest use.
