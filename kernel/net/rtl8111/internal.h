@@ -4,6 +4,7 @@
 #include <kernel/pci/msix.h>
 #include "registers.h"
 #include "ring.h"
+#include "counters.h"
 
 struct rtl8111_controller {
   struct pci_claim claim;
@@ -15,6 +16,7 @@ struct rtl8111_controller {
   uint8_t mac[6];
   bool identity_known, started, active, link_up, stopping;
   struct rtl_ring rx, tx;
+  struct dma_buffer counters;
   uint64_t tx_deadlines[RTL_RING_COUNT];
   uint64_t reset_deadline, reset_recheck;
   uint16_t pending_interrupts;
@@ -61,5 +63,10 @@ void rtl_mac_modify(struct rtl8111_controller *controller, unsigned address,
                     uint16_t clear, uint16_t set);
 bool rtl_phy_prepare(struct rtl8111_controller *controller);
 bool rtl_phy_read(struct rtl8111_controller *controller, unsigned address, uint16_t *value);
+
+/* Debugger snapshot: BSP kernel context, IF=0, outside interrupt handlers.
+ * Only read the returned payload after success. Storage remains owned until reboot,
+ * including when a dump times out; timeout does not revoke device ownership. */
+const struct rtl_counters *rtl8111_capture_counters(struct rtl8111_controller *controller);
 
 #endif
