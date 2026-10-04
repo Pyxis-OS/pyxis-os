@@ -2238,7 +2238,7 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
     return CALL_NOT_FOUND;
   }
   struct npfs_store_pool *pool = source->volume->pool;
-  enum call_status status = begin_namespace(context, pool);
+  enum call_status status = writable(pool);
   if (status != CALL_OK) {
     return status;
   }
@@ -2295,6 +2295,18 @@ enum call_status npfs_store_rename(struct npfs_store_context *context, struct np
     }
   } else if (status != CALL_NOT_FOUND) {
     discard_idle_inode(moved, false);
+    return status;
+  }
+  /* Replacement must make the new contents durable before losing the old name. */
+  status = victim ? flush_inode(context, moved) : CALL_OK;
+  if (status == CALL_OK) {
+    status = begin_namespace(context, pool);
+  }
+  if (status != CALL_OK) {
+    discard_idle_inode(moved, false);
+    if (victim) {
+      discard_idle_inode(victim, false);
+    }
     return status;
   }
   struct npfs_inode source_previous = source->record;

@@ -56,8 +56,9 @@ enum call_status npfs_store_read(struct npfs_store_context *context,
     struct npfs_store_inode *inode, uint64_t offset, void *bytes,
     size_t capacity, size_t *read);
 uint64_t npfs_store_size(const struct npfs_store_inode *inode);
-/* Namespace edits reach an indivisible durable metadata commit without flushing
- * cached files. Remove and rename replacement detach the last durable target
+/* Namespace edits commit durably without flushing unrelated cached files.
+ * Replacement rename first flushes the moved file. Remove and rename replacement
+ * detach the last durable target
  * record, retaining unpublished contents for open handles and later writeback. */
 enum call_status npfs_store_create(struct npfs_store_context *context,
     struct npfs_store_inode *directory, const char *name, size_t length,
