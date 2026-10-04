@@ -2,8 +2,9 @@
 
 Status: Phase A image assembly/USB boot and Phase B.3 enumeration/control
 transfers, BOT/SCSI reads and kernel block/GPT integration implemented,
-2026-10-04; native read-only USB mounts are implemented. Write/flush and broader
-physical qualification remain pending.
+2026-10-04; native USB mounts and Phase C.1 write/flush support are implemented.
+Qualified disks support explicitly requested writable mounts. The broader
+persistent development loop and physical qualification remain pending.
 Owner-reported [ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md) now
 include root and USB 3 hub-descendant storage reads. Broader hardware/recovery
 qualification of native mounting remains pending. Inspection-first work includes
@@ -14,8 +15,8 @@ physical installation target, with QEMU development before laptop validation.
 Implemented image behavior lives in the [USB image reference](../development/usb-image.md).
 Phase B follows the read-only contracts below. Implemented controller behavior
 lives in the [xHCI reference](../devices/usb-xhci.md), with checked discovery and
-request ownership in [USB enumeration](../devices/usb-enumeration.md). Writable
-installation is unassigned. This document does not
+request ownership in [USB enumeration](../devices/usb-enumeration.md). Persistent
+installation and physical validation remain unassigned. This document does not
 authorize physical writes or reorder the active filesystem, spaces/SMP and
 display work.
 
@@ -139,8 +140,9 @@ USB boot inventory; neither tool nor its benchmark is a boot-image prerequisite.
 The owner accepted per-device read-only support on 2026-10-04, superseding
 unique supported-disk selection and the earlier single-controller backend
 proposal. B.4 introduced a kernel-internal BOT/SCSI probe; the first B.5 slice adds
-kernel block registration and GPT discovery. Configured read-only mount authority
-now covers observed USB disks.
+kernel block registration and GPT discovery. Configured mount authority
+now covers observed USB disks; C.1 extends the initial read-only profile with
+qualified writes and flushes under the same selection policy.
 Physical qualification remains Phase C.
 
 ### Selection and authority
@@ -166,7 +168,8 @@ The internal read-only boot probe retains private geometry, sense, counters and
 byte samples. Terminal candidates now register with the kernel block interface,
 including individual unsupported/setup-failure results; supported devices serve
 queued reads and GPT discovery. Configured GUID authority now supports native
-read-only USB mounts. USB writes and public raw-disk operations remain deferred.
+USB mounts, including explicit writable requests on qualified media. Public
+raw-disk operations remain deferred.
 Enabling `CONFIG_XHCI` enables these consumers; the checked-in default remains `n`.
 
 Block integration must preserve today's stable per-device IDs, explicit disk
@@ -238,7 +241,7 @@ and exhaustive discovery are separate queries. GPT waits for sealed discovery
 and scans USB media sequentially through ordinary block tickets, with one shared
 pre-AP scratch allocation. Partial USB discovery does not disable individually
 READY disks or existing VirtIO authority. Private queues, DMA and recovery stay
-with each backend. Configured USB read-only mount authority is implemented;
+with each backend. Configured USB mount authority is implemented;
 public raw USB authority remains deferred.
 
 ### Requests, deadlines and failure ownership
@@ -261,7 +264,8 @@ this boot. Each owning worker runs synchronous private transfers, capturing
 outbound bytes and retaining no caller read destination. One exchange runs at a
 time per interface, as required by
 [BOT section 3.4](https://www.usb.org/sites/default/files/usbmassbulk_10.pdf).
-B.5 adds two captured read slots per supported device before AP startup. Queued,
+B.5 adds two captured read slots per supported device before AP startup. C.1
+reuses their buffers for captured writes and ordered flush tickets. Queued,
 active and completed-uncollected requests count against that budget; the owning
 controller worker serializes the exchanges and collection copies only successful
 whole reads. No caller read pointer is retained.
@@ -279,8 +283,9 @@ image sizes in unit-test expectations.
 B.5 preserves the [block ticket contract](../devices/block-storage.md#tickets-and-caller-ownership):
 caller wait timeout neither cancels nor consumes; successful read collection
 copies exactly the requested bytes, and failure leaves caller storage untouched.
-Set `submitted` when the BOT command first becomes device-visible. Report
-`writable=false` and `flush_supported=false`; writes and flushes return read-only.
+Set `submitted` when the original BOT command first becomes device-visible.
+B.5 initially reports read-only capabilities. C.1 qualifies write protection and
+blocking cache synchronization before reporting writable/flush support.
 Media geometry must satisfy the existing block/GPT logical-block profile and
 checked range arithmetic, independent of image defaults or sampled drive sizes.
 
@@ -390,14 +395,22 @@ host tools and the later physical-preparation procedure.
    observed matches and selected-device errors fail. Without a match, complete
    discovery reports NOT_FOUND and partial discovery reports UNAVAILABLE. Unseen
    devices could conceal another matching GUID; this accepted limit does not
-   grant USB writes or public raw-disk access.
+   grant public raw-disk access. C.1 separately qualifies writable mounts.
 
 ### C. Persistent USB installation and hardware validation
 
-1. [ ] **Establish write and flush behaviour.** Implement bounded writes and real
-   cache synchronization through the block contract. Unsupported flushes must
-   prevent a mount requiring durability, never succeed as placeholders. Preserve
-   uncertain-outcome and sticky-failure semantics on disconnect/error.
+1. [x] **Establish write and flush behaviour.** Bounded WRITE (10)/(16) and real
+   whole-medium SYNCHRONIZE CACHE (10), with IMMED clear, use the existing block
+   tickets and captured buffers. Known clear write protection and successful
+   blocking synchronization qualify each disk; unsupported/unknown capabilities
+   preserve reads on healthy transport. The owner accepted explicitly requested
+   writable mounts through configured GUID authority; installer raw USB access
+   remains deferred. Per-device FIFO orders flushes, failed or abandoned published
+   mutations latch write failure, and no mutation is replayed. See the
+   [C.1 implementation](../devices/usb-storage.md) and
+   [QEMU qualification record](../development/usb-storage-bringup.md#2026-10-04-qualified-writes-and-cache-synchronization).
+   Error/recovery branches remain source-reviewed without forced-error validation;
+   QEMU persistence does not qualify physical durability.
 2. [ ] **Integrate the persistent development loop.** Depends on qualified
    [native filesystem writer](../devices/filesystem-native-adapter.md) and
    qualification of the USB backend's write/flush/error behavior. Edit/build/run,
@@ -415,8 +428,9 @@ host tools and the later physical-preparation procedure.
 - Phase A and B.3 enumeration/control transfers are implemented; B.1 records the
   accepted per-device read-only contract. Enumeration publishes root devices and
   supported USB 2/3 hub descendants. B.4 adds an internal BOT/SCSI media probe;
-  B.5 read-only mount integration is implemented. Writable
-  work and its roadmap ordering remain unassigned.
+  B.5 read-only mount integration and C.1 qualified writes/flushes are implemented.
+  C.2 persistent development-loop integration and C.3 physical validation remain
+  unassigned; native ThinkPad testing is deferred.
 - Image update/preservation ownership remains open for persistent installation.
   Read-only disk selection does not qualify a write target or authenticate media.
 - The [GUID/boot-device identity follow-up](../technical-debt.md#configured-guid-and-boot-device-identity)
