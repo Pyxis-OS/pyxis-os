@@ -1,0 +1,5 @@
+{"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+{"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+{"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+{"type": "command_complete", "command": 4, "kind": "builtin", "status": 0}
+{"type": "final", "cause": "shell_exit", "process_reason": 1, "process_reason_name": "exited", "exit_status": 0, "drain": "complete"}
