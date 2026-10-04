@@ -87,11 +87,7 @@ void net_ethernet_receive(const uint8_t *frame, size_t length)
     net_arp_receive(header->source, payload, payload_length);
     break;
   case ETHERNET_TYPE_IPV4:
-    if (own) {
-      net_ipv4_receive(&net_ethernet, payload, payload_length);
-    } else {
-      ++ethernet_stats.foreign;
-    }
+    net_ipv4_receive(&net_ethernet, broadcast, payload, payload_length);
     break;
   default:
     ++ethernet_stats.unsupported;

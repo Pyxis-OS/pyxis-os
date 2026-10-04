@@ -199,6 +199,16 @@ with only that listener, memory, clock and output streams. Bootstrap init has
 separate TCP LISTEN authority; ordinary session startup delegates only CONNECT.
 This opt-in handoff replaces that init's shell and does not expose a remote shell.
 
+For manual broadcast reception, trusted init may instead hand off with
+`session app://session.pxe --configure-network --udp-broadcast PORT`, optionally
+adding `--udp-count COUNT`. Setup opens a wildcard UDP endpoint and gives
+`udp-echo --endpoint` only endpoint INSPECT/SEND/RECEIVE, memory, clock and output
+streams. It replies by limited broadcast, preserving bytes and peer port.
+Ordinary sessions receive only UDP OPEN authority, so applications cannot create
+these endpoints. The stock init scripts do not run this mode. An explicit `--udp-unassigned`
+clears IPv4 after opening the endpoint, leaving the net0 binding intact, for
+pre-assignment qualification. It requires configuration authority.
+
 Trusted init also receives a `terminal` service with CREATE authority for
 [independent terminal sessions](terminal-sessions.md). Ordinary session startup
 does not delegate that service or an attachment. Application terminal handles

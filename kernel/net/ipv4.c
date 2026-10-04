@@ -80,6 +80,13 @@ uint32_t net_ipv4_address(void)
   return configuration.address;
 }
 
+bool net_ipv4_is_broadcast(uint32_t address)
+{
+  return address == IPV4_LIMITED_BROADCAST ||
+      (configuration.address && configuration.prefix < 31 &&
+       address == (configuration.address | ~configuration.mask));
+}
+
 bool net_ipv4_is_neighbor(uint32_t address)
 {
   return configuration.address && is_unicast(address) &&
@@ -165,6 +172,25 @@ enum net_result net_ipv4_route(uint32_t source, uint32_t destination,
   return NET_OK;
 }
 
+static void initialize_header(struct net_packet *packet, uint32_t source,
+    uint32_t destination, uint8_t protocol)
+{
+  struct ipv4_header *header = (void *)packet->data;
+  *header = (struct ipv4_header){
+    .version_length = (IPV4_VERSION << IPV4_VERSION_SHIFT) |
+        (IPV4_HEADER_SIZE / IPV4_HEADER_WORD_BYTES),
+    .ttl = IPV4_DEFAULT_TTL,
+    .protocol = protocol,
+  };
+  net_write_u16(header->total_length, packet->length);
+  /* No fragmentation is supported. DF also makes a zero identification valid
+   * for these atomic datagrams; receivers must not use it for reassembly. */
+  net_write_u16(header->fragment, IPV4_FLAG_DONT_FRAGMENT);
+  net_write_u32(header->source, source);
+  net_write_u32(header->destination, destination);
+  net_write_u16(header->checksum, net_checksum(packet->data, IPV4_HEADER_SIZE));
+}
+
 enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
     uint32_t destination, uint8_t protocol, uint64_t deadline, struct ipv4_completion completion)
 {
@@ -181,21 +207,31 @@ enum net_result net_ipv4_transmit(struct net_packet *packet, uint32_t source,
     return result;
   }
 
-  struct ipv4_header *header = (void *)packet->data;
-  *header = (struct ipv4_header){
-    .version_length = (IPV4_VERSION << IPV4_VERSION_SHIFT) |
-        (IPV4_HEADER_SIZE / IPV4_HEADER_WORD_BYTES),
-    .ttl = IPV4_DEFAULT_TTL,
-    .protocol = protocol,
-  };
-  net_write_u16(header->total_length, packet->length);
-  /* No fragmentation is supported. DF also makes a zero identification valid
-   * for these atomic datagrams; receivers must not use it for reassembly. */
-  net_write_u16(header->fragment, IPV4_FLAG_DONT_FRAGMENT);
-  net_write_u32(header->source, route.source);
-  net_write_u32(header->destination, destination);
-  net_write_u16(header->checksum, net_checksum(packet->data, IPV4_HEADER_SIZE));
+  initialize_header(packet, route.source, destination, protocol);
   return net_ipv4_submit(packet, deadline, completion);
+}
+
+enum net_result net_ipv4_transmit_udp_broadcast(struct net_packet *packet, uint32_t source,
+    uint64_t deadline, struct ipv4_completion completion)
+{
+  assert_worker_context();
+  if (!packet || packet->length < IPV4_HEADER_SIZE || packet->length > NET_PACKET_MAX_BYTES ||
+      source != configuration.address) {
+    return NET_INVALID;
+  }
+  if (task_deadline_expired(deadline)) {
+    return NET_TIMED_OUT;
+  }
+  initialize_header(packet, source, IPV4_LIMITED_BROADCAST, IPV4_PROTOCOL_UDP);
+  enum net_result result = net_ethernet_transmit(net_ethernet_broadcast,
+      ETHERNET_TYPE_IPV4, packet->data, packet->length);
+  if (result == NET_OK) {
+    uint64_t flags = cpu_save_interrupts();
+    net_packet_release(packet);
+    cpu_restore_interrupts(flags);
+    net_ipv4_transmitted(completion);
+  }
+  return result;
 }
 
 enum net_result net_ipv4_submit(struct net_packet *packet, uint64_t deadline,
@@ -245,7 +281,7 @@ void net_ipv4_cancel_tcp(uint64_t generation)
   net_loopback_cancel_tcp(generation);
 }
 
-void net_ipv4_receive(const struct net_interface *interface,
+void net_ipv4_receive(const struct net_interface *interface, bool link_broadcast,
     const uint8_t *data, size_t length)
 {
   ++ipv4_stats.received;
@@ -285,10 +321,15 @@ void net_ipv4_receive(const struct net_interface *interface,
       (configuration.address && destination == configuration.address);
   bool accepted = interface == &net_loopback && local_source && local_destination;
   if (interface == &net_ethernet) {
-    accepted = configuration.address && destination == configuration.address &&
-        is_unicast(source) && source != configuration.address &&
-        ((source & configuration.mask) != (configuration.address & configuration.mask) ||
+    bool broadcast = header->protocol == IPV4_PROTOCOL_UDP &&
+        net_ipv4_is_broadcast(destination);
+    bool unicast = !link_broadcast && configuration.address &&
+        destination == configuration.address;
+    bool valid_source = is_unicast(source) && source != configuration.address &&
+        (!configuration.address ||
+         (source & configuration.mask) != (configuration.address & configuration.mask) ||
          is_subnet_host(source, configuration.mask, configuration.prefix));
+    accepted = (unicast || broadcast) && valid_source;
   }
   if (!accepted) {
     ++ipv4_stats.nonlocal;

@@ -35,6 +35,16 @@ static uint16_t udp_checksum(uint32_t source, uint32_t destination,
 enum net_result net_udp_send_packet(struct udp_endpoint *endpoint, uint32_t address,
     uint16_t port, const uint8_t *data, size_t length, uint64_t deadline, uint64_t token)
 {
+  uint32_t source = endpoint->local.address;
+  if (endpoint->broadcast) {
+    if (net_ipv4_is_loopback(address)) {
+      return NET_NO_ROUTE;
+    }
+    source = net_ipv4_address();
+    if (!source && address != IPV4_LIMITED_BROADCAST) {
+      return NET_NO_ROUTE;
+    }
+  }
   uint64_t flags = cpu_save_interrupts();
   struct net_packet *packet = net_packet_allocate(IPV4_HEADER_SIZE + UDP_HEADER_SIZE + length);
   cpu_restore_interrupts(flags);
@@ -47,13 +57,18 @@ enum net_result net_udp_send_packet(struct udp_endpoint *endpoint, uint32_t addr
   net_write_u16(header->destination, port);
   net_write_u16(header->length, UDP_HEADER_SIZE + length);
   memcpy((uint8_t *)header + UDP_HEADER_SIZE, data, length);
-  uint16_t checksum = udp_checksum(endpoint->local.address, address,
+  uint16_t checksum = udp_checksum(source, address,
       (const uint8_t *)header, UDP_HEADER_SIZE + length);
   /* Wire zero means omitted checksum; computed zero must be encoded as all ones. */
   net_write_u16(header->checksum, checksum ? checksum : UINT16_MAX);
 
-  enum net_result result = net_ipv4_transmit(packet, endpoint->local.address, address,
-      IPV4_PROTOCOL_UDP, deadline, (struct ipv4_completion){IPV4_NOTIFY_UDP, token});
+  struct ipv4_completion completion = {IPV4_NOTIFY_UDP, token};
+  enum net_result result;
+  if (endpoint->broadcast && address == IPV4_LIMITED_BROADCAST) {
+    result = net_ipv4_transmit_udp_broadcast(packet, source, deadline, completion);
+  } else {
+    result = net_ipv4_transmit(packet, source, address, IPV4_PROTOCOL_UDP, deadline, completion);
+  }
   if (result != NET_OK) {
     flags = cpu_save_interrupts();
     net_packet_release(packet);

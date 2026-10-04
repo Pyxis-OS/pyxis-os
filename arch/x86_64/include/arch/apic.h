@@ -12,6 +12,7 @@
 #define APIC_VIRTIO_BLK_VECTOR 38
 #define APIC_XHCI_VECTOR 39
 #define APIC_RTL8111_VECTOR 40
+#define APIC_MOUSE_VECTOR 41
 #define APIC_SPURIOUS_VECTOR 255
 
 struct apic_msi_message {

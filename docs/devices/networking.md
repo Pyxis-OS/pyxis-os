@@ -364,9 +364,13 @@ References: [VirtIO 1.4 network device and PCI transport](https://docs.oasis-ope
 
 ## Ethernet and ARP
 
-Ethernet accepts its own unicast destination and broadcast ARP. IPv4 must be
-unicast to the configured IP; external loopback, nonlocal, multicast and broadcast
-IP traffic is discarded. Frames use Ethernet II with IPv4/ARP types, padding to
+Ethernet accepts its own unicast destination and broadcast ARP/IPv4. Ordinary
+IPv4 traffic must be unicast to the configured IP. UDP limited broadcast and
+the configured subnet broadcast are admitted only for wildcard endpoints below;
+/31 and /32 have no subnet broadcast. Broadcast-MAC frames carrying a unicast
+IP destination remain discarded. External loopback, nonlocal and multicast
+IP traffic is discarded. Incoming IPv4 sources still require a valid unicast
+host address, including before our address is assigned. Frames use Ethernet II with IPv4/ARP types, padding to
 60 bytes before the hardware-supplied FCS. VLANs, multicast membership, forwarding,
 address conflict detection and gratuitous ARP are outside this slice.
 
@@ -534,8 +538,8 @@ see [QEMU's host setup notes](https://www.qemu.org/docs/master/system/devices/ne
 The backend gateway is the first diagnostic target; an external timeout alone
 does not identify a guest-stack failure.
 
-The initial networking milestone is complete. DHCP needs UDP, broadcast support,
-lease deadlines and delegated configuration authority. [DNS](../userland/dns.md) is complete;
+The initial networking milestone is complete. DHCP uses the privileged UDP
+broadcast primitive below and still needs userspace lease handling/deadlines. [DNS](../userland/dns.md) is complete;
 [TCP listeners and streams](tcp.md) are available through native capabilities.
 IPv6, richer routing, network
 isolation and website hosting remain separate scopes in
@@ -545,11 +549,14 @@ Internet host conformance. See the limits above before adding another protocol.
 
 ## Native UDP endpoint lifetime
 
-Init receives a separate `udp` service grant. Session and shell explicitly copy
-its OPEN right into child startup resources, independently of echo and
-configuration authority. The service authorizes binding any available port on an
+Init receives a separate `udp` service grant with OPEN and BROADCAST authority.
+Trusted session handoff preserves those rights for network setup. Ordinary local
+and remote shells and their children receive OPEN alone, independently of echo
+and configuration authority. The service authorizes binding any available port on an
 explicit local IPv4 address: any address in `127/8`, or the configured NIC address.
-There are no wildcard bindings, shared bindings or privileged-port distinctions.
+The separate BROADCAST right permits wildcard net0 bindings. A wildcard may share
+a port with a concrete binding; each address/port binding itself remains exclusive.
+There is no privileged-port distinction.
 The port namespace and resource bounds are system-wide, not isolated by space.
 
 [The UDP protocols](../../include/abi/udp.h) use tagged CALL requests:
@@ -568,6 +575,13 @@ The port namespace and resource bounds are system-wide, not isolated by space.
   return `CALL_BAD_REQUEST`, missing routes `CALL_NO_ROUTE`, and an unavailable
   interface `CALL_UNAVAILABLE`. Port zero and duplicate bindings follow OPEN's
   rules. Selection sends no packets and does not perform ARP or prove reachability.
+- `UDP_OPEN_BROADCAST` requires BROADCAST, with zero address/reserved fields in
+  the existing open request. It binds net0's port while retaining address zero
+  in INSPECT; net0 must already be bound, but need not have an assigned address.
+  Port zero selects an ephemeral port in the wildcard namespace. It receives
+  UDP to the current interface address, limited broadcast or local subnet
+  broadcast. A concrete binding takes precedence for interface unicast; broadcast
+  reaches only the wildcard. `127/8` destinations never select a wildcard.
 - `UDP_INSPECT` on `PROTOCOL_UDP` requires INSPECT and returns the original bound
   address/port and current state: BOUND, SHUTDOWN or UNAVAILABLE. This succeeds
   on stopped endpoints too. BOUND describes the binding, not NIC carrier.
@@ -596,11 +610,11 @@ completion. No user/private-stack pointers cross CPUs and no scheduler queue is
 added.
 
 Route selection and binding are serialized with configuration changes by that
-same worker. The endpoint retains only its concrete local binding, not the
+same worker. OPEN/OPEN_ROUTE retain only their concrete local binding, not the
 destination or a route snapshot: it is neither connected to a peer nor a
 wildcard listener. Later sends use their own destinations and current routing,
 subject to the bound source address. The existing invalidation and shutdown
-rules below apply to both ways of opening an endpoint.
+rules below apply to those two operations.
 
 At most 16 endpoint objects may live, including stopped objects still held by
 handles and those awaiting final cleanup. Exhaustion is `CALL_LIMIT`; allocation
@@ -611,7 +625,7 @@ may be deferred past CLOSE's return. Use SHUTDOWN when immediate binding release
 is needed. A surviving copied handle continues to refer to the same object,
 never a later endpoint that reuses its port.
 
-Removing or replacing the NIC's address marks its bound endpoints UNAVAILABLE
+Removing or replacing the NIC's address marks its concrete bound endpoints UNAVAILABLE
 and releases their bindings. Restoring the same address does not revive them.
 Changing only prefix/gateway preserves bindings, as does link down/up. Loopback
 bindings are independent of NIC configuration. Explicit shutdown also works on
@@ -674,7 +688,7 @@ See [RFC 768](https://www.rfc-editor.org/rfc/rfc768.html).
 Shutdown discards queued receive data, removes an ARP-waiting send and wakes
 pending I/O with `CALL_ENDPOINT_CLOSED`. Worker processing serializes delivery
 and shutdown; already completed calls keep their results even if their callers
-have not resumed. Address removal does the same with
+have not resumed. Concrete endpoint address removal does the same with
 `CALL_UNAVAILABLE`. Final close discards remaining receive packets. Prefix/gateway
 replacement preserves the endpoint and its receive queue, but clearing the old
 ARP state fails sends awaiting transmission under that route as unavailable;
@@ -691,7 +705,13 @@ cannot be distinguished from traffic intended for its new owner.
 
 Unbound destination ports are silently dropped. ICMP error generation and
 application delivery are deferred, so an absent listener usually appears as a
-receive timeout. There is no fragmentation, reassembly, broadcast, multicast,
+receive timeout. Wildcard endpoints survive IPv4 replacement/clear, retaining
+queued datagrams and pending receives. Their sends use the current assigned
+source; while unassigned, only limited broadcast may use source zero. Limited
+broadcast sends copy directly to Ethernet broadcast without ARP. Other sends
+require ordinary net0 unicast routing and an assigned source; loopback and
+subnet-broadcast sends are unsupported for wildcard endpoints. ARP-pending
+sends still fail on configuration changes. There is no fragmentation, reassembly, multicast,
 retransmission, delivery/order guarantee or duplicate suppression. DHCP and TCP
 remain separate work; the DNS client below owns its bounded query retries.
 
@@ -716,6 +736,16 @@ successfully after thirty seconds without an arrival or N successful echoes
 server unsuccessfully. Packets with source port zero cannot be replied to and
 are skipped. A count limit still has the idle timeout. Neither tool requires
 terminal input, and neither runs by default.
+
+Trusted init may use `session app://session.pxe --configure-network
+--udp-broadcast PORT [--udp-count N]` instead of its interactive shell. Session
+creates one wildcard endpoint and launches `udp-echo --endpoint` with only
+INSPECT/SEND/RECEIVE on that endpoint, memory, clock and output streams. The
+child gets no creation service, launcher, roots or configuration authority. It
+echoes by limited broadcast, preserving payload and destination port. No such
+handoff runs in the stock init scripts. The optional `--udp-unassigned` flag
+clears IPv4 after opening the endpoint while retaining the net0 binding. It
+requires configuration authority and is valid only with `--udp-broadcast`.
 
 ### Loopback pair
 
@@ -834,10 +864,10 @@ Trusted init can separately delegate a bound listener to the
 
 ## Further networking work
 
-Wildcard/connected UDP, broadcast/multicast, fragmentation, IPv6, asynchronous
-send and waiting on multiple objects remain outside this implementation. DHCP
-needs unconfigured-address and broadcast handling as well as configuration
-authority and lease deadlines; explicit-address unicast UDP alone is insufficient.
+Connected UDP, multicast, fragmentation, IPv6, asynchronous send and waiting
+on multiple objects remain outside this implementation. DHCP now has the narrow
+unconfigured-source/broadcast primitive; userspace lease handling and deadlines
+remain in the [DHCP milestone](../wip/dhcp-and-link-selection.md).
 DNS queries, hostname ping and [native TCP listeners/streams](tcp.md) are implemented.
 Readiness and remote-terminal application protocols remain future work.
 ICMP errors and generic UDP ephemeral-port selection are

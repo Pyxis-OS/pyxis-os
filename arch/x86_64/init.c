@@ -6,7 +6,7 @@
 #include <arch/descriptors.h>
 #include <arch/init.h>
 #include <arch/io_apic.h>
-#include <arch/keyboard.h>
+#include <arch/ps2.h>
 #include <arch/paging.h>
 #include <arch/syscall.h>
 #include <arch/user.h>
@@ -68,7 +68,7 @@ void arch_init(struct boot_info *boot)
   apic_init();
   arch_clock_maintain();
   if (io_apic_init()) {
-    ps2_keyboard_init();
+    ps2_init();
   }
   arch_clock_maintain();
   arch_user_init();

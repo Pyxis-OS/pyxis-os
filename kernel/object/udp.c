@@ -24,10 +24,14 @@ struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
-  if (operation != UDP_OPEN && operation != UDP_OPEN_ROUTE) {
-    return (struct syscall_result){CALL_BAD_OPERATION, 0};
+  uint64_t required;
+  switch (operation) {
+  case UDP_OPEN:
+  case UDP_OPEN_ROUTE: required = UDP_SERVICE_RIGHT_OPEN; break;
+  case UDP_OPEN_BROADCAST: required = UDP_SERVICE_RIGHT_BROADCAST; break;
+  default: return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
-  if (!(rights & UDP_SERVICE_RIGHT_OPEN)) {
+  if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   struct udp_open_request request = {0};
@@ -39,15 +43,24 @@ struct syscall_result udp_service_call(uint64_t rights, uint64_t operation,
       !user_buffer_check(reply_address, sizeof(struct udp_open_reply), USER_BUFFER_WRITE)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};
   }
-  if (request.reserved) {
+  if (request.reserved || (operation == UDP_OPEN_BROADCAST && request.address)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
 
   struct udp_open_reply reply;
   struct capability_table *table = &process_current()->capabilities;
-  enum call_status status = operation == UDP_OPEN_ROUTE ?
-      net_udp_open_route(table, request.address, request.port, &reply) :
-      net_udp_open(table, request.address, request.port, &reply);
+  enum call_status status;
+  switch (operation) {
+  case UDP_OPEN_ROUTE:
+    status = net_udp_open_route(table, request.address, request.port, &reply);
+    break;
+  case UDP_OPEN_BROADCAST:
+    status = net_udp_open_broadcast(table, request.port, &reply);
+    break;
+  default:
+    status = net_udp_open(table, request.address, request.port, &reply);
+    break;
+  }
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

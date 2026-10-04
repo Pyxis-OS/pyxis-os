@@ -12,6 +12,7 @@
 #define MADT_IRQ_OVERRIDE 2
 #define ISA_BUS 0
 #define KEYBOARD_ISA_IRQ 1
+#define MOUSE_ISA_IRQ 12
 #define INTI_POLARITY_MASK 3
 #define INTI_TRIGGER_SHIFT 2
 #define INTI_TRIGGER_MASK 3
@@ -158,9 +159,69 @@ static const struct madt_entry *madt_entry_at(const struct acpi_madt *madt,
   return entry;
 }
 
-bool acpi_keyboard_route(const struct boot_info *boot,
-                         struct keyboard_irq_route *route)
+enum isa_route_result {
+  ISA_ROUTE_FOUND,
+  ISA_ROUTE_ABSENT,
+  ISA_ROUTE_INVALID,
+};
+
+static enum isa_route_result isa_route(const struct acpi_madt *madt, unsigned isa_irq,
+                                       struct isa_irq_route *route)
 {
+  *route = (struct isa_irq_route){.gsi = isa_irq};
+  bool overridden = false;
+  for (size_t offset = sizeof(*madt); offset < madt->header.length;) {
+    const struct madt_entry *entry = madt_entry_at(madt, offset);
+    if (entry->type == MADT_IRQ_OVERRIDE) {
+      if (entry->length < sizeof(struct madt_irq_override)) {
+        panic("truncated MADT interrupt override");
+      }
+      const struct madt_irq_override *override = (const void *)entry;
+      if (override->bus == ISA_BUS && override->source == isa_irq) {
+        unsigned polarity = override->flags & INTI_POLARITY_MASK;
+        unsigned trigger = (override->flags >> INTI_TRIGGER_SHIFT) & INTI_TRIGGER_MASK;
+        if (overridden ||
+            (polarity != INTI_CONFORMS && polarity != INTI_HIGH_OR_EDGE &&
+             polarity != INTI_LOW_OR_LEVEL) ||
+            (trigger != INTI_CONFORMS && trigger != INTI_HIGH_OR_EDGE &&
+             trigger != INTI_LOW_OR_LEVEL)) {
+          *route = (struct isa_irq_route){0};
+          return ISA_ROUTE_INVALID;
+        }
+        /* ISA defaults are active-high and edge-triggered. */
+        route->gsi = override->gsi;
+        route->active_low = polarity == INTI_LOW_OR_LEVEL;
+        route->level_triggered = trigger == INTI_LOW_OR_LEVEL;
+        overridden = true;
+      }
+    }
+    offset += entry->length;
+  }
+
+  /* Find the controller whose GSI range can contain the input. Its actual
+   * upper bound comes from its version register after the MMIO page is mapped. */
+  for (size_t offset = sizeof(*madt); offset < madt->header.length;) {
+    const struct madt_entry *entry = madt_entry_at(madt, offset);
+    if (entry->type == MADT_IO_APIC) {
+      if (entry->length < sizeof(struct madt_io_apic)) {
+        panic("truncated MADT I/O APIC entry");
+      }
+      const struct madt_io_apic *controller = (const void *)entry;
+      if (controller->gsi_base <= route->gsi &&
+          (!route->io_apic_physical || controller->gsi_base > route->gsi_base)) {
+        route->io_apic_physical = controller->address;
+        route->gsi_base = controller->gsi_base;
+      }
+    }
+    offset += entry->length;
+  }
+  return route->io_apic_physical ? ISA_ROUTE_FOUND : ISA_ROUTE_ABSENT;
+}
+
+bool acpi_ps2_routes(const struct boot_info *boot, struct isa_irq_route *keyboard,
+                     struct isa_irq_route *mouse)
+{
+  *keyboard = *mouse = (struct isa_irq_route){0};
   if (!boot->acpi_rsdp) {
     return false;
   }
@@ -193,53 +254,19 @@ bool acpi_keyboard_route(const struct boot_info *boot,
     return false;
   }
 
-  *route = (struct keyboard_irq_route){.gsi = KEYBOARD_ISA_IRQ};
-  bool overridden = false;
-  for (size_t offset = sizeof(*madt); offset < madt->header.length;) {
-    const struct madt_entry *entry = madt_entry_at(madt, offset);
-    if (entry->type == MADT_IRQ_OVERRIDE) {
-      if (entry->length < sizeof(struct madt_irq_override)) {
-        panic("truncated MADT interrupt override");
-      }
-      const struct madt_irq_override *override = (const void *)entry;
-      if (override->bus == ISA_BUS && override->source == KEYBOARD_ISA_IRQ) {
-        unsigned polarity = override->flags & INTI_POLARITY_MASK;
-        unsigned trigger = (override->flags >> INTI_TRIGGER_SHIFT) & INTI_TRIGGER_MASK;
-        if (overridden ||
-            (polarity != INTI_CONFORMS && polarity != INTI_HIGH_OR_EDGE &&
-             polarity != INTI_LOW_OR_LEVEL) ||
-            (trigger != INTI_CONFORMS && trigger != INTI_HIGH_OR_EDGE &&
-             trigger != INTI_LOW_OR_LEVEL)) {
-          panic("invalid MADT keyboard interrupt override");
-        }
-        /* ISA defaults are active-high and edge-triggered. */
-        route->gsi = override->gsi;
-        route->active_low = polarity == INTI_LOW_OR_LEVEL;
-        route->level_triggered = trigger == INTI_LOW_OR_LEVEL;
-        overridden = true;
-      }
-    }
-    offset += entry->length;
+  switch (isa_route(madt, KEYBOARD_ISA_IRQ, keyboard)) {
+  case ISA_ROUTE_INVALID:
+    panic("invalid MADT keyboard interrupt override");
+  case ISA_ROUTE_ABSENT:
+    return false;
+  case ISA_ROUTE_FOUND:
+    break;
   }
-
-  /* Find the controller whose GSI range can contain the keyboard. Its actual
-   * upper bound comes from its version register after the MMIO page is mapped. */
-  for (size_t offset = sizeof(*madt); offset < madt->header.length;) {
-    const struct madt_entry *entry = madt_entry_at(madt, offset);
-    if (entry->type == MADT_IO_APIC) {
-      if (entry->length < sizeof(struct madt_io_apic)) {
-        panic("truncated MADT I/O APIC entry");
-      }
-      const struct madt_io_apic *controller = (const void *)entry;
-      if (controller->gsi_base <= route->gsi &&
-          (!route->io_apic_physical || controller->gsi_base > route->gsi_base)) {
-        route->io_apic_physical = controller->address;
-        route->gsi_base = controller->gsi_base;
-      }
-    }
-    offset += entry->length;
+  /* The mouse is optional: a bad IRQ 12 description leaves only it unusable. */
+  if (isa_route(madt, MOUSE_ISA_IRQ, mouse) == ISA_ROUTE_INVALID) {
+    klog("mouse: invalid MADT IRQ 12 override; mouse unavailable\n");
   }
-  return route->io_apic_physical != 0;
+  return true;
 }
 
 uint64_t acpi_hpet_address(const struct boot_info *boot)
