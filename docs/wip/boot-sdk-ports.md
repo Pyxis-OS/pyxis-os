@@ -192,7 +192,7 @@ terminal milestones remain deferred. No Neovim build or runtime compatibility
 is claimed. The LLVM investigation remains separate future work.
 The [BusyBox vi port](../userland/vi.md) is complete: the first modal editor
 before Neovim, packaged in the normal image with a native libbb adapter and
-libc `ftruncate`. BusyBox less and then Links are queued next in
+libc `ftruncate`. Links and then BusyBox less are queued next in
 [application ports](application-ports.md).
 
 After native filesystem writer completion, the agreed
