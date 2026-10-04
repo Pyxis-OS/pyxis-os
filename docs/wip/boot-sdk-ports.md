@@ -232,7 +232,11 @@ with an internal [read-only BOT/SCSI media probe](../devices/usb-storage.md)
 for independently supported disks. The first B.5 slice registers kernel-only
 USB block devices with bounded read tickets and GPT discovery. Configured read-only
 USB mounts now use the sole observed GUID match after discovery/scan completion,
-including partial inventories. Writable work remains unassigned. Reusable
+including partial inventories. C.1 adds bounded captured WRITE (10)/(16),
+ordered whole-medium cache flushes and per-device qualification for explicitly
+requested writable GUID mounts. Unqualified healthy media retain read-only
+service. Persistent edit/build/run integration and physical write qualification
+remain unassigned; installer raw USB access remains deferred. Reusable
 controller/USB/class/block boundaries are required, without speculative driver
 frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.

@@ -629,11 +629,11 @@ authorized recovery validation.
 The owner deferred native ThinkPad installation on 2026-10-04 while completing
 [task-5 QEMU
 qualification](development/experiments/native-filesystem-task5/README.md).
-Current writable storage is VirtIO only; USB read-only block/filesystem access
-has QEMU coverage, while native mount qualification, USB writes and flush remain
-pending. Resume the physical step after the USB storage/backend
-write-and-cache-synchronization work, with an explicitly selected expendable
-target. The internal NVMe remains unsupported.
+VirtIO and per-device qualified USB now support writable native mounts. USB
+write/cache synchronization is implemented for C.1; physical writable mounting
+and durability qualification remain pending. Resume the physical step with an
+explicitly selected expendable target after the QEMU integration stages. The
+internal NVMe remains unsupported.
 
 ## USB image updates and firmware qualification
 
@@ -1206,7 +1206,8 @@ nonzero scratchpads and 64-byte contexts; nondefault PSI mappings and BIOS
 ownership handoff remain unmeasured paths. This first native snapshot does not
 establish broad controller qualification. The later owner-reported run also
 traversed the dock's USB 3 hub and completed root/descendant storage probes.
-Recovery remains unexecuted; USB block access remains pending.
+Recovery remains unexecuted; native USB block/mount qualification remains
+pending. Kernel block access and qualified writes have QEMU coverage.
 
 USB 2 root-port reset has no explicit connect-debounce interval. The startup snapshot
 waits 20 ms only after the driver powers a port; it has no separate link-settling
@@ -1245,9 +1246,9 @@ using an initial 4 KiB descriptor/control budget. A larger configuration makes
 inventory incomplete. The initial arena retains up to 512 validated interface
 records per controller; overflow is partial. Unknown/vendor classes are valid
 unbound observations. Revisit these bounds with concrete descriptor/topology requirements. Storage
-probing, kernel block registration and read-only mount authority now use accepted
-per-device support across controllers. Writes and broader physical qualification
-remain separate work.
+probing, kernel block registration and configured mount authority now use
+accepted per-device support across controllers. Qualified disks support explicit
+writable mounts; broader physical qualification remains separate work.
 
 All advertised ports receive input/output contexts and an EP0 ring/control buffer
 before AP startup. With the current 4 KiB buffer and 4 KiB allocations, this adds
@@ -1304,13 +1305,14 @@ with natural device evidence; physical USB qualification remains separate.
 The [BOT/SCSI probe](devices/usb-storage.md) accepts one non-composite BOT
 interface, no streams, and one LUN. Multiple LUNs, other interface shapes and
 observed READ CAPACITY (16) protection-enabled geometry remain unsupported.
-Terminal candidates now register kernel block devices and support read-only GPT
-discovery. Configured native GUID authority supports read-only USB mounts after
-sealed discovery and terminal GPT scans. Observed uniqueness is accepted under
-partial discovery; unseen disks may conceal another matching GUID. Duplicate
-observed matches fail, and selected-disk errors never fall back. Installer raw
-authority remains VirtIO-only; USB public raw access, writes and flushes are
-deferred. Two captured read slots per supported disk and snapshot capacity are
+Terminal candidates now register kernel block devices and support GPT
+discovery. Configured native GUID authority supports USB mounts after sealed
+discovery and terminal GPT scans, including explicitly writable mounts on
+qualified media. Observed uniqueness is accepted under partial discovery;
+unseen disks may conceal another matching GUID. Duplicate observed matches
+fail, and selected-disk errors never fall back. Installer raw authority remains
+VirtIO-only; USB public raw access is deferred. Two captured I/O slots per
+supported disk and snapshot capacity are
 reserved before AP startup; GPT USB scans share one scratch buffer. Revisit the
 pre-AP reservation cost with measured topology/resource requirements and later
 native qualification. Revisit those limits in their focused
@@ -1330,6 +1332,34 @@ is not full USB 3 conformance. Revisit with actual path-latency accounting befor
 adding power management or non-control scheduling; do not send successful zero
 placeholders. USB 3 boot traversal retains the existing conservative USB 2
 stability/recovery delays and adds no explicit warm-reset recovery retry.
+
+## USB writable-media qualification limits
+
+C.1 requires known WP-clear protection and a successful real blocking
+SYNCHRONIZE CACHE (10) before enabling writes and flushes. MODE SENSE (6) captures
+only its four-byte header; fallback to the eight-byte MODE SENSE (10) header is
+limited to current ILLEGAL REQUEST / invalid-opcode or invalid-field rejection.
+Unknown protection, unusable optional headers and clean qualification rejection
+leave healthy media readable but not writable. No MODE SELECT or write-cache
+mode change is attempted. Revisit compatibility only with natural device
+responses that need a concrete bounded extension; do not infer writable or
+flush support from vendor IDs or successful reads.
+
+The five-second exchange deadline and shared boot-media deadline also bound
+synchronization. A slow genuine flush can retire the device even when the medium
+is capable of persisting data. Revisit those bounds with measured physical
+flush latency. QEMU command completion and restart checks do not qualify device
+firmware, physical cache behavior or power loss; native write qualification
+remains deferred to an explicitly selected expendable target.
+
+A failed runtime write/flush or abandoned published mutation permanently latches
+write failure for this boot. Healthy transport can still admit reads, but the
+filesystem may separately retain its own writeback error. No mutation replay or
+later successful flush clears either backend uncertainty. Revisit any recovery
+only with an explicit error-acknowledgment and ownership contract. Mutation
+failure/abandonment, MODE SENSE fallback, unsupported flush and malformed
+qualification responses have source review, without forced-error validation;
+revisit with natural device evidence.
 
 ## CPU entropy without a kernel generator
 

@@ -40,8 +40,9 @@ implements consent, formatting, installation and read-back verification.
 
 ## Inventory and raw access
 
-Installer disk authority remains VirtIO-only; configured read-only USB mounting
-uses the separate native GUID authority.
+Installer disk authority remains VirtIO-only; configured USB mounting, including
+explicitly writable mounts on qualified disks, uses the separate native GUID
+authority.
 
 [`include/abi/disk.h`](../../include/abi/disk.h) defines two native protocols.
 DISKS ENUMERATE requires ENUMERATE and takes a zero-based inventory index; it
@@ -97,5 +98,6 @@ kernel service does not check `SAFE_TO_WIPE`, authenticate contents or interpret
 partition names as consent. Target preparation and explicit consent belong to
 the trusted installer. The installer selects the sole eligible disk automatically or asks for a disk
 number when several qualify, then requires typed `wipe`. The installer does not
-expose USB raw access or USB write/flush support. AHCI, NVMe, hotplug,
+expose USB raw access. Qualified USB write/flush support is available only
+through configured native mounts and the kernel block interface. AHCI, NVMe, hotplug,
 physical-media qualification and power-loss validation remain outside this interface. See [block storage](block-storage.md) and [GPT discovery](gpt.md).
