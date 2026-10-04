@@ -111,11 +111,17 @@ static enum call_status select_partition(struct npfs_store_context *context,
     struct npfs_job *job, struct gpt_partition *partition,
     struct block_info *device, bool *degraded)
 {
-  uint64_t inventory_flags = cpu_save_interrupts();
-  bool complete = block_native_inventory_complete();
-  cpu_restore_interrupts(inventory_flags);
-  if (!complete) {
-    return CALL_UNAVAILABLE;
+  if (job->device) {
+    uint64_t flags = cpu_save_interrupts();
+    bool complete = block_installer_inventory_complete();
+    bool allowed = block_installer_device(job->device);
+    cpu_restore_interrupts(flags);
+    if (!complete) {
+      return CALL_UNAVAILABLE;
+    }
+    if (!allowed) {
+      return CALL_NOT_FOUND;
+    }
   }
   enum gpt_status selected_status = GPT_UNAVAILABLE;
   uint64_t selected_blocks = 0;
@@ -125,11 +131,11 @@ static enum call_status select_partition(struct npfs_store_context *context,
   bool partition_found = false;
   block_device_id selected_id = BLOCK_DEVICE_ID_NONE;
   for (;;) {
-    bool pending = false;
     selected_id = BLOCK_DEVICE_ID_NONE;
     uint64_t flags = cpu_save_interrupts();
-    for (size_t i = 0; i < block_native_device_count(); ++i) {
-      block_device_id id = block_native_device_at(i);
+    bool pending = !job->device && !block_discovery_finished();
+    for (size_t i = 0; i < block_device_count(); ++i) {
+      block_device_id id = block_device_at(i);
       if (job->device && job->device != id) {
         continue;
       }
@@ -173,7 +179,10 @@ static enum call_status select_partition(struct npfs_store_context *context,
     kernel_task_sleep_until(task_deadline_after_ms(1));
   }
   if (!selected_id) {
-    return CALL_NOT_FOUND;
+    uint64_t flags = cpu_save_interrupts();
+    bool complete = block_inventory_complete();
+    cpu_restore_interrupts(flags);
+    return complete ? CALL_NOT_FOUND : CALL_UNAVAILABLE;
   }
   if (disk_device_claimed(selected_id)) {
     return CALL_BUSY;
