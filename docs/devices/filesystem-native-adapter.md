@@ -111,9 +111,12 @@ to recover; the call still returns READ_ONLY. Unknown required features reject
 opening; unknown read-only-compatible features forbid replay and other writes.
 Uncertain write or flush failure stops mutation and retains dirty state/error.
 Structural fsck is separate from local opening and traversed-record validation.
-Sync acknowledges recoverable retained writeback errors when reporting them;
-later success requires all dirty data to be durable. Ongoing failures still fail
-each sync attempt. Terminal uncertainty is never acknowledged away for the boot.
+Each sync retries dirty writeback, so a still-full pool reports NO_SPACE on every
+failed attempt. Sync acknowledges recoverable retained errors when reporting
+them. An unacknowledged error from earlier writeback, such as a background flush,
+can still be reported once after writeback succeeds; a later sync can then
+succeed once all dirty data is durable. Terminal uncertainty is never acknowledged
+away for the boot.
 
 Checked partition-relative I/O supports 512-byte and 4 KiB device blocks, including
 unaligned partition starts on 512-byte media. Transfers obey device limits and
@@ -165,9 +168,22 @@ USB-image consumer built and checked successfully; no USB boot is claimed.
 Committed-journal recovery has been exercised at runtime: host `fsck --replay`
 and kernel replay at writable mount recovered a committed transaction, with
 contents verified, later mutation successful and host fsck clean; read-only
-opening refused it with the logged explanation. Interrupted cleanup, retained-open
-unlink, uncertain I/O, ENOSPC, allocator pressure and read-only-device opening
-remain source-reviewed only. No physical-media qualification has been performed.
+opening refused it with the logged explanation.
+
+The [2026-10-04 follow-up record](../development/experiments/npfs-runtime-qualification/README.md)
+exercises a 64 MiB pool reaching delayed-allocation ENOSPC, background retention
+and one-time sync reporting, then successful writes after freeing space. A
+retained-open 32 MiB file remained readable after unlink, with complete extracted
+bytes verified; cleanup reclaimed its blocks after the final close. An unclean
+stop after synchronized unlink while a reader still held the inode left persisted
+DETACHED membership, which a later writable mount reclaimed. Stopped pools passed
+host fsck. The record includes exact commands, configuration and internal debugger
+observations; public FILESYSTEM_INFO does not expose free blocks.
+
+That restart covers pending cleanup before reclamation, not interruption at
+arbitrary points in a cleanup batch. Such interruption, uncertain I/O, allocator
+pressure and read-only-device opening remain source-reviewed only. No
+physical-media qualification has been performed.
 
 Manual debugger work follows the existing [ownership rules](../development/gdb.md);
 no sleeping worker or engine call may be injected as a stopped debugger call.
