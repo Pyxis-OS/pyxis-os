@@ -327,8 +327,8 @@ before an atomic append contract can be offered.
 
 Polling/nonblocking descriptor I/O, fork/exec-style process semantics and buffered
 stdio are outside this slice. Current streams are unbuffered and supply no
-buffering controls, pushback, scanning or wide I/O. Fixed-width inttypes output
-macros do not imply scanning or other integer-type families. Revisit these gaps
+buffering controls or wide I/O. Pushback is one byte per FILE, and scanning
+covers narrow conversions only; fixed-width inttypes input (SCN) macros are absent. Revisit these gaps
 only for a concrete consumer, defining native blocking/lifetime behavior or the
 library semantics it actually requires. No successful placeholder APIs exist
 for the missing operations.
@@ -498,6 +498,22 @@ Re-enabling it needs an explicit writable configuration location and review of
 its parser/formatting requirements. Floating printf is now available for the
 upstream timedemo report; exercising timedemo remains separate from normal
 gameplay and demo playback. Wall-clock time is not a prerequisite.
+
+## Quake port limits
+
+The [Quake port](userland/quake.md) renders at quakegeneric's fixed 320x240.
+A resolution switcher is wanted: it needs a video driver with a mode list behind
+Quake's Video Modes menu, reallocation of the frame, z-buffer and surface cache,
+and a check of the renderer's size limits (upstream reverted 640x480 as
+unstable). Sound, networking, CD audio and joysticks are absent; adding sound
+needs a native audio device first.
+
+Saves are Quake's trusted text format, written in place without a temporary
+file, and are lost on reboot with the rest of `home://`. Shareware and retail
+data share `home://quake/id1`, so their configuration and saves mix.
+QuakeC strings outside the hunk use a 512-entry engine-string table; overflowing
+it stops the game with an error. Revisit these when persistent storage or a
+second data set makes them matter.
 
 ## Virtio-fs runtime resource retention
 
@@ -1340,3 +1356,13 @@ for a few packets before a misaligned first byte is rejected. Its IRQ 12 route
 must share the keyboard's I/O APIC; firmware that places it elsewhere leaves the
 mouse unavailable. Reconsider these when native packets show drift that a short
 inter-byte timeout would catch, or a target routes IRQ 12 to another I/O APIC.
+
+Only that PS/2 stream is supported. On the ThinkPad the touchpad stays in its
+firmware relative mode, with no scrolling or multi-finger input, and TrackPoint
+motion arrives mixed into the same stream. USB HID mice need configured
+interrupt endpoints, which xHCI does not set up yet, plus a HID boot-protocol
+driver; they fit best after USB storage's endpoint work. Pointer sessions are
+relative only: there is no on-screen cursor or absolute positioning. Doom has no
+mouse support yet, although pointer sessions would allow it. Revisit Synaptics
+absolute mode when gestures or scrolling are wanted, and USB mice after bulk
+endpoints exist.

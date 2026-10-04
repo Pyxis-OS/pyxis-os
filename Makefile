@@ -40,7 +40,8 @@ $(error PREBUILT accepts kernel sdk userspace ports)
 endif
 DOOM_WAD ?=
 DOOM_DEMOS ?=
-export INIT NETWORK_CONFIG DOOM_WAD DOOM_DEMOS
+QUAKE_DATA ?=
+export INIT NETWORK_CONFIG DOOM_WAD DOOM_DEMOS QUAKE_DATA
 
 LOG_LEVEL ?= info
 ifeq ($(LOG_LEVEL),trace)

@@ -103,7 +103,8 @@ remain independent of that port.
 The [Doom port](../userland/doom.md) uses the mapped display, keyboard sessions and
 monotonic clock for single-player gameplay and demo playback. Images include
 shareware data; local retail WADs and demos are optional overrides. PCI/VirtIO
-is not a prerequisite.
+is not a prerequisite. The [Quake port](../userland/quake.md) adds pointer
+sessions for mouse look, shareware data and a `QUAKE_DATA` override.
 
 VirtIO driver order is agreed: virtio-fs, then virtio-net, then virtio-blk.
 An opt-in [host-backed development overlay](host-development-overlay.md)
@@ -285,7 +286,7 @@ XID `502` remains unsupported.
 | SDL2 and graphical applications | A native software-rendered SDL2 backend supports a selected GrafX2 edit/save workflow. | Probe the pinned application first; settle input/presentation and image-library needs. zlib/libpng are useful shared candidates. Compositor and GPU support stay separate. |
 | SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
 | Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
-| Quake | A selected software-rendered port runs single-player or a demo. | Planned together with mouse input in [mouse input and Quake](mouse-and-quake.md) (quakegeneric). Audio and multiplayer can follow; no GPU prerequisite. |
+| Quake | Done: the [Quake port](../userland/quake.md) plays the shareware episode with [mouse look](../devices/mouse.md), in QEMU and natively. | Audio, multiplayer and a resolution switcher can follow; see [technical debt](../technical-debt.md#quake-port-limits). No GPU prerequisite. |
 | Native disk storage | The [block-storage foundation](../devices/block-storage.md), [native format/tools](../devices/filesystem-readonly.md) and [kernel cache/writer](../devices/filesystem-native-adapter.md) are complete. | Installation and crash/physical-media qualification remain separate; FUSE remains later. |
 
 The [application port candidates](application-ports.md) include longer-term
