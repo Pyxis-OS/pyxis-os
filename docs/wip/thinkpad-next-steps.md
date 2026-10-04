@@ -330,7 +330,8 @@ Record it in technical debt with that revisit point when implemented.
 - an address on the LAN. Today only manual static configuration exists; there is
   no DHCP;
 - **broadcast reception.** The stack currently discards broadcast and multicast IP
-  traffic. DHCP needs the same capability, so the two belong together.
+  traffic. DHCP needs the same capability, so the two belong together. The
+  [DHCP proposal](dhcp-and-link-selection.md) adds it as its first task.
 
 **Interim, without discovery:** reserve a fixed address for the ThinkPad's MAC in
 the router, configure it statically in the image, and connect from the host in
