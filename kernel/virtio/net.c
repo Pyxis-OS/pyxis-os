@@ -69,6 +69,7 @@ struct virtio_net_controller {
 
 static struct virtio_net_controller *controllers;
 static bool inventory_complete;
+static bool refresh_network_config(struct virtio_net_controller *controller, bool force);
 
 static bool sample_network_config(const struct virtio_net_controller *controller,
     uint8_t mac[VIRTIO_NET_MAC_BYTES], bool *link_up, uint8_t *generation)
@@ -433,15 +434,21 @@ void virtio_net_start(struct virtio_net_controller *controller)
     stop_network(controller, "activation rejected");
     return;
   }
+  /* Carrier may change while DRIVER_OK/delivery are off without a generation
+   * notification. Activation must publish a fresh configuration sample. */
+  if (!refresh_network_config(controller, true)) {
+    return;
+  }
   virtio_net_queue_notify(&controller->rx);
   klog("virtio-net: RX/TX active, %u buffers per queue, BSP worker owns completions\n",
        VIRTIO_NET_QUEUE_SIZE);
 }
 
-static bool refresh_network_config(struct virtio_net_controller *controller)
+static bool refresh_network_config(struct virtio_net_controller *controller, bool force)
 {
   volatile struct virtio_pci_common *common = virtio_pci_common(&controller->pci);
-  if (!controller->config_unstable && common->config_generation == controller->config_generation) {
+  if (!force && !controller->config_unstable &&
+      common->config_generation == controller->config_generation) {
     return true;
   }
   if (controller->config_unstable && !task_deadline_expired(controller->config_recheck) &&
@@ -520,7 +527,7 @@ bool virtio_net_service(struct virtio_net_controller *controller)
     stop_network(controller, "device needs reset or status changed");
     return false;
   }
-  if (!refresh_network_config(controller)) {
+  if (!refresh_network_config(controller, false)) {
     return false;
   }
 
