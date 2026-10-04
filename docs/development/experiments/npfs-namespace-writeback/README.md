@@ -6,18 +6,19 @@ The owner accepted keeping these operations immediately durable while flushing
 only affected files when required for consistency. Whole-pool file/directory sync
 and disk-scoped mount sync remain unchanged.
 
-Create and file rename commit their metadata without flushing cached files.
-Rename changes directory entries, not the moved file's inode/data, and replacement
-stages the victim's last durable record with DETACHED/list fields. An open victim
-keeps its live cached contents. Shrink flushes only its target before committing
+Create and rename without replacement commit their metadata without flushing
+cached files. Replacement rename first flushes the moved file, then stages the
+victim's last durable record with DETACHED/list fields. An open victim keeps its
+live cached contents. Shrink flushes only its target before committing
 the smaller size; this preserves pending growth, timestamps and retained partial
 block writes, and can still fail on the target's own delayed-allocation error.
 
 Before running, expected results were: a successful small create/rename would
 leave unrelated cached data pending; shrink would affect only its target;
 replacement would preserve an open victim's bytes through EOF; explicit sync
-would subsequently make retained linked data durable. Namespace durability alone
-does not promise unsynchronized file contents after a crash. Pressure/cache
+would subsequently make retained linked data durable. Rename without replacement
+does not promise unsynchronized file contents after a crash. Replacement flushes
+the new contents before removing the old name. Pressure/cache
 exhaustion and background flushing may still flush the entire pool.
 
 ## Matched ordinary workload
@@ -214,3 +215,64 @@ reported complete draining, and QEMU was quit. Host fsck passed again; extracted
 This is a persistence/integration check, not a new matched performance comparison
 against the changed main or a qualification of its USB backend. All task-owned
 QEMU, debugger and remote-client processes were stopped.
+
+## Replacement crash correction from review #387
+
+Review of `365a1df` found that metadata-only replacement could discard a durable
+old file while publishing a moved inode with durable size zero. The existing
+retained-open-victim run used an already durable source, so it did not exercise
+this case. Fix `319bc8f` flushes only the moved file when a victim exists, before
+beginning the namespace transaction and taking its rollback snapshots. A failed
+flush returns without changing either name. The victim's durable detachment and
+retained-handle behavior are unchanged. Delayed allocation may now make a
+replacement fail on the moved file's own disk-full error; that failure path was
+source-reviewed, not forced in this run.
+
+The reviewer reproduced the loss with the default 30-second interval. Our first
+two manual attempts at that interval encountered background writeback and the
+replacement survived; those attempts do not qualify cached replacement. To keep
+the cached state observable during manual inspection, both comparison kernels
+were rebuilt with the existing `CONFIG_NPFS_FLUSH_SECONDS=300` option. Baseline
+was `365a1df`; fixed kernel was `319bc8f`. All other configuration, pinned bundles,
+128 MiB initial pool, 8 MiB journal, four CPUs, 256 MiB, nested KVM, patched QEMU
+and VirtIO writeback disk settings match the earlier record. Each boot used a
+fresh `initial-disk.raw` copy and fresh OVMF variables; QEMU file names substituted
+`replacement-before` or `replacement-fixed` and the archived `*-300.iso`.
+This was a behavior check, not a new latency comparison.
+
+Each command was submitted separately, waiting for exit status zero:
+
+```text
+cat app://share/hello.txt > data://target.txt
+sync data://
+cat app://share/iobench.bin > data://tmp.bin
+mv data://tmp.bin data://target.txt
+```
+
+The fixed boot additionally wrote `unrelated.bin` from the same 1 MiB fixture
+between sync and the temp-file write. Neither boot synced after replacement.
+Read-only GDB inspection immediately after rename showed:
+
+| Kernel / inode | Live size | Durable size | Dirty size |
+| --- | ---: | ---: | --- |
+| Baseline moved file, inode 15 | 1048576 | 0 | true |
+| Fixed moved file, inode 14 | 1048576 | 1048576 | false |
+| Fixed unrelated file, inode 15 | 1048576 | 0 | true |
+
+After detaching GDB, each QEMU process was killed with SIGKILL while the cached
+state remained pending. Partition extraction used the same `dd bs=512 skip=2049
+count=262144` command; host `fsck.npfs --image ... --replay` passed for both.
+`npfs-inspect list --volume bench` reported baseline `target.txt` size zero and
+fixed `target.txt` size 1048576. The fixed file was extracted and `cmp` matched
+the source fixture exactly. Fixed `unrelated.bin` recovered with size zero, as
+expected for its unsynchronized contents: replacement did not flush it.
+[replacement-crash.txt](replacement-crash.txt) retains every guest command
+completion and both debugger snapshots. The expected remote disconnect occurred
+because of abrupt VM termination; no complete final drain is claimed.
+
+The 30-second configuration was restored and the ordinary default image rebuilt.
+All QEMU, debugger and remote-client jobs from this correction were stopped.
+No new test program, self-test, fault-injection mechanism or automation was added;
+only the manual abrupt-shutdown case requested by the review was exercised.
+Arbitrary crash points, uncertain disk failures and physical media remain outside
+this qualification.

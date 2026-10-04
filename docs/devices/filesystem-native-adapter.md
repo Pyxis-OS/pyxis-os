@@ -98,11 +98,13 @@ COMMITTED is the completion point. Checkpointing and durable EMPTY precede reuse
 of journal space and freed blocks. Cleanup updates pointers and bitmap together
 in bounded batches, retaining persistent list membership through completion.
 
-Creation and file rename commit namespace metadata without flushing cached files.
-Rename does not synchronize the moved file's contents. Remove and rename
-replacement stage the target's last durable record with DETACHED, preserving
-cached contents for retained handles. Shrinking resize flushes only its target
-before committing the smaller size; its own delayed allocation can still fail.
+Creation and rename without replacement commit namespace metadata without flushing
+cached files. Replacement rename first flushes the moved file, so a cached save
+cannot replace durable contents with an empty or partial file after a crash.
+Remove and rename replacement stage the victim's last durable record with
+DETACHED, preserving cached contents for retained handles. Shrinking resize flushes
+only its target before committing the smaller size; its own delayed allocation
+can still fail.
 Successful namespace/size transactions reach durable COMMITTED. Unrelated dirty
 files wait for sync or background/cache-pressure writeback. The
 [namespace qualification](../development/experiments/npfs-namespace-writeback/README.md)

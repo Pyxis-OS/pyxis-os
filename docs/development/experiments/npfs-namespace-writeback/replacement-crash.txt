@@ -1,0 +1,56 @@
+=== before: manually submitted guest commands ===
+cat app://share/hello.txt > data://target.txt
+sync data://
+cat app://share/iobench.bin > data://tmp.bin
+mv data://tmp.bin data://target.txt
+
+=== complete remote JSON record ===
+{"type":"ready"}
+{"type":"tab_width","columns":8}
+{"type":"fresh_line"}
+{"type":"command_complete","command":1,"kind":"exited","exit_status":0}
+{"type":"fresh_line"}
+{"type":"command_complete","command":2,"kind":"exited","exit_status":0}
+{"type":"fresh_line"}
+{"type":"command_complete","command":3,"kind":"exited","exit_status":0}
+{"type":"fresh_line"}
+{"type":"command_complete","command":4,"kind":"exited","exit_status":0}
+
+=== read-only GDB inspection before abrupt shutdown ===
+0xffffffff8000cefd in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:108
+108	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+inode=15 size=1048576 durable_size=0 size_dirty=1 refs=0 cleanup=0
+inode=3 size=0 durable_size=0 size_dirty=0 refs=0 cleanup=0
+inode=1 size=4096 durable_size=4096 size_dirty=0 refs=1 cleanup=0
+[Inferior 1 (process 1) detached]
+
+=== fixed: manually submitted guest commands ===
+cat app://share/hello.txt > data://target.txt
+sync data://
+cat app://share/iobench.bin > data://unrelated.bin
+cat app://share/iobench.bin > data://tmp.bin
+mv data://tmp.bin data://target.txt
+
+=== complete remote JSON record ===
+{"type":"ready"}
+{"type":"tab_width","columns":8}
+{"type":"fresh_line"}
+{"type":"command_complete","command":1,"kind":"exited","exit_status":0}
+{"type":"fresh_line"}
+{"type":"command_complete","command":2,"kind":"exited","exit_status":0}
+{"type":"fresh_line"}
+{"type":"command_complete","command":3,"kind":"exited","exit_status":0}
+{"type":"fresh_line"}
+{"type":"command_complete","command":4,"kind":"exited","exit_status":0}
+{"type":"fresh_line"}
+{"type":"command_complete","command":5,"kind":"exited","exit_status":0}
+
+=== read-only GDB inspection before abrupt shutdown ===
+0xffffffff8000cefd in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:108
+108	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+inode=14 size=1048576 durable_size=1048576 size_dirty=0 refs=0 cleanup=0
+inode=15 size=1048576 durable_size=0 size_dirty=1 refs=0 cleanup=0
+inode=3 size=0 durable_size=0 size_dirty=0 refs=0 cleanup=0
+inode=1 size=4096 durable_size=4096 size_dirty=0 refs=1 cleanup=0
+[Inferior 1 (process 1) detached]
+

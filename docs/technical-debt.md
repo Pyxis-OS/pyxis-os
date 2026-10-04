@@ -1031,9 +1031,10 @@ shared pool; quotas and starvation policy remain deferred until a concrete need.
 
 One transaction commits/checkpoints at a time. Cleanup delays space reuse, and
 large shrinking truncates stall further writes/resizes of the affected inode.
-Create and file rename no longer flush unrelated cached files; shrink flushes
-only its target and can still fail on that target's delayed allocation. Namespace
-success makes the directory edit durable without synchronizing unsaved moved-file
+Create and file rename no longer flush unrelated cached files. Replacement
+rename flushes the moved file before discarding the old name; shrink flushes its
+target. Both can still fail on that file's delayed allocation. Rename without
+replacement makes the directory edit durable without synchronizing moved-file
 contents. Cache exhaustion and explicit/background sync still flush the pool.
 The [namespace record](development/experiments/npfs-namespace-writeback/README.md)
 checks this separation and retained-open dirty replacement. Revisit target-only
