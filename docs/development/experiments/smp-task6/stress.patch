@@ -1,0 +1,162 @@
+diff --git a/kernel/mm/heap.c b/kernel/mm/heap.c
+index d5579c5..1cf0161 100644
+--- a/kernel/mm/heap.c
++++ b/kernel/mm/heap.c
+@@ -27,6 +27,7 @@ static uintptr_t arena_next, arena_end;
+ /* Pool and allocation counters belong to heap_lock; the arena counters, which
+  * move with arena_next, belong to growth_lock. */
+ static struct heap_stats stats;
++size_t heap_debug_rechecked, heap_debug_grown; /* SCRATCH STRESS ONLY: growth_lock */
+ 
+ static size_t pool_size_for_request(size_t request)
+ {
+@@ -176,7 +177,10 @@ void *kmalloc(size_t bytes)
+   spin_lock(&heap_lock);
+   pointer = allocate_locked(bytes);
+   spin_unlock(&heap_lock);
+-  if (!pointer) {
++  if (pointer) {
++    ++heap_debug_rechecked; /* SCRATCH STRESS ONLY */
++  } else {
++    ++heap_debug_grown; /* SCRATCH STRESS ONLY */
+     add_pool(bytes, &pointer);
+   }
+   spin_unlock(&growth_lock);
+@@ -207,3 +211,12 @@ struct heap_stats heap_get_stats(void)
+   spin_unlock(&growth_lock);
+   return snapshot;
+ }
++
++/* SCRATCH STRESS ONLY: TLSF's own consistency check under the heap lock. */
++int heap_debug_check(void)
++{
++  spin_lock(&heap_lock);
++  int result = tlsf_check(allocator);
++  spin_unlock(&heap_lock);
++  return result;
++}
+diff --git a/kernel/task.c b/kernel/task.c
+index c3b13e0..78313ab 100644
+--- a/kernel/task.c
++++ b/kernel/task.c
+@@ -21,6 +21,7 @@
+ #include <kernel/wait.h>
+ #include <stdatomic.h>
+ #include <arch/cpu_local.h>
++#include <kernel/mm/pmm.h>
+ 
+ #define TASK_STACK_SIZE (16 * 1024)
+ 
+@@ -910,6 +911,104 @@ void kernel_task_yield_if_runnable(void)
+   cpu_restore_interrupts(flags);
+ }
+ 
++/* SCRATCH STRESS ONLY. */
++int heap_debug_check(void);
++extern size_t heap_debug_rechecked, heap_debug_grown;
++#define STRESS_SLOTS 64
++
++static void fill(uint64_t *block, size_t bytes, uint64_t pattern)
++{
++  for (size_t i = 0; i < bytes / sizeof(uint64_t); ++i) {
++    block[i] = pattern ^ i;
++  }
++}
++
++static bool check(const uint64_t *block, size_t bytes, uint64_t pattern)
++{
++  for (size_t i = 0; i < bytes / sizeof(uint64_t); ++i) {
++    if (block[i] != (pattern ^ i)) {
++      return false;
++    }
++  }
++  return true;
++}
++
++static void heap_stress(size_t cpu_index)
++{
++  cpu_disable_interrupts();
++  uint64_t *blocks[STRESS_SLOTS] = {0};
++  size_t sizes[STRESS_SLOTS] = {0};
++  uint64_t patterns[STRESS_SLOTS] = {0};
++  uint64_t start = arch_monotonic_ns();
++  uint64_t end = start + UINT64_C(6000000000);
++  size_t rounds = 0, allocations = 0, failures = 0, mismatches = 0, large = 0;
++  while (arch_monotonic_ns() < end) {
++    size_t slot = rounds % STRESS_SLOTS;
++    if (blocks[slot]) {
++      if (!check(blocks[slot], sizes[slot], patterns[slot])) {
++        ++mismatches;
++      }
++      kfree(blocks[slot]);
++      blocks[slot] = NULL;
++    }
++
++    /* Mostly small blocks; every 512th is 1-4 MiB, which forces growth. */
++    size_t bytes = 16u << (rounds % 13);
++    if (rounds % 512 == 511) {
++      bytes = (size_t)(1 + rounds / 512 % 4) << 20;
++      ++large;
++    }
++    uint64_t *block = kmalloc(bytes);
++    if (!block) {
++      ++failures;
++    } else {
++      ++allocations;
++      uint64_t pattern = (uint64_t)cpu_index << 56 | rounds << 8;
++      fill(block, bytes, pattern);
++      blocks[slot] = block;
++      sizes[slot] = bytes;
++      patterns[slot] = pattern;
++    }
++    ++rounds;
++  }
++  for (size_t slot = 0; slot < STRESS_SLOTS; ++slot) {
++    if (blocks[slot]) {
++      if (!check(blocks[slot], sizes[slot], patterns[slot])) {
++        ++mismatches;
++      }
++      kfree(blocks[slot]);
++    }
++  }
++
++  struct heap_stats stats = heap_get_stats();
++  klog("stress: CPU %zu rounds=%zu allocations=%zu large=%zu failures=%zu "
++       "mismatches=%zu; TLSF check %d; pools=%zu arena=%zu retired=%zu\n",
++       cpu_index, rounds, allocations, large, failures, mismatches,
++       heap_debug_check(), stats.pools, stats.arena_bytes, stats.retired_bytes);
++
++  /* Later, with boot finished, CPU 1 asks for more than RAM. Growth maps
++   * until the PMM runs out, then retires only what it mapped. */
++  if (cpu_index == 1) {
++    while (arch_monotonic_ns() < start + UINT64_C(20000000000)) {
++      __asm__ volatile("pause");
++    }
++    struct heap_stats before = heap_get_stats();
++    void *huge = kmalloc((size_t)512 << 20);
++    struct heap_stats after = heap_get_stats();
++    void *small = kmalloc((size_t)1 << 20);
++    struct heap_stats later = heap_get_stats();
++    struct pmm_stats memory = pmm_get_stats();
++    klog("stress: growth-lock retries satisfied=%zu growths=%zu\n", heap_debug_rechecked,
++         heap_debug_grown);
++    klog("stress: huge=%p arena %zu->%zu retired %zu->%zu; next 1 MiB=%p arena %zu "
++         "pools %zu->%zu; TLSF check %d; PMM free=%zu\n",
++         huge, before.arena_bytes, after.arena_bytes, before.retired_bytes,
++         after.retired_bytes, small, later.arena_bytes, before.pools, later.pools,
++         heap_debug_check(), memory.free_frames);
++    kfree(small);
++  }
++}
++
+ [[noreturn]] void task_schedule(void)
+ {
+   size_t cpu_index = arch_cpu_index();
+@@ -921,6 +1020,7 @@ void kernel_task_yield_if_runnable(void)
+     while (!atomic_load_explicit(&started, memory_order_acquire)) {
+       cpu_wait_interrupt();
+     }
++    heap_stress(cpu_index);
+   }
+ 
+   struct scheduler *scheduler = local_scheduler();

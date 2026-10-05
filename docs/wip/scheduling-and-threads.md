@@ -397,6 +397,26 @@ The PMM's bit-by-bit first-fit scan now runs under its lock. It is left as is an
 recorded in [technical debt](../technical-debt.md#pmm-first-fit-scan-under-its-lock),
 to revisit in task 7 if page allocation on several CPUs shows waiting.
 
+### Task-6 decisions
+
+All three were accepted by the owner on 2026-10-05:
+
+1. **Arena placement and size.** 256 GiB, right after the 64 GiB general kernel
+   VM area in the same shared PML4 slot (`HEAP_ARENA_BASE`, `HEAP_ARENA_SIZE`).
+   The sizing rule is four times the PMM's 64 GiB limit, checked in
+   `heap_init()`. Running out of the arena is permanent NO_MEMORY for growth.
+2. **Failed growth.** This refines decision 4: a failed growth retires only the
+   pages it mapped, and the never-mapped remainder stays usable. Running out of
+   frames on the first page therefore retires nothing. `heap_stats` reports
+   arena use and retired bytes, also shown in the boot log. Moving RAM-file
+   storage out of the heap stays deferred.
+3. **General kernel VM.** Nothing needs it off the BSP once growth has its own
+   arena, and task 7 changes only private spaces. It stays BSP-only, now
+   asserted for the kernel space, with no lock. Remote unmapping or reuse there
+   would need TLB shootdowns.
+
+See the [task-6 record](../development/experiments/smp-task6/README.md).
+
 ### Review notes carried from #410
 
 The [#410 review](https://git.internal/PyxisOS/pyxis-os/pulls/410) approved task 1
@@ -412,15 +432,8 @@ decision. Each task settles its own note before implementing it.
   framebuffer session, so the task-1 baseline lacks them. Wake latency and
   placement are what tasks 3–4 change. Capture both before task 4 lands, for
   example through QEMU `sendkey`/`screendump`.
-- **Task 6: arena sizing.** RAM FILE backing is `kmalloc` storage that doubles as
-  the file grows, and pools are never removed. The arena therefore bounds the
-  largest RAM-file working set for the whole boot. A failed doubling also retires
-  its entire range.
-  - Proposal: name the sizing rule, for example "at least the largest supported
-    physical memory, carved from the 64 GiB kernel VM".
-  - Proposal: expose retired-range accounting as a counter.
-  - Proposal: if the sizing becomes awkward, revisit RAM-file backing; it need
-    not live in the heap.
+- **Task 6: arena sizing.** Resolved by task-6 decisions 1 and 2. Moving
+  RAM-file backing out of the heap remains a deferred option.
 
 ## Performance records and validation
 
@@ -519,10 +532,12 @@ updates current subsystem docs only for behavior it implements.
    [task-5 record](../development/experiments/smp-task5/README.md). Only the
    PMM's own failure path ran; caller rollback is deferred to task 7, when
    callers leave the BSP.
-6. [ ] **Enable safe concurrent heap growth.** Synchronize TLSF/stats and kernel-VM
-   bookkeeping, implement the agreed growth/publication/unwind contract, and keep
-   general mapping reuse constrained. Review the full lock graph and allocation
-   recursion; record matched allocation results.
+6. [x] **Enable safe concurrent heap growth.** Synchronize TLSF/stats, implement
+   the agreed growth/publication/unwind contract, and keep general mapping reuse
+   constrained; the general kernel VM stays BSP-only (task-6 decision 3). Review
+   the full lock graph and allocation recursion; record matched allocation
+   results. See the [memory boundaries](../kernel/smp.md#memory-and-output-boundaries)
+   and the [task-6 record](../development/experiments/smp-task6/README.md).
 7. [ ] **Make private MEMORY operations local.** Remove the BSP request/loan for
    this exclusive single-task path, preserving behavior, profiling and cleanup.
    Verify concurrent callers on distinct roots, migrated callers, termination and

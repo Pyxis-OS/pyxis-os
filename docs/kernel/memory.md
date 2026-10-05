@@ -47,9 +47,9 @@ subdivide acquired regions without entering the kernel for each small allocation
 ## Address-space handoff
 
 VM mutation and physical/heap allocation remain on the BSP with interrupts
-disabled. The physical allocator and scratch mappings underneath are already safe
-on other CPUs ([SMP](smp.md#memory-and-output-boundaries)), but their callers are
-not yet. A memory call cannot use the existing early-publication pattern of a
+disabled. The heap, physical allocator and scratch mappings underneath are
+already safe on other CPUs ([SMP](smp.md#memory-and-output-boundaries)), but
+their callers are not yet. A memory call cannot use the existing early-publication pattern of a
 capability-table growth request: the requester must stop using its private root
 before the BSP may modify it.
 
