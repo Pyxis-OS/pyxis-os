@@ -497,8 +497,8 @@ These helpers run with interrupts disabled on the process's CPU. The x86_64
 check reads the active root through recursive mappings, checking each ancestor
 before descending and requiring user access (and write access when requested)
 at every level. It rejects null-page, higher-half, noncanonical, overflowing,
-unmapped and insufficiently permitted ranges. It never uses shared scratch
-slots, VM range metadata, allocation, or an address-space switch.
+unmapped and insufficiently permitted ranges. It never uses scratch slots,
+VM range metadata, allocation, or an address-space switch.
 
 Validation remains valid through the copy because user backing is eager and
 the process has one task with stable, private mappings. Copy helpers never

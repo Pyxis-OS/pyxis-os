@@ -376,15 +376,36 @@ latency. The scheduler does not know about display timing. See
 
 ## Memory and output boundaries
 
-Allocators, VM metadata, page-table mutation and the two scratch mappings remain
-BSP-only and require interrupts disabled. A kernel task must save/disable
-interrupts around these calls and restore them afterward; being pinned to the
-BSP alone does not prevent same-CPU reentry. AP syscalls may access their
-capabilities and block on endpoints, but cannot allocate memory.
+The heap, VM metadata and page-table mutation remain BSP-only and require
+interrupts disabled, and so does every current caller of the physical
+allocator. A kernel task must save/disable interrupts around these calls and
+restore them afterward; being pinned to the BSP alone does not prevent same-CPU
+reentry. AP syscalls may access their capabilities and block on endpoints, but
+cannot allocate memory.
+
+Two lower layers are already safe on any CPU with interrupts disabled, outside
+interrupt and fault entry:
+
+- **Physical allocator.** `pmm_alloc()`, `pmm_free()` and `pmm_get_stats()`
+  serialize the frame bitmap and its counters with one short lock. Frames come
+  back unzeroed; the caller zeroes them outside the lock. Memory-pressure
+  notification can also come from any CPU.
+- **Scratch mappings.** Each CPU index owns two slots in the 2 MiB window at
+  `TEMP_MAP_BASE`, enough for all 256 xAPIC IDs. Every slot's page-table
+  ancestors exist before any private root copies the kernel slots. Only the
+  owning CPU maps its slots, with a local `invlpg`; IF=0 keeps it on that CPU
+  until it unmaps. Frame zeroing and page-table walks use the calling CPU's
+  slots.
+
+Spinlocks (`include/kernel/spinlock.h`) are held with IF=0 and never across
+allocation, logging, a context switch or waiting for another CPU. The PMM lock
+is a leaf: allocation notifies memory pressure only after releasing it. The
+pressure lock and resource and group locks are taken before the queue lock,
+never after it.
 
 User-buffer checks are a narrow exception to BSP-only queries: the executing
 CPU can inspect its active private root through recursive mappings, with IF=0
-and stable user mappings. They do not use shared scratch slots or VM metadata.
+and stable user mappings. They use no scratch slots or VM metadata.
 General `vm_query()` and page-table mutation remain BSP-only.
 
 Private spaces are built before publication and reclaimed only after retirement.

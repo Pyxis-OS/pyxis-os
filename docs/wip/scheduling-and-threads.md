@@ -379,6 +379,24 @@ Placement treats every thread as an independent CPU, so two busy tasks can share
 while other cores idle. Filling one thread per core first would be a separate, measured
 change.
 
+### Task-5 decisions
+
+Both were accepted by the owner on 2026-10-05:
+
+1. **Lock primitive.** A small `struct spinlock` in `include/kernel/spinlock.h`
+   asserts IF=0, spins with `pause`, and has no nesting or owner tracking. The
+   PMM and pressure state use it, and so will task 6's heap and growth locks.
+   The scheduler's queue lock was converted to it with no change in behaviour.
+2. **Validation.** No committed caller uses the new paths off the BSP, so they
+   were checked with a throwaway stress patch: every AP allocates, zeroes,
+   pattern-checks and frees frames and walks private roots while the BSP boots.
+   GDB inspected each CPU's scratch slots. See the
+   [task-5 record](../development/experiments/smp-task5/README.md).
+
+The PMM's bit-by-bit first-fit scan now runs under its lock. It is left as is and
+recorded in [technical debt](../technical-debt.md#pmm-first-fit-scan-under-its-lock),
+to revisit in task 7 if page allocation on several CPUs shows waiting.
+
 ### Review notes carried from #410
 
 The [#410 review](https://git.internal/PyxisOS/pyxis-os/pulls/410) approved task 1
@@ -493,10 +511,12 @@ updates current subsystem docs only for behavior it implements.
    completion boundary; invalid requests preserve existing placement.
    Include BSP userspace eligibility once its prerequisites hold; complete
    it no later than task 7. Record matched scheduling/concurrency results.
-5. [ ] **Prepare architecture and physical allocation for concurrency.** Add
+5. [x] **Prepare architecture and physical allocation for concurrency.** Add
    CPU-local scratch mappings, synchronized PMM operations/statistics and explicit
    interrupt/lock rules. Retain existing mutation call sites until the full memory
-   path is safe; validate zeroing, rollback and ownership.
+   path is safe; validate zeroing, rollback and ownership. See the
+   [memory boundaries](../kernel/smp.md#memory-and-output-boundaries) and the
+   [task-5 record](../development/experiments/smp-task5/README.md).
 6. [ ] **Enable safe concurrent heap growth.** Synchronize TLSF/stats and kernel-VM
    bookkeeping, implement the agreed growth/publication/unwind contract, and keep
    general mapping reuse constrained. Review the full lock graph and allocation
