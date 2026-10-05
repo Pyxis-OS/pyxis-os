@@ -18,8 +18,10 @@ struct vm_space *vm_kernel_space(void);
  * with an empty user area. Failure sets *result to NULL. Allocation, queries
  * and mutation are BSP-only, IF=0, and asserted for the kernel space, whose
  * reused ranges have no remote invalidation; no VM operations from fault
- * handlers. A running task must leave its private root and lend ownership
- * through the scheduler before BSP mutation; resumption reloads CR3. */
+ * handlers. A process's only task may also change its own private space in a
+ * syscall, IF=0, on the CPU where that space is active. Otherwise a running
+ * task must leave its private root and lend ownership through the scheduler
+ * before BSP mutation; resumption reloads CR3. */
 enum mm_result vm_space_create(struct vm_space **result);
 /* Each CPU may activate the kernel space or a private space it exclusively
  * owns. Always flushes that CPU's TLB, including shared kernel translations. */

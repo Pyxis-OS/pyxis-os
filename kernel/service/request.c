@@ -10,7 +10,6 @@
 #include <kernel/object/capability.h>
 #include <kernel/object/namespace.h>
 #include <kernel/object/endpoint.h>
-#include <kernel/object/memory.h>
 #include <kernel/object/display.h>
 #include <kernel/object/system_info.h>
 #include <kernel/panic.h>
@@ -34,8 +33,6 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct terminal_create_service_request, request)},
   [BSP_SERVICE_PIPE_CREATE] = {sizeof(struct pipe_create_request), alignof(struct pipe_create_request),
       offsetof(struct pipe_create_request, request)},
-  [BSP_SERVICE_MEMORY] = {sizeof(struct memory_request), alignof(struct memory_request),
-      offsetof(struct memory_request, request)},
   [BSP_SERVICE_DISPLAY] = {sizeof(struct display_request), alignof(struct display_request),
       offsetof(struct display_request, request)},
   [BSP_SERVICE_CAPABILITY_GROW] = {sizeof(struct capability_growth_request), alignof(struct capability_growth_request),
@@ -137,7 +134,6 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_READINESS:
   case BSP_SERVICE_SYSTEM_INFO_MEMORY:
     return false;
-  case BSP_SERVICE_MEMORY:
   case BSP_SERVICE_DISPLAY:
     return true;
   default:
@@ -177,9 +173,6 @@ void bsp_request_publish_deferred(struct bsp_request *request)
 {
   KASSERT(request && request->state == BSP_REQUEST_DEFERRED);
   KASSERT(requires_handoff(request->service));
-  if (request->service == BSP_SERVICE_MEMORY) {
-    memory_request_published((struct memory_request *)request);
-  }
   publish_request(request);
 }
 
@@ -279,8 +272,6 @@ static void service_request(struct bsp_request *request)
   case BSP_SERVICE_SYSTEM_INFO_MEMORY:
     system_info_memory_execute((struct system_info_memory_request *)request);
     break;
-  case BSP_SERVICE_MEMORY:
-    memory_request_execute((struct memory_request *)request);
     break;
   case BSP_SERVICE_DISPLAY:
     display_request_execute((struct display_request *)request);
