@@ -2,14 +2,15 @@
 
 With `CONFIG_XHCI=y`, Caelum independently probes supported boot-present storage
 on each discovered xHCI controller, including traversed hub descendants. The
-checked-in default remains `n`. Supported disks register with the kernel-only
+checked-in default is `y`. Supported disks register with the kernel-only
 [block interface](block-storage.md) and receive [GPT snapshots](gpt.md). Trusted init can open USB-backed npfs volumes
 using configured GUID authority, then delegate ordinary directory/file grants.
 Explicit writable mounts require known clear write protection and successful
 cache-synchronization qualification; other readable disks remain read-only.
-Installer raw-disk authority remains VirtIO-only; USB registration grants no
-public raw-disk access. Hotplug and physical write/durability qualification remain
-separate work.
+The trusted Install init can delegate bounded [installer raw-disk
+authority](installer-authority.md) for retained USB candidates. USB registration
+alone grants applications no raw-disk access. Hotplug and physical
+write/durability qualification remain separate work.
 
 ## Binding and preparation
 
@@ -205,9 +206,15 @@ qualified writable backend; read-only opening still refuses replay. Unknown
 read-only-compatible filesystem features also prevent writes and replay.
 Returned roots carry the selected boot ID and remain independently retained
 through delegation and executable capture. USB addresses, routes, GUIDs and
-volume names do not give an application mount or raw-block authority. Installer
-enumeration, explicit device opens and disk-volume inspection remain VirtIO-only
-through the separate `block_installer_*` view.
+volume names do not give an application mount or raw-block authority. The
+separate `block_installer_*` view exposes retained USB and VirtIO candidates only
+through trusted Install init. It waits for sealed observed discovery, permitting
+partial USB coverage while refusing lost registry records or incomplete VirtIO
+bookkeeping. Unsupported, failed, protected and unqualified candidates remain
+visible for eligibility diagnosis. An exclusive write claim requires qualified
+write/flush support, no latched write failure and no mounted pool or existing
+claim. Installer selection and typed consent remain unchanged; unseen disks
+cannot be listed. See [installer authority](installer-authority.md).
 
 ## Media and retained results
 

@@ -46,16 +46,23 @@ the read-only system-root reopen.
 
 ## Inventory and raw access
 
-Installer disk authority remains VirtIO-only; configured USB mounting, including
-explicitly writable mounts on qualified disks, uses the separate native GUID
-authority.
+Installer disk authority covers retained VirtIO and USB BOT/SCSI candidates.
+USB write claims require the same per-device C.1 qualification as writable native
+mounts: known write-protection-clear media and a successful real blocking cache
+synchronization. Configured native mounting uses its separate GUID authority.
 
 [`include/abi/disk.h`](../../include/abi/disk.h) defines two native protocols.
 DISKS ENUMERATE requires ENUMERATE and takes a zero-based inventory index; it
-returns NOT_FOUND at the end and refuses an incomplete inventory. IDs select
-physical devices for this boot independently of mutable GPT GUIDs. Unsupported
-and failed candidates remain listed. INFO reports preparation, geometry when
-known, writable/flush/failure flags, mounted/claimed state and the last completed
+returns NOT_FOUND at the end. ENUMERATE and OPEN wait within the operation
+deadline for boot discovery to seal the retained candidate IDs. They refuse
+lost registry records or incomplete VirtIO candidate bookkeeping, but accept
+sealed observed USB inventory when coverage is partial, such as an unsupported
+EHCI controller or uninspected hub descendants. Unseen disks cannot be listed
+and may conceal other eligible targets. IDs select physical devices for this
+boot independently of mutable GPT GUIDs. Unsupported and failed retained
+candidates remain listed, as do protected and unqualified USB disks. INFO
+reports preparation, geometry when known, writable/flush/failure flags,
+mounted/claimed state and the last completed
 GPT status/GUID. A GPT GUID is available only for healthy or degraded metadata.
 
 DISKS OPEN requires OPEN and selects an ID plus READ_ONLY or READ_WRITE access.
@@ -64,7 +71,9 @@ exclusive claim and provides no snapshot against another raw writer. READ_WRITE
 also grants WRITE/RELEASE and requires an operational writable device with flush
 support and no latched write failure. Any existing raw claim or retained npfs
 pool on that device returns BUSY, including a read-only pool or one with no live
-handles. Successful raw claims block all mounts on the device.
+handles. READ_WRITE also waits for the selected device's GPT scan; inventory
+sealing does not require every GPT scan to finish. Successful raw claims block
+all mounts on the device.
 
 READ and WRITE use byte offsets and nonzero lengths aligned to the logical block
 size, within device bounds and at most `DISK_IO_MAX_BYTES` (4096). WRITE captures
@@ -104,6 +113,11 @@ kernel service does not check `SAFE_TO_WIPE`, authenticate contents or interpret
 partition names as consent. Target preparation and explicit consent belong to
 the trusted installer. The installer selects the sole eligible disk automatically or asks for a disk
 number when several qualify, then requires typed `wipe` for install or `update`
-for Update. The installer does not expose USB raw access. Qualified USB write/flush support is available only
-through configured native mounts and the kernel block interface. AHCI, NVMe, hotplug,
-physical-media qualification and power-loss validation remain outside this interface. See [block storage](block-storage.md) and [GPT discovery](gpt.md).
+for Update. Partial USB coverage does not change these selection and consent
+rules; a sole eligible observed disk is not proof that no other disk exists.
+USB raw access follows the same claims, bounded I/O, ordered flushes, explicit
+release and GPT rescan as VirtIO. Normal boots still grant no raw-disk service.
+AHCI, NVMe, hotplug, physical installation qualification and power-loss
+validation remain outside this interface. The physical USB step is C.4 of the
+[USB plan](../wip/usb-installation.md). See [block storage](block-storage.md) and
+[GPT discovery](gpt.md).

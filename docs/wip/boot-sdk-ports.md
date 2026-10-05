@@ -124,8 +124,9 @@ exits, so SMP has a stable base:
 - **Filesystem:** after [system updates](../userland/system-updates.md) task 2,
   merged 2026-10-05.
 - **USB:** after the first native installation, which the owner moved ahead of
-  SMP on 2026-10-05. That is C.3, the installer's USB raw authority, and C.4,
-  the physical installation of the [USB plan](usb-installation.md). The commit
+  SMP on 2026-10-05. C.3, the installer's USB raw authority, is QEMU-qualified;
+  C.4, the physical installation of the [USB plan](usb-installation.md), remains
+  pending owner assignment. The commit
   installed in C.4 is then tagged `0.0.1`. Further USB work waits.
 - **Networking:** after the link-selection task, merged 2026-10-05. Native lease-renewal
   qualification can wait.
@@ -258,8 +259,9 @@ behavior. BSP request separation is complete. FUSE is not a prerequisite.
 The installer's **Update** choice replaces the ESP from newer live media while
 preserving GPT identities and the npfs pool. Healthy GPT and compatible
 empty-journal pool metadata anchor interrupted ESP recovery. Physical
-installation/update qualification and USB installer raw authority remain
-[deferred](../technical-debt.md#installer-inspection-and-recovery-limits).
+installation/update qualification remains
+[deferred](../technical-debt.md#installer-inspection-and-recovery-limits). C.3 also
+[qualifies USB installer raw authority in QEMU](../development/experiments/usb-installer-c3/README.md).
 
 The [USB installation proposal](usb-installation.md) records a replaceable SanDisk
 target and QEMU-first stages: boot Limine/kernel/archive from a FAT32 EFI partition,
@@ -283,8 +285,9 @@ ordered whole-medium cache flushes and per-device qualification for explicitly
 requested writable GUID mounts. Unqualified healthy media retain read-only
 service. C.2 qualifies the [persistent USB edit/build/run loop](../development/edit-build-run.md#persistent-usb-development)
 in QEMU, including explicit sync, fresh-process persistence and read-only use.
-Physical write qualification remains unassigned; installer raw USB access remains
-deferred. Reusable
+C.3 exposes sealed observed USB candidates to trusted installer inventory and
+qualified exclusive raw claims, with QEMU Install/Update/recovery qualification.
+C.4 physical write qualification remains pending owner assignment. Reusable
 controller/USB/class/block boundaries are required, without speculative driver
 frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.

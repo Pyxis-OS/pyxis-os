@@ -1,11 +1,11 @@
 # xHCI controllers
 
-Native xHCI initialization defaults to disabled by `CONFIG_XHCI=n` in
-[`.config`](../../.config). Both controller preparation and worker
-startup are skipped, with `xHCI: disabled at build time` in the boot log. The
-kernel makes no xHCI claim or DMA allocation. Enable XHCI under Caelum in
-[`make menuconfig`](../development/configuration.md), or set `CONFIG_XHCI=y`
-directly in `.config`, and rebuild to resume explicit QEMU bring-up.
+Native xHCI initialization defaults to enabled by `CONFIG_XHCI=y` in
+[`.config`](../../.config) and Kconfig. XHCI under Caelum in
+[`make menuconfig`](../development/configuration.md) controls controller preparation
+and worker startup. Set `CONFIG_XHCI=n` and rebuild to disable them: the boot log
+reports `xHCI: disabled at build time`, and the kernel makes no xHCI claim or DMA
+allocation.
 Every discovered xHCI function is inspected independently when enabled.
 Owner-reported ThinkPad inventory and reads provide limited native evidence;
 broader controller and recovery qualification remain pending.
@@ -15,9 +15,9 @@ When enabled, Caelum prepares each discovered PCI xHCI function and its own
 slots/contexts for boot-present root-port devices and bounded hub descendants.
 [USB enumeration](usb-enumeration.md)
 addresses them, checks descriptors and publishes a read-only boot inventory.
-[Read-only BOT/SCSI probes](usb-storage.md) consume bounded bulk transfers; USB block access remains pending. The archive-backed shell and existing VirtIO block behavior remain available.
-[Phase B](../wip/usb-installation.md#b-native-read-only-usb-storage) tracks those
-remaining layers. [Native observations](../targets/t14-gen1-amd/usb-bringup.md)
+[BOT/SCSI storage](usb-storage.md) provides native block access and qualified
+write/flush support. The archive-backed shell and existing VirtIO block behavior
+remain available. [Native observations](../targets/t14-gen1-amd/usb-bringup.md)
 cover the owner's ThinkPad profiles; they do not establish broad hardware qualification.
 
 ## Preparation and activation

@@ -52,10 +52,12 @@ HPET period, but interrupt delays must also remain within the sampling bound.
 Choose an interval well below wrap time; timer deliveries are triggers, not
 elapsed-time accounting. See the [clock contract](../kernel/timekeeping.md).
 
-**XHCI** controls native USB. `CONFIG_XHCI=n` disables
+**XHCI** controls native USB and defaults to enabled (`CONFIG_XHCI=y`).
+`CONFIG_XHCI=n` disables
 native controller preparation and worker startup; `CONFIG_XHCI=y` enables them.
 Menuconfig may write the disabled choice as `# CONFIG_XHCI is not set`; that is
-equivalent to `n`. Native xHCI is qualified only in QEMU. See the
+equivalent to `n`. QEMU qualification and limited owner-reported native
+observations do not establish broad hardware qualification. See the
 [controller reference](../devices/usb-xhci.md) for the hardware limits.
 
 Rebuild normally after saving. Configuration edits are local Git changes;

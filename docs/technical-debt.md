@@ -690,8 +690,9 @@ media again and choosing Update while the GPT and pool remain eligible; see the
 [QEMU recovery record](development/experiments/system-updates-task2/README.md).
 Revisit the absence of fallback/atomic replacement with a separately agreed
 in-system update design. An interrupted installation can leave a partial disk,
-without rollback or automatic repair. The ordinary QEMU success/refusal cases and host structural
-checks do not qualify power loss, uncertain I/O, USB/NVMe or physical firmware.
+without rollback or automatic repair. Ordinary QEMU success/refusal cases and
+host structural checks do not qualify power loss, uncertain I/O, physical USB
+media, NVMe or physical firmware.
 Revisit those limits with the assigned end-to-end hardware task and separately
 authorized recovery validation.
 
@@ -699,10 +700,10 @@ The owner deferred native ThinkPad installation on 2026-10-04 while completing
 [task-5 QEMU
 qualification](development/experiments/native-filesystem-task5/README.md).
 VirtIO and per-device qualified USB now support writable native mounts. USB
-write/cache synchronization is implemented for C.1; installer raw-disk authority
-remains VirtIO-only, and physical writable mounting, installation/update and
-durability qualification remain pending. USB raw authority needs its own focused
-integration before it can enable the installer. Resume the physical step with an
+write/cache synchronization is implemented for C.1, and C.3 enables the trusted
+installer's bounded raw authority for retained USB candidates. Physical writable
+mounting, installation/update and durability qualification remain pending in C.4
+of the [USB plan](wip/usb-installation.md). Resume that physical step with an
 explicitly selected expendable target after the QEMU integration stages. The
 internal NVMe remains unsupported.
 
@@ -1308,11 +1309,11 @@ monotonic duration from the current wall clock.
 
 ## xHCI hardware profile and runtime retention
 
-Native xHCI initialization is [disabled by default](devices/usb-xhci.md) while
-broader controller and recovery qualification remain pending. Firmware USB boot
-remains available; Caelum enumeration and storage probes require an explicit
-`CONFIG_XHCI=y` image. Limited owner-reported native reads do not change that
-default. Revisit it after physical hardware qualification is agreed.
+Native xHCI initialization is [enabled by default](devices/usb-xhci.md), as the
+owner requested on 2026-10-05. Broader controller and recovery qualification
+remain pending; this default change does not expand the supported hardware
+profile. `CONFIG_XHCI=n` remains available for images that must skip native
+controller preparation and workers.
 
 The [initial controller](devices/usb-xhci.md) has agent-run QEMU coverage and
 limited owner-reported ThinkPad evidence, with independently discovered
@@ -1430,8 +1431,15 @@ discovery. Configured native GUID authority supports USB mounts after sealed
 discovery and terminal GPT scans, including explicitly writable mounts on
 qualified media. Observed uniqueness is accepted under partial discovery;
 unseen disks may conceal another matching GUID. Duplicate observed matches
-fail, and selected-disk errors never fall back. Installer raw authority remains
-VirtIO-only; USB public raw access is deferred. Two captured I/O slots per
+fail, and selected-disk errors never fall back. Installer raw authority now
+accepts retained USB candidates after observed discovery is sealed. It permits
+partial USB coverage while refusing lost registry records or incomplete VirtIO
+bookkeeping. Unseen disks may conceal additional eligible targets; the existing
+sole-eligible selection and typed consent apply only to observed disks. Normal
+boots grant no raw service, and qualified write claims still exclude mounted or
+claimed devices and latched write failure. Revisit inventory coverage and target
+selection with native C.4 evidence rather than inferring a complete machine
+inventory from a successful installer list. Two captured I/O slots per
 supported disk and snapshot capacity are
 reserved before AP startup; GPT USB scans share one scratch buffer. Revisit the
 pre-AP reservation cost with measured topology/resource requirements and later

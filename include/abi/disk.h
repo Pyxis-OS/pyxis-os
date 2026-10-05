@@ -42,9 +42,11 @@ enum disk_gpt_status {
   DISK_GPT_NO_MEMORY, DISK_GPT_IO_ERROR, DISK_GPT_TIMED_OUT,
 };
 
-/* ENUMERATE takes a zero-based inventory index, returns NOT_FOUND at the end,
- * and refuses an incomplete inventory. IDs identify physical devices for this
- * boot, independent of mutable GPT GUIDs. Unsupported devices remain listed.
+/* ENUMERATE waits for boot disk discovery, takes a zero-based observed inventory
+ * index and returns NOT_FOUND at the end. Lost registry records or incomplete
+ * VirtIO bookkeeping refuse inventory; partial USB topology alone does not.
+ * Unseen devices cannot be listed. IDs identify physical devices for this boot,
+ * independent of mutable GPT GUIDs. Unsupported devices remain listed.
  * INFO uses the same reply. Unknown geometry is zero; GPT GUID is nonzero only
  * when a healthy/degraded GPT is available. GPT fields describe the last
  * completed scan; raw writes refresh them on release, not after each write. */

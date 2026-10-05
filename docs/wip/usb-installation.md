@@ -4,12 +4,13 @@ Status: Phase A image assembly/USB boot and Phase B.3 enumeration/control
 transfers, BOT/SCSI reads and kernel block/GPT integration implemented,
 2026-10-04; native USB mounts and Phase C.1 write/flush support are implemented.
 Qualified disks support explicitly requested writable mounts. Phase C.2's
-QEMU persistent edit/build/run loop is qualified; physical validation remains
-pending.
+QEMU persistent edit/build/run loop is qualified. Phase C.3's trusted installer
+USB raw authority is implemented and QEMU-qualified; physical validation remains
+pending in C.4.
 Owner-reported [ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md) now
 include root and USB 3 hub-descendant storage reads. Broader hardware/recovery
 qualification of native mounting remains pending. Inspection-first work includes
-[USB 2/3 hub traversal](../devices/usb-hubs.md). The [build-time switch](../devices/usb-xhci.md) defaults to disabled;
+[USB 2/3 hub traversal](../devices/usb-hubs.md). The [build-time switch](../devices/usb-xhci.md) defaults to enabled;
 firmware USB boot and archive-backed programs remain available.
 The owner wants a replaceable USB drive as the first
 physical installation target, with QEMU development before laptop validation.
@@ -182,13 +183,14 @@ including individual unsupported/setup-failure results; supported devices serve
 queued reads and GPT discovery. Configured GUID authority now supports native
 USB mounts, including explicit writable requests on qualified media. Public
 raw-disk operations remain deferred.
-Enabling `CONFIG_XHCI` enables these consumers; the checked-in default remains `n`.
+Enabling `CONFIG_XHCI` enables these consumers; the checked-in default is `y`.
 
 Block integration must preserve today's stable per-device IDs, explicit disk
 handles and native mount authority. USB addresses, topology, serial numbers and
-GUID knowledge grant no filesystem authority. B.5 preserves a separate VirtIO-only
-installer domain while configured native GUID authority searches the full
-registry; the old global `block.backend` and
+GUID knowledge grant no filesystem authority. B.5 initially preserved a separate
+VirtIO-only installer domain; C.3 extends trusted installer inventory and claims
+to observed USB candidates with existing per-device qualification. Configured
+native GUID authority searches the full registry; the old global `block.backend` and
 unique-disk policy are superseded, not implemented requirements.
 
 ### Controller resources and startup
@@ -254,7 +256,8 @@ and scans USB media sequentially through ordinary block tickets, with one shared
 pre-AP scratch allocation. Partial USB discovery does not disable individually
 READY disks or existing VirtIO authority. Private queues, DMA and recovery stay
 with each backend. Configured USB mount authority is implemented;
-public raw USB authority remains deferred.
+C.3 adds trusted installer USB raw authority with existing qualification and
+exclusion guards. Ordinary programs receive no raw USB authority.
 
 ### Requests, deadlines and failure ownership
 
@@ -395,8 +398,8 @@ host tools and the later physical-preparation procedure.
    candidates through the per-device block contract; use bounded asynchronous
    read tickets and retain per-device setup/failure outcomes. Seal boot discovery
    separately from completeness, preserving usable devices under partial inventory.
-   Installer disk grants remain VirtIO-only; configured filesystem mounts use
-   the full registry in the following task.
+   This slice kept installer disk grants VirtIO-only; C.3 later extends them.
+   Configured filesystem mounts use the full registry in the following task.
 6. [x] **Integrate read-only USB mounting.** Reuse GPT, filesystem core and native
    object interfaces, preserving explicit device authority. Trusted init selects
    partition, volume and binding within supplied disk authority; programs receive
@@ -416,9 +419,9 @@ host tools and the later physical-preparation procedure.
    tickets and captured buffers. Known clear write protection and successful
    blocking synchronization qualify each disk; unsupported/unknown capabilities
    preserve reads on healthy transport. The owner accepted explicitly requested
-   writable mounts through configured GUID authority; installer raw USB access
-   remains deferred. Per-device FIFO orders flushes, failed or abandoned published
-   mutations latch write failure, and no mutation is replayed. See the
+   writable mounts through configured GUID authority; C.3 subsequently adds
+   trusted installer raw access. Per-device FIFO orders flushes; failed or
+   abandoned published mutations latch write failure, and no mutation is replayed. See the
    [C.1 implementation](../devices/usb-storage.md) and
    [QEMU qualification record](../development/usb-storage-bringup.md#2026-10-04-qualified-writes-and-cache-synchronization).
    Error/recovery branches remain source-reviewed without forced-error validation;
@@ -434,14 +437,23 @@ host tools and the later physical-preparation procedure.
    [qualification record](../development/usb-storage-bringup.md#persistent-usb-development-loop-c2)
    includes revisions, configuration, hashes and host structural inspection.
    No runtime, authority or installer changes were needed.
-3. [ ] **Give the installer USB raw authority.** USB disks that passed C.1
+3. [x] **Give the installer USB raw authority.** USB disks that passed C.1
    write qualification join the installer's exclusive raw-disk claim on the same
    terms as VirtIO disks: inventory with eligibility reasons, exclusive claim,
    bounded writes, flush, release and rescan. Unqualified, write-protected or
    mounted USB disks stay ineligible with a reason. No selection policy is added
    beyond C.1 qualification, and raw access stays limited to trusted install init.
-   - **Finish when:** in QEMU, with live media and an emulated USB target of
-     512-byte logical sectors, Install and then Update reach the same results as
+   The owner accepted sealed observed USB inventory on 2026-10-05: wait for boot
+   discovery to finish, then retain every observed candidate for eligibility
+   reporting, even under partial USB topology coverage. Lost registry records or
+   incomplete VirtIO bookkeeping still refuse inventory. Unseen disks cannot be
+   listed and may conceal other eligible targets; existing selection and typed
+   consent apply to the observed candidates.
+   The [C.3 qualification record](../development/experiments/usb-installer-c3/README.md)
+   records USB Install, target-only boots, Update with every outside-ESP byte
+   preserved, real interrupted Update/recovery, and mounted/protected refusal.
+   - **Qualified in QEMU:** with live media and an emulated USB target of
+     512-byte logical sectors, Install and then Update reached the same results as
      the [VirtIO update qualification](../development/experiments/system-updates-task2/README.md):
      - a target-only boot from the USB disk runs the installed revision;
      - a synced file survives Update, with every byte outside the ESP unchanged;
@@ -476,8 +488,8 @@ host tools and the later physical-preparation procedure.
   accepted per-device read-only contract. Enumeration publishes root devices and
   supported USB 2/3 hub descendants. B.4 adds an internal BOT/SCSI media probe;
   B.5 read-only mount integration and C.1 qualified writes/flushes are implemented.
-  C.2's QEMU persistent development loop is qualified. C.3 installer USB raw
-  authority and C.4 physical validation are planned but unassigned.
+  C.2's QEMU persistent development loop and C.3's trusted installer USB raw
+  authority are qualified. C.4 physical validation remains pending owner assignment.
 - Updating an installation is owned by the installer's
   [Update choice](../userland/system-updates.md), which preserves the pool.
   Read-only disk selection does not qualify a write target or authenticate media.

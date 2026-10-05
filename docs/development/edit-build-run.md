@@ -199,7 +199,7 @@ for the completion points. No host process may modify an attached disk.
 The [C.2 qualification record](usb-storage-bringup.md#persistent-usb-development-loop-c2)
 records manual editor/compiler, restart and read-only observations. An orderly
 QEMU restart is not a physical cache or power-loss qualification. Restore
-`CONFIG_XHCI=n` and run `make image` without init/mount overrides to return to
+the checked-in `CONFIG_XHCI=y` and run `make image` without init/mount overrides to return to
 the checked-in boot defaults.
 
 ## Use a remote terminal

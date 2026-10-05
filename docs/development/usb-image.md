@@ -102,8 +102,8 @@ support. `debug-usb` pauses with GDB on `127.0.0.1:1234`, as described in the
 [debugger guide](gdb.md). Ordinary `make run` and `make debug` retain ISO boot.
 
 After firmware boot, exercise `app://` programs and RAM-backed `home://` in the
-shell. The checked-in `CONFIG_XHCI=n` leaves kernel USB access disabled. With
-xHCI enabled, supported boot-present BOT disks provide native block reads and
+shell. The checked-in `CONFIG_XHCI=y` enables native USB access. With
+that setting, supported boot-present BOT disks provide native block reads and
 GPT discovery. Qualified disks also support explicitly authorized writes and
 ordered cache flushes. The default init does not mount this sample volume;
 configure its actual `MOUNT_DISK` GUID and an explicit trusted read-only mount

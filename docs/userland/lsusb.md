@@ -36,6 +36,6 @@ initializing snapshots, query/authority failures, bad usage and output failures 
 
 This slice covers root devices and [hub descendants](../devices/usb-hubs.md).
 It has no strings or serials, rescan or hotplug. Later removal or failure leaves the boot observation
-unchanged. `CONFIG_XHCI=n` remains the default; enable it explicitly to qualify
-hardware. The [controller profile](../devices/usb-xhci.md) still has limits, and the
+unchanged. `CONFIG_XHCI=y` is the default; disable it explicitly when a
+bring-up image should leave native USB untouched. The [controller profile](../devices/usb-xhci.md) still has limits, and the
 ThinkPad native clock prerequisite remains separate.
