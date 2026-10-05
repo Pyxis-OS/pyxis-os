@@ -122,8 +122,9 @@ Native evidence comes from the owner's ThinkPad T14 Gen 1 AMD and is
   qualified for writes. Booted alone, it ran `4dc804a` with writable `system://`.
   A synced `keep.bin` kept its SHA-256 across a synced power-off. The owner
   tagged `4dc804a` as `0.0.1`.
-- **2026-10-05, Update:** Update from SMP task 2a live media replaced the stick's
-  ESP in 14 s. The SHA-256 of `keep.bin` was unchanged afterwards.
+- **2026-10-05, Update:** Update from SMP task 2a live media (`9b7b932`) replaced
+  the stick's ESP in 14 s. The SHA-256 of `keep.bin` was unchanged afterwards, and
+  the stick then booted `9b7b932`.
 
 Pyxis has no orderly shutdown. A synced power-off is `sync` of the written files,
 an idle shell, then holding the power button. It covers only data synced before

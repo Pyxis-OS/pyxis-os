@@ -213,12 +213,12 @@ native installation.
 ### Update round trip
 
 Later on 2026-10-05, after SMP task 2a ([PR #411](https://git.internal/PyxisOS/pyxis-os/pulls/411)),
-the owner booted live media from that work and ran Update on the stick. The exact
-live-media revision was not recorded. Update took 14 s and rewrote the ESP's
+the owner booted live media from that work and ran Update on the stick. The live
+media was built from `9b7b932`, the merge of that PR, and the stick then booted
+that revision. Update took 14 s and rewrote the ESP's
 installed command line from the 0.0.1 `init.primary=app://init-installed` grammar
 to `space.pyxis=app://init-installed`. Afterwards, `sha256sum` of `system://keep.bin`
-still matched, so the pool was preserved. The relayed result does not state the
-kernel revision reported by the following stick boot.
+still matched, so the pool was preserved.
 
 ### Not covered
 
