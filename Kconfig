@@ -27,9 +27,9 @@ config HPET_MAINTENANCE_TICKS
 
 config XHCI
   bool "XHCI"
-  default n
+  default y
   help
     Enable native xHCI controller preparation and USB enumeration.
-    Qualified only in QEMU; leave disabled for ThinkPad bring-up.
+    Enable boot-present device inventory and qualified USB storage access.
 
 endmenu

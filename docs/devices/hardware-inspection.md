@@ -39,7 +39,7 @@ vendor entry. Labels never choose a driver or grant authority. Tools support
 names are missing. Missing names keep status 0 for complete inventory; partial,
 unavailable or initializing observations exit 1.
 
-`CONFIG_XHCI=n` remains the default until physical qualification. Firmware can
+`CONFIG_XHCI=y` enables native USB inventory by default. Firmware can
 still boot the kernel/archive from USB. The
 [xHCI profile and retention limits](../technical-debt.md#xhci-hardware-profile-and-runtime-retention)
 and [descriptor budgets](../technical-debt.md#usb-descriptor-bounds-and-per-port-preparation)

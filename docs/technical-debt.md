@@ -1309,11 +1309,11 @@ monotonic duration from the current wall clock.
 
 ## xHCI hardware profile and runtime retention
 
-Native xHCI initialization is [disabled by default](devices/usb-xhci.md) while
-broader controller and recovery qualification remain pending. Firmware USB boot
-remains available; Caelum enumeration and storage probes require an explicit
-`CONFIG_XHCI=y` image. Limited owner-reported native reads do not change that
-default. Revisit it after physical hardware qualification is agreed.
+Native xHCI initialization is [enabled by default](devices/usb-xhci.md), as the
+owner requested on 2026-10-05. Broader controller and recovery qualification
+remain pending; this default change does not expand the supported hardware
+profile. `CONFIG_XHCI=n` remains available for images that must skip native
+controller preparation and workers.
 
 The [initial controller](devices/usb-xhci.md) has agent-run QEMU coverage and
 limited owner-reported ThinkPad evidence, with independently discovered

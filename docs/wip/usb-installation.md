@@ -10,7 +10,7 @@ pending in C.4.
 Owner-reported [ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md) now
 include root and USB 3 hub-descendant storage reads. Broader hardware/recovery
 qualification of native mounting remains pending. Inspection-first work includes
-[USB 2/3 hub traversal](../devices/usb-hubs.md). The [build-time switch](../devices/usb-xhci.md) defaults to disabled;
+[USB 2/3 hub traversal](../devices/usb-hubs.md). The [build-time switch](../devices/usb-xhci.md) defaults to enabled;
 firmware USB boot and archive-backed programs remain available.
 The owner wants a replaceable USB drive as the first
 physical installation target, with QEMU development before laptop validation.
@@ -183,7 +183,7 @@ including individual unsupported/setup-failure results; supported devices serve
 queued reads and GPT discovery. Configured GUID authority now supports native
 USB mounts, including explicit writable requests on qualified media. Public
 raw-disk operations remain deferred.
-Enabling `CONFIG_XHCI` enables these consumers; the checked-in default remains `n`.
+Enabling `CONFIG_XHCI` enables these consumers; the checked-in default is `y`.
 
 Block integration must preserve today's stable per-device IDs, explicit disk
 handles and native mount authority. USB addresses, topology, serial numbers and

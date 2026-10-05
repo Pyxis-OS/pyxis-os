@@ -2,7 +2,7 @@
 
 With `CONFIG_XHCI=y`, Caelum independently probes supported boot-present storage
 on each discovered xHCI controller, including traversed hub descendants. The
-checked-in default remains `n`. Supported disks register with the kernel-only
+checked-in default is `y`. Supported disks register with the kernel-only
 [block interface](block-storage.md) and receive [GPT snapshots](gpt.md). Trusted init can open USB-backed npfs volumes
 using configured GUID authority, then delegate ordinary directory/file grants.
 Explicit writable mounts require known clear write protection and successful
