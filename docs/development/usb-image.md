@@ -121,7 +121,9 @@ trusted init without replacing the persistent disk. `usb-image` replaces
 `build/pyxis-usb.img`; do not use that output as the persistent disk or copy a
 newly assembled image over the private copy holding saved files.
 The firmware-boot launchers remain read-only; the walkthrough uses a separate
-manual writable attachment. Physical writable use remains deferred.
+manual writable attachment. Physical installations use the
+[native installer](../userland/installer.md) rather than this image; see
+[USB installation](../devices/usb-installation.md).
 
 ## Prepare a selected physical target later
 

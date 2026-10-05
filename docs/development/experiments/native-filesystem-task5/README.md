@@ -107,7 +107,7 @@ writable VirtIO storage but neither USB mass-storage reads/writes/flush nor NVMe
 Firmware USB boot and descriptor enumeration cannot substitute for a writable
 native target. Resume physical validation after the USB read/block-integration
 and real write/cache-synchronization work in the
-[USB milestone](../../../wip/usb-installation.md). Select an expendable target
+[USB milestone](../../../devices/usb-installation.md). Select an expendable target
 explicitly then; the internal Fedora disk has not been touched. No physical-media
 or power-loss claim follows from these QEMU runs.
 

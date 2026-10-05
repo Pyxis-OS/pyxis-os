@@ -43,7 +43,7 @@ unavailable or initializing observations exit 1.
 still boot the kernel/archive from USB. The
 [xHCI profile and retention limits](../technical-debt.md#xhci-hardware-profile-and-runtime-retention)
 and [descriptor budgets](../technical-debt.md#usb-descriptor-bounds-and-per-port-preparation)
-remain explicit. [Storage selection/media work](../wip/usb-installation.md#b-native-read-only-usb-storage)
-is a separate milestone. The
+remain explicit. [USB installation](usb-installation.md) describes storage
+selection, mounts and installation. The
 [everyday pipeline target](../development/io-reliability-attribution.md#everyday-pipeline-performance-target)
 uses the databases as ordinary text-tool input without imposing a database version.

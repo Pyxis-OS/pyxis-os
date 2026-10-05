@@ -123,12 +123,12 @@ exits, so SMP has a stable base:
 
 - **Filesystem:** after [system updates](../userland/system-updates.md) task 2,
   merged 2026-10-05.
-- **USB:** after the first native installation, which the owner moved ahead of
-  SMP on 2026-10-05. Reached that day: C.3 gave the installer USB raw authority,
-  and C.4 installed `4dc804a` natively from PXE media onto a USB stick, tagged
-  `0.0.1`. The C.4 Update round trip passed natively after SMP task 2a. Further
-  USB work waits until after SMP; see the
-  [USB plan](usb-installation.md).
+- **USB:** complete. The owner moved the first native installation ahead of
+  SMP on 2026-10-05. That day the installer gained USB raw authority, `4dc804a`
+  was installed natively from PXE media onto a USB stick and tagged `0.0.1`, and
+  the Update round trip passed after SMP task 2a. See
+  [USB installation](../devices/usb-installation.md). Further USB work waits
+  until after SMP.
 - **Networking:** after the link-selection task, merged 2026-10-05. Native lease-renewal
   qualification can wait.
 
@@ -262,40 +262,16 @@ behavior. BSP request separation is complete. FUSE is not a prerequisite.
 [System updates](../userland/system-updates.md) are implemented and QEMU-qualified.
 The installer's **Update** choice replaces the ESP from newer live media while
 preserving GPT identities and the npfs pool. Healthy GPT and compatible
-empty-journal pool metadata anchor interrupted ESP recovery. Physical
-installation/update qualification remains
-[deferred](../technical-debt.md#installer-inspection-and-recovery-limits). C.3 also
-[qualifies USB installer raw authority in QEMU](../development/experiments/usb-installer-c3/README.md).
+empty-journal pool metadata anchor interrupted ESP recovery. One physical
+install and Update passed on a USB stick; power loss and other devices remain
+[unqualified](../technical-debt.md#installer-inspection-and-recovery-limits).
 
-The [USB installation proposal](usb-installation.md) records a replaceable SanDisk
-target and QEMU-first stages: boot Limine/kernel/archive from a FAT32 EFI partition,
-add xHCI/Bulk-Only read-only access to a separate Pyxis pool, then integrate native
-persistence and validate the ThinkPad. Real-device passthrough is an intermediate
-check, not validation of the laptop controller. Boot-image Phase A now provides
-an opt-in [raw image and emulated USB launch](../development/usb-image.md);
-Phase B.1 now records per-device storage support, controller resource
-preparation, bounded requests and failure ownership. Phase B.2 adds
-[controller ownership, rings, MSI-X and root-port slot reservations](../devices/usb-xhci.md).
-Phase B.3 adds [checked enumeration and control requests](../devices/usb-enumeration.md),
-including SuperSpeedPlus root link recognition.
-The later inspection-first slice discovers controllers independently and publishes
-root-device observations and [hub descendants](../devices/usb-hubs.md)
-with an internal [read-only BOT/SCSI media probe](../devices/usb-storage.md)
-for independently supported disks. The first B.5 slice registers kernel-only
-USB block devices with bounded read tickets and GPT discovery. Configured read-only
-USB mounts now use the sole observed GUID match after discovery/scan completion,
-including partial inventories. C.1 adds bounded captured WRITE (10)/(16),
-ordered whole-medium cache flushes and per-device qualification for explicitly
-requested writable GUID mounts. Unqualified healthy media retain read-only
-service. C.2 qualifies the [persistent USB edit/build/run loop](../development/edit-build-run.md#persistent-usb-development)
-in QEMU, including explicit sync, fresh-process persistence and read-only use.
-C.3 exposes sealed observed USB candidates to trusted installer inventory and
-qualified exclusive raw claims, with QEMU Install/Update/recovery qualification.
-C.4's first native installation, synced power-off persistence and Update round
-trip passed on the ThinkPad. Reusable
-controller/USB/class/block boundaries are required, without speculative driver
-frameworks. This does not reorder filesystem core, spaces/SMP
-or the visible-work sequence.
+Complete: [USB installation](../devices/usb-installation.md). Pyxis boots from a
+raw USB image, reads and, on qualified disks, writes npfs pools through native
+xHCI and Bulk-Only storage, and gives the trusted installer raw USB authority.
+The first native installation onto a ThinkPad USB stick was tagged `0.0.1`;
+its Update round trip also passed. Its [limits](../devices/usb-installation.md#limits)
+link to the remaining technical debt.
 
 The [ThinkPad KVM and invariant-TSC investigation](thinkpad-kvm-tsc.md) records
 a successful four-vCPU KVM boot, an owner-observed native HPET panic, the

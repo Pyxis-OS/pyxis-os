@@ -138,7 +138,7 @@ Test built-in ports before dock paths when collecting future recovery evidence.
 
 The owner installed Pyxis onto the nominal 128 GB SanDisk stick (`0781:55a9`)
 from PXE live media, booted the stick alone, and checked persistence across a
-synced power-off, as defined in C.4 of the [USB plan](../../wip/usb-installation.md).
+synced power-off, as defined in [USB installation](../../devices/usb-installation.md#validation).
 This is owner-reported evidence from screen photos, transcribed by Claude, not
 an agent-run measurement. The firmware version was not recorded. No dock hub was
 enumerated in the photographed boot. The stick was in a built-in port.
@@ -210,10 +210,18 @@ SHA-256 was unchanged. Both the marker removal and the new file persisted.
 The owner tagged `4dc804a` as `0.0.1`, a signed annotated tag, as the first
 native installation.
 
+### Update round trip
+
+Later on 2026-10-05, after SMP task 2a ([PR #411](https://git.internal/PyxisOS/pyxis-os/pulls/411)),
+the owner booted live media from that work and ran Update on the stick. The exact
+live-media revision was not recorded. Update took 14 s and rewrote the ESP's
+installed command line from the 0.0.1 `init.primary=app://init-installed` grammar
+to `space.pyxis=app://init-installed`. Afterwards, `sha256sum` of `system://keep.bin`
+still matched, so the pool was preserved. The relayed result does not state the
+kernel revision reported by the following stick boot.
+
 ### Not covered
 
-- **The Update round trip.** The owner deferred it to the next update that is
-  actually needed.
 - **Power loss during writes,** uncertain I/O and other sticks, ports or the
   dock path.
 - **The [configured-mount discovery latency measurement](../../technical-debt.md#configured-mount-discovery-latency),**

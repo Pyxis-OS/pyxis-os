@@ -698,13 +698,12 @@ qualification](development/experiments/native-filesystem-task5/README.md).
 VirtIO and per-device qualified USB now support writable native mounts. USB
 write/cache synchronization is implemented for C.1, and C.3 enables the trusted
 installer's bounded raw authority for retained USB candidates. On 2026-10-05,
-C.4 of the [USB plan](wip/usb-installation.md) installed onto one expendable
-stick from PXE live media. Writable mounting and persistence across a synced
-power-off passed natively; see the
+the first native [USB installation](devices/usb-installation.md) wrote one
+expendable stick from PXE live media. Writable mounting, persistence across a
+synced power-off and one Update round trip passed natively; see the
 [owner-reported record](targets/t14-gen1-amd/usb-bringup.md#2026-10-05-first-native-installation-c4).
-A physical Update, power loss during writes, uncertain I/O and other devices or
-ports remain unqualified. The Update is checked with the next real update. The
-internal NVMe remains unsupported.
+Power loss during writes, uncertain I/O and other devices, ports or the dock
+path remain unqualified. The internal NVMe remains unsupported.
 
 ## USB image updates and firmware qualification
 
@@ -712,8 +711,9 @@ The [raw USB image builder](development/usb-image.md) creates fresh images and
 replaces the sample pool and its identities on every rebuild. There is no
 preservation of installed data, rollback or atomic physical update protocol.
 The manual copy procedure relocates backup GPT on larger media but does not
-expand the pool. Revisit image preparation and update ownership before the
-persistent-installation phase stores user data.
+expand the pool. Installed systems use the [native installer](userland/installer.md)
+and its pool-preserving Update instead; the raw image remains a development
+artifact. Revisit image preservation only if raw images become a delivery format.
 
 Emulated USB boot has reached the shell, but an intermittent
 [pre-kernel Limine file-open failure](development/qemu.md#usb-firmware-file-open-failure-before-kernel-entry)
@@ -1101,8 +1101,8 @@ VirtIO. Slow USB discovery can delay a startup mount such as `system://`, or
 exhaust its deadline. Enumeration and mount requests have existing 30-second
 budgets; waiting does not provide an additional mount budget.
 
-The native startup cost has not been measured. On the first native USB mount
-boot, record discovery completion, GPT scan completion and mount readiness,
+The native startup cost has not been measured; the first native installation
+did not record it. On a later native USB mount boot, record discovery completion, GPT scan completion and mount readiness,
 including the controller/topology and target backend. Revisit any latency policy
 with those measurements while preserving duplicate-GUID detection and explicit
 partial-discovery results.
@@ -1326,8 +1326,9 @@ nonzero scratchpads and 64-byte contexts; nondefault PSI mappings and BIOS
 ownership handoff remain unmeasured paths. This first native snapshot does not
 establish broad controller qualification. The later owner-reported run also
 traversed the dock's USB 3 hub and completed root/descendant storage probes.
-Recovery remains unexecuted; native USB block/mount qualification remains
-pending. Kernel block access and qualified writes have QEMU coverage.
+Recovery remains unexecuted. The first native installation then mounted one
+qualified stick writable from a built-in port; that single profile does not
+qualify other controllers, ports or devices.
 
 USB 2 root-port reset has no explicit connect-debounce interval. The startup snapshot
 waits 20 ms only after the driver powers a port; it has no separate link-settling
@@ -1436,9 +1437,10 @@ partial USB coverage while refusing lost registry records or incomplete VirtIO
 bookkeeping. Unseen disks may conceal additional eligible targets; the existing
 sole-eligible selection and typed consent apply only to observed disks. Normal
 boots grant no raw service, and qualified write claims still exclude mounted or
-claimed devices and latched write failure. Revisit inventory coverage and target
-selection with native C.4 evidence rather than inferring a complete machine
-inventory from a successful installer list. Two captured I/O slots per
+claimed devices and latched write failure. The native C.4 installation listed
+its stick while unsupported EHCI kept coverage partial. Revisit inventory coverage
+and target selection with further native topology evidence rather than inferring
+a complete machine inventory from a successful installer list. Two captured I/O slots per
 supported disk and snapshot capacity are
 reserved before AP startup; GPT USB scans share one scratch buffer. Revisit the
 pre-AP reservation cost with measured topology/resource requirements and later
@@ -1493,8 +1495,8 @@ The five-second exchange deadline and shared boot-media deadline also bound
 synchronization. A slow genuine flush can retire the device even when the medium
 is capable of persisting data. Revisit those bounds with measured physical
 flush latency. QEMU command completion and restart checks do not qualify device
-firmware, physical cache behavior or power loss; native write qualification
-remains deferred to an explicitly selected expendable target.
+firmware, physical cache behavior or power loss. One physical stick has
+qualified natively; other devices remain unqualified.
 
 A failed runtime write/flush or abandoned published mutation permanently latches
 write failure for this boot. Healthy transport can still admit reads, but the
@@ -1504,6 +1506,19 @@ only with an explicit error-acknowledgment and ownership contract. Mutation
 failure/abandonment, MODE SENSE fallback, unsupported flush and malformed
 qualification responses have source review, without forced-error validation;
 revisit with natural device evidence.
+
+## USB controller and transport coverage
+
+xHCI is the only USB host-controller driver. EHCI, OHCI and UHCI controllers,
+such as the ThinkPad's Realtek DASH EHCI, remain unsupported inventory records.
+`lsusb` then reports partial coverage, and disks behind those controllers are
+invisible to configured mounts and the installer. [USB storage](devices/usb-storage.md)
+uses Bulk-Only Transport only. A device offering UAS as an alternate is used
+through BOT; a UAS-only device is unsupported, and any BOT throughput cost is
+unmeasured. Classes other than hubs and storage, including HID, remain unbound.
+Revisit when a target device or workflow needs another controller type, UAS or
+a USB input class; add each through the existing [layer
+boundaries](devices/usb-installation.md#layers-and-ownership).
 
 ## CPU entropy without a kernel generator
 
@@ -1540,13 +1555,3 @@ relative only: there is no on-screen cursor or absolute positioning. Doom has no
 mouse support yet, although pointer sessions would allow it. Revisit Synaptics
 absolute mode when gestures or scrolling are wanted, and USB mice after bulk
 endpoints exist.
-
-## 0.0.1 boot grammar recognition
-
-Initial spaces replaced the CPU-indexed `init.primary` boot options. The updater
-still accepts the 0.0.1 token `init.primary=app://init-installed` as a valid
-installed command line, so the first Update of a 0.0.1 disk rewrites it without
-reporting damage. Nothing else reads the old grammar, and the kernel rejects it.
-Remove the token from `userspace/installer/esp_read.c` once the owner's 0.0.1
-installation has been updated. Without the token, an old ESP is still rebuilt;
-it is only reported as damaged boot files.

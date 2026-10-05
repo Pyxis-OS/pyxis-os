@@ -242,11 +242,10 @@ current direction for tasks 2–6.
   `app://init`.
 - Every boot creates Caelum plus the configured spaces, whatever the CPU count.
   Spare CPUs no longer get idle spaces.
-- The installer writes `space.pyxis=app://init-installed`. The updater accepts
-  the 0.0.1 `init.primary=app://init-installed` token only to recognize an
-  installed ESP, and then rewrites it. This migration is the one intended
-  compatibility path. It is to be recorded as technical debt until the owner's
-  0.0.1 stick has been updated.
+- The installer writes `space.pyxis=app://init-installed`. The updater
+  temporarily recognized the 0.0.1 `init.primary=app://init-installed` token so
+  that it could rewrite that ESP. The owner's stick was updated on 2026-10-05,
+  and the token was then removed.
 
 ### Decision 2 (accepted): single-CPU defaults
 
@@ -317,7 +316,9 @@ All three were accepted by the owner on 2026-10-05:
 2. **Install entry.** The entry is `space.install=app://init-install.pxe
    boot.install=1`. `boot.install=1` requires exactly one configured space, and
    only that space's init receives installer authority. Any other configuration
-   fails boot.
+   fails boot. The #411 review asked whether to pin that space's image to
+   `app://init-install.pxe`. The owner decided on 2026-10-05 not to pin it: the
+   grants follow the configured image, because the command line is trusted.
 3. **Navigation.** Super+Left/Right stops at both ends and does not wrap. Revisit
    this if it feels awkward with the scrolling bar.
 

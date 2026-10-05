@@ -33,9 +33,7 @@ both qualify; Update needs no `SAFE_TO_WIPE` marker and has no Read the room mod
 
 ESP inspection distinguishes valid contents, rebuildable contents and refusal.
 A valid installed command line carries this disk's `mount.disk` and exactly one
-`space.pyxis=app://init-installed`. The 0.0.1 form, `init.primary=app://init-installed`,
-is also recognized, so Update rewrites such an ESP in the space grammar without
-reporting damaged boot files.
+`space.pyxis=app://init-installed`; any other configuration is rebuildable.
 Missing or structurally damaged FAT/boot contents are rebuildable using the
 healthy GPT and compatible empty-journal pool as the recovery anchor. When the
 installed configuration is readable, it must not carry a foreign or invalid disk
@@ -101,9 +99,9 @@ host structural checking and recovery of an interrupted ESP replacement.
 These records qualify the original VirtIO target path. Installer USB raw-disk
 authority is now implemented, using the same Update workflow; its integration
 checks are in the [C.3 USB-target
-record](../development/experiments/usb-installer-c3/README.md). C.4 of the
-[USB plan](../wip/usb-installation.md) installed natively on the ThinkPad; the
-owner deferred its physical Update round trip to the next real update. Power
+record](../development/experiments/usb-installer-c3/README.md). The first
+[native USB installation](../devices/usb-installation.md#validation) on the
+ThinkPad passed one physical Update round trip, preserving a synced file. Power
 loss and uncertain I/O remain [deferred](../technical-debt.md#installer-inspection-and-recovery-limits).
 Updates from inside a running installed system, image downloading and npfs
 format migration are outside this interface.

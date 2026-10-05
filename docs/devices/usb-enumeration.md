@@ -2,9 +2,10 @@
 
 Caelum addresses boot-present root devices and supported hub descendants on every prepared xHCI
 controller and publishes an immutable read-only boot snapshot for native
-[lsusb](../userland/lsusb.md). Supported storage also receives an internal
-[read-only BOT/SCSI probe](usb-storage.md); USB block access remains pending. [The installation milestone](../wip/usb-installation.md#b-native-read-only-usb-storage)
-tracks class/media work. [Owner-reported ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md)
+[lsusb](../userland/lsusb.md). Supported storage also receives a
+[BOT/SCSI probe](usb-storage.md) and kernel block registration.
+[USB installation](usb-installation.md) summarizes the storage path end to end.
+[Owner-reported ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md)
 cover specific native profiles; broader hardware and recovery qualification remain pending.
 
 ## Boundaries and preparation

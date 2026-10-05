@@ -1,7 +1,7 @@
 # USB installer authority qualification
 
 Manual QEMU qualification on 2026-10-05 for C.3 of the
-[USB milestone](../../../wip/usb-installation.md). Physical installation is the
+[USB milestone](../../../devices/usb-installation.md). Physical installation is the
 separately assigned C.4 task.
 
 ## Sources and scope

@@ -117,7 +117,6 @@ for Update. Partial USB coverage does not change these selection and consent
 rules; a sole eligible observed disk is not proof that no other disk exists.
 USB raw access follows the same claims, bounded I/O, ordered flushes, explicit
 release and GPT rescan as VirtIO. Normal boots still grant no raw-disk service.
-AHCI, NVMe, hotplug, physical installation qualification and power-loss
-validation remain outside this interface. The physical USB step is C.4 of the
-[USB plan](../wip/usb-installation.md). See [block storage](block-storage.md) and
-[GPT discovery](gpt.md).
+AHCI, NVMe, hotplug and power-loss validation remain outside this interface.
+[USB installation](usb-installation.md) records the native ThinkPad installation.
+See [block storage](block-storage.md) and [GPT discovery](gpt.md).
