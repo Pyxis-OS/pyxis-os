@@ -32,6 +32,17 @@ Arrows, Home/End, Delete and Page Up/Down come from libterm's key decoder, and
 a standalone Escape is recognized after 100 ms. The screen size is re-read
 at each redraw.
 
+The packaged [session configuration](session-configuration.md) sets `EXINIT`
+to `set ts=3 et ai`:
+
+- tab stops every three columns;
+- Tab inserts spaces;
+- new lines keep the previous line's indent.
+
+There is no `shiftwidth`, so `>>` and `<<` shift by one tab stop. `-c` commands
+run after `EXINIT`, so `vi -c 'set noet' Makefile` types real tabs for one
+session. Tabs already in a file stay tabs.
+
 ## How the port maps onto Pyxis
 
 Only `editors/vi.c` is built. A recipe-local `libbb.h`, feature header and
@@ -47,7 +58,7 @@ patch changes only the Unix-specific parts:
 | `fstat` size and `S_ISREG` | Read to EOF. Opening a directory fails with its native error. |
 | `access(W_OK)` and mode bits | `[Readonly]` when the file cannot be opened for WRITE now |
 | `stat` before `:w NAME` | Refuse unless opening NAME reports ENOENT; `:w!` overrides |
-| `~/.exrc` owner/mode check | Not read; `EXINIT` still works |
+| `~/.exrc` owner/mode check | Not read; `EXINIT` from session configuration still works |
 
 Userland libc gained `ftruncate` over native `FILE_RESIZE`, plus `memrchr`,
 `strchrnul` and `stpcpy`. A save keeps upstream's order: open without
