@@ -18,9 +18,19 @@ Phase B follows the read-only contracts below. Implemented controller behavior
 lives in the [xHCI reference](../devices/usb-xhci.md), with checked discovery and
 request ownership in [USB enumeration](../devices/usb-enumeration.md). The
 [persistent development walkthrough](../development/edit-build-run.md#persistent-usb-development)
-keeps a private QEMU disk across sessions. Physical validation remains unassigned. This document does not
-authorize physical writes or reorder the active filesystem, spaces/SMP and
-display work.
+keeps a private QEMU disk across sessions.
+
+On 2026-10-05 the owner moved the first native installation ahead of the
+[runtime SMP focus](boot-sdk-ports.md#kernel-focus-runtime-smp): C.3 gives the
+installer USB raw authority, and C.4 validates the installation on the ThinkPad.
+The owner chose three defaults:
+- the installer may claim only C.1-qualified USB disks;
+- the PXE-booted live image installs onto the stick;
+- the native evidence is a boot of the stick alone, persistence across a synced
+  power-off, and one Update round trip.
+
+Each task starts only when the owner assigns it; this document does not
+authorize physical writes.
 
 ## Intended result and layout
 
@@ -424,14 +434,41 @@ host tools and the later physical-preparation procedure.
    [qualification record](../development/usb-storage-bringup.md#persistent-usb-development-loop-c2)
    includes revisions, configuration, hashes and host structural inspection.
    No runtime, authority or installer changes were needed.
-3. [ ] **Validate the physical installation.** First inspect laptop hardware,
-   then select the expendable USB target explicitly. Progress from firmware boot
-   to read-only mounting and bounded persistence checks. Record device, firmware,
-   topology and observed differences. An orderly reboot is not a power-loss test.
-   Include the deferred [configured-mount discovery latency measurement](../technical-debt.md#configured-mount-discovery-latency)
-   on the first native USB mount boot and the
-   [write-qualification compatibility notes](../technical-debt.md#usb-writable-media-qualification-limits)
-   if the selected device rejects or disrupts optional qualification commands.
+3. [ ] **Give the installer USB raw authority.** USB disks that passed C.1
+   write qualification join the installer's exclusive raw-disk claim on the same
+   terms as VirtIO disks: inventory with eligibility reasons, exclusive claim,
+   bounded writes, flush, release and rescan. Unqualified, write-protected or
+   mounted USB disks stay ineligible with a reason. No selection policy is added
+   beyond C.1 qualification, and raw access stays limited to trusted install init.
+   - **Finish when:** in QEMU, with live media and an emulated USB target of
+     512-byte logical sectors, Install and then Update reach the same results as
+     the [VirtIO update qualification](../development/experiments/system-updates-task2/README.md):
+     - a target-only boot from the USB disk runs the installed revision;
+     - a synced file survives Update, with every byte outside the ESP unchanged;
+     - an interrupted Update is rebuilt from fresh live media;
+     - a mounted or unqualified USB disk is refused without writes.
+4. [ ] **Validate the physical installation.** Install onto the owner's
+   expendable 128 GB stick from the PXE-booted live image, which has already
+   booted the ThinkPad natively. Record device, firmware, topology and observed
+   differences.
+   - **Synced power-off:** Pyxis has no orderly shutdown or reboot yet. A synced
+     power-off means running `sync` on the written files, waiting for the shell
+     to be idle, then holding the power button until the laptop turns off. It
+     qualifies only data synced before power was removed; it is not a test of
+     power loss during writes. If the journal was still committed, booting the
+     installed stick replays it, and Update refuses until that has happened.
+   - **Finish when:**
+     - the stick, booted alone, runs the installed revision with `system://`
+       mounted writable;
+     - a file written and synced under `system://` keeps its SHA-256 across a
+       synced power-off and the next boot;
+     - one Update from newer PXE media succeeds, and the stick then boots the
+       new revision with that file unchanged.
+   - **Then:** the owner git-tags the installed commit `0.0.1`.
+   - **Also record:** the [write-qualification compatibility notes](../technical-debt.md#usb-writable-media-qualification-limits)
+     if the stick rejects or disrupts optional qualification commands. The
+     [configured-mount discovery latency measurement](../technical-debt.md#configured-mount-discovery-latency)
+     remains deferred.
 
 ## Remaining assignment and qualification decisions
 
@@ -439,9 +476,10 @@ host tools and the later physical-preparation procedure.
   accepted per-device read-only contract. Enumeration publishes root devices and
   supported USB 2/3 hub descendants. B.4 adds an internal BOT/SCSI media probe;
   B.5 read-only mount integration and C.1 qualified writes/flushes are implemented.
-  C.2's QEMU persistent development loop is qualified. C.3 physical validation
-  remains unassigned; native ThinkPad testing is deferred.
-- Image update/preservation ownership remains open for persistent installation.
+  C.2's QEMU persistent development loop is qualified. C.3 installer USB raw
+  authority and C.4 physical validation are planned but unassigned.
+- Updating an installation is owned by the installer's
+  [Update choice](../userland/system-updates.md), which preserves the pool.
   Read-only disk selection does not qualify a write target or authenticate media.
 - The [GUID/boot-device identity follow-up](../technical-debt.md#configured-guid-and-boot-device-identity)
   is deferred until internal-disk installation support; boot-device preference
@@ -449,9 +487,9 @@ host tools and the later physical-preparation procedure.
 - If the physical target requires hubs, firmware capabilities outside the
   bootstrap prefix or another unsupported controller feature, inspect and discuss
   that expansion before changing the initial hardware profile.
-- Agree the writable-device qualification and recovery evidence before physical
-  writes. Replaceability limits the cost of failure; it proves no endurance or
-  durability guarantee and does not remove the filesystem deployment gates.
+- C.4 records the agreed physical evidence. Replaceability limits the cost of
+  failure; it proves no endurance or durability guarantee and does not remove
+  the filesystem deployment gates.
 
 ## References
 
