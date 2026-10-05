@@ -1,6 +1,7 @@
 #include <arch/paging.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
+#include <kernel/mm/pressure.h>
 #include <kernel/panic.h>
 #include <kernel/spinlock.h>
 #include <tlsf.h>
@@ -12,6 +13,8 @@
 #define HEAP_POOL_PREFIX_BYTES HEAP_ALIGNMENT
 /* The arena outlives every failed growth, which retires what it mapped. */
 #define HEAP_ARENA_RAM_MULTIPLE 4
+/* Each page table maps 512 pages, and each page directory 512 tables. */
+#define PAGES_PER_TABLE 512
 
 static unsigned char control[HEAP_CONTROL_BYTES] __attribute__((aligned(HEAP_ALIGNMENT)));
 static tlsf_t allocator;
@@ -86,6 +89,18 @@ static bool add_pool(size_t request, void **result)
 {
   size_t bytes = pool_size_for_request(request);
   if (!bytes || bytes > arena_end - arena_next) {
+    return false;
+  }
+
+  /* A growth that cannot fit in the free frames would map until the PMM is
+   * empty, then retire all of it. Refuse it before mapping anything, but
+   * still start reclamation as a failed frame allocation would. Only frames
+   * taken by another CPU meanwhile can still make a growth fail. */
+  size_t pages = bytes / PAGE_SIZE;
+  size_t table_pages = pages / PAGES_PER_TABLE + 1 +
+                       pages / (PAGES_PER_TABLE * PAGES_PER_TABLE) + 1;
+  if (pages + table_pages > pmm_get_stats().free_frames) {
+    mm_pressure_notify();
     return false;
   }
 
