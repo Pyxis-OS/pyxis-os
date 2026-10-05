@@ -14,20 +14,33 @@ valid_image() {
 case "$BOOT_MENU_TIMEOUT" in
   ''|*[!0-9]*) echo 'BOOT_MENU_TIMEOUT must be a nonnegative decimal seconds count.' >&2; exit 1 ;;
 esac
-valid_image "$INIT_DEFAULT"
-valid_image "$INIT_PRIMARY"
-command_line="init=$INIT_DEFAULT init.primary=$INIT_PRIMARY"
+# Space names: 1-31 of a-z, 0-9 and '-', unique; the kernel checks them again.
+valid_space_name() {
+  case "$1" in
+    ''|*[!a-z0-9-]*) echo "Invalid space name: $1" >&2; exit 1 ;;
+  esac
+  [ "${#1}" -le 31 ] || { echo "Space name exceeds 31 characters: $1" >&2; exit 1; }
+}
+command_line=
+names=' '
 # Deliberate whitespace splitting; glob expansion is disabled for selections.
 set -f
-for selection in $INIT_CPUS; do
-  cpu=${selection%%=*}
-  image=${selection#*=}
-  case "$cpu" in
-    ''|*[!0-9]*) echo "Invalid init CPU selection: $selection" >&2; exit 1 ;;
+for selection in $SPACES; do
+  case "$selection" in
+    *=*) ;;
+    *) echo "Space selection must be NAME=IMAGE: $selection" >&2; exit 1 ;;
   esac
+  name=${selection%%=*}
+  image=${selection#*=}
+  valid_space_name "$name"
+  case "$names" in
+    *" $name "*) echo "Duplicate space name: $name" >&2; exit 1 ;;
+  esac
+  names="$names$name "
   valid_image "$image"
-  command_line="$command_line init.$cpu=$image"
+  command_line="${command_line:+$command_line }space.$name=$image"
 done
+[ -n "$command_line" ] || { echo 'SPACES must configure at least one space.' >&2; exit 1; }
 mount_disk=${MOUNT_DISK:-}
 if [ -n "$mount_disk" ]; then
   case "$mount_disk" in

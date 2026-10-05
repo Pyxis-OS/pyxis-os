@@ -32,6 +32,10 @@ replays, migrates or writes the pool. Finalized and unfinalized installations
 both qualify; Update needs no `SAFE_TO_WIPE` marker and has no Read the room mode.
 
 ESP inspection distinguishes valid contents, rebuildable contents and refusal.
+A valid installed command line carries this disk's `mount.disk` and exactly one
+`space.pyxis=app://init-installed`. The 0.0.1 form, `init.primary=app://init-installed`,
+is also recognized, so Update rewrites such an ESP in the space grammar without
+reporting damaged boot files.
 Missing or structurally damaged FAT/boot contents are rebuildable using the
 healthy GPT and compatible empty-journal pool as the recovery anchor. When the
 installed configuration is readable, it must not carry a foreign or invalid disk

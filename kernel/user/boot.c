@@ -1,10 +1,10 @@
-#include <arch/clock.h>
 #include <arch/smp.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/object/mount.h>
 #include <kernel/panic.h>
+#include <kernel/space.h>
 #include <kernel/string.h>
 #include <kernel/user/launch.h>
 
@@ -14,19 +14,36 @@ static bool same_text(const char *left, const char *right)
   return size == strlen(right) && !memcmp(left, right, size);
 }
 
-static size_t parse_cpu(const char *text)
+#define SPACE_NAME_MAX 31
+#define SPACE_OPTION_PREFIX "space."
+
+struct space_selection {
+  const char *name;
+  const char *image;
+};
+
+/* Names identify configured spaces; they grant nothing and need not be titles. */
+static bool valid_space_name(const char *name)
 {
-  if (!*text) {
-    panic("init selection has no CPU index");
+  size_t length = strlen(name);
+  if (!length || length > SPACE_NAME_MAX) {
+    return false;
   }
-  size_t index = 0;
-  while (*text) {
-    if (*text < '0' || *text > '9' || index > (SIZE_MAX - (*text - '0')) / 10) {
-      panic("invalid init CPU index: %s", text);
+  for (size_t i = 0; i < length; ++i) {
+    char c = name[i];
+    if (!(c >= 'a' && c <= 'z') && !(c >= '0' && c <= '9') && c != '-') {
+      return false;
     }
-    index = index * 10 + (*text++ - '0');
   }
-  return index;
+  return true;
+}
+
+/* Until tasks can migrate, each workload space is pinned to one CPU: workload
+ * CPUs in configuration order, wrapping, or the BSP on a single-CPU boot. */
+static size_t workload_cpu(size_t position)
+{
+  size_t count = arch_cpu_count();
+  return count == 1 ? 0 : 1 + position % (count - 1);
 }
 
 static unsigned hex_digit(char value)
@@ -79,18 +96,17 @@ static struct gpt_guid parse_disk_guid(const char *text)
 void user_launch_initial(const char *command_line)
 {
   KASSERT(arch_cpu_index() == 0);
-  size_t count = arch_cpu_count();
-  KASSERT(count && count <= SIZE_MAX / sizeof(const char *));
-  size_t primary = count > 1 ? 1 : 0;
-  char *options = strndup(command_line, strlen(command_line));
-  const char **images = kmalloc(count * sizeof(*images));
-  if (!options || !images) {
-    panic("cannot allocate init selections");
+  size_t length = strlen(command_line);
+  char *options = strndup(command_line, length);
+  /* Every option is a separated KEY=VALUE token of at least three bytes. */
+  size_t capacity = length / 2 + 1;
+  struct space_selection *selections = kmalloc(capacity * sizeof(*selections));
+  if (!options || !selections) {
+    panic("cannot allocate space selections");
   }
-  memset(images, 0, count * sizeof(*images));
-  const char *default_image = NULL, *primary_image = NULL;
+  size_t selection_count = 0;
   const char *mount_disk = NULL;
-  bool install = false, install_seen = false;
+  bool install = false;
 
   char *cursor = options;
   while (*cursor) {
@@ -107,62 +123,52 @@ void user_launch_initial(const char *command_line)
     if (*cursor) {
       *cursor++ = '\0';
     }
-    char *image = key;
-    while (*image && *image != '=') {
-      ++image;
+    char *value = key;
+    while (*value && *value != '=') {
+      ++value;
     }
-    if (!*image) {
+    if (!*value) {
       panic("kernel option needs a value: %s", key);
     }
-    *image++ = '\0';
+    *value++ = '\0';
     if (same_text(key, "boot.install")) {
-      if (install_seen || !same_text(image, "1")) {
+      if (install || !same_text(value, "1")) {
         panic("boot.install must occur once with value 1");
       }
       install = true;
-      install_seen = true;
       continue;
     }
     if (same_text(key, "mount.disk")) {
       if (mount_disk) {
         panic("duplicate mount disk configuration");
       }
-      mount_disk = image;
+      mount_disk = value;
       continue;
     }
-    if (strlen(image) <= 6 || memcmp(image, "app://", 6)) {
-      panic("init must name an app:// archive entry: %s", image);
-    }
-
-    if (same_text(key, "init")) {
-      if (default_image) {
-        panic("duplicate default init selection");
-      }
-      default_image = image;
-    } else if (same_text(key, "init.primary")) {
-      if (primary_image) {
-        panic("duplicate primary init selection");
-      }
-      primary_image = image;
-    } else if (strlen(key) > 5 && !memcmp(key, "init.", 5)) {
-      size_t index = parse_cpu(key + 5);
-      if (index >= count) {
-        klog("userspace: skipping init for absent CPU %zu\n", index);
-        continue;
-      }
-      if (index == 0 && count > 1) {
-        panic("CPU 0 is reserved for Caelum on a multicore boot");
-      }
-      if (images[index]) {
-        panic("duplicate init selection for CPU %zu", index);
-      }
-      images[index] = image;
-    } else {
+    size_t prefix = strlen(SPACE_OPTION_PREFIX);
+    if (strlen(key) <= prefix || memcmp(key, SPACE_OPTION_PREFIX, prefix)) {
       panic("unknown kernel option: %s", key);
     }
+    const char *name = key + prefix;
+    if (!valid_space_name(name)) {
+      panic("invalid space name: %s", name);
+    }
+    if (strlen(value) <= 6 || memcmp(value, "app://", 6)) {
+      panic("space %s init must name an app:// archive entry: %s", name, value);
+    }
+    for (size_t i = 0; i < selection_count; ++i) {
+      if (same_text(selections[i].name, name)) {
+        panic("duplicate space configuration: %s", name);
+      }
+    }
+    KASSERT(selection_count < capacity);
+    selections[selection_count++] = (struct space_selection){name, value};
   }
-  if (!default_image) {
-    panic("kernel command line must select a default init");
+  if (!selection_count) {
+    panic("kernel command line must configure at least one space");
+  }
+  if (install && selection_count != 1) {
+    panic("boot.install requires exactly one configured space");
   }
 
   struct mount_config mount = {0};
@@ -171,20 +177,10 @@ void user_launch_initial(const char *command_line)
     mount.enabled = true;
   }
 
-  /* Numeric overrides win over the primary selection regardless of option
-   * order. Every workload CPU gets an init; an idle script can simply exit. */
-  for (size_t index = primary; index < count; ++index) {
-    arch_clock_maintain();
-    const char *image = images[index];
-    if (!image && index == primary) {
-      image = primary_image;
-    }
-    image = image ? image : default_image;
-    if (install) {
-      image = index == primary ? "app://init-install.pxe" : "app://init-idle";
-    }
-    user_launch_init(index, image, &mount, install && index == primary);
+  for (size_t i = 0; i < selection_count; ++i) {
+    struct space *space = space_create(selections[i].name, workload_cpu(i));
+    user_launch_init(space, selections[i].image, &mount, install);
   }
-  kfree(images);
+  kfree(selections);
   kfree(options);
 }

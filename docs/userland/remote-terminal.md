@@ -7,8 +7,8 @@ assigned address with a 100 ms clock sleep. Remote looks up the configured
 selector under READ authority, then waits for the configuration owner to bind
 and assign that candidate; lookup never activates hardware. An absent or unavailable NIC is
 reported on the Remote tab. Init/server failures are not restarted, and address
-changes invalidate the listener rather than rebinding it. Additional CPUs keep
-the idle init; boots without CPU 3 do not start the default server.
+changes invalidate the listener rather than rebinding it. The default `remote`
+space starts the server on every CPU count.
 
 ## Host setup
 

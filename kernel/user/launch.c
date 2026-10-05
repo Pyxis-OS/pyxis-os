@@ -85,7 +85,7 @@ static enum initrd_result select_image(const char *name, struct initrd_file *ima
   return initrd_lookup(interpreter + 6, image);
 }
 
-void user_launch_init(size_t cpu_index, const char *image_uri,
+void user_launch_init(struct space *space, const char *image_uri,
     const struct mount_config *mount_config, bool install)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -116,7 +116,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
     klog("userspace: cannot select %s (initrd result %u)\n", image_uri, (unsigned)selection);
     goto fail;
   }
-  if (user_process_load(arch_cpu_at(cpu_index)->space, image.data, image.size,
+  if (user_process_load(space, image.data, image.size,
         &process, &entry) != MM_OK) {
     goto fail;
   }
@@ -175,17 +175,14 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
           DISPLAY_RIGHT_DRAW, 0, &display_handle) != CAP_OK) {
     goto fail;
   }
-  handle_t space_handle = HANDLE_INVALID;
-  /* Caelum stays kernel-owned, including the single-CPU shared-TTY fallback. */
-  if (cpu_index != 0) {
-    space_control = space_control_create(process->space);
-    if (!space_control || capability_install(&process->capabilities, space_control,
-          SPACE_RIGHT_SET_TITLE, 0, &space_handle) != CAP_OK) {
-      goto fail;
-    }
-    object_release(space_control);
-    space_control = NULL;
+  handle_t space_handle;
+  space_control = space_control_create(process->space);
+  if (!space_control || capability_install(&process->capabilities, space_control,
+        SPACE_RIGHT_SET_TITLE, 0, &space_handle) != CAP_OK) {
+    goto fail;
   }
+  object_release(space_control);
+  space_control = NULL;
   uint64_t app_rights = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE |
                         DIRECTORY_RIGHT_READ_FILES;
   uint64_t home_rights = app_rights | DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
@@ -297,9 +294,7 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
     {"terminal", terminal_service_handle},
   };
   size_t resource_count = 19;
-  if (space_handle != HANDLE_INVALID) {
-    resources[resource_count++] = (struct process_binding){"space", space_handle};
-  }
+  resources[resource_count++] = (struct process_binding){"space", space_handle};
   if (script_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"script", script_handle};
   }
@@ -338,8 +333,10 @@ void user_launch_init(size_t cpu_index, const char *image_uri,
   if (process_prepare_startup(process, &startup) != MM_OK) {
     goto fail;
   }
-  klog("userspace: %s entry=%p, CPU %zu\n", image_uri, (void *)entry, cpu_index);
-  if (user_task_create_on(cpu_index, process, entry,
+  /* The title still holds the configured name: no task has run yet. */
+  klog("userspace: space %s: %s entry=%p, CPU %zu\n", space->title, image_uri,
+       (void *)entry, space->cpu_index);
+  if (user_task_create_on(space->cpu_index, process, entry,
         USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE) != MM_OK) {
     goto fail;
   }
@@ -422,5 +419,5 @@ fail:
   while (object_reap_pending()) {
     object_reap();
   }
-  panic("cannot prepare init %s on CPU %zu", image_uri, cpu_index);
+  panic("cannot prepare init %s for space %s", image_uri, space->title);
 }

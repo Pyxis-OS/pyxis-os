@@ -26,9 +26,16 @@ struct space
   struct pointer_object *pointer; /* Space retains the initial reference. */
   struct display_object *display; /* Space retains the initial reference. */
   struct console_object *console; /* Space retains the initial reference. */
+  /* Every task in this space runs on this CPU until task migration exists. */
+  size_t cpu_index;
+  struct space *next; /* Registry order; fixed once the scheduler starts. */
 };
 
-void space_init_all(const struct boot_framebuffer *boot_fb);
+/* Creates Caelum's space, first in registry order, on CPU 0. BSP only, at boot. */
+void space_init(const struct boot_framebuffer *boot_fb);
+/* Appends a workload space titled NAME whose tasks run on CPU_INDEX. BSP only,
+ * before task_schedule(); spaces are never destroyed. Panics on exhaustion. */
+struct space *space_create(const char *name, size_t cpu_index);
 
 /* Copies a validated title without allocation. Preserves IF. */
 bool space_set_title(struct space *space, const char *title, size_t length);
@@ -36,7 +43,5 @@ bool space_set_title(struct space *space, const char *title, size_t length);
 void space_present();
 /* BSP kernel-task entry; argument is unused. */
 void space_present_task(void *argument);
-/* BSP only, preserves IF. Updates keyboard and pointer focus together with selection. */
-void space_switch(size_t index);
 
 #endif // PYXIS_OS_SPACE_H

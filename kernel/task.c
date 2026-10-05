@@ -13,6 +13,7 @@
 #include <abi/launcher.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/space.h>
 #include <kernel/user.h>
 #include <kernel/task.h>
 #include <kernel/service/request.h>
@@ -547,7 +548,7 @@ enum mm_result user_task_prepare_on(size_t cpu_index, struct process *process,
   *result = NULL;
   if (!schedulers || cpu_index >= arch_cpu_count() || !process ||
       !process->startup_address ||
-      process->space != arch_cpu_at(cpu_index)->space ||
+      process->space->cpu_index != cpu_index ||
       !arch_user_entry_valid(entry, stack_top)) {
     return MM_INVALID;
   }

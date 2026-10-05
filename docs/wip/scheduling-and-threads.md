@@ -68,17 +68,37 @@ selection explicitly; do not silently reinterpret old indices.
 
 ### Scrolling space bar
 
-Keep fixed-width tabs and Super+Left/Right selection. Once the space list exceeds
-the visible width, the tab bar is a viewport. Reserve left/right chevrons as
-indicators: light when more spaces are hidden beyond that viewport edge, muted
-when that end of the complete list is visible. The chevrons do not navigate.
+Agreed with the owner on 2026-10-05; implemented in task 2b.
 
-When moving right, scroll as needed to keep the selected space and its next
-neighbour visible; moving left is symmetric. At the actual end, selection can
-reach the edge slot because there is no further neighbour to reveal. Keep the
-selection visible even when only one tab fits; neighbour preview applies when
-there is room. Selection and viewport track registry order, not CPU indices.
-Caelum stays the first space in that order.
+**Layout.**
+- All tabs have equal width. A tab's minimum width is the widest title among
+  all spaces plus fixed padding on each side.
+- If every tab fits at that minimum, the bar is divided equally among all tabs.
+- Otherwise the bar shows as many whole tabs as fit at the minimum and stretches
+  them equally to fill the viewport, so there are no partial tabs.
+- Titles are centered in their tabs. A title wider than the whole viewport is
+  clipped with a `…` marker.
+- Tab widths may change when a title changes.
+
+**Chevrons.** Left and right chevrons are always reserved, even when every tab
+fits, so the layout stays stable and leaves room for a future "add space"
+button. Each chevron is light when more spaces are hidden beyond that edge, and
+muted when that end of the complete list is visible. The chevrons do not
+navigate.
+
+**Selection.**
+- Super+Left/Right moves the selection and stops at both ends; it does not wrap.
+- When moving right, the viewport scrolls as needed to keep the selected space
+  and its next neighbour visible. Moving left is symmetric.
+- At the actual end of the list, the selection can reach the edge slot, because
+  there is no further neighbour to reveal.
+- The selection stays visible even when only one tab fits. The neighbour
+  preview applies when there is room.
+- Selection and viewport follow registry order, not CPU indices. Caelum stays
+  first in that order.
+
+**Titles.** Title rules are unchanged: 1–63 printable ASCII bytes, stored without
+allocation.
 
 Use initial per-task round-robin fairness and modest load balancing. A space with
 more runnable tasks can receive more total CPU time. CPU masks provide placement
@@ -285,21 +305,34 @@ In the task-1 baseline workloads, the kernel heap grew only when RAM files grew:
 six pools of 276 KiB to 2.1 MiB. The [heap growth record](../development/experiments/smp-task1-baseline/README.md#kernel-heap-growth)
 gives the counts that task 6 should compare against.
 
+### Task-2 decisions
+
+All three were accepted by the owner on 2026-10-05:
+
+1. **Interim placement.** Until migration (task 4), each space's tasks run on
+   one CPU: the workload CPUs from 1 onward in configuration order, wrapping, or
+   CPU 0 on a one-CPU boot. Children stay on their parent's CPU.
+   `space.NAME.cpus` arrives with the launch-ceiling work in task 3.
+2. **Install entry.** The entry is `space.install=app://init-install.pxe
+   boot.install=1`. `boot.install=1` requires exactly one configured space, and
+   only that space's init receives installer authority. Any other configuration
+   fails boot.
+3. **Navigation.** Super+Left/Right stops at both ends and does not wrap. Revisit
+   this if it feels awkward with the scrolling bar.
+
+Task 2 is split into 2a and 2b. 2a covers the registry, boot grammar, placement,
+routing and installer migration. 2b is the scrolling space bar.
+
 ### Review notes carried from #410
 
 The [#410 review](https://git.internal/PyxisOS/pyxis-os/pulls/410) approved task 1
 and left these notes for later tasks. They are proposals; none is an accepted
 decision. Each task settles its own note before implementing it.
 
-- **Task 2: install entry.** `boot/limine/limine.conf` starts the installer
-  with `init=app://init-idle init.primary=app://init-install.pxe boot.install=1`.
-  Decision 1 must give it a `space.NAME=` form as well, and the installer's
-  written configuration must follow.
-- **Task 2: migration check.** Changing the grammar makes the first update of
-  the 0.0.1 stick a grammar migration. That update is also the deferred C.4
-  Update round trip. Proposal: in QEMU, install with `4dc804a`, update with the
-  new media, then boot the target alone. The owner's native ThinkPad update
-  afterwards closes C.4 and exercises the migration.
+- **Task 2: install entry.** Resolved by task-2 decision 2.
+- **Task 2: migration check.** Done in QEMU for 2a. A 0.0.1 install followed by
+  Update from the new media, then a target-only boot, succeeded. The owner's
+  native ThinkPad update closes C.4 and exercises the migration.
 - **Task 4: IPC baseline gap.** `iobench pipe` and `ipcbench` need the local
   framebuffer session, so the task-1 baseline lacks them. Wake latency and
   placement are what tasks 3–4 change. Capture both before task 4 lands, for
@@ -379,7 +412,9 @@ updates current subsystem docs only for behavior it implements.
    Record any unresolved correctness decisions rather than inventing requirements.
    Completed 2026-10-05: audit, [baseline](../development/experiments/smp-task1-baseline/README.md)
    and accepted [decisions](#task-1-decisions).
-2. [ ] **Separate spaces and boot sessions from CPU topology.** Add independent
+2. [ ] **Separate spaces and boot sessions from CPU topology.** Split into
+   2a (registry, `space.NAME` grammar, interim placement, routing and installer
+   migration) and 2b (scrolling bar). Add independent
    lookup and update init selection, navigation, presentation/input and explicit
    service context. Implement the fixed-width scrolling bar and directional
    neighbour preview. Preserve session roles and Caelum authority; no dynamic
@@ -413,6 +448,14 @@ updates current subsystem docs only for behavior it implements.
    reference, preserving thread/worker follow-ups in WIP and technical debt.
 
 ## Subsequent work
+
+Owner direction, 2026-10-05; neither part is SMP scope, and neither authorizes
+placeholder APIs:
+
+- Users will create and destroy spaces at runtime.
+- A running application that holds the capability will be able to change its
+  space's title. Today `SPACE_RIGHT_SET_TITLE` reaches only init, session and
+  the interactive shell.
 
 A declarative YAML init is an agreed follow-up direction, not an SMP dependency.
 Existing configuration is Lua instead; that mismatch is recorded under

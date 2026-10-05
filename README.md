@@ -41,11 +41,12 @@ into build. Serial uses the launching terminal; exit QEMU with Ctrl-a x.
 `VFIO_PCI=0000:05:00.0` opts into [PCI passthrough](docs/development/qemu.md#pci-passthrough),
 after the [host setup](docs/development/thinkpad-nic-passthrough.md#host-setup).
 
-On a four-CPU boot, the first tab is Caelum's live kernel log. Super+Left/Right
-switches spaces; select CPU 1 for the development shell or CPU 2 for the read-only
-host-access session. CPU 3 starts the [remote terminal server](docs/userland/remote-terminal.md);
-further CPUs run idle init scripts. Navigation currently shows four tabs. A single-CPU boot shares the BSP's terminal with its shell.
-[Init scripts](docs/userland/init.md) select these sessions and their grants.
+The first tab is Caelum's live kernel log, and boot starts there. Super+Right
+selects the Development shell, then the Read-only host-access session, then
+Remote, which starts the [remote terminal server](docs/userland/remote-terminal.md).
+Super+Left/Right stops at either end. Every CPU count gets the same spaces;
+navigation currently shows four tabs. `SPACES` and the
+[init scripts](docs/userland/init.md) select these spaces and their grants.
 
 The shell starts at `home://`, which is RAM-backed and lost on reboot. `app://`
 contains the read-only boot archive. Optional [virtio-fs setup](docs/devices/virtio-fs.md)

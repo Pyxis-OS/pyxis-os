@@ -3,8 +3,7 @@
 The shell runs foreground programs with arguments, named resources and an
 explicit working directory. It waits for completion, reports a nonzero exit or
 user fault, and returns to the prompt. The default [init script](init.md) hands
-off to an interactive shell at `home://` on CPU 1 when available, otherwise on
-the BSP. See [the shell reference](shell.md) for commands, quoting, scripts and
+off to an interactive shell at `home://` in the Development space. See [the shell reference](shell.md) for commands, quoting, scripts and
 a short walkthrough.
 
 ## Filesystem and authority

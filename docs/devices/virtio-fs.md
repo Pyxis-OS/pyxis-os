@@ -71,11 +71,11 @@ device tagged `pyxis-host`. The memfd size follows `MEMORY`. Socket paths must
 not contain commas, which delimit QEMU options.
 
 Successful initialization logs the prepared queue addresses followed by a FUSE
-session-ready message. Default init selections start shells on CPUs 1 and 2
-when present; Super+Right selects their tabs. Each interactive init mounts the
-same export before session handoff. The development profile on CPU 1 delegates
-read-write grants; the read-only profile on CPU 2 delegates read-only grants.
-The Remote profile on CPU 3 delegates an optional read-write view to its remote
+session-ready message. The default Development and Read-only spaces start
+shells; Super+Right selects their tabs. Each interactive init mounts the
+same export before session handoff. The development profile delegates
+read-write grants; the read-only profile delegates read-only grants.
+The Remote profile delegates an optional read-write view to its remote
 shell sessions, sharing the same export.
 Both shells start in the shared RAM-backed `home://` directory, so use an
 explicit `host://` path or `cd host://` to reach the export.
@@ -158,7 +158,7 @@ sync host://work/hello.c host://work/hello.pxe host://work host://
 ```
 
 On the second Kilo visit, change the message, save and quit before rebuilding.
-In CPU 2's shell, `cat host://work/hello.c` reads the same source. Attempts to
+In the Read-only shell, `cat host://work/hello.c` reads the same source. Attempts to
 `mkdir host://work/blocked`, remove or rename that source with `rm` or `mv`, or
 save an edit in Kilo fail under the read-only grant. Stop QEMU and the daemon
 as described above, start a fresh daemon and QEMU pair using the same export

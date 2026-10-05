@@ -47,7 +47,7 @@ The configured interval must leave room for interrupt delays; nominal validation
 alone does not establish the actual sampling bound.
 
 Before BSP interrupts are enabled, explicit samples cover boot phases, PIT/PS2
-polling, AP startup waits, initrd mapping/validation, PCI devices, CPU spaces and
+polling, AP startup waits, initrd mapping/validation, PCI devices, spaces and
 initial task launches. This avoids accumulating the time of an entire long boot
 without sampling. Individual operations between these samples, runtime execution
 with interrupts disabled, firmware stalls and any debugger/VM pause during which

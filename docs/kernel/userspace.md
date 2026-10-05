@@ -80,9 +80,8 @@ tree, and explicitly supplies grants, directory context and environment when
 launching foreground children. See [the shell contract](../userland/shell.md).
 
 Normal output targets the owning space's TTY; the kernel-log syscall targets
-Caelum and serial. On multicore boots use Super+Right to select CPU 1 before typing;
-input on Caelum is discarded. The single-CPU fallback accepts input on Caelum,
-where kernel logs can disrupt the editor's display. See [keyboard input](../devices/keyboard.md)
+Caelum and serial. Use Super+Right to select a workload space before typing;
+input on Caelum is discarded on every CPU count. See [keyboard input](../devices/keyboard.md)
 and [libterm](../userland/terminal.md) for input and editing behavior.
 
 The [console wrapper](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/include/console.h) reports bytes written and
@@ -116,11 +115,11 @@ reference. A closed handle is immediately stale; other owners, including the
 space that owns the console, retain their references. Process exit releases
 handles left open. The read-only startup record is not updated after close.
 
-The [boot launcher](../../kernel/user/launch.c) prepares one shell on CPU 1 when
-available, otherwise on the BSP. Both boot
+The [boot launcher](../../kernel/user/launch.c) prepares each configured space's
+init on that space's CPU. Both boot
 and userspace launch use [shared image/stack preparation](../../kernel/user/load.c)
 to create a process that owns the
-loaded address space and belongs to the target CPU's space. Before submission, it calls
+loaded address space and belongs to its space. Before submission, it calls
 `process_prepare_startup()` with named bindings to already installed handles,
 arguments and environment. Preparation validates and copies the supplied kernel
 data into zeroed process-owned pages through a temporary alias, without activating

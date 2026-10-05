@@ -197,11 +197,7 @@ holding keystrokes needed by a future foreground child, at a syscall/rendering
 cost. Revisit changed-span rendering or input buffering with an explicit handoff
 when interactive workloads make that cost material.
 
-Editing assumes exclusive output use. The single-CPU fallback shares Caelum's
-TTY with scheduler/kernel logs, which can move the cursor during a read and
-visibly disrupt its display. Input bytes and the returned line remain separate
-from those writes. A real terminal ownership policy or separate log view is
-needed before treating that fallback as a normal interactive environment.
+Editing assumes exclusive output use of the space's terminal.
 
 The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
 on screen. History, Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](userland/terminal.md).
@@ -1544,3 +1540,13 @@ relative only: there is no on-screen cursor or absolute positioning. Doom has no
 mouse support yet, although pointer sessions would allow it. Revisit Synaptics
 absolute mode when gestures or scrolling are wanted, and USB mice after bulk
 endpoints exist.
+
+## 0.0.1 boot grammar recognition
+
+Initial spaces replaced the CPU-indexed `init.primary` boot options. The updater
+still accepts the 0.0.1 token `init.primary=app://init-installed` as a valid
+installed command line, so the first Update of a 0.0.1 disk rewrites it without
+reporting damage. Nothing else reads the old grammar, and the kernel rejects it.
+Remove the token from `userspace/installer/esp_read.c` once the owner's 0.0.1
+installation has been updated. Without the token, an old ESP is still rebuilt;
+it is only reported as damaged boot files.
