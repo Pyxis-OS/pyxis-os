@@ -243,9 +243,10 @@ current direction for tasks 2–6.
 - Authority is a new `SPACE_RIGHT_SET_AFFINITY` on the existing `space` grant
   that each space's init already receives. The kernel stores the space's ceiling
   from boot configuration, and no capability can change the ceiling.
-- The setup window closes permanently when the first process is launched into
-  the space. Scripts therefore run `affinity LIST` before `service start` and
-  the `session` handoff. Closing the window at the first launch means no
+- The setup window closes permanently at the first launch performed from the
+  space, whether by its init or by any holder of its grants. The kernel's own
+  start of init does not count. Scripts therefore run `affinity LIST` before
+  `service start` and the `session` handoff. Closing the window at the first launch means no
   already-launched task ever needs to be re-placed.
 - This also keeps delegation harmless. Grants can be copied with equal or
   reduced rights, and the handoff forwards the `space` grant for titles, but by
@@ -283,6 +284,35 @@ Use a dedicated, never-reused heap arena.
 In the task-1 baseline workloads, the kernel heap grew only when RAM files grew:
 six pools of 276 KiB to 2.1 MiB. The [heap growth record](../development/experiments/smp-task1-baseline/README.md#kernel-heap-growth)
 gives the counts that task 6 should compare against.
+
+### Review notes carried from #410
+
+The [#410 review](https://git.internal/PyxisOS/pyxis-os/pulls/410) approved task 1
+and left these notes for later tasks. They are proposals; none is an accepted
+decision. Each task settles its own note before implementing it.
+
+- **Task 2: install entry.** `boot/limine/limine.conf` starts the installer
+  with `init=app://init-idle init.primary=app://init-install.pxe boot.install=1`.
+  Decision 1 must give it a `space.NAME=` form as well, and the installer's
+  written configuration must follow.
+- **Task 2: migration check.** Changing the grammar makes the first update of
+  the 0.0.1 stick a grammar migration. That update is also the deferred C.4
+  Update round trip. Proposal: in QEMU, install with `4dc804a`, update with the
+  new media, then boot the target alone. The owner's native ThinkPad update
+  afterwards closes C.4 and exercises the migration.
+- **Task 4: IPC baseline gap.** `iobench pipe` and `ipcbench` need the local
+  framebuffer session, so the task-1 baseline lacks them. Wake latency and
+  placement are what tasks 3–4 change. Capture both before task 4 lands, for
+  example through QEMU `sendkey`/`screendump`.
+- **Task 6: arena sizing.** RAM FILE backing is `kmalloc` storage that doubles as
+  the file grows, and pools are never removed. The arena therefore bounds the
+  largest RAM-file working set for the whole boot. A failed doubling also retires
+  its entire range.
+  - Proposal: name the sizing rule, for example "at least the largest supported
+    physical memory, carved from the 64 GiB kernel VM".
+  - Proposal: expose retired-range accounting as a counter.
+  - Proposal: if the sizing becomes awkward, revisit RAM-file backing; it need
+    not live in the heap.
 
 ## Performance records and validation
 
