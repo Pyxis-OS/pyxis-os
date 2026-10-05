@@ -17,6 +17,7 @@
 #include <kernel/user.h>
 #include <kernel/task.h>
 #include <kernel/service/request.h>
+#include <kernel/spinlock.h>
 #include <kernel/wait.h>
 #include <stdatomic.h>
 #include <arch/cpu_local.h>
@@ -78,24 +79,22 @@ struct scheduler {
 static struct scheduler *schedulers;
 static struct task *completed_head;
 static atomic_bool started;
-static atomic_bool queues_locked;
+static struct spinlock queues_locked;
 static struct task_wait *timed_waits; /* queues_locked, expired by the BSP. */
 
 /* Sleeping kernel tasks belong to the BSP and are accessed only with IF=0. */
 static struct task *sleeping_tasks;
 
-/* IF=0 on every caller. Protects queue links and wait state; never allocate, log,
- * switch contexts or wait for another CPU while holding this lock. */
+/* Protects queue links and wait state. Resource and group locks may be held
+ * while taking it; it nests inside them, never the reverse. */
 static void lock_queues(void)
 {
-  while (atomic_exchange_explicit(&queues_locked, true, memory_order_acquire)) {
-    __asm__ volatile("pause");
-  }
+  spin_lock(&queues_locked);
 }
 
 static void unlock_queues(void)
 {
-  atomic_store_explicit(&queues_locked, false, memory_order_release);
+  spin_unlock(&queues_locked);
 }
 
 static struct scheduler *local_scheduler(void)
