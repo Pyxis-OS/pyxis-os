@@ -179,8 +179,9 @@ the installed revision and preserved file hash.
 
 ## Delivery and limits
 
-The checked-in `.config` remains `CONFIG_XHCI=n`; a final ordinary `make -j16
-image` with that default also passed. All task QEMU/debugger processes were
+At the initial C.3 qualification revision, `.config` remained `CONFIG_XHCI=n`;
+an ordinary `make -j16 image` with that default also passed. The owner subsequently
+requested the enabled default; see the review follow-up below. All task QEMU/debugger processes were
 closed. Only disposable images were written; physical installation, PXE live
 boot, a real power-off and the owner's `0.0.1` tag remain C.4.
 
@@ -189,3 +190,63 @@ medium. They do not qualify physical write durability, optional-command failure
 recovery, unseen topology or other logical-sector sizes. Partial topology was
 intentional in every live qualification boot through unsupported EHCI. No new
 topology, capacity, GUID or debugger address is part of the implementation.
+
+## Review follow-up: durable ESP publication and enabled xHCI
+
+The [review on #407](https://git.internal/PyxisOS/pyxis-os/pulls/407) found that
+old readable configuration/revision clusters could classify a partly rewritten
+kernel/archive as a recognized installation. The owner requested an immediate
+fix and separately changed the xHCI default to enabled on 2026-10-05.
+
+[Userland #124](https://git.internal/PyxisOS/pyxis-userland/pulls/124), revision
+`a3ea1b0`, changes the shared ESP writer: clear and flush the reserved area before
+replacing FAT/directory/file data; keep both boot sectors invalid; flush the
+complete new tree; then publish the boot sectors. Existing final sync/release
+persists publication. This adds two synchronizations and does not rely on old
+and new file clusters coinciding. Flush failures stop without retry. The parent
+rebased onto `a12aa3b` (the merged session-environment integration); other pins
+are unchanged. Parent `52c177b` pins the published userland fix and records the
+enabled default in both Kconfig and `.config`.
+
+With the same nested-KVM/root USB/EHCI configuration and finalized saved-file
+baseline, manual GDB stopped the real writer before reading the archive source
+at offset 5242880 for 4096 bytes. The live image used rebased parent `bbe595f`
+plus the enabled-default changes and published userland `a3ea1b0`; it reported
+`bbe595f87ea4`. BOT had completed 2409 writes / 9852928 bytes and two flushes
+(boot qualification and persisted boot invalidation). QEMU was killed while
+held at that breakpoint. Host inspection observed:
+
+- both primary and backup FAT boot sectors still entirely zero;
+- the whole kernel matching the new source, and the first 5 MiB of archive
+  matching the new archive while the complete archive still differed;
+- every byte outside the actual GPT-derived ESP extent unchanged.
+
+Fresh live `52c177b` media listed the same disk as eligible with damaged FAT32
+geometry, installed revision `unknown`, and
+`Boot files damaged or missing; Update will rebuild them.`
+[The confirmation screenshot](review-recovery-confirmation.png) records that
+classification. After typed `update`, a second manual debugger stop immediately
+before primary boot-sector publication observed three flushes (qualification,
+invalidation and complete-tree synchronization). The archive was then complete
+while both boot sectors remained zero. Normal execution resumed, verified the
+files, reopened the pool and reported `updated`, exit 0. Final BOT observations
+were 11621 writes / 47578112 bytes and five flushes, with healthy transport and
+no retries. Both outside-ESP comparisons passed again. The unchanged pool passed
+host fsck without replay; extracted `kept.txt` retained its original SHA-256.
+
+A separate blank 2 GiB USB target with the same `52c177b` live media passed
+Install / Read the room, typed `wipe`, formatting, GPT rescan and boot-file/root
+verification, reporting `installed`, exit 0. The repaired original disk also
+booted alone from USB with no ISO or VirtIO disk, reported `52c177be45b3` and
+npfs `system://`, and returned the unchanged original SHA-256 for `kept.txt`.
+[The target-only boot screenshot](review-target-boot.png) records both results.
+All follow-up QEMU/debugger processes were closed.
+
+Ordinary full image builds passed for the integrated sources, including
+`make -j16 image` without overrides. Kconfiglib inspection confirmed `XHCI=y`
+both before loading any `.config` and after loading the checked-in configuration.
+Existing third-party build warnings remain. No new tests, hooks or automation
+were added. `fj actions tasks` in userland reported zero tasks; `fj pr status 124`
+could not parse Forgejo's empty status (`unknown variant`, empty string), so
+standalone dependency CI is unavailable rather than a passed check. Parent CI
+builds the pinned dependency. Physical flush/power-loss qualification remains C.4.
