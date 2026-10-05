@@ -276,6 +276,30 @@ for lookup, identity or authority. Longer labels are clipped visually to the
 existing tab width, without altering the stored text. The presenter snapshots
 the title under a short lock before drawing; updates do not allocate.
 
+## Space bar
+
+The presenter draws one tab per space in registry order, Caelum first, between a
+`<` and a `>` slot that are always reserved. All tabs have equal width:
+
+- Each tab is at least as wide as the widest title among all spaces, plus one
+  character cell of margin on each side.
+- When every tab fits at that width, the tabs share the bar equally.
+- Otherwise the bar shows as many whole tabs as fit and stretches them to fill
+  the space between the chevrons.
+
+Titles are centered, and the selected tab's title is underlined. A title wider
+than the whole viewport, which needs a framebuffer under about 550 pixels wide,
+is clipped with a three-dot marker. A chevron is light when spaces are hidden
+beyond that edge and muted when that end of the list is visible. Chevrons do not
+navigate.
+
+Super+Left/Right moves the selection and stops at both ends. Moving right
+scrolls so that the selected space and the next one are visible. Moving left is
+symmetric. At the end of the list, the selection may sit in the edge slot. The
+selection stays visible when only one tab fits, and when a title change alters
+how many tabs fit. Layout follows the current titles on every frame, so renaming
+a space can change every tab's width.
+
 ## Startup grants and lifetime
 
 An init path must name an exact `app://` archive entry. Native init receives

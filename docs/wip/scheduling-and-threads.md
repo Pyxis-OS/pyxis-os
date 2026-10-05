@@ -68,7 +68,8 @@ selection explicitly; do not silently reinterpret old indices.
 
 ### Scrolling space bar
 
-Agreed with the owner on 2026-10-05; implemented in task 2b.
+Agreed with the owner on 2026-10-05 and implemented in task 2b; the
+[space bar reference](../userland/init.md#space-bar) describes current behavior.
 
 **Layout.**
 - All tabs have equal width. A tab's minimum width is the widest title among
@@ -331,8 +332,9 @@ decision. Each task settles its own note before implementing it.
 
 - **Task 2: install entry.** Resolved by task-2 decision 2.
 - **Task 2: migration check.** Done in QEMU for 2a. A 0.0.1 install followed by
-  Update from the new media, then a target-only boot, succeeded. The owner's
-  native ThinkPad update closes C.4 and exercises the migration.
+  Update from the new media, then a target-only boot, succeeded. On 2026-10-05
+  the owner updated the 0.0.1 ThinkPad stick natively. The update took 14 s,
+  and `sha256sum` of the retained `keep.bin` (`vi.pxe`) matched.
 - **Task 4: IPC baseline gap.** `iobench pipe` and `ipcbench` need the local
   framebuffer session, so the task-1 baseline lacks them. Wake latency and
   placement are what tasks 3–4 change. Capture both before task 4 lands, for
@@ -412,9 +414,9 @@ updates current subsystem docs only for behavior it implements.
    Record any unresolved correctness decisions rather than inventing requirements.
    Completed 2026-10-05: audit, [baseline](../development/experiments/smp-task1-baseline/README.md)
    and accepted [decisions](#task-1-decisions).
-2. [ ] **Separate spaces and boot sessions from CPU topology.** Split into
+2. [x] **Separate spaces and boot sessions from CPU topology.** Split into
    2a (registry, `space.NAME` grammar, interim placement, routing and installer
-   migration) and 2b (scrolling bar). Add independent
+   migration, #411) and 2b (scrolling bar). Add independent
    lookup and update init selection, navigation, presentation/input and explicit
    service context. Implement the fixed-width scrolling bar and directional
    neighbour preview. Preserve session roles and Caelum authority; no dynamic

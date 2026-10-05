@@ -44,8 +44,8 @@ after the [host setup](docs/development/thinkpad-nic-passthrough.md#host-setup).
 The first tab is Caelum's live kernel log, and boot starts there. Super+Right
 selects the Development shell, then the Read-only host-access session, then
 Remote, which starts the [remote terminal server](docs/userland/remote-terminal.md).
-Super+Left/Right stops at either end. Every CPU count gets the same spaces;
-navigation currently shows four tabs. `SPACES` and the
+Super+Left/Right stops at either end, and the tab bar scrolls when the spaces
+do not fit. Every CPU count gets the same spaces. `SPACES` and the
 [init scripts](docs/userland/init.md) select these spaces and their grants.
 
 The shell starts at `home://`, which is RAM-backed and lost on reboot. `app://`

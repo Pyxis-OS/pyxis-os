@@ -2,9 +2,9 @@
 
 `make userspace` builds the SDK, shell and core utilities. Normal boot runs the
 default [init script](init.md) and [session launcher](session-configuration.md),
-which by default start separate shells on CPUs 1 and 2 when present,
-or one on the BSP for a single-CPU boot, with shared `home://` as their working directory. On multicore boots
-use Super+Right to select CPU 1 before typing. The normal initrd contains init,
+which by default start separate shells in the Development and Read-only spaces,
+with shared `home://` as their working directory. Boot starts on Caelum's tab;
+use Super+Right to select Development before typing. The normal initrd contains init,
 shell, ls, cat, head, mkdir, rm, rmdir, mv, [Kilo and its license](../development/ports.md), and `share/hello.txt`;
 home is initially empty and its RAM
 contents disappear on reboot.

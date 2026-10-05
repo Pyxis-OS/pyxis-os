@@ -6,8 +6,8 @@ transfers, BOT/SCSI reads and kernel block/GPT integration implemented,
 Qualified disks support explicitly requested writable mounts. Phase C.2's
 QEMU persistent edit/build/run loop is qualified. Phase C.3's trusted installer
 USB raw authority is implemented and QEMU-qualified. C.4's first native
-installation succeeded on 2026-10-05 and is tagged `0.0.1`; only its Update round
-trip remains, deferred to the next real update.
+installation succeeded on 2026-10-05 and is tagged `0.0.1`. Its Update round
+trip passed the same day.
 Owner-reported [ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md) now
 include root and USB 3 hub-descendant storage reads. Broader hardware/recovery
 qualification of native mounting remains pending. Inspection-first work includes
@@ -460,7 +460,7 @@ host tools and the later physical-preparation procedure.
      - a synced file survives Update, with every byte outside the ESP unchanged;
      - an interrupted Update is rebuilt from fresh live media;
      - a mounted or unqualified USB disk is refused without writes.
-4. [ ] **Validate the physical installation.** Install onto the owner's
+4. [x] **Validate the physical installation.** Install onto the owner's
    expendable 128 GB stick from the PXE-booted live image, which has already
    booted the ThinkPad natively. Record device, firmware, topology and observed
    differences.
@@ -486,9 +486,12 @@ host tools and the later physical-preparation procedure.
      writable `system://`. A synced file kept its SHA-256 across a synced
      power-off. The owner tagged `4dc804a` as `0.0.1`. The stick qualified for
      writes without either compatibility watchpoint. The owner deferred the
-     Update round trip to the next update that is actually needed, so this
-     task stays open for that check alone. See the
+     Update round trip to the next update that is actually needed. See the
      [owner-reported record](../targets/t14-gen1-amd/usb-bringup.md#2026-10-05-first-native-installation-c4).
+   - **Update round trip, 2026-10-05:** the owner reported this result. Update
+     from the SMP task-2a media rewrote the stick's ESP from the 0.0.1
+     `init.primary` grammar to `space.pyxis` in 14 s. `sha256sum` of the retained
+     `keep.bin` (a copy of `vi.pxe`) still matched, so the pool was preserved.
 
 ## Remaining assignment and qualification decisions
 
@@ -497,9 +500,8 @@ host tools and the later physical-preparation procedure.
   supported USB 2/3 hub descendants. B.4 adds an internal BOT/SCSI media probe;
   B.5 read-only mount integration and C.1 qualified writes/flushes are implemented.
   C.2's QEMU persistent development loop and C.3's trusted installer USB raw
-  authority are qualified. C.4's native installation and synced power-off
-  persistence passed on the ThinkPad; its Update round trip waits for the next
-  real update.
+  authority are qualified. C.4's native installation, synced power-off
+  persistence and Update round trip passed on the ThinkPad.
 - Updating an installation is owned by the installer's
   [Update choice](../userland/system-updates.md), which preserves the pool.
   Read-only disk selection does not qualify a write target or authenticate media.

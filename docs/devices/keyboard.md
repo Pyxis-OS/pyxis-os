@@ -41,14 +41,15 @@ Space navigation, character mapping and userspace delivery belong to callers;
 the driver installs no bindings or consumer task.
 
 The presentation task binds Super+Left and Super+Right to the previous and next
-space in CPU order, wrapping at either end. The selected tab's name is underlined.
+space in registry order, stopping at either end. The selected tab's name is
+underlined, and the [space bar](../userland/init.md#space-bar) scrolls to keep
+it visible.
 Each arrow press switches once; releases and repeats do not switch. Either Super
 key works, lock modifiers do not affect the shortcut, and adding Shift, Control
 or Alt suppresses it. A shortcut's arrow repeats/releases remain consumed even
 if Super is released first. Remaining input is routed to the selected space's
 keyboard session, or its console when there is no session.
-Caelum discards application input on multicore boots; the single-CPU development
-fallback shares its console with userspace.
+Caelum discards application input on every CPU count.
 
 The session maps US ASCII key positions, with Shift, Caps Lock and typematic
 repeat. Enter yields newline, Backspace `\b`, Tab `\t`, and Escape `0x1b`.
