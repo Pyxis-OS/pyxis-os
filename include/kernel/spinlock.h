@@ -7,8 +7,9 @@
 
 /* A short busy-wait lock shared between CPUs. Every holder runs with IF=0, so
  * interrupt and fault entry must never take one. Never hold a spinlock across
- * allocation, logging, a context switch or waiting for another CPU, and never
- * take the same lock twice. Each lock documents what it may nest inside. */
+ * logging, a context switch or waiting for another CPU, and never take the
+ * same lock twice. Only the heap growth lock may be held across allocation.
+ * Each lock documents what it may nest inside. */
 struct spinlock {
   atomic_bool locked;
 };

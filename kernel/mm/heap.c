@@ -24,8 +24,8 @@ static struct spinlock heap_lock;
 static struct spinlock growth_lock;
 static uintptr_t arena_next, arena_end;
 
-/* Pool and allocation counters belong to heap_lock, retired_bytes to
- * growth_lock. arena_bytes is computed from the cursor in each snapshot. */
+/* Pool and allocation counters belong to heap_lock; the arena counters, which
+ * move with arena_next, belong to growth_lock. */
 static struct heap_stats stats;
 
 static size_t pool_size_for_request(size_t request)
@@ -65,6 +65,7 @@ static void retire_mapped(uintptr_t base, size_t bytes)
     pmm_free(physical, 1);
   }
   arena_next += bytes;
+  stats.arena_bytes += bytes;
   stats.retired_bytes += bytes;
 }
 
@@ -127,6 +128,7 @@ static bool add_pool(size_t request, void **result)
     return false;
   }
   arena_next += bytes;
+  stats.arena_bytes += bytes;
   return true;
 }
 
@@ -201,7 +203,6 @@ struct heap_stats heap_get_stats(void)
   spin_lock(&growth_lock);
   spin_lock(&heap_lock);
   struct heap_stats snapshot = stats;
-  snapshot.arena_bytes = arena_next - arch_heap_arena_base();
   spin_unlock(&heap_lock);
   spin_unlock(&growth_lock);
   return snapshot;
