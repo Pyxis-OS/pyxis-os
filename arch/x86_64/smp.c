@@ -15,7 +15,6 @@
 
 #define AP_STACK_BYTES (16 * 1024)
 #define AP_STARTUP_TIMER_PERIODS 600
-#define XAPIC_MAX_ID 255
 
 static struct cpu_local *bsp_only[1];
 static struct cpu_local **cpus;

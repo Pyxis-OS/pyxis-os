@@ -29,8 +29,8 @@ enum mm_result arch_space_activate(struct arch_address_space *space);
 enum mm_result arch_space_destroy(struct arch_address_space *space);
 
 /* Kernel mutations are limited to its shared allocation area; other spaces
- * permit lower-half mutations. Calls are BSP-only, IF=0. APs only activate
- * task spaces and must not access the shared scratch mappings. Kernel ranges
+ * permit lower-half mutations. Calls are BSP-only, IF=0; APs only activate
+ * task spaces. Walks use the calling CPU's own scratch slots. Kernel ranges
  * in use by another CPU must not be unmapped, remapped or protected. There
  * are no remote TLB shootdowns; task ownership transfers flush CR3 locally.
  * Callers manage virtual reservations; supplied data frames remain caller-owned.
@@ -55,7 +55,8 @@ enum mm_result arch_page_query(const struct arch_address_space *space,
  * Mappings must remain stable through the subsequent access. */
 bool arch_user_buffer_accessible(const struct arch_address_space *space,
                                  uintptr_t address, size_t bytes, bool write);
-/* Pre-established scratch slot, no allocations; never exposes a lasting pointer. */
+/* Any CPU with IF=0, outside interrupt/fault entry. Uses that CPU's own
+ * pre-established scratch slot, no allocations; never exposes a lasting pointer. */
 void arch_frame_zero(phys_addr_t physical);
 
 #endif
