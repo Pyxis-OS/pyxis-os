@@ -40,10 +40,13 @@ bool block_discovery_finished(void);
 bool block_inventory_complete(void);
 enum block_preparation block_preparation_result(block_device_id device);
 
-/* Installer raw-disk authority remains VirtIO-only. Configured GUID mounts
- * use the full registry; registration alone grants no public disk access. */
+/* Trusted installer inventory uses the sealed observed registry. Lost records
+ * or incomplete VirtIO bookkeeping make it unavailable; partial USB topology
+ * alone does not. Unsupported/unqualified candidates remain listed. Raw WRITE
+ * admission still requires per-device writable/flush qualification and exclusion
+ * of retained pools/claims. Registration alone grants no public disk access. */
 block_device_id block_installer_device_at(size_t index);
-bool block_installer_inventory_complete(void);
+bool block_installer_inventory_available(void);
 bool block_installer_device(block_device_id device);
 
 struct block_info {

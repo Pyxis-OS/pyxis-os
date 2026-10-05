@@ -113,10 +113,10 @@ static enum call_status select_partition(struct npfs_store_context *context,
 {
   if (job->device) {
     uint64_t flags = cpu_save_interrupts();
-    bool complete = block_installer_inventory_complete();
+    bool available = block_installer_inventory_available();
     bool allowed = block_installer_device(job->device);
     cpu_restore_interrupts(flags);
-    if (!complete) {
+    if (!available) {
       return CALL_UNAVAILABLE;
     }
     if (!allowed) {

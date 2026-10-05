@@ -164,6 +164,22 @@ static enum call_status await_gpt(struct npfs_store_context *context,
   }
 }
 
+static enum call_status await_discovery(struct npfs_store_context *context)
+{
+  for (;;) {
+    uint64_t flags = cpu_save_interrupts();
+    bool finished = block_discovery_finished();
+    cpu_restore_interrupts(flags);
+    if (finished) {
+      return CALL_OK;
+    }
+    if (task_deadline_expired(context->deadline)) {
+      return CALL_TIMED_OUT;
+    }
+    kernel_task_sleep_until(task_deadline_after_ms(1));
+  }
+}
+
 static uint64_t public_gpt_status(enum gpt_status status)
 {
   switch (status) {
@@ -245,15 +261,19 @@ static enum call_status release_claim(struct npfs_store_context *context,
 enum call_status disk_perform(struct npfs_store_context *context, struct npfs_job *job)
 {
   npfs_require_worker();
+  enum call_status discovery = await_discovery(context);
+  if (discovery != CALL_OK) {
+    return discovery;
+  }
   uint64_t flags = cpu_save_interrupts();
-  bool complete = block_installer_inventory_complete();
+  bool available = block_installer_inventory_available();
   if (job->operation == NPFS_RAW_INFO && !job->device) {
     job->device = block_installer_device_at(job->offset);
   }
   enum block_preparation preparation = block_preparation_result(job->device);
   bool installer = block_installer_device(job->device);
   cpu_restore_interrupts(flags);
-  if (!complete) {
+  if (!available) {
     return CALL_UNAVAILABLE;
   }
   if (preparation == BLOCK_DEVICE_INVALID || !installer) {

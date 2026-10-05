@@ -16,7 +16,7 @@ struct block_device {
 };
 
 static struct block_device *devices;
-static size_t device_count, device_capacity, installer_count;
+static size_t device_count, device_capacity;
 static bool retained;
 
 static void assert_client_context(void)
@@ -58,7 +58,6 @@ void block_prepare(void)
     };
     virtio_blk_set_id(i, id);
   }
-  installer_count = device_count;
 }
 
 size_t block_registry_capacity(void)
@@ -130,23 +129,22 @@ enum block_preparation block_preparation_result(block_device_id id)
   return device ? device->preparation : BLOCK_DEVICE_INVALID;
 }
 
-/* Installer raw-disk authority remains scoped to its qualified VirtIO backend. */
 block_device_id block_installer_device_at(size_t index)
 {
   assert_client_context();
-  return index < installer_count ? (block_device_id)index + 1 : BLOCK_DEVICE_ID_NONE;
+  return block_device_at(index);
 }
 
-bool block_installer_inventory_complete(void)
+bool block_installer_inventory_available(void)
 {
   assert_client_context();
-  return installer_count == virtio_blk_device_count() && virtio_blk_inventory_complete();
+  return retained && block_discovery_finished() && virtio_blk_inventory_complete();
 }
 
 bool block_installer_device(block_device_id id)
 {
   assert_client_context();
-  return id && id <= installer_count;
+  return find_device(id) != NULL;
 }
 
 enum block_result block_get_info(block_device_id id, struct block_info *info)
