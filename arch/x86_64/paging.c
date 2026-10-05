@@ -164,8 +164,10 @@ static bool mutable_address(const struct arch_address_space *space,
   }
 
   if (space == &kernel_space) {
-    return address >= KERNEL_VM_BASE &&
-           address - KERNEL_VM_BASE < KERNEL_VM_SIZE;
+    return (address >= KERNEL_VM_BASE &&
+            address - KERNEL_VM_BASE < KERNEL_VM_SIZE) ||
+           (address >= HEAP_ARENA_BASE &&
+            address - HEAP_ARENA_BASE < HEAP_ARENA_SIZE);
   }
   return address >= PAGE_SIZE && address <= LOWER_HALF_MAX;
 }
@@ -439,7 +441,13 @@ void paging_init(struct boot_info *boot)
   }
 
   /* Install the allocation area's ancestors before any roots can share them.
-   * This area fits entirely in one PML4 slot, so later growth stays shared. */
+   * This area and the heap arena fit in one PML4 slot, so later growth in
+   * either stays shared. They use disjoint PDPT entries, so general VM on the
+   * BSP and heap growth on another CPU never create the same table. */
+  _Static_assert(HEAP_ARENA_BASE == KERNEL_VM_BASE + KERNEL_VM_SIZE &&
+                 KERNEL_VM_SIZE % (UINT64_C(1) << PDPT_INDEX_SHIFT) == 0 &&
+                 KERNEL_VM_SIZE + HEAP_ARENA_SIZE <= PML4_SLOT_BYTES,
+                 "kernel VM and heap arena share one PML4 slot");
   KASSERT(!*bootstrap_leaf(KERNEL_VM_BASE));
 
   uint64_t *root = bootstrap_pointer(kernel_space.root, PAGE_SIZE);
@@ -862,6 +870,16 @@ uintptr_t arch_vm_base(void)
 size_t arch_vm_size(void)
 {
   return KERNEL_VM_SIZE;
+}
+
+uintptr_t arch_heap_arena_base(void)
+{
+  return HEAP_ARENA_BASE;
+}
+
+size_t arch_heap_arena_size(void)
+{
+  return HEAP_ARENA_SIZE;
 }
 
 uintptr_t arch_user_vm_base(void)

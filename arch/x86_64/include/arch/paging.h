@@ -15,6 +15,9 @@ void paging_init(struct boot_info *boot);
 void paging_prepare_ap(void);
 uintptr_t arch_vm_base(void);
 size_t arch_vm_size(void);
+/* Kernel addresses outside the VM area, mapped only by heap growth. */
+uintptr_t arch_heap_arena_base(void);
+size_t arch_heap_arena_size(void);
 uintptr_t arch_user_vm_base(void);
 size_t arch_user_vm_size(void);
 struct arch_address_space *arch_kernel_space(void);
@@ -28,11 +31,13 @@ enum mm_result arch_space_activate(struct arch_address_space *space);
  * callers must reclaim their backing first. Clears the root on success. */
 enum mm_result arch_space_destroy(struct arch_address_space *space);
 
-/* Kernel mutations are limited to its shared allocation area; other spaces
- * permit lower-half mutations. Calls are BSP-only, IF=0; APs only activate
- * task spaces. Walks use the calling CPU's own scratch slots. Kernel ranges
- * in use by another CPU must not be unmapped, remapped or protected. There
- * are no remote TLB shootdowns; task ownership transfers flush CR3 locally.
+/* Kernel mutations are limited to its shared allocation area and the heap
+ * arena; other spaces permit lower-half mutations. Calls are BSP-only, IF=0,
+ * except that heap growth maps and unmaps unpublished arena pages on any CPU.
+ * APs only activate task spaces. Walks use the calling CPU's own scratch
+ * slots. Kernel ranges in use by another CPU must not be unmapped, remapped
+ * or protected. There are no remote TLB shootdowns; task ownership transfers
+ * flush CR3 locally.
  * Callers manage virtual reservations; supplied data frames remain caller-owned.
  * Empty tables are retained for reuse until their space is destroyed;
  * failure may retain zeroed tables but never installs a partial data mapping. */
