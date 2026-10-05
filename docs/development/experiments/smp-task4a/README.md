@@ -118,10 +118,56 @@ apart, recorded each CPU's running and queued task ([migration-gdb.txt](migratio
 - **After CPU 1's client exited:** CPU 1 was running `…a020`, which an idle pull had moved
   mid-computation after a user-mode preemption.
 
+## Native ThinkPad check (owner-run)
+
+On 2026-10-05 the owner ran the [ThinkPad check](thinkpad-check.md) by PXE on the T14 Gen 1
+(Ryzen 5 PRO 4650U: 6 cores, 12 threads; Pyxis CPUs 1–11 take userspace). Two entries
+booted: this PR at `c490dbd`, and main at `43f9415` as the baseline. The same command line
+was used for both. These are owner-reported values, transcribed from the session.
+
+Concurrent remote heap clients, each client's `Elapsed`, in s:
+
+| Clients | Main | This PR |
+| ---: | --- | --- |
+| 1 | 1.293 | 1.447 |
+| 4 | 4.906–5.170 | 1.298, 1.468, 2.295, 2.296 |
+| 8 | 9.648–10.229 | 2.351, 2.638, then six at 3.489–3.520 |
+| 11 | — | 2.728–4.236 |
+| 12 | — | 4.060–4.511 |
+
+On main every client shares the remote space's CPU. With this PR they spread. The scaling is
+not linear, and two causes are likely (not measured):
+
+- **Sibling threads:** the boot log's APIC IDs (0–5 and 8–13) mean that SMT sibling
+  threads are adjacent Pyxis CPUs: (0,1), (2,3), … (10,11). The two 2.3 s results among
+  four clients fit two clients on sibling threads of one core. The scheduler does not
+  know the topology.
+- **Power limit:** this 15 W processor lowers its all-core clock as more cores run.
+
+`session app://iobench.pxe pipe --buffer 4096`, median (range) in ms. Each median is
+1 MiB divided by the reported throughput at the median:
+
+| Run | Acceptance | Completion |
+| --- | --- | --- |
+| Main, tabs 4–7 (every space runs on one CPU) | 2.38, 2.77, 2.27, 2.19 | 2.47, 2.85, 2.34, 2.27 |
+| This PR, tab 4, scheduler placement | 1.54 (1.135–2.186) | 1.62 (1.151–2.270) |
+| This PR, tab 5, scheduler placement | 1.28 (1.135–2.191) | 1.30 (1.168–2.276) |
+| This PR, tab 6, scheduler placement | 1.58 (1.414–1.699) | 1.63 (1.495–1.766) |
+| This PR, tab 7, limited to CPU 1 | 2.19 (2.192–4.394) | 2.28 (2.275–4.482) |
+| This PR, tab 8, limited to CPU 2 | 2.88 (2.562–2.974) | 2.92 (2.606–3.057) |
+
+Natively, pipes whose ends land on different CPUs are 1.5–2 times faster than
+same-CPU pipes, and their slowest passes only reach same-CPU speed. The bimodal slow
+passes seen in the nested VM therefore come from that VM's cost of waking a halted
+vCPU, not from the placement policy.
+
+A separate fix also came out of this check: rollover input loss on the ThinkPad keyboard
+went to #418, and it is not part of this PR. That bug corrupted some typed pipe commands;
+main's tab 8 run is missing because of it.
+
 ## Not exercised
 
-- No native ThinkPad run yet. [thinkpad-check.md](thinkpad-check.md) gives the
-  owner-run commands and the staged PXE builds.
+- No native run of the 1-CPU control or the mixed BSP-bound sets.
 - The preemption push (move at a load gap of two) was not caught in the debugger. Its
   locals are optimized out at the requeue site, so a `dprintf` could not be attached.
 - The 1-CPU control was not run under the debugger.

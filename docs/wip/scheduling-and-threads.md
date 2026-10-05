@@ -368,14 +368,16 @@ are one mechanism. A task preempted in user mode is requeued on a CPU whose load
 at least two lower, and that CPU's reschedule IPI is its wake-up. Idle APs also
 retry pulls on their 120 Hz tick. See [placement and migration](../kernel/smp.md#placement-and-migration).
 
-**Open after 4a: cross-CPU pipes.** The [4a record](../development/experiments/smp-task4a/README.md)
-shows a pipe whose producer and consumer land on different CPUs going bimodal on
-this nested VM. Some passes are faster than before; others are three to four
-times slower, apparently from waking halted vCPUs. Limiting the space to one CPU
-restores the old numbers, and endpoint IPC medians are unchanged. Proposed: keep
-the accepted policy and decide after an owner-run ThinkPad pipe check. If native
-hardware also shows the slowdown, consider starting a new task on its parent's CPU
-unless that CPU is two or more tasks heavier than the least-loaded one.
+**Cross-CPU pipes, resolved by the native check.** In the nested VM, pipes whose
+ends landed on different CPUs went bimodal. On the ThinkPad the owner measured the same
+pipes completing 1.5–2 times faster than same-CPU pipes, so the accepted policy stays.
+See the [native results](../development/experiments/smp-task4a/README.md#native-thinkpad-check-owner-run).
+
+**Candidate follow-up, not scheduled: topology-aware placement.** The ThinkPad's APIC
+IDs make SMT sibling threads adjacent Pyxis CPUs, and CPU 1 is the BSP's sibling.
+Placement treats every thread as an independent CPU, so two busy tasks can share a core
+while other cores idle. Filling one thread per core first would be a separate, measured
+change.
 
 ### Review notes carried from #410
 
