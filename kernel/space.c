@@ -31,12 +31,16 @@
 #define PRESENT_INTERVAL_NS UINT64_C(16666667)
 
 #define SPACES_NAV_HEIGHT 32
-#define SPACES_NAV_COUNT 4
+/* Character cells: a chevron slot at each end, and blank margin each side of a title. */
+#define SPACES_NAV_CHEVRON_CELLS 2
+#define SPACES_NAV_TITLE_PADDING_CELLS 1
 
 static const struct boot_framebuffer *screen;
 /* Registry order starts at Caelum. Boot appends before the presenter starts. */
 static struct space *caelum_space, *last_space;
 static struct space *active_space;
+/* Registry index of the leftmost visible tab. Presenter-owned. */
+static size_t viewport_first;
 
 static struct framebuffer *spaces_nav_fb;
 
@@ -198,38 +202,137 @@ static void snapshot_title(struct space *space, char title[SPACE_TITLE_MAX + 1])
   cpu_restore_interrupts(flags);
 }
 
+/* Equal-width tabs, as many whole tabs as fit between the chevron slots. */
+struct nav_layout {
+  size_t count;
+  size_t visible;
+  size_t tab_width;
+};
+
+static struct nav_layout nav_layout(void)
+{
+  struct nav_layout layout = {0};
+  size_t widest = 0;
+  for (struct space *space = caelum_space; space; space = space->next) {
+    char title[SPACE_TITLE_MAX + 1];
+    snapshot_title(space, title);
+    widest = MAX(widest, strlen(title));
+    ++layout.count;
+  }
+
+  size_t chevrons = 2 * SPACES_NAV_CHEVRON_CELLS * bizcat.width;
+  size_t available = spaces_nav_fb->width > chevrons ? spaces_nav_fb->width - chevrons : 0;
+  size_t minimum = (widest + 2 * SPACES_NAV_TITLE_PADDING_CELLS) * bizcat.width;
+  layout.visible = MIN(layout.count, MAX(available / minimum, 1));
+  layout.tab_width = available / layout.visible;
+  return layout;
+}
+
+static size_t space_index(const struct space *wanted)
+{
+  size_t index = 0;
+  for (struct space *space = caelum_space; space != wanted; space = space->next) {
+    ++index;
+  }
+  return index;
+}
+
+/* Keeps the selection inside a viewport that never extends past the list. */
+static void keep_selection_visible(const struct nav_layout *layout, size_t selected)
+{
+  viewport_first = MIN(viewport_first, layout->count - layout->visible);
+  if (selected < viewport_first) {
+    viewport_first = selected;
+  } else if (selected >= viewport_first + layout->visible) {
+    viewport_first = selected - layout->visible + 1;
+  }
+}
+
+/* After a move, also reveal the next space in that direction when there is room. */
+static void reveal_neighbour(size_t selected, bool next)
+{
+  struct nav_layout layout = nav_layout();
+  if (layout.visible > 1) {
+    if (next && selected + 1 < layout.count &&
+        selected + 1 >= viewport_first + layout.visible) {
+      viewport_first = selected + 2 - layout.visible;
+    } else if (!next && selected > 0 && selected - 1 < viewport_first) {
+      viewport_first = selected - 1;
+    }
+  }
+  keep_selection_visible(&layout, selected);
+}
+
+static void draw_ellipsis(size_t x, size_t y, uint32_t color)
+{
+  /* The font has no ellipsis glyph: three dots on the baseline of one cell. */
+  size_t dot = bizcat.width / 4;
+  size_t baseline = y + bizcat.height - 2 * dot - 1;
+  for (size_t i = 0; i < 3; ++i) {
+    fb_fill_rect(spaces_nav_fb, x + i * (dot + dot / 2), baseline, dot, dot, color);
+  }
+}
+
+static void draw_chevron(size_t x, char glyph, bool more)
+{
+  size_t padding = (SPACES_NAV_HEIGHT - bizcat.height) / 2;
+  size_t width = SPACES_NAV_CHEVRON_CELLS * bizcat.width;
+  uint32_t color = more ? aardvark_scheme.foreground : aardvark_scheme.palette[8];
+  tty_plot_char_raw(spaces_nav_fb, &bizcat, glyph, x + (width - bizcat.width) / 2, padding,
+      color, aardvark_scheme.palette[0]);
+}
+
+static void draw_tab(struct space *space, size_t x, size_t width)
+{
+  fb_rect(spaces_nav_fb, x, 0, width, SPACES_NAV_HEIGHT, aardvark_scheme.palette[8]);
+
+  char title[SPACE_TITLE_MAX + 1];
+  snapshot_title(space, title);
+  size_t margin = 2 * SPACES_NAV_TITLE_PADDING_CELLS * bizcat.width;
+  size_t cells = width > margin ? (width - margin) / bizcat.width : 0;
+  size_t length = strlen(title);
+  bool clipped = length > cells;
+  size_t shown = clipped ? (cells ? cells - 1 : 0) : length;
+  size_t drawn = clipped ? cells : length;
+  if (!drawn) {
+    return;
+  }
+
+  size_t padding = (SPACES_NAV_HEIGHT - bizcat.height) / 2;
+  size_t text_x = x + (width - drawn * bizcat.width) / 2;
+  for (size_t i = 0; i < shown; ++i) {
+    tty_plot_char_raw(spaces_nav_fb, &bizcat, title[i], text_x + i * bizcat.width,
+        padding, aardvark_scheme.foreground, aardvark_scheme.palette[0]);
+  }
+  if (clipped) {
+    draw_ellipsis(text_x + shown * bizcat.width, padding, aardvark_scheme.foreground);
+  }
+  if (space == active_space) {
+    fb_fill_rect(spaces_nav_fb, text_x, padding + bizcat.height + 1,
+        drawn * bizcat.width, 1, aardvark_scheme.foreground);
+  }
+}
+
 static void draw_spaces_nav()
 {
-  const size_t tab_width = spaces_nav_fb->width / SPACES_NAV_COUNT;
-  const size_t max_len = (tab_width / bizcat.width) - 2;
+  struct nav_layout layout = nav_layout();
+  /* A title change can shrink the visible count; keep the selection in view. */
+  keep_selection_visible(&layout, space_index(active_space));
+
+  fb_fill_rect(spaces_nav_fb, 0, 0, spaces_nav_fb->width, SPACES_NAV_HEIGHT,
+      aardvark_scheme.palette[0]);
+  size_t chevron_width = SPACES_NAV_CHEVRON_CELLS * bizcat.width;
+  draw_chevron(0, '<', viewport_first > 0);
+  draw_chevron(spaces_nav_fb->width - chevron_width, '>',
+      viewport_first + layout.visible < layout.count);
 
   struct space *space = caelum_space;
-  for (size_t i = 0; i < SPACES_NAV_COUNT; i++) {
-    fb_fill_rect(spaces_nav_fb, tab_width * i, 0, tab_width, SPACES_NAV_HEIGHT,
-        aardvark_scheme.palette[0]);
-    fb_rect(spaces_nav_fb, tab_width * i, 0, tab_width, SPACES_NAV_HEIGHT,
-        aardvark_scheme.palette[8]);
-
-    if (space) {
-      char title[SPACE_TITLE_MAX + 1];
-      snapshot_title(space, title);
-
-      size_t padding = bizcat.height / 2;
-      size_t len = MIN(strlen(title), max_len);
-
-      for (size_t j = 0; j < len; j++) {
-        tty_plot_char_raw(spaces_nav_fb, &bizcat, title[j],
-            tab_width * i + padding + j * bizcat.width, padding,
-            aardvark_scheme.foreground, aardvark_scheme.palette[0]);
-      }
-
-      if (space == active_space) {
-        fb_fill_rect(spaces_nav_fb, tab_width * i + padding,
-            padding + bizcat.height + 1, len * bizcat.width, 1,
-            aardvark_scheme.foreground);
-      }
-      space = space->next;
-    }
+  for (size_t i = 0; i < viewport_first; ++i) {
+    space = space->next;
+  }
+  for (size_t i = 0; i < layout.visible; ++i) {
+    draw_tab(space, chevron_width + i * layout.tab_width, layout.tab_width);
+    space = space->next;
   }
 }
 
@@ -322,6 +425,7 @@ static void switch_adjacent_space(bool next)
   if (next) {
     if (active_space->next) {
       switch_space(active_space->next);
+      reveal_neighbour(space_index(active_space), true);
     }
     return;
   }
@@ -331,6 +435,7 @@ static void switch_adjacent_space(bool next)
   }
   if (previous) {
     switch_space(previous);
+    reveal_neighbour(space_index(active_space), false);
   }
 }
 

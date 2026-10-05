@@ -181,7 +181,7 @@ See the [recipe notes](../../ports/sbase/README.md) for remaining upstream limit
 
 ## Editing in Pyxis
 
-Select CPU 1 with Super+Right on a multicore boot. The shell starts at `home://`:
+Select the Development space with Super+Right. The shell starts at `home://`:
 
 ```text
 kilo hello.c

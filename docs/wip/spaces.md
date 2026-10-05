@@ -23,11 +23,11 @@ The shared session interface could initially be a text display with a tab bar:
 [Caelum   ] [shell    ] [editor   ] [desktop A] [desktop B] [+]
 ```
 
-The agreed [runtime SMP milestone](scheduling-and-threads.md#scrolling-space-bar)
-adds a scrolling viewport over fixed-width tabs. Super+Left/Right changes selection
-and reveals the next neighbour in that direction when possible; noninteractive
-chevrons indicate hidden spaces at each edge. These navigation choices do not
-implement the future dynamic creation flow below.
+The [space bar](../userland/init.md#space-bar) is a scrolling viewport over
+equal-width tabs, with chevrons always reserved at each edge. Super+Left/Right
+changes selection and reveals the next neighbour in that direction when possible.
+These navigation choices do not implement the future dynamic creation flow below;
+the reserved chevron slots leave room for its add-space control.
 
 Starting a new space begins with an empty tab. The user enters the program they
 want to run in that tab and presses Enter to launch it, without requiring an
