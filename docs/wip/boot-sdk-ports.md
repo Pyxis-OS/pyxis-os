@@ -121,11 +121,13 @@ private memory and the heap, presentation and input routing, and the
 BSP-owned service rules. Other kernel feature tracks therefore pause at these
 exits, so SMP has a stable base:
 
-- **Filesystem:** after [system updates](system-updates.md) task 2.
-- **USB:** after "USB storage works": C.1 writes and flushes merged, and a
-  native ThinkPad check of read-only boot, the writable mount and the C.1
-  review notes. C.2 and C.3 of the [USB plan](usb-installation.md) then wait.
-- **Networking:** after the current link-selection task. Native lease-renewal
+- **Filesystem:** after [system updates](../userland/system-updates.md) task 2,
+  merged 2026-10-05.
+- **USB:** after the first native installation, which the owner moved ahead of
+  SMP on 2026-10-05. That is C.3, the installer's USB raw authority, and C.4,
+  the physical installation of the [USB plan](usb-installation.md). The commit
+  installed in C.4 is then tagged `0.0.1`. Further USB work waits.
+- **Networking:** after the link-selection task, merged 2026-10-05. Native lease-renewal
   qualification can wait.
 
 Fixes for major problems found by ThinkPad validation remain allowed in any
