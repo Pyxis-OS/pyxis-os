@@ -144,8 +144,10 @@ audit and [baseline](../development/experiments/smp-task1-baseline/README.md)
 were recorded and all task-1 decisions accepted; implementation tasks
 have not started.
 
-After SMP, the candidates are dynamic space creation (the new tab and its
-launch flow), a file navigator and multiplexing. The scrolling space bar itself
+After SMP, the agreed next direction is the [system layout](system-layout.md):
+a userspace boot init, a Lua boot configuration, a rescue archive with writable
+system volumes and a two-stage Update. Other candidates are dynamic space
+creation (the new tab and its launch flow), a file navigator and multiplexing. The scrolling space bar itself
 is part of SMP task 2.
 
 The [native filesystem milestone](native-filesystem.md) has completed format-only
