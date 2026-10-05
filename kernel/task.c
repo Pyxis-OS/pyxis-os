@@ -228,13 +228,6 @@ static size_t load_locked(size_t cpu_index)
   return schedulers[cpu_index].queued + (schedulers[cpu_index].running ? 1 : 0);
 }
 
-/* Multicore userspace stays off the BSP until private memory is serviced
- * locally (SMP task 7); a single-CPU boot runs it there. */
-static bool user_cpu_eligible(const struct space *space, size_t cpu_index)
-{
-  return space_allows_cpu(space, cpu_index) && (cpu_index != 0 || arch_cpu_count() == 1);
-}
-
 /* Only a user task outside a syscall can move: its saved state is a user-mode
  * boundary on its own kernel stack. A blocked syscall resumes where it was. */
 static bool task_movable(const struct task *task)
@@ -243,12 +236,14 @@ static bool task_movable(const struct task *task)
 }
 
 /* queues_locked. The least-loaded CPU SPACE may use; ties prefer PREFERRED,
- * then the lowest index. */
+ * then the lowest AP, then the BSP, which also runs the kernel workers. */
 static size_t place_locked(const struct space *space, size_t preferred)
 {
+  size_t count = arch_cpu_count();
   size_t best = SIZE_MAX;
-  for (size_t cpu_index = 0; cpu_index < arch_cpu_count(); ++cpu_index) {
-    if (!user_cpu_eligible(space, cpu_index)) {
+  for (size_t i = 0; i < count; ++i) {
+    size_t cpu_index = (i + 1) % count;
+    if (!space_allows_cpu(space, cpu_index)) {
       continue;
     }
     if (best == SIZE_MAX || load_locked(cpu_index) < load_locked(best) ||
@@ -275,7 +270,7 @@ static struct task *pull_locked(size_t cpu_index)
     struct task *previous = NULL;
     for (struct task *task = schedulers[other].ready_head; task;
          previous = task, task = task->next) {
-      if (task_movable(task) && user_cpu_eligible(task->process->space, cpu_index)) {
+      if (task_movable(task) && space_allows_cpu(task->process->space, cpu_index)) {
         source = &schedulers[other];
         found = task;
         found_previous = previous;
@@ -549,7 +544,8 @@ struct task_profile *task_profile_current(void)
 }
 
 /* Takes the local queue's head, or, when it is empty, pulls a movable task
- * from a busier CPU. The BSP pulls nothing while it runs no multicore userspace. */
+ * from a busier CPU. The BSP pulls too; its kernel workers are queued locally,
+ * so it pulls only while none of them is runnable. */
 static struct task *dequeue(struct scheduler *scheduler, size_t cpu_index)
 {
   lock_queues();
@@ -561,7 +557,7 @@ static struct task *dequeue(struct scheduler *scheduler, size_t cpu_index)
     }
     --scheduler->queued;
     task->next = NULL;
-  } else if (cpu_index != 0) {
+  } else {
     task = pull_locked(cpu_index);
   }
   scheduler->running = task != NULL;
@@ -579,7 +575,7 @@ static void requeue_preempted(struct task *task, size_t cpu_index)
   if (task_movable(task)) {
     struct space *space = task->process->space;
     size_t target = place_locked(space, cpu_index);
-    if (!user_cpu_eligible(space, cpu_index) ||
+    if (!space_allows_cpu(space, cpu_index) ||
         load_locked(target) + 2 <= load_locked(cpu_index)) {
       destination = target;
     }
@@ -688,7 +684,7 @@ enum call_status task_space_set_affinity(struct space *space, const uint64_t *cp
   memcpy(space->effective_cpus, cpus, space_cpu_words() * sizeof(*cpus));
   /* Setup is open only before the first launch, so the caller is the space's
    * only task and nothing else needs re-placing. */
-  task->relocate = !user_cpu_eligible(space, task->cpu_index);
+  task->relocate = !space_allows_cpu(space, task->cpu_index);
   unlock_queues();
   return CALL_OK;
 }
@@ -705,7 +701,7 @@ enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
   }
   bool placeable = false;
   for (size_t cpu_index = 0; cpu_index < arch_cpu_count(); ++cpu_index) {
-    placeable |= user_cpu_eligible(process->space, cpu_index);
+    placeable |= space_allows_cpu(process->space, cpu_index);
   }
   if (!placeable) {
     return MM_INVALID;

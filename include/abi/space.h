@@ -29,8 +29,8 @@ _Static_assert(sizeof(struct space_title_request) == 32, "space title request la
  * CPUS addresses ceil(CPU_COUNT / 64) little-endian bit words: bit N of word
  * N / 64 selects boot CPU index N. CPU_COUNT is 1..boot CPU count, and bits at
  * or beyond it must be clear. An empty set or an index beyond the boot is
- * BAD_REQUEST; a CPU outside the ceiling is DENIED; a set whose only CPU is
- * the BSP on a multicore boot is UNAVAILABLE. Any failure changes nothing. On
+ * BAD_REQUEST, and a CPU outside the ceiling is DENIED. Any CPU may be named,
+ * including the BSP. Any failure changes nothing. On
  * success the call returns on an allowed CPU. Repeated requests replace the
  * set. No reply. */
 struct space_affinity_request {
