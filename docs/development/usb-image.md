@@ -125,49 +125,12 @@ manual writable attachment. Physical installations use the
 [native installer](../userland/installer.md) rather than this image; see
 [USB installation](../devices/usb-installation.md).
 
-## Prepare a selected physical target later
+## Physical installation
 
-Phase A builds and boots regular emulated image files. Physical writing requires
-a separately assigned installation step and explicit selection of the expendable
-whole USB drive. Keep the internal NVMe outside that selection. The following
-is a manual preparation procedure for that later step, not an automatic target
-finder or installer.
-
-Select a stable whole-drive `/dev/disk/by-id/` path, then inspect its resolved
-device, model, serial, capacity, logical-sector size and current mount points:
-
-```sh
-usb_target=/dev/disk/by-id/usb-REPLACE_WITH_THE_SELECTED_WHOLE_DRIVE
-readlink -f "$usb_target"
-lsblk -o NAME,PATH,MODEL,SERIAL,SIZE,LOG-SEC,MOUNTPOINTS "$usb_target"
-sudo blockdev --getss "$usb_target"
-sudo blockdev --getsize64 "$usb_target"
-stat -c %s build/pyxis-usb.img
-```
-
-The selected drive must use 512-byte logical sectors and be at least as large
-as the image. Unmount each currently mounted partition on that exact drive and
-relinquish other host access before writing. Check the selected whole-drive path
-again before copying; the copy replaces its partition table and contents.
-
-```sh
-sudo dd if=build/pyxis-usb.img of="$usb_target" bs=4M conv=fsync status=progress
-sudo sgdisk --move-second-header "$usb_target"
-sudo sgdisk --verify "$usb_target"
-```
-
-Relocating the backup GPT is required when the physical target is larger than
-the image: [Caelum's GPT scanner](../devices/gpt.md#supported-layout-and-checks)
-requires that copy at the disk's actual final logical block. This changes GPT
-geometry without expanding the ESP or pool. The remaining capacity stays unused;
-pool resizing is separate work. Rewriting an installation replaces its pool,
-and these commands provide no rollback on interruption.
-
-Select USB UEFI boot in firmware, with Secure Boot disabled for the unsigned
-vendored loader. Limine reads the same EFI files and the shell runs from RAM.
-Physical controller, laptop port topology, USB keyboard support, persistent
-reads/writes and power-loss durability require the later assigned hardware and
-USB stages. A successful QEMU boot does not establish those properties.
+Physical USB targets are installed with the [native installer](../userland/installer.md),
+not by writing this image. Update keeps the pool; see
+[system updates](../userland/system-updates.md). The first native installation is
+recorded in [USB installation](../devices/usb-installation.md).
 
 ## Validation
 

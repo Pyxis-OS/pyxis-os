@@ -360,11 +360,11 @@ Accepted 2026-10-02.
    - [x] Install and boot in QEMU on merged main, including USB-backed live
      media, CPU entropy without VirtIO RNG and synchronized persistent files.
      See [task-5 qualification](../development/experiments/native-filesystem-task5/README.md).
-   - [ ] Native ThinkPad installation/boot, **deferred by the owner, 2026-10-04**,
-     until writable USB storage is available. The completed
-     [USB installation](../devices/usb-installation.md#validation) installed onto
-     and booted a USB stick natively on 2026-10-05, with persistence across a
-     synced power-off and one Update round trip. No NVMe backend exists.
+   - [x] Native ThinkPad installation/boot. The owner deferred it on 2026-10-04
+     until writable USB storage existed. It was completed on 2026-10-05 by the
+     [USB installation](../devices/usb-installation.md#validation), which installed
+     onto and booted a USB stick natively, with persistence across a synced
+     power-off and one Update round trip. No NVMe backend exists.
 
 ## Task-3 delivery
 
