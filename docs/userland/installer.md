@@ -8,7 +8,10 @@ already in RAM; installing does not require a driver for the live medium.
 
 Choose **Install** first, then **Proceed with installation** for marked development disks or **Read the
 room** to include blank, foreign, partially marked and damaged contents. The
-installer lists every disk and explains eligibility. It selects a sole eligible
+installer waits for sealed boot discovery, lists retained VirtIO and USB disk
+candidates and explains eligibility. Partial USB coverage can hide additional
+disks; it does not prevent listing the observed candidates. Lost registry records
+or incomplete VirtIO bookkeeping refuse inventory. It selects a sole eligible
 disk or asks for its displayed number when several qualify, then shows size,
 GUID and escaped labels of the volumes that will be destroyed.
 A zeroed first sector with neither GPT header present is listed as blank;
@@ -21,7 +24,9 @@ validated COMMITTED journal images overlaid in memory; it never persists replay.
 Any individually readable nonempty pool with no regular markers vetoes the
 entire disk in both modes. A marked pool cannot override another final pool.
 Mounted/retained pools, raw claims and unsupported, failed, read-only or
-flush-incapable devices are excluded. Unsupported GPT features/capacity and
+flush-incapable devices are excluded. USB targets must have known
+write-protection-clear media and a successful blocking cache-synchronization
+qualification; reads alone do not qualify a target. Unsupported GPT features/capacity and
 inspection I/O/allocation failures also fail closed.
 
 The journal prompt starts with ceil(pool bytes / 128), rounded up to MiB,
@@ -69,9 +74,13 @@ firmware-variable updater. See the
 [validation record](../development/experiments/native-filesystem-task4.3/README.md)
 and [remaining limits](../technical-debt.md#installer-inspection-and-recovery-limits).
 Merged-main [QEMU end-to-end qualification](../development/experiments/native-filesystem-task5/README.md)
-includes USB-backed live-media loading and CPU entropy. Native ThinkPad
-installation remains deferred: qualified USB write/flush support is implemented,
-but installer USB raw authority and physical qualification remain pending.
+includes USB-backed live-media loading and CPU entropy. The separate
+[C.3 USB-target record](../development/experiments/usb-installer-c3/README.md)
+documents installer raw-authority integration checks. Native ThinkPad
+installation remains deferred to C.4 of the [USB plan](../wip/usb-installation.md).
+Installer USB raw authority is implemented; physical installation, target-only
+boot, synced power-off persistence and Update qualification require a separately
+authorized expendable target.
 The [program reference](../../userspace/installer/README.md) describes its SDK
 boundary; the [format and host tools](../../fs/docs/npfs-host-tools.md) remain
 owned by pyxis-fs.

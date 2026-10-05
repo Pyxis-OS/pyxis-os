@@ -11,7 +11,13 @@ and the npfs pool containing `system://` data. It uses the same trusted
 The installer lists disks with an eligibility reason, selects a sole eligible
 disk or asks for its displayed number, and shows installed and live kernel
 revisions. A missing, empty, structurally damaged or nonprintable `boot/revision` displays
-`unknown`; this optional record does not authorize an update.
+`unknown`; this optional record does not authorize an update. Retained VirtIO
+and USB candidates use the same selection and typed-consent rules. USB write
+claims require known write-protection-clear media and successful real blocking
+cache synchronization, with no latched write failure or mounted/claimed device.
+Inventory waits for sealed discovery; partial USB coverage may conceal other
+eligible disks, while lost registry records or incomplete VirtIO bookkeeping
+refuse inventory.
 
 An eligible disk has healthy matching GPT copies with the exact installer
 layout: the 512 MiB ESP at 1 MiB and an npfs partition extending to the aligned
@@ -81,8 +87,12 @@ covers the initial action menu, revision recording and candidate/refusal cases.
 The [ESP-update qualification record](../development/experiments/system-updates-task2/README.md)
 records the finalized installation update, target-only reboot, preserved data,
 host structural checking and recovery of an interrupted ESP replacement.
-These are QEMU qualifications; physical firmware, USB raw-disk authority,
-power loss and uncertain I/O remain
-[deferred](../technical-debt.md#installer-inspection-and-recovery-limits).
+These records qualify the original VirtIO target path. Installer USB raw-disk
+authority is now implemented, using the same Update workflow; its integration
+checks are in the [C.3 USB-target
+record](../development/experiments/usb-installer-c3/README.md). Physical USB
+installation/Update qualification belongs to C.4 of the
+[USB plan](../wip/usb-installation.md); physical firmware, power loss and uncertain
+I/O remain [deferred](../technical-debt.md#installer-inspection-and-recovery-limits).
 Updates from inside a running installed system, image downloading and npfs
 format migration are outside this interface.

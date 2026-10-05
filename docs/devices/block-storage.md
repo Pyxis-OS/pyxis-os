@@ -20,8 +20,12 @@ discovery was exhaustive. Configured native mount authority uses the full
 registry after discovery and GPT scans finish, permitting a unique observed GUID
 match under partial discovery. `block_inventory_complete()` controls initial
 absence and no-match diagnosis rather than disabling prepared disks. The
-installer remains VirtIO-only through the separate `block_installer_*` view;
-USB public raw access is deferred.
+installer uses the separate `block_installer_*` view of all retained VirtIO and
+USB candidates. That view waits for sealed discovery and accepts observed USB
+records under partial coverage, while refusing lost registry records or
+incomplete VirtIO bookkeeping. Unseen disks cannot be enumerated. Raw access
+requires an explicitly delegated installer capability; writable claims retain
+the existing per-device qualification, mount exclusion and failure checks.
 
 The block-storage foundation milestone is complete. Its implemented contracts
 live here, in [shared VirtIO queues](virtio-queues.md) for filesystem, entropy and
