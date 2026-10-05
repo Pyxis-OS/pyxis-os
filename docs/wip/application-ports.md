@@ -5,6 +5,8 @@ implementation assignment. Select one bounded consumer, probe a pinned source
 revision, and discuss missing contracts before starting each milestone. Keep
 ports in userspace and adapt their platform interfaces without reshaping the
 kernel around an individual application.
+Every candidate follows the [ports and native commands](../development/ports.md#ports-and-native-commands)
+boundary: ports are leaf tools, and nothing that defines Pyxis is ported.
 
 Kilo, TCC, Lua and Doom already provide useful applications; see the
 [port workflow](../development/ports.md), [edit/build/run loop](../development/edit-build-run.md),
@@ -28,7 +30,7 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
 | awk | Text filtering, field processing and small scripts; select an implementation after a libc/dependency probe. |
 | uniq | [Implemented sbase port](../userland/uniq.md), packaged in the normal image with libc `getline`/`isblank` and validated against host upstream output. |
-| grep, tail, wc, sort, hexdump | Small everyday commands that remain useful alongside awk. Decide which to port or implement separately; this is not a commitment to a complete Unix utility suite. |
+| grep, tail, wc, sort, hexdump | Small everyday commands that remain useful alongside awk. Decide which to port or implement separately; this is not a commitment to a complete Unix utility suite. Pure text filters can be ports; commands that inspect system state are native. |
 | jq | JSON inspection and transformation, initially on local files. Audit libc/math and the selected regex configuration/dependency. |
 | pup | A Go command-line HTML parser and CSS-selector tool, with JSON output for pipelines. It is a small Go utility candidate; see the [Go runtime direction](toolchains-and-runtimes.md#go-cross-compiler-then-hosted-go-toolchain). |
 

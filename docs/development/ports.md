@@ -8,6 +8,45 @@ Recipes are trusted build code. They do not modify the SDK or resolve/install
 dependencies. Source pins, licenses, host/Pyxis dependencies, patch order and
 output names live in each recipe's metadata; `ports.lua` only lists recipes.
 
+## Ports and native commands
+
+Agreed 2026-10-05. Ports bring familiar tools to Pyxis; they must not become
+its userland. Everything that makes Pyxis itself stays native, and ported tools
+keep it working.
+
+**Native-owned.** Anything that creates or shows a Pyxis concept is a native
+userland program, never a port:
+
+- the shell, init and sessions; spaces, titles and affinity;
+- grants, mounts and services;
+- the installer and Update;
+- network configuration;
+- the core file commands, such as `ls`, `cat`, `head`, `mkdir`, `mv`, `rm`,
+  `rmdir` and `sync`, where scheme roots and grants show up.
+
+No ported command duplicates a native one, so there is no BusyBox `sh`, `init`,
+`mount`, `ls`, `ps` or `ifconfig`. A tool that lists or inspects system state,
+such as a `ps` or a `find` over scheme roots, is native too.
+
+**Ported leaf tools.** A port is a tool whose value is familiar behaviour, such
+as an editor, pager, archiver, checksum, text filter or browser. Each BusyBox
+applet or sbase tool is added on its own, as a recorded decision, never by
+enabling a default configuration. If removing a port would also remove a Pyxis
+concept, that tool should have been native.
+
+**Pyxis behaviour keeps working.** A ported tool:
+
+- accepts scheme paths such as `system://` and `http://` through libc;
+- runs with only the grants it was given, with no ambient authority;
+- fails explicitly instead of faking success. For example, it refuses links or
+  unsupported metadata rather than pretending to create them.
+
+Every port's finish criteria include at least one check of this behaviour. For
+BusyBox `tar`, that could be extracting a `home://` archive into `system://` and
+a clear refusal without write access. Platform support follows the
+[libc portability rules](../userland/libc-portability.md): standard libc
+functions built on native constructs, not POSIX-shaped kernel mechanisms.
+
 ## Building and packaging
 
 ```sh
