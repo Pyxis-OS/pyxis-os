@@ -75,13 +75,15 @@ interface) at `4-3`, AX200 Bluetooth at `4-4`, and the camera at `6-2`.
   baseline on `07:00.3` has no attached peripheral, making undocked USB-A Right
   a useful proposed first native qualification route. This is a validation
   recommendation, not a controller-selection policy or baked-in port map.
-- Linux choosing UAS does not by itself prove BOT availability. The separate
-  [SanDisk target observation](../../wip/usb-installation.md#known-target-and-missing-evidence)
-  records BOT alternate 0 and UAS alternate 1 for the owner's `0781:55a9` target.
+- Linux choosing UAS does not by itself prove BOT availability. A separate
+  2026-10-02 Linux inspection found BOT at alternate 0 and UAS at alternate 1
+  for the owner's `0781:55a9` stick; Pyxis later
+  [selected BOT natively](usb-bringup.md#2026-10-04-read-only-storage-and-usb-3-hub-follow-up).
   These inventories contain no full stick configuration/endpoint descriptors.
-- [Native USB block access](../../devices/usb-enumeration.md) remains pending.
-  Fedora enumeration and Pyxis descriptor inspection do not
-  establish readable media under Pyxis.
+- Fedora enumeration does not establish Pyxis support. Native
+  [USB storage](../../devices/usb-storage.md) and the
+  [first native installation](usb-bringup.md#2026-10-05-first-native-installation-c4)
+  are recorded separately.
 
 ## Device condition and evidence limits
 

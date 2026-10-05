@@ -77,12 +77,12 @@ and [remaining limits](../technical-debt.md#installer-inspection-and-recovery-li
 Merged-main [QEMU end-to-end qualification](../development/experiments/native-filesystem-task5/README.md)
 includes USB-backed live-media loading and CPU entropy. The separate
 [C.3 USB-target record](../development/experiments/usb-installer-c3/README.md)
-documents installer raw-authority integration checks. The first native
-installation, C.4 of the [USB plan](../wip/usb-installation.md), installed onto
-a USB stick on the ThinkPad from PXE live media. The stick then booted alone and
-kept a synced file across a synced power-off; see the
+documents installer raw-authority integration checks. The first
+[native USB installation](../devices/usb-installation.md#validation) installed
+onto a USB stick on the ThinkPad from PXE live media. The stick then booted
+alone, kept a synced file across a synced power-off and passed one Update round
+trip; see the
 [owner-reported record](../targets/t14-gen1-amd/usb-bringup.md#2026-10-05-first-native-installation-c4).
-A physical Update is checked with the next real update.
 The [program reference](../../userspace/installer/README.md) describes its SDK
 boundary; the [format and host tools](../../fs/docs/npfs-host-tools.md) remain
 owned by pyxis-fs.

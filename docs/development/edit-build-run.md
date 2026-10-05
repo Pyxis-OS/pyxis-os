@@ -57,8 +57,9 @@ and [terminal behavior](../userland/terminal.md) for details.
 An explicitly configured USB-backed npfs volume can hold source, objects and
 native executable output across boots. The compiler and SDK stay in the read-only
 archive; `home://` stays RAM-backed. This QEMU walkthrough uses a private disk
-copy and a separately booted ISO. Physical writes remain deferred to the
-[hardware qualification stage](../wip/usb-installation.md#c-persistent-usb-installation-and-hardware-validation).
+copy and a separately booted ISO. Physical installation uses the
+[native installer](../userland/installer.md); see
+[USB installation](../devices/usb-installation.md#validation).
 
 ### Select and mount a private disk
 

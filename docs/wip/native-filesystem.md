@@ -180,9 +180,8 @@ Accepted 2026-10-02.
    only to trusted init. Init passes it only to the installer, and only when the
    installer is launched to install.
 2. **Target disks.** V1 supports whatever writable disk driver Caelum has. Today
-   that is a QEMU virtio-blk disk. [USB mass storage](usb-installation.md) is
-   developed in parallel, and a USB target follows when it lands; it is not a
-   prerequisite. NVMe comes later.
+   that is virtio-blk and qualified [USB mass storage](../devices/usb-installation.md).
+   NVMe comes later.
 3. **Installer steps.** On a [consenting target](#target-consent) the installer:
    1. creates a GPT;
    2. creates the boot partition (a FAT32 EFI system partition, written fresh,
@@ -362,10 +361,10 @@ Accepted 2026-10-02.
      media, CPU entropy without VirtIO RNG and synchronized persistent files.
      See [task-5 qualification](../development/experiments/native-filesystem-task5/README.md).
    - [ ] Native ThinkPad installation/boot, **deferred by the owner, 2026-10-04**,
-     until writable USB storage is available. USB descriptor enumeration and
-     firmware boot are implemented; native mass-storage reads, block integration
-     and real write/flush support remain in the [USB milestone](usb-installation.md).
-     No NVMe backend exists. The QEMU result does not close physical qualification.
+     until writable USB storage is available. The completed
+     [USB installation](../devices/usb-installation.md#validation) installed onto
+     and booted a USB stick natively on 2026-10-05, with persistence across a
+     synced power-off and one Update round trip. No NVMe backend exists.
 
 ## Task-3 delivery
 

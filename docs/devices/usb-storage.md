@@ -9,8 +9,9 @@ Explicit writable mounts require known clear write protection and successful
 cache-synchronization qualification; other readable disks remain read-only.
 The trusted Install init can delegate bounded [installer raw-disk
 authority](installer-authority.md) for retained USB candidates. USB registration
-alone grants applications no raw-disk access. Hotplug and physical
-write/durability qualification remain separate work.
+alone grants applications no raw-disk access. [USB installation](usb-installation.md)
+summarizes the path end to end. Hotplug and power-loss durability remain
+unqualified.
 
 ## Binding and preparation
 
@@ -238,8 +239,10 @@ Storage outcomes are separate from descriptor-inventory completeness.
 
 The [manual bring-up record](../development/usb-storage-bringup.md) describes QEMU
 coverage. The [owner-reported ThinkPad follow-up](../targets/t14-gen1-amd/usb-bringup.md#2026-10-04-read-only-storage-and-usb-3-hub-follow-up)
-observed root and USB 3 hub-descendant reads with capacities matching Linux;
-physical writes, recovery and broader native qualification remain pending.
+observed root and USB 3 hub-descendant reads with capacities matching Linux.
+The [first native installation](../targets/t14-gen1-amd/usb-bringup.md#2026-10-05-first-native-installation-c4)
+qualified one stick for writes and flushes; recovery and broader native
+qualification remain pending.
 The C.1 error, abandonment and qualification-refusal paths have source review;
 forced-error validation was not performed. Protocol behavior follows
 [USB BOT 1.0](https://www.usb.org/sites/default/files/usbmassbulk_10.pdf)
