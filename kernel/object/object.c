@@ -175,7 +175,7 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
   case OBJECT_PROFILE:
     return !(rights & ~(PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_FILE | PROFILE_RIGHT_HOST));
   case OBJECT_SPACE:
-    return !(rights & ~SPACE_RIGHT_SET_TITLE);
+    return !(rights & ~SPACE_RIGHTS);
   case OBJECT_TERMINAL_SERVICE:
     return !(rights & ~TERMINAL_SERVICE_RIGHT_CREATE);
   case OBJECT_TERMINAL_ATTACHMENT:

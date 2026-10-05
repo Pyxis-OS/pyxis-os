@@ -4,7 +4,10 @@
 #include <abi/message.h>
 
 #define SPACE_RIGHT_SET_TITLE (UINT64_C(1) << 0)
+#define SPACE_RIGHT_SET_AFFINITY (UINT64_C(1) << 1)
+#define SPACE_RIGHTS (SPACE_RIGHT_SET_TITLE | SPACE_RIGHT_SET_AFFINITY)
 #define SPACE_SET_TITLE UINT64_C(1)
+#define SPACE_SET_AFFINITY UINT64_C(2)
 #define SPACE_TITLE_MAX 63
 
 /* SET_TITLE requires SET_TITLE authority and the object's own space. Titles
@@ -19,5 +22,23 @@ struct space_title_request {
 };
 
 _Static_assert(sizeof(struct space_title_request) == 32, "space title request layout");
+
+/* SET_AFFINITY requires SET_AFFINITY authority and the object's own space. It
+ * narrows the CPUs the space's tasks may use, within the boot ceiling, until
+ * the space's first launch request; afterwards it fails with ENDPOINT_CLOSED.
+ * CPUS addresses ceil(CPU_COUNT / 64) little-endian bit words: bit N of word
+ * N / 64 selects boot CPU index N. CPU_COUNT is 1..boot CPU count, and bits at
+ * or beyond it must be clear. An empty set or an index beyond the boot is
+ * BAD_REQUEST; a CPU outside the ceiling is DENIED; a set whose only CPU is
+ * the BSP on a multicore boot is UNAVAILABLE. Any failure changes nothing. On
+ * success the call returns on an allowed CPU. Repeated requests replace the
+ * set. No reply. */
+struct space_affinity_request {
+  struct message_header header;
+  uint64_t cpus;
+  uint64_t cpu_count;
+};
+
+_Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity request layout");
 
 #endif

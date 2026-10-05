@@ -52,6 +52,7 @@ struct task {
   struct arch_user_state cpu;
   size_t cpu_index;
   bool exited, faulted, terminated, in_syscall;
+  bool relocate; /* Leave this CPU at syscall return; set under queues_locked. */
   atomic_bool stop_requested;
   struct execution_group_member group_member;
   struct execution_group *cleanup_group;
@@ -178,7 +179,17 @@ void task_syscall_leave(void)
   if (task_stop_requested()) {
     terminate_task();
   }
-  local_scheduler()->current_task->in_syscall = false;
+  struct scheduler *scheduler = local_scheduler();
+  struct task *task = scheduler->current_task;
+  task->in_syscall = false;
+  if (task->relocate) {
+    /* The caller's space no longer allows this CPU. Switch out before any user
+     * instruction runs; the scheduler requeues the task on an allowed CPU, and
+     * the rest of the syscall return runs there from this kernel stack. */
+    task->relocate = false;
+    arch_user_save(&task->cpu);
+    arch_context_switch(&task->saved_stack, scheduler->stack);
+  }
 }
 
 bool kernel_task_is_current(void (*entry)(void *), const void *argument)
@@ -567,8 +578,10 @@ static void requeue_preempted(struct task *task, size_t cpu_index)
   size_t destination = cpu_index;
   lock_queues();
   if (task_movable(task)) {
-    size_t target = place_locked(task->process->space, cpu_index);
-    if (load_locked(target) + 2 <= load_locked(cpu_index)) {
+    struct space *space = task->process->space;
+    size_t target = place_locked(space, cpu_index);
+    if (!user_cpu_eligible(space, cpu_index) ||
+        load_locked(target) + 2 <= load_locked(cpu_index)) {
       destination = target;
     }
   }
@@ -645,6 +658,40 @@ enum mm_result kernel_task_create(void (*entry)(void *), void *argument)
   task->argument = argument;
   enqueue(&schedulers[0], task);
   return MM_OK;
+}
+
+void task_space_close_setup(struct space *space)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  lock_queues();
+  space->setup_open = false;
+  unlock_queues();
+}
+
+bool task_space_setup_open(struct space *space)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  lock_queues();
+  bool open = space->setup_open;
+  unlock_queues();
+  return open;
+}
+
+enum call_status task_space_set_affinity(struct space *space, const uint64_t *cpus)
+{
+  struct task *task = current_user_task();
+  KASSERT(task->process->space == space);
+  lock_queues();
+  if (!space->setup_open) {
+    unlock_queues();
+    return CALL_ENDPOINT_CLOSED;
+  }
+  memcpy(space->effective_cpus, cpus, space_cpu_words() * sizeof(*cpus));
+  /* Setup is open only before the first launch, so the caller is the space's
+   * only task and nothing else needs re-placing. */
+  task->relocate = !user_cpu_eligible(space, task->cpu_index);
+  unlock_queues();
+  return CALL_OK;
 }
 
 enum mm_result user_task_prepare(struct process *process, uintptr_t entry,

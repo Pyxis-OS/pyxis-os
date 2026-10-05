@@ -106,21 +106,46 @@ size_t space_cpu_words(void)
   return (arch_cpu_count() + 63) / 64;
 }
 
-bool space_allows_cpu(const struct space *space, size_t cpu_index)
+static bool cpu_bit(const uint64_t *cpus, size_t cpu_index)
 {
-  return cpu_index < arch_cpu_count() &&
-      (space->allowed_cpus[cpu_index / 64] >> (cpu_index % 64)) & 1;
+  return cpu_index < arch_cpu_count() && (cpus[cpu_index / 64] >> (cpu_index % 64)) & 1;
 }
 
-static struct space *space_alloc(const char *title, uint64_t *allowed_cpus, bool focused)
+bool space_ceiling_allows(const struct space *space, size_t cpu_index)
 {
-  KASSERT(arch_cpu_index() == 0 && allowed_cpus);
+  return cpu_bit(space->ceiling_cpus, cpu_index);
+}
+
+bool space_allows_cpu(const struct space *space, size_t cpu_index)
+{
+  return cpu_bit(space->effective_cpus, cpu_index);
+}
+
+static uint64_t *cpu_set_copy(const uint64_t *source)
+{
+  size_t bytes = space_cpu_words() * sizeof(*source);
+  uint64_t *copy = kmalloc(bytes);
+  if (!copy) {
+    panic("cannot allocate space CPU set");
+  }
+  memcpy(copy, source, bytes);
+  return copy;
+}
+
+static struct space *space_alloc(const char *title, uint64_t *ceiling_cpus, bool focused)
+{
+  KASSERT(arch_cpu_index() == 0 && ceiling_cpus);
   arch_clock_maintain();
   struct space *space = kmalloc(sizeof(*space));
   if (!space) {
     panic("cannot allocate space");
   }
-  *space = (struct space){.allowed_cpus = allowed_cpus};
+  *space = (struct space){
+    .ceiling_cpus = ceiling_cpus,
+    .effective_cpus = cpu_set_copy(ceiling_cpus),
+    .affinity_staging = cpu_set_copy(ceiling_cpus),
+    .setup_open = true,
+  };
   atomic_init(&space->title_locked, false);
   size_t length = strlen(title);
   KASSERT(length && length <= SPACE_TITLE_MAX);
@@ -169,9 +194,9 @@ void space_init(const struct boot_framebuffer *boot_fb)
   spaces_nav_fb = fb_alloc(boot_fb, boot_fb->width, SPACES_NAV_HEIGHT);
 }
 
-struct space *space_create(const char *name, uint64_t *allowed_cpus)
+struct space *space_create(const char *name, uint64_t *ceiling_cpus)
 {
-  struct space *space = space_alloc(name, allowed_cpus, false);
+  struct space *space = space_alloc(name, ceiling_cpus, false);
   last_space->next = space;
   last_space = space;
   return space;
