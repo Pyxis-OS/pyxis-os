@@ -438,6 +438,11 @@ All three were accepted by the owner on 2026-10-05:
 3. **Split.** 7a makes private memory local with the BSP still excluded. 7b
    enables BSP userspace, measured against 7a.
 
+7b implemented decision 2. On four CPUs in the nested VM, four compute clients
+took 0.93 s instead of 1.27 s. With all four CPUs busy, ttcp kept 98% of its rate
+from before 7b. See the [7b record](../development/experiments/smp-task7b/README.md)
+and [technical debt](../technical-debt.md#bsp-userspace-and-kernel-workers).
+
 7a found the PMM's bit-by-bit scan serializing concurrent page clients; see the
 [task-7a record](../development/experiments/smp-task7a/README.md#pmm-lock-contention).
 The owner chose a follow-up before 7b: word-at-a-time PMM search from a
@@ -567,13 +572,15 @@ updates current subsystem docs only for behavior it implements.
    the full lock graph and allocation recursion; record matched allocation
    results. See the [memory boundaries](../kernel/smp.md#memory-and-output-boundaries)
    and the [task-6 record](../development/experiments/smp-task6/README.md).
-7. [ ] **Make private MEMORY operations local.** Split into 7a (local private
+7. [x] **Make private MEMORY operations local.** Split into 7a (local private
    memory; see the [7a record](../development/experiments/smp-task7a/README.md)),
    a PMM search follow-up ([record](../development/experiments/smp-task7-pmm/README.md))
-   and 7b (BSP userspace). Remove the BSP request/loan for
-   this exclusive single-task path, preserving behavior, profiling and cleanup.
-   Verify concurrent callers on distinct roots, migrated callers, termination and
-   BSP eligibility. Run a caller's out-of-frames unwind off the BSP. Record backing-growth/page-operation and mixed-load results.
+   and 7b (BSP userspace; [record](../development/experiments/smp-task7b/README.md)).
+   Remove the BSP request/loan for this exclusive single-task path, preserving
+   behavior, profiling and cleanup. Verify concurrent callers on distinct roots,
+   migrated callers, termination and BSP eligibility. Run a caller's
+   out-of-frames unwind off the BSP. Record backing-growth/page-operation and
+   mixed-load results.
 8. [ ] **Validate and close.** Run the CPU/device matrix, independent-space and
    lifetime scenarios, native ThinkPad validation and matched final measurements.
    Document remaining serial services and accepted limits; rewrite this milestone as an implemented kernel

@@ -1,0 +1,51 @@
+# 4-CPU boot of the 7b code with INIT=init-affinity0.sh SPACE_CPUS='readonly=0'
+# kernel log
+userspace: space development: app://init entry=0x40088d
+userspace: space readonly: app://init-readonly entry=0x40088d
+userspace: space remote: app://init-remote entry=0x40088d
+# GDB snapshots (t7b-snap.gdb): running and queued tasks per CPU
+SNAP CPU0: run user(Pinned), q user(Pinned), q user(Read-only), q kernel, q kernel, q user(Pinned) | CPU1: run idle | CPU2: run idle | CPU3: run idle
+SNAP CPU0: run user(Pinned), q kernel, q kernel, q user(Pinned), q user(Read-only), q user(Pinned) | CPU1: run idle | CPU2: run idle | CPU3: run idle
+SNAP CPU0: run user(Pinned), q kernel, q kernel, q user(Pinned), q user(Pinned) | CPU1: run idle | CPU2: run idle | CPU3: run idle
+SNAP CPU0: run user(Pinned), q user(Read-only), q kernel, q user(Pinned), q user(Pinned) | CPU1: run idle | CPU2: run idle | CPU3: run idle
+# Pinned tab after the jobs: each allocbench heap --rounds 1000000
+Elapsed 9562.459 ms
+Elapsed 9522.539 ms
+Elapsed 9420.008 ms
+
+# 1-CPU boot check
+### allocbench heap
+# host 0.069 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+Elapsed 14.298 ms; 73337558 operations/s; 13.6 ns/operation
+### allocbench pages
+# host 0.058 s complete={"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+Elapsed 5.418 ms; 23626 operations/s; 42326.4 ns/operation
+### ls app://
+# host 0.089 s complete={"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# 2-CPU boot check
+### concurrent 4: aggregate host wall 1.058 s
+## c0 allocbench heap --rounds 262144
+# host start +0.000 end +0.928 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+Elapsed 870.938 ms; 77053586 operations/s; 13.0 ns/operation
+## c1 allocbench heap --rounds 262144
+# host start +0.000 end +1.058 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+Elapsed 951.132 ms; 70556836 operations/s; 14.2 ns/operation
+## c2 allocbench pages
+# host start +0.000 end +0.242 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+Elapsed 4.758 ms; 26903 operations/s; 37170.5 ns/operation
+## c3 ls app://
+# host start +0.000 end +0.935 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+# 12-CPU boot check
+### concurrent 4: aggregate host wall 0.864 s
+## c0 allocbench heap --rounds 262144
+# host start +0.000 end +0.864 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+Elapsed 803.003 ms; 83572400 operations/s; 12.0 ns/operation
+## c1 allocbench heap --rounds 262144
+# host start +0.000 end +0.846 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+Elapsed 797.874 ms; 84109622 operations/s; 11.9 ns/operation
+## c2 allocbench pages
+# host start +0.000 end +0.071 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+Elapsed 5.003 ms; 25584 operations/s; 39087.0 ns/operation
+## c3 ls app://
+# host start +0.000 end +0.119 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
