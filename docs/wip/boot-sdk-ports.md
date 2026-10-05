@@ -325,7 +325,9 @@ traffic, link checks and the owner-run native PXE/HTTPS results. The dock-facing
 XID `502` remains unsupported.
 [DHCP](../devices/dhcp.md) provides acquisition and lease maintenance;
 [qualification](../development/dhcp-qualification.md) records its coverage.
-[Link-based net0 selection](net0-link-selection.md) remains a later proposal.
+[Initial net0 selection](../devices/net0-selection.md) chooses reported linked
+controllers and continues trusted setup after an offline startup timeout;
+[qualification](../development/link-selection-qualification.md) records its coverage.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

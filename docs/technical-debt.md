@@ -705,6 +705,16 @@ Hardware tallies are accessible only through the internal GDB capture helper.
 Revisit that diagnostic interface when a network status command is assigned;
 there is no public statistics ABI or periodic tally polling today.
 
+## Initial net0 selection limits
+
+[Automatic selection](devices/net0-selection.md) requires complete discovery and
+reported carrier. VirtIO without STATUS needs an explicit selector; an incomplete
+inventory leaves the setup owner waiting while the shell remains available.
+Selection binds once until reboot, with no controller fallback or lease
+revalidation on link-up. A cable moved to another port therefore requires reboot
+or an explicit future switching design. Revisit with drain/teardown ownership and
+DHCP link-up policy, rather than adding a second binding or lease authority.
+
 ## Virtio-net runtime resource retention
 
 The external interface's first unique configuration binding lasts until reboot.

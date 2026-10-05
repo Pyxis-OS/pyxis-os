@@ -7,11 +7,13 @@ selectors remain available. Binding lasts until reboot, including while IPv4
 is cleared.
 
 ```lua
-net0 = { driver = "virtio", dhcp = true }
+net0 = { select = "link", dhcp = true }
 ```
 
 Use a MAC selector for a particular physical controller. `dhcp = true` excludes
-`address`, `prefix` and `gateway`. The default profile requests DHCP from VirtIO.
+`address`, `prefix` and `gateway`. The default profile requests DHCP after
+[link selection](net0-selection.md).
+Explicit driver/MAC selectors remain available.
 An explicit `dns.server` wins over the first DHCP DNS server; without either,
 use `1.1.1.1`. See [network configuration](networking.md#boot-configuration-and-use)
 and [session configuration](../userland/session-configuration.md).
@@ -25,7 +27,8 @@ client MAC and selected server. The client reads netmask, first router, first
 DNS, lease duration, T1, T2 and server identifier, including overloaded fields.
 It rejects malformed options and expired candidate leases.
 
-Initial acquisition takes at most about ten seconds. A timeout starts the local
+Link selection and initial acquisition share at most about ten seconds. A timeout
+starts the local
 session offline with profile/fallback DNS; the same client continues discovery
 in the background. Retry state survives bounded receive calls. Delays use
 randomized exponential backoff, and only successful local sends advance the
@@ -74,5 +77,5 @@ backstop. DNS changes reach newly launched programs; existing programs keep thei
 startup `DNS_SERVER`. See [technical debt](../technical-debt.md#dhcp-maintainer-and-client-limits).
 
 [Qualification](../development/dhcp-qualification.md) records measured coverage
-and remaining native lifecycle checks. [Link selection](../wip/net0-link-selection.md)
-is a separate proposal.
+and remaining native lifecycle checks. [Link selection](net0-selection.md)
+chooses the initial controller and can wait before this client opens its endpoint.

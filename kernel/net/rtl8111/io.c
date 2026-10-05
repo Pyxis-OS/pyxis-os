@@ -311,3 +311,23 @@ bool rtl8111_ready(const struct rtl8111_controller *controller)
 {
   return controller && controller->active;
 }
+
+bool rtl8111_prepared(const struct rtl8111_controller *controller)
+{
+  return controller && controller->prepared && !controller->stopping;
+}
+
+bool rtl8111_carrier(const struct rtl8111_controller *controller, bool *up)
+{
+  net_worker_assert_context();
+  *up = false;
+  if (!rtl8111_prepared(controller)) {
+    return false;
+  }
+  uint8_t status = rtl_read8(controller, RTL_PHY_STATUS);
+  if (status == UINT8_MAX) {
+    return false;
+  }
+  *up = (status & RTL_PHY_LINK) != 0;
+  return true;
+}

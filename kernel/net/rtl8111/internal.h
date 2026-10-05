@@ -7,6 +7,7 @@
 #include "counters.h"
 
 struct rtl8111_controller {
+  uint32_t controller_id;
   struct pci_claim claim;
   struct pci_probe_state probe;
   struct pci_mapping registers;

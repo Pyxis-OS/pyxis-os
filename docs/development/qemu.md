@@ -33,7 +33,8 @@ a finite limit at startup.
 The launcher does not change host drivers, permissions or limits. Follow the
 [ThinkPad host setup](thinkpad-nic-passthrough.md#host-setup) before launching.
 The [hardware boot results](thinkpad-nic-passthrough.md#validation-2026-10-03)
-confirm read-only PCI discovery; the passed-through NIC has no Pyxis driver yet.
+confirm PCI discovery; the built-in port is now supported by the
+[RTL8111 driver](../devices/rtl8111.md).
 
 ## AHCI CD-ROM crash before kernel entry
 
