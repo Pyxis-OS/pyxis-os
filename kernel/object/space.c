@@ -44,8 +44,13 @@ static struct syscall_result set_affinity(struct space *space, uintptr_t request
   if (!request.cpu_count || request.cpu_count > count) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  /* Staging needs no lock: while setup is open the caller is the space's only
-   * task, and once it closes the commit fails without using the contents. */
+  /* Once setup closes, delegated grants can let several of the space's tasks
+   * call at once, so refuse before touching the shared staging bitmap. While
+   * it is open the caller is the space's only task, which alone could close
+   * it, so staging needs no lock. The commit checks again under the queue lock. */
+  if (!task_space_setup_open(space)) {
+    return (struct syscall_result){CALL_ENDPOINT_CLOSED, 0};
+  }
   uint64_t *staging = space->affinity_staging;
   size_t words = (request.cpu_count + 63) / 64;
   memset(staging, 0, space_cpu_words() * sizeof(*staging));

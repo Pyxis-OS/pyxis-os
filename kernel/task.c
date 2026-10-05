@@ -668,6 +668,15 @@ void task_space_close_setup(struct space *space)
   unlock_queues();
 }
 
+bool task_space_setup_open(struct space *space)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  lock_queues();
+  bool open = space->setup_open;
+  unlock_queues();
+  return open;
+}
+
 enum call_status task_space_set_affinity(struct space *space, const uint64_t *cpus)
 {
   struct task *task = current_user_task();

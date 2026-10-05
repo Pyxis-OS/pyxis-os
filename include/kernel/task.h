@@ -44,6 +44,9 @@ void task_syscall_leave(void);
 
 /* Launch admission from SPACE, IF=0: closes its affinity setup permanently. */
 void task_space_close_setup(struct space *space);
+/* IF=0. Setup only closes; a true result can go stale only through a launch
+ * from the space, and while open the space's sole task is the caller. */
+bool task_space_setup_open(struct space *space);
 /* Current user task in SPACE, IF=0. Commits an already validated effective CPU
  * set while setup is open, else ENDPOINT_CLOSED. If the caller's CPU is now
  * excluded, it moves at syscall return, before any user instruction runs. */
