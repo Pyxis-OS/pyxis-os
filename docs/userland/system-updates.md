@@ -63,6 +63,13 @@ files. The configuration comes from the packaged template, using the existing
 disk GUID, timeout zero and installed init, with no Install entry. The revision
 record comes from the running live kernel's SYSTEM_INFO. Install and Update
 share the fresh-ESP writer; Update invokes neither GPT writing nor pool formatting.
+The writer clears and flushes the reserved area, including both FAT boot sectors,
+before replacing metadata or file data. It keeps boot geometry invalid until
+the complete replacement tree has been flushed, then writes both boot sectors.
+The final sync below persists those sectors. Stale configuration and revision
+bytes therefore cannot classify a partly rewritten tree as a valid installation,
+even when the new files occupy different clusters. Once boot geometry is
+published, the new tree is already durable, subject to the device's flush contract.
 Replacing the whole ESP removes any other ESP files. There are no side-by-side
 kernels or fallback entry.
 
