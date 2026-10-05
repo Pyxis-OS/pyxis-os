@@ -23,6 +23,35 @@ hubs, Billboard/HID interfaces and dock audio, without adding PCI functions.
 Both captures already contain two Realtek Ethernet functions, Intel AX200 Wi-Fi,
 Renoir graphics/audio, the NVMe controller and the card reader.
 
+## CPU topology
+
+Linux `lscpu` reports one socket, six cores with two threads each (12 CPUs) and one NUMA node. It
+lists six L1/L2 instances and two 8 MiB L3 instances in total, meaning two core complexes
+(CCXs) of three cores. The base clock is 2.1 GHz, with frequency boost enabled.
+
+A native Pyxis boot on 2026-10-05 reported these APIC IDs in startup order. Pyxis CPU
+indices follow that order, and the sibling and CCX columns are inferred:
+
+| Pyxis CPU | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| APIC ID | 0 | 1 | 2 | 3 | 4 | 5 | 8 | 9 | 10 | 11 | 12 | 13 |
+| Core (inferred) | 0 | 0 | 1 | 1 | 2 | 2 | 3 | 3 | 4 | 4 | 5 | 5 |
+| CCX (inferred) | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 1 | 1 | 1 | 1 | 1 |
+
+The inference follows AMD's usual APIC ID layout: bit 0 selects the SMT thread, and the
+gap at 6–7 starts the second CCX. Neither Fedora capture records per-thread APIC or
+core IDs, and Pyxis does not read CPUID topology leaves. The grouping is therefore
+consistent with the hardware, not enumerated by it. It means:
+
+- SMT siblings are adjacent Pyxis CPUs.
+- Pyxis CPU 1 shares a core with the BSP (CPU 0).
+
+The scheduler treats all 12 as independent CPUs. In the
+[SMP task-4a native check](../../development/experiments/smp-task4a/README.md#native-thinkpad-check-owner-run),
+four concurrent compute clients finished as two near the single-client time and two
+about 1.8× slower. That fits two clients sharing one core. Topology-aware placement
+remains an unscheduled candidate in the [SMP milestone](../../wip/scheduling-and-threads.md).
+
 ## USB controllers and observed port routes
 
 | PCI function | Observed controller | Linux USB 2 bus | Linux USB 3 bus |
