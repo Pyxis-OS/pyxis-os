@@ -28,14 +28,24 @@ struct space
   struct console_object *console; /* Space retains the initial reference. */
   /* Every task in this space runs on this CPU until task migration exists. */
   size_t cpu_index;
+  /* Boot CPU indices this space's tasks may use, one bit each in
+   * space_cpu_words() words. Fixed at boot; empty when init did not start. */
+  uint64_t *allowed_cpus;
   struct space *next; /* Registry order; fixed once the scheduler starts. */
 };
 
 /* Creates Caelum's space, first in registry order, on CPU 0. BSP only, at boot. */
 void space_init(const struct boot_framebuffer *boot_fb);
-/* Appends a workload space titled NAME whose tasks run on CPU_INDEX. BSP only,
- * before task_schedule(); spaces are never destroyed. Panics on exhaustion. */
-struct space *space_create(const char *name, size_t cpu_index);
+/* Words in an allowed-CPU bitmap covering every boot CPU index. */
+size_t space_cpu_words(void);
+/* Appends a workload space titled NAME whose tasks run on CPU_INDEX, which
+ * ALLOWED_CPUS must contain unless the bitmap is empty. Takes ownership of the
+ * kmalloc'd bitmap. BSP only, before task_schedule(); spaces are never
+ * destroyed. Panics on exhaustion. */
+struct space *space_create(const char *name, uint64_t *allowed_cpus, size_t cpu_index);
+bool space_allows_cpu(const struct space *space, size_t cpu_index);
+/* Boot only: writes TEXT to the space's terminal, for a space that cannot start. */
+void space_report(struct space *space, const char *text);
 
 /* Copies a validated title without allocation. Preserves IF. */
 bool space_set_title(struct space *space, const char *title, size_t length);

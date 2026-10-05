@@ -35,7 +35,6 @@ struct launcher_request {
   struct launch_preparation *group;
   struct process *parent;
   struct execution_group *execution_group; /* Borrowed from caller's launcher. */
-  size_t cpu_index;
   struct launch_capture *capture_result;
   struct launch_preparation *group_result;
   enum call_status result;

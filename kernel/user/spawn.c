@@ -5,6 +5,7 @@
 #include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/space.h>
 #include <kernel/user.h>
 #include <kernel/user/launch.h>
 #include <kernel/mm/heap.h>
@@ -100,7 +101,7 @@ struct launch_preparation *launcher_batch_create(void)
 }
 
 enum call_status launcher_batch_prepare(struct launch_preparation *group,
-    struct launch_capture *capture, struct process *parent, size_t cpu_index,
+    struct launch_capture *capture, struct process *parent,
     struct execution_group *execution_group)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -115,7 +116,7 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
       capture->image->backing == FILE_NPFS;
   const void *bytes = external ? capture->external_image : capture->image->data;
   size_t size = external ? capture->external_image_size : capture->image->size;
-  enum call_status status = execution_group_check(execution_group, parent->space, cpu_index);
+  enum call_status status = execution_group_check(execution_group, parent->space);
   if (status != CALL_OK) {
     if (!external) {
       file_end_operation(capture->image);
@@ -149,7 +150,8 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
   }
 
   struct task *task;
-  enum mm_result submitted = user_task_prepare_on(cpu_index, child, entry,
+  /* Children join their space's placement CPU until tasks can migrate. */
+  enum mm_result submitted = user_task_prepare_on(parent->space->cpu_index, child, entry,
       USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE, &task);
   if (submitted != MM_OK) {
     status = submitted == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
@@ -201,11 +203,11 @@ void launcher_batch_discard(struct launch_preparation *group)
 }
 
 enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
-    size_t cpu_index, struct execution_group *execution_group, handle_t *result)
+    struct execution_group *execution_group, handle_t *result)
 {
   struct launch_preparation group = {0};
   *result = HANDLE_INVALID;
-  enum call_status status = launcher_batch_prepare(&group, capture, parent, cpu_index,
+  enum call_status status = launcher_batch_prepare(&group, capture, parent,
       execution_group);
   if (status == CALL_OK) {
     status = launcher_batch_publish(&group, result);

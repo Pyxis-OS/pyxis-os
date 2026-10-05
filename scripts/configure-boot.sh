@@ -41,6 +41,50 @@ for selection in $SPACES; do
   command_line="${command_line:+$command_line }space.$name=$image"
 done
 [ -n "$command_line" ] || { echo 'SPACES must configure at least one space.' >&2; exit 1; }
+# CPU lists: comma-separated decimal indices and inclusive A-B ranges, without
+# leading zeros, at most nine digits. Indices beyond the booted CPU count are
+# reported at boot.
+valid_cpu_number() {
+  case "$1" in
+    0) ;;
+    ''|0*|*[!0-9]*) return 1 ;;
+  esac
+  [ "${#1}" -le 9 ]
+}
+valid_cpu_list() {
+  rest=$1,
+  while [ -n "$rest" ]; do
+    entry=${rest%%,*}
+    rest=${rest#*,}
+    case "$entry" in
+      *-*)
+        first=${entry%%-*}
+        last=${entry#*-}
+        valid_cpu_number "$first" && valid_cpu_number "$last" &&
+          [ "$first" -le "$last" ] || return 1 ;;
+      *) valid_cpu_number "$entry" || return 1 ;;
+    esac
+  done
+}
+cpu_names=' '
+for selection in $SPACE_CPUS; do
+  case "$selection" in
+    *=?*) ;;
+    *) echo "Space CPU set must be NAME=LIST: $selection" >&2; exit 1 ;;
+  esac
+  name=${selection%%=*}
+  list=${selection#*=}
+  case "$names" in
+    *" $name "*) ;;
+    *) echo "CPU set names a space not in SPACES: $name" >&2; exit 1 ;;
+  esac
+  case "$cpu_names" in
+    *" $name "*) echo "Duplicate CPU set for space: $name" >&2; exit 1 ;;
+  esac
+  cpu_names="$cpu_names$name "
+  valid_cpu_list "$list" || { echo "Invalid CPU list for space $name: $list" >&2; exit 1; }
+  command_line="$command_line space.$name.cpus=$list"
+done
 mount_disk=${MOUNT_DISK:-}
 if [ -n "$mount_disk" ]; then
   case "$mount_disk" in

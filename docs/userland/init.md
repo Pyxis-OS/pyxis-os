@@ -32,11 +32,31 @@ the tab's initial title until init sets one. It grants no authority. At least on
 space is required. The old `init`, `init.primary` and `init.N` options are no
 longer accepted.
 
-Until task migration exists, each space's tasks run on one CPU. Spaces take the
-workload CPUs (1 onward) in configuration order, wrapping when there are more
-spaces than CPUs. With a single CPU, everything runs on CPU 0. The default
-configuration therefore keeps Development, Read-only and Remote on CPUs 1, 2 and
-3. Further CPUs stay idle, and no space is created for them.
+An optional `space.NAME.cpus=LIST` option sets the CPUs that space's tasks may
+use, its ceiling. LIST is comma-separated boot CPU indices and inclusive `A-B`
+ranges, for example `0,2-3`. Indices are dense boot indices, not APIC IDs.
+Without the option, a space may use every CPU. Children inherit their space's
+ceiling.
+
+Until task migration exists, each space's tasks run on one CPU. The space takes
+the next workload CPU (1 onward) in configuration order, wrapping when there are
+more spaces than CPUs, if its ceiling allows that CPU. Otherwise it takes the
+lowest workload CPU its ceiling allows. With a single CPU, everything runs on
+CPU 0. The default configuration therefore keeps Development, Read-only and
+Remote on CPUs 1, 2 and 3. Further CPUs stay idle, and no space is created for
+them.
+
+A space can still be created without starting its init. The tab and the kernel
+log then say why. This happens in two cases:
+
+- **Absent CPU:** its ceiling names a CPU this boot does not have, for example
+  `8-11` on a four-CPU machine. The set is never narrowed to the CPUs present.
+- **CPU 0 only:** on a multicore boot, the ceiling allows only CPU 0, and
+  multicore boots do not yet run userspace on CPU 0.
+
+Other spaces and the rest of the boot continue. An unstarted space runs no
+tasks. If it was the one that configures networking, other sessions start
+without a network address.
 
 Make takes the list as `SPACES`, separately from the host file used to stage
 `init`:
@@ -52,13 +72,18 @@ make image                         # restore the packaged init and spaces
 
 `SPACES` defaults to
 `development=app://init readonly=app://init-readonly remote=app://init-remote`.
+`SPACE_CPUS` is an optional whitespace-separated list of `NAME=LIST` ceilings,
+for example `SPACE_CPUS='remote=2-3'`. The build rejects an unknown or repeated
+name, a malformed or reversed list, leading zeros and indices longer than nine
+digits; it cannot know the CPU count.
 It is a whitespace-separated list of `NAME=URI` entries. Paths select entries
 already in the boot archive, using letters, digits, `_`, `.`, `/`, `:`, `+` and
 `-`. The kernel supports whitespace-separated options, without quoting or
 escaping, in a command line of at most 4095 bytes. Boot fails on:
 
 - a missing space;
-- malformed, unknown or duplicate options;
+- malformed, unknown or duplicate options, including CPU sets;
+- a CPU set for an unconfigured space;
 - a non-`app://` init.
 
 `INIT` names one host file, relative to the repository root or absolute. It is

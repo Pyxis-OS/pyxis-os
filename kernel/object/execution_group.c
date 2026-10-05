@@ -62,25 +62,24 @@ static void destroy_group(struct kernel_object *object)
   kfree(group);
 }
 
-struct execution_group *execution_group_create(struct space *space, size_t cpu_index)
+struct execution_group *execution_group_create(struct space *space)
 {
   KASSERT(arch_cpu_index() == 0 && space);
   struct execution_group *group = kmalloc(sizeof(*group));
   if (group) {
-    *group = (struct execution_group){.space = space, .cpu_index = cpu_index};
+    *group = (struct execution_group){.space = space};
     atomic_init(&group->locked, false);
     object_init(&group->object, OBJECT_EXECUTION_GROUP, destroy_group);
   }
   return group;
 }
 
-enum call_status execution_group_check(struct execution_group *group,
-    struct space *space, size_t cpu_index)
+enum call_status execution_group_check(struct execution_group *group, struct space *space)
 {
   if (!group) {
     return CALL_OK;
   }
-  if (group->space != space || group->cpu_index != cpu_index) {
+  if (group->space != space) {
     return CALL_DENIED;
   }
   lock_group(group);
@@ -90,12 +89,12 @@ enum call_status execution_group_check(struct execution_group *group,
 }
 
 enum call_status execution_group_launch_begin(struct execution_group *group,
-    struct space *space, size_t cpu_index)
+    struct space *space)
 {
   if (!group) {
     return CALL_OK;
   }
-  if (group->space != space || group->cpu_index != cpu_index) {
+  if (group->space != space) {
     return CALL_DENIED;
   }
   lock_group(group);
