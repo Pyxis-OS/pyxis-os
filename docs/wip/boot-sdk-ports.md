@@ -236,6 +236,9 @@ libc `ftruncate`. The [Links port](../userland/links.md) is complete: a text
 browser that loads every page through libc, packaged in the normal image with
 libc directory reading and a narrow `stat`. BusyBox less is queued next in
 [application ports](application-ports.md).
+[Developing inside Pyxis](in-pyxis-development.md) records the owner's
+experiment of writing a program on the installed system, and the tooling it
+needs: BusyBox `tar` and archive inits for extra hand-configured spaces.
 
 After native filesystem writer completion, the agreed
 [runtime SMP milestone](scheduling-and-threads.md) separates spaces and boot sessions
