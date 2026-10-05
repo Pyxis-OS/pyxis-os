@@ -130,7 +130,7 @@ exits, so SMP has a stable base:
 
 Fixes for major problems found by ThinkPad validation remain allowed in any
 track. Ports may continue when they need only userland and libc additions, not
-new kernel facilities; for example vi, [Links](links.md) and less.
+new kernel facilities; for example vi, [Links](../userland/links.md) and less.
 
 The first SMP step is a spike: task 1 of the milestone, which rebases the
 investigation, captures the baseline and settles its open decisions. It starts

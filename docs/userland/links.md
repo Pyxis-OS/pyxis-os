@@ -73,7 +73,10 @@ record what those functions cannot report.
 ## Limits
 
 - **Blocking loads:** every load blocks the interface, network fetches
-  included. Only the HTTP provider's own deadlines bound them.
+  included. Only the HTTP provider's 30-second budget bounds them. In review
+  under nested KVM, a server that never answered left a blank screen for 32 s
+  before "Operation timed out", and a Ctrl+C pressed meanwhile quit Links only
+  after the open returned.
 - **HTTP:**
   - a redirect or any status other than 200/204 is an open error, and a
     redirect reads "Operation not supported" (see
@@ -90,6 +93,10 @@ record what those functions cannot report.
   name lookup and sockets; lookup always fails, so they report "Host not
   found". Downloads to disk fail with "Invalid argument", because they need
   exclusive creation.
+- **Local links from remote pages:** a page fetched over HTTP(S) can link to
+  `host://`, `home://` or `system://`, and following the link opens the local
+  object. A page cannot script or submit what it opens, but desktop browsers
+  refuse this navigation.
 - **Display:** ASCII, with non-ASCII characters approximated, and no images.
 - **Screen size:** fixed, with no resize notification.
 - **Programs:** Links starts no other programs.
@@ -133,11 +140,14 @@ and ELinks is larger and also built on `select`.
 ## Validation
 
 Pyxis main `6623675` with this change, userland `7178b06` and ports `274ef70`
-were built with `make -j16 image`. Links builds with no compiler warnings under
-the recipe's flags, which silence upstream's unused-parameter, unused-variable
-and similar classes. The image booted four CPUs under nested KVM, with patched QEMU
-10.2.2, virtio-net and a virtio-fs export holding a local mirror of the JVMS SE8
-HTML chapters. The following was exercised:
+were built with `make -j16 image`. The pins later became userland `a3eb8d2` and
+ports `36d952e`, which only merge later main changes (net0 selection, installer
+updates and the BusyBox mirror fetch) into those commits. Links builds with no
+compiler warnings under the recipe's flags, which silence upstream's
+unused-parameter, unused-variable and similar classes. The image booted four
+CPUs under nested KVM, with patched QEMU 10.2.2, virtio-net and a virtio-fs
+export holding a local mirror of the JVMS SE8 HTML chapters. The following was
+exercised:
 
 - **Remote terminal (100×29):**
   - the JVMS index and chapters from `host://`, including search, link

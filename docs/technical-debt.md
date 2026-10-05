@@ -415,16 +415,19 @@ and code that reads one fails to compile instead of seeing invented values.
 
 - **Sizing opens the file.** `stat` opens a file with READ, or WRITE if READ is
   denied, so a file with neither right cannot be sized. On a provider URI it
-  performs the request.
+  performs the request, so a port that calls `stat` before `fopen` fetches
+  twice. Links sends provider URIs straight to `fopen`.
 - **Symlinks.** Lookup never follows a symlink, so `stat` of a symlink entry
   fails; `readdir` reports it as `DT_LNK`. `lstat` and `readlink` are absent.
 - **Listings.** `readdir` returns no `.` or `..` entries. A detected
   concurrent change ends the listing with EAGAIN rather than restarting it.
 - **Native utilities.** The first ls and mkdir still use libpyxis helpers.
 
-Revisit when native objects gain timestamps or other metadata, or when a port
-needs `lstat`, `readlink` or `access`. Add fields only for values the native
-layer reports.
+Revisit when native objects gain timestamps or other metadata, when a port
+needs `lstat`, `readlink` or `access`, or when a port calls `stat` on provider
+URIs. Review of the Links port proposed failing there with ENODEV, as
+`opendir` does, without issuing the request. Add fields only for values
+the native layer reports.
 
 ## File identity across capability paths
 
@@ -539,8 +542,11 @@ case explicitly.
 ## Links port limits
 
 [Links](userland/links.md) loads every page synchronously, so a slow network
-fetch freezes the interface until the HTTP provider's own deadline. Revisit
-with a native way to wait on a provider open alongside console input.
+fetch freezes the interface until the HTTP provider's own 30-second budget
+ends. In review under nested KVM, a server that accepted the connection and
+never answered left a blank screen for 32 s before "Operation timed out". A Ctrl+C pressed during the wait
+is held and quits Links only after the open returns. Revisit with a native way
+to wait on a provider open alongside console input.
 
 - **No saved configuration.** Options, bookmarks and history are not saved.
   Revisit once `home://` persists and libc has exclusive creation.
@@ -550,6 +556,12 @@ with a native way to wait on a provider open alongside console input.
 - **Sockets compiled in.** Links' socket and DNS code is compiled but
   unreachable. The port's socket functions fail, so `ftp://` and `finger://`
   report "Host not found".
+- **Remote pages can link to local roots.** A page fetched over HTTP(S) can
+  link to `host://`, `home://` or `system://`, and following the link opens the
+  local object. Without scripting, a page cannot read or send what it opens, so
+  this matches a local link the user chooses to follow. Desktop browsers refuse
+  such navigation. Revisit before Links gains POST, cookies or providers that
+  act on requests.
 
 The HTTP-side limits are recorded under [HTTP redirects](#http-redirects) and
 [response metadata through fopen](#response-metadata-through-fopen).
