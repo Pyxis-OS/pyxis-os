@@ -1540,13 +1540,3 @@ relative only: there is no on-screen cursor or absolute positioning. Doom has no
 mouse support yet, although pointer sessions would allow it. Revisit Synaptics
 absolute mode when gestures or scrolling are wanted, and USB mice after bulk
 endpoints exist.
-
-## 0.0.1 boot grammar recognition
-
-Initial spaces replaced the CPU-indexed `init.primary` boot options. The updater
-still accepts the 0.0.1 token `init.primary=app://init-installed` as a valid
-installed command line, so the first Update of a 0.0.1 disk rewrites it without
-reporting damage. Nothing else reads the old grammar, and the kernel rejects it.
-Remove the token from `userspace/installer/esp_read.c` once the owner's 0.0.1
-installation has been updated. Without the token, an old ESP is still rebuilt;
-it is only reported as damaged boot files.
