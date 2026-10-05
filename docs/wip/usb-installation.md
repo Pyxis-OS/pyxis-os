@@ -5,8 +5,9 @@ transfers, BOT/SCSI reads and kernel block/GPT integration implemented,
 2026-10-04; native USB mounts and Phase C.1 write/flush support are implemented.
 Qualified disks support explicitly requested writable mounts. Phase C.2's
 QEMU persistent edit/build/run loop is qualified. Phase C.3's trusted installer
-USB raw authority is implemented and QEMU-qualified; physical validation remains
-pending in C.4.
+USB raw authority is implemented and QEMU-qualified. C.4's first native
+installation succeeded on 2026-10-05 and is tagged `0.0.1`; only its Update round
+trip remains, deferred to the next real update.
 Owner-reported [ThinkPad observations](../targets/t14-gen1-amd/usb-bringup.md) now
 include root and USB 3 hub-descendant storage reads. Broader hardware/recovery
 qualification of native mounting remains pending. Inspection-first work includes
@@ -481,6 +482,13 @@ host tools and the later physical-preparation procedure.
      if the stick rejects or disrupts optional qualification commands. The
      [configured-mount discovery latency measurement](../technical-debt.md#configured-mount-discovery-latency)
      remains deferred.
+   - **Status, 2026-10-05:** the stick, booted alone, ran `4dc804a` with a
+     writable `system://`. A synced file kept its SHA-256 across a synced
+     power-off. The owner tagged `4dc804a` as `0.0.1`. The stick qualified for
+     writes without either compatibility watchpoint. The owner deferred the
+     Update round trip to the next update that is actually needed, so this
+     task stays open for that check alone. See the
+     [owner-reported record](../targets/t14-gen1-amd/usb-bringup.md#2026-10-05-first-native-installation-c4).
 
 ## Remaining assignment and qualification decisions
 
@@ -489,7 +497,9 @@ host tools and the later physical-preparation procedure.
   supported USB 2/3 hub descendants. B.4 adds an internal BOT/SCSI media probe;
   B.5 read-only mount integration and C.1 qualified writes/flushes are implemented.
   C.2's QEMU persistent development loop and C.3's trusted installer USB raw
-  authority are qualified. C.4 physical validation remains pending owner assignment.
+  authority are qualified. C.4's native installation and synced power-off
+  persistence passed on the ThinkPad; its Update round trip waits for the next
+  real update.
 - Updating an installation is owned by the installer's
   [Update choice](../userland/system-updates.md), which preserves the pool.
   Read-only disk selection does not qualify a write target or authenticate media.

@@ -97,9 +97,9 @@ host structural checking and recovery of an interrupted ESP replacement.
 These records qualify the original VirtIO target path. Installer USB raw-disk
 authority is now implemented, using the same Update workflow; its integration
 checks are in the [C.3 USB-target
-record](../development/experiments/usb-installer-c3/README.md). Physical USB
-installation/Update qualification belongs to C.4 of the
-[USB plan](../wip/usb-installation.md); physical firmware, power loss and uncertain
-I/O remain [deferred](../technical-debt.md#installer-inspection-and-recovery-limits).
+record](../development/experiments/usb-installer-c3/README.md). C.4 of the
+[USB plan](../wip/usb-installation.md) installed natively on the ThinkPad; the
+owner deferred its physical Update round trip to the next real update. Power
+loss and uncertain I/O remain [deferred](../technical-debt.md#installer-inspection-and-recovery-limits).
 Updates from inside a running installed system, image downloading and npfs
 format migration are outside this interface.

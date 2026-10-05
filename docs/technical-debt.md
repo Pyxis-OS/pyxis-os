@@ -701,10 +701,13 @@ The owner deferred native ThinkPad installation on 2026-10-04 while completing
 qualification](development/experiments/native-filesystem-task5/README.md).
 VirtIO and per-device qualified USB now support writable native mounts. USB
 write/cache synchronization is implemented for C.1, and C.3 enables the trusted
-installer's bounded raw authority for retained USB candidates. Physical writable
-mounting, installation/update and durability qualification remain pending in C.4
-of the [USB plan](wip/usb-installation.md). Resume that physical step with an
-explicitly selected expendable target after the QEMU integration stages. The
+installer's bounded raw authority for retained USB candidates. On 2026-10-05,
+C.4 of the [USB plan](wip/usb-installation.md) installed onto one expendable
+stick from PXE live media. Writable mounting and persistence across a synced
+power-off passed natively; see the
+[owner-reported record](targets/t14-gen1-amd/usb-bringup.md#2026-10-05-first-native-installation-c4).
+A physical Update, power loss during writes, uncertain I/O and other devices or
+ports remain unqualified. The Update is checked with the next real update. The
 internal NVMe remains unsupported.
 
 ## USB image updates and firmware qualification
@@ -1475,6 +1478,7 @@ flush support from vendor IDs or successful reads.
 
 Two hardware compatibility watchpoints from merged
 [PR #395](https://git.internal/PyxisOS/pyxis-os/pulls/395) remain deferred.
+The first natively qualified stick, the C.4 install target, triggered neither.
 A device that cleanly rejects SYNCHRONIZE CACHE stays read-only, including a
 device whose firmware might not use a volatile write cache. Querying its caching
 mode page and reported Write Cache Enable (WCE) state is a possible extension

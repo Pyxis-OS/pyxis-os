@@ -124,10 +124,11 @@ exits, so SMP has a stable base:
 - **Filesystem:** after [system updates](../userland/system-updates.md) task 2,
   merged 2026-10-05.
 - **USB:** after the first native installation, which the owner moved ahead of
-  SMP on 2026-10-05. C.3, the installer's USB raw authority, is QEMU-qualified;
-  C.4, the physical installation of the [USB plan](usb-installation.md), remains
-  pending owner assignment. The commit
-  installed in C.4 is then tagged `0.0.1`. Further USB work waits.
+  SMP on 2026-10-05. Reached that day: C.3 gave the installer USB raw authority,
+  and C.4 installed `4dc804a` natively from PXE media onto a USB stick, tagged
+  `0.0.1`. The C.4 Update round trip waits for the next real update and needs no
+  USB work. Further USB work waits until after SMP; see the
+  [USB plan](usb-installation.md).
 - **Networking:** after the link-selection task, merged 2026-10-05. Native lease-renewal
   qualification can wait.
 
@@ -287,7 +288,8 @@ service. C.2 qualifies the [persistent USB edit/build/run loop](../development/e
 in QEMU, including explicit sync, fresh-process persistence and read-only use.
 C.3 exposes sealed observed USB candidates to trusted installer inventory and
 qualified exclusive raw claims, with QEMU Install/Update/recovery qualification.
-C.4 physical write qualification remains pending owner assignment. Reusable
+C.4's first native installation and synced power-off persistence passed on
+the ThinkPad; its Update round trip waits for the next real update. Reusable
 controller/USB/class/block boundaries are required, without speculative driver
 frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.
