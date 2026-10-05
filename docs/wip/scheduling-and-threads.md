@@ -1,10 +1,9 @@
 # Runtime SMP and independent spaces
 
 Status: agreed milestone direction, 2026-10-01; implementation not started.
-Task 1 is in progress. On 2026-10-05 the evidence was re-audited at main `83c08d6`
-and the [pre-implementation baseline](../development/experiments/smp-task1-baseline/README.md)
-was recorded. Decisions 1–3 were accepted; the heap-growth mapping
-[decision](#task-1-decisions) remains open.
+Task 1 is complete. On 2026-10-05 the evidence was re-audited at main `83c08d6`,
+the [pre-implementation baseline](../development/experiments/smp-task1-baseline/README.md)
+was recorded, and the owner accepted the [task-1 decisions](#task-1-decisions).
 The prerequisite [native filesystem writer](../devices/filesystem-native-adapter.md)
 is complete.
 This milestone replaces the earlier proposal to combine CPU-independent spaces
@@ -197,8 +196,8 @@ Owner decisions on 2026-10-05:
   proposes Lua instead of YAML. This mismatch is recorded here and left
   unresolved. It does not affect the initial-space syntax below.
 
-Decisions 1–3 below were accepted by the owner on 2026-10-05. They are the
-current direction for tasks 2–4. Decision 4 remains open.
+Decisions 1–4 below were accepted by the owner on 2026-10-05. They are the
+current direction for tasks 2–6.
 
 ### Decision 1 (accepted): initial space configuration and syntax
 
@@ -261,9 +260,9 @@ current direction for tasks 2–4. Decision 4 remains open.
   rule above: a blocked syscall still resumes on its previous CPU. On one CPU,
   the only valid set is `0`.
 
-### Decision 4 (open): heap-growth mapping (blocks task 6)
+### Decision 4 (accepted): heap-growth mapping
 
-**Recommended default:** a dedicated, never-reused heap arena.
+Use a dedicated, never-reused heap arena.
 
 - Reserve a fixed kernel virtual window for heap pools, outside the general
   first-fit list, and advance it monotonically under a growth lock that is
@@ -280,9 +279,6 @@ current direction for tasks 2–4. Decision 4 remains open.
   before it is published. Publication therefore needs no shootdown.
 - Heap pools also stop consuming the 256 general range records. The window size
   is a named layout constant, and running out of it is NO_MEMORY.
-
-**Alternative:** keep using general kernel VM, together with a cross-CPU
-invalidation protocol. That protocol is post-milestone work.
 
 ## Performance records and validation
 
@@ -341,14 +337,14 @@ record them rather than broadening the milestone without agreement.
 Tasks may be split further for review; do not start the next implicitly. Each PR
 updates current subsystem docs only for behavior it implements.
 
-1. [ ] **Rebase the investigation and capture the baseline.** After native writer
+1. [x] **Rebase the investigation and capture the baseline.** After native writer
    completion, audit changed worker/memory/lifetime dependencies and record the
    bounded performance set above. Settle session configuration, trusted-init
    affinity authority/handoff, single-CPU defaults and the mapping-growth design
    before dependent implementation.
    Record any unresolved correctness decisions rather than inventing requirements.
-   Audit and baseline are recorded, and decisions 1–3 were accepted on 2026-10-05.
-   Complete once the heap-growth mapping [decision](#task-1-decisions) is answered.
+   Completed 2026-10-05: audit, [baseline](../development/experiments/smp-task1-baseline/README.md)
+   and accepted [decisions](#task-1-decisions).
 2. [ ] **Separate spaces and boot sessions from CPU topology.** Add independent
    lookup and update init selection, navigation, presentation/input and explicit
    service context. Implement the fixed-width scrolling bar and directional
