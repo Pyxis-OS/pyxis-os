@@ -310,9 +310,9 @@ deployment or text consumer. Resize and reconnect remain separate work.
 ## Libc compatibility gaps
 
 The completed [descriptor portability slice](userland/libc-portability.md) supplies
-open/read/write/close for cksum and restricted tee. Public O_RDWR, seeking,
-fdopen/fileno and duplication remain absent even though fopen supports update
-modes and stdio seeking internally. Consumers requiring those interfaces need
+open/read/write/close for cksum and restricted tee, and `lseek` for files.
+Public O_RDWR, fdopen/fileno and duplication remain absent even though fopen
+supports update modes internally. Consumers requiring those interfaces need
 a separately agreed extension. Revisit them against a pinned consumer's actual
 needs; duplication must settle shared open-state/cursor ownership before adding
 new descriptor aliases. Descriptor inheritance and cross-process shared offsets
@@ -405,18 +405,29 @@ define whether ownership remains before introducing retries or pending-close
 storage. The [close contract](userland/libc-portability.md#close-failure-and-cleanup)
 records the current status and errno rules.
 
-## Directory APIs in libpyxis
+## Narrow libc file metadata
 
-The first ls and mkdir use native libpyxis enumeration and creation helpers,
-with libc for output and other C support. This keeps the initial utilities small,
-but programs expecting libc directory APIs will still need native adaptations.
+Libc offers `mkdir`, `opendir`/`readdir`/`closedir` and `stat`/`fstat` for
+ports such as [Links](userland/links.md). Native objects report only a kind and,
+for files, a size, so `struct stat` has only `st_mode` file-type bits and
+`st_size`. There are no permission, owner, link-count, identity or time fields,
+and code that reads one fails to compile instead of seeing invented values.
 
-TODO: revisit libc directory enumeration and creation APIs when extending libc
-or porting consumers that need them, including whether to expose dirent-style
-iteration and a mkdir wrapper. Define how those APIs map to capability roots,
-directory context, rights and errno before implementing them. The native ABI
-remains capability-based; this does not commit the OS to POSIX semantics or add
-those wrappers to the first-shell milestone.
+- **Sizing opens the file.** `stat` opens a file with READ, or WRITE if READ is
+  denied, so a file with neither right cannot be sized. On a provider URI it
+  performs the request, so a port that calls `stat` before `fopen` fetches
+  twice. Links sends provider URIs straight to `fopen`.
+- **Symlinks.** Lookup never follows a symlink, so `stat` of a symlink entry
+  fails; `readdir` reports it as `DT_LNK`. `lstat` and `readlink` are absent.
+- **Listings.** `readdir` returns no `.` or `..` entries. A detected
+  concurrent change ends the listing with EAGAIN rather than restarting it.
+- **Native utilities.** The first ls and mkdir still use libpyxis helpers.
+
+Revisit when native objects gain timestamps or other metadata, when a port
+needs `lstat`, `readlink` or `access`, or when a port calls `stat` on provider
+URIs. Review of the Links port proposed failing there with ENODEV, as
+`opendir` does, without issuing the request. Add fields only for values
+the native layer reports.
 
 ## File identity across capability paths
 
@@ -527,6 +538,33 @@ probes WRITE authority because truthful file metadata does not exist yet. The
 recipe's libbb adapter covers only vi's helpers; BusyBox less will extend it.
 Input EOF exits and loses unsaved edits, as upstream does; Kilo handles that
 case explicitly.
+
+## Links port limits
+
+[Links](userland/links.md) loads every page synchronously, so a slow network
+fetch freezes the interface until the HTTP provider's own 30-second budget
+ends. In review under nested KVM, a server that accepted the connection and
+never answered left a blank screen for 32 s before "Operation timed out". A Ctrl+C pressed during the wait
+is held and quits Links only after the open returns. Revisit with a native way
+to wait on a provider open alongside console input.
+
+- **No saved configuration.** Options, bookmarks and history are not saved.
+  Revisit once `home://` persists and libc has exclusive creation.
+- **No downloads.** Downloads to disk fail, because they need exclusive
+  creation too.
+- **Fixed screen size.** It is read once, without resize notification.
+- **Sockets compiled in.** Links' socket and DNS code is compiled but
+  unreachable. The port's socket functions fail, so `ftp://` and `finger://`
+  report "Host not found".
+- **Remote pages can link to local roots.** A page fetched over HTTP(S) can
+  link to `host://`, `home://` or `system://`, and following the link opens the
+  local object. Without scripting, a page cannot read or send what it opens, so
+  this matches a local link the user chooses to follow. Desktop browsers refuse
+  such navigation. Revisit before Links gains POST, cookies or providers that
+  act on requests.
+
+The HTTP-side limits are recorded under [HTTP redirects](#http-redirects) and
+[response metadata through fopen](#response-metadata-through-fopen).
 
 ## Virtio-fs runtime resource retention
 
@@ -974,8 +1012,8 @@ compatibility; do not silently accept ambiguous framing or publish partial bodie
 
 The [HTTP and HTTPS providers](userland/http-fetch.md) never follow redirects. A 3xx
 response is a rejected final status, so opening a moved page fails even when
-the server names its new location. Browsing through `fopen`, such as the
-planned [Links port](wip/links.md), meets this on ordinary sites.
+the server names its new location. Browsing through `fopen`, as the
+[Links port](userland/links.md) does, meets this on ordinary sites.
 
 Deferred by the owner on 2026-10-04: redirects are wanted, but not yet. When
 they are implemented, settle:
@@ -1000,9 +1038,9 @@ they are implemented, settle:
 A program reading a provider URI through libc `fopen` receives only bytes. It
 gets no media type, HTTP status or, once redirects exist, final URL. The native
 OPEN reply already carries an optional media type, and the providers retain
-the final HTTP status, but neither reaches the program. The planned
-[Links port](wip/links.md) therefore detects HTML by sniffing or file extension,
-and shows a rejected status only as an open error.
+the final HTTP status, but neither reaches the program. The
+[Links port](userland/links.md) therefore detects HTML by sniffing or file
+extension, and shows a rejected status only as an open error.
 
 Revisit with a way to expose response metadata to programs that fits Pyxis,
 alongside [discoverable resource representations](wip/userspace-scheme-providers.md#discoverable-resource-representations).

@@ -165,8 +165,9 @@ without options. They report path-specific errors to stderr, continue to later
 paths and return failure if any operation failed. Output errors stop the utility.
 Directory operations use libpyxis; libc supplies allocation and output. The small
 shared utility helper sizes path scratch storage and formats native errors without
-introducing libc directory APIs or converting native statuses to errno. The libc
-directory API [follow-up](../technical-debt.md#directory-apis-in-libpyxis) remains open.
+converting native statuses to errno. Libc now also has directory reading and a
+[narrow `stat`](../technical-debt.md#narrow-libc-file-metadata), which these
+utilities do not use.
 
 ## Foreground shell
 

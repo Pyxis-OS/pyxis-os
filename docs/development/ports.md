@@ -216,6 +216,10 @@ Native writable disk storage and atomic replacement remain separate work.
 license at `app://share/licenses/busybox/LICENSE`, and the shell resolves `vi`
 to it. It is a modal alternative to Kilo, with the same terminal grants and
 Ctrl+C passthrough; see the [recipe notes](../../ports/busybox/README.md).
+[Links](../userland/links.md) is packaged at `app://links.pxe` with its GPL
+license at `app://share/licenses/links/COPYING`. It is a text web browser that
+loads local files and HTTP(S) pages through libc; see the
+[recipe notes](../../ports/links/README.md).
 
 The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and TCC;
 [guest Lua](../userland/lua.md) is independent of the host recipe runner.

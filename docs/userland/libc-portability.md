@@ -253,7 +253,7 @@ absent interfaces and their revisit points. [Console EOF](../technical-debt.md#c
 [creation mode](../technical-debt.md#public-open-creation-mode),
 [non-atomic append](../technical-debt.md#non-atomic-stdio-append),
 [uncertain native release](../technical-debt.md#unexpected-native-close-failures),
-[directory APIs](../technical-debt.md#directory-apis-in-libpyxis) and
+[narrow file metadata](../technical-debt.md#narrow-libc-file-metadata) and
 [file alias side effects](../technical-debt.md#shell-redirection-side-effects-and-file-aliases)
 remain explicit limits. General process semantics, polling/nonblocking I/O,
 signals and cross-process shared offsets require separate design work; this
