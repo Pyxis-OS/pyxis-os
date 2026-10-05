@@ -108,25 +108,16 @@ static size_t parse_cpu_list(const char *name, const char *list, uint64_t *allow
   }
 }
 
-/* Until tasks can migrate, each space is pinned to one allowed CPU: the next
- * workload CPU in configuration order, wrapping, if allowed, otherwise the
- * lowest allowed workload CPU. A single-CPU boot uses the BSP. Multicore
- * userspace does not run on the BSP yet. */
-static bool place_space(const uint64_t *allowed, size_t position, size_t *cpu)
+/* The scheduler places tasks; boot only checks that one CPU can take them.
+ * Multicore userspace does not run on the BSP yet. */
+static bool has_user_cpu(const uint64_t *allowed)
 {
   size_t count = arch_cpu_count();
   if (count == 1) {
-    *cpu = 0;
     return allowed[0] & 1;
   }
-  size_t preferred = 1 + position % (count - 1);
-  if ((allowed[preferred / 64] >> (preferred % 64)) & 1) {
-    *cpu = preferred;
-    return true;
-  }
-  for (size_t candidate = 1; candidate < count; ++candidate) {
-    if ((allowed[candidate / 64] >> (candidate % 64)) & 1) {
-      *cpu = candidate;
+  for (size_t cpu = 1; cpu < count; ++cpu) {
+    if ((allowed[cpu / 64] >> (cpu % 64)) & 1) {
       return true;
     }
   }
@@ -319,22 +310,21 @@ void user_launch_initial(const char *command_line)
       }
     }
 
-    size_t cpu;
     const char *reason = NULL;
     char absent_reason[64];
     if (absent != NO_ABSENT_CPU) {
       sprintf(absent_reason, "CPU set names absent CPU %zu", absent);
       reason = absent_reason;
-    } else if (!place_space(allowed, i, &cpu)) {
+    } else if (!has_user_cpu(allowed)) {
       reason = "CPU set allows only CPU 0, which runs no userspace on a multicore boot yet";
     }
     if (reason) {
       /* An unstarted space accepts no tasks. */
       memset(allowed, 0, words * sizeof(*allowed));
-      report_unstarted(space_create(name, allowed, 0), name, reason);
+      report_unstarted(space_create(name, allowed), name, reason);
       continue;
     }
-    struct space *space = space_create(name, allowed, cpu);
+    struct space *space = space_create(name, allowed);
     user_launch_init(space, selections[i].image, &mount, install);
   }
   kfree(cpu_sets);

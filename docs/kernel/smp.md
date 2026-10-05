@@ -1,13 +1,13 @@
-# Pinned tasks on multiple CPUs
+# Scheduling on multiple CPUs
 
 `make run CPUS=4` boots one QEMU socket with four cores and one thread per core.
 `CPUS` defaults to one and also applies to `make debug`. With multiple CPUs,
 CPU 0 (the BSP) services allocation and cleanup. Boot creates the configured
-[spaces](../userland/init.md) independently of the CPU count. Until tasks can
-migrate, each space's tasks run on one CPU: the workload CPUs from 1 onward in
-configuration order, wrapping, or the BSP on a single-CPU boot. The defaults put
-Development, Read-only and Remote on CPUs 1–3; further CPUs stay idle.
-Children stay on their parent's CPU.
+[spaces](../userland/init.md) independently of the CPU count. User tasks run on
+any CPU their space allows except, on a multicore boot, the BSP, which takes
+userspace only once private memory is serviced locally (SMP task 7). A
+single-CPU boot runs everything on the BSP. Placement and balancing are
+described below; the defaults put Development, Read-only and Remote on CPUs 1–3.
 CPU indices are dense, stable for the boot, and distinct from hardware APIC IDs.
 
 ## Boot handoff
@@ -55,23 +55,50 @@ After bringing CPUs online, the BSP initializes the console and calls
 `task_init()` to allocate one scheduler per CPU. APs wait until the BSP enters
 `task_schedule()`, which publishes the initialized state with release ordering.
 Each CPU then runs its own ready queue round-robin with local timer preemption.
-Its permanent boot stack becomes its scheduler stack. Tasks never migrate.
+Its permanent boot stack becomes its scheduler stack.
 
 The BSP loads a private image and user stack, wraps that address space in a
-process belonging to a space that allows the target CPU, then submits the process using:
+process belonging to its space, then submits the process using:
 
 ```c
-enum mm_result result = user_task_create_on(cpu_index, process, entry, stack_top);
+enum mm_result result = user_task_create(process, entry, stack_top);
 ```
 
-`cpu_index` must be below `arch_cpu_count()`. `user_task_create()` remains a
-shorthand for CPU zero. Submission may occur before or after scheduling starts,
-but only on the BSP with IF=0 and outside interrupt/fault entry. Success transfers
-sole ownership of the process to the task; failure leaves it with the caller.
-The target CPU must be in the owning space's allowed set. Do not inspect or mutate
-the process or its address space after transfer. There is one task per process.
+Submission may occur before or after scheduling starts, but only on the BSP
+with IF=0 and outside interrupt/fault entry. Success transfers sole ownership of
+the process to the task; failure leaves it with the caller. Do not inspect or
+mutate the process or its address space after transfer. There is one task per
+process.
 
-Batch launch splits submission into BSP-only `user_task_prepare_on()` and
+### Placement and migration
+
+Each CPU's load is its queued tasks plus one while a task occupies it, kept under
+the queue lock. A user task may run on a CPU its space allows; on a multicore boot
+the BSP is excluded. There are no priorities or other scoring.
+
+- **Publication** places each new task on the least-loaded CPU it may use. Ties
+  prefer the launching parent's CPU, then the lowest index. Members of a batch
+  are placed one at a time, each seeing those already queued, so a pipeline
+  spreads across idle CPUs. The parent's CPU is a tie-break only; the parent is
+  blocked in its launch syscall and cannot move meanwhile.
+- **Preemption** of a user task in user mode requeues it on another CPU when
+  that CPU's load is at least two below the local one. The threshold stops equal
+  neighbours trading a task every tick. The destination's reschedule IPI is its
+  only notification.
+- **An idle CPU** pulls the first movable task it may run from the busiest other
+  queue, provided that queue's CPU keeps a task. Idle APs keep their 120 Hz
+  timer, so they retry every tick without extra IPIs.
+
+Only a user task outside a syscall moves. It is either new or was preempted in
+user mode, so its whole continuation is on its own kernel stack. Dispatch on the
+destination reloads its CR3, TSS stack, syscall stack, FP state and both GS
+bases. A task that blocks in a syscall, including a deferred BSP request, keeps
+its CPU and resumes there; it becomes movable again after its next user-mode
+preemption. Parked, executing and retired tasks are never moved, and kernel tasks
+stay on the BSP. `cpu_index` changes only under the queue lock, which also orders
+wake and stop notification.
+
+Batch launch splits submission into BSP-only `user_task_prepare()` and
 `user_task_publish_group()`. Preparation allocates and initializes each task,
 kernel stack, reusable request area and separate profiling storage without
 enqueueing it; its process remains inactive and owned by the preparer.
@@ -174,9 +201,9 @@ continuations stay runnable until their own unwind returns all loans; their fina
 syscall boundary prevents user return. Published BSP/HOST requests remain
 uninterruptible. See [execution groups](../interfaces/execution-groups.md).
 
-Parking a user task saves user CPU state just like timer preemption. Resume
-restores the same CPU, process root and private entry stack, with interrupts
-still disabled. The process remains alive while blocked. User mappings stay
+Parking a user task saves user CPU state just like timer preemption. A parked
+syscall resumes on the same CPU, restoring its process root and private entry
+stack, with interrupts still disabled. The process remains alive while blocked. User mappings stay
 stable except during an explicit private-memory loan after the task has left
 its address space.
 Only an explicit capability-table loan allows the BSP to modify its table.
@@ -352,7 +379,8 @@ task's inactive space: its scheduler publishes the request only after leaving
 the task stack and
 reloading the kernel root and clearing entry/current state. The BSP executor
 changes private mappings before waking the owner; normal resumption reloads CR3 before any task access. No other CPU uses
-that private root during the loan.
+that private root during the loan, and the borrowing task keeps its CPU because it
+is inside its syscall.
 Kernel code, CPU records, scheduler stacks, heap pools and framebuffer mappings
 remain mapped throughout AP execution. A shared kernel range must not be
 unmapped, remapped or protected while another CPU can use it.
@@ -360,8 +388,10 @@ unmapped, remapped or protected while another CPU can use it.
 Task activation reloads CR3 before accessing a newly published task stack. Task
 retirement reloads it after leaving that stack, before the BSP can reclaim the
 backing. With PCID and global pages disabled, these reloads invalidate the local
-translations, including those of reused kernel-stack ranges. Other CPUs never
-access that task's stack or private mappings. Endpoint messages and wait records
+translations, including those of reused kernel-stack ranges. A task executes on
+one CPU at a time; after a move, the previous CPU has already left the task's
+stack and dropped its private root, and the destination reloads CR3 before using
+them. Endpoint messages and wait records
 use heap storage, whose mappings remain backed even after freeing the object.
 This is a restricted ownership protocol, not general cross-CPU TLB invalidation;
 mutable shared mappings and concurrent allocator calls still require additional
@@ -377,8 +407,8 @@ the first panicking CPU also draws on the
 kernel panic still halts only the faulting CPU. Shared TTY mutation still needs
 serialization; the low-level log lock interface requires interrupts disabled.
 
-Kernel tasks stay on the BSP. Task migration, shared user address spaces and
-kernel-task fault recovery are not supported; a kernel-task fault is fatal.
+Kernel tasks stay on the BSP. Shared user address spaces and kernel-task fault
+recovery are not supported; a kernel-task fault is fatal.
 
 ## Debugger inspection
 

@@ -129,13 +129,13 @@ void launcher_request_execute(struct launcher_request *request)
   case LAUNCH_START:
     KASSERT(request->capture && request->parent && !request->group);
     request->result = launcher_start(request->capture, request->parent,
-        request->execution_group, &request->child);
+        request->parent_cpu, request->execution_group, &request->child);
     discard_capture(request->capture);
     break;
   case LAUNCH_BATCH_PREPARE:
     KASSERT(request->capture && request->group && request->parent);
     request->result = launcher_batch_prepare(request->group, request->capture,
-        request->parent, request->execution_group);
+        request->parent, request->parent_cpu, request->execution_group);
     discard_capture(request->capture);
     break;
   case LAUNCH_DISCARD:
@@ -180,6 +180,7 @@ static struct launcher_request *request_launch_service(enum launcher_action acti
       action == LAUNCH_CREATE_EXECUTION_GROUP) {
     request->parent = process_current();
     KASSERT(request->parent);
+    request->parent_cpu = arch_cpu_index();
   }
   bsp_request_submit_and_wait(&request->request);
   return request;

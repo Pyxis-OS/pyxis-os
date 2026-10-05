@@ -1,0 +1,37 @@
+pre4 (main d30e678, 4 CPUs), session spaces p1..p6 on CPUs 1,2,3,1,2,3
+pipe --buffer 4096 (acceptance median/range ms; completion median/range ms)
+ p1: 0.734 (0.705..0.806); 1.042 (1.017..1.132)
+ p2: 0.706 (0.705..0.729); 1.027 (1.017..1.036)
+ p3: 0.721 (0.711..0.848); 1.033 (1.029..1.155)
+ipcbench call --size 64 --messages 8 completion per pass ms
+ p4: 2.086 2.044 2.045 2.066 2.030 -> median 2.045
+ p5: 2.044 2.045 2.033 2.044 2.035 -> median 2.044
+ p6: 2.032 2.023 2.077 2.022 2.034 -> median 2.032
+pre1 (main d30e678, 1 CPU), all spaces on CPU 0
+pipe --buffer 4096
+ p1: 3.082 (2.844..3.771); 3.529 (3.291..4.230)
+ p2: 2.869 (2.843..3.562); 3.320 (3.291..4.017)
+ p3: 3.068 (2.853..3.446); 3.511 (3.311..3.897)
+ipcbench call completion per pass ms
+ p4: 3.175 3.244 3.234 3.160 3.156 -> median 3.175
+ p5: 2.955 2.875 2.904 2.881 3.962 -> median 2.904
+ p6: 3.244 3.166 3.235 3.238 3.155 -> median 3.235
+pre4 repeat (before, 4 CPUs)
+ pipe completion medians: 1.030 (1.000..2.243), 1.019 (0.996..1.041), 1.133 (1.028..2.095)
+ ipcbench passes p4: 2.072 2.042 2.080 2.086 2.298 | p5: 2.051 2.112 2.808 2.037 ~2.03 | p6: 2.633 1.895 4.817 1.853 1.844
+post4 (after, 4 CPUs, default placement)
+ pipe acceptance/completion medians (ranges):
+  p1: 2.328 (0.476..3.558); 2.940 (0.854..3.949)
+  p2: 0.491 (0.455..3.353); 1.088 (0.768..4.145)
+  p3: 0.515 (0.487..1.424); 0.841 (0.805..1.755)
+ ipcbench passes p4: 2.073 2.049 2.041 2.050 2.036 | p5: 2.307 1.841 3.681 1.922 1.960 | p6: 2.289 1.855 1.837 3.473 2.018
+pin4 (after, each space limited to one CPU: SPACE_CPUS p1=1 p2=2 p3=3 p4=1 p5=2 p6=3)
+ pipe completion medians: 1.039 (1.028..1.120), 1.004 (0.995..1.015), 1.056 (1.034..2.738)
+ ipcbench passes p4: 1.984 3.642 2.741 2.053 2.071 | p5: 2.080 2.064 2.078 2.687 2.106 | p6: 2.049 2.030 2.041 2.036 2.058
+pin4 repeat
+ pipe completion medians: 1.052 (1.026..1.374), 1.044 (1.041..1.154), 1.155 (1.037..1.567)
+ ipcbench passes p4: 2.134 2.057 2.053 2.142 2.090 | p5: 2.056 2.103 4.520 2.042 2.030 | p6: 1.865 1.856 1.856 1.862 1.868
+post1 (after, 1 CPU)
+ pipe acceptance/completion medians: 2.998/3.506, 3.337/3.982, 2.944/3.511
+ ipcbench passes p4: 3.509 4.139 3.348 3.424 4.341 | p5: 3.921 3.155 3.240 3.887 ~3.17 | p6: 3.168 3.292 3.174 3.214 3.247
+L1 KVM halt_poll_ns=200000 (this nested host VM)

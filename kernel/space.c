@@ -112,16 +112,15 @@ bool space_allows_cpu(const struct space *space, size_t cpu_index)
       (space->allowed_cpus[cpu_index / 64] >> (cpu_index % 64)) & 1;
 }
 
-static struct space *space_alloc(const char *title, uint64_t *allowed_cpus,
-    size_t cpu_index, bool focused)
+static struct space *space_alloc(const char *title, uint64_t *allowed_cpus, bool focused)
 {
-  KASSERT(arch_cpu_index() == 0 && allowed_cpus && cpu_index < arch_cpu_count());
+  KASSERT(arch_cpu_index() == 0 && allowed_cpus);
   arch_clock_maintain();
   struct space *space = kmalloc(sizeof(*space));
   if (!space) {
     panic("cannot allocate space");
   }
-  *space = (struct space){.cpu_index = cpu_index, .allowed_cpus = allowed_cpus};
+  *space = (struct space){.allowed_cpus = allowed_cpus};
   atomic_init(&space->title_locked, false);
   size_t length = strlen(title);
   KASSERT(length && length <= SPACE_TITLE_MAX);
@@ -163,16 +162,16 @@ void space_init(const struct boot_framebuffer *boot_fb)
   }
   memset(allowed, 0, space_cpu_words() * sizeof(*allowed));
   allowed[0] = 1;
-  caelum_space = space_alloc(KERNEL_NAME, allowed, 0, true);
+  caelum_space = space_alloc(KERNEL_NAME, allowed, true);
   last_space = caelum_space;
   active_space = caelum_space;
   log_set_tty(caelum_space->tty);
   spaces_nav_fb = fb_alloc(boot_fb, boot_fb->width, SPACES_NAV_HEIGHT);
 }
 
-struct space *space_create(const char *name, uint64_t *allowed_cpus, size_t cpu_index)
+struct space *space_create(const char *name, uint64_t *allowed_cpus)
 {
-  struct space *space = space_alloc(name, allowed_cpus, cpu_index, false);
+  struct space *space = space_alloc(name, allowed_cpus, false);
   last_space->next = space;
   last_space = space;
   return space;
