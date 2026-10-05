@@ -113,6 +113,34 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Current focus and later candidates
 
+### Kernel focus: runtime SMP
+
+Owner direction, 2026-10-04. The [runtime SMP milestone](scheduling-and-threads.md)
+is the next kernel work. It touches the scheduler, launch and process lifetime,
+private memory and the heap, presentation and input routing, and the
+BSP-owned service rules. Other kernel feature tracks therefore pause at these
+exits, so SMP has a stable base:
+
+- **Filesystem:** after [system updates](system-updates.md) task 2.
+- **USB:** after "USB storage works": C.1 writes and flushes merged, and a
+  native ThinkPad check of read-only boot, the writable mount and the C.1
+  review notes. C.2 and C.3 of the [USB plan](usb-installation.md) then wait.
+- **Networking:** after the current link-selection task. Native lease-renewal
+  qualification can wait.
+
+Fixes for major problems found by ThinkPad validation remain allowed in any
+track. Ports may continue when they need only userland and libc additions, not
+new kernel facilities; for example vi, [Links](links.md) and less.
+
+The first SMP step is a spike: task 1 of the milestone, which rebases the
+investigation, captures the baseline and settles its open decisions. It starts
+when resources allow and no major kernel work conflicts. A throwaway prototype
+branch is not part of task 1 unless the owner asks for one.
+
+After SMP, the candidates are dynamic space creation (the new tab and its
+launch flow), a file navigator and multiplexing. The scrolling space bar itself
+is part of SMP task 2.
+
 The [native filesystem milestone](native-filesystem.md) has completed format-only
 codecs, host tools and the Caelum-owned cache/writer. Trusted init selects explicit
 read-only or writable roots; native file, directory and configured-disk sync
@@ -168,6 +196,9 @@ Kilo and machine-readable command completion; framebuffer screenshots remain for
 graphical work. See [terminal sessions](../userland/terminal-sessions.md) and
 [execution groups](../interfaces/execution-groups.md) for the underlying contracts.
 Authentication, a multiplexer and process threads remain separate work.
+[File transfer through the remote terminal](remote-file-transfer.md) is accepted
+and not started: single-file upload and download with kitty's transfer
+protocol, then drag-and-drop upload.
 [Foreground interruption](../userland/foreground-interruption.md) is
 implemented: Ctrl+C terminates a running foreground command or pipeline through
 process-level termination, shell-armed interrupt events and a minimal
@@ -247,8 +278,10 @@ USB mounts now use the sole observed GUID match after discovery/scan completion,
 including partial inventories. C.1 adds bounded captured WRITE (10)/(16),
 ordered whole-medium cache flushes and per-device qualification for explicitly
 requested writable GUID mounts. Unqualified healthy media retain read-only
-service. Persistent edit/build/run integration and physical write qualification
-remain unassigned; installer raw USB access remains deferred. Reusable
+service. C.2 qualifies the [persistent USB edit/build/run loop](../development/edit-build-run.md#persistent-usb-development)
+in QEMU, including explicit sync, fresh-process persistence and read-only use.
+Physical write qualification remains unassigned; installer raw USB access remains
+deferred. Reusable
 controller/USB/class/block boundaries are required, without speculative driver
 frameworks. This does not reorder filesystem core, spaces/SMP
 or the visible-work sequence.
@@ -295,7 +328,9 @@ traffic, link checks and the owner-run native PXE/HTTPS results. The dock-facing
 XID `502` remains unsupported.
 [DHCP](../devices/dhcp.md) provides acquisition and lease maintenance;
 [qualification](../development/dhcp-qualification.md) records its coverage.
-[Link-based net0 selection](net0-link-selection.md) remains a later proposal.
+[Initial net0 selection](../devices/net0-selection.md) chooses reported linked
+controllers and continues trusted setup after an offline startup timeout;
+[qualification](../development/link-selection-qualification.md) records its coverage.
 
 | Path | First concrete completion point | Decisions and supporting work |
 | --- | --- | --- |

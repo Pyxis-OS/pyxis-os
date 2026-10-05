@@ -53,6 +53,12 @@ launcher authority. Reading source from stdin additionally requires console
 input. Alternative launchers must provide the corresponding grants; paths do
 not confer access by themselves.
 
+An explicitly configured native USB mount can also hold source, objects and
+executable output when the disk qualifies for writes and the session receives
+the writable root grant. The compiler and SDK remain in `app://`; see the
+[persistent USB development walkthrough](../development/edit-build-run.md#persistent-usb-development)
+for mount configuration, synchronization and checking files after a restart.
+
 Relative paths use the inherited directory chain; a leading `scheme://` selects
 a named root. Quoted includes search beside their source first. Rooted includes
 are opened directly, without falling back to search directories. Each `-I` or
@@ -83,9 +89,12 @@ GCC's private headers. `-print-search-dirs` displays the configured paths.
   deferred. The unsigned millisecond benchmark interval must be under 49 days.
 - Output uses create/truncate streams. A failed write can leave a partial file;
   compilation does not publish output by atomic replacement. `home://` contents
-  are lost on reboot;
-  an optional writable `host://` export can keep output across boots. See the
-  [persistence walkthrough](../devices/virtio-fs.md#persistent-development-walkthrough).
+  are lost on reboot. An explicitly configured, qualified writable USB mount
+  can keep source and output across boots; follow the
+  [USB walkthrough](../development/edit-build-run.md#persistent-usb-development)
+  to synchronize and verify them. An optional writable `host://` export is
+  another persistence path; see its
+  [walkthrough](../devices/virtio-fs.md#persistent-development-walkthrough).
 - Each process has a fixed 1 MiB stack without growth and an unmapped guard
   page below it. Recursive parsing and larger inputs can exceed it. The largest fixed compiler frame observed in the
   GCC build was 2,720 bytes, not a bound on total stack use or source complexity.

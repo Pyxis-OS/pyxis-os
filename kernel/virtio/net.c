@@ -50,6 +50,7 @@ _Static_assert(offsetof(struct virtio_net_config, status) == VIRTIO_NET_MAC_BYTE
                "VirtIO network configuration prefix");
 
 struct virtio_net_controller {
+  uint32_t controller_id;
   struct virtio_net_controller *next;
   struct virtio_pci_transport pci;
   uint64_t offered_features, accepted_features;
@@ -68,8 +69,9 @@ struct virtio_net_controller {
 
 static struct virtio_net_controller *controllers;
 static bool inventory_complete;
+static bool refresh_network_config(struct virtio_net_controller *controller, bool force);
 
-static bool sample_network_config(struct virtio_net_controller *controller,
+static bool sample_network_config(const struct virtio_net_controller *controller,
     uint8_t mac[VIRTIO_NET_MAC_BYTES], bool *link_up, uint8_t *generation)
 {
   volatile struct virtio_pci_common *common = virtio_pci_common(&controller->pci);
@@ -285,7 +287,9 @@ void virtio_net_prepare(const struct boot_info *boot)
            device->address.bus, device->address.device, device->address.function);
       continue;
     }
-    *controller = (struct virtio_net_controller){.next = controllers};
+    *controller = (struct virtio_net_controller){
+      .controller_id = (uint32_t)index + 1, .next = controllers,
+    };
     controllers = controller;
     /* The retained inventory exposes read-only records; transport claiming
      * changes ownership on the same boot-lifetime record through the PCI API. */
@@ -311,6 +315,34 @@ const uint8_t *virtio_net_identity_mac(const struct virtio_net_controller *contr
 bool virtio_net_inventory_complete(void)
 {
   return inventory_complete;
+}
+
+uint32_t virtio_net_controller_id(const struct virtio_net_controller *controller)
+{
+  return controller->controller_id;
+}
+
+bool virtio_net_prepared(const struct virtio_net_controller *controller)
+{
+  return controller && controller->prepared && !controller->stopping;
+}
+
+bool virtio_net_carrier(const struct virtio_net_controller *controller, bool *up)
+{
+  net_worker_assert_context();
+  *up = false;
+  if (!virtio_net_prepared(controller) ||
+      !(controller->accepted_features & VIRTIO_NET_F_STATUS)) {
+    return false;
+  }
+  uint8_t mac[VIRTIO_NET_MAC_BYTES], generation;
+  bool sampled_up;
+  if (!sample_network_config(controller, mac, &sampled_up, &generation) ||
+      memcmp(mac, controller->mac, sizeof(mac))) {
+    return false;
+  }
+  *up = sampled_up;
+  return true;
 }
 
 void virtio_net_interrupt(void)
@@ -402,15 +434,21 @@ void virtio_net_start(struct virtio_net_controller *controller)
     stop_network(controller, "activation rejected");
     return;
   }
+  /* Carrier may change while DRIVER_OK/delivery are off without a generation
+   * notification. Activation must publish a fresh configuration sample. */
+  if (!refresh_network_config(controller, true)) {
+    return;
+  }
   virtio_net_queue_notify(&controller->rx);
   klog("virtio-net: RX/TX active, %u buffers per queue, BSP worker owns completions\n",
        VIRTIO_NET_QUEUE_SIZE);
 }
 
-static bool refresh_network_config(struct virtio_net_controller *controller)
+static bool refresh_network_config(struct virtio_net_controller *controller, bool force)
 {
   volatile struct virtio_pci_common *common = virtio_pci_common(&controller->pci);
-  if (!controller->config_unstable && common->config_generation == controller->config_generation) {
+  if (!force && !controller->config_unstable &&
+      common->config_generation == controller->config_generation) {
     return true;
   }
   if (controller->config_unstable && !task_deadline_expired(controller->config_recheck) &&
@@ -489,7 +527,7 @@ bool virtio_net_service(struct virtio_net_controller *controller)
     stop_network(controller, "device needs reset or status changed");
     return false;
   }
-  if (!refresh_network_config(controller)) {
+  if (!refresh_network_config(controller, false)) {
     return false;
   }
 

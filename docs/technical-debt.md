@@ -716,6 +716,16 @@ Hardware tallies are accessible only through the internal GDB capture helper.
 Revisit that diagnostic interface when a network status command is assigned;
 there is no public statistics ABI or periodic tally polling today.
 
+## Initial net0 selection limits
+
+[Automatic selection](devices/net0-selection.md) requires complete discovery and
+reported carrier. VirtIO without STATUS needs an explicit selector; an incomplete
+inventory leaves the setup owner waiting while the shell remains available.
+Selection binds once until reboot, with no controller fallback or lease
+revalidation on link-up. A cable moved to another port therefore requires reboot
+or an explicit future switching design. Revisit with drain/teardown ownership and
+DHCP link-up policy, rather than adding a second binding or lease authority.
+
 ## Virtio-net runtime resource retention
 
 The external interface's first unique configuration binding lasts until reboot.
@@ -1416,6 +1426,22 @@ leave healthy media readable but not writable. No MODE SELECT or write-cache
 mode change is attempted. Revisit compatibility only with natural device
 responses that need a concrete bounded extension; do not infer writable or
 flush support from vendor IDs or successful reads.
+
+Two hardware compatibility watchpoints from merged
+[PR #395](https://git.internal/PyxisOS/pyxis-os/pulls/395) remain deferred.
+A device that cleanly rejects SYNCHRONIZE CACHE stays read-only, including a
+device whose firmware might not use a volatile write cache. Querying its caching
+mode page and reported Write Cache Enable (WCE) state is a possible extension
+guided by device evidence, not an accepted alternative qualification or proof of
+physical durability. Revisit only
+after observing an affected expendable device and settling the write/flush policy.
+
+An optional MODE SENSE or qualification synchronization exchange that breaks
+transport currently fails the whole media probe, even when earlier reads
+succeeded. Returning to read-only service after a successful reset is a proposal;
+it requires an explicit recovery policy and verified healthy transfer ownership
+and reads. Prior read success alone does not establish those conditions. Revisit
+with natural physical-device evidence rather than weakening failure handling now.
 
 The five-second exchange deadline and shared boot-media deadline also bound
 synchronization. A slow genuine flush can retire the device even when the medium

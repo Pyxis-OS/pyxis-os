@@ -20,6 +20,11 @@ struct virtio_net_controller *virtio_net_first(void);
 struct virtio_net_controller *virtio_net_next(const struct virtio_net_controller *controller);
 const uint8_t *virtio_net_identity_mac(const struct virtio_net_controller *controller);
 bool virtio_net_inventory_complete(void);
+uint32_t virtio_net_controller_id(const struct virtio_net_controller *controller);
+bool virtio_net_prepared(const struct virtio_net_controller *controller);
+/* Worker-only, bounded read-only sampling. False means carrier is unknown,
+ * including devices without STATUS. Does not change cached config or ownership. */
+bool virtio_net_carrier(const struct virtio_net_controller *controller, bool *up);
 
 /* Sole BSP network worker, IF=1. Start once; service at most one batch of sixteen
  * RX and sixteen TX completions per turn. True requests a yield before another

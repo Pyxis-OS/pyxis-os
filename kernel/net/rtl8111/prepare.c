@@ -355,7 +355,7 @@ void rtl8111_prepare(const struct boot_info *boot)
            address.bus, address.device, address.function);
       continue;
     }
-    *controller = (struct rtl8111_controller){0};
+    *controller = (struct rtl8111_controller){.controller_id = (uint32_t)index + 1};
     if (!pci_reserve_device_at(index, &controller->claim)) {
       inventory_complete = false;
       klog("rtl8111 %x:%x.%u: cannot reserve function; unavailable\n",
@@ -418,4 +418,9 @@ struct rtl8111_controller *rtl8111_first(void)
 const uint8_t *rtl8111_identity_mac(const struct rtl8111_controller *controller)
 {
   return controller && controller->identity_known ? controller->mac : NULL;
+}
+
+uint32_t rtl8111_controller_id(const struct rtl8111_controller *controller)
+{
+  return controller->controller_id;
 }

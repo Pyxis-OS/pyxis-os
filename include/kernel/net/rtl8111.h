@@ -15,6 +15,10 @@ bool rtl8111_inventory_complete(void);
 struct rtl8111_controller *rtl8111_first(void);
 struct rtl8111_controller *rtl8111_next(const struct rtl8111_controller *controller);
 const uint8_t *rtl8111_identity_mac(const struct rtl8111_controller *controller);
+uint32_t rtl8111_controller_id(const struct rtl8111_controller *controller);
+bool rtl8111_prepared(const struct rtl8111_controller *controller);
+/* Worker-only, direct read-only carrier sample; no PHY command or negotiation. */
+bool rtl8111_carrier(const struct rtl8111_controller *controller, bool *up);
 
 /* Sole BSP network worker, IF=1. Start once after binding, service bounded
  * completion batches; deadline also accepts IF=0. No runtime storage release. */
