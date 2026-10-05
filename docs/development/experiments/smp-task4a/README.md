@@ -120,7 +120,8 @@ apart, recorded each CPU's running and queued task ([migration-gdb.txt](migratio
 
 ## Not exercised
 
-- No native ThinkPad run.
+- No native ThinkPad run yet. [thinkpad-check.md](thinkpad-check.md) gives the
+  owner-run commands and the staged PXE builds.
 - The preemption push (move at a load gap of two) was not caught in the debugger. Its
   locals are optimized out at the requeue site, so a `dprintf` could not be attached.
 - The 1-CPU control was not run under the debugger.
