@@ -37,9 +37,12 @@ read-only `app`, read-only SYSTEM_INFO and standard streams. SYSTEM_INFO supplie
 the live kernel build revision for display and the installed ESP record. It waits for the child and reports its
 completion. It delegates no launcher, writable home, mount, host, network or
 display authority. The packaged [native installer](../userland/installer.md)
-implements consent, formatting, installation, read-back verification and
-read-only Update candidate inspection. Update inspection uses only raw reads;
-it never opens a volume or acquires a write claim.
+implements consent, formatting, installation and
+[system updates](../userland/system-updates.md). Update candidate inspection uses
+raw reads without mounting a pool. After typed `update`, it acquires the same
+exclusive write claim as install, rechecks eligibility and the selected layout,
+then writes only the ESP. Flush, release/rescan and read-back verification precede
+the read-only system-root reopen.
 
 ## Inventory and raw access
 
@@ -100,7 +103,7 @@ Disk capabilities authorize operations, not selection of a safe target. The raw
 kernel service does not check `SAFE_TO_WIPE`, authenticate contents or interpret
 partition names as consent. Target preparation and explicit consent belong to
 the trusted installer. The installer selects the sole eligible disk automatically or asks for a disk
-number when several qualify, then requires typed `wipe`. The installer does not
-expose USB raw access. Qualified USB write/flush support is available only
+number when several qualify, then requires typed `wipe` for install or `update`
+for Update. The installer does not expose USB raw access. Qualified USB write/flush support is available only
 through configured native mounts and the kernel block interface. AHCI, NVMe, hotplug,
 physical-media qualification and power-loss validation remain outside this interface. See [block storage](block-storage.md) and [GPT discovery](gpt.md).

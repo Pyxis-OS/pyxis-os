@@ -1,7 +1,7 @@
 # System-update recognition qualification
 
 Manual validation on 2026-10-04, task 1 of
-[system updates](../../../wip/system-updates.md). This qualifies candidate
+[system updates](../../../userland/system-updates.md). This qualifies candidate
 recognition and revision recording, not ESP updates or complete bootability.
 
 ## Inputs and environment
