@@ -1,7 +1,9 @@
+#include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 #include <arch/ps2.h>
 #include <kernel/keyboard.h>
+#include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
 
@@ -9,9 +11,13 @@
 #define SCAN_EXTENDED 0xe0
 #define SCAN_PAUSE 0xe1
 #define SCAN_RELEASE 0xf0
-#define SCAN_OVERRUN_ZERO 0x00
-#define SCAN_OVERRUN_ONES 0xff
+/* Key detection error: the keyboard could not resolve that many simultaneous
+ * keys, or its own buffer overran. Set 2 sends 0x00; some keyboards send 0xFF.
+ * The unresolved keys are not reported; no byte in transit was lost. */
+#define SCAN_KEY_ERROR_ZERO 0x00
+#define SCAN_KEY_ERROR_ONES 0xff
 #define SCAN_POWER_ON 0xaa
+#define KEY_ERROR_LOG_INTERVAL_NS UINT64_C(1000000000)
 
 /* Raw set 2, with controller translation disabled. Fake shift bytes in the
  * Print Screen sequence have no extended-table entry and cannot alter Shift. */
@@ -65,6 +71,9 @@ static bool available;
 static uint8_t raw_queue[RAW_QUEUE_BYTES];
 static size_t raw_read, raw_write, raw_count;
 static bool input_lost;
+static size_t key_errors; /* IRQ producer; the consumer reads it with IF=0. */
+static size_t key_errors_logged;
+static uint64_t key_errors_logged_at;
 static bool held[KEY_COUNT];
 static unsigned locks;
 static bool extended, released, pause_release;
@@ -80,12 +89,15 @@ void keyboard_receive(uint8_t status, uint8_t data)
   if (!available) {
     return;
   }
-  if ((status & (PS2_TIMEOUT_ERROR | PS2_PARITY_ERROR)) ||
-      data == SCAN_OVERRUN_ZERO || data == SCAN_OVERRUN_ONES || data == SCAN_POWER_ON ||
+  if ((status & (PS2_TIMEOUT_ERROR | PS2_PARITY_ERROR)) || data == SCAN_POWER_ON ||
       raw_count == RAW_QUEUE_BYTES) {
     input_lost = true;
   }
   if (input_lost) {
+    return;
+  }
+  if (data == SCAN_KEY_ERROR_ZERO || data == SCAN_KEY_ERROR_ONES) {
+    ++key_errors;
     return;
   }
   raw_queue[raw_write] = data;
@@ -205,12 +217,32 @@ static bool decode(uint8_t byte, struct key_event *event)
   return true;
 }
 
+/* Task context only: logging from the IRQ could contend for the log lock. */
+static void report_key_errors(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  size_t total = key_errors;
+  cpu_restore_interrupts(flags);
+  if (total == key_errors_logged) {
+    return;
+  }
+  uint64_t now = arch_monotonic_ns();
+  if (key_errors_logged && now - key_errors_logged_at < KEY_ERROR_LOG_INTERVAL_NS) {
+    return;
+  }
+  klog("keyboard: too many keys pressed at once (%zu reports); those keys were not delivered\n",
+       total);
+  key_errors_logged = total;
+  key_errors_logged_at = now;
+}
+
 bool keyboard_read_event(struct key_event *event)
 {
   KASSERT(cpu_current() == cpu_bsp() && event);
   if (!available) {
     return false;
   }
+  report_key_errors();
   if (pause_release) {
     pause_release = false;
     key_event(KEY_PAUSE, true, event);

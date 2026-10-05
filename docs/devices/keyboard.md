@@ -16,6 +16,16 @@ decodes them. If bytes are lost, the next read reports `KEY_STATE_RESET` with
 `KEY_NONE` and clears held keys and modifiers. Discard any held-key state in the
 consumer too. A false return leaves the event unchanged.
 
+Bytes count as lost on a controller parity or timeout error, a power-on (`0xAA`)
+byte, or a full queue. A key detection error is different. The keyboard sends
+`0x00` (some keyboards `0xFF`) when it cannot resolve that many simultaneous
+keys or its own buffer overruns; laptop keyboards do this with only a few keys
+held. Linux likewise ignores it. Pyxis drops that byte, keeps decoder,
+held-key and console state, and does not deliver the unresolved keys. Orphan
+releases that follow are ignored as usual. The input task logs the running count
+to the kernel log at most once per second. A detection error between a sequence
+prefix and its final byte can misdecode that one key.
+
 Initialization uses ACPI to find the keyboard's I/O APIC route and directs it to
 the BSP. The controller uses untranslated scan set 2. The auxiliary port carries
 the [mouse](mouse.md); controller bytes are routed by the status register's
