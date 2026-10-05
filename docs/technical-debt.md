@@ -178,22 +178,43 @@ kernel mapping reuse need their own handoff/invalidation contracts. Eager
 task-lifetime storage and long non-preemptible operations remain explicit costs;
 measure them in matched before/after workloads.
 
-## PMM first-fit scan under its lock
+## PMM first-fit search under its lock
 
-`pmm_alloc()` searches the frame bitmap one bit at a time from frame 1 on every
-call, and since SMP task 5 it does so while holding the PMM lock. Search time grows
-with the number of allocated frames below the first free run, and other CPUs
-allocating or freeing frames wait for it. Matched `allocbench pages` results did
-not change with the lock while every caller was on the BSP
-([task-5 record](development/experiments/smp-task5/README.md)).
+`pmm_alloc()` searches first fit under the PMM lock. Since the SMP task-7 PMM
+follow-up, it skips fully allocated 64-bit bitmap words and starts at a hint
+below which every frame is unavailable. That ended the serialization measured in
+7a: lock wait fell to about 150 cycles per call with two page clients
+([record](development/experiments/smp-task7-pmm/README.md#pmm-lock)).
 
-SMP task 7a measured the waiting it predicted, in the nested VM
-([task-7a record](development/experiments/smp-task7a/README.md#pmm-lock-contention)).
-Each page client's frame allocation scanned about 7,700 bits under the lock. Two
-concurrent clients on separate CPUs each took about 1.75 times as long as one
-alone, and lock-wait time was about as large as lock-hold time. A
-lowest-free-frame hint or skipping full bitmap words are the cheap first steps;
-the change awaits an owner decision.
+Search time can still grow with fragmentation: free frames scattered through
+mostly allocated words, or a long run requested among short free stretches. The
+lock is still taken once per frame by `vm_back()` and heap growth, which allocate
+one frame at a time. Revisit if a workload shows PMM lock waiting again; batching
+frames per call would be the next step.
+
+## Scratch-slot false sharing
+
+Each CPU's two scratch slots are adjacent PTEs, so the slots of CPUs 0–3, 4–7
+and so on share one 64-byte cache line of the scratch page table. The
+`scratch_busy` flags of every CPU also share lines. Each page that private memory
+or heap growth maps uses the slots about a dozen times, for zeroing and for each
+page-table level read. CPUs doing that at the same time bounce those lines.
+
+In the nested VM, two concurrent page clients each took about 1.9 times as long
+as one alone. Giving each CPU's PTEs and flags their own line, in a throwaway
+build, cut that to about 1.4 times
+([record](development/experiments/smp-task7-pmm/README.md#remaining-concurrency-cost-scratch-slot-false-sharing)).
+
+There are two options:
+
+- **Spread the slots, one line per CPU.** Covering all 256 xAPIC IDs needs an
+  8 MiB scratch window instead of 2 MiB, which moves the APIC, I/O APIC and
+  HPET mappings.
+- **Walk the active address space through the recursive mapping.** This removes
+  most slot use, and single-CPU cost, entirely.
+
+Revisit after the native ThinkPad check in SMP task 8, which shows whether the
+cost matters on real hardware.
 
 ## Never-reused kernel heap arena
 
