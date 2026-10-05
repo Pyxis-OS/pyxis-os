@@ -410,6 +410,12 @@ All three were accepted by the owner on 2026-10-05:
    frames on the first page therefore retires nothing. `heap_stats` reports
    arena use and retired bytes, also shown in the boot log. Moving RAM-file
    storage out of the heap stays deferred.
+
+   After the #425 review, growth also refuses up front when the pool cannot
+   fit in the free frames. Otherwise a request larger than free RAM, such as a
+   RAM-file write, mapped until the PMM was empty and retired all of it. Any
+   program could repeat that and use up the arena. Retirement now needs another
+   CPU to take frames during a growth.
 3. **General kernel VM.** Nothing needs it off the BSP once growth has its own
    arena, and task 7 changes only private spaces. It stays BSP-only, now
    asserted for the kernel space, with no lock. Remote unmapping or reuse there

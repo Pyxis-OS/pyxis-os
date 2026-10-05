@@ -171,11 +171,11 @@ will introduce independent spaces, single-task migration and local private-memor
 operations with allocator synchronization and explicit mapping lifetime rules. It
 is not implemented yet; an allocator spinlock alone does not resolve these ownership
 constraints. Since SMP tasks 5 and 6 the heap, physical allocator and scratch
-mappings are safe on any CPU, but their callers are not. Selected serial services and deferred
-destruction remain BSP-owned initially. Worker relocation and shared kernel mapping
-reuse need their own handoff/invalidation contracts. Eager task-lifetime storage and
-long non-preemptible operations remain explicit costs; measure them in matched
-before/after workloads.
+mappings are safe on any CPU, but their callers are not. Selected serial services
+and deferred destruction remain BSP-owned initially. Worker relocation and shared
+kernel mapping reuse need their own handoff/invalidation contracts. Eager
+task-lifetime storage and long non-preemptible operations remain explicit costs;
+measure them in matched before/after workloads.
 
 ## PMM first-fit scan under its lock
 
@@ -193,20 +193,28 @@ bytes are the cheap first steps.
 ## Never-reused kernel heap arena
 
 Kernel heap pools come from a 256 GiB arena whose addresses are never reused, so
-publishing a pool needs no TLB shootdown. Pools are never removed, and a failed
-growth retires the pages it mapped. The arena therefore bounds every pool ever
-added plus every retired page for the whole boot. Running out of it makes all
-later heap growth fail, even after memory is freed. RAM FILE backing is heap
-storage that doubles as a file grows, so it is the likeliest consumer.
+publishing a pool needs no TLB shootdown. Pools are never removed. The arena
+therefore bounds every pool ever added plus every retired page for the whole
+boot. Running out of it makes all later heap growth fail, even after memory is
+freed. RAM FILE backing is heap storage that doubles as a file grows, so it is
+the likeliest consumer.
+
+Growth refuses a pool that does not fit in the free frames before mapping
+anything, so a request larger than free memory retires nothing. A growth still
+retires the pages it mapped when another CPU takes frames while it maps. That
+needs concurrent allocation, which starts in SMP task 7. The check reads a
+snapshot of the free count, so a growth can still briefly take most free frames
+when the pool only just fits.
 
 Growth also zeroes and maps its whole pool with interrupts disabled while holding
 the growth lock. A large RAM-file doubling occupies its CPU for that time, and
 other CPUs that need growth wait. The BSP already behaved this way before SMP
 task 6.
 
-Revisit if `heap_stats` shows retired bytes or arena use approaching its size,
-or if growth latency becomes material. Moving RAM-file backing out of the heap
-is the first option.
+Revisit in SMP task 7, when frames are allocated on several CPUs, and whenever
+`heap_stats` shows retired bytes or arena use approaching its size, or growth
+latency becomes material. Moving RAM-file backing out of the heap is the first
+option.
 
 ## Synchronous launch preparation
 

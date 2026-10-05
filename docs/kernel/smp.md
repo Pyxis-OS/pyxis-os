@@ -398,7 +398,11 @@ outside interrupt and fault entry:
     heap-lock section.
   - **No shootdown.** No other CPU can hold a translation for an address that
     was never mapped, so publication needs none.
-  - **Failure.** A failed growth unmaps locally and retires only the pages it
+  - **Failure.** Growth first compares the pool's pages, plus an allowance
+    for new page tables, with the free frames. A growth that cannot fit is
+    refused before mapping anything; it retires nothing and sends a
+    memory-pressure notice. A growth that still fails, because another CPU
+    took frames meanwhile, unmaps locally and retires only the pages it
     mapped; the never-mapped remainder stays usable. A used-up arena is
     NO_MEMORY. `heap_get_stats()` reports arena use and retired bytes.
 
@@ -414,12 +418,20 @@ outside interrupt and fault entry:
   slots.
 
 Spinlocks (`include/kernel/spinlock.h`) are held with IF=0 and never across
-logging, a context switch or waiting for another CPU. Only the heap growth lock
-is held across allocation: growth takes the PMM lock, then the heap lock to
-publish, in that order. The heap and PMM locks are leaves; allocation notifies
-memory pressure only after releasing the PMM lock. The pressure lock and
-resource and group locks are taken before the queue lock, never after it. No
-caller of `kmalloc()` or `pmm_alloc()` may hold the queue or pressure lock.
+logging, a context switch or waiting for another CPU. The heap and PMM locks
+are leaves; allocation notifies memory pressure only after releasing the PMM
+lock. Only the heap growth lock is held across allocation, so it comes first
+in the full order:
+
+1. Heap growth lock.
+2. Either the PMM lock or the heap lock, each released before the next is
+   taken; growth takes the PMM lock while mapping and the heap lock to publish.
+3. The memory-pressure lock, reached from growth through a failed or low
+   frame allocation, or a refused growth.
+4. The queue lock, taken by the pressure lock's wake and by resource and group
+   locks.
+
+No caller of `kmalloc()` or `pmm_alloc()` may hold the queue or pressure lock.
 
 User-buffer checks are a narrow exception to BSP-only queries: the executing
 CPU can inspect its active private root through recursive mappings, with IF=0

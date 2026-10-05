@@ -1,16 +1,28 @@
 diff --git a/kernel/mm/heap.c b/kernel/mm/heap.c
-index d5579c5..1cf0161 100644
+index 8400cb6..9c28da6 100644
 --- a/kernel/mm/heap.c
 +++ b/kernel/mm/heap.c
-@@ -27,6 +27,7 @@ static uintptr_t arena_next, arena_end;
+@@ -30,6 +30,7 @@ static uintptr_t arena_next, arena_end;
  /* Pool and allocation counters belong to heap_lock; the arena counters, which
   * move with arena_next, belong to growth_lock. */
  static struct heap_stats stats;
-+size_t heap_debug_rechecked, heap_debug_grown; /* SCRATCH STRESS ONLY: growth_lock */
++size_t heap_debug_rechecked, heap_debug_grown, heap_debug_fail_after; /* SCRATCH STRESS ONLY: growth_lock */
  
  static size_t pool_size_for_request(size_t request)
  {
-@@ -176,7 +177,10 @@ void *kmalloc(size_t bytes)
+@@ -107,6 +108,11 @@ static bool add_pool(size_t request, void **result)
+   uintptr_t base = arena_next;
+   size_t mapped = 0;
+   for (; mapped < bytes; mapped += PAGE_SIZE) {
++    /* SCRATCH STRESS ONLY: fail once after this many mapped pages. */
++    if (heap_debug_fail_after && mapped == heap_debug_fail_after * PAGE_SIZE) {
++      heap_debug_fail_after = 0;
++      break;
++    }
+     phys_addr_t physical = pmm_alloc(1);
+     if (!physical) {
+       break;
+@@ -191,7 +197,10 @@ void *kmalloc(size_t bytes)
    spin_lock(&heap_lock);
    pointer = allocate_locked(bytes);
    spin_unlock(&heap_lock);
@@ -22,7 +34,7 @@ index d5579c5..1cf0161 100644
      add_pool(bytes, &pointer);
    }
    spin_unlock(&growth_lock);
-@@ -207,3 +211,12 @@ struct heap_stats heap_get_stats(void)
+@@ -222,3 +231,12 @@ struct heap_stats heap_get_stats(void)
    spin_unlock(&growth_lock);
    return snapshot;
  }
@@ -36,24 +48,25 @@ index d5579c5..1cf0161 100644
 +  return result;
 +}
 diff --git a/kernel/task.c b/kernel/task.c
-index c3b13e0..78313ab 100644
+index c3b13e0..a318548 100644
 --- a/kernel/task.c
 +++ b/kernel/task.c
-@@ -21,6 +21,7 @@
+@@ -21,6 +21,8 @@
  #include <kernel/wait.h>
  #include <stdatomic.h>
  #include <arch/cpu_local.h>
 +#include <kernel/mm/pmm.h>
++#include <arch/paging.h>
  
  #define TASK_STACK_SIZE (16 * 1024)
  
-@@ -910,6 +911,104 @@ void kernel_task_yield_if_runnable(void)
+@@ -910,6 +912,120 @@ void kernel_task_yield_if_runnable(void)
    cpu_restore_interrupts(flags);
  }
  
 +/* SCRATCH STRESS ONLY. */
 +int heap_debug_check(void);
-+extern size_t heap_debug_rechecked, heap_debug_grown;
++extern size_t heap_debug_rechecked, heap_debug_grown, heap_debug_fail_after;
 +#define STRESS_SLOTS 64
 +
 +static void fill(uint64_t *block, size_t bytes, uint64_t pattern)
@@ -146,13 +159,29 @@ index c3b13e0..78313ab 100644
 +         after.retired_bytes, small, later.arena_bytes, before.pools, later.pools,
 +         heap_debug_check(), memory.free_frames);
 +    kfree(small);
++
++    /* Injected failure after 64 mapped pages: only those are retired, and the
++     * next growth starts right after them. */
++    struct heap_stats injected_before = heap_get_stats();
++    heap_debug_fail_after = 64;
++    void *first = kmalloc((size_t)16 << 20);
++    struct heap_stats injected_after = heap_get_stats();
++    void *second = kmalloc((size_t)16 << 20);
++    struct heap_stats final = heap_get_stats();
++    klog("stress: injected first=%p arena %zu->%zu retired %zu->%zu; second=%p "
++         "(arena offset %zu) arena %zu pools %zu->%zu; TLSF check %d\n",
++         first, injected_before.arena_bytes, injected_after.arena_bytes,
++         injected_before.retired_bytes, injected_after.retired_bytes, second,
++         second ? (size_t)((uintptr_t)second - arch_heap_arena_base()) : 0,
++         final.arena_bytes, injected_before.pools, final.pools, heap_debug_check());
++    kfree(second);
 +  }
 +}
 +
  [[noreturn]] void task_schedule(void)
  {
    size_t cpu_index = arch_cpu_index();
-@@ -921,6 +1020,7 @@ void kernel_task_yield_if_runnable(void)
+@@ -921,6 +1037,7 @@ void kernel_task_yield_if_runnable(void)
      while (!atomic_load_explicit(&started, memory_order_acquire)) {
        cpu_wait_interrupt();
      }
