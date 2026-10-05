@@ -171,10 +171,11 @@ will introduce independent spaces, single-task migration and local private-memor
 operations with allocator synchronization and explicit mapping lifetime rules. It
 is not implemented yet; an allocator spinlock alone does not resolve these ownership
 constraints. Since SMP task 5 the physical allocator and scratch mappings are safe
-on any CPU, but their callers are not. Selected serial services and deferred destruction remain BSP-owned
-initially. Worker relocation and shared kernel mapping reuse need their own
-handoff/invalidation contracts. Eager task-lifetime storage and long non-preemptible
-operations remain explicit costs; measure them in matched before/after workloads.
+on any CPU, but their callers are not. Selected serial services and deferred
+destruction remain BSP-owned initially. Worker relocation and shared kernel mapping
+reuse need their own handoff/invalidation contracts. Eager task-lifetime storage and
+long non-preemptible operations remain explicit costs; measure them in matched
+before/after workloads.
 
 ## PMM first-fit scan under its lock
 

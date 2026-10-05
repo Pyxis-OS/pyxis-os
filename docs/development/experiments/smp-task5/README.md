@@ -61,7 +61,7 @@ Full output: `pre4-output.txt`, `post4-output.txt`, `pre1-output.txt` and
 ## Stress run (not committed)
 
 [stress.patch](stress.patch) is a throwaway patch on top of this PR; it is not
-part of the tree. When the scheduler starts, it keeps every AP busy for six
+part of the tree. It applies to main at `fe1f5cd` with `git apply`. When the scheduler starts, it keeps every AP busy for six
 seconds while the BSP continues booting: USB enumeration, display start and
 network setup all allocate during that window. Each round on an AP:
 

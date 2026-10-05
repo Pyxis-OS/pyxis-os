@@ -516,7 +516,9 @@ updates current subsystem docs only for behavior it implements.
    interrupt/lock rules. Retain existing mutation call sites until the full memory
    path is safe; validate zeroing, rollback and ownership. See the
    [memory boundaries](../kernel/smp.md#memory-and-output-boundaries) and the
-   [task-5 record](../development/experiments/smp-task5/README.md).
+   [task-5 record](../development/experiments/smp-task5/README.md). Only the
+   PMM's own failure path ran; caller rollback is deferred to task 7, when
+   callers leave the BSP.
 6. [ ] **Enable safe concurrent heap growth.** Synchronize TLSF/stats and kernel-VM
    bookkeeping, implement the agreed growth/publication/unwind contract, and keep
    general mapping reuse constrained. Review the full lock graph and allocation
@@ -524,7 +526,7 @@ updates current subsystem docs only for behavior it implements.
 7. [ ] **Make private MEMORY operations local.** Remove the BSP request/loan for
    this exclusive single-task path, preserving behavior, profiling and cleanup.
    Verify concurrent callers on distinct roots, migrated callers, termination and
-   BSP eligibility. Record backing-growth/page-operation and mixed-load results.
+   BSP eligibility. Run a caller's out-of-frames unwind off the BSP. Record backing-growth/page-operation and mixed-load results.
 8. [ ] **Validate and close.** Run the CPU/device matrix, independent-space and
    lifetime scenarios, native ThinkPad validation and matched final measurements.
    Document remaining serial services and accepted limits; rewrite this milestone as an implemented kernel
