@@ -1,3 +1,4 @@
+#include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/private.h>
@@ -14,7 +15,8 @@ struct private_allocation {
 enum mm_result private_memory_allocate(struct process *process, size_t size,
                                         uintptr_t *address)
 {
-  KASSERT(arch_cpu_index() == 0 && process && address);
+  KASSERT(process && process == process_current() && address);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(size && !(size & (PAGE_SIZE - 1)));
   *address = 0;
 
@@ -37,7 +39,8 @@ enum mm_result private_memory_allocate(struct process *process, size_t size,
 enum mm_result private_memory_release(struct process *process, uintptr_t address,
                                        size_t size)
 {
-  KASSERT(arch_cpu_index() == 0 && process);
+  KASSERT(process && process == process_current());
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   struct private_allocation **link = &process->allocations;
   while (*link) {
     struct private_allocation *allocation = *link;

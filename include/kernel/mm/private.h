@@ -5,10 +5,12 @@
 
 struct process;
 
-/* BSP, IF=0, owning an inactive private address space. Sizes are nonzero whole
- * pages. Only allocations made here are releasable here; image, startup and
- * initial stack mappings never enter this process-owned list. Allocation sets
- * address to zero on failure. Release requires an exact current address/size. */
+/* The process's own task in a syscall, IF=0, on whichever CPU runs it; that
+ * CPU has the private address space active and no other CPU uses it. Sizes are
+ * nonzero whole pages. Only allocations made here are releasable here; image,
+ * startup and initial stack mappings never enter this process-owned list.
+ * Allocation sets address to zero on failure. Release requires an exact
+ * current address/size. */
 enum mm_result private_memory_allocate(struct process *process, size_t size,
                                         uintptr_t *address);
 enum mm_result private_memory_release(struct process *process, uintptr_t address,

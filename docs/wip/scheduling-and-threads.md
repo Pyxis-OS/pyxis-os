@@ -423,6 +423,25 @@ All three were accepted by the owner on 2026-10-05:
 
 See the [task-6 record](../development/experiments/smp-task6/README.md).
 
+### Task-7 decisions
+
+All three were accepted by the owner on 2026-10-05:
+
+1. **Memory profile ABI.** The publication, queue and resume phases are removed
+   from `struct profile_memory_operation`. Counts, bytes, service and total
+   remain, with total running from syscall entry through reply copying.
+   `allocbench --profile` changed with it (pyxis-userland).
+2. **BSP placement (7b).** The BSP becomes eligible for placement, pulls and
+   affinity. Ties go to the parent's CPU, then the lowest AP, then the BSP. A
+   space limited to CPU 0 then starts, and `affinity 0` on a multicore boot is
+   accepted instead of returning UNAVAILABLE.
+3. **Split.** 7a makes private memory local with the BSP still excluded. 7b
+   enables BSP userspace, measured against 7a.
+
+7a found the PMM's bit-by-bit scan serializing concurrent page clients; see the
+[task-7a record](../development/experiments/smp-task7a/README.md#pmm-lock-contention)
+and [technical debt](../technical-debt.md#pmm-first-fit-scan-under-its-lock).
+
 ### Review notes carried from #410
 
 The [#410 review](https://git.internal/PyxisOS/pyxis-os/pulls/410) approved task 1
@@ -544,7 +563,9 @@ updates current subsystem docs only for behavior it implements.
    the full lock graph and allocation recursion; record matched allocation
    results. See the [memory boundaries](../kernel/smp.md#memory-and-output-boundaries)
    and the [task-6 record](../development/experiments/smp-task6/README.md).
-7. [ ] **Make private MEMORY operations local.** Remove the BSP request/loan for
+7. [ ] **Make private MEMORY operations local.** Split into 7a (local private
+   memory; see the [7a record](../development/experiments/smp-task7a/README.md))
+   and 7b (BSP userspace). Remove the BSP request/loan for
    this exclusive single-task path, preserving behavior, profiling and cleanup.
    Verify concurrent callers on distinct roots, migrated callers, termination and
    BSP eligibility. Run a caller's out-of-frames unwind off the BSP. Record backing-growth/page-operation and mixed-load results.

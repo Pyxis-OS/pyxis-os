@@ -129,8 +129,8 @@ stack pointers.
 Task metadata occupies 784 bytes. Each user task eagerly owns one 4,928-byte
 request allocation, sized for the explicit service catalog's largest typed
 record, HOST, with an 8-byte alignment requirement, and a separate zeroed
-816-byte profiling allocation. Their combined size is 6,528 bytes, excluding heap overhead and the
-unchanged 16 KiB kernel stack. Kernel workers use only the 784-byte task metadata
+720-byte profiling allocation. Their combined size is 6,432 bytes, excluding heap
+overhead and the unchanged 16 KiB kernel stack. Kernel workers use only the 784-byte task metadata
 and allocate neither user area. Preparation failure, prepared-task discard and
 retirement release each owned allocation exactly once on the BSP with IF=0.
 
@@ -161,13 +161,14 @@ are non-preemptible; kernel tasks run preemptibly on the BSP. An interrupt arriv
 while the scheduler is idle returns to its ready-queue loop. IF=0 and STI/HLT's
 interrupt shadow cover publication between the empty-queue check and halt.
 
-Private-memory and display requests publish to the common BSP request FIFO only
-once their caller has left its private root and task stack, cleared entry/current
-state and become parked. Publication detaches an idle executor's waiter under the
+Display requests publish to the common BSP request FIFO only once their caller
+has left its private root and task stack, cleared entry/current state and become
+parked. Private-memory operations no longer use the FIFO; they run in the
+caller's syscall ([memory](memory.md#execution)). Publication detaches an idle executor's waiter under the
 request lock and wakes it after unlocking. The ordinary ready queue and existing
 rescheduling IPI make the worker runnable on the BSP. A BSP caller sends no
 self-IPI and uses the same deferred handoff. Scheduler/preemption code has no
-memory/display queue checks. No remote allocation or new interrupt handler is added.
+display queue checks. No remote allocation or new interrupt handler is added.
 
 Capability growth, namespace creation, endpoint creation/export, RAMFS entry/name
 allocation and discard, and RAM FILE backing replacement publish to that same
@@ -377,13 +378,14 @@ latency. The scheduler does not know about display timing. See
 ## Memory and output boundaries
 
 VM metadata and page-table mutation remain BSP-only and require interrupts
-disabled, and so does every current caller of the heap and the physical
-allocator. The general kernel VM area asserts it: its ranges are reused, and
-changing a mapping another CPU may hold would need a remote TLB shootdown. A
-kernel task must save/disable interrupts around these calls and restore them
-afterward; being pinned to the BSP alone does not prevent same-CPU reentry. AP
-syscalls may access their capabilities and block on endpoints, but cannot
-allocate memory.
+disabled, with one exception: a process's private memory operations change its
+own active address space in its syscall, on any CPU
+([memory](memory.md#execution)). The general kernel VM area asserts BSP
+ownership: its ranges are reused, and changing a mapping another CPU may hold
+would need a remote TLB shootdown. A kernel task must save/disable interrupts
+around these calls and restore them afterward; being pinned to the BSP alone does
+not prevent same-CPU reentry. Other heap allocation by syscalls, such as
+capability growth or RAM-file backing, still goes through BSP requests.
 
 Three lower layers are already safe on any CPU with interrupts disabled,
 outside interrupt and fault entry:
@@ -439,10 +441,9 @@ and stable user mappings. They use no scratch slots or VM metadata.
 General `vm_query()` and page-table mutation remain BSP-only.
 
 Private spaces are built before publication and reclaimed only after retirement.
-The [memory](memory.md) and [display](../interfaces/graphics.md) services can borrow a parked
-task's inactive space: its scheduler publishes the request only after leaving
-the task stack and
-reloading the kernel root and clearing entry/current state. The BSP executor
+The [display](../interfaces/graphics.md) service can borrow a parked task's
+inactive space: its scheduler publishes the request only after leaving the task
+stack and reloading the kernel root and clearing entry/current state. The BSP executor
 changes private mappings before waking the owner; normal resumption reloads CR3 before any task access. No other CPU uses
 that private root during the loan, and the borrowing task keeps its CPU because it
 is inside its syscall.

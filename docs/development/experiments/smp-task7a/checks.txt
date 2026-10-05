@@ -1,0 +1,34 @@
+# Out-of-frames unwind and Ctrl-C termination, 4 CPUs, 7a image (ELF ce28fe46…)
+# GDB reads of 'kernel/mm/pmm.c'::stats ($1) and 'kernel/mm/heap.c'::stats ($2)
+## before
+$1 = {total_frames = 42316, free_frames = 31691, allocated_frames = 10625, metadata_pages = 4}
+$2 = {pools = 14, pool_bytes = 4898816, live_allocations = 2200, live_block_bytes = 3575552, arena_bytes = 4898816, retired_bytes = 0}
+# three concurrent remote clients: allocbench pages --size 1048576 --live 64 --rounds 1
+c0 allocbench pages --size 1048576 --live 64 --rounds 1: exited 1 0.779s
+c1 allocbench pages --size 1048576 --live 64 --rounds 1: exited 1 0.776s
+c2 allocbench pages --size 1048576 --live 64 --rounds 1: exited 0 0.845s
+41 allocation attempts, 0 releases, 1 failures; peak live payload 41943040 bytes
+38 allocation attempts, 0 releases, 1 failures; peak live payload 38797312 bytes
+64 allocation attempts, 64 releases, 0 failures; peak live payload 67108864 bytes
+## after out-of-frames
+$1 = {total_frames = 42316, free_frames = 31691, allocated_frames = 10625, metadata_pages = 4}
+$2 = {pools = 14, pool_bytes = 4898816, live_allocations = 2200, live_block_bytes = 3576576, arena_bytes = 4898816, retired_bytes = 0}
+# Ctrl-C one second into allocbench pages --rounds 1000000, then 10 ms into allocbench growth --rounds 1
+1.010s {"type": "command_complete", "command": 1, "kind": "terminated"}
+0.019s {"type": "command_complete", "command": 1, "kind": "terminated"}
+## after ctrl-c
+$1 = {total_frames = 42316, free_frames = 31691, allocated_frames = 10625, metadata_pages = 4}
+$2 = {pools = 14, pool_bytes = 4898816, live_allocations = 2200, live_block_bytes = 3576576, arena_bytes = 4898816, retired_bytes = 0}
+## after a normal allocbench pages run
+$1 = {total_frames = 42316, free_frames = 31691, allocated_frames = 10625, metadata_pages = 4}
+$2 = {pools = 14, pool_bytes = 4898816, live_allocations = 2200, live_block_bytes = 3576576, arena_bytes = 4898816, retired_bytes = 0}
+# panics in serial log: 0
+
+# PMM lock counters (pmm-counters.patch on the 7a code), 4 CPUs, read through GDB.
+# rdtsc cycles; this build's timings are inflated, so only ratios are used.
+## after boot
+pmm_debug_calls = 16368, pmm_debug_scanned = 123525345, wait = 12518370, hold = 588960120
+## after one allocbench pages --rounds 2048
+pmm_debug_calls = 83142, pmm_debug_scanned = 635633737, wait = 16486573, hold = 3041144744
+## after two concurrent allocbench pages --rounds 2048
+pmm_debug_calls = 216690, pmm_debug_scanned = 1702138890, wait = 4518674825, hold = 8138185420

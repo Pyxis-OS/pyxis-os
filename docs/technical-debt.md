@@ -42,15 +42,15 @@ thread-local errno when introducing userspace threads.
 
 The [allocation benchmark and caller-scoped memory profile](development/allocation-profiling.md)
 separate warm userspace heap throughput, heap expansion and direct private-page
-requests. Profiling splits parking/publication, BSP queue time, service and
-resumption. Report the accelerator, CPU count, live set and host/nested-VM context;
+requests. Since SMP task 7a, profiling splits service from the whole syscall;
+earlier records also split publication, BSP queue time and resumption. Report the accelerator, CPU count, live set and host/nested-VM context;
 the instrumentation itself reads HPET and perturbs timings.
 
 Standalone kernel `kmalloc`/`kfree` throughput and deeper PMM/VM timing remain
 unmeasured. Pool growth counters describe backing acquired during a measurement
-window, not total retained memory or a fragmentation metric. Private-memory
-requests now [notify the BSP after publication](kernel/smp.md), removing their dependency
-on a later timer wakeup. The common executor now admits all migrated services,
+window, not total retained memory or a fragmentation metric. Private memory
+now runs in the caller's syscall ([memory](kernel/memory.md#execution)). The
+common executor admits the remaining migrated services,
 including HOST forwarding; measure queue and worker costs before changing
 allocation policy.
 
@@ -142,8 +142,9 @@ allocation and page-table mutation; they are not just a fault-handler shortcut.
 
 ## BSP-only allocation and VM mutation
 
-Kernel allocation and page-table mutation remain owned by the BSP. Tasks submit
-specific requests and wait for BSP service. The
+Kernel allocation and page-table mutation remain owned by the BSP, except private
+memory operations, which run in the caller's syscall since SMP task 7a. Tasks
+submit other specific requests and wait for BSP service. The
 [common executor](../kernel/service/request.c) separates subsystem operations
 from scheduling through a closed service catalog and one FIFO. Each user task
 owns one reusable request allocation and a separate caller-only profiling
@@ -153,8 +154,8 @@ but long non-preemptible service operations still delay other requests and BSP
 work.
 
 The handoff ordering is part of correctness, not incidental queue plumbing.
-Private-memory requests are published only after the requester has left its
-task stack and private address space; resumption reloads CR3 before returning to
+Display requests are published only after the requester has left its task stack
+and private address space; resumption reloads CR3 before returning to
 the task stack. A wake arriving before a task finishes parking records a
 notification without making the still-running context runnable elsewhere.
 Changes to service placement or synchronization must preserve these guarantees
@@ -168,10 +169,10 @@ ownership, submission/completion and subsystem service from scheduling while
 retaining BSP-only allocation and the inactive-root handoff. The agreed
 [runtime SMP milestone](wip/scheduling-and-threads.md), after native writer completion,
 will introduce independent spaces, single-task migration and local private-memory
-operations with allocator synchronization and explicit mapping lifetime rules. It
-is not implemented yet; an allocator spinlock alone does not resolve these ownership
-constraints. Since SMP tasks 5 and 6 the heap, physical allocator and scratch
-mappings are safe on any CPU, but their callers are not. Selected serial services
+operations with allocator synchronization and explicit mapping lifetime rules.
+Since SMP tasks 5–7a the heap, physical allocator and scratch mappings are safe
+on any CPU, and private memory operations use them locally; other allocating
+services still run on the BSP. Selected serial services
 and deferred destruction remain BSP-owned initially. Worker relocation and shared
 kernel mapping reuse need their own handoff/invalidation contracts. Eager
 task-lifetime storage and long non-preemptible operations remain explicit costs;
@@ -182,13 +183,17 @@ measure them in matched before/after workloads.
 `pmm_alloc()` searches the frame bitmap one bit at a time from frame 1 on every
 call, and since SMP task 5 it does so while holding the PMM lock. Search time grows
 with the number of allocated frames below the first free run, and other CPUs
-allocating or freeing frames wait for it. Today every caller is on the BSP, so no
-CPU waits. Matched `allocbench pages` results did not change with the lock
+allocating or freeing frames wait for it. Matched `allocbench pages` results did
+not change with the lock while every caller was on the BSP
 ([task-5 record](development/experiments/smp-task5/README.md)).
 
-Revisit in SMP task 7, when private-memory work allocates frames on several CPUs.
-If measurements show waiting, a lowest-free-frame hint or skipping full bitmap
-bytes are the cheap first steps.
+SMP task 7a measured the waiting it predicted, in the nested VM
+([task-7a record](development/experiments/smp-task7a/README.md#pmm-lock-contention)).
+Each page client's frame allocation scanned about 7,700 bits under the lock. Two
+concurrent clients on separate CPUs each took about 1.75 times as long as one
+alone, and lock-wait time was about as large as lock-hold time. A
+lowest-free-frame hint or skipping full bitmap words are the cheap first steps;
+the change awaits an owner decision.
 
 ## Never-reused kernel heap arena
 
@@ -824,7 +829,7 @@ drivers' reclamation with a real teardown and SMP invalidation contract.
 
 The [native virtio-fs backend](devices/virtio-fs.md#native-directory-and-file-objects)
 uses the largest record in each user task's reusable 4,928-byte request allocation,
-including a 4 KiB read/write buffer. A separate 816-byte persistent profile
+including a 4 KiB read/write buffer. A separate 720-byte persistent profile
 allocation is also eager. Kernel workers allocate neither area. This avoids
 allocating on APs or exposing private stacks to the worker, but every user task
 pays both costs even if it never accesses HOST or enables profiling. Eager

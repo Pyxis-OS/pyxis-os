@@ -28,10 +28,7 @@ struct profile_memory_operation {
   uint64_t failures;
   uint64_t requested_bytes; /* Page-rounded bytes, including failed requests. */
   uint64_t completed_bytes; /* Successful allocations or releases only. */
-  struct profile_duration publication;
-  struct profile_duration queue;
   struct profile_duration service;
-  struct profile_duration resume;
   struct profile_duration total;
 };
 
@@ -110,17 +107,17 @@ _Static_assert(sizeof(struct profile_host_snapshot) == 408, "host snapshot layou
  * END disables collection and returns final counters (BAD_REQUEST if inactive).
  * Closing a handle does not stop collection; END or process exit does.
  *
- * Only requests admitted to the private-memory scheduler service are counted,
- * including failures there. Malformed/denied syscalls and other kernel memory
- * work are excluded. Times are elapsed monotonic ns, including instrumentation
- * and scheduling, NOT CPU time. Boundaries: request preparation, just before
- * publication locking, BSP service start/end, caller resumption. Queue time
- * therefore includes publication locking; total excludes syscall validation,
- * reply copying and counter accumulation. No per-request clock reads when off.
+ * Only requests that reach the private address space are counted, including
+ * failures there. Malformed/denied syscalls and other kernel memory work are
+ * excluded. Times are elapsed monotonic ns, including instrumentation, NOT CPU
+ * time. The operation runs in the caller's syscall on its own CPU. Service is
+ * the address-space change itself; total runs from syscall entry through reply
+ * copying, so total minus service is validation and copying. Counter
+ * accumulation is excluded. No per-request clock reads when off.
  * Totals saturate at UINT64_MAX and set SATURATED. The reply contains no
  * addresses. Bad reply storage must not change collection state. */
 _Static_assert(sizeof(struct profile_duration) == 16, "profile duration layout");
-_Static_assert(sizeof(struct profile_memory_operation) == 112, "profile operation layout");
-_Static_assert(sizeof(struct profile_snapshot) == 232, "profile snapshot layout");
+_Static_assert(sizeof(struct profile_memory_operation) == 64, "profile operation layout");
+_Static_assert(sizeof(struct profile_snapshot) == 136, "profile snapshot layout");
 
 #endif
