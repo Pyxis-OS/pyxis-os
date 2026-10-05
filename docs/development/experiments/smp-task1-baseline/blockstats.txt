@@ -1,0 +1,33 @@
+# 4 CPUs: target = native pool virtio-blk, usbdisk = blank xHCI stick
+## before native grow
+target: rd_bytes=1426432 wr_bytes=0 rd_operations=310 wr_operations=0 flush_operations=0 wr_total_time_ns=0 rd_total_time_ns=9099160 flush_total_time_ns=0 rd_merged=0 wr_merged=0 idle_time_ns=1844864788
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1594762 flush_total_time_ns=33992 rd_merged=0 wr_merged=0 idle_time_ns=87706569239
+## after native grow / before prepared
+target: rd_bytes=1758208 wr_bytes=7835648 rd_operations=391 wr_operations=400 flush_operations=176 wr_total_time_ns=14168234 rd_total_time_ns=11914202 flush_total_time_ns=4692606 rd_merged=0 wr_merged=0 idle_time_ns=1188159786
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1594762 flush_total_time_ns=33992 rd_merged=0 wr_merged=0 idle_time_ns=92482290988
+## after prepared / before copy
+target: rd_bytes=1958912 wr_bytes=21151744 rd_operations=440 wr_operations=756 flush_operations=276 wr_total_time_ns=25848050 rd_total_time_ns=13608843 flush_total_time_ns=7008697 rd_merged=0 wr_merged=0 idle_time_ns=1158883310
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1594762 flush_total_time_ns=33992 rd_merged=0 wr_merged=0 idle_time_ns=97710565808
+## after copy+sync
+target: rd_bytes=2286592 wr_bytes=28938240 rd_operations=520 wr_operations=1148 flush_operations=448 wr_total_time_ns=38169298 rd_total_time_ns=15946473 flush_total_time_ns=11176588 rd_merged=0 wr_merged=0 idle_time_ns=1206480969
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1594762 flush_total_time_ns=33992 rd_merged=0 wr_merged=0 idle_time_ns=102512701388
+## end of boot
+target: rd_bytes=3236864 wr_bytes=54288384 rd_operations=752 wr_operations=2337 flush_operations=952 wr_total_time_ns=82166688 rd_total_time_ns=24284646 flush_total_time_ns=26318381 rd_merged=0 wr_merged=0 idle_time_ns=36438975777
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1594762 flush_total_time_ns=33992 rd_merged=0 wr_merged=0 idle_time_ns=322755665993
+
+# 1 CPU
+## before native grow
+target: rd_bytes=1426432 wr_bytes=0 rd_operations=310 wr_operations=0 flush_operations=0 wr_total_time_ns=0 rd_total_time_ns=8960808 flush_total_time_ns=0 rd_merged=0 wr_merged=0 idle_time_ns=2015541882
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1212442 flush_total_time_ns=11372 rd_merged=0 wr_merged=0 idle_time_ns=20140311195
+## after native grow / before prepared
+target: rd_bytes=1750016 wr_bytes=7794688 rd_operations=389 wr_operations=393 flush_operations=172 wr_total_time_ns=12390796 rd_total_time_ns=11563452 flush_total_time_ns=4271427 rd_merged=0 wr_merged=0 idle_time_ns=1228830968
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1212442 flush_total_time_ns=11372 rd_merged=0 wr_merged=0 idle_time_ns=25344286127
+## after prepared / before copy
+target: rd_bytes=1958912 wr_bytes=21143552 rd_operations=440 wr_operations=756 flush_operations=276 wr_total_time_ns=23866080 rd_total_time_ns=13501594 flush_total_time_ns=6633609 rd_merged=0 wr_merged=0 idle_time_ns=1224216604
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1212442 flush_total_time_ns=11372 rd_merged=0 wr_merged=0 idle_time_ns=31454434987
+## after copy+sync
+target: rd_bytes=2286592 wr_bytes=28930048 rd_operations=520 wr_operations=1148 flush_operations=448 wr_total_time_ns=33982676 rd_total_time_ns=15685759 flush_total_time_ns=9746343 rd_merged=0 wr_merged=0 idle_time_ns=1240184826
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1212442 flush_total_time_ns=11372 rd_merged=0 wr_merged=0 idle_time_ns=36668075827
+## end of boot
+target: rd_bytes=3146752 wr_bytes=51761152 rd_operations=730 wr_operations=2222 flush_operations=904 wr_total_time_ns=68953708 rd_total_time_ns=22909461 flush_total_time_ns=21299807 rd_merged=0 wr_merged=0 idle_time_ns=10640655464
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1212442 flush_total_time_ns=11372 rd_merged=0 wr_merged=0 idle_time_ns=180255904790
