@@ -214,7 +214,13 @@ There are two options:
   most slot use, and single-CPU cost, entirely.
 
 Revisit after the native ThinkPad check in SMP task 8, which shows whether the
-cost matters on real hardware.
+cost matters on real hardware. The owner prefers the recursive walk (2026-10-06,
+not yet decided). Frame zeroing would still use a slot. It could instead go
+through the frame's final mapping before anyone can see it, which would change
+the "zeroed before mapping" rule, or keep one padded zeroing slot per CPU.
+Copy-on-write zero pages were considered and set aside. They only move the
+zeroing to the first write, need allocating page faults, and defer NO_MEMORY
+from ALLOCATE to an ordinary store.
 
 ## Never-reused kernel heap arena
 
