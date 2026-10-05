@@ -116,8 +116,10 @@
   klog("VM: total=%zu reserved=%zu backed=%zu pages, records=%zu/%u\n",
        virtual.total_pages, virtual.reserved_pages, virtual.backed_pages,
        virtual.range_records, VM_MAX_RANGES);
-  klog("heap: TLSF pools=%zu bytes=%zu, alignment=16, live allocations=%zu\n",
-       heap.pools, heap.pool_bytes, heap.live_allocations);
+  klog("heap: TLSF pools=%zu bytes=%zu, alignment=16, live allocations=%zu; "
+       "arena used=%zu retired=%zu bytes\n",
+       heap.pools, heap.pool_bytes, heap.live_allocations, heap.arena_bytes,
+       heap.retired_bytes);
 
   user_launch_initial(boot->command_line);
   arch_clock_maintain();

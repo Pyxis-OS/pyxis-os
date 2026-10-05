@@ -10,9 +10,14 @@
 #define LOWER_HALF_MAX ((UINT64_C(1) << (VIRTUAL_ADDRESS_BITS - 1)) - 1)
 #define HIGHER_HALF_BASE (~LOWER_HALF_MAX)
 #define KERNEL_BASE UINT64_C(0xffffffff80000000)
-/* PML4 256: virtual allocations; 509: metadata, scratch, framebuffer; 510: recursive. */
+/* PML4 256: virtual allocations, then the heap arena; 509: metadata, scratch,
+ * framebuffer; 510: recursive. */
 #define KERNEL_VM_BASE HIGHER_HALF_BASE
 #define KERNEL_VM_SIZE (UINT64_C(64) << 30)
+/* Heap pools only, never reused. Four times the largest supported RAM. */
+#define HEAP_ARENA_BASE (KERNEL_VM_BASE + KERNEL_VM_SIZE)
+#define HEAP_ARENA_SIZE (UINT64_C(256) << 30)
+#define PML4_SLOT_BYTES (UINT64_C(512) << 30)
 #define PMM_METADATA_BASE UINT64_C(0xfffffe8000000000)
 #define TEMP_MAP_BASE UINT64_C(0xfffffe8040000000)
 #define APIC_BASE UINT64_C(0xfffffe8040200000)

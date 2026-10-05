@@ -1,0 +1,68 @@
+# Locked heap (stress.patch on this PR). h2, h4 and h12 used the patch before the growth-lock counters were added.
+## h2
+stress: CPU 1 rounds=161692 allocations=161692 large=315 failures=0 mismatches=0; TLSF check 0; pools=12 arena=14499840 retired=0
+stress: huge=0x0 arena 14499840->151642112 retired 0->137142272; next 1 MiB=0xffff80100032c040 arena 151642112 pools 12->12; TLSF check 0; PMM free=33482
+## h4
+stress: CPU 3 rounds=158232 allocations=158232 large=309 failures=0 mismatches=0; TLSF check 0; pools=24 arena=28631040 retired=0
+stress: CPU 1 rounds=159731 allocations=159731 large=311 failures=0 mismatches=0; TLSF check 0; pools=24 arena=28631040 retired=0
+stress: CPU 2 rounds=158956 allocations=158956 large=310 failures=0 mismatches=0; TLSF check 0; pools=24 arena=28631040 retired=0
+stress: huge=0x0 arena 28631040->140816384 retired 0->112185344; next 1 MiB=0xffff8010005fe040 arena 140816384 pools 24->24; TLSF check 0; PMM free=27389
+## h4b
+stress: CPU 3 rounds=159293 allocations=159293 large=311 failures=0 mismatches=0; TLSF check 0; pools=24 arena=28631040 retired=0
+stress: CPU 1 rounds=159367 allocations=159367 large=311 failures=0 mismatches=0; TLSF check 0; pools=24 arena=28631040 retired=0
+stress: CPU 2 rounds=159054 allocations=159054 large=310 failures=0 mismatches=0; TLSF check 0; pools=24 arena=28631040 retired=0
+stress: growth-lock retries satisfied=12 growths=24
+stress: huge=0x0 arena 28631040->140816384 retired 0->112185344; next 1 MiB=0xffff8010005fe040 arena 140816384 pools 24->24; TLSF check 0; PMM free=27389
+## h12
+stress: CPU 10 rounds=111254 allocations=111254 large=217 failures=0 mismatches=0; TLSF check 0; pools=57 arena=52723712 retired=0
+stress: CPU 11 rounds=107710 allocations=107710 large=210 failures=0 mismatches=0; TLSF check 0; pools=57 arena=52723712 retired=0
+stress: CPU 6 rounds=124701 allocations=124701 large=243 failures=0 mismatches=0; TLSF check 0; pools=57 arena=52723712 retired=0
+stress: CPU 7 rounds=91654 allocations=91654 large=179 failures=0 mismatches=0; TLSF check 0; pools=57 arena=52723712 retired=0
+stress: CPU 3 rounds=85481 allocations=85481 large=166 failures=0 mismatches=0; TLSF check 0; pools=57 arena=52723712 retired=0
+stress: CPU 8 rounds=120433 allocations=120433 large=235 failures=0 mismatches=0; TLSF check 0; pools=57 arena=52723712 retired=0
+stress: CPU 4 rounds=107803 allocations=107803 large=210 failures=0 mismatches=0; TLSF check 0; pools=57 arena=52723712 retired=0
+stress: CPU 1 rounds=105330 allocations=105330 large=205 failures=0 mismatches=0; TLSF check 0; pools=57 arena=52723712 retired=0
+stress: CPU 9 rounds=93538 allocations=93538 large=182 failures=0 mismatches=0; TLSF check 0; pools=57 arena=52723712 retired=0
+stress: CPU 5 rounds=136358 allocations=136358 large=266 failures=0 mismatches=0; TLSF check 0; pools=57 arena=52723712 retired=0
+stress: CPU 2 rounds=117950 allocations=117950 large=230 failures=0 mismatches=0; TLSF check 0; pools=57 arena=52723712 retired=0
+stress: huge=0x0 arena 52723712->139186176 retired 0->86462464; next 1 MiB=0xffff801000cfe040 arena 139186176 pools 57->57; TLSF check 0; PMM free=21109
+## hd4 (the patch plus a failed-growth counter: fails, last request, pool size, mapped bytes)
+stress: CPU 1 rounds=157591 allocations=157591 large=307 failures=0 mismatches=0; TLSF check 0; pools=24 arena=28631040 retired=0
+stress: CPU 3 rounds=157662 allocations=157662 large=307 failures=0 mismatches=0; TLSF check 0; pools=24 arena=28631040 retired=0
+stress: CPU 2 rounds=157696 allocations=157696 large=308 failures=0 mismatches=0; TLSF check 0; pools=24 arena=28631040 retired=0
+stress: growth-lock retries satisfied=16 growths=24 fails=1 last request=536870912 pool=570433536 mapped=112185344
+stress: huge=0x0 arena 28631040->140816384 retired 0->112185344; next 1 MiB=0xffff8010005fe040 arena 140816384 pools 24->24; TLSF check 0; PMM free=27389
+
+## hr4 (after the review fix: refusal plus an injected failure after 64 pages)
+stress: CPU 3 rounds=159247 allocations=159247 large=311 failures=0 mismatches=0; TLSF check 0; pools=25 arena=33095680 retired=0
+stress: CPU 1 rounds=159265 allocations=159265 large=311 failures=0 mismatches=0; TLSF check 0; pools=25 arena=33095680 retired=0
+stress: CPU 2 rounds=159731 allocations=159731 large=311 failures=0 mismatches=0; TLSF check 0; pools=25 arena=33095680 retired=0
+stress: growth-lock retries satisfied=14 growths=25
+stress: huge=0x0 arena 33095680->33095680 retired 0->0; next 1 MiB=0xffff801000710040 arena 33095680 pools 25->25; TLSF check 0; PMM free=26351
+stress: injected first=0x0 arena 33095680->33357824 retired 0->262144; second=0xffff801001fd0040 (arena offset 33357888) arena 51191808 pools 25->26; TLSF check 0
+## hr12 (after the review fix: refusal plus an injected failure after 64 pages)
+stress: CPU 5 rounds=99025 allocations=99025 large=193 failures=0 mismatches=0; TLSF check 0; pools=56 arena=49373184 retired=0
+stress: CPU 3 rounds=89447 allocations=89447 large=174 failures=0 mismatches=0; TLSF check 0; pools=56 arena=49373184 retired=0
+stress: CPU 2 rounds=114011 allocations=114011 large=222 failures=0 mismatches=0; TLSF check 0; pools=56 arena=49373184 retired=0
+stress: CPU 4 rounds=105472 allocations=105472 large=206 failures=0 mismatches=0; TLSF check 0; pools=56 arena=49373184 retired=0
+stress: CPU 1 rounds=98547 allocations=98547 large=192 failures=0 mismatches=0; TLSF check 0; pools=56 arena=49373184 retired=0
+stress: CPU 8 rounds=123449 allocations=123449 large=241 failures=0 mismatches=0; TLSF check 0; pools=56 arena=49373184 retired=0
+stress: CPU 9 rounds=87240 allocations=87240 large=170 failures=0 mismatches=0; TLSF check 0; pools=56 arena=49373184 retired=0
+stress: CPU 11 rounds=124975 allocations=124975 large=244 failures=0 mismatches=0; TLSF check 0; pools=56 arena=49373184 retired=0
+stress: CPU 10 rounds=135050 allocations=135050 large=263 failures=0 mismatches=0; TLSF check 0; pools=56 arena=49373184 retired=0
+stress: CPU 7 rounds=104758 allocations=104758 large=204 failures=0 mismatches=0; TLSF check 0; pools=56 arena=49373184 retired=0
+stress: CPU 6 rounds=134841 allocations=134841 large=263 failures=0 mismatches=0; TLSF check 0; pools=56 arena=49373184 retired=0
+stress: growth-lock retries satisfied=112 growths=56
+stress: huge=0x0 arena 49373184->49373184 retired 0->0; next 1 MiB=0xffff801000bec040 arena 49373184 pools 56->56; TLSF check 0; PMM free=21970
+stress: injected first=0x0 arena 49373184->49635328 retired 0->262144; second=0xffff801002f56040 (arena offset 49635392) arena 67469312 pools 56->57; TLSF check 0
+
+# Control: the same patch with kmalloc's first attempt and kfree unlocked, 4 CPUs
+display: presentation started; earl
+y
+ Ccaoenlsuoml ep arneitci:r eads
+s
+er
+tio
+n: Csl_amape && l"inutermnalx  HeCrIrp o0r: a4-. 0s:enc orn
+oid
+o Ctla ceepvloeur:lmt   bp1 ia tnUmiSaacBp:   3sia.ss0 s nsesurplteleie"od n-(r:it dhs=it4lr _dsm_liapopat r=&ot1&y  /"etnilnnsatfb:/eltrelnd sa;fl . asced:rd5rr6loe2rs)s 

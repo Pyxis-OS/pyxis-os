@@ -376,15 +376,35 @@ latency. The scheduler does not know about display timing. See
 
 ## Memory and output boundaries
 
-The heap, VM metadata and page-table mutation remain BSP-only and require
-interrupts disabled, and so does every current caller of the physical
-allocator. A kernel task must save/disable interrupts around these calls and
-restore them afterward; being pinned to the BSP alone does not prevent same-CPU
-reentry. AP syscalls may access their capabilities and block on endpoints, but
-cannot allocate memory.
+VM metadata and page-table mutation remain BSP-only and require interrupts
+disabled, and so does every current caller of the heap and the physical
+allocator. The general kernel VM area asserts it: its ranges are reused, and
+changing a mapping another CPU may hold would need a remote TLB shootdown. A
+kernel task must save/disable interrupts around these calls and restore them
+afterward; being pinned to the BSP alone does not prevent same-CPU reentry. AP
+syscalls may access their capabilities and block on endpoints, but cannot
+allocate memory.
 
-Two lower layers are already safe on any CPU with interrupts disabled, outside
-interrupt and fault entry:
+Three lower layers are already safe on any CPU with interrupts disabled,
+outside interrupt and fault entry:
+
+- **Kernel heap.** `kmalloc()` and `kfree()` hold a short heap lock around
+  TLSF and its counters. Pools live in a 256 GiB arena after the general kernel
+  VM area, in the same shared PML4 slot, and are never removed.
+  - **Growth.** A miss drops the heap lock and takes a separate growth lock.
+    It then retries, because another CPU may have grown the heap meanwhile.
+    Only then does it map zeroed frames at arena addresses that were never
+    mapped before. It publishes the pool and allocates the request in one
+    heap-lock section.
+  - **No shootdown.** No other CPU can hold a translation for an address that
+    was never mapped, so publication needs none.
+  - **Failure.** Growth first compares the pool's pages, plus an allowance
+    for new page tables, with the free frames. A growth that cannot fit is
+    refused before mapping anything; it retires nothing and sends a
+    memory-pressure notice. A growth that still fails, because another CPU
+    took frames meanwhile, unmaps locally and retires only the pages it
+    mapped; the never-mapped remainder stays usable. A used-up arena is
+    NO_MEMORY. `heap_get_stats()` reports arena use and retired bytes.
 
 - **Physical allocator.** `pmm_alloc()`, `pmm_free()` and `pmm_get_stats()`
   serialize the frame bitmap and its counters with one short lock. Frames come
@@ -398,10 +418,20 @@ interrupt and fault entry:
   slots.
 
 Spinlocks (`include/kernel/spinlock.h`) are held with IF=0 and never across
-allocation, logging, a context switch or waiting for another CPU. The PMM lock
-is a leaf: allocation notifies memory pressure only after releasing it. The
-pressure lock and resource and group locks are taken before the queue lock,
-never after it.
+logging, a context switch or waiting for another CPU. The heap and PMM locks
+are leaves; allocation notifies memory pressure only after releasing the PMM
+lock. Only the heap growth lock is held across allocation, so it comes first
+in the full order:
+
+1. Heap growth lock.
+2. Either the PMM lock or the heap lock, each released before the next is
+   taken; growth takes the PMM lock while mapping and the heap lock to publish.
+3. The memory-pressure lock, reached from growth through a failed or low
+   frame allocation, or a refused growth.
+4. The queue lock, taken by the pressure lock's wake and by resource and group
+   locks.
+
+No caller of `kmalloc()` or `pmm_alloc()` may hold the queue or pressure lock.
 
 User-buffer checks are a narrow exception to BSP-only queries: the executing
 CPU can inspect its active private root through recursive mappings, with IF=0
