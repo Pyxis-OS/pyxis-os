@@ -3,7 +3,8 @@
 Status: agreed milestone direction, 2026-10-01; implementation not started.
 Task 1 is in progress. On 2026-10-05 the evidence was re-audited at main `83c08d6`
 and the [pre-implementation baseline](../development/experiments/smp-task1-baseline/README.md)
-was recorded. The [open decisions](#open-decisions) await owner answers.
+was recorded. Decisions 1–3 were accepted; the heap-growth mapping
+[decision](#task-1-decisions) remains open.
 The prerequisite [native filesystem writer](../devices/filesystem-native-adapter.md)
 is complete.
 This milestone replaces the earlier proposal to combine CPU-independent spaces
@@ -95,9 +96,9 @@ filesystem couplings that landed since.
 
 | Current coupling | Evidence at `83c08d6` | Required change or retained guarantee |
 | --- | --- | --- |
-| One space per CPU; init, UI and Caelum identity by CPU index | `space_init_all()` in `kernel/space.c` stores each space in `arch_cpu_at(i)->space`; CPU 0 gets the log TTY and initial focus. `user_launch_initial()` in `kernel/user/boot.c` parses `init.N` options, chooses primary CPU 1 (CPU 0 on one CPU) and panics on CPU-0 init with several CPUs. `user_launch_init()` in `kernel/user/launch.c` takes the space from the CPU and withholds the title grant from CPU 0. | Independent registry and session configuration ([decision 1](#open-decisions)); explicit context for kernel services. |
-| Boot session grammar is also a userspace and installed-media contract | `Makefile` (`INIT_DEFAULT`, `INIT_PRIMARY`, `INIT_CPUS`) and `scripts/configure-boot.sh` write `init=`, `init.primary=` and `init.N=`. The installer (`userspace/installer/main.c`) writes `init.primary=app://init-installed`, and `esp_read.c` recognizes an installed ESP by that token. The 0.0.1 stick carries it. | Replace the grammar explicitly, together with the installer and updater (decision 1); never reinterpret an old index. |
-| Per-space console, display, keyboard and pointer objects are created by CPU index | `space_init_all()` creates them for each CPU; `keyboard_create()` and `pointer_create()` assert BSP. The BSP presenter `space_present_task()` drains the global keyboard/mouse queues into `active_space` and drops input aimed at CPU 0's space on multicore boots. `space_switch()` takes a CPU index, and the bar draws only the first `SPACES_NAV_COUNT` CPU spaces. | Create the same objects per session and route by registry order. The presenter may stay a BSP task. |
+| One space per CPU; init, UI and Caelum identity by CPU index | `space_init_all()` in `kernel/space.c` stores each space in `arch_cpu_at(i)->space`; CPU 0 gets the log TTY and initial focus. `user_launch_initial()` in `kernel/user/boot.c` parses `init.N` options, chooses primary CPU 1 (CPU 0 on one CPU) and panics on CPU-0 init with several CPUs. `user_launch_init()` in `kernel/user/launch.c` takes the space from the CPU and withholds the title grant from CPU 0. | Independent registry and initial-space configuration ([decision 1](#task-1-decisions)); explicit context for kernel services. |
+| Boot init grammar is also a userspace and installed-media contract | `Makefile` (`INIT_DEFAULT`, `INIT_PRIMARY`, `INIT_CPUS`) and `scripts/configure-boot.sh` write `init=`, `init.primary=` and `init.N=`. The installer (`userspace/installer/main.c`) writes `init.primary=app://init-installed`, and `esp_read.c` recognizes an installed ESP by that token. The 0.0.1 stick carries it. | Replace the grammar explicitly, together with the installer and updater (decision 1); never reinterpret an old index. |
+| Per-space console, display, keyboard and pointer objects are created by CPU index | `space_init_all()` creates them for each CPU; `keyboard_create()` and `pointer_create()` assert BSP. The BSP presenter `space_present_task()` drains the global keyboard/mouse queues into `active_space` and drops input aimed at CPU 0's space on multicore boots. `space_switch()` takes a CPU index, and the bar draws only the first `SPACES_NAV_COUNT` CPU spaces. | Create the same objects per configured space and route by registry order. The presenter may stay a BSP task. |
 | CPU identity in launch and group admission | `user_task_prepare_on()` requires `process->space == arch_cpu_at(cpu_index)->space`. `user_task_publish_group()` asserts that a batch has one `cpu_index`. `execution_group_check()` and `execution_group_launch_begin()` compare the group's stored `cpu_index`. The launcher captures `arch_cpu_index()` into its request and relies on "placement cannot change while capture sleeps". | Keep space/group authority but remove CPU identity from admission; publish batches across several queues (task 3). |
 | Ready queues, parking, stop and wake | `task->cpu_index` is fixed at creation. Wake re-enqueues on, and stop notifies, that CPU. Timed waits, sleeping kernel tasks, task reaping and object retirement run only on CPU 0. `kernel_task_create()` always enqueues on CPU 0. | Preserve queue locking and the early-wakeup handshake; change `cpu_index` only under the queue lock at agreed safe points. |
 | Dispatch state and user entry | `arch/x86_64/user.c` saves FP/segment state eagerly per task and restores user GS. The syscall stack comes from `%gs` and is set at every dispatch. Reading found no other pinning there. | Install destination CR3, entry stack and user CPU state; kernel GS remains CPU-local. |
@@ -184,7 +185,7 @@ Local capability growth and other allocation-backed operations are later bounded
 follow-ups unless required for this memory path; allocator availability alone does
 not authorize replacing their ownership contracts.
 
-## Open decisions
+## Task-1 decisions
 
 Owner decisions on 2026-10-05:
 
@@ -194,78 +195,63 @@ Owner decisions on 2026-10-05:
   is Lua: `app://config/session.lua` and `network.lua`, which session.pxe
   evaluates after init hands off. The [Lua direction](development-paths.md) also
   proposes Lua instead of YAML. This mismatch is recorded here and left
-  unresolved. The syntax for describing initial spaces is a task-1 decision
-  (decision 1).
+  unresolved. It does not affect the initial-space syntax below.
 
-The three decisions below are proposals for round 1; none is agreed. Each has a
-recommended default. Decision 4 is round 2, to be asked after these. Answering
-"defer" is fine, but each decision blocks the task named in it.
+Decisions 1–3 below were accepted by the owner on 2026-10-05. They are the
+current direction for tasks 2–4. Decision 4 remains open.
 
-### Decision 1: initial session configuration and syntax (blocks task 2)
-
-**Recommended default:**
+### Decision 1 (accepted): initial space configuration and syntax
 
 - The kernel command line stays the trusted source. The kernel already parses
   it and the installer already writes it, so no new parser or file format is
   needed.
-- Ordered `session.NAME=IMAGE` options replace `init=`, `init.primary=` and
-  `init.N=`. The optional `session.NAME.cpus=LIST` is that session's launcher
-  ceiling.
-- The order of the options is the tab order after Caelum.
+- Ordered `space.NAME=IMAGE` options replace `init=`, `init.primary=` and
+  `init.N=`. Each option creates one initial space and runs IMAGE in it as that
+  space's trusted init.
+- The optional `space.NAME.cpus=LIST` is that space's launcher ceiling.
+- The order of the options is the tab order after Caelum. Caelum's log space is
+  always first and is not configured.
 - NAME is 1–31 characters from `a-z`, `0-9` and `-`, and must be unique. It
-  identifies the session in configuration and diagnostics only. Init still sets
-  the title.
+  matches the `.cpus` option and identifies the space in diagnostics only. It
+  grants no authority, and init still sets the title.
 - LIST is a set of dense boot CPU indices, for example `0,2-3`. Script
   `affinity` (decision 3) uses the same syntax.
-- In Make, `SESSIONS="development=app://init readonly=app://init-readonly
-  remote=app://init-remote"` and an empty-by-default `SESSION_CPUS="NAME=LIST …"`
+- In Make, `SPACES="development=app://init readonly=app://init-readonly
+  remote=app://init-remote"` and an empty-by-default `SPACE_CPUS="NAME=LIST …"`
   replace `INIT_DEFAULT`, `INIT_PRIMARY` and `INIT_CPUS`. `INIT` still stages
   `app://init`.
-- Every boot starts Caelum plus the configured sessions, whatever the CPU count.
+- Every boot creates Caelum plus the configured spaces, whatever the CPU count.
   Spare CPUs no longer get idle spaces.
-- The installer writes `session.pyxis=app://init-installed`. The updater accepts
+- The installer writes `space.pyxis=app://init-installed`. The updater accepts
   the 0.0.1 `init.primary=app://init-installed` token only to recognize an
   installed ESP, and then rewrites it. This migration is the one intended
-  compatibility path. It is recorded as technical debt until the owner's 0.0.1
-  stick has been updated.
+  compatibility path. It is to be recorded as technical debt until the owner's
+  0.0.1 stick has been updated.
 
-This decides boot-time session identity only. The later Lua/YAML follow-up
-configures work inside a session and is not decided here.
+### Decision 2 (accepted): single-CPU defaults
 
-**Alternative:** describe sessions in a boot-archive file. That needs a parser in
-the kernel, or a launcher that creates spaces, and dynamic space creation is
-outside this milestone.
-
-### Decision 2: single-CPU defaults (blocks task 2)
-
-**Recommended default:**
-
-- A one-CPU boot starts the same configured sessions as any other boot, each in
-  its own space, all eligible on CPU 0. The primary-only fallback that shares
-  Caelum's terminal is removed; Caelum still gets no title grant.
+- A one-CPU boot creates the same configured spaces as any other boot, each with
+  its own tab and objects, all eligible on CPU 0. The primary-only fallback that
+  shares Caelum's terminal is removed; Caelum still gets no title grant.
 - Boot focus is Caelum on every CPU count, as it is on multicore boots today.
   On one CPU, this replaces landing directly in the shell.
-- A session whose configured ceiling names an offline CPU does not start. Its
-  tab and the log report why, while the other sessions and the boot continue.
+- A space whose configured ceiling names an offline CPU does not start its init.
+  Its tab and the log report why, while the other spaces and the boot continue.
   The set is never silently narrowed.
 
-**Alternatives:** keep today's primary-only shared terminal on one CPU, or focus
-the first session at boot on every CPU count.
-
-### Decision 3: trusted-init affinity authority and handoff (blocks tasks 3–4)
-
-**Recommended default:**
+### Decision 3 (accepted): trusted-init affinity authority and handoff
 
 - Authority is a new `SPACE_RIGHT_SET_AFFINITY` on the existing `space` grant
-  that each session init already receives. The kernel stores the space's ceiling
+  that each space's init already receives. The kernel stores the space's ceiling
   from boot configuration, and no capability can change the ceiling.
 - The setup window closes permanently when the first process is launched into
   the space. Scripts therefore run `affinity LIST` before `service start` and
-  `session`. Closing the window at the first launch means no already-launched
-  task ever needs to be re-placed. It also keeps delegation harmless: grants can
-  be copied with equal or reduced rights, and `session` forwards the `space`
-  grant for titles, but by then the window has closed. The handoff should still
-  reduce that grant to `SPACE_RIGHT_SET_TITLE`.
+  the `session` handoff. Closing the window at the first launch means no
+  already-launched task ever needs to be re-placed.
+- This also keeps delegation harmless. Grants can be copied with equal or
+  reduced rights, and the handoff forwards the `space` grant for titles, but by
+  then the window has closed. The handoff still reduces that grant to
+  `SPACE_RIGHT_SET_TITLE`.
 - While the window is open, repeated requests are each validated and applied
   atomically, and the last successful one wins. An empty set, an offline CPU or a
   CPU outside the ceiling fails and changes nothing.
@@ -275,13 +261,9 @@ the first session at boot on every CPU count.
   rule above: a blocked syscall still resumes on its previous CPU. On one CPU,
   the only valid set is `0`.
 
-**Alternatives:** keep the window open until session handoff, which requires
-re-placing already-launched service tasks; or use a separate one-shot affinity
-object instead of a right on `space`.
+### Decision 4 (open): heap-growth mapping (blocks task 6)
 
-### Decision 4, round 2: heap-growth mapping (blocks task 6)
-
-**Proposal:** a dedicated, never-reused heap arena.
+**Recommended default:** a dedicated, never-reused heap arena.
 
 - Reserve a fixed kernel virtual window for heap pools, outside the general
   first-fit list, and advance it monotonically under a growth lock that is
@@ -365,8 +347,8 @@ updates current subsystem docs only for behavior it implements.
    affinity authority/handoff, single-CPU defaults and the mapping-growth design
    before dependent implementation.
    Record any unresolved correctness decisions rather than inventing requirements.
-   Audit and baseline are recorded; complete once the [open decisions](#open-decisions)
-   are answered.
+   Audit and baseline are recorded, and decisions 1–3 were accepted on 2026-10-05.
+   Complete once the heap-growth mapping [decision](#task-1-decisions) is answered.
 2. [ ] **Separate spaces and boot sessions from CPU topology.** Add independent
    lookup and update init selection, navigation, presentation/input and explicit
    service context. Implement the fixed-width scrolling bar and directional
@@ -404,7 +386,7 @@ updates current subsystem docs only for behavior it implements.
 
 A declarative YAML init is an agreed follow-up direction, not an SMP dependency.
 Existing configuration is Lua instead; that mismatch is recorded under
-[open decisions](#open-decisions), not resolved.
+[task-1 decisions](#task-1-decisions), not resolved.
 A userspace launcher would interpret it and invoke the same native setup operations
 as scripts: mounts, bindings, networking, affinity and final session launch.
 Configuration requests resources within granted authority; parsing it grants none.

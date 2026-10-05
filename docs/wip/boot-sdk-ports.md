@@ -141,7 +141,8 @@ investigation, captures the baseline and settles its open decisions. It starts
 when resources allow and no major kernel work conflicts. A throwaway prototype
 branch is not part of task 1 unless the owner asks for one. On 2026-10-05 the
 audit and [baseline](../development/experiments/smp-task1-baseline/README.md)
-were recorded; the milestone's round-1 decisions await the owner.
+were recorded and decisions 1–3 accepted; the heap-growth mapping
+decision remains open.
 
 After SMP, the candidates are dynamic space creation (the new tab and its
 launch flow), a file navigator and multiplexing. The scrolling space bar itself
