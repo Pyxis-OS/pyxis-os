@@ -35,9 +35,9 @@ enum mm_result arch_space_destroy(struct arch_address_space *space);
  * arena; other spaces permit lower-half mutations. Calls are BSP-only, IF=0,
  * with two exceptions on any CPU: heap growth maps and unmaps unpublished arena
  * pages, and a task's private memory operations change its own active space.
- * Walks use the calling CPU's own scratch slots. Kernel ranges in use by another CPU must not be unmapped, remapped
- * or protected. There are no remote TLB shootdowns; task ownership transfers
- * flush CR3 locally.
+ * Walks use the calling CPU's own scratch slots. Kernel ranges in use by
+ * another CPU must not be unmapped, remapped or protected. There are no remote
+ * TLB shootdowns; task ownership transfers flush CR3 locally.
  * Callers manage virtual reservations; supplied data frames remain caller-owned.
  * Empty tables are retained for reuse until their space is destroyed;
  * failure may retain zeroed tables but never installs a partial data mapping. */

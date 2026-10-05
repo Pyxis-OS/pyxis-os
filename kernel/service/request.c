@@ -272,7 +272,6 @@ static void service_request(struct bsp_request *request)
   case BSP_SERVICE_SYSTEM_INFO_MEMORY:
     system_info_memory_execute((struct system_info_memory_request *)request);
     break;
-    break;
   case BSP_SERVICE_DISPLAY:
     display_request_execute((struct display_request *)request);
     break;
