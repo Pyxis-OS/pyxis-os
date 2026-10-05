@@ -280,6 +280,10 @@ Use a dedicated, never-reused heap arena.
 - Heap pools also stop consuming the 256 general range records. The window size
   is a named layout constant, and running out of it is NO_MEMORY.
 
+In the task-1 baseline workloads, the kernel heap grew only when RAM files grew:
+six pools of 276 KiB to 2.1 MiB. The [heap growth record](../development/experiments/smp-task1-baseline/README.md#kernel-heap-growth)
+gives the counts that task 6 should compare against.
+
 ## Performance records and validation
 
 The [task-1 baseline](../development/experiments/smp-task1-baseline/README.md)

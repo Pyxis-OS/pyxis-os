@@ -206,6 +206,47 @@ a read-only GDB batch did the following (commands and output are in
 
 The four clients took 6.533 s in aggregate, including the stop.
 
+### Kernel heap growth
+
+This is context for [decision 4](../../../wip/scheduling-and-threads.md#task-1-decisions).
+Three further boots used the same image and configuration, each with a freshly
+made pool disk. Their timings were not used, because GDB attached between groups.
+
+The first two boots, at 4 and 1 CPUs, repeated the full workload sequence above
+in the same order. A GDB batch attach read the kernel heap counters
+(`'kernel/mm/heap.c'::stats`) after boot and after each workload group.
+
+| Point | Pools | Pool bytes | Live allocations (4 / 1 CPU) | Live block bytes (4 / 1 CPU) |
+| --- | ---: | ---: | ---: | ---: |
+| After boot | 9 | 3,624,960 | 2,003 / 1,978 | 2,756,408 / 2,733,216 |
+| After allocation set | 9 | 3,624,960 | 2,006 / 1,978 | 2,756,880 / 2,733,216 |
+| After RAM I/O | 15 | 12,255,232 | 2,015 / 1,988 | 9,024,216 / 9,000,600 |
+| After HOST, native, TCP and concurrent sets | 15 | 12,255,232 | 2,055 / 2,018 | 9,033,984 / 9,008,192 |
+
+Pool counts and bytes were identical at both CPU counts at every point, so the
+two counts share one column. In this sequence, the kernel heap grew only during
+the RAM-file workloads.
+
+`allocbench` does not use `kmalloc`: its private memory comes from the PMM and VM
+directly, and so does the native filesystem's cache and buffers. HOST, TCP and
+the concurrent sets fit in existing pools.
+
+The third boot (4 CPUs) placed a GDB `dprintf` after pool publication in
+`add_pool()` and ran the RAM commands one at a time:
+
+| Command | Pools added | Sizes |
+| --- | ---: | --- |
+| `cat app://share/iobench.bin > home://iobench.bin` | 4 | 282,624; 561,152; 1,114,112; 2,224,128 |
+| `iobench write home://grow.bin` (warmup + 5 × 1 MiB) | 1 | 2,224,128 |
+| `iobench copy app://share/iobench.bin home://copy.bin` | 1 | 2,224,128 |
+
+RAM FILE backing is a `kmalloc` buffer whose capacity doubles as the file grows,
+so a growing RAM file adds pools until its buffers fit. Each pool's size follows
+the request, not the 256 KiB minimum. Growth was rare: 6 events across the 100 workload
+commands, all from the three RAM-file commands. Each event mapped and zeroed between 69 and 543
+pages. No growth duration was measured, because a timing breakpoint would itself
+distort the result.
+
 ## Observations
 
 - With 4 CPUs, concurrent compute-bound sessions do not scale: 2 × H and 4 × H
@@ -254,3 +295,5 @@ was assembled.
 - [4cpu-serial.txt](4cpu-serial.txt) and [1cpu-serial.txt](1cpu-serial.txt): boot
   serial logs, including xHCI enumeration and init placement.
 - [4cpu-gdb.txt](4cpu-gdb.txt): the placement snapshot.
+- [heap-stats.txt](heap-stats.txt): the kernel heap counter snapshots and the
+  growth-attribution log.

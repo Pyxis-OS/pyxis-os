@@ -1,0 +1,57 @@
+# heap_stats ('kernel/mm/heap.c'::stats) read by GDB batch attach between workload groups
+# 4 CPUs
+## after boot
+$1 = {pools = 9, pool_bytes = 3624960, live_allocations = 2003, live_block_bytes = 2756408}
+## after allocation set
+$1 = {pools = 9, pool_bytes = 3624960, live_allocations = 2006, live_block_bytes = 2756880}
+## after RAM I/O
+$1 = {pools = 15, pool_bytes = 12255232, live_allocations = 2015, live_block_bytes = 9024216}
+## after HOST I/O
+$1 = {pools = 15, pool_bytes = 12255232, live_allocations = 2015, live_block_bytes = 9024216}
+## after native I/O
+$1 = {pools = 15, pool_bytes = 12255232, live_allocations = 2031, live_block_bytes = 9026696}
+## after TCP
+$1 = {pools = 15, pool_bytes = 12255232, live_allocations = 2043, live_block_bytes = 9029248}
+## after concurrent sets
+$1 = {pools = 15, pool_bytes = 12255232, live_allocations = 2055, live_block_bytes = 9033984}
+
+# 1 CPU
+## after boot
+$1 = {pools = 9, pool_bytes = 3624960, live_allocations = 1978, live_block_bytes = 2733216}
+## after allocation set
+$1 = {pools = 9, pool_bytes = 3624960, live_allocations = 1978, live_block_bytes = 2733216}
+## after RAM I/O
+$1 = {pools = 15, pool_bytes = 12255232, live_allocations = 1988, live_block_bytes = 9000600}
+## after HOST I/O
+$1 = {pools = 15, pool_bytes = 12255232, live_allocations = 1988, live_block_bytes = 9000608}
+## after native I/O
+$1 = {pools = 15, pool_bytes = 12255232, live_allocations = 2002, live_block_bytes = 9002632}
+## after TCP
+$1 = {pools = 15, pool_bytes = 12255232, live_allocations = 2012, live_block_bytes = 9004768}
+## after concurrent sets
+$1 = {pools = 15, pool_bytes = 12255232, live_allocations = 2018, live_block_bytes = 9008192}
+
+# Attribution boot, 4 CPUs: dprintf at kernel/mm/heap.c:65 (after a pool is added)
+set pagination off
+set confirm off
+dprintf kernel/mm/heap.c:65,"add_pool: pools=%lu pool_bytes=%lu live_block_bytes=%lu\n", 'kernel/mm/heap.c'::stats.pools, 'kernel/mm/heap.c'::stats.pool_bytes, 'kernel/mm/heap.c'::stats.live_block_bytes
+info breakpoints
+continue
+# add_pool lines seen after each command
+=== iobench read app://share/iobench.bin
+0
+=== cat app://share/iobench.bin > home://iobench.bin
+4
+=== iobench read home://iobench.bin
+4
+=== iobench write home://grow.bin
+5
+=== iobench copy app://share/iobench.bin home://copy.bin
+6
+# dprintf output
+add_pool: pools=10 pool_bytes=3907584 live_block_bytes=2990552
+add_pool: pools=11 pool_bytes=4468736 live_block_bytes=3121112
+add_pool: pools=12 pool_bytes=5582848 live_block_bytes=3382232
+add_pool: pools=13 pool_bytes=7806976 live_block_bytes=3904472
+add_pool: pools=14 pool_bytes=10031104 live_block_bytes=5993656
+add_pool: pools=15 pool_bytes=12255232 live_block_bytes=8083216
