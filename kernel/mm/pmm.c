@@ -2,6 +2,7 @@
 #include <kernel/mm/pressure.h>
 #include <kernel/memory.h>
 #include <kernel/panic.h>
+#include <kernel/spinlock.h>
 
 #define FRAMES_PER_BITMAP_BYTE 8
 #define PMM_BITMAP_COUNT 2
@@ -12,6 +13,10 @@ static uint8_t *unavailable_bitmap;
 static uint8_t *allocatable_bitmap;
 static size_t bitmap_bytes;
 static size_t frame_count;
+
+/* Protects unavailable_bitmap and stats after initialization. A leaf lock:
+ * nothing is taken, woken or zeroed while holding it. */
+static struct spinlock pmm_lock;
 static struct pmm_stats stats;
 
 static bool bit_get(const uint8_t *bitmap, size_t frame)
@@ -145,13 +150,9 @@ void pmm_init(const struct boot_info *boot, struct pmm_bootstrap plan,
   stats.free_frames = stats.total_frames;
 }
 
-phys_addr_t pmm_alloc(size_t pages)
+static phys_addr_t take_run_locked(size_t pages)
 {
-  KASSERT(unavailable_bitmap != NULL);
-  if (!pages || pages > stats.free_frames) {
-    if (pages) {
-      mm_pressure_notify();
-    }
+  if (pages > stats.free_frames) {
     return 0;
   }
 
@@ -171,15 +172,30 @@ phys_addr_t pmm_alloc(size_t pages)
 
       stats.free_frames -= pages;
       stats.allocated_frames += pages;
-      /* Start asynchronous cache reclamation before physical exhaustion. */
-      if (stats.free_frames < stats.total_frames / 16) {
-        mm_pressure_notify();
-      }
       return first * PAGE_SIZE;
     }
   }
-  mm_pressure_notify();
   return 0;
+}
+
+phys_addr_t pmm_alloc(size_t pages)
+{
+  KASSERT(unavailable_bitmap != NULL);
+  if (!pages) {
+    return 0;
+  }
+
+  spin_lock(&pmm_lock);
+  phys_addr_t physical = take_run_locked(pages);
+  /* Start asynchronous cache reclamation before physical exhaustion. */
+  bool pressure = !physical || stats.free_frames < stats.total_frames / 16;
+  spin_unlock(&pmm_lock);
+
+  /* The notification can wake a task, which takes the queue lock. */
+  if (pressure) {
+    mm_pressure_notify();
+  }
+  return physical;
 }
 
 void pmm_free(phys_addr_t physical, size_t pages)
@@ -190,6 +206,7 @@ void pmm_free(phys_addr_t physical, size_t pages)
     panic("PMM: invalid free phys=0x%lx pages=%zu", physical, pages);
   }
 
+  spin_lock(&pmm_lock);
   /* Validate the whole extent before changing anything. Eligibility is a second
    * bitmap so reserved and metadata frames cannot be freed as allocations. */
   for (size_t i = first; i < first + pages; ++i) {
@@ -204,9 +221,13 @@ void pmm_free(phys_addr_t physical, size_t pages)
 
   stats.free_frames += pages;
   stats.allocated_frames -= pages;
+  spin_unlock(&pmm_lock);
 }
 
 struct pmm_stats pmm_get_stats(void)
 {
-  return stats;
+  spin_lock(&pmm_lock);
+  struct pmm_stats snapshot = stats;
+  spin_unlock(&pmm_lock);
+  return snapshot;
 }

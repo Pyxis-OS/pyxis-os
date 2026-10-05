@@ -71,7 +71,17 @@ static struct arch_address_space kernel_space;
 static uint64_t physical_limit;
 static uint64_t bootstrap_offset;
 static bool active;
-static bool scratch_busy[SCRATCH_SLOT_COUNT];
+
+/* Each CPU index owns one pair of slots. Only that CPU reads or changes its row
+ * or remaps its pages, so its local invlpg is sufficient. */
+static bool scratch_busy[XAPIC_CPU_LIMIT][SCRATCH_SLOT_COUNT];
+_Static_assert(XAPIC_CPU_LIMIT * SCRATCH_SLOT_COUNT * ARCH_PAGE_SIZE <=
+               APIC_BASE - TEMP_MAP_BASE, "scratch slots for every CPU");
+
+static uintptr_t scratch_address(size_t cpu, unsigned slot)
+{
+  return TEMP_MAP_BASE + (cpu * SCRATCH_SLOT_COUNT + slot) * PAGE_SIZE;
+}
 
 static bool canonical(uintptr_t address)
 {
@@ -420,9 +430,13 @@ void paging_init(struct boot_info *boot)
                   PAGE_WRITE);
   }
 
-  /* Both scratch leaves start absent, but every ancestor is already allocated. */
-  KASSERT(!*bootstrap_leaf(TEMP_MAP_BASE + SCRATCH_TABLE * PAGE_SIZE));
-  KASSERT(!*bootstrap_leaf(TEMP_MAP_BASE + SCRATCH_DATA * PAGE_SIZE));
+  /* Every CPU's scratch leaves start absent, but each ancestor is allocated now,
+   * before any root copies the shared kernel slots. */
+  for (size_t cpu = 0; cpu < XAPIC_CPU_LIMIT; ++cpu) {
+    for (unsigned slot = 0; slot < SCRATCH_SLOT_COUNT; ++slot) {
+      KASSERT(!*bootstrap_leaf(scratch_address(cpu, slot)));
+    }
+  }
 
   /* Install the allocation area's ancestors before any roots can share them.
    * This area fits entirely in one PML4 slot, so later growth stays shared. */
@@ -448,18 +462,20 @@ void paging_init(struct boot_info *boot)
        read_cr3(), RECURSIVE_SLOT);
 }
 
+/* IF=0 keeps the caller on this CPU, and off any other task, until it unmaps. */
 static void *map_scratch(phys_addr_t physical, unsigned slot)
 {
-  KASSERT(cpu_current() == cpu_bsp());
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  size_t cpu = cpu_current()->index;
   KASSERT(active && physical_valid(physical) && slot < SCRATCH_SLOT_COUNT &&
-          !scratch_busy[slot]);
+          cpu < XAPIC_CPU_LIMIT && !scratch_busy[cpu][slot]);
 
-  uintptr_t virtual = TEMP_MAP_BASE + slot * PAGE_SIZE;
+  uintptr_t virtual = scratch_address(cpu, slot);
   volatile uint64_t *table = active_table(virtual, LEVEL_PT);
   volatile uint64_t *entry = &table[index_at(virtual, LEVEL_PT)];
   KASSERT(!(*entry & PTE_PRESENT));
 
-  scratch_busy[slot] = true;
+  scratch_busy[cpu][slot] = true;
   *entry = physical | PTE_PRESENT | PTE_WRITE | PTE_NX;
   invlpg(virtual);
   return (void *)virtual;
@@ -467,16 +483,17 @@ static void *map_scratch(phys_addr_t physical, unsigned slot)
 
 static void unmap_scratch(unsigned slot)
 {
-  KASSERT(slot < SCRATCH_SLOT_COUNT && scratch_busy[slot]);
+  size_t cpu = cpu_current()->index;
+  KASSERT(slot < SCRATCH_SLOT_COUNT && scratch_busy[cpu][slot]);
 
-  uintptr_t virtual = TEMP_MAP_BASE + slot * PAGE_SIZE;
+  uintptr_t virtual = scratch_address(cpu, slot);
   volatile uint64_t *table = active_table(virtual, LEVEL_PT);
 
   /* Finish accesses through the slot before withdrawing its mapping. */
   __asm__ volatile("" : : : "memory");
   table[index_at(virtual, LEVEL_PT)] = 0;
   invlpg(virtual);
-  scratch_busy[slot] = false;
+  scratch_busy[cpu][slot] = false;
 }
 
 void arch_frame_zero(phys_addr_t physical)
@@ -799,11 +816,9 @@ enum mm_result arch_space_activate(struct arch_address_space *space)
     return MM_INVALID;
   }
 
-  /* Only the BSP uses the shared scratch slots. AP activation must neither
-   * inspect that mutable bookkeeping nor wait for an unrelated BSP walk. */
-  if (cpu_current() == cpu_bsp()) {
-    KASSERT(!scratch_busy[SCRATCH_TABLE] && !scratch_busy[SCRATCH_DATA]);
-  }
+  /* A CPU never changes roots while one of its own scratch slots is mapped. */
+  size_t cpu = cpu_current()->index;
+  KASSERT(!scratch_busy[cpu][SCRATCH_TABLE] && !scratch_busy[cpu][SCRATCH_DATA]);
   /* Kernel mappings, including this stack, stay identical across the switch.
    * PCID and global translations remain disabled, so CR3 flushes the old TLB. */
   write_cr3(space->root);

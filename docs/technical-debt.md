@@ -170,10 +170,24 @@ retaining BSP-only allocation and the inactive-root handoff. The agreed
 will introduce independent spaces, single-task migration and local private-memory
 operations with allocator synchronization and explicit mapping lifetime rules. It
 is not implemented yet; an allocator spinlock alone does not resolve these ownership
-constraints. Selected serial services and deferred destruction remain BSP-owned
+constraints. Since SMP task 5 the physical allocator and scratch mappings are safe
+on any CPU, but their callers are not. Selected serial services and deferred destruction remain BSP-owned
 initially. Worker relocation and shared kernel mapping reuse need their own
 handoff/invalidation contracts. Eager task-lifetime storage and long non-preemptible
 operations remain explicit costs; measure them in matched before/after workloads.
+
+## PMM first-fit scan under its lock
+
+`pmm_alloc()` searches the frame bitmap one bit at a time from frame 1 on every
+call, and since SMP task 5 it does so while holding the PMM lock. Search time grows
+with the number of allocated frames below the first free run, and other CPUs
+allocating or freeing frames wait for it. Today every caller is on the BSP, so no
+CPU waits. Matched `allocbench pages` results did not change with the lock
+([task-5 record](development/experiments/smp-task5/README.md)).
+
+Revisit in SMP task 7, when private-memory work allocates frames on several CPUs.
+If measurements show waiting, a lowest-free-frame hint or skipping full bitmap
+bytes are the cheap first steps.
 
 ## Synchronous launch preparation
 

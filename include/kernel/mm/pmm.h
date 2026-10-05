@@ -19,12 +19,17 @@ struct pmm_stats {
   size_t metadata_pages;
 };
 
-/* All PMM calls are BSP-only, IF=0, outside interrupt/fault handlers.
+/* Plan, init and rebase run once on the BSP before any other CPU starts.
  * Plan reserves space conceptually; arch supplies a bootstrap-accessible pointer. */
 struct pmm_bootstrap pmm_plan(const struct boot_info *boot);
 void pmm_init(const struct boot_info *boot, struct pmm_bootstrap plan,
               void *metadata);
 void pmm_rebase(void *metadata);
+
+/* Afterwards any CPU may call these with IF=0, outside interrupt/fault entry.
+ * A short leaf lock serializes the bitmap and statistics. Allocation can then
+ * notify memory pressure, so its caller must not hold the queue or pressure
+ * lock. Frames are returned unzeroed. */
 phys_addr_t pmm_alloc(size_t pages); /* Zero means exhaustion or invalid count. */
 /* Caller owns precisely this extent; allocation boundaries are not tracked.
  * Misaligned, reserved, out-of-range and already-free frames are fatal errors. */

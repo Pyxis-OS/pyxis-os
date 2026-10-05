@@ -15,6 +15,10 @@
 #define APIC_MOUSE_VECTOR 41
 #define APIC_SPURIOUS_VECTOR 255
 
+/* xAPIC IDs are 8 bits and every CPU's is distinct, which bounds the CPU count. */
+#define XAPIC_MAX_ID 255
+#define XAPIC_CPU_LIMIT (XAPIC_MAX_ID + 1)
+
 struct apic_msi_message {
   uint32_t address_low, address_high, data;
 };
