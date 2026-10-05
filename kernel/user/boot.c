@@ -1,4 +1,5 @@
 #include <arch/smp.h>
+#include <kernel/format.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -16,10 +17,13 @@ static bool same_text(const char *left, const char *right)
 
 #define SPACE_NAME_MAX 31
 #define SPACE_OPTION_PREFIX "space."
+#define SPACE_CPUS_SUFFIX "cpus"
+#define NO_ABSENT_CPU SIZE_MAX
 
 struct space_selection {
   const char *name;
   const char *image;
+  const char *cpus; /* NULL: every boot CPU. */
 };
 
 /* Names identify configured spaces; they grant nothing and need not be titles. */
@@ -38,12 +42,106 @@ static bool valid_space_name(const char *name)
   return true;
 }
 
-/* Until tasks can migrate, each workload space is pinned to one CPU: workload
- * CPUs in configuration order, wrapping, or the BSP on a single-CPU boot. */
-static size_t workload_cpu(size_t position)
+static struct space_selection *find_selection(struct space_selection *selections,
+    size_t count, const char *name)
+{
+  for (size_t i = 0; i < count; ++i) {
+    if (same_text(selections[i].name, name)) {
+      return &selections[i];
+    }
+  }
+  return NULL;
+}
+
+static size_t parse_cpu_number(const char **cursor, const char *name)
+{
+  const char *text = *cursor;
+  if (*text < '0' || *text > '9') {
+    panic("space %s CPU set is malformed", name);
+  }
+  size_t value = 0;
+  while (*text >= '0' && *text <= '9') {
+    if (value > (SIZE_MAX - (*text - '0')) / 10) {
+      panic("space %s CPU index overflows", name);
+    }
+    value = value * 10 + (*text++ - '0');
+  }
+  *cursor = text;
+  return value;
+}
+
+static void allow_cpu(uint64_t *allowed, size_t cpu)
+{
+  allowed[cpu / 64] |= UINT64_C(1) << (cpu % 64);
+}
+
+/* LIST is comma-separated boot CPU indices and inclusive A-B ranges. Malformed
+ * syntax is fatal. Returns the lowest index without a boot CPU, if any. */
+static size_t parse_cpu_list(const char *name, const char *list, uint64_t *allowed)
 {
   size_t count = arch_cpu_count();
-  return count == 1 ? 0 : 1 + position % (count - 1);
+  size_t absent = NO_ABSENT_CPU;
+  const char *cursor = list;
+  for (;;) {
+    size_t first = parse_cpu_number(&cursor, name);
+    size_t last = first;
+    if (*cursor == '-') {
+      ++cursor;
+      last = parse_cpu_number(&cursor, name);
+      if (last < first) {
+        panic("space %s CPU range %zu-%zu is reversed", name, first, last);
+      }
+    }
+    size_t first_absent = first > count ? first : count;
+    if (last >= count && first_absent < absent) {
+      absent = first_absent;
+    }
+    for (size_t cpu = first; cpu <= last && cpu < count; ++cpu) {
+      allow_cpu(allowed, cpu);
+    }
+    if (!*cursor) {
+      return absent;
+    }
+    if (*cursor++ != ',') {
+      panic("space %s CPU set is malformed", name);
+    }
+  }
+}
+
+/* Until tasks can migrate, each space is pinned to one allowed CPU: the next
+ * workload CPU in configuration order, wrapping, if allowed, otherwise the
+ * lowest allowed workload CPU. A single-CPU boot uses the BSP. Multicore
+ * userspace does not run on the BSP yet. */
+static bool place_space(const uint64_t *allowed, size_t position, size_t *cpu)
+{
+  size_t count = arch_cpu_count();
+  if (count == 1) {
+    *cpu = 0;
+    return allowed[0] & 1;
+  }
+  size_t preferred = 1 + position % (count - 1);
+  if ((allowed[preferred / 64] >> (preferred % 64)) & 1) {
+    *cpu = preferred;
+    return true;
+  }
+  for (size_t candidate = 1; candidate < count; ++candidate) {
+    if ((allowed[candidate / 64] >> (candidate % 64)) & 1) {
+      *cpu = candidate;
+      return true;
+    }
+  }
+  return false;
+}
+
+/* The space keeps its tab, which explains why its init did not start. */
+static void report_unstarted(struct space *space, const char *name, const char *reason)
+{
+  /* Bounded: a 31-byte name and a reason of at most 96 bytes. */
+  char text[160];
+  KASSERT(strlen(name) <= SPACE_NAME_MAX && strlen(reason) <= 96);
+  sprintf(text, "space %s not started: %s\n", name, reason);
+  klog("userspace: %s", text);
+  space_report(space, text);
 }
 
 static unsigned hex_digit(char value)
@@ -101,10 +199,11 @@ void user_launch_initial(const char *command_line)
   /* Every option is a separated KEY=VALUE token of at least three bytes. */
   size_t capacity = length / 2 + 1;
   struct space_selection *selections = kmalloc(capacity * sizeof(*selections));
-  if (!options || !selections) {
+  struct space_selection *cpu_sets = kmalloc(capacity * sizeof(*cpu_sets));
+  if (!options || !selections || !cpu_sets) {
     panic("cannot allocate space selections");
   }
-  size_t selection_count = 0;
+  size_t selection_count = 0, cpu_set_count = 0;
   const char *mount_disk = NULL;
   bool install = false;
 
@@ -149,20 +248,46 @@ void user_launch_initial(const char *command_line)
     if (strlen(key) <= prefix || memcmp(key, SPACE_OPTION_PREFIX, prefix)) {
       panic("unknown kernel option: %s", key);
     }
-    const char *name = key + prefix;
+    char *name = key + prefix;
+    char *attribute = name;
+    while (*attribute && *attribute != '.') {
+      ++attribute;
+    }
+    if (*attribute) {
+      *attribute++ = '\0';
+      if (!same_text(attribute, SPACE_CPUS_SUFFIX)) {
+        panic("unknown kernel option: space.%s.%s", name, attribute);
+      }
+    }
     if (!valid_space_name(name)) {
       panic("invalid space name: %s", name);
+    }
+    if (*attribute) {
+      for (size_t i = 0; i < cpu_set_count; ++i) {
+        if (same_text(cpu_sets[i].name, name)) {
+          panic("duplicate CPU set for space %s", name);
+        }
+      }
+      KASSERT(cpu_set_count < capacity);
+      cpu_sets[cpu_set_count++] = (struct space_selection){.name = name, .cpus = value};
+      continue;
     }
     if (strlen(value) <= 6 || memcmp(value, "app://", 6)) {
       panic("space %s init must name an app:// archive entry: %s", name, value);
     }
-    for (size_t i = 0; i < selection_count; ++i) {
-      if (same_text(selections[i].name, name)) {
-        panic("duplicate space configuration: %s", name);
-      }
+    if (find_selection(selections, selection_count, name)) {
+      panic("duplicate space configuration: %s", name);
     }
     KASSERT(selection_count < capacity);
-    selections[selection_count++] = (struct space_selection){name, value};
+    selections[selection_count++] = (struct space_selection){.name = name, .image = value};
+  }
+  for (size_t i = 0; i < cpu_set_count; ++i) {
+    struct space_selection *selection = find_selection(selections, selection_count,
+        cpu_sets[i].name);
+    if (!selection) {
+      panic("CPU set for unconfigured space %s", cpu_sets[i].name);
+    }
+    selection->cpus = cpu_sets[i].cpus;
   }
   if (!selection_count) {
     panic("kernel command line must configure at least one space");
@@ -177,10 +302,42 @@ void user_launch_initial(const char *command_line)
     mount.enabled = true;
   }
 
+  size_t words = space_cpu_words();
   for (size_t i = 0; i < selection_count; ++i) {
-    struct space *space = space_create(selections[i].name, workload_cpu(i));
+    const char *name = selections[i].name;
+    uint64_t *allowed = kmalloc(words * sizeof(*allowed));
+    if (!allowed) {
+      panic("cannot allocate space CPU set");
+    }
+    memset(allowed, 0, words * sizeof(*allowed));
+    size_t absent = NO_ABSENT_CPU;
+    if (selections[i].cpus) {
+      absent = parse_cpu_list(name, selections[i].cpus, allowed);
+    } else {
+      for (size_t cpu = 0; cpu < arch_cpu_count(); ++cpu) {
+        allow_cpu(allowed, cpu);
+      }
+    }
+
+    size_t cpu;
+    const char *reason = NULL;
+    char absent_reason[64];
+    if (absent != NO_ABSENT_CPU) {
+      sprintf(absent_reason, "CPU set names absent CPU %zu", absent);
+      reason = absent_reason;
+    } else if (!place_space(allowed, i, &cpu)) {
+      reason = "CPU set allows only CPU 0, which runs no userspace on a multicore boot yet";
+    }
+    if (reason) {
+      /* An unstarted space accepts no tasks. */
+      memset(allowed, 0, words * sizeof(*allowed));
+      report_unstarted(space_create(name, allowed, 0), name, reason);
+      continue;
+    }
+    struct space *space = space_create(name, allowed, cpu);
     user_launch_init(space, selections[i].image, &mount, install);
   }
+  kfree(cpu_sets);
   kfree(selections);
   kfree(options);
 }

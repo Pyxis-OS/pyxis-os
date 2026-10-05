@@ -64,7 +64,7 @@ static void create_execution_group(struct launcher_request *request)
   struct process *parent = request->parent;
   KASSERT(parent && !parent->execution_group);
   request->result = CALL_NO_MEMORY;
-  struct execution_group *group = execution_group_create(parent->space, request->cpu_index);
+  struct execution_group *group = execution_group_create(parent->space);
   if (!group) {
     return;
   }
@@ -129,13 +129,13 @@ void launcher_request_execute(struct launcher_request *request)
   case LAUNCH_START:
     KASSERT(request->capture && request->parent && !request->group);
     request->result = launcher_start(request->capture, request->parent,
-        request->cpu_index, request->execution_group, &request->child);
+        request->execution_group, &request->child);
     discard_capture(request->capture);
     break;
   case LAUNCH_BATCH_PREPARE:
     KASSERT(request->capture && request->group && request->parent);
     request->result = launcher_batch_prepare(request->group, request->capture,
-        request->parent, request->cpu_index, request->execution_group);
+        request->parent, request->execution_group);
     discard_capture(request->capture);
     break;
   case LAUNCH_DISCARD:
@@ -180,7 +180,6 @@ static struct launcher_request *request_launch_service(enum launcher_action acti
       action == LAUNCH_CREATE_EXECUTION_GROUP) {
     request->parent = process_current();
     KASSERT(request->parent);
-    request->cpu_index = arch_cpu_index();
   }
   bsp_request_submit_and_wait(&request->request);
   return request;
@@ -675,12 +674,12 @@ struct syscall_result launcher_call(struct kernel_object *object, uint64_t right
       (parent->execution_group && parent->execution_group != group)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  /* Placement cannot change while capture sleeps. Sealing can: the BSP checks
-   * again at preparation and under the group lock at final publication. */
-  if (group && (group->space != parent->space || group->cpu_index != arch_cpu_index())) {
+  /* A process never changes space. Sealing can change while capture sleeps:
+   * the BSP checks again at preparation and under the group lock at publication. */
+  if (group && group->space != parent->space) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  enum call_status status = execution_group_launch_begin(group, parent->space, arch_cpu_index());
+  enum call_status status = execution_group_launch_begin(group, parent->space);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

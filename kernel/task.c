@@ -548,7 +548,7 @@ enum mm_result user_task_prepare_on(size_t cpu_index, struct process *process,
   *result = NULL;
   if (!schedulers || cpu_index >= arch_cpu_count() || !process ||
       !process->startup_address ||
-      process->space->cpu_index != cpu_index ||
+      !space_allows_cpu(process->space, cpu_index) ||
       !arch_user_entry_valid(entry, stack_top)) {
     return MM_INVALID;
   }
@@ -597,14 +597,27 @@ void user_task_discard_prepared(struct task *task)
 void user_task_publish_group(struct task **tasks, size_t count)
 {
   KASSERT(arch_cpu_index() == 0 && count && count <= LAUNCH_BATCH_MAX);
-  size_t cpu_index = tasks[0]->cpu_index;
+  /* Published tasks may run and retire as soon as the lock drops, so keep
+   * only their destination indices for notification. */
+  size_t destinations[LAUNCH_BATCH_MAX];
+  size_t destination_count = 0;
   lock_queues();
   for (size_t i = 0; i < count; ++i) {
-    KASSERT(tasks[i] && tasks[i]->cpu_index == cpu_index);
+    KASSERT(tasks[i]);
+    size_t cpu_index = tasks[i]->cpu_index;
     enqueue_locked(&schedulers[cpu_index], tasks[i]);
+    bool seen = false;
+    for (size_t j = 0; j < destination_count; ++j) {
+      seen |= destinations[j] == cpu_index;
+    }
+    if (!seen) {
+      destinations[destination_count++] = cpu_index;
+    }
   }
   unlock_queues();
-  notify_remote_cpu(cpu_index);
+  for (size_t i = 0; i < destination_count; ++i) {
+    notify_remote_cpu(destinations[i]);
+  }
 }
 
 enum mm_result user_task_create_on(size_t cpu_index, struct process *process,

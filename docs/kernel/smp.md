@@ -58,7 +58,7 @@ Each CPU then runs its own ready queue round-robin with local timer preemption.
 Its permanent boot stack becomes its scheduler stack. Tasks never migrate.
 
 The BSP loads a private image and user stack, wraps that address space in a
-process belonging to a space placed on the target CPU, then submits the process using:
+process belonging to a space that allows the target CPU, then submits the process using:
 
 ```c
 enum mm_result result = user_task_create_on(cpu_index, process, entry, stack_top);
@@ -68,7 +68,7 @@ enum mm_result result = user_task_create_on(cpu_index, process, entry, stack_top
 shorthand for CPU zero. Submission may occur before or after scheduling starts,
 but only on the BSP with IF=0 and outside interrupt/fault entry. Success transfers
 sole ownership of the process to the task; failure leaves it with the caller.
-The target CPU must be the one recorded by the process's owning space. Do not inspect or mutate
+The target CPU must be in the owning space's allowed set. Do not inspect or mutate
 the process or its address space after transfer. There is one task per process.
 
 Batch launch splits submission into BSP-only `user_task_prepare_on()` and
@@ -77,9 +77,10 @@ kernel stack, reusable request area and separate profiling storage without
 enqueueing it; its process remains inactive and owned by the preparer.
 `user_task_discard_prepared()` releases those task allocations, leaving process
 destruction to the preparer. After execution-group admission succeeds, publication enqueues the complete
-batch under the queue lock and transfers every process and task together. It
-allocates nothing; after unlocking, the BSP retains only the destination CPU
-index for notification. All observer handles and result slots exist before this
+batch under the queue lock and transfers every process and task together.
+Members may target different CPUs' queues. Publication allocates nothing; after
+unlocking, the BSP retains only the distinct destination CPU indices and notifies
+each remote one once. All observer handles and result slots exist before this
 transfer. The blocked caller lends its capability table to BSP preparation;
 cross-CPU requests and results live in the shared request allocation, never remote
 stack pointers.

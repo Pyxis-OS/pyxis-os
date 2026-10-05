@@ -13,11 +13,12 @@ atomically: a CONTROL|WAIT-authorized supervision handle and a LAUNCH-only launc
 bound to the new group. Failure installs neither handle. The creator stays outside
 the group, and an empty group remains open while supervision exists.
 
-The group fixes the creator's space and assigned CPU. Its bound launcher implements
-the existing single/batch launch protocol, with no extra group argument or implicit
-resource grants. It can be delegated to an ungrouped helper in the same placement;
-children launched through it still join the bound group. Use from another space or
-CPU is DENIED. A bound launcher cannot create groups.
+The group fixes the creator's space. Its bound launcher implements the existing
+single/batch launch protocol, with no extra group argument or implicit resource
+grants. It can be delegated to an ungrouped helper in the same space, on any CPU;
+children launched through it still join the bound group. Use from another space
+is DENIED. A bound launcher cannot create groups. Children run on CPUs their
+space allows; the group itself records no CPU.
 
 Membership is permanent kernel state. Every child of a member belongs to the same
 group, including background commands, pipeline stages and launched services.

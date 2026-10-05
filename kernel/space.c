@@ -101,15 +101,27 @@ static struct tty *tty_alloc(const struct framebuffer *fb) {
   return tty;
 }
 
-static struct space *space_alloc(const char *title, size_t cpu_index, bool focused)
+size_t space_cpu_words(void)
 {
-  KASSERT(arch_cpu_index() == 0 && cpu_index < arch_cpu_count());
+  return (arch_cpu_count() + 63) / 64;
+}
+
+bool space_allows_cpu(const struct space *space, size_t cpu_index)
+{
+  return cpu_index < arch_cpu_count() &&
+      (space->allowed_cpus[cpu_index / 64] >> (cpu_index % 64)) & 1;
+}
+
+static struct space *space_alloc(const char *title, uint64_t *allowed_cpus,
+    size_t cpu_index, bool focused)
+{
+  KASSERT(arch_cpu_index() == 0 && allowed_cpus && cpu_index < arch_cpu_count());
   arch_clock_maintain();
   struct space *space = kmalloc(sizeof(*space));
   if (!space) {
     panic("cannot allocate space");
   }
-  *space = (struct space){.cpu_index = cpu_index};
+  *space = (struct space){.cpu_index = cpu_index, .allowed_cpus = allowed_cpus};
   atomic_init(&space->title_locked, false);
   size_t length = strlen(title);
   KASSERT(length && length <= SPACE_TITLE_MAX);
@@ -144,19 +156,38 @@ void space_init(const struct boot_framebuffer *boot_fb)
 {
   screen = boot_fb;
   static_assert(sizeof(KERNEL_NAME) <= SPACE_TITLE_MAX + 1);
-  caelum_space = space_alloc(KERNEL_NAME, 0, true);
+  /* Caelum runs no userspace; its set only records its kernel-owned CPU. */
+  uint64_t *allowed = kmalloc(space_cpu_words() * sizeof(*allowed));
+  if (!allowed) {
+    panic("cannot allocate space CPU set");
+  }
+  memset(allowed, 0, space_cpu_words() * sizeof(*allowed));
+  allowed[0] = 1;
+  caelum_space = space_alloc(KERNEL_NAME, allowed, 0, true);
   last_space = caelum_space;
   active_space = caelum_space;
   log_set_tty(caelum_space->tty);
   spaces_nav_fb = fb_alloc(boot_fb, boot_fb->width, SPACES_NAV_HEIGHT);
 }
 
-struct space *space_create(const char *name, size_t cpu_index)
+struct space *space_create(const char *name, uint64_t *allowed_cpus, size_t cpu_index)
 {
-  struct space *space = space_alloc(name, cpu_index, false);
+  struct space *space = space_alloc(name, allowed_cpus, cpu_index, false);
   last_space->next = space;
   last_space = space;
   return space;
+}
+
+void space_report(struct space *space, const char *text)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  bool locked = log_begin();
+  while (*text) {
+    tty_put_char(space->tty, *text++);
+  }
+  log_end(locked);
+  cpu_restore_interrupts(flags);
 }
 
 static void lock_title(struct space *space)

@@ -14,13 +14,12 @@ struct execution_group_member {
   struct task *task;
 };
 
-/* Immutable placement. Lock protects admission, controlling grants, member links
+/* Immutable space. Lock protects admission, controlling grants, member links
  * and completion counters. A process owns one storage reference from preparation
  * through final reclamation; only published members contribute to members. */
 struct execution_group {
   struct kernel_object object;
   struct space *space;
-  size_t cpu_index;
   atomic_bool locked;
   bool sealed;
   bool stopping;
@@ -34,12 +33,11 @@ struct execution_group {
 };
 
 /* BSP, IF=0. Returns one storage reference, no controlling authority. */
-struct execution_group *execution_group_create(struct space *space, size_t cpu_index);
+struct execution_group *execution_group_create(struct space *space);
 
-/* IF=0, caller retains storage. No allocation. Foreign placement is DENIED;
+/* IF=0, caller retains storage. No allocation. Another space is DENIED;
  * sealed admission is ENDPOINT_CLOSED. Publication rechecks under the lock. */
-enum call_status execution_group_check(struct execution_group *group,
-    struct space *space, size_t cpu_index);
+enum call_status execution_group_check(struct execution_group *group, struct space *space);
 
 /* BSP, IF=0. All tasks already own group storage references. Serialize final
  * admission and enrollment with sealing, then transfer every task together.
@@ -52,7 +50,7 @@ void execution_group_member_complete(struct execution_group *group);
 
 /* Admitted preparation owns storage until all staging has been disposed. */
 enum call_status execution_group_launch_begin(struct execution_group *group,
-    struct space *space, size_t cpu_index);
+    struct space *space);
 void execution_group_launch_end(struct execution_group *group);
 void execution_group_member_detach(struct execution_group *group,
     struct execution_group_member *member);

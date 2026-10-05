@@ -325,6 +325,28 @@ All three were accepted by the owner on 2026-10-05:
 Task 2 is split into 2a and 2b. 2a covers the registry, boot grammar, placement,
 routing and installer migration. 2b is the scrolling space bar.
 
+### Task-3 decisions
+
+Both were accepted by the owner on 2026-10-05:
+
+1. **Affinity authority moves to task 4.** Until a request can move a task, a
+   new right and setup-window state would have no working operation behind them.
+   Task 4 therefore adds the right, the window, the request, the script command
+   and its migration boundary together. `session` already forwards the `space`
+   grant with an explicit `SPACE_RIGHT_SET_TITLE` mask, so the new right will not
+   pass through the handoff.
+2. **Interim placement with ceilings.** Each space keeps its rotating workload
+   CPU when the ceiling allows it; otherwise it takes the lowest allowed workload
+   CPU. On a multicore boot, a ceiling allowing only CPU 0 leaves the space
+   unstarted, just like an absent CPU, until BSP userspace eligibility (tasks
+   4–7). "Absent" means an index this boot does not have. CPUs are never taken
+   offline at runtime: an AP that fails to start panics the boot, and there is
+   no hotplug.
+
+Task 3 keeps one allowed set per space, the ceiling. The narrower effective set
+arrives with the task-4 affinity request. Execution groups no longer record a
+CPU, so a group's launcher works from any CPU in its space.
+
 ### Review notes carried from #410
 
 The [#410 review](https://git.internal/PyxisOS/pyxis-os/pulls/410) approved task 1
@@ -422,15 +444,17 @@ updates current subsystem docs only for behavior it implements.
    service context. Implement the fixed-width scrolling bar and directional
    neighbour preview. Preserve session roles and Caelum authority; no dynamic
    space lifecycle.
-3. [ ] **Separate launch authority from execution placement.** Keep space-scoped
-   group admission, launcher ceilings and inherited effective affinity. Prepare
-   the agreed trusted-init setup authority and session handoff; replace captured
-   CPU identity where necessary and prepare atomic batch publication across queues.
+3. [x] **Separate launch authority from execution placement.** Keep space-scoped
+   group admission, launcher ceilings and inherited effective affinity; replace
+   captured CPU identity and prepare atomic batch publication across queues.
    Preserve launch rollback and transitive completion/termination semantics.
+   The trusted-init affinity authority and handoff moved to task 4
+   (task-3 decision 1).
 4. [ ] **Enable safe placement and migration.** Use existing queue synchronization,
    bounded load-aware placement/balancing, remote notification and the agreed safe
-   points. Enable the native init-affinity request and script command with the
-   agreed completion boundary; invalid requests preserve existing placement.
+   points. Add `SPACE_RIGHT_SET_AFFINITY`, the setup window, the native
+   init-affinity request and the `affinity` script command with the agreed
+   completion boundary; invalid requests preserve existing placement.
    Include BSP userspace eligibility once its prerequisites hold; complete
    it no later than task 7. Record matched scheduling/concurrency results.
 5. [ ] **Prepare architecture and physical allocation for concurrency.** Add

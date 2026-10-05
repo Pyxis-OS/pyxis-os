@@ -29,9 +29,11 @@ INIT ?=
 NETWORK_CONFIG ?=
 # Ordered NAME=IMAGE initial spaces; tab order follows Caelum's log space.
 SPACES ?= development=app://init readonly=app://init-readonly remote=app://init-remote
+# Optional NAME=LIST CPU ceilings, e.g. remote=2-3; unlisted spaces may use every CPU.
+SPACE_CPUS ?=
 MOUNT_DISK ?=
 BOOT_MENU_TIMEOUT ?= 0
-export SPACES MOUNT_DISK BOOT_MENU_TIMEOUT
+export SPACES SPACE_CPUS MOUNT_DISK BOOT_MENU_TIMEOUT
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)
