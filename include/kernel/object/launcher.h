@@ -35,6 +35,9 @@ struct launcher_request {
   struct launch_preparation *group;
   struct process *parent;
   struct execution_group *execution_group; /* Borrowed from caller's launcher. */
+  /* Placement tie-break only: the caller stays in this syscall, on this CPU,
+   * until the request completes. Never used for admission. */
+  size_t parent_cpu;
   struct launch_capture *capture_result;
   struct launch_preparation *group_result;
   enum call_status result;

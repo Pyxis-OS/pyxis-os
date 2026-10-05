@@ -38,13 +38,12 @@ ranges, for example `0,2-3`. Indices are dense boot indices, not APIC IDs.
 Without the option, a space may use every CPU. Children inherit their space's
 ceiling.
 
-Until task migration exists, each space's tasks run on one CPU. The space takes
-the next workload CPU (1 onward) in configuration order, wrapping when there are
-more spaces than CPUs, if its ceiling allows that CPU. Otherwise it takes the
-lowest workload CPU its ceiling allows. With a single CPU, everything runs on
-CPU 0. The default configuration therefore keeps Development, Read-only and
-Remote on CPUs 1, 2 and 3. Further CPUs stay idle, and no space is created for
-them.
+The scheduler places each task on the least-loaded CPU its space allows and
+balances tasks between CPUs; see [placement and migration](../kernel/smp.md#placement-and-migration).
+On a multicore boot, userspace stays off CPU 0 for now. With a single CPU,
+everything runs on CPU 0. Each init is placed as it starts, so the default
+configuration still puts Development, Read-only and Remote on CPUs 1, 2 and 3.
+No space is created for further CPUs.
 
 A space can still be created without starting its init. The tab and the kernel
 log then say why. This happens in two cases:

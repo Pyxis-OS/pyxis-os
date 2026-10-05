@@ -69,6 +69,9 @@ struct scheduler {
   struct task *current_task;
   uintptr_t stack;
   struct execution_group *cleanup_group;
+  /* queues_locked. Load is queued tasks plus one while a task occupies the CPU. */
+  size_t queued;
+  bool running;
 };
 
 static struct scheduler *schedulers;
@@ -207,6 +210,85 @@ static void enqueue_locked(struct scheduler *scheduler, struct task *task)
     scheduler->ready_head = task;
   }
   scheduler->ready_tail = task;
+  ++scheduler->queued;
+}
+
+static size_t load_locked(size_t cpu_index)
+{
+  return schedulers[cpu_index].queued + (schedulers[cpu_index].running ? 1 : 0);
+}
+
+/* Multicore userspace stays off the BSP until private memory is serviced
+ * locally (SMP task 7); a single-CPU boot runs it there. */
+static bool user_cpu_eligible(const struct space *space, size_t cpu_index)
+{
+  return space_allows_cpu(space, cpu_index) && (cpu_index != 0 || arch_cpu_count() == 1);
+}
+
+/* Only a user task outside a syscall can move: its saved state is a user-mode
+ * boundary on its own kernel stack. A blocked syscall resumes where it was. */
+static bool task_movable(const struct task *task)
+{
+  return task->kind == TASK_USER && !task->in_syscall;
+}
+
+/* queues_locked. The least-loaded CPU SPACE may use; ties prefer PREFERRED,
+ * then the lowest index. */
+static size_t place_locked(const struct space *space, size_t preferred)
+{
+  size_t best = SIZE_MAX;
+  for (size_t cpu_index = 0; cpu_index < arch_cpu_count(); ++cpu_index) {
+    if (!user_cpu_eligible(space, cpu_index)) {
+      continue;
+    }
+    if (best == SIZE_MAX || load_locked(cpu_index) < load_locked(best) ||
+        (load_locked(cpu_index) == load_locked(best) && cpu_index == preferred)) {
+      best = cpu_index;
+    }
+  }
+  KASSERT(best != SIZE_MAX);
+  return best;
+}
+
+/* queues_locked. An idle CPU takes the first movable task it may run from the
+ * busiest other queue, provided that CPU keeps at least one task. */
+static struct task *pull_locked(size_t cpu_index)
+{
+  struct scheduler *source = NULL;
+  struct task *found = NULL, *found_previous = NULL;
+  size_t found_load = 1;
+  for (size_t other = 0; other < arch_cpu_count(); ++other) {
+    size_t load = load_locked(other);
+    if (other == cpu_index || load <= found_load) {
+      continue;
+    }
+    struct task *previous = NULL;
+    for (struct task *task = schedulers[other].ready_head; task;
+         previous = task, task = task->next) {
+      if (task_movable(task) && user_cpu_eligible(task->process->space, cpu_index)) {
+        source = &schedulers[other];
+        found = task;
+        found_previous = previous;
+        found_load = load;
+        break;
+      }
+    }
+  }
+  if (!found) {
+    return NULL;
+  }
+  if (found_previous) {
+    found_previous->next = found->next;
+  } else {
+    source->ready_head = found->next;
+  }
+  if (source->ready_tail == found) {
+    source->ready_tail = found_previous;
+  }
+  --source->queued;
+  found->next = NULL;
+  found->cpu_index = cpu_index;
+  return found;
 }
 
 static void notify_remote_cpu(size_t cpu_index)
@@ -456,7 +538,9 @@ struct task_profile *task_profile_current(void)
   return profile;
 }
 
-static struct task *dequeue(struct scheduler *scheduler)
+/* Takes the local queue's head, or, when it is empty, pulls a movable task
+ * from a busier CPU. The BSP pulls nothing while it runs no multicore userspace. */
+static struct task *dequeue(struct scheduler *scheduler, size_t cpu_index)
 {
   lock_queues();
   struct task *task = scheduler->ready_head;
@@ -465,10 +549,33 @@ static struct task *dequeue(struct scheduler *scheduler)
     if (!scheduler->ready_head) {
       scheduler->ready_tail = NULL;
     }
+    --scheduler->queued;
     task->next = NULL;
+  } else if (cpu_index != 0) {
+    task = pull_locked(cpu_index);
   }
+  scheduler->running = task != NULL;
   unlock_queues();
   return task;
+}
+
+/* A task preempted at a user-mode boundary moves when another CPU it may use
+ * is at least two tasks lighter, so equal neighbours do not trade it each tick.
+ * The destination's reschedule IPI is its only notification. */
+static void requeue_preempted(struct task *task, size_t cpu_index)
+{
+  size_t destination = cpu_index;
+  lock_queues();
+  if (task_movable(task)) {
+    size_t target = place_locked(task->process->space, cpu_index);
+    if (load_locked(target) + 2 <= load_locked(cpu_index)) {
+      destination = target;
+    }
+  }
+  task->cpu_index = destination;
+  enqueue_locked(&schedulers[destination], task);
+  unlock_queues();
+  notify_remote_cpu(destination);
 }
 
 [[noreturn]] static void enter_task(void)
@@ -540,16 +647,21 @@ enum mm_result kernel_task_create(void (*entry)(void *), void *argument)
   return MM_OK;
 }
 
-enum mm_result user_task_prepare_on(size_t cpu_index, struct process *process,
-                                    uintptr_t entry, uintptr_t stack_top,
-                                    struct task **result)
+enum mm_result user_task_prepare(struct process *process, uintptr_t entry,
+                                 uintptr_t stack_top, size_t preferred_cpu,
+                                 struct task **result)
 {
   KASSERT(arch_cpu_index() == 0);
   *result = NULL;
-  if (!schedulers || cpu_index >= arch_cpu_count() || !process ||
-      !process->startup_address ||
-      !space_allows_cpu(process->space, cpu_index) ||
+  if (!schedulers || !process || !process->startup_address ||
       !arch_user_entry_valid(entry, stack_top)) {
+    return MM_INVALID;
+  }
+  bool placeable = false;
+  for (size_t cpu_index = 0; cpu_index < arch_cpu_count(); ++cpu_index) {
+    placeable |= user_cpu_eligible(process->space, cpu_index);
+  }
+  if (!placeable) {
     return MM_INVALID;
   }
 
@@ -582,7 +694,8 @@ enum mm_result user_task_prepare_on(size_t cpu_index, struct process *process,
   task->process = process;
   task->entry = entry;
   task->user_stack = stack_top;
-  task->cpu_index = cpu_index;
+  /* Holds only the placement preference until publication places the task. */
+  task->cpu_index = preferred_cpu;
   arch_user_state_init(&task->cpu);
   *result = task;
   return MM_OK;
@@ -603,8 +716,10 @@ void user_task_publish_group(struct task **tasks, size_t count)
   size_t destination_count = 0;
   lock_queues();
   for (size_t i = 0; i < count; ++i) {
-    KASSERT(tasks[i]);
-    size_t cpu_index = tasks[i]->cpu_index;
+    KASSERT(tasks[i] && tasks[i]->kind == TASK_USER);
+    /* Each placement counts the members already queued, so a batch spreads. */
+    size_t cpu_index = place_locked(tasks[i]->process->space, tasks[i]->cpu_index);
+    tasks[i]->cpu_index = cpu_index;
     enqueue_locked(&schedulers[cpu_index], tasks[i]);
     bool seen = false;
     for (size_t j = 0; j < destination_count; ++j) {
@@ -620,24 +735,16 @@ void user_task_publish_group(struct task **tasks, size_t count)
   }
 }
 
-enum mm_result user_task_create_on(size_t cpu_index, struct process *process,
-                                   uintptr_t entry, uintptr_t stack_top)
-{
-  struct task *task;
-  enum mm_result status = user_task_prepare_on(cpu_index, process, entry,
-      stack_top, &task);
-  if (status != MM_OK) {
-    return status;
-  }
-  /* Publication transfers process and stack ownership. */
-  enqueue(&schedulers[cpu_index], task);
-  return MM_OK;
-}
-
 enum mm_result user_task_create(struct process *process, uintptr_t entry,
                                 uintptr_t stack_top)
 {
-  return user_task_create_on(0, process, entry, stack_top);
+  struct task *task;
+  enum mm_result status = user_task_prepare(process, entry, stack_top, SIZE_MAX, &task);
+  if (status == MM_OK) {
+    /* Publication transfers process and stack ownership. */
+    user_task_publish_group(&task, 1);
+  }
+  return status;
 }
 
 static void complete_task(struct task *task)
@@ -780,7 +887,7 @@ void kernel_task_yield_if_runnable(void)
       wake_sleepers();
     }
 
-    struct task *task = dequeue(scheduler);
+    struct task *task = dequeue(scheduler, cpu_index);
     scheduler->current_task = task;
     if (!task) {
       if (!idle_reported) {
@@ -837,7 +944,7 @@ void kernel_task_yield_if_runnable(void)
       task->next = sleeping_tasks;
       sleeping_tasks = task;
     } else {
-      enqueue(scheduler, task);
+      requeue_preempted(task, cpu_index);
     }
   }
 }

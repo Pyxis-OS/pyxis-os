@@ -347,6 +347,38 @@ Task 3 keeps one allowed set per space, the ceiling. The narrower effective set
 arrives with the task-4 affinity request. Execution groups no longer record a
 CPU, so a group's launcher works from any CPU in its space.
 
+### Task-4 decisions
+
+All three were accepted by the owner on 2026-10-05:
+
+1. **Balancing policy.**
+   - New tasks go to the least-loaded allowed CPU. Ties go to the parent's CPU,
+     then the lowest index.
+   - A CPU about to idle pulls one movable task from the busiest queue.
+   - A CPU at least two tasks lighter than the busiest takes work.
+   - Idle CPUs are woken at most once per idle period.
+   - Load is queued plus running tasks, with no priorities or further scoring.
+2. **BSP userspace.** On multicore boots, userspace stays off the BSP until task 7,
+   which then enables it with a measured comparison.
+3. **Split.** 4a covers placement, balancing and migration. 4b covers the
+   affinity right, the setup window, the request and the `affinity` command.
+
+As implemented in 4a, the "lighter CPU takes work" and "wake an idle CPU" rules
+are one mechanism. A task preempted in user mode is requeued on a CPU whose load is
+at least two lower, and that CPU's reschedule IPI is its wake-up. Idle APs also
+retry pulls on their 120 Hz tick. See [placement and migration](../kernel/smp.md#placement-and-migration).
+
+**Cross-CPU pipes, resolved by the native check.** In the nested VM, pipes whose
+ends landed on different CPUs went bimodal. On the ThinkPad the owner measured the same
+pipes completing 1.5–2 times faster than same-CPU pipes, so the accepted policy stays.
+See the [native results](../development/experiments/smp-task4a/README.md#native-thinkpad-check-owner-run).
+
+**Candidate follow-up, not scheduled: topology-aware placement.** The ThinkPad's APIC
+IDs make SMT sibling threads adjacent Pyxis CPUs, and CPU 1 is the BSP's sibling.
+Placement treats every thread as an independent CPU, so two busy tasks can share a core
+while other cores idle. Filling one thread per core first would be a separate, measured
+change.
+
 ### Review notes carried from #410
 
 The [#410 review](https://git.internal/PyxisOS/pyxis-os/pulls/410) approved task 1
@@ -450,7 +482,9 @@ updates current subsystem docs only for behavior it implements.
    Preserve launch rollback and transitive completion/termination semantics.
    The trusted-init affinity authority and handoff moved to task 4
    (task-3 decision 1).
-4. [ ] **Enable safe placement and migration.** Use existing queue synchronization,
+4. [ ] **Enable safe placement and migration.** Split into 4a (placement,
+   balancing and migration; see the [4a record](../development/experiments/smp-task4a/README.md))
+   and 4b (affinity request). Use existing queue synchronization,
    bounded load-aware placement/balancing, remote notification and the agreed safe
    points. Add `SPACE_RIGHT_SET_AFFINITY`, the setup window, the native
    init-affinity request and the `affinity` script command with the agreed

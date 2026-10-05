@@ -101,7 +101,7 @@ struct launch_preparation *launcher_batch_create(void)
 }
 
 enum call_status launcher_batch_prepare(struct launch_preparation *group,
-    struct launch_capture *capture, struct process *parent,
+    struct launch_capture *capture, struct process *parent, size_t parent_cpu,
     struct execution_group *execution_group)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -150,9 +150,9 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
   }
 
   struct task *task;
-  /* Children join their space's placement CPU until tasks can migrate. */
-  enum mm_result submitted = user_task_prepare_on(parent->space->cpu_index, child, entry,
-      USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE, &task);
+  /* Publication places the child; equal loads favour the parent's CPU. */
+  enum mm_result submitted = user_task_prepare(child, entry,
+      USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE, parent_cpu, &task);
   if (submitted != MM_OK) {
     status = submitted == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
     goto fail;
@@ -203,11 +203,11 @@ void launcher_batch_discard(struct launch_preparation *group)
 }
 
 enum call_status launcher_start(struct launch_capture *capture, struct process *parent,
-    struct execution_group *execution_group, handle_t *result)
+    size_t parent_cpu, struct execution_group *execution_group, handle_t *result)
 {
   struct launch_preparation group = {0};
   *result = HANDLE_INVALID;
-  enum call_status status = launcher_batch_prepare(&group, capture, parent,
+  enum call_status status = launcher_batch_prepare(&group, capture, parent, parent_cpu,
       execution_group);
   if (status == CALL_OK) {
     status = launcher_batch_publish(&group, result);

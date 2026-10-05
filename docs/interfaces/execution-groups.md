@@ -62,7 +62,7 @@ mixed with terminal attachment and TCP interests. Completion reports cleanup, no
 aggregate program success. Keep a WAIT-only copy when dropping the final CONTROL
 handle and then observing shutdown.
 
-Running userspace stops at an assigned-CPU scheduler safe point. A blocked syscall
+Running userspace stops at a scheduler safe point on its current CPU. A blocked syscall
 resumes its kernel continuation to detach registrations and return ownership before
 retirement; it cannot return to userspace. Timers and subsystem links are detached
 separately. Network and entropy slots are cancelled through their owning worker and

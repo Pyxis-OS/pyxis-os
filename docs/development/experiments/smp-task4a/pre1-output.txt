@@ -1,0 +1,1129 @@
+######## alloc
+### allocbench heap
+# host 0.073 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=4096 mixed=no profile=off
+Clock-call loop: 38596 ns/read (1000 reads); not subtracted
+524288 allocation attempts, 524288 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 14.240 ms; 73637972 operations/s; 13.6 ns/operation
+
+### allocbench heap
+# host 0.070 s complete={"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=4096 mixed=no profile=off
+Clock-call loop: 39504 ns/read (1000 reads); not subtracted
+524288 allocation attempts, 524288 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 13.355 ms; 78514142 operations/s; 12.7 ns/operation
+
+### allocbench heap
+# host 0.070 s complete={"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=4096 mixed=no profile=off
+Clock-call loop: 38633 ns/read (1000 reads); not subtracted
+524288 allocation attempts, 524288 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 14.402 ms; 72806857 operations/s; 13.7 ns/operation
+
+### allocbench heap
+# host 0.073 s complete={"type": "command_complete", "command": 4, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=4096 mixed=no profile=off
+Clock-call loop: 39789 ns/read (1000 reads); not subtracted
+524288 allocation attempts, 524288 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 13.760 ms; 76203765 operations/s; 13.1 ns/operation
+
+### allocbench heap
+# host 0.070 s complete={"type": "command_complete", "command": 5, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=4096 mixed=no profile=off
+Clock-call loop: 38625 ns/read (1000 reads); not subtracted
+524288 allocation attempts, 524288 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 14.638 ms; 71631432 operations/s; 14.0 ns/operation
+
+### allocbench heap --mixed --size 4096 --live 256
+# host 0.120 s complete={"type": "command_complete", "command": 6, "kind": "exited", "exit_status": 0}
+allocbench heap: size=4096 live=256 rounds=4096 mixed=yes profile=off
+Clock-call loop: 37799 ns/read (1000 reads); not subtracted
+1048576 allocation attempts, 1048576 releases, 0 failures; peak live payload 1048576 bytes
+Elapsed 56.508 ms; 37112637 operations/s; 26.9 ns/operation
+
+### allocbench heap --mixed --size 4096 --live 256
+# host 0.114 s complete={"type": "command_complete", "command": 7, "kind": "exited", "exit_status": 0}
+allocbench heap: size=4096 live=256 rounds=4096 mixed=yes profile=off
+Clock-call loop: 39100 ns/read (1000 reads); not subtracted
+1048576 allocation attempts, 1048576 releases, 0 failures; peak live payload 1048576 bytes
+Elapsed 55.444 ms; 37824681 operations/s; 26.4 ns/operation
+
+### allocbench heap --mixed --size 4096 --live 256
+# host 0.117 s complete={"type": "command_complete", "command": 8, "kind": "exited", "exit_status": 0}
+allocbench heap: size=4096 live=256 rounds=4096 mixed=yes profile=off
+Clock-call loop: 38236 ns/read (1000 reads); not subtracted
+1048576 allocation attempts, 1048576 releases, 0 failures; peak live payload 1048576 bytes
+Elapsed 56.670 ms; 37006270 operations/s; 27.0 ns/operation
+
+### allocbench heap --mixed --size 4096 --live 256
+# host 0.115 s complete={"type": "command_complete", "command": 9, "kind": "exited", "exit_status": 0}
+allocbench heap: size=4096 live=256 rounds=4096 mixed=yes profile=off
+Clock-call loop: 38217 ns/read (1000 reads); not subtracted
+1048576 allocation attempts, 1048576 releases, 0 failures; peak live payload 1048576 bytes
+Elapsed 56.481 ms; 37129951 operations/s; 26.9 ns/operation
+
+### allocbench heap --mixed --size 4096 --live 256
+# host 0.115 s complete={"type": "command_complete", "command": 10, "kind": "exited", "exit_status": 0}
+allocbench heap: size=4096 live=256 rounds=4096 mixed=yes profile=off
+Clock-call loop: 37935 ns/read (1000 reads); not subtracted
+1048576 allocation attempts, 1048576 releases, 0 failures; peak live payload 1048576 bytes
+Elapsed 56.777 ms; 36936836 operations/s; 27.1 ns/operation
+
+### allocbench growth
+# host 0.121 s complete={"type": "command_complete", "command": 11, "kind": "exited", "exit_status": 0}
+allocbench growth: size=65536 live=128 rounds=1 mixed=no profile=off
+Clock-call loop: 38804 ns/read (1000 reads); not subtracted
+128 allocation attempts, 128 releases, 0 failures; peak live payload 8388608 bytes
+Elapsed 65.215 ms; 3925 operations/s; 254747.5 ns/operation
+
+### allocbench growth
+# host 0.103 s complete={"type": "command_complete", "command": 12, "kind": "exited", "exit_status": 0}
+allocbench growth: size=65536 live=128 rounds=1 mixed=no profile=off
+Clock-call loop: 38818 ns/read (1000 reads); not subtracted
+128 allocation attempts, 128 releases, 0 failures; peak live payload 8388608 bytes
+Elapsed 46.834 ms; 5466 operations/s; 182947.2 ns/operation
+
+### allocbench growth
+# host 0.105 s complete={"type": "command_complete", "command": 13, "kind": "exited", "exit_status": 0}
+allocbench growth: size=65536 live=128 rounds=1 mixed=no profile=off
+Clock-call loop: 38827 ns/read (1000 reads); not subtracted
+128 allocation attempts, 128 releases, 0 failures; peak live payload 8388608 bytes
+Elapsed 47.717 ms; 5365 operations/s; 186393.2 ns/operation
+
+### allocbench growth
+# host 0.103 s complete={"type": "command_complete", "command": 14, "kind": "exited", "exit_status": 0}
+allocbench growth: size=65536 live=128 rounds=1 mixed=no profile=off
+Clock-call loop: 38581 ns/read (1000 reads); not subtracted
+128 allocation attempts, 128 releases, 0 failures; peak live payload 8388608 bytes
+Elapsed 46.915 ms; 5457 operations/s; 183261.2 ns/operation
+
+### allocbench growth
+# host 0.102 s complete={"type": "command_complete", "command": 15, "kind": "exited", "exit_status": 0}
+allocbench growth: size=65536 live=128 rounds=1 mixed=no profile=off
+Clock-call loop: 38921 ns/read (1000 reads); not subtracted
+128 allocation attempts, 128 releases, 0 failures; peak live payload 8388608 bytes
+Elapsed 46.590 ms; 5495 operations/s; 181990.4 ns/operation
+
+### allocbench pages
+# host 0.088 s complete={"type": "command_complete", "command": 16, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=64 mixed=no profile=off
+Clock-call loop: 39640 ns/read (1000 reads); not subtracted
+64 allocation attempts, 64 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 35.677 ms; 3588 operations/s; 278728.6 ns/operation
+
+### allocbench pages
+# host 0.091 s complete={"type": "command_complete", "command": 17, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=64 mixed=no profile=off
+Clock-call loop: 38825 ns/read (1000 reads); not subtracted
+64 allocation attempts, 64 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 35.856 ms; 3570 operations/s; 280122.6 ns/operation
+
+### allocbench pages
+# host 0.088 s complete={"type": "command_complete", "command": 18, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=64 mixed=no profile=off
+Clock-call loop: 38714 ns/read (1000 reads); not subtracted
+64 allocation attempts, 64 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 35.736 ms; 3582 operations/s; 279186.3 ns/operation
+
+### allocbench pages
+# host 0.089 s complete={"type": "command_complete", "command": 19, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=64 mixed=no profile=off
+Clock-call loop: 39704 ns/read (1000 reads); not subtracted
+64 allocation attempts, 64 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 36.762 ms; 3482 operations/s; 287201.2 ns/operation
+
+### allocbench pages
+# host 0.089 s complete={"type": "command_complete", "command": 20, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=64 mixed=no profile=off
+Clock-call loop: 38923 ns/read (1000 reads); not subtracted
+64 allocation attempts, 64 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 35.516 ms; 3604 operations/s; 277465.4 ns/operation
+
+### allocbench growth --profile
+# host 0.139 s complete={"type": "command_complete", "command": 21, "kind": "exited", "exit_status": 0}
+allocbench growth: size=65536 live=128 rounds=1 mixed=no profile=on
+Clock-call loop: 38473 ns/read (1000 reads); not subtracted
+128 allocation attempts, 128 releases, 0 failures; peak live payload 8388608 bytes
+Elapsed 72.074 ms; 3552 operations/s; 281540.1 ns/operation
+Backing allocate: 128 requests, 0 failures, 9961472 requested / 9961472 completed bytes
+  publication total 4.551 ms, mean 35.555 us, max 43.500 us
+  BSP queue   total 16.754 ms, mean 130.888 us, max 1490.830 us
+  service     total 24.383 ms, mean 190.493 us, max 248.160 us
+  resume      total 21.430 ms, mean 167.426 us, max 1152.600 us
+  total       total 67.118 ms, mean 524.361 us, max 2867.550 us
+Backing release: 0 requests, 0 failures, 0 requested / 0 completed bytes
+
+### allocbench pages --profile
+# host 0.132 s complete={"type": "command_complete", "command": 22, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=64 mixed=no profile=on
+Clock-call loop: 38724 ns/read (1000 reads); not subtracted
+64 allocation attempts, 64 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 60.759 ms; 2107 operations/s; 474676.1 ns/operation
+Backing allocate: 64 requests, 0 failures, 4194304 requested / 4194304 completed bytes
+  publication total 2.284 ms, mean 35.686 us, max 44.170 us
+  BSP queue   total 7.808 ms, mean 121.998 us, max 625.160 us
+  service     total 10.042 ms, mean 156.910 us, max 249.250 us
+  resume      total 11.053 ms, mean 172.708 us, max 1221.210 us
+  total       total 31.187 ms, mean 487.303 us, max 1940.720 us
+Backing release: 64 requests, 0 failures, 4194304 requested / 4194304 completed bytes
+  publication total 2.290 ms, mean 35.778 us, max 51.670 us
+  BSP queue   total 7.631 ms, mean 119.237 us, max 806.810 us
+  service     total 3.658 ms, mean 57.161 us, max 65.130 us
+  resume      total 9.921 ms, mean 155.009 us, max 876.450 us
+  total       total 23.500 ms, mean 367.185 us, max 1073.070 us
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+######## io
+### iobench read app://share/iobench.bin
+# host 0.138 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+iobench read: source=app://share/iobench.bin output=none buffer=4088 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 39123 ns/read (1000 reads); not subtracted
+Host FILE profiling: off (measured payload reads only)
+warmup 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+sample 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=38780 ns
+  payload=256840 ns (0.257 ms); 3893.475 MiB/s
+  complete=331600 ns (0.332 ms); 3015.682 MiB/s
+sample 2: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=37390 ns
+  payload=250910 ns (0.251 ms); 3985.493 MiB/s
+  complete=324350 ns (0.324 ms); 3083.089 MiB/s
+sample 3: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=37510 ns
+  payload=251340 ns (0.251 ms); 3978.674 MiB/s
+  complete=331410 ns (0.331 ms); 3017.410 MiB/s
+sample 4: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=37530 ns
+  payload=900730 ns (0.901 ms); 1110.211 MiB/s
+  complete=974070 ns (0.974 ms); 1026.620 MiB/s
+sample 5: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=37660 ns
+  payload=252170 ns (0.252 ms); 3965.579 MiB/s
+  complete=325750 ns (0.326 ms); 3069.839 MiB/s
+OPEN summary: 5 verified samples; elapsed median=0.038 ms range=0.037..0.039 ms
+Payload read summary: 5 verified samples; elapsed median=0.252 ms range=0.251..0.901 ms; throughput at median elapsed=3965.579 MiB/s
+Complete consumption summary: 5 verified samples; elapsed median=0.331 ms range=0.324..0.974 ms; throughput at median elapsed=3017.410 MiB/s
+
+### cat app://share/iobench.bin > home://iobench.bin
+# host 0.027 s complete={"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+
+### iobench read home://iobench.bin
+# host 0.141 s complete={"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+iobench read: source=home://iobench.bin output=none buffer=4088 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 38855 ns/read (1000 reads); not subtracted
+Host FILE profiling: off (measured payload reads only)
+warmup 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+sample 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=38470 ns
+  payload=1560030 ns (1.560 ms); 641.013 MiB/s
+  complete=1634840 ns (1.635 ms); 611.681 MiB/s
+sample 2: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=37900 ns
+  payload=274030 ns (0.274 ms); 3649.235 MiB/s
+  complete=348020 ns (0.348 ms); 2873.398 MiB/s
+sample 3: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=44210 ns
+  payload=253550 ns (0.254 ms); 3943.995 MiB/s
+  complete=333720 ns (0.334 ms); 2996.524 MiB/s
+sample 4: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=36840 ns
+  payload=253090 ns (0.253 ms); 3951.164 MiB/s
+  complete=325920 ns (0.326 ms); 3068.238 MiB/s
+sample 5: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=36720 ns
+  payload=249580 ns (0.250 ms); 4006.731 MiB/s
+  complete=322150 ns (0.322 ms); 3104.144 MiB/s
+OPEN summary: 5 verified samples; elapsed median=0.038 ms range=0.037..0.044 ms
+Payload read summary: 5 verified samples; elapsed median=0.254 ms range=0.250..1.560 ms; throughput at median elapsed=3943.995 MiB/s
+Complete consumption summary: 5 verified samples; elapsed median=0.334 ms range=0.322..1.635 ms; throughput at median elapsed=2996.524 MiB/s
+
+### iobench write home://grow.bin
+# host 0.156 s complete={"type": "command_complete", "command": 4, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=home://grow.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 38794 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=none
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=6407100 ns (6.407 ms); 156.077 MiB/s
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=12495360 ns (12.495 ms); 80.030 MiB/s
+sample 3: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=12663290 ns (12.663 ms); 78.968 MiB/s
+sample 4: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=13262720 ns (13.263 ms); 75.399 MiB/s
+sample 5: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=12889870 ns (12.890 ms); 77.580 MiB/s
+Output retained: home://grow.bin
+Transfer summary: 5 verified samples; elapsed median=12.663 ms range=6.407..13.263 ms; throughput at median elapsed=78.968 MiB/s
+
+### iobench copy app://share/iobench.bin home://copy.bin
+# host 0.149 s complete={"type": "command_complete", "command": 5, "kind": "exited", "exit_status": 0}
+iobench copy: source=app://share/iobench.bin output=home://copy.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 38626 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=none
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=7407860 ns (7.408 ms); 134.992 MiB/s
+sample 2: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=8639710 ns (8.640 ms); 115.745 MiB/s
+sample 3: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=7260190 ns (7.260 ms); 137.737 MiB/s
+sample 4: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=7166400 ns (7.166 ms); 139.540 MiB/s
+sample 5: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=9995200 ns (9.995 ms); 100.048 MiB/s
+Output retained: home://copy.bin
+Transfer summary: 5 verified samples; elapsed median=7.408 ms range=7.166..9.995 ms; throughput at median elapsed=134.992 MiB/s
+
+### iobench read host://iobench.bin
+# host 1.121 s complete={"type": "command_complete", "command": 6, "kind": "exited", "exit_status": 0}
+iobench read: source=host://iobench.bin output=none buffer=4088 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 39621 ns/read (1000 reads); not subtracted
+Host FILE profiling: off (measured payload reads only)
+warmup 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+sample 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=4607950 ns
+  payload=158754870 ns (158.755 ms); 6.299 MiB/s
+  complete=163967690 ns (163.968 ms); 6.099 MiB/s
+sample 2: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=4136490 ns
+  payload=171529500 ns (171.530 ms); 5.830 MiB/s
+  complete=176272880 ns (176.273 ms); 5.673 MiB/s
+sample 3: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=4171810 ns
+  payload=171953670 ns (171.954 ms); 5.816 MiB/s
+  complete=176724490 ns (176.724 ms); 5.659 MiB/s
+sample 4: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=4848760 ns
+  payload=171680910 ns (171.681 ms); 5.825 MiB/s
+  complete=177129880 ns (177.130 ms); 5.646 MiB/s
+sample 5: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=4041520 ns
+  payload=171468140 ns (171.468 ms); 5.832 MiB/s
+  complete=176109600 ns (176.110 ms); 5.678 MiB/s
+OPEN summary: 5 verified samples; elapsed median=4.172 ms range=4.042..4.849 ms
+Payload read summary: 5 verified samples; elapsed median=171.530 ms range=158.755..171.954 ms; throughput at median elapsed=5.830 MiB/s
+Complete consumption summary: 5 verified samples; elapsed median=176.273 ms range=163.968..177.130 ms; throughput at median elapsed=5.673 MiB/s
+
+### iobench write host://grow.bin --sync
+# host 2.081 s complete={"type": "command_complete", "command": 7, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=host://grow.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 39666 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=160010190 ns (160.010 ms); 6.250 MiB/s
+  file_sync=699410 ns (0.699 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=168242580 ns (168.243 ms); 5.944 MiB/s
+  file_sync=780370 ns (0.780 ms)
+sample 3: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=167025180 ns (167.025 ms); 5.987 MiB/s
+  file_sync=1273030 ns (1.273 ms)
+sample 4: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=166064900 ns (166.065 ms); 6.022 MiB/s
+  file_sync=606460 ns (0.606 ms)
+sample 5: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=165560590 ns (165.561 ms); 6.040 MiB/s
+  file_sync=776710 ns (0.777 ms)
+Output retained: host://grow.bin
+Transfer summary: 5 verified samples; elapsed median=166.065 ms range=160.010..168.243 ms; throughput at median elapsed=6.022 MiB/s
+File sync summary: 5 verified samples; elapsed median=0.777 ms range=0.606..1.273 ms
+
+### iobench copy app://share/iobench.bin host://copy.bin --sync
+# host 2.070 s complete={"type": "command_complete", "command": 8, "kind": "exited", "exit_status": 0}
+iobench copy: source=app://share/iobench.bin output=host://copy.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 38223 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=160121190 ns (160.121 ms); 6.245 MiB/s
+  file_sync=596470 ns (0.596 ms)
+sample 2: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=168308160 ns (168.308 ms); 5.941 MiB/s
+  file_sync=602580 ns (0.603 ms)
+sample 3: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=165975750 ns (165.976 ms); 6.025 MiB/s
+  file_sync=598520 ns (0.599 ms)
+sample 4: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=167519630 ns (167.520 ms); 5.969 MiB/s
+  file_sync=596550 ns (0.597 ms)
+sample 5: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=164838550 ns (164.839 ms); 6.067 MiB/s
+  file_sync=600520 ns (0.601 ms)
+Output retained: host://copy.bin
+Transfer summary: 5 verified samples; elapsed median=165.976 ms range=160.121..168.308 ms; throughput at median elapsed=6.025 MiB/s
+File sync summary: 5 verified samples; elapsed median=0.599 ms range=0.596..0.603 ms
+
+### iobench read data://iobench.bin
+# host 1.448 s complete={"type": "command_complete", "command": 9, "kind": "exited", "exit_status": 0}
+iobench read: source=data://iobench.bin output=none buffer=4088 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 39461 ns/read (1000 reads); not subtracted
+Host FILE profiling: off (measured payload reads only)
+warmup 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+sample 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=1525650 ns
+  payload=181193280 ns (181.193 ms); 5.519 MiB/s
+  complete=183392420 ns (183.392 ms); 5.453 MiB/s
+sample 2: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=1524640 ns
+  payload=193722430 ns (193.722 ms); 5.162 MiB/s
+  complete=196000220 ns (196.000 ms); 5.102 MiB/s
+sample 3: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=1529860 ns
+  payload=193537020 ns (193.537 ms); 5.167 MiB/s
+  complete=195931570 ns (195.932 ms); 5.104 MiB/s
+sample 4: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=1532360 ns
+  payload=193010910 ns (193.011 ms); 5.181 MiB/s
+  complete=195189770 ns (195.190 ms); 5.123 MiB/s
+sample 5: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=0 eof_calls=1 failed_pass=0
+  open=2181540 ns
+  payload=192816000 ns (192.816 ms); 5.186 MiB/s
+  complete=195675500 ns (195.675 ms); 5.111 MiB/s
+OPEN summary: 5 verified samples; elapsed median=1.530 ms range=1.525..2.182 ms
+Payload read summary: 5 verified samples; elapsed median=193.011 ms range=181.193..193.722 ms; throughput at median elapsed=5.181 MiB/s
+Complete consumption summary: 5 verified samples; elapsed median=195.675 ms range=183.392..196.000 ms; throughput at median elapsed=5.111 MiB/s
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### iobench write data://grow.bin --sync
+# host 2.860 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://grow.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 39180 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=224993430 ns (224.993 ms); 4.445 MiB/s
+  file_sync=36618030 ns (36.618 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=225858750 ns (225.859 ms); 4.428 MiB/s
+  file_sync=36020760 ns (36.021 ms)
+sample 3: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=224066660 ns (224.067 ms); 4.463 MiB/s
+  file_sync=36405350 ns (36.405 ms)
+sample 4: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=225752580 ns (225.753 ms); 4.430 MiB/s
+  file_sync=37360520 ns (37.361 ms)
+sample 5: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=227290820 ns (227.291 ms); 4.400 MiB/s
+  file_sync=36218000 ns (36.218 ms)
+Output retained: data://grow.bin
+Transfer summary: 5 verified samples; elapsed median=225.753 ms range=224.067..227.291 ms; throughput at median elapsed=4.430 MiB/s
+File sync summary: 5 verified samples; elapsed median=36.405 ms range=36.021..37.361 ms
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### iobench write data://prepared.bin --prepared --sync
+# host 3.765 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://prepared.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 38504 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=prepared overwrite sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=182493390 ns (182.493 ms); 5.480 MiB/s
+  file_sync=26288210 ns (26.288 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=181800820 ns (181.801 ms); 5.501 MiB/s
+  file_sync=26507400 ns (26.507 ms)
+sample 3: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=183099940 ns (183.100 ms); 5.461 MiB/s
+  file_sync=26956790 ns (26.957 ms)
+sample 4: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=183548580 ns (183.549 ms); 5.448 MiB/s
+  file_sync=26952050 ns (26.952 ms)
+sample 5: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=184149800 ns (184.150 ms); 5.430 MiB/s
+  file_sync=25759330 ns (25.759 ms)
+Output retained: data://prepared.bin
+Transfer summary: 5 verified samples; elapsed median=183.100 ms range=181.801..184.150 ms; throughput at median elapsed=5.461 MiB/s
+File sync summary: 5 verified samples; elapsed median=26.507 ms range=25.759..26.957 ms
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### iobench copy app://share/iobench.bin data://copy.bin --sync
+# host 2.860 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+iobench copy: source=app://share/iobench.bin output=data://copy.bin buffer=4080 rounds=5 warmup=1 fixture=1048576 bytes
+Clock-call loop: 38985 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=227562190 ns (227.562 ms); 4.394 MiB/s
+  file_sync=37396650 ns (37.397 ms)
+sample 2: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=226575190 ns (226.575 ms); 4.414 MiB/s
+  file_sync=36528340 ns (36.528 ms)
+sample 3: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=226365190 ns (226.365 ms); 4.418 MiB/s
+  file_sync=36131920 ns (36.132 ms)
+sample 4: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=226036060 ns (226.036 ms); 4.424 MiB/s
+  file_sync=36306760 ns (36.307 ms)
+sample 5: OK; requested=1048576 read=1048576 written=1048576 bytes; failed_pass=0
+  file_read_calls=258 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=227045310 ns (227.045 ms); 4.404 MiB/s
+  file_sync=36395690 ns (36.396 ms)
+Output retained: data://copy.bin
+Transfer summary: 5 verified samples; elapsed median=226.575 ms range=226.036..227.562 ms; throughput at median elapsed=4.414 MiB/s
+File sync summary: 5 verified samples; elapsed median=36.396 ms range=36.132..37.397 ms
+
+### sync data://
+# host 0.015 s complete={"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+######## tcp
+### ttcp -t 10.0.2.2
+# host 12.728 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+ttcp-t: 2048 buffers of 8192 bytes, port 5001 -> 10.0.2.2
+ttcp-t: 16777216 bytes in 12.712225 seconds = 1.259 MiB/s (including closure)
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### ttcp -t 10.0.2.2
+# host 12.751 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+ttcp-t: 2048 buffers of 8192 bytes, port 5001 -> 10.0.2.2
+ttcp-t: 16777216 bytes in 12.734990 seconds = 1.256 MiB/s (including closure)
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### ttcp -t 10.0.2.2
+# host 12.710 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+ttcp-t: 2048 buffers of 8192 bytes, port 5001 -> 10.0.2.2
+ttcp-t: 16777216 bytes in 12.693682 seconds = 1.260 MiB/s (including closure)
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### ttcp -t 10.0.2.2
+# host 12.709 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+ttcp-t: 2048 buffers of 8192 bytes, port 5001 -> 10.0.2.2
+ttcp-t: 16777216 bytes in 12.693429 seconds = 1.260 MiB/s (including closure)
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### ttcp -t 10.0.2.2
+# host 12.718 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+ttcp-t: 2048 buffers of 8192 bytes, port 5001 -> 10.0.2.2
+ttcp-t: 16777216 bytes in 12.702184 seconds = 1.260 MiB/s (including closure)
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+######## single
+### allocbench heap --rounds 262144
+# host 0.918 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 38683 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 862.280 ms; 77827216 operations/s; 12.8 ns/operation
+
+### allocbench pages --rounds 2048
+# host 1.023 s complete={"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 39297 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 969.901 ms; 4223 operations/s; 236792.3 ns/operation
+
+### iobench write data://single1.bin --rounds 2 --sync
+# host 1.436 s complete={"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://single1.bin buffer=4080 rounds=2 warmup=1 fixture=1048576 bytes
+Clock-call loop: 38925 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=228153520 ns (228.154 ms); 4.383 MiB/s
+  file_sync=36998000 ns (36.998 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=225252540 ns (225.253 ms); 4.439 MiB/s
+  file_sync=36378620 ns (36.379 ms)
+Output retained: data://single1.bin
+Transfer summary: 2 verified samples; elapsed median=226.703 ms range=225.253..228.154 ms; throughput at median elapsed=4.411 MiB/s
+File sync summary: 2 verified samples; elapsed median=36.688 ms range=36.379..36.998 ms
+
+### ttcp -t -n 192 10.0.2.2
+# host 1.204 s complete={"type": "command_complete", "command": 4, "kind": "exited", "exit_status": 0}
+ttcp-t: 192 buffers of 8192 bytes, port 5001 -> 10.0.2.2
+ttcp-t: 1572864 bytes in 1.190171 seconds = 1.260 MiB/s (including closure)
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### allocbench heap --rounds 262144
+# host 0.918 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 38616 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 861.997 ms; 77852787 operations/s; 12.8 ns/operation
+
+### allocbench pages --rounds 2048
+# host 1.023 s complete={"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 39462 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 969.099 ms; 4227 operations/s; 236596.4 ns/operation
+
+### iobench write data://single2.bin --rounds 2 --sync
+# host 1.436 s complete={"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://single2.bin buffer=4080 rounds=2 warmup=1 fixture=1048576 bytes
+Clock-call loop: 38957 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=225588250 ns (225.588 ms); 4.433 MiB/s
+  file_sync=36485230 ns (36.485 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=227005270 ns (227.005 ms); 4.405 MiB/s
+  file_sync=35997230 ns (35.997 ms)
+Output retained: data://single2.bin
+Transfer summary: 2 verified samples; elapsed median=226.297 ms range=225.588..227.005 ms; throughput at median elapsed=4.419 MiB/s
+File sync summary: 2 verified samples; elapsed median=36.241 ms range=35.997..36.485 ms
+
+### ttcp -t -n 192 10.0.2.2
+# host 1.212 s complete={"type": "command_complete", "command": 4, "kind": "exited", "exit_status": 0}
+ttcp-t: 192 buffers of 8192 bytes, port 5001 -> 10.0.2.2
+ttcp-t: 1572864 bytes in 1.197948 seconds = 1.252 MiB/s (including closure)
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### allocbench heap --rounds 262144
+# host 0.927 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 38600 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 870.859 ms; 77060566 operations/s; 13.0 ns/operation
+
+### allocbench pages --rounds 2048
+# host 1.026 s complete={"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 39750 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 973.048 ms; 4209 operations/s; 237560.6 ns/operation
+
+### iobench write data://single3.bin --rounds 2 --sync
+# host 1.432 s complete={"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://single3.bin buffer=4080 rounds=2 warmup=1 fixture=1048576 bytes
+Clock-call loop: 38592 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=227272930 ns (227.273 ms); 4.400 MiB/s
+  file_sync=36041060 ns (36.041 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=226081630 ns (226.082 ms); 4.423 MiB/s
+  file_sync=36668550 ns (36.669 ms)
+Output retained: data://single3.bin
+Transfer summary: 2 verified samples; elapsed median=226.677 ms range=226.082..227.273 ms; throughput at median elapsed=4.412 MiB/s
+File sync summary: 2 verified samples; elapsed median=36.355 ms range=36.041..36.669 ms
+
+### ttcp -t -n 192 10.0.2.2
+# host 1.212 s complete={"type": "command_complete", "command": 4, "kind": "exited", "exit_status": 0}
+ttcp-t: 192 buffers of 8192 bytes, port 5001 -> 10.0.2.2
+ttcp-t: 1572864 bytes in 1.197906 seconds = 1.252 MiB/s (including closure)
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+######## conc
+### concurrent 2: aggregate host wall 1.777 s
+## c0 allocbench heap --rounds 262144
+# host start +0.000 end +1.777 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 72215 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 1642.980 ms; 40845815 operations/s; 24.5 ns/operation
+
+## c1 allocbench heap --rounds 262144
+# host start +0.000 end +1.774 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 50758 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 1654.884 ms; 40552001 operations/s; 24.7 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 4: aggregate host wall 3.531 s
+## c0 allocbench heap --rounds 262144
+# host start +0.000 end +3.401 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 53374 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 3176.543 ms; 21126383 operations/s; 47.3 ns/operation
+
+## c1 allocbench heap --rounds 262144
+# host start +0.000 end +3.426 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 71772 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 3074.145 ms; 21830090 operations/s; 45.8 ns/operation
+
+## c2 allocbench heap --rounds 262144
+# host start +0.000 end +3.523 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 95444 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 3016.447 ms; 22247651 operations/s; 44.9 ns/operation
+
+## c3 allocbench heap --rounds 262144
+# host start +0.000 end +3.531 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 136107 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 2665.163 ms; 25180018 operations/s; 39.7 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 2: aggregate host wall 2.123 s
+## c0 allocbench pages --rounds 2048
+# host start +0.000 end +2.123 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 41235 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 2015.336 ms; 2032 operations/s; 492025.4 ns/operation
+
+## c1 allocbench pages --rounds 2048
+# host start +0.000 end +2.115 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 42993 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 2052.820 ms; 1995 operations/s; 501176.7 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 4: aggregate host wall 4.314 s
+## c0 allocbench pages --rounds 2048
+# host start +0.000 end +4.314 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 44719 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4099.018 ms; 999 operations/s; 1000736.9 ns/operation
+
+## c1 allocbench pages --rounds 2048
+# host start +0.000 end +4.302 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 73423 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4190.371 ms; 977 operations/s; 1023039.7 ns/operation
+
+## c2 allocbench pages --rounds 2048
+# host start +0.000 end +4.304 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 61306 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4182.232 ms; 979 operations/s; 1021052.7 ns/operation
+
+## c3 allocbench pages --rounds 2048
+# host start +0.000 end +4.306 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 55087 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4131.733 ms; 991 operations/s; 1008723.8 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 4: aggregate host wall 4.733 s
+## c0 allocbench heap --rounds 262144
+# host start +0.000 end +1.299 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 60625 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 1034.274 ms; 64884993 operations/s; 15.4 ns/operation
+
+## c1 allocbench pages --rounds 2048
+# host start +0.000 end +4.733 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 72165 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4608.327 ms; 889 operations/s; 1125079.9 ns/operation
+
+## c2 iobench write data://mix1.bin --rounds 2 --sync
+# host start +0.000 end +4.281 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://mix1.bin buffer=4080 rounds=2 warmup=1 fixture=1048576 bytes
+Clock-call loop: 65839 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=601375360 ns (601.375 ms); 1.663 MiB/s
+  file_sync=85630700 ns (85.631 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=644283190 ns (644.283 ms); 1.552 MiB/s
+  file_sync=87875900 ns (87.876 ms)
+Output retained: data://mix1.bin
+Transfer summary: 2 verified samples; elapsed median=622.829 ms range=601.375..644.283 ms; throughput at median elapsed=1.606 MiB/s
+File sync summary: 2 verified samples; elapsed median=86.753 ms range=85.631..87.876 ms
+
+## c3 ttcp -t -n 192 10.0.2.2
+# host start +0.000 end +3.988 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+ttcp-t: 192 buffers of 8192 bytes, port 5001 -> 10.0.2.2
+ttcp-t: 1572864 bytes in 3.852609 seconds = 0.389 MiB/s (including closure)
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 2: aggregate host wall 1.776 s
+## c0 allocbench heap --rounds 262144
+# host start +0.000 end +1.776 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 51295 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 1703.817 ms; 39387370 operations/s; 25.4 ns/operation
+
+## c1 allocbench heap --rounds 262144
+# host start +0.000 end +1.770 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 64048 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 1606.890 ms; 41763203 operations/s; 23.9 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 4: aggregate host wall 3.518 s
+## c0 allocbench heap --rounds 262144
+# host start +0.000 end +3.487 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 43669 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 3064.214 ms; 21900842 operations/s; 45.7 ns/operation
+
+## c1 allocbench heap --rounds 262144
+# host start +0.000 end +3.508 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 82662 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 3205.699 ms; 20934235 operations/s; 47.8 ns/operation
+
+## c2 allocbench heap --rounds 262144
+# host start +0.000 end +3.516 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 127727 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 2799.537 ms; 23971419 operations/s; 41.7 ns/operation
+
+## c3 allocbench heap --rounds 262144
+# host start +0.000 end +3.518 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 103633 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 3100.619 ms; 21643699 operations/s; 46.2 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 2: aggregate host wall 2.156 s
+## c0 allocbench pages --rounds 2048
+# host start +0.000 end +2.154 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 69920 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 2061.176 ms; 1987 operations/s; 503216.8 ns/operation
+
+## c1 allocbench pages --rounds 2048
+# host start +0.000 end +2.156 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 55901 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 2050.658 ms; 1997 operations/s; 500649.0 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 4: aggregate host wall 4.329 s
+## c0 allocbench pages --rounds 2048
+# host start +0.000 end +4.317 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 74237 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4209.897 ms; 973 operations/s; 1027806.8 ns/operation
+
+## c1 allocbench pages --rounds 2048
+# host start +0.000 end +4.319 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 60019 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4199.983 ms; 975 operations/s; 1025386.4 ns/operation
+
+## c2 allocbench pages --rounds 2048
+# host start +0.000 end +4.327 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 42259 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4111.299 ms; 996 operations/s; 1003735.1 ns/operation
+
+## c3 allocbench pages --rounds 2048
+# host start +0.000 end +4.329 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 41509 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4163.589 ms; 984 operations/s; 1016501.1 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 4: aggregate host wall 4.734 s
+## c0 allocbench heap --rounds 262144
+# host start +0.000 end +1.223 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 44072 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 940.625 ms; 71344976 operations/s; 14.0 ns/operation
+
+## c1 allocbench pages --rounds 2048
+# host start +0.000 end +4.734 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 82297 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4630.972 ms; 884 operations/s; 1130608.5 ns/operation
+
+## c2 iobench write data://mix2.bin --rounds 2 --sync
+# host start +0.000 end +4.255 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://mix2.bin buffer=4080 rounds=2 warmup=1 fixture=1048576 bytes
+Clock-call loop: 72908 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=596380300 ns (596.380 ms); 1.677 MiB/s
+  file_sync=93158720 ns (93.159 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=612648290 ns (612.648 ms); 1.632 MiB/s
+  file_sync=97867290 ns (97.867 ms)
+Output retained: data://mix2.bin
+Transfer summary: 2 verified samples; elapsed median=604.514 ms range=596.380..612.648 ms; throughput at median elapsed=1.654 MiB/s
+File sync summary: 2 verified samples; elapsed median=95.513 ms range=93.159..97.867 ms
+
+## c3 ttcp -t -n 192 10.0.2.2
+# host start +0.000 end +3.982 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+ttcp-t: 192 buffers of 8192 bytes, port 5001 -> 10.0.2.2
+ttcp-t: 1572864 bytes in 3.864189 seconds = 0.388 MiB/s (including closure)
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 2: aggregate host wall 1.782 s
+## c0 allocbench heap --rounds 262144
+# host start +0.000 end +1.782 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 61828 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 1654.035 ms; 40572812 operations/s; 24.6 ns/operation
+
+## c1 allocbench heap --rounds 262144
+# host start +0.000 end +1.775 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 42828 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 1675.037 ms; 40064111 operations/s; 25.0 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 4: aggregate host wall 3.516 s
+## c0 allocbench heap --rounds 262144
+# host start +0.000 end +3.469 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 44226 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 3056.378 ms; 21956990 operations/s; 45.5 ns/operation
+
+## c1 allocbench heap --rounds 262144
+# host start +0.000 end +3.511 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 95968 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 3242.887 ms; 20694172 operations/s; 48.3 ns/operation
+
+## c2 allocbench heap --rounds 262144
+# host start +0.000 end +3.513 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 103022 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 2828.461 ms; 23726286 operations/s; 42.1 ns/operation
+
+## c3 allocbench heap --rounds 262144
+# host start +0.000 end +3.516 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 103663 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 3105.628 ms; 21608792 operations/s; 46.3 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 2: aggregate host wall 2.137 s
+## c0 allocbench pages --rounds 2048
+# host start +0.000 end +2.137 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 42055 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 2028.290 ms; 2019 operations/s; 495187.9 ns/operation
+
+## c1 allocbench pages --rounds 2048
+# host start +0.000 end +2.129 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 42452 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 2066.855 ms; 1982 operations/s; 504603.3 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 4: aggregate host wall 4.309 s
+## c0 allocbench pages --rounds 2048
+# host start +0.000 end +4.288 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 42893 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4218.293 ms; 971 operations/s; 1029856.6 ns/operation
+
+## c1 allocbench pages --rounds 2048
+# host start +0.000 end +4.306 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 73281 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4148.006 ms; 987 operations/s; 1012696.9 ns/operation
+
+## c2 allocbench pages --rounds 2048
+# host start +0.000 end +4.307 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 68102 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4143.652 ms; 988 operations/s; 1011633.8 ns/operation
+
+## c3 allocbench pages --rounds 2048
+# host start +0.000 end +4.309 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 40286 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4093.093 ms; 1001 operations/s; 999290.4 ns/operation
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+### concurrent 4: aggregate host wall 4.731 s
+## c0 allocbench heap --rounds 262144
+# host start +0.000 end +1.296 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench heap: size=64 live=128 rounds=262144 mixed=no profile=off
+Clock-call loop: 85231 ns/read (1000 reads); not subtracted
+33554432 allocation attempts, 33554432 releases, 0 failures; peak live payload 8192 bytes
+Elapsed 1004.704 ms; 66794684 operations/s; 15.0 ns/operation
+
+## c1 allocbench pages --rounds 2048
+# host start +0.000 end +4.731 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+allocbench pages: size=65536 live=1 rounds=2048 mixed=no profile=off
+Clock-call loop: 80426 ns/read (1000 reads); not subtracted
+2048 allocation attempts, 2048 releases, 0 failures; peak live payload 65536 bytes
+Elapsed 4492.351 ms; 912 operations/s; 1096765.3 ns/operation
+
+## c2 iobench write data://mix3.bin --rounds 2 --sync
+# host start +0.000 end +4.281 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+iobench write: source=generated output=data://mix3.bin buffer=4080 rounds=2 warmup=1 fixture=1048576 bytes
+Clock-call loop: 70018 ns/read (1000 reads); not subtracted
+Interface: libpyxis file handles; storage=grow from zero sync=file (preparation untimed, completion separate)
+RAM replacement profiling: off (measured transfers only)
+Host FILE profiling: off (measured transfers only)
+warmup 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+sample 1: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=597456600 ns (597.457 ms); 1.674 MiB/s
+  file_sync=87596300 ns (87.596 ms)
+sample 2: OK; requested=1048576 read=0 written=1048576 bytes; failed_pass=0
+  file_read_calls=0 short_reads=0 file_write_calls=258 short_writes=0
+  transfer=620907960 ns (620.908 ms); 1.611 MiB/s
+  file_sync=84866270 ns (84.866 ms)
+Output retained: data://mix3.bin
+Transfer summary: 2 verified samples; elapsed median=609.182 ms range=597.457..620.908 ms; throughput at median elapsed=1.642 MiB/s
+File sync summary: 2 verified samples; elapsed median=86.231 ms range=84.866..87.596 ms
+
+## c3 ttcp -t -n 192 10.0.2.2
+# host start +0.000 end +3.974 s complete={"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}
+ttcp-t: 192 buffers of 8192 bytes, port 5001 -> 10.0.2.2
+ttcp-t: 1572864 bytes in 3.840320 seconds = 0.391 MiB/s (including closure)
+
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+# final {"type":"final","cause":"shell_exit","process_reason":1,"process_reason_name":"exited","exit_status":0,"drain":"complete"}
+######## blockstats
+## before native grow
+target: rd_bytes=1426432 wr_bytes=0 rd_operations=310 wr_operations=0 flush_operations=0 wr_total_time_ns=0 rd_total_time_ns=9769710 flush_total_time_ns=0 rd_merged=0 wr_merged=0 idle_time_ns=2024339449
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1756700 flush_total_time_ns=108864 rd_merged=0 wr_merged=0 idle_time_ns=13907258843
+## after native grow
+target: rd_bytes=1750016 wr_bytes=7794688 rd_operations=389 wr_operations=393 flush_operations=172 wr_total_time_ns=14311134 rd_total_time_ns=12612222 flush_total_time_ns=5169938 rd_merged=0 wr_merged=0 idle_time_ns=1230357530
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1756700 flush_total_time_ns=108864 rd_merged=0 wr_merged=0 idle_time_ns=19120438282
+## after prepared
+target: rd_bytes=1950720 wr_bytes=21110784 rd_operations=438 wr_operations=749 flush_operations=272 wr_total_time_ns=25653807 rd_total_time_ns=14656316 flush_total_time_ns=7720080 rd_merged=0 wr_merged=0 idle_time_ns=1225993546
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1756700 flush_total_time_ns=108864 rd_merged=0 wr_merged=0 idle_time_ns=25239811177
+## after copy+sync
+target: rd_bytes=2278400 wr_bytes=28897280 rd_operations=518 wr_operations=1141 flush_operations=444 wr_total_time_ns=37890694 rd_total_time_ns=17192738 flush_total_time_ns=11543972 rd_merged=0 wr_merged=0 idle_time_ns=1240860091
+usbdisk: rd_bytes=186880 wr_bytes=0 rd_operations=34 wr_operations=0 flush_operations=1 wr_total_time_ns=0 rd_total_time_ns=1756700 flush_total_time_ns=108864 rd_merged=0 wr_merged=0 idle_time_ns=30466692582

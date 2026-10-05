@@ -69,7 +69,8 @@ See [QEMU troubleshooting](docs/development/qemu.md) for host emulator boot fail
 The [shell guide](docs/userland/shell.md) and [edit/build/run walkthrough](docs/development/edit-build-run.md)
 cover ordinary guest use.
 
-Processes stay on their assigned CPU. The BSP owns kernel allocation, VM mutation
+The scheduler places and balances processes across the CPUs their space allows,
+excluding the BSP on multicore boots. The BSP owns kernel allocation, VM mutation
 and cleanup, and runs preemptible kernel tasks; user syscall paths remain
 non-preemptible. See [SMP ownership](docs/kernel/smp.md), [userspace](docs/kernel/userspace.md)
 and [memory](docs/kernel/memory.md). Low-level allocation contracts live in

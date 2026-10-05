@@ -26,8 +26,6 @@ struct space
   struct pointer_object *pointer; /* Space retains the initial reference. */
   struct display_object *display; /* Space retains the initial reference. */
   struct console_object *console; /* Space retains the initial reference. */
-  /* Every task in this space runs on this CPU until task migration exists. */
-  size_t cpu_index;
   /* Boot CPU indices this space's tasks may use, one bit each in
    * space_cpu_words() words. Fixed at boot; empty when init did not start. */
   uint64_t *allowed_cpus;
@@ -38,11 +36,10 @@ struct space
 void space_init(const struct boot_framebuffer *boot_fb);
 /* Words in an allowed-CPU bitmap covering every boot CPU index. */
 size_t space_cpu_words(void);
-/* Appends a workload space titled NAME whose tasks run on CPU_INDEX, which
- * ALLOWED_CPUS must contain unless the bitmap is empty. Takes ownership of the
- * kmalloc'd bitmap. BSP only, before task_schedule(); spaces are never
- * destroyed. Panics on exhaustion. */
-struct space *space_create(const char *name, uint64_t *allowed_cpus, size_t cpu_index);
+/* Appends a workload space titled NAME whose tasks may run on ALLOWED_CPUS.
+ * Takes ownership of the kmalloc'd bitmap. BSP only, before task_schedule();
+ * spaces are never destroyed. Panics on exhaustion. */
+struct space *space_create(const char *name, uint64_t *allowed_cpus);
 bool space_allows_cpu(const struct space *space, size_t cpu_index);
 /* Boot only: writes TEXT to the space's terminal, for a space that cannot start. */
 void space_report(struct space *space, const char *text);

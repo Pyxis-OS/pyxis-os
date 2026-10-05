@@ -334,9 +334,8 @@ void user_launch_init(struct space *space, const char *image_uri,
     goto fail;
   }
   /* The title still holds the configured name: no task has run yet. */
-  klog("userspace: space %s: %s entry=%p, CPU %zu\n", space->title, image_uri,
-       (void *)entry, space->cpu_index);
-  if (user_task_create_on(space->cpu_index, process, entry,
+  klog("userspace: space %s: %s entry=%p\n", space->title, image_uri, (void *)entry);
+  if (user_task_create(process, entry,
         USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE) != MM_OK) {
     goto fail;
   }
