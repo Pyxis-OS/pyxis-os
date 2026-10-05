@@ -1,6 +1,9 @@
 # Runtime SMP and independent spaces
 
 Status: agreed milestone direction, 2026-10-01; implementation not started.
+Task 1 is complete. On 2026-10-05 the evidence was re-audited at main `83c08d6`,
+the [pre-implementation baseline](../development/experiments/smp-task1-baseline/README.md)
+was recorded, and the owner accepted the [task-1 decisions](#task-1-decisions).
 The prerequisite [native filesystem writer](../devices/filesystem-native-adapter.md)
 is complete.
 This milestone replaces the earlier proposal to combine CPU-independent spaces
@@ -84,19 +87,31 @@ shared services. Per-space resource accounting/quotas remain separate work.
 
 ## Evidence and safety boundaries
 
-Read-only investigation used main `36a199a`, after filesystem task-1 acceptance.
-These entry points identify the main coupling; recheck them against the completed
-filesystem-core revision before implementation. No new speedup or contention
-measurement is established by this investigation.
+The task-1 audit read main `83c08d6` (2026-10-05), after the native writer,
+system-updates task 2, USB installer C.3/C.4 and default-on xHCI. It was code
+reading only; no row was established by forcing a path at runtime. It replaces the
+earlier `36a199a` table and adds the USB, per-space input/presentation and native
+filesystem couplings that landed since.
 
-| Current coupling | Evidence at the inspected revision | Required change or retained guarantee |
+| Current coupling | Evidence at `83c08d6` | Required change or retained guarantee |
 | --- | --- | --- |
-| One space per CPU; init and UI lookup by CPU | `kernel/space.c`, `kernel/user/boot.c`, `kernel/user/launch.c` | Independent registry/session configuration; explicit context for kernel services. |
-| CPU equality in task preparation and execution-group admission | `user_task_prepare_on()` in `kernel/task.c`; `execution_group_check()` and `execution_group_launch_begin()` | Keep space/group authority while making execution placement mutable. |
-| Ready queues, parking and stop publication | `kernel/task.c` | Preserve queue locking and early-wakeup handshake; publish no stack still executing. |
-| Dispatch state and user entry | `arch/x86_64/user.c`, `arch/x86_64/syscall_entry.S` | Install destination CR3, entry stack and user CPU state; kernel GS remains CPU-local. |
-| Heap/PMM/VM have one allocator owner and shared scratch aliases | `kernel/mm/heap.c`, `kernel/mm/pmm.c`, `kernel/mm/vm.c`, `arch/x86_64/paging.c` | Synchronize metadata, provide CPU-local scratch, prove growth/publication and mapping lifetime. |
-| Serial services rely on BSP execution and IF=0 | `kernel/service/request.c`, `kernel/fs/npfs.c`, `kernel/fs/hostfs.c`, `kernel/virtio/blk.c`, `kernel/net/interface.c` | Retain ownership initially. Off-BSP workers need explicit cross-CPU handoffs, not just different affinity. |
+| One space per CPU; init, UI and Caelum identity by CPU index | `space_init_all()` in `kernel/space.c` stores each space in `arch_cpu_at(i)->space`; CPU 0 gets the log TTY and initial focus. `user_launch_initial()` in `kernel/user/boot.c` parses `init.N` options, chooses primary CPU 1 (CPU 0 on one CPU) and panics on CPU-0 init with several CPUs. `user_launch_init()` in `kernel/user/launch.c` takes the space from the CPU and withholds the title grant from CPU 0. | Independent registry and initial-space configuration ([decision 1](#task-1-decisions)); explicit context for kernel services. |
+| Boot init grammar is also a userspace and installed-media contract | `Makefile` (`INIT_DEFAULT`, `INIT_PRIMARY`, `INIT_CPUS`) and `scripts/configure-boot.sh` write `init=`, `init.primary=` and `init.N=`. The installer (`userspace/installer/main.c`) writes `init.primary=app://init-installed`, and `esp_read.c` recognizes an installed ESP by that token. The 0.0.1 stick carries it. | Replace the grammar explicitly, together with the installer and updater (decision 1); never reinterpret an old index. |
+| Per-space console, display, keyboard and pointer objects are created by CPU index | `space_init_all()` creates them for each CPU; `keyboard_create()` and `pointer_create()` assert BSP. The BSP presenter `space_present_task()` drains the global keyboard/mouse queues into `active_space` and drops input aimed at CPU 0's space on multicore boots. `space_switch()` takes a CPU index, and the bar draws only the first `SPACES_NAV_COUNT` CPU spaces. | Create the same objects per configured space and route by registry order. The presenter may stay a BSP task. |
+| CPU identity in launch and group admission | `user_task_prepare_on()` requires `process->space == arch_cpu_at(cpu_index)->space`. `user_task_publish_group()` asserts that a batch has one `cpu_index`. `execution_group_check()` and `execution_group_launch_begin()` compare the group's stored `cpu_index`. The launcher captures `arch_cpu_index()` into its request and relies on "placement cannot change while capture sleeps". | Keep space/group authority but remove CPU identity from admission; publish batches across several queues (task 3). |
+| Ready queues, parking, stop and wake | `task->cpu_index` is fixed at creation. Wake re-enqueues on, and stop notifies, that CPU. Timed waits, sleeping kernel tasks, task reaping and object retirement run only on CPU 0. `kernel_task_create()` always enqueues on CPU 0. | Preserve queue locking and the early-wakeup handshake; change `cpu_index` only under the queue lock at agreed safe points. |
+| Dispatch state and user entry | `arch/x86_64/user.c` saves FP/segment state eagerly per task and restores user GS. The syscall stack comes from `%gs` and is set at every dispatch. Reading found no other pinning there. | Install destination CR3, entry stack and user CPU state; kernel GS remains CPU-local. |
+| Heap, PMM, VM, pressure and scratch aliases have one unsynchronized owner | `kernel/mm/heap.c`, `pmm.c`, `vm.c` and `pressure.c` take no locks; `pmm_alloc()` updates pressure state. `kmalloc()` and `pmm_alloc()` assert nothing themselves; callers keep BSP and IF=0. `map_scratch()` in `arch/x86_64/paging.c` asserts BSP and serves page-table walks, frame zeroing and space creation from two global slots, `SCRATCH_TABLE` and `SCRATCH_DATA`. | Synchronize metadata and statistics, including pressure state; provide CPU-local scratch; settle growth publication (decision 4). |
+| Heap growth shares reusable kernel VM | `add_pool()` takes its range from the general first-fit kernel VM list, which also serves task stacks, DMA, display frames, image loading and npfs buffers. It backs the range eagerly and never removes a pool, so each pool keeps one of the 256 kernel range records. Other freed ranges coalesce and can be reused at once; unmapping is a local `invlpg`. Task-stack reuse relies on the CR3 reload at dispatch, with PCID and global pages off. | Decision 4; general kernel-range reuse stays with its existing owner and protocol. |
+| BSP request executor and serial workers | The executor and its storage/completion rules are in `kernel/service/request.c`. The HOST transport worker is `filesystem_worker()` in `kernel/virtio/pci.c`. There is one virtio-blk worker per disk, one network worker (`kernel/net/interface.c`) and the terminal readiness worker (`kernel/user/readiness.c`), all BSP kernel tasks asserting BSP and IF state. | Retain ownership. Off-BSP workers need explicit cross-CPU handoffs, not just different affinity. |
+| Native filesystem writer, cache and background flush | One BSP kernel task, `npfs_worker` in `kernel/fs/npfs.c`, owns every store call; `npfs_require_worker()` asserts CPU 0 with IF=1. `kernel/fs/npfs_store.c` allocates heap and kernel VM for metadata, cache, scratch, bitmap and write runs under IF=0. Flush (`CONFIG_NPFS_FLUSH_SECONDS`, default 30) and one-second maintenance use `task_wait_sleep_until()`, so they depend on BSP timed-wait expiry. Submission, forwarding, retirement and mount/disk object creation assert BSP; block waits and 1 ms retry sleeps run there too. | Retained as a BSP service; its deadlines must keep firing while the BSP also runs userspace (today's 1-CPU boot already does). Moving it is post-milestone and needs synchronized block clients. |
+| USB host and storage | `xhci_prepare()` runs on the BSP before AP startup and allocates every ring, context, arena and record. MSI-X targets the BSP (`apic_bsp_msi_message()`). One BSP `controller_worker` per controller drains events and runs USB storage, waking on activity or at least every 10 ms (`USB_WORKER_POLL_MS`). `usb/block.c` and `storage/block.c` clients assert BSP. `storage/gpt.c` runs per-disk scan tasks and a USB discovery poll, and allocates during rescan. | Retained as a BSP service with no allocation elsewhere. Its recurring wakeups are BSP load that BSP-eligible userspace will share. |
+| Device interrupts | Every MSI-X and I/O APIC route targets the BSP. | May stay on the BSP; wakeups must reach the task's current CPU. |
+
+The baseline measured the consequence. With 4 CPUs, two and four concurrent
+compute-bound sessions take about 2.1 and 4.2 times one session, while the
+debugger shows CPUs 0, 2 and 3 idle. Under mixed load, BSP-serviced clients slow
+by 2–3 times and TCP throughput falls to 0.42 of its single-client rate.
 
 ### Scheduler and process lifetime
 
@@ -169,7 +184,141 @@ Local capability growth and other allocation-backed operations are later bounded
 follow-ups unless required for this memory path; allocator availability alone does
 not authorize replacing their ownership contracts.
 
+## Task-1 decisions
+
+Owner decisions on 2026-10-05:
+
+- Native ThinkPad validation is required at task 8. An owner-run native check is
+  recommended after task 4.
+- The plan's follow-up says "declarative YAML init". The existing configuration
+  is Lua: `app://config/session.lua` and `network.lua`, which session.pxe
+  evaluates after init hands off. The [Lua direction](development-paths.md) also
+  proposes Lua instead of YAML. This mismatch is recorded here and left
+  unresolved. It does not affect the initial-space syntax below.
+
+Decisions 1–4 below were accepted by the owner on 2026-10-05. They are the
+current direction for tasks 2–6.
+
+### Decision 1 (accepted): initial space configuration and syntax
+
+- The kernel command line stays the trusted source. The kernel already parses
+  it and the installer already writes it, so no new parser or file format is
+  needed.
+- Ordered `space.NAME=IMAGE` options replace `init=`, `init.primary=` and
+  `init.N=`. Each option creates one initial space and runs IMAGE in it as that
+  space's trusted init.
+- The optional `space.NAME.cpus=LIST` is that space's launcher ceiling.
+- The order of the options is the tab order after Caelum. Caelum's log space is
+  always first and is not configured.
+- NAME is 1–31 characters from `a-z`, `0-9` and `-`, and must be unique. It
+  matches the `.cpus` option and identifies the space in diagnostics only. It
+  grants no authority, and init still sets the title.
+- LIST is a set of dense boot CPU indices, for example `0,2-3`. Script
+  `affinity` (decision 3) uses the same syntax.
+- In Make, `SPACES="development=app://init readonly=app://init-readonly
+  remote=app://init-remote"` and an empty-by-default `SPACE_CPUS="NAME=LIST …"`
+  replace `INIT_DEFAULT`, `INIT_PRIMARY` and `INIT_CPUS`. `INIT` still stages
+  `app://init`.
+- Every boot creates Caelum plus the configured spaces, whatever the CPU count.
+  Spare CPUs no longer get idle spaces.
+- The installer writes `space.pyxis=app://init-installed`. The updater accepts
+  the 0.0.1 `init.primary=app://init-installed` token only to recognize an
+  installed ESP, and then rewrites it. This migration is the one intended
+  compatibility path. It is to be recorded as technical debt until the owner's
+  0.0.1 stick has been updated.
+
+### Decision 2 (accepted): single-CPU defaults
+
+- A one-CPU boot creates the same configured spaces as any other boot, each with
+  its own tab and objects, all eligible on CPU 0. The primary-only fallback that
+  shares Caelum's terminal is removed; Caelum still gets no title grant.
+- Boot focus is Caelum on every CPU count, as it is on multicore boots today.
+  On one CPU, this replaces landing directly in the shell.
+- A space whose configured ceiling names an offline CPU does not start its init.
+  Its tab and the log report why, while the other spaces and the boot continue.
+  The set is never silently narrowed.
+
+### Decision 3 (accepted): trusted-init affinity authority and handoff
+
+- Authority is a new `SPACE_RIGHT_SET_AFFINITY` on the existing `space` grant
+  that each space's init already receives. The kernel stores the space's ceiling
+  from boot configuration, and no capability can change the ceiling.
+- The setup window closes permanently at the first launch performed from the
+  space, whether by its init or by any holder of its grants. The kernel's own
+  start of init does not count. Scripts therefore run `affinity LIST` before
+  `service start` and the `session` handoff. Closing the window at the first launch means no
+  already-launched task ever needs to be re-placed.
+- This also keeps delegation harmless. Grants can be copied with equal or
+  reduced rights, and the handoff forwards the `space` grant for titles, but by
+  then the window has closed. The handoff still reduces that grant to
+  `SPACE_RIGHT_SET_TITLE`.
+- While the window is open, repeated requests are each validated and applied
+  atomically, and the last successful one wins. An empty set, an offline CPU or a
+  CPU outside the ceiling fails and changes nothing.
+- The request commits under the scheduler queue lock. If the caller's current CPU
+  is excluded, the scheduler moves the caller at its user-return safe point, so
+  user code sees success only on an eligible CPU. This agrees with the migration
+  rule above: a blocked syscall still resumes on its previous CPU. On one CPU,
+  the only valid set is `0`.
+
+### Decision 4 (accepted): heap-growth mapping
+
+Use a dedicated, never-reused heap arena.
+
+- Reserve a fixed kernel virtual window for heap pools, outside the general
+  first-fit list, and advance it monotonically under a growth lock that is
+  separate from the heap lock.
+- An allocation that misses drops the heap lock, takes the growth lock and
+  rechecks, because another CPU may already have grown the heap.
+- Each growth maps zeroed frames into virtual addresses that were never mapped
+  before. It then publishes the new pool with `tlsf_add_pool()` under the heap
+  lock.
+- On failure, the growth unmaps locally and frees its frames. Its virtual range
+  is retired, never reused.
+- Pools are never removed, as today. A virtual address that is never reused
+  cannot have a stale remote translation, and no other CPU touches a range
+  before it is published. Publication therefore needs no shootdown.
+- Heap pools also stop consuming the 256 general range records. The window size
+  is a named layout constant, and running out of it is NO_MEMORY.
+
+In the task-1 baseline workloads, the kernel heap grew only when RAM files grew:
+six pools of 276 KiB to 2.1 MiB. The [heap growth record](../development/experiments/smp-task1-baseline/README.md#kernel-heap-growth)
+gives the counts that task 6 should compare against.
+
+### Review notes carried from #410
+
+The [#410 review](https://git.internal/PyxisOS/pyxis-os/pulls/410) approved task 1
+and left these notes for later tasks. They are proposals; none is an accepted
+decision. Each task settles its own note before implementing it.
+
+- **Task 2: install entry.** `boot/limine/limine.conf` starts the installer
+  with `init=app://init-idle init.primary=app://init-install.pxe boot.install=1`.
+  Decision 1 must give it a `space.NAME=` form as well, and the installer's
+  written configuration must follow.
+- **Task 2: migration check.** Changing the grammar makes the first update of
+  the 0.0.1 stick a grammar migration. That update is also the deferred C.4
+  Update round trip. Proposal: in QEMU, install with `4dc804a`, update with the
+  new media, then boot the target alone. The owner's native ThinkPad update
+  afterwards closes C.4 and exercises the migration.
+- **Task 4: IPC baseline gap.** `iobench pipe` and `ipcbench` need the local
+  framebuffer session, so the task-1 baseline lacks them. Wake latency and
+  placement are what tasks 3–4 change. Capture both before task 4 lands, for
+  example through QEMU `sendkey`/`screendump`.
+- **Task 6: arena sizing.** RAM FILE backing is `kmalloc` storage that doubles as
+  the file grows, and pools are never removed. The arena therefore bounds the
+  largest RAM-file working set for the whole boot. A failed doubling also retires
+  its entire range.
+  - Proposal: name the sizing rule, for example "at least the largest supported
+    physical memory, carved from the 64 GiB kernel VM".
+  - Proposal: expose retired-range accounting as a counter.
+  - Proposal: if the sizing becomes awkward, revisit RAM-file backing; it need
+    not live in the heap.
+
 ## Performance records and validation
+
+The [task-1 baseline](../development/experiments/smp-task1-baseline/README.md)
+(main `83c08d6`, nested KVM, 4 and 1 CPUs, xHCI active) provides the
+pre-implementation numbers. Later tasks repeat its commands and configuration.
 
 Capture a baseline before implementation and a comparable result after the
 milestone, plus matched before/after records for substantial intermediate changes
@@ -190,7 +339,8 @@ Select a small reproducible set from [allocbench](../development/allocation-prof
 [I/O and IPC tools](../development/io-ipc-baselines.md) and existing TCP measurements:
 
 - Warm heap allocation, fresh backing growth and page allocation/release.
-- RAM/HOST reads, growing writes and copies; native reads with unchanged fixtures.
+- RAM/HOST reads, growing writes and copies; native reads with unchanged fixtures;
+  native writes and sync on RAM-backed disk images, with xHCI enabled and recorded.
 - TCP throughput with matched payload and connection configuration.
 - Concurrent sessions running allocation and I/O/network work, recording per-client
   latency/throughput and aggregate progress as well as single-client results.
@@ -208,6 +358,8 @@ repeated memory growth/release, allocation failure unwind, affinity restrictions
 CPU-independent session/input/display routing, tab overflow and both scrolling
 ends, and counters returning to expected idle ownership. Check init requests
 within/outside the launcher ceiling, single-CPU setup and session handoff. Distinguish code inspection from behavior actually observed.
+Task 8 also requires native ThinkPad validation; an owner-run native check after
+task 4 is recommended.
 
 Success requires demonstrated parallel process execution and local private-memory
 work without changing authority or lifetime guarantees. No speedup percentage is
@@ -219,12 +371,14 @@ record them rather than broadening the milestone without agreement.
 Tasks may be split further for review; do not start the next implicitly. Each PR
 updates current subsystem docs only for behavior it implements.
 
-1. [ ] **Rebase the investigation and capture the baseline.** After native writer
+1. [x] **Rebase the investigation and capture the baseline.** After native writer
    completion, audit changed worker/memory/lifetime dependencies and record the
    bounded performance set above. Settle session configuration, trusted-init
    affinity authority/handoff, single-CPU defaults and the mapping-growth design
    before dependent implementation.
    Record any unresolved correctness decisions rather than inventing requirements.
+   Completed 2026-10-05: audit, [baseline](../development/experiments/smp-task1-baseline/README.md)
+   and accepted [decisions](#task-1-decisions).
 2. [ ] **Separate spaces and boot sessions from CPU topology.** Add independent
    lookup and update init selection, navigation, presentation/input and explicit
    service context. Implement the fixed-width scrolling bar and directional
@@ -254,13 +408,15 @@ updates current subsystem docs only for behavior it implements.
    Verify concurrent callers on distinct roots, migrated callers, termination and
    BSP eligibility. Record backing-growth/page-operation and mixed-load results.
 8. [ ] **Validate and close.** Run the CPU/device matrix, independent-space and
-   lifetime scenarios and matched final measurements. Document remaining serial
-   services and accepted limits; rewrite this milestone as an implemented kernel
+   lifetime scenarios, native ThinkPad validation and matched final measurements.
+   Document remaining serial services and accepted limits; rewrite this milestone as an implemented kernel
    reference, preserving thread/worker follow-ups in WIP and technical debt.
 
 ## Subsequent work
 
 A declarative YAML init is an agreed follow-up direction, not an SMP dependency.
+Existing configuration is Lua instead; that mismatch is recorded under
+[task-1 decisions](#task-1-decisions), not resolved.
 A userspace launcher would interpret it and invoke the same native setup operations
 as scripts: mounts, bindings, networking, affinity and final session launch.
 Configuration requests resources within granted authority; parsing it grants none.

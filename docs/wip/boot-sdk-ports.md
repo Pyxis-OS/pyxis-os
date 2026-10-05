@@ -139,7 +139,10 @@ new kernel facilities; for example vi, [Links](../userland/links.md) and less.
 The first SMP step is a spike: task 1 of the milestone, which rebases the
 investigation, captures the baseline and settles its open decisions. It starts
 when resources allow and no major kernel work conflicts. A throwaway prototype
-branch is not part of task 1 unless the owner asks for one.
+branch is not part of task 1 unless the owner asks for one. On 2026-10-05 the
+audit and [baseline](../development/experiments/smp-task1-baseline/README.md)
+were recorded and all task-1 decisions accepted; implementation tasks
+have not started.
 
 After SMP, the candidates are dynamic space creation (the new tab and its
 launch flow), a file navigator and multiplexing. The scrolling space bar itself
