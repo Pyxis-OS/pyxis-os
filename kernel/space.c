@@ -34,6 +34,8 @@
 #define SPACES_NAV_COUNT 4
 
 static const struct boot_framebuffer *screen;
+/* Registry order starts at Caelum. Boot appends before the presenter starts. */
+static struct space *caelum_space, *last_space;
 static struct space *active_space;
 
 static struct framebuffer *spaces_nav_fb;
@@ -95,59 +97,62 @@ static struct tty *tty_alloc(const struct framebuffer *fb) {
   return tty;
 }
 
-void space_init_all(const struct boot_framebuffer *boot_fb)
+static struct space *space_alloc(const char *title, size_t cpu_index, bool focused)
+{
+  KASSERT(arch_cpu_index() == 0 && cpu_index < arch_cpu_count());
+  arch_clock_maintain();
+  struct space *space = kmalloc(sizeof(*space));
+  if (!space) {
+    panic("cannot allocate space");
+  }
+  *space = (struct space){.cpu_index = cpu_index};
+  atomic_init(&space->title_locked, false);
+  size_t length = strlen(title);
+  KASSERT(length && length <= SPACE_TITLE_MAX);
+  memcpy(space->title, title, length + 1);
+  ktrace("Initializing Space: %s\n", space->title);
+
+  space->fb = fb_alloc(screen, screen->width, screen->height - SPACES_NAV_HEIGHT);
+  space->tty = tty_alloc(space->fb);
+  space->console = console_create(space->tty);
+  if (!space->console) {
+    panic("cannot allocate space console");
+  }
+
+  space->display = display_create(space);
+  if (!space->display) {
+    panic("cannot allocate space display");
+  }
+
+  space->keyboard = keyboard_create(space, focused);
+  if (!space->keyboard) {
+    panic("cannot allocate space keyboard");
+  }
+
+  space->pointer = pointer_create(space, focused);
+  if (!space->pointer) {
+    panic("cannot allocate space pointer");
+  }
+  return space;
+}
+
+void space_init(const struct boot_framebuffer *boot_fb)
 {
   screen = boot_fb;
-
-  for (size_t i = 0; i < arch_cpu_count(); ++i) {
-    arch_clock_maintain();
-    struct space *space = kmalloc(sizeof(*space));
-    if (!space) {
-      panic("cannot allocate space");
-    }
-    *space = (struct space){0};
-    atomic_init(&space->title_locked, false);
-    if (i == 0) {
-      static_assert(sizeof(KERNEL_NAME) <= sizeof(space->title));
-      memcpy(space->title, KERNEL_NAME, sizeof(KERNEL_NAME));
-    } else {
-      sprintf(space->title, "CPU %zu", i);
-    }
-    ktrace("Initializing Space: %s\n", space->title);
-
-    space->fb = fb_alloc(boot_fb, boot_fb->width, 
-        boot_fb->height - SPACES_NAV_HEIGHT);
-    space->tty = tty_alloc(space->fb);
-    space->console = console_create(space->tty);
-    if (!space->console) {
-      panic("cannot allocate space console");
-    }
-
-    space->display = display_create(space);
-    if (!space->display) {
-      panic("cannot allocate space display");
-    }
-
-    space->keyboard = keyboard_create(space, i == 0);
-    if (!space->keyboard) {
-      panic("cannot allocate space keyboard");
-    }
-
-    space->pointer = pointer_create(space, i == 0);
-    if (!space->pointer) {
-      panic("cannot allocate space pointer");
-    }
-
-    arch_cpu_at(i)->space = space;
-
-    if (i == 0) {
-      log_set_tty(space->tty);
-      active_space = space;
-    }
-  }
-  klog("spaces: %zu CPU spaces initialized\n", arch_cpu_count());
-
+  static_assert(sizeof(KERNEL_NAME) <= SPACE_TITLE_MAX + 1);
+  caelum_space = space_alloc(KERNEL_NAME, 0, true);
+  last_space = caelum_space;
+  active_space = caelum_space;
+  log_set_tty(caelum_space->tty);
   spaces_nav_fb = fb_alloc(boot_fb, boot_fb->width, SPACES_NAV_HEIGHT);
+}
+
+struct space *space_create(const char *name, size_t cpu_index)
+{
+  struct space *space = space_alloc(name, cpu_index, false);
+  last_space->next = space;
+  last_space = space;
+  return space;
 }
 
 static void lock_title(struct space *space)
@@ -198,14 +203,14 @@ static void draw_spaces_nav()
   const size_t tab_width = spaces_nav_fb->width / SPACES_NAV_COUNT;
   const size_t max_len = (tab_width / bizcat.width) - 2;
 
+  struct space *space = caelum_space;
   for (size_t i = 0; i < SPACES_NAV_COUNT; i++) {
     fb_fill_rect(spaces_nav_fb, tab_width * i, 0, tab_width, SPACES_NAV_HEIGHT,
         aardvark_scheme.palette[0]);
     fb_rect(spaces_nav_fb, tab_width * i, 0, tab_width, SPACES_NAV_HEIGHT,
         aardvark_scheme.palette[8]);
 
-    if (i < arch_cpu_count()) {
-      struct space *space = arch_cpu_at(i)->space;
+    if (space) {
       char title[SPACE_TITLE_MAX + 1];
       snapshot_title(space, title);
 
@@ -223,6 +228,7 @@ static void draw_spaces_nav()
             padding + bizcat.height + 1, len * bizcat.width, 1,
             aardvark_scheme.foreground);
       }
+      space = space->next;
     }
   }
 }
@@ -295,20 +301,36 @@ void space_present()
   }
 }
 
+/* BSP only, preserves IF. Moves keyboard and pointer focus with the selection. */
+static void switch_space(struct space *next)
+{
+  KASSERT(arch_cpu_index() == 0);
+  uint64_t flags = cpu_save_interrupts();
+  if (next != active_space) {
+    keyboard_focus(active_space->keyboard, false);
+    pointer_focus(active_space->pointer, false);
+    active_space = next;
+    keyboard_focus(next->keyboard, true);
+    pointer_focus(next->pointer, true);
+  }
+  cpu_restore_interrupts(flags);
+}
+
+/* Selection stops at both ends of the registry; it does not wrap. */
 static void switch_adjacent_space(bool next)
 {
-  size_t count = arch_cpu_count();
-  for (size_t index = 0; index < count; ++index) {
-    if (arch_cpu_at(index)->space != active_space) {
-      continue;
-    }
-
-    if (next) {
-      space_switch(index + 1 == count ? 0 : index + 1);
-    } else {
-      space_switch(index == 0 ? count - 1 : index - 1);
+  if (next) {
+    if (active_space->next) {
+      switch_space(active_space->next);
     }
     return;
+  }
+  struct space *previous = NULL;
+  for (struct space *space = caelum_space; space != active_space; space = space->next) {
+    previous = space;
+  }
+  if (previous) {
+    switch_space(previous);
   }
 }
 
@@ -325,8 +347,8 @@ static void handle_space_input(void)
       uint64_t flags = cpu_save_interrupts();
       /* Lost scan bytes can include a space shortcut, so no queued stream can
        * be trusted to describe what the user meant to send. */
-      for (size_t i = arch_cpu_count() > 1 ? 1 : 0; i < arch_cpu_count(); ++i) {
-        keyboard_reset_input(arch_cpu_at(i)->space->keyboard);
+      for (struct space *space = caelum_space->next; space; space = space->next) {
+        keyboard_reset_input(space->keyboard);
       }
       cpu_restore_interrupts(flags);
       continue;
@@ -346,7 +368,8 @@ static void handle_space_input(void)
         continue;
       }
     }
-    if (arch_cpu_count() > 1 && active_space == arch_cpu_at(0)->space) {
+    /* Caelum's space has no input reader. */
+    if (active_space == caelum_space) {
       continue;
     }
 
@@ -367,15 +390,15 @@ static void handle_pointer_input(void)
       /* The device was not reset, so a button may still be held. Treat all as
        * held: each must be released and pressed again before it counts. */
       device_buttons = MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT | MOUSE_BUTTON_MIDDLE;
-      for (size_t i = arch_cpu_count() > 1 ? 1 : 0; i < arch_cpu_count(); ++i) {
-        pointer_reset_input(arch_cpu_at(i)->space->pointer);
+      for (struct space *space = caelum_space->next; space; space = space->next) {
+        pointer_reset_input(space->pointer);
       }
     } else {
       /* Presses are judged against the device, not a space, so a button held
        * across a space switch is not new to the space that gains focus. */
       uint32_t pressed = event.buttons & ~device_buttons;
       device_buttons = event.buttons;
-      if (arch_cpu_count() == 1 || active_space != arch_cpu_at(0)->space) {
+      if (active_space != caelum_space) {
         pointer_route_event(active_space->pointer, &event, pressed);
       }
     }
@@ -400,21 +423,4 @@ void space_present_task(void *argument)
     }
     kernel_task_sleep_until(deadline);
   }
-}
-
-void space_switch(size_t index)
-{
-  KASSERT(arch_cpu_index() == 0);
-  uint64_t flags = cpu_save_interrupts();
-  if (index < arch_cpu_count()) {
-    struct space *next = arch_cpu_at(index)->space;
-    if (next != active_space) {
-      keyboard_focus(active_space->keyboard, false);
-      pointer_focus(active_space->pointer, false);
-      active_space = next;
-      keyboard_focus(next->keyboard, true);
-      pointer_focus(next->pointer, true);
-    }
-  }
-  cpu_restore_interrupts(flags);
 }

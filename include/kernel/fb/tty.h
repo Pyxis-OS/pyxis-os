@@ -77,6 +77,5 @@ void tty_put_char(struct tty *tty, char c);
 void tty_clear(struct tty *tty);
 void tty_fresh_line(struct tty *tty);
 
-struct tty *get_tty(void);
 
 #endif // KERNEL_FB_TTY_H

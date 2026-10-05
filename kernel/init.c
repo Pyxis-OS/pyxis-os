@@ -75,7 +75,7 @@
   system_info_init();
   arch_clock_maintain();
 
-  space_init_all(&boot->framebuffer);
+  space_init(&boot->framebuffer);
   arch_clock_maintain();
 
   task_init();

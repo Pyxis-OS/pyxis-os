@@ -21,11 +21,6 @@ const struct color_scheme aardvark_scheme = {
 
 struct tty global_tty = {0};
 
-struct tty *get_tty(void)
-{
-  return cpu_current()->space->tty;
-}
-
 void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
     char c, size_t x, size_t y, uint32_t fg, uint32_t bg)
 {

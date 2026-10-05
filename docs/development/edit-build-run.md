@@ -93,7 +93,7 @@ session app://session.pxe --configure-network --start-remote-services
 Build the separate ISO and existing remote client:
 
 ```sh
-make -j16 image INIT=/tmp/init-usb-development.sh INIT_CPUS= MOUNT_DISK="$usb_guid"
+make -j16 image INIT=/tmp/init-usb-development.sh SPACES=usb=app://init MOUNT_DISK="$usb_guid"
 make -C tools remote
 ```
 

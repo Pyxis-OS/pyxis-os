@@ -2,10 +2,12 @@
 
 `make run CPUS=4` boots one QEMU socket with four cores and one thread per core.
 `CPUS` defaults to one and also applies to `make debug`. With multiple CPUs,
-CPU 0 (the BSP) services allocation and cleanup. Each other CPU runs its
-selected [init](../userland/init.md); defaults start shells on CPUs 1 and 2, the
-remote terminal server on CPU 3, and idle init on further CPUs. Children stay on their parent's CPU. A single-CPU boot
-runs the primary init on the BSP.
+CPU 0 (the BSP) services allocation and cleanup. Boot creates the configured
+[spaces](../userland/init.md) independently of the CPU count. Until tasks can
+migrate, each space's tasks run on one CPU: the workload CPUs from 1 onward in
+configuration order, wrapping, or the BSP on a single-CPU boot. The defaults put
+Development, Read-only and Remote on CPUs 1–3; further CPUs stay idle.
+Children stay on their parent's CPU.
 CPU indices are dense, stable for the boot, and distinct from hardware APIC IDs.
 
 ## Boot handoff
@@ -56,7 +58,7 @@ Each CPU then runs its own ready queue round-robin with local timer preemption.
 Its permanent boot stack becomes its scheduler stack. Tasks never migrate.
 
 The BSP loads a private image and user stack, wraps that address space in a
-process belonging to the target CPU's space, then submits the process using:
+process belonging to a space placed on the target CPU, then submits the process using:
 
 ```c
 enum mm_result result = user_task_create_on(cpu_index, process, entry, stack_top);
@@ -66,7 +68,7 @@ enum mm_result result = user_task_create_on(cpu_index, process, entry, stack_top
 shorthand for CPU zero. Submission may occur before or after scheduling starts,
 but only on the BSP with IF=0 and outside interrupt/fault entry. Success transfers
 sole ownership of the process to the task; failure leaves it with the caller.
-The target CPU must host the process's owning space. Do not inspect or mutate
+The target CPU must be the one recorded by the process's owning space. Do not inspect or mutate
 the process or its address space after transfer. There is one task per process.
 
 Batch launch splits submission into BSP-only `user_task_prepare_on()` and

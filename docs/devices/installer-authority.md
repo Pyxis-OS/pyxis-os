@@ -3,13 +3,13 @@
 The live image has a separate `Install Pyxis` Limine entry. `BOOT_MENU_TIMEOUT`
 is a build setting, default `0` for immediate normal boot. Build install media
 with `BOOT_MENU_TIMEOUT=5` to show the menu for five seconds. Both entries are
-generated for either value. The install entry adds `boot.install=1`:
-Caelum selects native `app://init-install.pxe` on the primary workload CPU and
-idle init on every other workload CPU. The BSP remains kernel-only on multicore
-boots. Duplicate install options or values other than `1` fail boot.
+generated for either value. The install entry's command line is
+`space.install=app://init-install.pxe boot.install=1`. `boot.install=1` requires
+exactly one configured space. Duplicate install options, values other than `1`
+or another space count fail boot.
 
 Normal init, sessions and applications receive no raw-disk service. Install mode
-gives only its primary trusted init the `disks`, `boot_kernel` and `boot_archive`
+gives only that space's trusted init the `disks`, `boot_kernel` and `boot_archive`
 resources. Selecting an executable with the same name during normal boot does
 not supply these grants. Other init resources retain their ordinary contracts.
 
