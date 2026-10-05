@@ -1,0 +1,75 @@
+diff --git a/kernel/mm/pmm.c b/kernel/mm/pmm.c
+index ccf555f..480a705 100644
+--- a/kernel/mm/pmm.c
++++ b/kernel/mm/pmm.c
+@@ -18,6 +18,22 @@ static size_t frame_count;
+  * nothing is taken, woken or zeroed while holding it. */
+ static struct spinlock pmm_lock;
+ static struct pmm_stats stats;
++/* SCRATCH ONLY */
++volatile uint64_t pmm_debug_wait_cycles, pmm_debug_hold_cycles, pmm_debug_calls, pmm_debug_scanned;
++static uint64_t pmm_debug_acquired;
++static void debug_lock(void)
++{
++  uint64_t start = __builtin_ia32_rdtsc();
++  spin_lock(&pmm_lock);
++  pmm_debug_acquired = __builtin_ia32_rdtsc();
++  pmm_debug_wait_cycles += pmm_debug_acquired - start;
++  ++pmm_debug_calls;
++}
++static void debug_unlock(void)
++{
++  pmm_debug_hold_cycles += __builtin_ia32_rdtsc() - pmm_debug_acquired;
++  spin_unlock(&pmm_lock);
++}
+ 
+ static bool bit_get(const uint8_t *bitmap, size_t frame)
+ {
+@@ -158,6 +174,7 @@ static phys_addr_t take_run_locked(size_t pages)
+ 
+   size_t run = 0;
+   for (size_t frame = 1; frame < frame_count; ++frame) {
++    ++pmm_debug_scanned;
+     if (bit_get(unavailable_bitmap, frame)) {
+       run = 0;
+       continue;
+@@ -185,11 +202,11 @@ phys_addr_t pmm_alloc(size_t pages)
+     return 0;
+   }
+ 
+-  spin_lock(&pmm_lock);
++  debug_lock();
+   phys_addr_t physical = take_run_locked(pages);
+   /* Start asynchronous cache reclamation before physical exhaustion. */
+   bool pressure = !physical || stats.free_frames < stats.total_frames / 16;
+-  spin_unlock(&pmm_lock);
++  debug_unlock();
+ 
+   /* The notification can wake a task, which takes the queue lock. */
+   if (pressure) {
+@@ -206,7 +223,7 @@ void pmm_free(phys_addr_t physical, size_t pages)
+     panic("PMM: invalid free phys=0x%lx pages=%zu", physical, pages);
+   }
+ 
+-  spin_lock(&pmm_lock);
++  debug_lock();
+   /* Validate the whole extent before changing anything. Eligibility is a second
+    * bitmap so reserved and metadata frames cannot be freed as allocations. */
+   for (size_t i = first; i < first + pages; ++i) {
+@@ -221,13 +238,13 @@ void pmm_free(phys_addr_t physical, size_t pages)
+ 
+   stats.free_frames += pages;
+   stats.allocated_frames -= pages;
+-  spin_unlock(&pmm_lock);
++  debug_unlock();
+ }
+ 
+ struct pmm_stats pmm_get_stats(void)
+ {
+-  spin_lock(&pmm_lock);
++  debug_lock();
+   struct pmm_stats snapshot = stats;
+-  spin_unlock(&pmm_lock);
++  debug_unlock();
+   return snapshot;
+ }

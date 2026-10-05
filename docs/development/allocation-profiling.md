@@ -81,33 +81,28 @@ memory gauge: releases may refer to allocations predating BEGIN. Heap growth
 runs expose pool count/bytes acquired during the window; freeing libc blocks does
 not release those pools. Existing pools and fragmentation are not inspected.
 
-Each admitted private-memory request records five boundaries:
+Each private-memory operation that reaches the address space records three
+boundaries, all in the caller's own syscall since SMP task 7a:
 
-1. Request preparation before parking.
-2. After leaving the task stack/private root and establishing the parked handoff,
-   just before taking the request publication lock.
-3. Immediately before BSP private-memory service.
-4. Immediately after service, before wakeup.
-5. Caller resumption after restoring its address space and task stack.
+1. Syscall entry, before validation.
+2. Immediately before and after the address-space change: this interval is
+   service.
+3. After the reply is copied, before the counters are updated.
 
-The four intervals and their end-to-end total have elapsed-time sums and maxima.
-Queue time includes publication lock/link overhead and waiting for the BSP
-executor; service includes private allocation bookkeeping, pages, zeroing, mappings
-and any kernel heap growth it causes. Resume includes notification and scheduling. Totals exclude
-initial syscall validation, reply copying and aggregate-counter updates. Invalid
-requests rejected before scheduler admission are not counted. No additional clock
-reads occur for unprofiled memory requests.
+Service includes private allocation bookkeeping, pages, zeroing, mappings and
+any kernel heap growth it causes. Total runs from syscall entry through reply
+copying, so total minus service is validation and copying. Requests rejected
+before reaching the address space are not counted. No additional clock reads
+occur for unprofiled memory requests.
 
-Transient timing samples live in the typed memory request in the caller's reusable
-request allocation. Persistent memory, FILE and HOST aggregates share a separate
-816-byte allocation, eagerly zeroed during user-task preparation; kernel workers
-allocate neither area. Collection remains caller-scoped under the current
-one-task-per-process model. The profiling subsystem owns controls and caller
-accessors; task provides only the current profile storage adapter. The deferred
-handoff gives the BSP executor exclusive access to the request while the caller
-is parked; it records service timestamps before waking the caller. The resumed
-caller alone updates the aggregates before releasing the request reservation.
-No allocator lock or private-memory allocation policy is changed.
+Before SMP task 7a, operations ran on the BSP executor and the profile also
+split publication, BSP queue and resumption time; the historical results below
+use those phases. Persistent memory, FILE and HOST aggregates share a separate
+720-byte allocation (816 bytes before task 7a), eagerly zeroed during user-task
+preparation; kernel workers allocate none. Collection remains caller-scoped
+under the current one-task-per-process model. The profiling subsystem owns
+controls and caller accessors; task provides only the current profile storage
+adapter.
 
 This measures userspace heap performance and kernel private-memory service.
 Standalone `kmalloc` throughput, PMM/VM subphase timings and system-wide accounting

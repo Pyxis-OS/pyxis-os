@@ -75,12 +75,13 @@ the request afterward; the caller may immediately consume, reuse or retire it.
 COMPLETE is not an asynchronous polling interface. The caller consumes results,
 updates any caller-local profile and explicitly releases the reservation.
 
-MEMORY and every DISPLAY operation add DEFERRED before QUEUED. Their catalog
-entries require the scheduler to leave the task stack, activate the kernel root,
-clear entry/current-task state and establish parking before publication. This
-lends an inactive private address space to BSP. Resumption reloads the process
-root before accessing the saved task stack. The same ordering applies to BSP
-userspace. See [VM ownership](memory.md) and [SMP handoffs](smp.md).
+Every DISPLAY operation adds DEFERRED before QUEUED. Its catalog entry requires
+the scheduler to leave the task stack, activate the kernel root, clear
+entry/current-task state and establish parking before publication. This lends an
+inactive private address space to BSP. Resumption reloads the process root before
+accessing the saved task stack. The same ordering applies to BSP userspace. See
+[SMP handoffs](smp.md). Private memory used the same deferred path until SMP task
+7a; it now runs in the caller's syscall ([memory](memory.md#execution)).
 
 HOST adds FORWARDED after SERVICING. The executor transfers it to the existing
 transport worker without waiting and makes no further request access. The HOST
@@ -118,7 +119,6 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 | RAM directory allocation/discard | Ordinary; returned unpublished entries or transferred detached entries |
 | RAM FILE replacement | Ordinary; caller retains logical busy ownership and performs user copies |
 | Group creation / launch preparation and publication | Ordinary; atomic supervision/launcher installation, independent capture/batch ownership, sealed admission and unpublished-child rollback |
-| Private memory | Deferred; inactive process loan for allocation/release |
 | Display acquire/present/release | Deferred; inactive process and display loans for every operation |
 | HOST forwarding | Ordinary admission; existing HOST worker owns transport and final completion |
 | Native filesystem forwarding | Ordinary admission; bounded native worker owns core views/I/O and final completion |
@@ -157,7 +157,8 @@ Retirement, deadlines and resource waits remain scheduler responsibilities.
 ## Profiling and scheduling costs
 
 Transient timestamps travel in typed requests. Persistent MEMORY, FILE and HOST
-aggregates live in a separate caller-only block; the profiling subsystem owns
+aggregates live in a separate caller-only block (MEMORY's samples are now taken
+in the caller's own syscall); the profiling subsystem owns
 BEGIN/SNAPSHOT/END controls. Services never borrow the aggregates. Disabled
 collection adds no timestamp reads or submission-time allocations. See
 [allocation profiling](../development/allocation-profiling.md) and
@@ -206,7 +207,8 @@ request is HOST, requiring 8-byte alignment against the heap's 16-byte guarantee
 
 Group termination subsequently adds stop/cleanup tracking: task metadata is now
 784 bytes, the request header grows the largest record to 4,928 bytes, and combined
-user metadata/request/profiles total 6,528 bytes. The table above records the
+user metadata/request/profiles total 6,528 bytes. SMP task 7a then shrinks the
+profile block to 720 bytes, for 6,432 in total. The table above records the
 historical storage-consolidation measurement.
 
 Interactive combined checks used one and four CPUs in nested KVM, fixed QEMU

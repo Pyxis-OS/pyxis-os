@@ -44,44 +44,30 @@ There is no resize, fixed-address request, permission change, reserve-only mode,
 shared memory or per-region object/handle. The later userspace allocator can
 subdivide acquired regions without entering the kernel for each small allocation.
 
-## Address-space handoff
+## Execution
 
-VM mutation and physical/heap allocation remain on the BSP with interrupts
-disabled. The heap, physical allocator and scratch mappings underneath are
-already safe on other CPUs ([SMP](smp.md#memory-and-output-boundaries)), but
-their callers are not yet. A memory call cannot use the existing early-publication pattern of a
-capability-table growth request: the requester must stop using its private root
-before the BSP may modify it.
+ALLOCATE and RELEASE run in the caller's own syscall, on whichever CPU runs it,
+with interrupts disabled. They change the caller's private address space while
+it is active on that CPU, and nothing is lent to the BSP.
 
-The memory subsystem captures its operation, process loan and region in a typed
-BSP request in the caller's eagerly allocated reusable request area. Preparation
-zeroes that typed record and reserves the area through result consumption;
-submission allocates nothing. Persistent profiling uses a separate caller-only
-allocation, and resource wait links remain in task metadata. The closed service
-catalog requires deferred submission: after moving
-to the permanent stack, activating the kernel root and clearing entry/current-task
-state, the scheduler marks the task parked and publishes the request to the common
-FIFO. Publication lends exclusive private-VM ownership to the BSP. Neither the
-old CPU nor any other task accesses that address space during the loan.
+This relies on the single-task process model. The process's only task is the
+only user of its address space, and it cannot move to another CPU during a
+syscall. A CPU that stops running a task switches roots, and with PCID and
+global pages off that flushes its TLB. No other CPU can therefore hold this
+address space's translations, so unmapping needs only a local `invlpg`.
+Display requests, which still lend the space to the BSP, cannot overlap a
+memory call, because the task is inside one syscall at a time.
 
-The BSP executor changes the inactive space outside the request-queue lock with
-interrupts disabled, stores results in the typed record and clears the process
-loan. Completion precedes waking, which returns ownership; the executor makes
-no further access to that request or caller. Normal resumption reloads CR3 before
-touching the saved task stack. Only then does the allocation handler write its already
-validated user reply. Allocation cannot invalidate that reply because it adds
-a disjoint range. Release requires no user-memory access on resumption. The
-caller merges any timing sample into its profile and explicitly releases the
-request reservation after consuming the result; only then may another service
-reuse the area.
+The heap, physical allocator and scratch mappings underneath are safe on any
+CPU ([SMP](smp.md#memory-and-output-boundaries)). Range records come from the
+kernel heap, frames are zeroed through the caller's CPU's own scratch slot, and
+a failed allocation unwinds its partial backing before returning NO_MEMORY.
 
-The same path handles BSP userspace. Publication wakes the executor through the
-ordinary ready queue; there is no memory-specific scheduler sweep. No remote
-stack access, shared user mappings or TLB shootdown is introduced. This depends on the current
-single-task process model; the caller cannot move to another CPU while its syscall
-holds the loan. Group termination preserves this
-uninterruptible loan: the syscall continuation collects the result and releases
-the reservation before its task can retire.
+Allocation writes its already validated reply after changing the mappings; it
+cannot invalidate that reply because it adds a disjoint range. Release makes no
+user-memory access afterwards. A stop or group termination takes effect when
+the syscall returns, so a process's address space and allocation records are
+never torn down while its memory call runs.
 
 ## Native use
 
