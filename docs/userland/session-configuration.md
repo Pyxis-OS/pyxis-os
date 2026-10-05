@@ -32,6 +32,10 @@ and rebuild the image to change the system selection. It returns one table:
 return {
   timezone = "Europe/Bucharest",
   terminal = { tab_width = 8 },
+  environment = {
+    -- vi: three-column tab stops, spaces for Tab and autoindent.
+    EXINIT = "set ts=3 et ai",
+  },
 }
 ```
 
@@ -41,6 +45,22 @@ names, non-integral tab widths or widths outside 1–32 are errors. Fields are
 read directly from the returned tables; metatable lookups do not supply settings.
 An existing invalid/unreadable file produces a diagnostic and no shell launch.
 There is no fallback after a configuration error.
+
+`environment` adds variables to the shell's startup environment, for the local
+shell and for [remote terminal](remote-terminal.md) sessions alike. The shell
+forwards its whole environment to the programs it starts, so the packaged
+`EXINIT` gives [vi](vi.md) its default options. Each key is a variable name:
+an ASCII letter or underscore, then letters, digits or underscores. Each value
+is a string without NUL bytes. Other keys or values are configuration errors.
+`TZ` and `DNS_SERVER` are refused, because `timezone` and the network
+configuration set them. A configured variable replaces an inherited one of the
+same name. There is no separate size limit; launch fails with a diagnostic if
+the environment exceeds the 64 KiB startup metadata limit.
+
+Values are strings for now. Environment variables are expected to carry
+capabilities later, as in the
+[capability-valued shell variables](../wip/userspace-scheme-providers.md#prepared-requests-and-shell-handoff)
+idea, so string-only is not a permanent property of this table.
 
 Timezone names follow libc's IANA-name syntax: slash-separated components of
 ASCII letters, digits, underscore, hyphen and plus. UTC needs no file; other
@@ -59,7 +79,8 @@ the state and configuration stream are closed before launch.
 Both files are decoded before applying settings. The network consumer owns its
 [configuration policy and authority](../devices/networking.md#boot-configuration-and-use).
 When requested, network application precedes the first terminal change. The
-launcher preserves the startup environment except that it replaces `TZ` with the selected timezone
+launcher preserves the startup environment except that it adds or replaces the
+configured `environment` variables, replaces `TZ` with the selected timezone
 and `DNS_SERVER` with the shared chosen resolver's numeric IPv4 address. Without
 a published choice it uses profile DNS or `1.1.1.1`. Trusted setup publishes its
 DNS choice even without IPv4 assignment; startup performs no DNS lookup. It forwards the
