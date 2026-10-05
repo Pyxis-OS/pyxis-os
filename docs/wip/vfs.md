@@ -4,6 +4,11 @@ Status: working draft for discussion. This records a design direction, not an
 approved specification or an implementation plan. Names, interfaces and policies
 remain open. It complements the [spaces draft](spaces.md).
 
+The agreed [system layout](system-layout.md) of 2026-10-05 supersedes the
+read-only shared base described below. The system is a rescue archive plus
+writable system volumes. Program lookup replaces an overlay for system binaries.
+The overlay, publication and bundle ideas here remain open drafts.
+
 ## Shared base and private overlays
 
 All spaces would receive a shared, read-only system filesystem. Each space could

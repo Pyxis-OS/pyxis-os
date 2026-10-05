@@ -214,8 +214,8 @@ Owner decisions on 2026-10-05:
 - The plan's follow-up says "declarative YAML init". The existing configuration
   is Lua: `app://config/session.lua` and `network.lua`, which session.pxe
   evaluates after init hands off. The [Lua direction](development-paths.md) also
-  proposes Lua instead of YAML. This mismatch is recorded here and left
-  unresolved. It does not affect the initial-space syntax below.
+  proposes Lua instead of YAML. This mismatch was recorded here, and the owner
+  resolved it later on 2026-10-05: Lua stays (see [system layout](system-layout.md)). It does not affect the initial-space syntax below.
 
 Decisions 1–4 below were accepted by the owner on 2026-10-05. They are the
 current direction for tasks 2–6.
@@ -484,9 +484,11 @@ placeholder APIs:
   space's title. Today `SPACE_RIGHT_SET_TITLE` reaches only init, session and
   the interactive shell.
 
-A declarative YAML init is an agreed follow-up direction, not an SMP dependency.
-Existing configuration is Lua instead; that mismatch is recorded under
-[task-1 decisions](#task-1-decisions), not resolved.
+The YAML-versus-Lua mismatch recorded under [task-1 decisions](#task-1-decisions)
+was resolved on 2026-10-05. Configuration stays Lua, read by a userspace boot
+init (see [system layout](system-layout.md)). YAML waits until service
+monitoring and supervision exist. The rest of this paragraph describes that
+later direction, not an SMP dependency.
 A userspace launcher would interpret it and invoke the same native setup operations
 as scripts: mounts, bindings, networking, affinity and final session launch.
 Configuration requests resources within granted authority; parsing it grants none.
