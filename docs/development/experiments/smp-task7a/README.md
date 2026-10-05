@@ -108,7 +108,7 @@ used.
 Each frame allocation scans the bitmap bit by bit from frame 1, past every
 allocated frame, while holding the lock. Alone, a client almost never waits. With
 two, waiting is about as large as holding, so the clients largely take turns.
-This is the [technical-debt entry](../../../technical-debt.md#pmm-first-fit-scan-under-its-lock)
+This is the [technical-debt entry](../../../technical-debt.md#pmm-first-fit-search-under-its-lock)
 whose revisit point was task 7. 7a does not change the PMM; that awaits an owner
 decision.
 

@@ -1,0 +1,240 @@
+diff --git a/kernel/mm/pmm.c b/kernel/mm/pmm.c
+index ccf555f..0296c32 100644
+--- a/kernel/mm/pmm.c
++++ b/kernel/mm/pmm.c
+@@ -4,41 +4,59 @@
+ #include <kernel/panic.h>
+ #include <kernel/spinlock.h>
+ 
+-#define FRAMES_PER_BITMAP_BYTE 8
++#define FRAMES_PER_WORD 64
+ #define PMM_BITMAP_COUNT 2
+ 
+ /* Unavailable includes allocations and reservations. Allocatable is immutable
+- * after initialization, so reserved frames can never be freed by a caller. */
+-static uint8_t *unavailable_bitmap;
+-static uint8_t *allocatable_bitmap;
+-static size_t bitmap_bytes;
++ * after initialization, so reserved frames can never be freed by a caller.
++ * Bits past frame_count stay unavailable, so whole words can be scanned. */
++static uint64_t *unavailable_bitmap;
++static uint64_t *allocatable_bitmap;
++static size_t bitmap_words;
+ static size_t frame_count;
+ 
+-/* Protects unavailable_bitmap and stats after initialization. A leaf lock:
+- * nothing is taken, woken or zeroed while holding it. */
++/* Protects unavailable_bitmap, first_candidate and stats after initialization.
++ * A leaf lock: nothing is taken, woken or zeroed while holding it. */
+ static struct spinlock pmm_lock;
+ static struct pmm_stats stats;
++/* SCRATCH ONLY */
++volatile uint64_t pmm_debug_wait_cycles, pmm_debug_hold_cycles, pmm_debug_calls;
++static uint64_t pmm_debug_acquired;
++static void debug_lock(void)
++{
++  uint64_t start = __builtin_ia32_rdtsc();
++  spin_lock(&pmm_lock);
++  pmm_debug_acquired = __builtin_ia32_rdtsc();
++  pmm_debug_wait_cycles += pmm_debug_acquired - start;
++  ++pmm_debug_calls;
++}
++static void debug_unlock(void)
++{
++  pmm_debug_hold_cycles += __builtin_ia32_rdtsc() - pmm_debug_acquired;
++  spin_unlock(&pmm_lock);
++}
+ 
+-static bool bit_get(const uint8_t *bitmap, size_t frame)
++/* Every frame below this one is unavailable, so searches may start here. */
++static size_t first_candidate;
++
++static bool bit_get(const uint64_t *bitmap, size_t frame)
+ {
+-  size_t byte = frame / FRAMES_PER_BITMAP_BYTE;
+-  unsigned bit = frame % FRAMES_PER_BITMAP_BYTE;
+-  return (bitmap[byte] >> bit) & 1;
++  return (bitmap[frame / FRAMES_PER_WORD] >> (frame % FRAMES_PER_WORD)) & 1;
+ }
+ 
+-static void bit_set(uint8_t *bitmap, size_t frame, bool value)
++static void bit_set(uint64_t *bitmap, size_t frame, bool value)
+ {
+-  uint8_t mask = (uint8_t)(1u << (frame % FRAMES_PER_BITMAP_BYTE));
++  uint64_t mask = UINT64_C(1) << (frame % FRAMES_PER_WORD);
+   if (value) {
+-    bitmap[frame / FRAMES_PER_BITMAP_BYTE] |= mask;
++    bitmap[frame / FRAMES_PER_WORD] |= mask;
+   } else {
+-    bitmap[frame / FRAMES_PER_BITMAP_BYTE] &= (uint8_t)~mask;
++    bitmap[frame / FRAMES_PER_WORD] &= ~mask;
+   }
+ }
+ 
+-static size_t bitmap_size_for_frames(size_t frames)
++static size_t bitmap_words_for_frames(size_t frames)
+ {
+-  return (frames + FRAMES_PER_BITMAP_BYTE - 1) / FRAMES_PER_BITMAP_BYTE;
++  return (frames + FRAMES_PER_WORD - 1) / FRAMES_PER_WORD;
+ }
+ 
+ static uint64_t page_up(uint64_t value)
+@@ -77,7 +95,7 @@ struct pmm_bootstrap pmm_plan(const struct boot_info *boot)
+     panic("PMM: no usable physical pages");
+   }
+ 
+-  size_t bytes = bitmap_size_for_frames(plan.frame_count);
++  size_t bytes = bitmap_words_for_frames(plan.frame_count) * sizeof(uint64_t);
+   plan.metadata_pages = page_up(bytes * PMM_BITMAP_COUNT) / PAGE_SIZE;
+   size_t storage_bytes = plan.metadata_pages * PAGE_SIZE;
+ 
+@@ -105,8 +123,10 @@ void pmm_rebase(void *metadata)
+ {
+   KASSERT(metadata != NULL);
+ 
++  KASSERT(!((uintptr_t)metadata % alignof(uint64_t)));
++
+   unavailable_bitmap = metadata;
+-  allocatable_bitmap = unavailable_bitmap + bitmap_bytes;
++  allocatable_bitmap = unavailable_bitmap + bitmap_words;
+ }
+ 
+ void pmm_init(const struct boot_info *boot, struct pmm_bootstrap plan,
+@@ -115,10 +135,10 @@ void pmm_init(const struct boot_info *boot, struct pmm_bootstrap plan,
+   KASSERT(!unavailable_bitmap);
+ 
+   frame_count = plan.frame_count;
+-  bitmap_bytes = bitmap_size_for_frames(frame_count);
++  bitmap_words = bitmap_words_for_frames(frame_count);
+   pmm_rebase(metadata);
+-  memset(unavailable_bitmap, UINT8_MAX, bitmap_bytes);
+-  memset(allocatable_bitmap, 0, bitmap_bytes);
++  memset(unavailable_bitmap, UINT8_MAX, bitmap_words * sizeof(uint64_t));
++  memset(allocatable_bitmap, 0, bitmap_words * sizeof(uint64_t));
+ 
+   stats.metadata_pages = plan.metadata_pages;
+   uint64_t metadata_end = plan.metadata_phys + plan.metadata_pages * PAGE_SIZE;
+@@ -150,31 +170,65 @@ void pmm_init(const struct boot_info *boot, struct pmm_bootstrap plan,
+   stats.free_frames = stats.total_frames;
+ }
+ 
++/* The first available frame at or after FRAME, or frame_count. Fully
++ * unavailable words are skipped whole; the first available bit in a word is
++ * its lowest clear bit. */
++static size_t next_available(size_t frame)
++{
++  if (frame >= frame_count) {
++    return frame_count;
++  }
++  size_t word = frame / FRAMES_PER_WORD;
++  uint64_t available = ~unavailable_bitmap[word] & (UINT64_MAX << (frame % FRAMES_PER_WORD));
++  while (!available) {
++    if (++word == bitmap_words) {
++      return frame_count;
++    }
++    available = ~unavailable_bitmap[word];
++  }
++  size_t found = word * FRAMES_PER_WORD + (size_t)__builtin_ctzll(available);
++  return found < frame_count ? found : frame_count;
++}
++
++/* The first unavailable frame in [FRAME, LIMIT), or LIMIT. Scanning stops at
++ * LIMIT, so a check for a short run never walks a long free stretch. */
++static size_t next_unavailable(size_t frame, size_t limit)
++{
++  size_t word = frame / FRAMES_PER_WORD;
++  uint64_t taken = unavailable_bitmap[word] & (UINT64_MAX << (frame % FRAMES_PER_WORD));
++  while (!taken) {
++    if ((++word) * FRAMES_PER_WORD >= limit) {
++      return limit;
++    }
++    taken = unavailable_bitmap[word];
++  }
++  size_t found = word * FRAMES_PER_WORD + (size_t)__builtin_ctzll(taken);
++  return found < limit ? found : limit;
++}
++
++/* First fit: the lowest run of PAGES available frames, as before. */
+ static phys_addr_t take_run_locked(size_t pages)
+ {
+   if (pages > stats.free_frames) {
+     return 0;
+   }
+ 
+-  size_t run = 0;
+-  for (size_t frame = 1; frame < frame_count; ++frame) {
+-    if (bit_get(unavailable_bitmap, frame)) {
+-      run = 0;
+-      continue;
+-    }
+-
+-    ++run;
+-    if (run == pages) {
+-      size_t first = frame + 1 - pages;
+-      for (size_t i = first; i <= frame; ++i) {
++  size_t lowest = next_available(first_candidate);
++  for (size_t first = lowest; first < frame_count;) {
++    size_t limit = pages <= frame_count - first ? first + pages : frame_count;
++    size_t end = next_unavailable(first, limit);
++    if (end - first == pages) {
++      for (size_t i = first; i < end; ++i) {
+         bit_set(unavailable_bitmap, i, true);
+       }
+-
+       stats.free_frames -= pages;
+       stats.allocated_frames += pages;
++      first_candidate = first == lowest ? end : lowest;
+       return first * PAGE_SIZE;
+     }
++    first = next_available(end);
+   }
++  first_candidate = lowest;
+   return 0;
+ }
+ 
+@@ -185,11 +239,11 @@ phys_addr_t pmm_alloc(size_t pages)
+     return 0;
+   }
+ 
+-  spin_lock(&pmm_lock);
++  debug_lock();
+   phys_addr_t physical = take_run_locked(pages);
+   /* Start asynchronous cache reclamation before physical exhaustion. */
+   bool pressure = !physical || stats.free_frames < stats.total_frames / 16;
+-  spin_unlock(&pmm_lock);
++  debug_unlock();
+ 
+   /* The notification can wake a task, which takes the queue lock. */
+   if (pressure) {
+@@ -206,7 +260,7 @@ void pmm_free(phys_addr_t physical, size_t pages)
+     panic("PMM: invalid free phys=0x%lx pages=%zu", physical, pages);
+   }
+ 
+-  spin_lock(&pmm_lock);
++  debug_lock();
+   /* Validate the whole extent before changing anything. Eligibility is a second
+    * bitmap so reserved and metadata frames cannot be freed as allocations. */
+   for (size_t i = first; i < first + pages; ++i) {
+@@ -218,16 +272,19 @@ void pmm_free(phys_addr_t physical, size_t pages)
+   for (size_t i = first; i < first + pages; ++i) {
+     bit_set(unavailable_bitmap, i, false);
+   }
++  if (first < first_candidate) {
++    first_candidate = first;
++  }
+ 
+   stats.free_frames += pages;
+   stats.allocated_frames -= pages;
+-  spin_unlock(&pmm_lock);
++  debug_unlock();
+ }
+ 
+ struct pmm_stats pmm_get_stats(void)
+ {
+-  spin_lock(&pmm_lock);
++  debug_lock();
+   struct pmm_stats snapshot = stats;
+-  spin_unlock(&pmm_lock);
++  debug_unlock();
+   return snapshot;
+ }

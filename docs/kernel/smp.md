@@ -409,8 +409,10 @@ outside interrupt and fault entry:
     NO_MEMORY. `heap_get_stats()` reports arena use and retired bytes.
 
 - **Physical allocator.** `pmm_alloc()`, `pmm_free()` and `pmm_get_stats()`
-  serialize the frame bitmap and its counters with one short lock. Frames come
-  back unzeroed; the caller zeroes them outside the lock. Memory-pressure
+  serialize the frame bitmap and its counters with one short lock. The search
+  is first fit over 64-bit bitmap words, skipping fully allocated words and
+  starting from a hint below which every frame is unavailable. Frames come back
+  unzeroed; the caller zeroes them outside the lock. Memory-pressure
   notification can also come from any CPU.
 - **Scratch mappings.** Each CPU index owns two slots in the 2 MiB window at
   `TEMP_MAP_BASE`, enough for all 256 xAPIC IDs. Every slot's page-table
