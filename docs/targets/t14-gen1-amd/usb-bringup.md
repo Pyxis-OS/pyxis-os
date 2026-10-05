@@ -133,3 +133,88 @@ reset recovery; no errors occurred. Full/low-speed storage behind a high-speed
 hub, low-speed descendants, hotplug, writes, flushes and broader firmware/controller
 profiles remain unqualified. The checked-in `CONFIG_XHCI=n` default is unchanged.
 Test built-in ports before dock paths when collecting future recovery evidence.
+
+## 2026-10-05 first native installation (C.4)
+
+The owner installed Pyxis onto the nominal 128 GB SanDisk stick (`0781:55a9`)
+from PXE live media, booted the stick alone, and checked persistence across a
+synced power-off, as defined in C.4 of the [USB plan](../../wip/usb-installation.md).
+This is owner-reported evidence from screen photos, transcribed by Claude, not
+an agent-run measurement. The firmware version was not recorded. No dock hub was
+enumerated in the photographed boot. The stick was in a built-in port.
+
+### Pre-C.3 live media
+
+A first attempt used live media built from main `a12aa3b`, before
+[PR #407](https://git.internal/PyxisOS/pyxis-os/pulls/407) merged, so the
+installer inventory was still VirtIO-only. Read the room reported
+`No eligible disks. Nothing was written.` without listing the stick. The same
+boot qualified the stick for writes:
+
+```text
+xHCI 7:0.3: root port 6 USB 3.1 speed-id=4 slot=1 enabled; addressing pending
+usb: 7:0.3 port 6 device 781:55a9
+usb-bot: 7:0.3 port 6: media probe ready: BOT first-span and final-block probe complete
+usb-bot: 7:0.3 port 6: blocks=240328704 block-bytes=512 read-bytes=66048
+usb-bot: 7:0.3 port 6: writable=1 flush=1; write protection clear and cache synchronization qualified
+block: USB device 1 ready
+GPT: device 1 unsupported; primary=2 backup=2 partitions=0
+```
+
+Write protection read clear, and the qualifying blocking SYNCHRONIZE CACHE (10)
+succeeded, so neither [C.1 compatibility watchpoint](../../technical-debt.md#usb-writable-media-qualification-limits)
+was observed. Both GPT copies were absent. The kernel's map classification is
+`unsupported` because the stick still carried its factory MBR with a data
+partition. The installer's own consent scan does not use that classification.
+Other enumerated devices were the fingerprint reader (`06cb:00bd`) and
+Bluetooth (`8087:0029`) on `07:00.4`, and the camera (`5986:2130`) on `06:00.0`.
+
+### Installation and target-only boot
+
+Live media from main `4dc804a`, the PR #407 merge, ran Install with Read the
+room. The owner reported that the stick was eligible and that installation
+finished in about 15 seconds. The installer screen was not photographed. Booted
+alone from the stick, the installed system reported:
+
+```text
+net0: DHCP 192.168.0.50/24 with default gateway
+home://> ping 1.1.1.1
+4 attempted, 4 replies, 0 unanswered
+round-trip min/avg/max = 11.018/11.682/12.518 ms
+home://> fastfetch
+Kernel: Caelum 4dc804aab123
+CPU: AMD Ryzen 5 PRO 4650U (12)
+Memory (allocator): 117.27 MiB / 31.06 GiB (0%)
+Disk (system://): npfs - shared pool capacity: 114.10 GiB
+home://> ls system://
+SAFE_TO_WIPE
+```
+
+### Synced power-off persistence
+
+The owner finalized the installation and wrote a file:
+
+```text
+rm system://SAFE_TO_WIPE
+sync system://
+cat app://vi.pxe > system://keep.bin
+sync system://keep.bin
+sha256sum system://keep.bin
+bdcc20ff1d2b1b8c9cb2a374bb8245e442c0b61a13f751afff942d940cdf8846  system://keep.bin
+```
+
+After a synced power-off, the next stick-only boot (uptime 12 seconds) again
+reported `Caelum 4dc804aab123`. `ls system://` listed only `keep.bin`, and its
+SHA-256 was unchanged. Both the marker removal and the new file persisted.
+
+The owner tagged `4dc804a` as `0.0.1`, a signed annotated tag, as the first
+native installation.
+
+### Not covered
+
+- **The Update round trip.** The owner deferred it to the next update that is
+  actually needed.
+- **Power loss during writes,** uncertain I/O and other sticks, ports or the
+  dock path.
+- **The [configured-mount discovery latency measurement](../../technical-debt.md#configured-mount-discovery-latency),**
+  which remains deferred.
