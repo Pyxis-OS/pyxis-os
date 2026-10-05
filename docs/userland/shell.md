@@ -96,11 +96,16 @@ persistent machine-client use.
 
 `title [--optional] name` sets the current space's tab label; quote names with
 spaces, for example `title "Source editing"`. It accepts 1–63 printable ASCII
-characters and clips the visible label to the fixed tab width. An error leaves
-the old title unchanged. `--optional` only tolerates a missing title grant, as
-on the single-CPU Caelum fallback. Titles survive shell exit, and only session
+characters. An error leaves the old title unchanged. `--optional` only
+tolerates a missing title grant. Titles survive shell exit, and only session
 handoff inherits the grant by default. See [space titles](init.md#space-titles).
 Like the other builtins, `title` cannot run with `&`.
+
+`affinity LIST` narrows the CPUs the current space's tasks may use, for example
+`affinity 2-3` or `affinity 1,3`. It needs the affinity grant that only a
+space's trusted init receives, and it works only before the space's first
+launch. See [affinity setup](init.md#affinity-setup). Indices above 8191 are a
+usage error. Like the other builtins, `affinity` cannot run with `&`.
 
 A command without `/` is a bare name: `cat` opens `app://cat.pxe`. There is no
 PATH search or fallback. Names already ending in `.pxe` still receive the suffix

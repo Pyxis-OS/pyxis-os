@@ -6,6 +6,7 @@
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
+#include <kernel/task.h>
 #include <kernel/user.h>
 #include <kernel/user/launch.h>
 #include <kernel/mm/heap.h>
@@ -110,6 +111,8 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
   KASSERT(!group->count || group->execution_group == execution_group);
   group->parent = parent;
   group->execution_group = execution_group;
+  /* Affinity setup ends at the space's first launch request, whatever its outcome. */
+  task_space_close_setup(parent->space);
   struct process *child;
   uintptr_t entry;
   bool external = capture->image->backing == FILE_HOST ||

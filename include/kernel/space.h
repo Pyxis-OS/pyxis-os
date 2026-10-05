@@ -26,9 +26,15 @@ struct space
   struct pointer_object *pointer; /* Space retains the initial reference. */
   struct display_object *display; /* Space retains the initial reference. */
   struct console_object *console; /* Space retains the initial reference. */
-  /* Boot CPU indices this space's tasks may use, one bit each in
-   * space_cpu_words() words. Fixed at boot; empty when init did not start. */
-  uint64_t *allowed_cpus;
+  /* Bitmaps over boot CPU indices, space_cpu_words() words each. The ceiling
+   * is fixed at boot (empty when init did not start). The effective set starts
+   * as the ceiling and narrows only while setup is open; the scheduler queue
+   * lock protects both effective_cpus and setup_open. Staging holds a request
+   * being validated; only the space's sole process can use it while open. */
+  uint64_t *ceiling_cpus;
+  uint64_t *effective_cpus;
+  uint64_t *affinity_staging;
+  bool setup_open;
   struct space *next; /* Registry order; fixed once the scheduler starts. */
 };
 
@@ -36,10 +42,12 @@ struct space
 void space_init(const struct boot_framebuffer *boot_fb);
 /* Words in an allowed-CPU bitmap covering every boot CPU index. */
 size_t space_cpu_words(void);
-/* Appends a workload space titled NAME whose tasks may run on ALLOWED_CPUS.
- * Takes ownership of the kmalloc'd bitmap. BSP only, before task_schedule();
- * spaces are never destroyed. Panics on exhaustion. */
-struct space *space_create(const char *name, uint64_t *allowed_cpus);
+/* Appends a workload space titled NAME whose ceiling is CEILING_CPUS. Takes
+ * ownership of the kmalloc'd bitmap. Setup starts open. BSP only, before
+ * task_schedule(); spaces are never destroyed. Panics on exhaustion. */
+struct space *space_create(const char *name, uint64_t *ceiling_cpus);
+bool space_ceiling_allows(const struct space *space, size_t cpu_index);
+/* Queue lock held, or setup closed (the effective set is then fixed). */
 bool space_allows_cpu(const struct space *space, size_t cpu_index);
 /* Boot only: writes TEXT to the space's terminal, for a space that cannot start. */
 void space_report(struct space *space, const char *text);

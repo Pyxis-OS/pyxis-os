@@ -73,8 +73,22 @@ process.
 ### Placement and migration
 
 Each CPU's load is its queued tasks plus one while a task occupies it, kept under
-the queue lock. A user task may run on a CPU its space allows; on a multicore boot
-the BSP is excluded. There are no priorities or other scoring.
+the queue lock. A user task may run on a CPU in its space's effective set; on a
+multicore boot the BSP is excluded. There are no priorities or other scoring.
+
+Each space keeps two CPU sets:
+
+- **Ceiling:** fixed at boot from `space.NAME.cpus`.
+- **Effective set:** starts as the ceiling, and only trusted init's
+  [affinity setup](../userland/init.md#affinity-setup) narrows it, before the
+  space's first launch.
+
+The effective set and the setup flag change only under the queue lock. Once
+setup closes, which happens before any task other than init exists in the space,
+the set is fixed. If an affinity request excludes the caller's CPU, the caller
+switches out in `task_syscall_leave()` after saving its user state. Requeueing
+then always moves a task off a CPU its space no longer allows, and the syscall
+return completes on the new CPU from the task's own kernel stack.
 
 - **Publication** places each new task on the least-loaded CPU it may use. Ties
   prefer the launching parent's CPU, then the lowest index. Members of a batch

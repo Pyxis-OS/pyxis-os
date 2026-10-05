@@ -1,6 +1,7 @@
 #ifndef KERNEL_TASK_H
 #define KERNEL_TASK_H
 
+#include <abi/syscall.h>
 #include <kernel/mm/types.h>
 
 struct task_profile;
@@ -10,6 +11,7 @@ struct bsp_request;
 struct task;
 struct execution_group;
 struct execution_group_member;
+struct space;
 
 /* Current user task only; false for workers and before scheduler setup. A stop
  * request is permanent. Interruptible sleeps resume kernel cleanup, never
@@ -39,6 +41,13 @@ struct execution_group *task_cleanup_set_group(struct execution_group *group);
  * continuation has returned all loans, registrations and owned temporaries. */
 void task_syscall_enter(void);
 void task_syscall_leave(void);
+
+/* Launch admission from SPACE, IF=0: closes its affinity setup permanently. */
+void task_space_close_setup(struct space *space);
+/* Current user task in SPACE, IF=0. Commits an already validated effective CPU
+ * set while setup is open, else ENDPOINT_CLOSED. If the caller's CPU is now
+ * excluded, it moves at syscall return, before any user instruction runs. */
+enum call_status task_space_set_affinity(struct space *space, const uint64_t *cpus);
 
 /* Current user task or BSP kernel task, in task context with IF=0. Prepare its
  * wait record before publishing it under the resource lock, after checking the

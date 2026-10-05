@@ -4,6 +4,8 @@
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
+#include <kernel/memory.h>
+#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 struct space_control {
@@ -28,10 +30,62 @@ struct kernel_object *space_control_create(struct space *space)
   return &control->object;
 }
 
+static struct syscall_result set_affinity(struct space *space, uintptr_t request_address,
+    size_t request_size)
+{
+  struct { uint64_t cpus, cpu_count; } request;
+  if (request_size != sizeof(request)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request, request_address, sizeof(request))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  size_t count = arch_cpu_count();
+  if (!request.cpu_count || request.cpu_count > count) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  /* Staging needs no lock: while setup is open the caller is the space's only
+   * task, and once it closes the commit fails without using the contents. */
+  uint64_t *staging = space->affinity_staging;
+  size_t words = (request.cpu_count + 63) / 64;
+  memset(staging, 0, space_cpu_words() * sizeof(*staging));
+  if (!copy_from_user(staging, request.cpus, words * sizeof(*staging))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (request.cpu_count % 64 && staging[words - 1] >> (request.cpu_count % 64)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  bool any = false, outside = false, user_cpu = false;
+  for (size_t cpu = 0; cpu < request.cpu_count; ++cpu) {
+    if (!((staging[cpu / 64] >> (cpu % 64)) & 1)) {
+      continue;
+    }
+    any = true;
+    outside |= !space_ceiling_allows(space, cpu);
+    user_cpu |= cpu != 0 || count == 1;
+  }
+  if (!any) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (outside) {
+    return (struct syscall_result){CALL_DENIED, 0};
+  }
+  if (!user_cpu) {
+    return (struct syscall_result){CALL_UNAVAILABLE, 0};
+  }
+  return (struct syscall_result){task_space_set_affinity(space, staging), 0};
+}
+
 struct syscall_result space_control_call(struct kernel_object *object, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size)
 {
   struct space_control *control = (struct space_control *)object;
+  if (operation == SPACE_SET_AFFINITY) {
+    if (!(rights & SPACE_RIGHT_SET_AFFINITY) || process_current()->space != control->space) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    return set_affinity(control->space, request_address, request_size);
+  }
   if (operation != SPACE_SET_TITLE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }

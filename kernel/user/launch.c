@@ -178,7 +178,7 @@ void user_launch_init(struct space *space, const char *image_uri,
   handle_t space_handle;
   space_control = space_control_create(process->space);
   if (!space_control || capability_install(&process->capabilities, space_control,
-        SPACE_RIGHT_SET_TITLE, 0, &space_handle) != CAP_OK) {
+        SPACE_RIGHT_SET_TITLE | SPACE_RIGHT_SET_AFFINITY, 0, &space_handle) != CAP_OK) {
     goto fail;
   }
   object_release(space_control);

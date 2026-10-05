@@ -275,6 +275,38 @@ use the same named input/output and standard-stream forwarding as framebuffer
 consoles. The trusted remote startup path retains creation authority until it
 launches the supervisor; ordinary remote shells receive application handles only.
 
+## Affinity setup
+
+Trusted init can narrow its space's CPUs within the boot ceiling before
+anything else runs there:
+
+```sh
+#!app://shell.pxe
+title --optional "Remote"
+affinity 2-3
+session app://session.pxe --start-remote-services
+```
+
+`affinity LIST` uses the same list syntax as the ceiling. The `space` grant that each
+init receives carries `SPACE_RIGHT_SET_AFFINITY`. The `session` handoff forwards
+only the title right, so sessions, shells and commands cannot change affinity.
+
+The setup window closes permanently at the space's first launch request, whether
+by init or anyone else, and whatever its outcome. The kernel starting init does not count.
+Until then, repeated requests each replace the set. Children then inherit the
+narrowed set. A request fails without changing anything in these cases:
+
+| Case | Status |
+| --- | --- |
+| Empty set, or a CPU this boot does not have | BAD_REQUEST |
+| A CPU outside the ceiling, or no grant | DENIED |
+| Only CPU 0 on a multicore boot | UNAVAILABLE |
+| After the first launch | ENDPOINT_CLOSED |
+
+If the caller's own CPU is excluded, it moves to an allowed CPU before it
+returns to userspace. A failed `affinity` stops an init script, like any other
+failed command.
+
 ## Space titles
 
 `title "Development"` sets the caller's tab label. Packaged init scripts set
@@ -283,10 +315,11 @@ configured space's init receives the title grant. The scripts still use
 `title --optional`, which ignores only a missing capability; malformed text and
 operation failures still stop a script.
 
-The initial `space` resource grants `SPACE_RIGHT_SET_TITLE`. It is bound to
+The initial `space` resource grants `SPACE_RIGHT_SET_TITLE` and, for
+[affinity setup](#affinity-setup), `SPACE_RIGHT_SET_AFFINITY`. It is bound to
 that init's space, and the kernel also requires the caller to belong to the
 same space. No title resource is issued for Caelum. The shell's `session`
-handoff passes this grant to the session launcher, which passes it to the
+handoff passes the title right to the session launcher, which passes it to the
 interactive shell. Ordinary foreground/background commands receive no title
 grant. An explicit native launcher can delegate it within its space using the
 existing capability machinery.

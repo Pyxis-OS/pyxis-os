@@ -449,7 +449,9 @@ CPU-independent session/input/display routing, tab overflow and both scrolling
 ends, and counters returning to expected idle ownership. Check init requests
 within/outside the launcher ceiling, single-CPU setup and session handoff. Distinguish code inspection from behavior actually observed.
 Task 8 also requires native ThinkPad validation; an owner-run native check after
-task 4 is recommended.
+task 4 is recommended. The #417 review suggested showing the preemption push once
+before task 8, through a scratch log line or `dprintf`. The 4b scratch run logged
+only the affinity relocation, which uses the same requeue branch.
 
 Success requires demonstrated parallel process execution and local private-memory
 work without changing authority or lifetime guarantees. No speedup percentage is
@@ -482,9 +484,9 @@ updates current subsystem docs only for behavior it implements.
    Preserve launch rollback and transitive completion/termination semantics.
    The trusted-init affinity authority and handoff moved to task 4
    (task-3 decision 1).
-4. [ ] **Enable safe placement and migration.** Split into 4a (placement,
+4. [x] **Enable safe placement and migration.** Split into 4a (placement,
    balancing and migration; see the [4a record](../development/experiments/smp-task4a/README.md))
-   and 4b (affinity request). Use existing queue synchronization,
+   and 4b (affinity request, [setup](../userland/init.md#affinity-setup)). Use existing queue synchronization,
    bounded load-aware placement/balancing, remote notification and the agreed safe
    points. Add `SPACE_RIGHT_SET_AFFINITY`, the setup window, the native
    init-affinity request and the `affinity` script command with the agreed
