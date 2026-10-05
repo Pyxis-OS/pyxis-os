@@ -1,4 +1,5 @@
 #include <arch/paging.h>
+#include <arch/smp.h>
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
@@ -25,6 +26,16 @@ struct vm_space {
 };
 
 static struct vm_space kernel_space;
+
+/* The general kernel area stays with the BSP. Its ranges are reused, and
+ * changing a reused mapping that another CPU may hold would need a remote TLB
+ * shootdown. Heap growth maps its own arena instead. */
+static void require_kernel_owner(const struct vm_space *space)
+{
+  if (space == &kernel_space) {
+    KASSERT(arch_cpu_index() == 0);
+  }
+}
 
 static struct arch_address_space *page_space(struct vm_space *space)
 {
@@ -201,6 +212,7 @@ static enum mm_result split_free_range(struct vm_space *space,
 enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment,
                           uintptr_t *result)
 {
+  require_kernel_owner(space);
   if (!result) {
     return MM_INVALID;
   }
@@ -236,6 +248,7 @@ enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment
 
 enum mm_result vm_reserve_at(struct vm_space *space, uintptr_t base, size_t bytes)
 {
+  require_kernel_owner(space);
   size_t pages;
   if (!space || !space->head || (base & (PAGE_SIZE - 1)) ||
       !page_count(bytes, &pages)) {
@@ -283,6 +296,7 @@ static enum mm_result require_unmapped(struct vm_space *space,
 
 enum mm_result vm_release(struct vm_space *space, uintptr_t base, size_t bytes)
 {
+  require_kernel_owner(space);
   struct vm_range *range = find_range(space, base, bytes);
   if (!range || range->state != RANGE_RESERVED) {
     return MM_INVALID;
@@ -311,6 +325,7 @@ static void free_backing(struct vm_space *space, const struct vm_range *range,
 enum mm_result vm_back(struct vm_space *space, uintptr_t base, size_t bytes,
                        unsigned permissions)
 {
+  require_kernel_owner(space);
   struct vm_range *range = find_range(space, base, bytes);
   if (!range || range->state != RANGE_RESERVED ||
       !permissions_valid(space, permissions)) {
@@ -383,6 +398,7 @@ enum mm_result vm_alloc_at(struct vm_space *space, uintptr_t base, size_t bytes,
 
 enum mm_result vm_free(struct vm_space *space, uintptr_t base, size_t bytes)
 {
+  require_kernel_owner(space);
   struct vm_range *range = find_range(space, base, bytes);
   if (!range || range->state != RANGE_BACKED) {
     return MM_INVALID;
@@ -395,6 +411,7 @@ enum mm_result vm_free(struct vm_space *space, uintptr_t base, size_t bytes)
 
 struct vm_stats vm_get_stats(const struct vm_space *space)
 {
+  require_kernel_owner(space);
   struct vm_stats stats = {0};
   if (!space) {
     return stats;
@@ -514,6 +531,7 @@ static struct vm_range *range_containing(struct vm_space *space, uintptr_t base)
 enum mm_result vm_map(struct vm_space *space, uintptr_t base, phys_addr_t physical,
                       unsigned permissions)
 {
+  require_kernel_owner(space);
   struct vm_range *range = range_containing(space, base);
   if (!range || range->state != RANGE_RESERVED ||
       !permissions_valid(space, permissions)) {
@@ -524,6 +542,7 @@ enum mm_result vm_map(struct vm_space *space, uintptr_t base, phys_addr_t physic
 
 enum mm_result vm_map_mmio(uintptr_t base, phys_addr_t physical)
 {
+  require_kernel_owner(&kernel_space);
   struct vm_range *range = range_containing(&kernel_space, base);
   if (!range || range->state != RANGE_RESERVED) {
     return MM_INVALID;
@@ -534,6 +553,7 @@ enum mm_result vm_map_mmio(uintptr_t base, phys_addr_t physical)
 enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
                         phys_addr_t *physical)
 {
+  require_kernel_owner(space);
   struct vm_range *range = range_containing(space, base);
   if (!range || range->state != RANGE_RESERVED) {
     return MM_INVALID;
@@ -544,6 +564,7 @@ enum mm_result vm_unmap(struct vm_space *space, uintptr_t base,
 enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
                           unsigned permissions)
 {
+  require_kernel_owner(space);
   struct vm_range *range = range_containing(space, base);
   if (!range || (range->state != RANGE_RESERVED && range->state != RANGE_BACKED) ||
       !permissions_valid(space, permissions)) {
@@ -555,6 +576,7 @@ enum mm_result vm_protect(struct vm_space *space, uintptr_t base,
 enum mm_result vm_query(struct vm_space *space, uintptr_t address,
                         struct page_translation *result)
 {
+  require_kernel_owner(space);
   if (!space || !space->head) {
     return MM_INVALID;
   }

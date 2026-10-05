@@ -16,8 +16,9 @@ void vm_init(void);
 struct vm_space *vm_kernel_space(void);
 /* Requires an initialized heap. New spaces share kernel mappings and start
  * with an empty user area. Failure sets *result to NULL. Allocation, queries
- * and mutation are BSP-only, IF=0; no VM operations or heap allocation from
- * fault handlers. A running task must leave its private root and lend ownership
+ * and mutation are BSP-only, IF=0, and asserted for the kernel space, whose
+ * reused ranges have no remote invalidation; no VM operations from fault
+ * handlers. A running task must leave its private root and lend ownership
  * through the scheduler before BSP mutation; resumption reloads CR3. */
 enum mm_result vm_space_create(struct vm_space **result);
 /* Each CPU may activate the kernel space or a private space it exclusively
@@ -69,7 +70,7 @@ enum mm_result vm_query(struct vm_space *space, uintptr_t address,
 
 /* Narrow exception to BSP-only queries: IF=0 on the CPU exclusively executing
  * this private space, whose mappings must stay stable through access. Checks
- * every page for user read/write access without touching VM metadata or shared
+ * every page for user read/write access without touching VM metadata or
  * scratch mappings. Zero bytes ignores address; the space must still be active. */
 bool vm_user_buffer_accessible(struct vm_space *space, uintptr_t address,
                                size_t bytes, bool write);
