@@ -56,18 +56,21 @@ and repeat the same steps.
    allocbench heap --rounds 262144
    ```
 
-4. **Four concurrent clients.** Paste these four lines together. Each launches
-   in the background; wait about ten seconds and note the four `Elapsed` lines,
-   which may arrive after the prompt:
+4. **Four concurrent clients.** Don't paste several lines into the remote
+   shell. Typing competes with the jobs, and output interleaves with input. From
+   your Pyxis checkout on the desktop, start them together over one remote
+   connection instead:
 
-   ```text
-   allocbench heap --rounds 262144 &
-   allocbench heap --rounds 262144 &
-   allocbench heap --rounds 262144 &
-   allocbench heap --rounds 262144 &
+   ```sh
+   /shared/pxe/boot/smp-4a/par-heap.sh build/tools/pyxis-remote 4
    ```
 
-5. **Eight concurrent clients.** Repeat step 4 with eight copies of the line.
+   The script, staged next to the builds and not part of the repository, sends
+   four `allocbench heap --rounds 262144 &` lines at once. It waits, exits the
+   remote shell and prints each client's `Elapsed` line plus a count. It needs
+   `python3` on the desktop.
+
+5. **Eight concurrent clients.** Run the same script with `8` instead of `4`.
 
 6. **Pipes.** On the ThinkPad itself, press Super+Right to reach tab 4. Type:
 
@@ -93,6 +96,10 @@ In the nested VM, tabs 4–6 on the check build were bimodal. Some passes were
 faster than same-CPU pipes and some were 3–4× slower. If the ThinkPad shows tabs 4–6 clearly slower
 than tabs 7–8, the proposed fix is to start new tasks on their parent's CPU
 unless it is two or more tasks heavier.
+
+Before reporting, confirm which kernel ran. The check build logs
+`userspace: space development: app://init entry=0x…` in the Caelum tab with no
+CPU number. Main's line ends with `, CPU 1`.
 
 ## Report back
 
