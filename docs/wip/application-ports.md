@@ -25,8 +25,8 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. |
 | vi | [Implemented BusyBox vi port](../userland/vi.md), packaged in the normal image as the first modal editor before Neovim, with libc `ftruncate` and literal search. |
 | Links | [Implemented Links 2.30 port](../userland/links.md), packaged in the normal image as a text web browser. Every page loads through libc, so local files, directory listings and the HTTP(S) providers work alike, with libc directory reading and a narrow `stat`. |
-| less | BusyBox `less` after Links: a pager for logs, command output and plain text. It shares BusyBox's support library and terminal handling with the vi port, so it should add little new platform work. |
-| tar | BusyBox `tar` without compression, agreed 2026-10-05 for [in-Pyxis development](in-pyxis-development.md#1-busybox-tar): unpacking HTML documentation fetched as one archive. Regular files and directories only. |
+| less | [Implemented BusyBox pager](../userland/less.md) for files and pipelines, with literal search and libterm console input independent of stdin. |
+| tar | [Implemented uncompressed BusyBox ustar subset](../userland/tar.md) for [in-Pyxis development](in-pyxis-development.md#1-busybox-tar), with whole-archive validation and regular files/directories only. |
 | PDCurses | Investigate a native libterm backend for terminal applications, using its documented platform hooks for drawing, input, cursor control and delays. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
 | awk | Text filtering, field processing and small scripts; select an implementation after a libc/dependency probe. |
@@ -36,7 +36,7 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | pup | A Go command-line HTML parser and CSS-selector tool, with JSON output for pipelines. It is a small Go utility candidate; see the [Go runtime direction](toolchains-and-runtimes.md#go-cross-compiler-then-hosted-go-toolchain). |
 
 The owner queued **vi, then Links, then less** on 2026-10-04; vi and Links are
-complete. The goal is
+complete, as is less. The goal is
 offline development on Pyxis: reading documentation such as the Java SE 8
 Virtual Machine Specification with only what Pyxis provides. The specification
 is about 400 linked pages, too many to print, and Links pages through documents

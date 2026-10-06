@@ -632,6 +632,32 @@ recipe's libbb adapter covers only vi's helpers; BusyBox less will extend it.
 Input EOF exits and loses unsaved edits, as upstream does; Kilo handles that
 case explicitly.
 
+## less pager limits
+
+The [BusyBox pager](userland/less.md) retains read display lines for backward
+paging, with the selected line-count limit and process-memory bound. It measures
+screen dimensions once, displays ASCII, and searches literal case-sensitive text
+without highlights. There are no raw escapes, regex, shell commands or live
+refresh. A content read during refill/search blocks, so a stalled producer can
+delay keys; cached navigation performs no extra read. Revisit native readiness
+through a proven libc extension when an actual live-stream consumer needs it,
+and screen resizing when terminal size-change notification is designed.
+
+## tar archive limits
+
+The [BusyBox ustar subset](userland/tar.md) captures the whole input archive or
+all creation file contents in process memory before writing. Large archives can
+fail allocation before mutation; recursive creation also consumes stack by tree
+depth. Creation names are limited to 99 bytes plus directory slash. Compression,
+GNU/PAX extensions, links, `-C` and stdin/stdout archives are absent. Revisit these
+limits with a concrete larger documentation/archive consumer.
+
+Validation prevents unsafe archives from writing any members, and a read-only
+root fails on its first required mutation. Extraction and output writes are not
+transactional: later I/O/authority failures can leave earlier entries or partial
+files. Directory enumeration is live. Revisit streaming or archive-wide rollback
+only with an explicit snapshot/transaction design; ordinary close is not sync.
+
 ## Links port limits
 
 [Links](userland/links.md) loads every page synchronously, so a slow network
