@@ -4,6 +4,7 @@
 #include "buffer.h"
 #include "presentation.h"
 #include "transfer.h"
+#include "paste.h"
 #include <remote/terminal.h>
 
 #include <errno.h>
@@ -24,6 +25,8 @@
 #define BUFFER_CAPACITY 65536u
 #define INPUT_ESCAPE_CAPACITY 32u
 #define INPUT_ESCAPE_TIMEOUT_MS 100
+#define PASTE_CAPACITY 2048u
+#define DROP_COMMAND_CAPACITY 1024u
 #define CONNECT_TIMEOUT_MS 10000
 #define LOCAL_CLOSE_TIMEOUT_MS 5000
 /* One CSI erase can touch every row. Leave room for its bounded row commands. */
@@ -53,6 +56,22 @@ struct client {
   struct byte_buffer output;
   struct presentation screen;
   struct file_transfer *transfer;
+  bool empty_prompt;
+  bool prompt_uncertain;
+  bool prompt_allowed;
+  bool awaiting_completion;
+  bool rearm_prompt;
+  unsigned char prompt_escape[8];
+  size_t prompt_escape_length;
+  bool pasting;
+  bool paste_candidate;
+  bool paste_discard;
+  unsigned char paste[PASTE_CAPACITY];
+  size_t paste_length;
+  size_t paste_end_length;
+  bool drop_confirmation;
+  char drop_path[PASTE_PATH_CAPACITY];
+  char drop_command[DROP_COMMAND_CAPACITY];
   unsigned char incoming[REMOTE_HEADER_SIZE + REMOTE_PAYLOAD_MAX];
   size_t received;
   size_t frame_size;
@@ -83,7 +102,7 @@ static void restore_terminal(void)
     terminal_raw = false;
   }
   if (terminal_screen) {
-    const char restore[] = "\x1b[0m\x1b[r\x1b[?7h\x1b[?25h\x1b[0 q\x1b[?1049l";
+    const char restore[] = "\x1b[0m\x1b[r\x1b[?7h\x1b[?25h\x1b[0 q\x1b[?2004l\x1b[?1049l";
     size_t offset = 0;
     /* A full output queue must never prevent restoration of cooked input. */
     if (stdout_flags >= 0 && fcntl(STDOUT_FILENO, F_SETFL, stdout_flags | O_NONBLOCK) == 0) {
@@ -287,6 +306,33 @@ static int frame_header(struct client *client)
   return 0;
 }
 
+static void flush_prompt_escape(struct client *client)
+{
+  for (size_t i = 0; i < client->prompt_escape_length; ++i) {
+    transfer_output(client->transfer, &client->screen, &client->outgoing,
+        client->prompt_escape[i], monotonic_ms());
+  }
+  client->prompt_escape_length = 0;
+}
+
+static void interactive_output(struct client *client, unsigned char byte)
+{
+  static const unsigned char marker[] = "\x1b]133;B\a";
+  if (byte != marker[client->prompt_escape_length]) {
+    flush_prompt_escape(client);
+    if (byte != marker[0]) {
+      transfer_output(client->transfer, &client->screen, &client->outgoing, byte, monotonic_ms());
+      return;
+    }
+  }
+  client->prompt_escape[client->prompt_escape_length++] = byte;
+  if (client->prompt_escape_length == sizeof(marker) - 1) {
+    client->empty_prompt = client->prompt_allowed && !client->prompt_uncertain;
+    client->prompt_allowed = false;
+    client->prompt_escape_length = 0;
+  }
+}
+
 static int present_frame(struct client *client)
 {
   uint32_t type = remote_decode_u32(client->incoming);
@@ -298,8 +344,7 @@ static int present_frame(struct client *client)
     while (client->presented < length && budget-- &&
            buffer_space(&client->output) >= RENDER_BYTE_RESERVE &&
            buffer_space(&client->outgoing) >= TRANSFER_REPLY_RESERVE) {
-      transfer_output(client->transfer, &client->screen, &client->outgoing,
-          payload[client->presented], monotonic_ms());
+      interactive_output(client, payload[client->presented]);
       ++client->presented;
     }
     if (client->presented < length) {
@@ -323,6 +368,7 @@ static int present_frame(struct client *client)
       if (client->machine) {
         output_text(client, "{\"type\":\"fresh_line\"}\n");
       } else {
+        flush_prompt_escape(client);
         transfer_fresh_line(client->transfer, &client->screen);
         presentation_fresh_line(&client->screen);
       }
@@ -348,6 +394,12 @@ static int present_frame(struct client *client)
         return -1;
       }
       client->last_command = command;
+      if (!client->machine) {
+        client->prompt_allowed = client->rearm_prompt;
+        client->rearm_prompt = false;
+        client->awaiting_completion = false;
+        transfer_authorize_upload(client->transfer, NULL);
+      }
       if (client->machine) {
         char value[32] = "";
         if (kind == REMOTE_COMPLETION_EXITED) {
@@ -425,16 +477,131 @@ static int present_frame(struct client *client)
   return 0;
 }
 
+/* Typeahead after submission makes later markers ambiguous for this connection:
+ * completion acknowledges a command, not consumption of queued host input. */
+static void note_input(struct client *client, unsigned char byte)
+{
+  bool empty_line = client->empty_prompt;
+  client->empty_prompt = false;
+  client->prompt_allowed = false;
+  if (empty_line && (byte == '\n' || byte == '\r' || byte == 3)) {
+    client->prompt_allowed = true;
+    return;
+  }
+  if (client->awaiting_completion) {
+    client->prompt_uncertain = true;
+    client->rearm_prompt = false;
+  } else if (byte == '\n' || byte == '\r') {
+    client->awaiting_completion = true;
+    client->rearm_prompt = true;
+  }
+}
+
+static void paste_forward(struct client *client)
+{
+  if (client->paste_length && !client->paste_discard) {
+    for (size_t i = 0; i < client->paste_length; ++i) {
+      if (client->paste[i] == '\r') {
+        client->paste[i] = '\n';
+      }
+      note_input(client, client->paste[i]);
+    }
+    queue_frame(client, REMOTE_INPUT, client->paste, client->paste_length);
+  }
+  client->paste_length = 0;
+}
+
+static void paste_data(struct client *client, unsigned char byte)
+{
+  if (client->paste_length == sizeof(client->paste)) {
+    client->paste_candidate = false;
+    paste_forward(client);
+  }
+  client->paste[client->paste_length++] = byte;
+}
+
+static void paste_finish(struct client *client)
+{
+  char name[PASTE_NAME_CAPACITY];
+  char path_quoted[PASTE_PATH_CAPACITY * 2 + 1];
+  char name_quoted[PASTE_NAME_CAPACITY * 2 + 1];
+  bool candidate = client->paste_candidate && client->empty_prompt &&
+      transfer_idle(client->transfer) &&
+      paste_file_path(client->paste, client->paste_length, client->drop_path, name) &&
+      paste_shell_quote(client->drop_path, path_quoted, sizeof(path_quoted)) &&
+      paste_shell_quote(name, name_quoted, sizeof(name_quoted));
+  if (candidate) {
+    int count = snprintf(client->drop_command, sizeof(client->drop_command),
+        "xfer receive %s %s\n", path_quoted, name_quoted);
+    size_t cells = (size_t)client->screen.columns * client->screen.rows;
+    size_t limit = cells - client->screen.columns / 2 - 1;
+    candidate = count > 0 && (size_t)count < sizeof(client->drop_command) &&
+        (size_t)count - 1 <= limit;
+  }
+  if (candidate) {
+    char prompt[PASTE_NAME_CAPACITY + 80];
+    int count = snprintf(prompt, sizeof(prompt),
+        "Upload \"%s\" to the current directory? [y/N] ", name);
+    presentation_fresh_line(&client->screen);
+    presentation_data(&client->screen, (unsigned char *)prompt, (size_t)count);
+    client->drop_confirmation = true;
+    client->paste_length = 0;
+  } else {
+    paste_forward(client);
+  }
+  client->pasting = false;
+}
+
+static void paste_byte(struct client *client, unsigned char byte)
+{
+  static const unsigned char end[] = "\x1b[201~";
+  if (byte != end[client->paste_end_length]) {
+    for (size_t i = 0; i < client->paste_end_length; ++i) {
+      paste_data(client, end[i]);
+    }
+    client->paste_end_length = 0;
+    if (byte != end[0]) {
+      paste_data(client, byte);
+      return;
+    }
+  }
+  if (++client->paste_end_length == sizeof(end) - 1) {
+    client->paste_end_length = 0;
+    paste_finish(client);
+  }
+}
+
 static void flush_input_escape(struct client *client)
 {
   if (client->input_escape_length) {
-    queue_frame(client, REMOTE_INPUT, client->input_escape, client->input_escape_length);
+    if (client->drop_confirmation) {
+      const unsigned char newline = '\n';
+      client->drop_confirmation = false;
+      presentation_data(&client->screen, &newline, 1);
+      queue_frame(client, REMOTE_INPUT, &newline, 1);
+      client->empty_prompt = false;
+      client->prompt_allowed = true;
+    } else if (transfer_active(client->transfer)) {
+      for (size_t i = 0; i < client->input_escape_length; ++i) {
+        transfer_input(client->transfer, &client->screen, &client->outgoing,
+            client->input_escape[i], monotonic_ms());
+      }
+    } else {
+      for (size_t i = 0; i < client->input_escape_length; ++i) {
+        note_input(client, client->input_escape[i]);
+      }
+      queue_frame(client, REMOTE_INPUT, client->input_escape, client->input_escape_length);
+    }
     client->input_escape_length = 0;
   }
 }
 
 static void input_byte(struct client *client, unsigned char byte)
 {
+  if (client->pasting) {
+    paste_byte(client, byte);
+    return;
+  }
   if (byte == 0x1d) {
     flush_input_escape(client);
     queue_frame(client, REMOTE_CLOSE, NULL, 0);
@@ -442,7 +609,35 @@ static void input_byte(struct client *client, unsigned char byte)
     client->close_deadline = monotonic_ms() + LOCAL_CLOSE_TIMEOUT_MS;
     return;
   }
-  if (transfer_input(client->transfer, &client->screen, &client->outgoing, byte, monotonic_ms())) {
+  if (client->drop_confirmation && byte != 27 && !client->input_escape_length) {
+    if (client->output.length) {
+      return;
+    }
+    if (byte != 'y' && byte != 'Y' && byte != 'n' && byte != 'N' &&
+        byte != '\r' && byte != '\n' && byte != 3) {
+      return;
+    }
+    bool accept = (byte == 'y' || byte == 'Y') && client->empty_prompt &&
+        transfer_idle(client->transfer);
+    const unsigned char newline = '\n';
+    presentation_data(&client->screen, &newline, 1);
+    client->drop_confirmation = false;
+    if (accept) {
+      transfer_authorize_upload(client->transfer, client->drop_path);
+      size_t length = strlen(client->drop_command);
+      note_input(client, (unsigned char)client->drop_command[0]);
+      note_input(client, '\n');
+      queue_frame(client, REMOTE_INPUT, client->drop_command, length);
+    } else {
+      /* Submit the still-empty line to restore the guest's prompt rendering. */
+      queue_frame(client, REMOTE_INPUT, &newline, 1);
+      client->empty_prompt = false;
+      client->prompt_allowed = true;
+    }
+    return;
+  }
+  if (byte != 27 && !client->input_escape_length &&
+      transfer_input(client->transfer, &client->screen, &client->outgoing, byte, monotonic_ms())) {
     return;
   }
   if (byte == '\r') {
@@ -450,6 +645,7 @@ static void input_byte(struct client *client, unsigned char byte)
   }
   if (!client->input_escape_length) {
     if (byte != 0x1b) {
+      note_input(client, byte);
       queue_frame(client, REMOTE_INPUT, &byte, 1);
       return;
     }
@@ -468,6 +664,19 @@ static void input_byte(struct client *client, unsigned char byte)
   if (length == 2 && byte != '[' && byte != 'O') {
     flush_input_escape(client);
   } else if (length >= 3 && byte >= 0x40 && byte <= 0x7e) {
+    if (length == 6 && !memcmp(escape, "\x1b[200~", 6)) {
+      client->pasting = true;
+      client->paste_candidate = client->empty_prompt && !client->drop_confirmation &&
+          transfer_idle(client->transfer);
+      client->paste_discard = client->drop_confirmation || transfer_active(client->transfer);
+      client->paste_length = client->paste_end_length = 0;
+      client->input_escape_length = 0;
+      return;
+    }
+    if (client->drop_confirmation || transfer_active(client->transfer)) {
+      flush_input_escape(client);
+      return;
+    }
     char command = (char)byte;
     if (escape[1] == 'O' && length == 3 && strchr("ABCDHF", command)) {
       escape[1] = '[';
@@ -501,6 +710,14 @@ static int read_input(struct client *client)
     return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR ? 0 : -1;
   }
   if (!count) {
+    if (client->pasting) {
+      static const unsigned char end[] = "\x1b[201~";
+      for (size_t i = 0; i < client->paste_end_length; ++i) {
+        paste_data(client, end[i]);
+      }
+      paste_forward(client);
+      client->pasting = false;
+    }
     flush_input_escape(client);
     queue_frame(client, REMOTE_END_INPUT, NULL, 0);
     client->input_ended = true;
@@ -557,11 +774,13 @@ static int run_client(struct client *client)
       return client->result;
     }
     if (client->input_escape_length && monotonic_ms() >= client->input_escape_deadline &&
-        buffer_space(&client->outgoing) >= INPUT_ESCAPE_CAPACITY + REMOTE_HEADER_SIZE) {
+        buffer_space(&client->outgoing) >= INPUT_ESCAPE_CAPACITY + REMOTE_HEADER_SIZE &&
+        buffer_space(&client->output) >= RENDER_BYTE_RESERVE) {
       flush_input_escape(client);
     }
     bool can_read_input = client->ready && !client->rejected && !client->final &&
                           !client->input_ended && !client->closing &&
+                          (client->machine || buffer_space(&client->output) >= RENDER_BYTE_RESERVE) &&
                           buffer_space(&client->outgoing) >= (client->machine ? 8192 : TRANSFER_REPLY_RESERVE);
     bool can_read_socket = !client->final && client->received < client->frame_size;
     short socket_events = (can_read_socket ? POLLIN : 0) |
@@ -584,7 +803,8 @@ static int run_client(struct client *client)
       }
     }
     if (client->input_escape_length &&
-        buffer_space(&client->outgoing) >= INPUT_ESCAPE_CAPACITY + REMOTE_HEADER_SIZE) {
+        buffer_space(&client->outgoing) >= INPUT_ESCAPE_CAPACITY + REMOTE_HEADER_SIZE &&
+        buffer_space(&client->output) >= RENDER_BYTE_RESERVE) {
       int64_t remaining = client->input_escape_deadline - monotonic_ms();
       int escape_timeout = remaining > 0 ? (int)remaining : 0;
       if (timeout < 0 || escape_timeout < timeout) {
@@ -756,6 +976,7 @@ int main(int argc, char **argv)
   unsigned char output[BUFFER_CAPACITY];
   struct client client = {
     .socket = socket_fd, .machine = machine, .frame_size = REMOTE_HEADER_SIZE,
+    .prompt_allowed = true,
     .outgoing = {.data = outgoing, .capacity = sizeof(outgoing)},
     .output = {.data = output, .capacity = sizeof(output)}
   };
@@ -773,6 +994,7 @@ int main(int argc, char **argv)
       return 1;
     }
     presentation_begin(&client.screen);
+    output_text(&client, "\x1b[?2004h");
     terminal_screen = true;
   }
   unsigned char hello[REMOTE_HELLO_SIZE];

@@ -104,6 +104,28 @@ within five seconds, preventing late protocol replies from becoming shell input.
 A completed file is published at the atomic rename;
 subsequent cancellation cannot undo that completed operation.
 
+## Task 2 implementation decisions
+
+Agreed 2026-10-07:
+
+- The interactive root remote shell opts into an OSC prompt marker in existing
+  output; no new terminal wire frame or kernel interface is needed. The host
+  invalidates its known empty prompt on ordinary input and restores it only
+  after command completion and a new marker. Once input is forwarded while a
+  command is pending, uncertainty stays latched until reconnection. This is
+  deliberately conservative; input consumption is not acknowledged by the
+  current protocol. [Consequences and revisit point](../technical-debt.md#remote-drop-prompt-tracking)
+  are recorded separately.
+- Detect one absolute or `~/` existing regular-file path in a bracketed paste,
+  including shell quoting and backslash escaping. Multiple paths, unsupported
+  quoting and ordinary text retain normal paste behavior.
+- The drop confirmation authorizes only the matching task-1 upload, avoiding a
+  second confirmation. No overwrite flag is injected. Refusal consumes the drop.
+- Outside a known empty prompt, including a running editor, the original paste
+  is forwarded as ordinary text, without injecting an upload command. This
+  resolves task 2's contradictory "never typed" sentence in favor of its stated
+  fallback and finish criteria.
+
 ## Tasks
 
 - [x] **1. Transfer by explicit command.**
@@ -124,7 +146,11 @@ subsequent cancellation cannot undo that completed operation.
     - cancelling on either side leaves no partial file;
     - unrelated output and paste still behave exactly as before.
 
-- [ ] **2. Drag and drop.**
+- [ ] **2. Drag and drop.** Implementation is complete in this PR; Linux
+  client/guest checks passed. Actual GUI terminal acceptance remains pending.
+  - [x] Bracketed-paste detection, shell signaling and one-confirmation upload.
+  - [x] Linux QEMU checks for transfer, refusal and ordinary/editor fallback.
+  - [ ] Owner GUI-drop validation from Linux and macOS host terminals.
   - **Detection:** `tools/remote` enables bracketed paste on the host terminal.
     When one paste is exactly the path of one existing regular file, with the
     host terminal's quoting removed, the client offers: "Upload `Foo.class` to
@@ -132,8 +158,9 @@ subsequent cancellation cannot undo that completed operation.
   - **Upload:** on yes, the client enters the task-1 receive command for that
     path at the shell prompt, and the transfer runs as in task 1.
   - **Fallback:** if the client cannot tell that the shell is idle at a prompt,
-    the paste goes through as ordinary text. A dropped path must never be typed
-    into a running program such as vi.
+    the paste goes through as ordinary text. A dropped path must never inject
+    an upload command into a running program such as vi; its original text is
+    pasted normally.
   - **Finish when:** dropping a file from a macOS and a Linux host terminal into
     an idle remote shell uploads it after confirmation. Dropping one into a
     running program, or pasting ordinary text, behaves as a normal paste.
@@ -186,6 +213,57 @@ no warnings (the full ports build still emitted existing vendor warnings).
 On the refreshed four-CPU nested-KVM image, refusal printed the new message,
 retained the original SHA-256, and left no staging name; explicit `--overwrite`
 still published the empty fixture with the matching empty-file digest.
+
+## Task 2 validation (2026-10-07)
+
+`make -C tools remote` passed without warnings. Full source `make -j16 image`
+passed with the existing compiler and a locally available CMake added to PATH;
+ports still emitted their existing vendor warnings. The marked editor changes
+libterm, so SDK and ports were rebuilt as well as userland. No compiler-container
+rebuild is needed. Kernel, filesystem, lwIP and ports source pins are unchanged
+from parent main `c76bb80`; the userland dependency starts at `56b9c0e`
+and is published as `5ba8efc` in [userland PR #137](https://git.internal/PyxisOS/pyxis-userland/pulls/137).
+
+Interactive QEMU used the patched 10.2.2 emulator, raw OVMF, four CPUs, 512 MiB,
+nested KVM, virtio-net/rng and loopback forwarding `2423:2323`. The Linux native
+client used a 100x24 PTY. Bracketed-paste input was supplied manually through
+that terminal, including an end delimiter split across two writes; no GUI file
+drop was performed. No new tests, fault injection or boot/output automation was
+added, and no performance result is claimed.
+
+A valid Java 8 `.class` (55 bytes), a backslash-escaped basename containing a
+space, and a double-quoted basename containing an apostrophe uploaded with one
+confirmation. Their guest and host SHA-256 matched
+`5d9ac23bf989e7c9e6d96b878e43faab063ec75ae5b6a057a81562a7c05cd2cf`.
+A quoted `~/` path uploaded a 1 MiB file with matching digest
+`fbbab289f7f94b25736c58be46a994c441fd02552cc6022352e3d86d2fab7c83`.
+After the final host changes, another 1 MiB drop and explicit download matched
+that digest in the selected download directory. An existing guest name was
+refused with the `--overwrite` diagnostic and retained its original digest.
+
+Host `n` and Escape refused a drop and restored the prompt; the next drop was
+offered. Pasting `y` during confirmation did not accept it. Empty Enter/Ctrl+C
+preserved subsequent detection. Host Ctrl+C canceled a dropped 16 MiB transfer;
+listing `tmp://` showed neither its target nor a staging name.
+
+In vi insert mode, a dropped path appeared as literal text and saved exactly as
+that text, without an upload offer or command. After vi exited, the uncertain
+connection continued to paste paths normally; reconnecting restored detection.
+An ordinary multiline paste ran `ls` and `cat` normally. Default machine mode
+preserved OSC 133 bytes in base64 output; quiet machine sessions returned typed
+completion and FINAL records without markers. Ctrl+] returned acknowledged closure
+and restored terminal settings/bracketed paste. Read-only GDB at a terminal read
+observed zero queued input, 359 output bytes and one passthrough holder.
+After final client closure, the completed-task queue was empty. All task-owned
+QEMU, client and debugger jobs were stopped.
+
+Userland Actions lists zero tasks. `fj pr status 137` fails to parse Forgejo's
+empty status value ("unknown variant ``"); no dependency CI pass is claimed.
+
+Actual Linux GUI drops and macOS terminal drops/publication were not measured.
+The milestone remains open for owner terminal acceptance. After that passes,
+close the task checkbox, turn this WIP document into the implemented file-transfer
+reference and update links as specified by AGENTS.md.
 
 ## Out of scope
 

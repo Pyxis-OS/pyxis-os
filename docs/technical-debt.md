@@ -44,6 +44,25 @@ validation guarantee. Collating symbols and equivalence classes remain unsupport
 Revisit the pinned engine or a focused matcher correction when a consumer needs
 these behaviors; the initial vi/less integration must retain the documented limits.
 
+## Remote drop prompt tracking
+
+[Host file drops](userland/remote-terminal.md#dropping-a-host-file) require a
+known empty root-shell prompt. OSC 133;B and command completion do not acknowledge
+consumption of host input: a completion/prompt can precede queued commands.
+The client therefore latches uncertainty when it forwards input while a command
+is pending. Drops remain normal pastes until reconnection, including after an
+interactive editor. Canceling an edited shell line can also suppress detection
+until a later completed command. This trades missed upload offers for avoiding
+injected commands in running programs, without changing the terminal wire or
+kernel authority. Revisit when a concrete native input-acknowledgment contract
+can establish prompt/input ordering; rendered prompt text is insufficient.
+
+Detection supports printable ASCII host paths only, matching the shell editor's
+input contract, and refuses final symlinks to match `xfer`'s source-opening policy.
+Quoted commands too large for the editor fall back to text. Revisit path coverage
+with native Unicode command editing or a supported argument-delivery interface,
+not by interpreting a host shell or silently truncating names.
+
 ## SMT placement and later balancing
 
 [Placement](kernel/smp.md#placement-and-migration) prefers idle siblings only

@@ -15,6 +15,11 @@ struct file_transfer;
 
 struct file_transfer *transfer_create(const char *download_directory,
     const volatile sig_atomic_t *interrupted);
+bool transfer_active(const struct file_transfer *transfer);
+bool transfer_idle(const struct file_transfer *transfer);
+/* One host-confirmed drop authorizes only this exact subsequent file query.
+ * Passing NULL withdraws it, including when the injected command completes. */
+void transfer_authorize_upload(struct file_transfer *transfer, const char *path);
 void transfer_destroy(struct file_transfer *transfer);
 void transfer_output(struct file_transfer *transfer, struct presentation *screen,
     struct byte_buffer *outgoing, unsigned char byte, int64_t now);
