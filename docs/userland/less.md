@@ -23,7 +23,9 @@ console, a named file, or redirected input.
 Space/Page Down and `b`/Page Up move pages. Arrows or `j`/`k` move lines;
 `g`/`G` or Home/End select the beginning/end. Counts select line/page positions.
 `/` and `?` search forward/backward, and `n`/`N` select later/earlier matches.
-Search is case-sensitive literal text, without highlighting. Changing files
+Search uses BRE patterns with matching text highlighted; `-I` enables ASCII
+case folding. For example, `/\.pxe$` finds program-name suffixes in
+`ls boot:// | less`. Malformed patterns report the libc regex error. Changing files
 clears search state. `:n`, `:p` and `E` select another file.
 
 The pager holds [Ctrl+C passthrough](foreground-interruption.md) throughout its
@@ -39,7 +41,8 @@ limit; excess input and allocation failure report errors. Content reads block
 when filling a new page or searching beyond cached input. Cached navigation
 needs no further read, but a stalled producer can delay keys during a refill.
 There is no live refresh or nonblocking pipe readiness. Raw escape display,
-regex, shell commands, marks, bracket matching and log saving are disabled.
+shell commands, marks, bracket matching and log saving are disabled. Regex uses
+[libc's ASCII-only classes/folding and pinned back-reference limits](libc-portability.md#regular-expressions-and-utf-8-conversion).
 
 A missing named console grant fails explicitly. A downstream intermediate pager, or a pager with file/pipe stdin and non-console
 stdout, receives no named input under the final-stage rule. The first stage's
@@ -48,6 +51,17 @@ stdout was redirected. Read and terminal failures report failure; terminal input
 ends the pager. See [technical debt](../technical-debt.md#less-pager-limits).
 
 ## Validation
+
+On 2026-10-07, the regex-enabled source image built and booted under the same
+four-CPU QEMU configuration as the [vi comparison](vi.md#regex-validation-2026-10-07).
+Framebuffer (1280×800) and remote (80×24) checks found and highlighted
+`/^#include` in a 240-line file and `/\.pxe$` in `ls boot:// | less`.
+Both reported `Missing ']'` for a malformed pattern and exited normally with
+`q`. Remote `-I` searches also found the uppercase `FOOO` line; `:n` to a second
+file cleared the prior regex and match list, and `n` left that file unchanged.
+Nonmatching display lines rendered normally, without reading failed-match
+offsets. These checks used scheme paths, files and pipe stdin; named-grant
+policy was unchanged. No fixtures, screenshots or automation are committed.
 
 On 2026-10-06, `make -j16 image` and interactive QEMU used nested KVM, four CPUs,
 512 MiB, patched QEMU 10.2.2, virtio-net and a virtio-fs export. Framebuffer
