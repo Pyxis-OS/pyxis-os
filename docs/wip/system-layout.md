@@ -160,9 +160,8 @@ Accepted by the owner on 2026-10-06:
       installed boots read the pool override, `system://config/boot.lua`. It
       merges by name: an entry with a default's name replaces it whole, new
       names follow the defaults, and nothing can be removed. Because the
-      override can replace a default space with an unusable one, the
-      default-configuration boot entry below, not the merge, is the guaranteed
-      way back. Space inits stop mounting and receive the roots their entry
+      override can replace a default space with an unusable one, the rescue
+      boot entry below, not the merge, is the guaranteed way back. Space inits stop mounting and receive the roots their entry
       lists.
     - **Missing volume.** A root can be marked optional. A missing or
       unmountable required volume leaves that space created but not started,
@@ -192,21 +191,20 @@ Accepted by the owner on 2026-10-06:
       mount.disk=GUID`. The install entry is `init=boot://init-install.pxe
       boot.install=1`; `init-install` becomes a boot init that creates the
       install space and forwards the raw-disk grants to it.
-    - **Default-configuration entry.** Installed systems get a second Limine
-      entry that ignores the pool override and boots the archive default. The
-      installer and Update write both entries, and the menu timeout is
-      nonzero so the entry is reachable.
-  - **Proposed, awaiting owner confirmation:**
-    - **Entry title:** `Pyxis OS (default configuration)`, after the normal
-      `Pyxis OS (Caelum)` entry, which stays first and is booted on timeout.
-    - **Option:** `boot.default_config=1`. The kernel accepts it only once,
-      with value 1, and passes it to boot init as an argument; boot init then
-      skips `system://config/boot.lua`.
-    - **Timeout:** 3 seconds. Every installed boot waits that long at the menu
-      unless a key is pressed.
-    - **Update:** its installed-configuration check accepts exactly this
-      two-entry form. A single-entry installation from before task 2 takes the
-      existing rebuild path.
+    - **Rescue entry.** Installed systems get a second Limine entry,
+      `Pyxis OS (rescue)`, that ignores the pool override and boots the archive
+      default. "Rescue" rather than "default" keeps it from reading as the
+      usual choice. It follows the normal `Pyxis OS (Caelum)` entry, which stays
+      first and is booted on timeout. The installer and Update write both
+      entries.
+      - **Option:** `boot.default_config=1`. The kernel accepts it only once,
+        with value 1, and passes it to boot init as an argument; boot init
+        then skips `system://config/boot.lua`.
+      - **Timeout:** 3 seconds, so the entry is reachable. Every installed boot
+        waits that long at the menu unless a key is pressed.
+      - **Update:** its installed-configuration check accepts exactly this
+        two-entry form. A single-entry installation from before task 2 takes
+        the existing rebuild path.
   - **Later:** write access to `system://config/boot.lua` chooses which inits
     run with forwarded grants on the next boot. The
     [users milestone](users-and-authority.md) should treat it as
