@@ -187,6 +187,17 @@ Accepted by the owner on 2026-10-06:
       forwards everything else and does not forward `native_mount` or
       `host_mount`, so mount authority stays with it. Spaces are still never
       destroyed.
+    - **Network owner.** A space entry may set `network = true`; more than
+      one makes the configuration invalid. Boot init forwards `net_config`
+      WRITE and UDP broadcast authority only to that space, and READ with
+      ordinary UDP to the others. Its init still runs `session
+      --configure-network`, and the DHCP maintainer stays in that space. This
+      turns today's single-owner convention into authority. Starting setup
+      from boot init in the Caelum space was rejected for now: it would leave a
+      long-lived, unsupervised process there. If an override replaces the
+      owner space with a broken one, the rescue entry restores networking.
+      `network.lua` stays in the archive for now
+      ([technical debt](../technical-debt.md#archive-only-network-configuration)).
     - **Command line.** Normal boot is `init=boot://boot-init.pxe
       mount.disk=GUID`. The install entry is `init=boot://init-install.pxe
       boot.install=1`; `init-install` becomes a boot init that creates the
