@@ -40,10 +40,19 @@ Accepted by the owner on 2026-10-06:
    package to `ci/Containerfile` in pyxis-os. The owner then rebuilds and
    publishes the builder container, and the existing fs CI job (`make -j16`)
    builds the target.
+4. **Linux timestamps:** accepted 2026-10-06. Preserve creation/modification
+   times as read-only `user.npfs.created_ns` and `user.npfs.modified_ns` xattrs,
+   containing signed nanoseconds or `unknown`. Linux mtime uses modification
+   time, with zero as its documented fallback when unknown. Since npfs has no
+   access or POSIX change timestamp, Linux atime/ctime use the same mtime.
 
 ## Tasks
 
 - [ ] **1. Read-only mount.**
+  Implementation and QEMU qualification are recorded in the
+  [task-1 validation](../development/experiments/npfs-fuse-task1/README.md).
+  The checkbox remains open until the owner mounts the ThinkPad stick and copies
+  a file; that physical step cannot be substituted by emulation.
   - `npfs-fuse SOURCE MOUNTPOINT`, where SOURCE is an npfs partition device, for
     example `/dev/sdb2`, or a pool image. The device is opened read-only. Other
     tools keep their image-only contract.

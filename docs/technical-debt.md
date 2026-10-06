@@ -1357,11 +1357,24 @@ replay has been exercised at runtime; see the
 Pending detached cleanup across an unclean writable restart has runtime coverage
 in the [follow-up record](development/experiments/npfs-runtime-qualification/README.md).
 Arbitrary mid-batch cleanup interruption and failure points remain source-reviewed;
-broader qualification waits until explicitly assigned. Host tools require unchanged
-standalone regular images and cooperating locks, stage replay payloads in memory,
+broader qualification waits until explicitly assigned. Formatting, checking and
+inspection require unchanged standalone regular images and cooperating locks,
+stage replay payloads in memory,
 and do not repair arbitrary damage or reclaim cleanup lists. Large images/volumes
 can exhaust host checker memory. Physical-media wear remains unmeasured; native operation latency and QEMU target
 bytes are measured in a nested VM, and do not qualify SSD endurance.
+
+The [read-only Linux mount](wip/npfs-fuse.md) also accepts npfs partition devices.
+Its source must stay unchanged for the entire mount: image locks only coordinate
+cooperating tools, and devices have no external writer exclusion. Linux can cache
+that immutable view. Directory handles retain sorted metadata snapshots and can
+exhaust host memory for very large open directories; global ownership checking
+remains fsck's job. Revisit snapshot/caching policy with measured large-directory
+workloads or a separately designed shared-writer protocol. Committed journals
+are refused until the milestone's in-memory replay task. Native timestamp xattrs
+preserve unknown status and creation time that ordinary Linux attributes cannot
+represent; Linux access/change time and allocated-block accounting are not native
+npfs metadata.
 
 ## Execution-group shutdown
 
