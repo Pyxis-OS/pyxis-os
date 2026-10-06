@@ -109,8 +109,10 @@ Accepted by the owner on 2026-10-07:
 
 ## Open questions
 
-- **Widget layout:** width, how many widgets, and what the bar does when tabs
-  and widgets do not fit. This is settled before task 3.
+- **Widget layout:** not a concern for now (owner, 2026-10-07). The resolutions
+  Pyxis runs at leave room for several widgets. Details are settled with the
+  task 3 implementer. If there are ever too many, mouse support could show the
+  less important ones on click.
 - **Later ACPI uses:** lid and AC-adapter events, thermal zones and sleep. These
   are not part of this milestone.
 
