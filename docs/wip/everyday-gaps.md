@@ -17,4 +17,4 @@ text tools may be ports.
 
 Related candidates already tracked elsewhere: grep, tail, wc, sort and hexdump in
 [application ports](application-ports.md), and the boot configuration checker in
-the [system layout](system-layout.md#after-the-milestone).
+[boot configuration checker](boot-configuration-checker.md).

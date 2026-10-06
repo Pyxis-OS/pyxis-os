@@ -862,14 +862,14 @@ synced power-off and one Update round trip passed natively; see the
 Power loss during writes, uncertain I/O and other devices, ports or the dock
 path remain unqualified. The internal NVMe remains unsupported.
 
-## System layout renames
+## Updates from before boot init
 
 Update recognizes only the current installed form of the
-[system layout](wip/system-layout.md), boot init's normal and rescue entries.
-An installation from before task 2, such as 0.0.2, is reported as having
-damaged or missing boot files and an unknown revision, and is rebuilt. The
-pool is unaffected. Task 3's two-stage Update kept this; because the previous
-revision is unknown, it then removes no program directories.
+[system layout](userland/system-layout.md), boot init's normal and rescue entries.
+An installation from before boot init, such as 0.0.2, is reported as having
+damaged or missing boot files and an unknown revision, and is rebuilt. The pool
+is unaffected. Because the previous revision is unknown, that Update removes no
+program directories. Revisit if another older form needs a direct Update.
 
 ## RAM volumes
 
@@ -927,12 +927,22 @@ Related limits of the [program stage](userland/system-updates.md#program-stage):
   about 90 MiB for today's archive.
 - Spaces receive `bin://` read-only; only the installer writes it.
 
+## Interim program revision directories
+
+Each Update copies every moved program into a new `bin/REVISION` directory, even
+when a program is unchanged, and the pool keeps two complete revisions. The
+directory is selected by the running kernel's revision, so programs cannot be
+updated without a new kernel and ESP. The [system layout](userland/system-layout.md#programs)
+accepted this as interim. Revisit when a final program update scheme is
+designed.
+
 ## Archive-only network configuration
 
 Network profiles live only in `boot://config/network.lua`. On an installed
 system, changing them needs an Update, while spaces can change through the
-pool override ([system layout](wip/system-layout.md)). Revisit after boot init:
-move network configuration onto the pool, following the same override pattern.
+pool override ([system layout](userland/system-layout.md)). Boot init now exists, so
+this is the next follow-up: move network configuration onto the pool, following
+the same override pattern.
 
 ## USB image updates and firmware qualification
 

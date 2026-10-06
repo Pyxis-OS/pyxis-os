@@ -1,9 +1,9 @@
 # ACPI power control and battery
 
 Status: **milestone, agreed 2026-10-07.** It follows the
-[system layout](system-layout.md) milestone. The owner chose uACPI as the ACPI
-interpreter (2026-10-06) and accepted the three decisions below. Each task
-starts when the owner says so.
+[system layout](../userland/system-layout.md) milestone. The owner chose uACPI
+as the ACPI interpreter (2026-10-06) and accepted the three decisions below.
+Each task starts when the owner says so.
 
 ## Goal
 

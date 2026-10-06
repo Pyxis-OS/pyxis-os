@@ -162,10 +162,16 @@ APIs, Unix IDs or mode bits, or implementation of an identity broker.
 - What does `home://` expose for each user? The earlier shared-home idea must not
   imply that all users can access one another's data. Decide sharing across one
   user's spaces separately from explicit sharing between users, including how
-  ownership persists on disk.
+  ownership persists on disk. Today's [system layout](../userland/system-layout.md)
+  has one shared `home` volume with no ownership, as a pre-users prototype;
+  decide what becomes of its contents.
 - Who may mount storage, publish system updates, administer accounts, inspect
   logs or manage other users' spaces? Decide administrative authority explicitly;
-  no Unix root/group/ACL model is selected here.
+  no Unix root/group/ACL model is selected here. Two inputs from the system
+  layout: write access to `system://config/boot.lua` chooses which inits run
+  with forwarded grants on the next boot, so it is administrative; and raw
+  volume access was agreed (2026-10-05) to be addressed by volume name and
+  granted as a capability to rescue and administrative sessions only.
 - Define logout, account removal and eventual explicit revocation. Preserve the
   agreed distinction between prospective policy changes and existing grants;
   termination cannot recall copies delegated outside a session.
