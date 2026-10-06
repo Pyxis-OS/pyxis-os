@@ -5,6 +5,28 @@ cost, and when to reconsider it. This is a working record, not a roadmap or a
 commitment to replace every simple implementation. Remove or update entries
 when the underlying tradeoff changes.
 
+## Remote transfer memory and staging limits
+
+[Explicit remote transfers](userland/remote-terminal.md#explicit-file-transfer)
+buffer the complete source and received file, bounded at 16 MiB per peer, to
+verify SHA-256 before writing. Guest names are limited to 200 UTF-8 bytes and
+host query/resolved paths to 1024 bytes. This bounds memory and OSC metadata but
+precludes larger transfers; reconsider streaming verification into private
+storage only with an agreed replacement publication contract.
+
+The mandatory negotiated SHA-256 extension intentionally excludes stock kitty
+peers. Reconsider interoperability only if a peer can supply the same verification
+and publication guarantees. Transfers are single regular files without resume,
+compression or deltas.
+
+Exclusive `.NAME.xfer-partial-ID` siblings can survive abrupt process/session
+death. Handled cancellation/errors attempt cleanup and report failures, but stale
+files are never automatically deleted or overwritten: manual review owns their
+removal. Rename commits the complete target; late cancellation cannot roll it
+back. Linux host atomic publication is validated; the macOS exclusive-rename path
+still needs an owner run. Revisit staging recovery if interruptions make manual
+cleanup burdensome, with explicit ownership rules rather than age-based deletion.
+
 ## Contiguous RAM-file backing
 
 RAM files currently own one kernel heap buffer. Growth reserves geometric spare

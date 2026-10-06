@@ -23,6 +23,9 @@ applied: MPL's standard secondary-license provisions remain available.
   provenance documentation are original project material.
 - `third_party/siphash/`: imported reference code retains
   [CC0](third_party/siphash/LICENSE_CC0) and its provenance notices.
+- `tools/remote/vendor/sha256.c` and `tools/remote/sha256.h`: the imported
+  SHA-256 implementation/interface is public domain; see its retained notice
+  and [source provenance](tools/remote/vendor/UPSTREAM.md).
 - `kernel/fb/font.c`: Bizcat font data by Robey Pointer retains the CC BY 4.0
   attribution, source links and conversion notice in that file.
 - `third_party/doom-shareware/`: game data retains its own
