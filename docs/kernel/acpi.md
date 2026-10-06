@@ -107,10 +107,12 @@ including items they queue. Work cannot wait for work.
 
 ## Measurements
 
-On the ThinkPad T14 Gen 1 AMD (owner's PXE boot of `5146d75`, 2026-10-07), the
-namespace loaded without AML errors, warnings or refusals in 52.1 ms. uACPI
-held 711,583 bytes in 18,519 blocks, and the firmware window used 2,127 pages
-(8.3 MiB of address space, which includes operation regions mapped whole).
+On the ThinkPad T14 Gen 1 AMD (owner's PXE boots, 2026-10-07), the SCI is IRQ 9
+routed to GSI 9, level-triggered and active-low. The namespace loaded without
+AML errors, warnings or refusals in 52.1 ms and, on a later boot, 37.2 ms. uACPI
+held 711,583 bytes in 18,519 blocks both times, and the firmware window used
+2,127 pages (8.3 MiB of address space, which includes operation regions mapped
+whole).
 No ThinkPad baseline boot time was taken.
 
 The QEMU comparison below uses nested-VM numbers from the agent's development
