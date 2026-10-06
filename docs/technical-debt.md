@@ -264,6 +264,14 @@ one padded zeroing slot per CPU. Copy-on-write zero pages were considered and
 set aside. They only move the zeroing to the first write, need allocating page
 faults, and defer NO_MEMORY from ALLOCATE to an ordinary store.
 
+After topology-aware placement (#451), the native page batches looked slower per
+client than the task-8 record: two clients took 0.148–0.149 s each against
+0.105–0.115 s, and eight up to 0.344 s against 0.137 s; one client was unchanged
+([record](development/experiments/core-placement/README.md)). That comparison
+spans sessions and older main, so it is unmeasured. One possibility is that
+spreading clients across cores and the two CCXs makes this sharing costlier. When
+revisiting, start with a same-sitting native A/B against main.
+
 ## Never-reused kernel heap arena
 
 Kernel heap pools come from a 256 GiB arena whose addresses are never reused, so

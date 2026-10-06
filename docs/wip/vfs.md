@@ -119,6 +119,12 @@ directory. Writable user data would live outside the read-only bundle view.
 Any manifest resource requests would remain subject to launcher authority;
 package metadata could not grant itself capabilities.
 
+Owner direction (2026-10-07): a bundle will carry a manifest, similar to a macOS
+bundle's `Info.plist`, that declares the grants its program needs, for example
+launch authority for compilers, `make` or `cmake`. Until bundles exist, launch
+authority for ordinary commands is a per-space setting (`launch = true` in the
+boot configuration), planned with the Lua runtime for build scripts.
+
 This is a future direction, not a change to the first-shell milestone. Keep its
 current initrd tree and `boot://` lookup while developing that milestone; no
 bundle format, namespace migration or packaging implementation is assigned here.
