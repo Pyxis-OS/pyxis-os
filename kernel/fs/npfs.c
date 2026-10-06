@@ -19,6 +19,8 @@
 #include "npfs_store.h"
 
 #define NPFS_MAINTENANCE_MS 1000u
+/* Writeback and checkpoint rounds allowed per pool before power-off gives up. */
+#define NPFS_SHUTDOWN_PASSES 8u
 
 struct npfs_pool {
   struct npfs_pool *next;
@@ -50,6 +52,13 @@ static struct task_wait *worker_wait;
 static bool available;
 static atomic_size_t admitted;
 static size_t wrapper_count, adapter_used;
+
+/* Power-off flush. The requesting worker and this worker both run on the BSP,
+ * so IF=0 serializes the handoff. Once sealed, pools take no further changes
+ * until the request is cancelled. */
+static struct task_wait *shutdown_wait;
+static bool shutdown_requested, shutdown_done, sealed;
+static enum call_status shutdown_status;
 
 static void npfs_worker(void *argument);
 
@@ -700,6 +709,54 @@ static void complete_job(struct npfs_job *job)
   }
 }
 
+/* Operations that cannot change a pool or its device, allowed while sealed. */
+static bool allowed_while_sealed(enum npfs_operation operation)
+{
+  switch (operation) {
+  case NPFS_LOOKUP:
+  case NPFS_ENUMERATE:
+  case NPFS_READ:
+  case NPFS_SIZE:
+  case NPFS_CAPTURE:
+  case NPFS_FILESYSTEM_INFO:
+  case NPFS_RAW_INFO:
+  case NPFS_RAW_READ:
+  case NPFS_RAW_RELEASE:
+    return true;
+  default:
+    return false;
+  }
+}
+
+/* Writes every writable pool's dirty data and checkpoints until its journal is
+ * EMPTY, so the next boot has nothing to replay. Failed and read-only pools
+ * take no writes and are skipped; a failure was logged when it happened. */
+static enum call_status flush_for_shutdown(void)
+{
+  enum call_status result = CALL_OK;
+  for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
+    if (!npfs_store_writable(pool->store)) {
+      continue;
+    }
+    struct npfs_store_context context = context_for(task_deadline_after_ms(NPFS_TIMEOUT_MS));
+    enum call_status status = npfs_store_sync(&context, pool->store);
+    for (unsigned pass = 0; status == CALL_OK && !npfs_store_journal_empty(pool->store); ++pass) {
+      if (pass == NPFS_SHUTDOWN_PASSES) {
+        status = CALL_TIMED_OUT;
+        break;
+      }
+      status = npfs_store_maintain(&context, pool->store, true, false);
+    }
+    if (status != CALL_OK) {
+      klog("npfs: power-off flush failed (status %u)\n", (unsigned)status);
+      if (result == CALL_OK) {
+        result = status;
+      }
+    }
+  }
+  return result;
+}
+
 static bool maintenance_pending(void)
 {
   for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
@@ -716,8 +773,9 @@ static void npfs_worker(void *argument)
   uint64_t next_flush = task_deadline_after_ms(CONFIG_NPFS_FLUSH_SECONDS * 1000u);
   uint64_t next_maintenance = task_deadline_after_ms(NPFS_MAINTENANCE_MS);
   for (;;) {
-    bool pending = maintenance_pending();
+    bool pending = !sealed && maintenance_pending();
     uint64_t flags = cpu_save_interrupts();
+    bool shutdown = shutdown_requested;
     bool pressure = mm_pressure_take();
     struct disk_object *disks = disk_take_retired();
     struct npfs_node *nodes = retired_nodes;
@@ -732,9 +790,9 @@ static void npfs_worker(void *argument)
       job->state = NPFS_JOB_ACTIVE;
     }
     bool flush = task_deadline_expired(next_flush);
-    bool maintenance = pressure || flush || task_deadline_expired(next_maintenance) ||
-        pending;
-    if (!nodes && !disks && !job && !maintenance) {
+    bool maintenance = !sealed && (pressure || flush ||
+        task_deadline_expired(next_maintenance) || pending);
+    if (!nodes && !disks && !job && !maintenance && !shutdown) {
       KASSERT(!worker_wait);
       struct task_wait *wait = task_wait_prepare();
       worker_wait = wait;
@@ -754,7 +812,8 @@ static void npfs_worker(void *argument)
           job->user_request->request.cleanup_group : NULL);
       cpu_restore_interrupts(flags);
       struct npfs_store_context context = context_for(job->deadline);
-      job->status = perform(&context, job);
+      job->status = sealed && !allowed_while_sealed(job->operation) ? CALL_UNAVAILABLE :
+          perform(&context, job);
       job->format_status = context.format_error;
       job->backing_error = context.backing_error;
       flags = cpu_save_interrupts();
@@ -769,6 +828,22 @@ static void npfs_worker(void *argument)
       object_cleanup_leave(previous);
       complete_job(job);
       cpu_restore_interrupts(flags);
+    }
+    /* Queued requests drain first; held user tasks submit no more. */
+    if (shutdown && !job) {
+      enum call_status status = flush_for_shutdown();
+      flags = cpu_save_interrupts();
+      sealed = status == CALL_OK;
+      shutdown_status = status;
+      shutdown_requested = false;
+      shutdown_done = true;
+      struct task_wait *wake = shutdown_wait;
+      shutdown_wait = NULL;
+      if (wake) {
+        task_wait_wake(wake);
+      }
+      cpu_restore_interrupts(flags);
+      maintenance = false;
     }
     if (maintenance) {
       for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
@@ -903,6 +978,37 @@ bool npfs_partition_mounted(block_device_id device, uint32_t partition)
     }
   }
   return false;
+}
+
+enum call_status npfs_shutdown_flush(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(arch_cpu_index() == 0 && (flags & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!kernel_task_is_current(npfs_worker, NULL));
+  if (!available) {
+    cpu_restore_interrupts(flags);
+    return CALL_OK;
+  }
+  KASSERT(!shutdown_requested && !sealed);
+  shutdown_requested = true;
+  shutdown_done = false;
+  wake_worker();
+  while (!shutdown_done) {
+    struct task_wait *wait = task_wait_prepare();
+    shutdown_wait = wait;
+    task_wait_sleep(wait);
+    shutdown_wait = NULL;
+  }
+  enum call_status status = shutdown_status;
+  cpu_restore_interrupts(flags);
+  return status;
+}
+
+void npfs_shutdown_cancel(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  sealed = false;
+  wake_worker();
 }
 
 void npfs_notify(void)

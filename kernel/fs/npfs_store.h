@@ -92,6 +92,8 @@ struct npfs_store_pool *npfs_store_inode_pool(struct npfs_store_inode *inode);
 enum call_status npfs_store_maintain(struct npfs_store_context *context,
     struct npfs_store_pool *pool, bool flush_dirty, bool pressure);
 bool npfs_store_pending(const struct npfs_store_pool *pool);
+/* True when the pool's durable journal control is EMPTY: nothing to replay. */
+bool npfs_store_journal_empty(const struct npfs_store_pool *pool);
 void npfs_store_info(struct npfs_store_inode *inode,
     struct directory_filesystem_info *info);
 
