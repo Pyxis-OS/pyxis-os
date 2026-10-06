@@ -1,9 +1,10 @@
 # Read-only RAM journal replay qualification
 
-Manual validation on 2026-10-06 for [task 2](../../../wip/npfs-fuse.md), including
-the merged filesystem #30 / Pyxis #437 review follow-ups. Task 2 is complete;
-task 1's physical ThinkPad-stick mount/copy remains an owner action. The rebuilt
-builder has been published and its optional FUSE compilation qualified below.
+Manual validation on 2026-10-06 for
+[read-only RAM replay](../../npfs-linux-mount.md), including the merged filesystem
+#30 / Pyxis #437 review follow-ups. Both milestone tasks are complete: the owner
+confirmed physical stick mount/copy on Arch Linux, and the rebuilt builder's
+optional FUSE compilation is qualified below.
 
 ## Revisions and environment
 
@@ -155,4 +156,6 @@ are retained outside Git at
 `/home/chronium/src/pyxis-npfs-fuse-validation/task2/`. All own QEMU, GDB and FUSE
 processes ended, and the read-only loop device was detached. A successful job in
 the old builder could skip the optional FUSE target; the freshly pulled builder's
-direct build above confirms its compilation. ThinkPad mount/copy is still pending.
+direct build above confirms its compilation. The owner subsequently reported
+successful physical stick mounting and copying on Arch Linux. No additional
+physical timing or digest measurements were supplied.

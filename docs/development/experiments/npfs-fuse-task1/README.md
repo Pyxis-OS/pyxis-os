@@ -1,9 +1,9 @@
 # Read-only npfs FUSE qualification
 
 Manual validation on 2026-10-06 for
-[task 1](../../../wip/npfs-fuse.md). Implementation and QEMU/loop-device checks
-are complete. The owner's ThinkPad-stick mount and file copy remain outstanding,
-so the milestone's task-1 checkbox remains open.
+[the Linux mount](../../npfs-linux-mount.md). Implementation and QEMU/loop-device
+checks are complete. On 2026-10-06 the owner reported successful physical stick
+mounting and copying on Arch Linux, completing the remaining qualification step.
 
 ## Revisions and environment
 
@@ -159,8 +159,9 @@ allocation ownership; whole-pool checking remains fsck's job.
 
 Inputs, ISO, digests, copied file and build logs are retained outside Git under
 `/home/chronium/src/pyxis-npfs-fuse-validation/task1/`. All own QEMU/FUSE processes
-were stopped and the read-only loop device detached. Physical ThinkPad mount/copy
-is still an owner action. The rebuilt builder was subsequently published and its
+were stopped and the read-only loop device detached. The owner subsequently
+confirmed physical stick mount/copy on Arch Linux. The rebuilt builder was
+published and its
 optional FUSE compilation qualified in the
 [task-2 record](../npfs-fuse-task2/README.md); an old builder's success only checked
 the targets whose dependencies were present.
