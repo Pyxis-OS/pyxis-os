@@ -11,8 +11,9 @@ Parent baseline `8544220` is current main with the accepted milestone. The guest
 used its pinned fs `d352c7e`, userland `c3d5668` and ports `0ead472`.
 Host baseline readers were built separately from filesystem main `9e1a63f`;
 its format/tool source is identical to the parent's pin. The new mount's
-executable source is fs `d5042f5`; published `994ab9c` adds only runtime-package
-documentation. The parent integration pins that published revision.
+executable source is fs `d5042f5`; published `3f527a4` adds only runtime-package
+and dependency-license documentation. The parent integration pins that published
+revision.
 
 Host Fedora 44, Linux `6.19.10-300.fc44.x86_64`, host GCC 16.2.1, Pyxis GCC
 16.2.0, libfuse3 3.18.3. QEMU 10.2.2 with the existing AHCI correction,
