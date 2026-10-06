@@ -815,6 +815,13 @@ The [system layout](wip/system-layout.md) renames leave two gaps until later tas
   missing boot files and an unknown revision, and is rebuilt. The pool is unaffected. Revisit with task 3's
   two-stage Update.
 
+## Archive-only network configuration
+
+Network profiles live only in `boot://config/network.lua`. On an installed
+system, changing them needs an Update, while spaces can change through the
+pool override ([system layout](wip/system-layout.md)). Revisit after boot init:
+move network configuration onto the pool, following the same override pattern.
+
 ## USB image updates and firmware qualification
 
 The [raw USB image builder](development/usb-image.md) creates fresh images and
