@@ -42,9 +42,11 @@ network authority. The packaged [native installer](../userland/installer.md)
 implements consent, formatting, installation and
 [system updates](../userland/system-updates.md). Update candidate inspection uses
 raw reads without mounting a pool. After typed `update`, it acquires the same
-exclusive write claim as install, rechecks eligibility and the selected layout,
-then writes only the ESP. Flush, release/rescan and read-back verification precede
-the read-only system-root reopen.
+exclusive write claim as install and rechecks eligibility and the selected
+layout. It then releases that claim, writes the new programs into the pool's
+`bin` volume through the disk handle, claims only the ESP partition and writes
+it. Flush, release and read-back verification precede the read-only system-root
+reopen.
 
 ## Inventory and raw access
 
@@ -86,8 +88,16 @@ published write/flush failures latch write failure until reboot, without retry o
 rollback. Calls execute through the serial filesystem worker and existing block
 tickets; no userspace buffer is lent to DMA.
 
-RELEASE requires RELEASE, flushes and rescans GPT before ending the claim on all
-aliases of that disk object. It returns any I/O/scan failure and still ends raw
+CLAIM requires WRITE and re-establishes raw mutation authority on a disk object
+whose claim was released. Partition zero claims the whole disk under READ_WRITE
+opening's rules. A GPT entry claims only that partition: no other claim may
+exist on the device and that partition must not hold a mounted pool, while
+other partitions' pools stay mounted. WRITE is then confined to the partition,
+and mounts of it are refused.
+
+RELEASE requires RELEASE and flushes. For a whole-disk claim it then rescans GPT;
+a partition claim cannot have changed the table and skips the rescan. It ends
+the claim on all aliases of that disk object. It returns any I/O/scan failure and still ends raw
 mutation authority; failure does not roll back bytes. Last-object close queues
 the same cleanup through the worker, logging failure. Use explicit RELEASE to
 observe the result. INFO and READ remain available on the released object.
@@ -96,8 +106,12 @@ observe the result. INFO and READ remain available on the released object.
 
 DISK OPEN_VOLUME requires MOUNT and uses the ordinary npfs partition/volume
 request and validation path. It permits read-only directory rights, including
-independently requested filesystem information. It waits for the selected
-device's GPT scan and refuses a live raw claim. Closing the disk does not revoke
+independently requested filesystem information, and mutation rights when the
+disk object also holds WRITE, which only READ_WRITE opening grants. It waits for
+the selected device's GPT scan and refuses a whole-disk claim or a claim on
+that partition. CREATE_VOLUME requires MOUNT and WRITE and appends a live volume
+with an empty root to the pool in one committed transaction, with an identity
+from the kernel's entropy source; the installer uses it to add `bin`. Closing the disk does not revoke
 a returned root. The normal configured-GUID mount authority remains separate.
 
 Mounted pools stay retained for the boot. Opening a volume for inspection can

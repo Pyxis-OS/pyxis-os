@@ -86,8 +86,14 @@ no placement preference. Boot init creates spaces one at a time, and an earlier
 init is usually blocked by then, so on four CPUs all three live inits start on
 CPU 1; balancing later moves runnable tasks to idle CPUs.
 
+Every space also receives `bin://`, read-only. On installed boots it is
+`bin/REVISION` on the system pool, for the running kernel's revision; the
+[installer](installer.md) writes it. On live boots, or when that directory is
+missing, it is the archive itself, which then holds every program; boot init
+reports which. The shell resolves bare names through `bin://`, then `boot://`.
+
 Space inits receive the bootstrap services, `boot://`, `tmp://` as their
-working directory, their configured roots and `OS_NAME`, plus their space's own
+working directory, `bin://`, their configured roots and `OS_NAME`, plus their space's own
 console, keyboard, pointer, display and space handle from the kernel. They do
 not receive mount authority or the space factory, so `mount` and `sync --disk`
 are unavailable to them; `sync PATH...` still works on their roots.
@@ -439,7 +445,7 @@ other workload authority is chosen from a space name or CPU.
 
 Mount authority stays with boot init; the selected directory binding list travels
 through session, service and remote-server handoff and ordinary child launch.
-The list contains at most 16 roots, including boot, tmp and HOST. Each launch queries
+The list contains at most 16 roots, including boot, tmp, bin and HOST. Each launch queries
 and copies the selected grants' actual rights and transport masks; explicit
 read-only attenuation also applies to the working-directory chain. A restricted
 launcher can select fewer roots or rights. It does not recover missing authority

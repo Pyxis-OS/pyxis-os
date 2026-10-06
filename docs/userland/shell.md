@@ -107,9 +107,12 @@ space's trusted init receives, and it works only before the space's first
 launch. See [affinity setup](init.md#affinity-setup). Indices above 8191 are a
 usage error. Like the other builtins, `affinity` cannot run with `&`.
 
-A command without `/` is a bare name: `cat` opens `boot://cat.pxe`. There is no
-PATH search or fallback. Names already ending in `.pxe` still receive the suffix
-when bare; use `boot://cat.pxe` or `./cat.pxe` to name an image directly. Paths
+A command without `/` is a bare name: `lspci` opens `bin://lspci.pxe`, and when
+that is not found, `boot://lspci.pxe`. Installed systems keep ordinary programs
+in `bin://` and the rescue set in `boot://`; live boots bind `bin://` to the
+archive. There is no PATH variable. Names already ending in `.pxe` still
+receive the suffix when bare; use `bin://cat.pxe` or `./cat.pxe` to name an
+image directly. Paths
 containing `/` are resolved as written. Builtins are recognized after quote
 removal. An empty command name is an error. Opened programs use the
 [script-launch helper](script-launch.md), which can dispatch a shebang to a native
