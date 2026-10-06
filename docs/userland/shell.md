@@ -288,7 +288,7 @@ cat missing 2> home://errors.txt | cat > home://empty.txt
 Whitespace around `|` is optional. Quotes and escapes keep it literal. Every
 stage needs a nonempty command name; leading, trailing or adjacent pipes are
 errors. `||`, `|&`, background pipelines and builtin stages (`cd`, `exit`, `mount`,
-`title`, `session`) are rejected before any file is opened. Redirections retain
+`title`, `session`, `poweroff`, `reboot`) are rejected before any file is opened. Redirections retain
 their ordinary per-stage syntax and duplicate-stream checks. Interactive input
 and script lines use the same rules and their existing total line-length limits.
 
@@ -544,6 +544,21 @@ In a remote session, root-shell exit causes the server to terminate all remainin
 group members, including a session successor. Remote `session` handoff therefore
 cannot keep a successor running after that shell exits.
 
+## Power-off and restart
+
+`poweroff` and `reboot` are builtins that take no arguments. They need the
+shell's `power` resource, which exists only in spaces whose boot configuration
+sets `power = true` ([boot configuration](init.md#boot-configuration)); elsewhere
+they print `this space has no power authority`.
+
+The kernel stops running user programs without asking them to exit, writes every
+mounted native pool's cached data and empties its journal, then powers off
+through ACPI or restarts. Files written without `sync` survive; RAM volumes such
+as `tmp://` do not. If a pool cannot be flushed, the command reports the status,
+programs resume and the system stays up. Holding the physical power button
+still switches off immediately, keeping only synced data. See
+[ACPI power-off](../kernel/acpi.md#power-off-and-restart).
+
 ## Startup and child authority
 
 The shell expects named `input`, `output`, `memory` and `launcher` resources,
@@ -552,6 +567,10 @@ memory permits MANAGE and launcher permits LAUNCH. Normally app supplies LOOKUP,
 ENUMERATE and READ_FILES, and home additionally supplies CREATE, WRITE_FILES and
 REMOVE. Directory grants can be restricted by the launcher; the shell queries
 and preserves their actual rights.
+An optional `power` resource supplies the `poweroff` and `reboot` builtins. The
+shell forwards it only to a `session` successor, never to the programs it runs;
+session passes it on to local successors but not when it starts remote services,
+so remote shells never hold it.
 An optional `display` resource supplies DRAW authority for the space. An optional
 `clock` resource supplies READ and SLEEP authority for monotonic time. An optional
 `keyboard` resource supplies INPUT authority for physical-key sessions.

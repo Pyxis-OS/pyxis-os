@@ -109,6 +109,10 @@ Accepted for task 2 on 2026-10-07:
   - The shutdown sequence from decision 3. Power-off enters S5 through uACPI.
     Reboot uses the FADT reset register, with a documented fallback if a machine
     lacks one.
+  - **Status:** implemented ([ACPI](../kernel/acpi.md#power-off-and-restart)).
+    QEMU meets every check below with one and four CPUs; the ThinkPad checks
+    are the owner's. The run script no longer passes `-no-reboot -no-shutdown`,
+    so a guest power-off exits QEMU and a reset reboots it.
   - **Finish when:**
     - `poweroff` makes QEMU exit;
     - the ThinkPad turns off;

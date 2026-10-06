@@ -126,9 +126,9 @@ Native evidence comes from the owner's ThinkPad T14 Gen 1 AMD and is
   the stick's ESP in 14 s. The SHA-256 of `keep.bin` was unchanged afterwards, and
   the stick then booted `9b7b932`.
 
-Pyxis has no orderly shutdown. A synced power-off is `sync` of the written files,
-an idle shell, then holding the power button. It covers only data synced before
-power was removed.
+`poweroff` in the `pyxis` space flushes every mounted pool before switching off
+([power-off and restart](../userland/shell.md#power-off-and-restart)). Holding the
+power button covers only data synced before power was removed.
 
 ## Limits
 

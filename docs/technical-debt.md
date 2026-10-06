@@ -380,6 +380,27 @@ milestone task:
   installs or removes the GPE or notify handlers that wait. Revisit when the
   battery and power-button tasks add them.
 
+## Power-off and restart limits
+
+[Power-off and restart](kernel/acpi.md#power-off-and-restart) follow the first
+version of "clean" agreed for the ACPI milestone:
+
+- **No orderly stop of programs or services.** User tasks are held where they
+  are; nothing is asked to exit or save. Revisit with service supervision.
+- **Failed pools are skipped.** A pool whose writeback already failed takes no
+  writes, so power-off proceeds without it; its unsynced changes are lost, as
+  they would be with the power button. The failure was logged when it happened.
+  Refusing instead would make a clean power-off impossible until reboot.
+- **One flush failure keeps the system up.** There is no forced power-off
+  command; holding the power button remains the way out.
+- **Raw disk handles are not flushed.** The installer flushes its own writes;
+  another raw writer would need to.
+- **Untested failure paths.** The flush-failure, firmware-failure and reset
+  fallback paths were checked by code inspection only. Revisit if a machine
+  reaches them.
+- **Held tasks ignore stop requests until release.** A group stopped during a
+  failed power operation stops when its tasks resume.
+
 ## Synchronous launch preparation
 
 Each in-flight launch reserves a full 64 KiB metadata capture buffer plus a
