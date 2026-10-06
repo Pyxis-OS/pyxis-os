@@ -97,6 +97,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_TCP_LISTENER;
   case OBJECT_SPACE:
     return PROTOCOL_SPACE;
+  case OBJECT_SPACE_FACTORY:
+    return PROTOCOL_SPACE_FACTORY;
   case OBJECT_PROFILE:
     return PROTOCOL_PROFILE;
   case OBJECT_PIPE_SERVICE:
@@ -176,6 +178,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~(PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_FILE | PROFILE_RIGHT_HOST));
   case OBJECT_SPACE:
     return !(rights & ~SPACE_RIGHTS);
+  case OBJECT_SPACE_FACTORY:
+    return !(rights & ~SPACE_FACTORY_RIGHTS);
   case OBJECT_TERMINAL_SERVICE:
     return !(rights & ~TERMINAL_SERVICE_RIGHT_CREATE);
   case OBJECT_TERMINAL_ATTACHMENT:

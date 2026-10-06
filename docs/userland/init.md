@@ -1,173 +1,214 @@
 # Init and session startup
 
-Boot configuration lists the initial spaces in order. Each gets its own tab,
-terminal, display and input, and runs one trusted init. Caelum's log space is
-always first and runs no init. The number of spaces does not depend on the CPU
-count, and a single-CPU boot creates the same spaces. Children stay in their
-parent's space and on its CPU. This does not introduce migration, supervision
-or a global PID 1.
+The kernel starts one trusted **boot init** from the boot archive, in Caelum's
+log space. Boot init reads the boot configuration, mounts each configured
+volume once, creates the configured spaces in order and starts each space's
+init, then exits. Each space gets its own tab, terminal, display and input and
+runs one trusted init. The number of spaces does not depend on the CPU count.
+Children stay in their parent's space. This introduces no migration,
+supervision or global PID 1.
 
-Init also receives an explicit namespace-creation service. The packaged active
+Space inits receive an explicit namespace-creation service. The packaged active
 init scripts create a [service namespace](../interfaces/namespaces.md) before session handoff;
 it is delegated independently of space membership.
 
-Initial processes share the read-only `boot://` archive and writable RAM-backed
-`tmp://` tree. It is not private per space and disappears on reboot. Each
-init receives the ordinary available bootstrap grants. Raw installer resources
-are issued only on the separate install path. Init scripts are trusted
-setup policy; the session handoff delegates resources to ordinary applications.
+Space inits share the read-only `boot://` archive and writable RAM-backed
+`tmp://` tree. It is not private per space and disappears on reboot. Raw
+installer resources are issued only on the separate install path. Init scripts
+are trusted setup policy; the session handoff delegates resources to ordinary
+applications.
 
-## Boot selection
+## Boot command line
 
-The generated Limine configuration carries one option per space, in tab order:
+The kernel accepts four options, each at most once, in a command line of at
+most 4095 bytes without quoting or escaping:
 
-```text
-space.development=boot://init space.readonly=boot://init-readonly space.remote=boot://init-remote
+| Option | Meaning |
+| --- | --- |
+| `init=boot://IMAGE` | Required. The boot init, a native PXE or shebang archive entry. |
+| `mount.disk=GUID` | The disk native mounts may use; boot init then reads the installed configuration. |
+| `boot.install=1` | The install entry: boot init also receives the raw installer resources. |
+| `boot.default_config=1` | The rescue entry: boot init ignores the pool override. |
+
+Anything else, a repeated option or a non-`boot://` init stops the boot.
+Normal live and installed boots use `init=boot://boot-init.pxe`.
+
+Boot init runs on CPU 0 in Caelum's space. Its messages go to the Caelum tab and
+to serial. It receives console output but no input, the bootstrap services, the
+`boot://` and `tmp://` roots, the `space_factory` resource, the HOST and native
+mount authority when present, and, on the install entry, the raw installer
+resources. Arguments add `--installed` when a disk is bound and
+`--default-config` for the rescue entry.
+
+## Boot configuration
+
+Boot init reads `boot://config/live.lua`, or `boot://config/installed.lua` when
+`mount.disk` is bound. Each file returns named `volumes` and a list of `spaces`:
+
+```lua
+return {
+  volumes = {
+    host = { kind = "virtio-fs" },
+    system = { kind = "npfs", partition = 2, volume = "system" },
+  },
+  spaces = {
+    { name = "development", title = "Development", init = "boot://init",
+      network = true, cpus = { 1, 2, 3 },
+      roots = { host = { access = "read-write", optional = true },
+                system = "read-only" } },
+  },
+}
 ```
 
-Each `space.NAME=IMAGE` option creates a space and starts IMAGE in it as its
-trusted init. NAME is 1–31 characters from `a-z`, `0-9` and `-`, and must be
-unique. It identifies the space in configuration and boot diagnostics and is
-the tab's initial title until init sets one. It grants no authority. At least one
-space is required. The old `init`, `init.primary` and `init.N` options are no
-longer accepted.
-
-An optional `space.NAME.cpus=LIST` option sets the CPUs that space's tasks may
-use, its ceiling. LIST is comma-separated boot CPU indices and inclusive `A-B`
-ranges, for example `0,2-3`. Indices are dense boot indices, not APIC IDs.
-Without the option, a space may use every CPU. Children inherit their space's
-ceiling.
+- **Volumes.** An `npfs` volume names a one-based GPT partition on the bound
+  disk and a volume name. A `virtio-fs` volume is the HOST export. Names use
+  1–31 characters from `a-z`, `0-9` and `-`, other than `boot` and `tmp`, and
+  become the root's scheme.
+- **Spaces.** `name` follows the same rules, other than `rescue` and `caelum`,
+  and identifies the space in logs; it grants nothing. `title` defaults to the
+  name. `init` must name a `boot://` entry. `cpus` lists boot CPU indices, the
+  space's ceiling; without it the space may use every CPU. Tab order follows
+  the list.
+- **Roots.** Each root names a volume and its access, `read-only` or
+  `read-write`, or a table that can also mark it `optional`. A volume is
+  mounted once, read-write if any space needs that, and each space receives only
+  the access it asks for.
+- **Network owner.** At most one space sets `network = true`. Only its init
+  receives `net_config` WRITE and UDP broadcast authority, so only it can run
+  `session --configure-network`; the others get READ and ordinary UDP. A
+  configuration without an owner is valid and leaves the network unconfigured.
 
 The scheduler places each task on the least-loaded CPU its space allows and
 balances tasks between CPUs; see [placement and migration](../kernel/smp.md#placement-and-migration).
 CPU 0, the BSP, runs userspace too, but placement ties prefer the other CPUs,
-because it also runs the kernel workers. With a single CPU, everything runs on
-CPU 0. Each init is placed as it starts, so on four CPUs the default
-configuration still puts Development, Read-only and Remote on CPUs 1, 2 and 3.
-No space is created for further CPUs.
+because it also runs the kernel workers and boot init. A new space's init has
+no placement preference. Boot init creates spaces one at a time, and an earlier
+init is usually blocked by then, so on four CPUs all three live inits start on
+CPU 1; balancing later moves runnable tasks to idle CPUs.
 
-A space can still be created without starting its init, when its ceiling names
-a CPU this boot does not have, for example `8-11` on a four-CPU machine. The set
-is never narrowed to the CPUs present. The tab and the kernel log then say why.
-A ceiling of only CPU 0 is valid on any boot.
+Space inits receive the bootstrap services, `boot://`, `tmp://` as their
+working directory, their configured roots and `OS_NAME`, plus their space's own
+console, keyboard, pointer, display and space handle from the kernel. They do
+not receive mount authority or the space factory, so `mount` and `sync --disk`
+are unavailable to them; `sync PATH...` still works on their roots.
 
-Other spaces and the rest of the boot continue. An unstarted space runs no
-tasks. If it was the one that configures networking, other sessions start
-without a network address.
+A space whose required volume is missing or fails to mount, whose CPU set names
+an absent CPU, or whose init cannot be opened is created but not started. Its
+tab and the log say why, and the other spaces start. If no space starts, boot
+init creates a `rescue` space running `boot://shell.pxe` with only `boot://` and
+`tmp://`; it cannot repair the pool.
 
-Make takes the list as `SPACES`, separately from the host file used to stage
-`init`:
+### Pool override
+
+Installed boots also read `system://config/boot.lua` from the default `system`
+volume. It has the same shape. An entry with a default's name replaces it
+whole, new names follow the defaults, and nothing can be removed. It cannot
+redefine the `system` volume. Roots may name volumes from either file. A
+missing override is reported and the default boots. An invalid override (a Lua
+error, an unknown key, a bad value, an undefined volume or a second network
+owner) is ignored whole, with the reason on the Caelum tab and serial.
+
+The override can replace a default space with an unusable one. The installed
+disk's second boot entry, **Pyxis OS (rescue)**, passes
+`boot.default_config=1` and boots the archive default; it restores the
+configuration, not the pool. Write access to `system://config/boot.lua`
+chooses which inits run with forwarded grants on the next boot, so treat it as
+administrative.
+
+### Development builds
+
+Edit `userspace/config/live.lua`, or `installed.lua` for builds with
+`MOUNT_DISK`, to change spaces, CPU sets and roots. `INIT` names one host file,
+relative to the repository root or absolute, staged as `boot://init`, the
+Development space's init. It can be a native PXE executable or a shebang script:
 
 ```sh
 make run CPUS=4
-make run CPUS=4 SPACES='development=boot://init readonly=boot://init-readonly'
-make run CPUS=4 SPACES='one=boot://init-readonly two=boot://init-readonly'
 make run INIT=/tmp/init.sh
 make image INIT=build/userspace/shell.pxe
-make image                         # restore the packaged init and spaces
+make image                         # restore the packaged init
 ```
 
-`SPACES` defaults to
-`development=boot://init readonly=boot://init-readonly remote=boot://init-remote`.
-`SPACE_CPUS` is an optional whitespace-separated list of `NAME=LIST` ceilings,
-for example `SPACE_CPUS='remote=2-3'`. The build rejects an unknown or repeated
-name, a malformed or reversed list, leading zeros and indices longer than nine
-digits; it cannot know the CPU count.
-It is a whitespace-separated list of `NAME=URI` entries. Paths select entries
-already in the boot archive, using letters, digits, `_`, `.`, `/`, `:`, `+` and
-`-`. The kernel supports whitespace-separated options, without quoting or
-escaping, in a command line of at most 4095 bytes. Boot fails on:
-
-- a missing space;
-- malformed, unknown or duplicate options, including CPU sets;
-- a CPU set for an unconfigured space;
-- a non-`boot://` init.
-
-`INIT` names one host file, relative to the repository root or absolute. It is
-staged as `boot://init`, replacing the packaged development script; it does not
-change the space list. It can be a native PXE executable or shebang script. To
-run only that init, also set `SPACES=NAME=boot://init`. Additional custom archive
-entries belong in the [boot assembly manifest](../development/boot-archive.md).
-
-Selection is checked on every image build. Changing only the space list
-regenerates Limine configuration and the ISO without recompiling the kernel.
-Identical configuration and archive contents retain their timestamps. Supply
-overrides on each invocation; a later build without them restores the packaged
-defaults. Kernel-only builds do not select or package init.
+Additional custom archive entries belong in the
+[boot assembly manifest](../development/boot-archive.md). Kernel-only builds do
+not select or package init.
 
 ## Install boot selection
 
 The build setting `BOOT_MENU_TIMEOUT` defaults to `0`, booting normally without
 a menu delay. Set `BOOT_MENU_TIMEOUT=5` when building install media to allow menu
 selection. The `Install Pyxis` entry is generated for either timeout. Its
-command line is `space.install=boot://init-install.pxe boot.install=1`.
-`boot.install=1` requires exactly one configured space, and only that space's
-init receives `disks`, `boot_kernel` and `boot_archive`. Selecting the same
-executable without `boot.install=1` supplies none of these resources.
+command line is `init=boot://init-install.pxe boot.install=1`, and only that
+boot init receives `disks`, `boot_kernel` and `boot_archive`.
 
-Native installer init explicitly delegates its bounded installer resources to
-`boot://installer.pxe`, waits for completion and reports its result. The installer
-is packaged and implements the [interactive installation flow](installer.md). See
+`init-install` is a boot init. It creates the `install` space with
+`boot://installer.pxe` as its first process, forwards its bounded installer
+resources and the read-only `boot://` root, drops the space factory and waits,
+then reports the installer's result on the Caelum tab. The installer implements
+the [interactive installation flow](installer.md). See
 [installer authority](../devices/installer-authority.md) for the source-file,
 raw-claim and handoff contracts. These resources do not enter ordinary session
 or child launch automatically.
 
-The installed configuration is `space.pyxis=boot://init-installed` with the
-disk's `mount.disk`. That init mounts partition 2's `system` volume read-write
-as `system://`, starts the ordinary local session and configures networking when
-available. `tmp://` remains RAM-backed. Installed disks use timeout zero and
-omit the installer entry; enter install mode through live media.
+The installed configuration has two entries and a three-second menu:
+`init=boot://boot-init.pxe mount.disk=<GUID>`, and the rescue entry, which adds
+`boot.default_config=1`. The archive's installed configuration starts the
+`pyxis` space with `boot://init-installed`, `system://` read-write and network
+ownership. That init starts the ordinary local session and configures
+networking. `tmp://` remains RAM-backed. Installed disks omit the installer
+entry; enter install mode through live media.
 
 ## Native disk configuration and mounting
 
 `MOUNT_DISK=<canonical-GPT-GUID>` selects the deployment disk and generates
-`mount.disk=<GPT-GUID>` in Limine configuration. Omission disables native mount
-authority. Malformed, zero or duplicate configuration fails setup; kernel parsing
-also rejects malformed or duplicate options outside the Make generator. The GUID
-selects a disk but authenticates neither it nor its contents. The filesystem has
-no on-disk principal or permission policy.
+`mount.disk=<GPT-GUID>` in Limine configuration, plus the rescue entry.
+Omission disables native mount authority. Malformed, zero or duplicate
+configuration fails setup; kernel parsing also rejects malformed or duplicate
+options outside the Make generator. The GUID selects a disk but authenticates
+neither it nor its contents. The filesystem has no on-disk principal or
+permission policy.
 
 Prepare a populated GPT image using the
 [native adapter instructions](../devices/filesystem-native-adapter.md#prepare-a-disposable-disk),
-then attach it with configuration matching that image:
+describe its volume in `userspace/config/installed.lua`, then attach it with
+configuration matching that image:
+
+```lua
+volumes = { data = { kind = "npfs", partition = 1, volume = "system" } },
+spaces = {
+  { name = "native", init = "boot://init", network = true,
+    roots = { data = "read-write" } },
+},
+```
 
 ```sh
-make run CPUS=4 INIT=/tmp/init-native.sh SPACES=native=boot://init \
+make run CPUS=4 INIT=/tmp/init-native.sh \
   VIRTIO_BLK_IMAGE=/absolute/path/to/development.raw \
   MOUNT_DISK=01234567-89ab-cdef-0123-456789abcdef
 ```
 
 The GUID is illustrative, not a default. Do not change an attached image from the
-host. A trusted script can mount and delegate a writable root:
+host. The space's init receives `data://` and can hand it to a session:
 
 ```sh
 #!boot://shell.pxe
-mount --partition 1 --volume system --read-write data://
 session boot://session.pxe --start-services
 ```
 
-Use `--read-only` and `VIRTIO_BLK_READONLY=1` for a read-only device. Read-only
-pool opening refuses a committed journal; writable opening validates and replays
-it before exposing records. Unknown required features prevent opening; unknown
-read-only-compatible features prevent writes and replay.
+Use `read-only` roots and `VIRTIO_BLK_READONLY=1` for a read-only device.
+Read-only pool opening refuses a committed journal; writable opening validates
+and replays it before exposing records. Unknown required features prevent
+opening; unknown read-only-compatible features prevent writes and replay.
 
 For boot-present USB BOT media, enable `CONFIG_XHCI=y` and attach the existing
 image read-only. An ISO can select its actual disk GUID without rebuilding that
-USB image. For the sample image, trusted init can use:
-
-```sh
-#!boot://shell.pxe
-mount --partition 2 --volume usb-test --read-only usb://
-namespace create
-service start text boot://textfs.pxe
-session boot://session.pxe --configure-network --start-remote-services
-```
-
-Build with `make image INIT=/tmp/init-usb.sh SPACES=usb=boot://init MOUNT_DISK=<actual-GPT-GUID>`
+USB image. For the sample image, the installed configuration can name
+`usb = { kind = "npfs", partition = 2, volume = "usb-test" }` and give a space
+a read-only `usb` root. Build with `make image MOUNT_DISK=<actual-GPT-GUID>`
 and attach the selected disk through xHCI; see the
 [USB storage bring-up record](../development/usb-storage-bringup.md).
-For explicitly writable attachment of a selected disposable image, init can
-request `--read-write` instead. The mount requires known WP-clear media and
+For explicitly writable attachment of a selected disposable image, the root can
+be `read-write` instead. The mount requires known WP-clear media and
 successful blocking cache-synchronization qualification; unqualified or latched
 write-failed disks refuse writable opening. Qualified USB mounts use the existing
 filesystem write, sync and replay path. Installer/public raw USB access remains
@@ -177,7 +218,7 @@ file grant before launching it. The
 [persistent USB development walkthrough](../development/edit-build-run.md#persistent-usb-development)
 shows editing, compiling, explicit sync and reuse of the same private disk.
 
-Every trusted workload init receives the same configured disk scope. The
+Boot init receives the configured disk scope. The
 `native_mount` resource is issued unless inventory establishes hardware absence.
 Pending discovery retains the scope rather than caching a permanent failure.
 Mount waits for sealed discovery and all terminal GPT scans, selects the sole
@@ -189,20 +230,20 @@ UNAVAILABLE for partial discovery. Selected-device failures do not fall back.
 A live raw claim prevents opening that device.
 `MOUNT_RIGHT_OPEN_ROOT`, `MOUNT_RIGHT_OBSERVE` and `MOUNT_RIGHT_WRITE` are independent:
 requesting root mutation rights requires WRITE; requesting filesystem information
-requires OBSERVE. `--no-info` omits observation. `--optional` skips only missing
-mount authority; wrong selectors, invalid media and other operation failures remain
-errors.
+requires OBSERVE. Boot init requests observation whenever its authority holds
+OBSERVE. An `optional` root skips a volume that is missing or fails to mount;
+otherwise the space does not start.
 
-Ordinary applications receive independently retained directory/file grants through
-handoff, with no mount or raw-block authority. Closing init's mount handle does
-not revoke those roots. Attenuated read-only grants cannot mutate. Observation
+Space inits and ordinary applications receive independently retained
+directory/file grants, with no mount or raw-block authority. Boot init exiting
+does not revoke those roots. Attenuated read-only grants cannot mutate. Observation
 provides [identity and shared-pool capacity](../interfaces/directories.md#scoped-filesystem-information),
 not usage or a writable allowance.
 
 File and directory sync commit the whole current pool, including ordered data from
-other files. Trusted init can call `sync --disk` to synchronize all mounted pools on
-its configured disk; this requires mount WRITE and accepts no disk selector.
-Existing `sync PATH...` remains the path-based utility. Ordinary sessions can use
+other files. `sync --disk` synchronizes all mounted pools on the configured disk;
+it requires mount WRITE, which only boot init holds, and accepts no disk
+selector. `sync PATH...` remains the path-based utility. Ordinary sessions can use
 sync on their granted files/directories. Closing a file promises no durability;
 dirty data and writeback errors survive in the mounted pool after its final handle
 closes. Call sync explicitly before reporting that persistent work is complete.
@@ -211,20 +252,23 @@ closes. Call sync explicitly before reporting that persistent work is complete.
 
 The userland repository supplies shebang scripts using `boot://shell.pxe`:
 
-- `init/development.sh`, installed as `boot://init`, opens the optional host export
-  with `mount --optional --read-write host` and hands off with
+- `init/development.sh`, installed as `boot://init`, receives the optional host
+  export read-write from `live.lua` and hands off with
   `session boot://session.pxe --configure-network --start-services`.
-- `init/readonly.sh`, installed as `boot://init-readonly`, opens the same optional
-  export with `mount --optional --read-only host` and hands off with
+- `init/readonly.sh`, installed as `boot://init-readonly`, receives the same
+  optional export read-only and hands off with
   `session boot://session.pxe --start-services`, leaving network settings alone.
 - `init/services.sh`, installed as `boot://init-services`, publishes the HTTP
   provider using the configured session environment, then starts a separate
   optional HTTPS provider with read-only trust grants and hands off to the
   interactive shell. A reported HTTPS setup failure leaves HTTPS unpublished
   and permits that handoff. It runs only when session selects `--start-services`.
-- `init/remote.sh`, installed as `boot://init-remote`, selects the Remote title,
-  mounts optional HOST read-write, creates the service namespace and hands off
-  through `session boot://session.pxe --start-remote-services`.
+- `init/remote.sh`, installed as `boot://init-remote`, receives optional HOST
+  read-write, creates the service namespace and hands off through
+  `session boot://session.pxe --start-remote-services`.
+- `init/installed.sh`, installed as `boot://init-installed`, receives
+  `system://` read-write from `installed.lua` and hands off like the
+  development script.
 - `init/remote-services.sh`, installed as `boot://init-remote-services`, starts
   HTTP/optional HTTPS with the configured environment and hands off through
   `session boot://session.pxe --remote-server 2323`. The trusted launcher waits
@@ -236,26 +280,26 @@ writes, resize and `mkdir`, `rm`, `rmdir` and `mv`; the read-only profile delega
 only host read grants. Both still start in writable, shared RAM `tmp://` and
 must explicitly address or enter `host://` to use the export. A host READ grant
 can load a native executable with the existing launcher authority. An absent
-device leaves either optional mount unbound, while an operational mount error
-stops the script. The host daemon's `--readonly` and host file permissions
+or failed export leaves the optional `host://` root unbound. The host daemon's `--readonly` and host file permissions
 independently restrict mutations; a guest read-write grant only authorizes
 attempts. See the [host setup and walkthrough](../devices/virtio-fs.md#start-the-host-service).
 
 The session launcher applies per-space [terminal/environment configuration](session-configuration.md)
-and starts the interactive shell. Only the development profile requests global
-network setup. Boot does not order init execution or wait for one init's setup
-before running another; select a single network-setup owner. Other sessions may
-start before networking is configured. Super+Left/Right switches the active tab.
+and starts the interactive shell. Only the network owner, Development in
+`live.lua` and `pyxis` in `installed.lua`, can request global network setup.
+Boot does not order init execution or wait for one init's setup before running
+another. Other sessions may start before networking is configured. Super+Left/Right switches the active tab.
 
 An explicitly selected init script can instead hand off with
 `session boot://session.pxe --configure-network --tcp-server ADDRESS PORT`,
 optionally adding `--tcp-count COUNT`. The trusted launcher creates an exact
 bound listener and starts the [concurrent TCP echo consumer](../devices/tcp.md#concurrent-echo-server)
-with only that listener, memory, clock and output streams. Bootstrap init has
+with only that listener, memory, clock and output streams. Space inits have
 separate TCP LISTEN authority; ordinary session startup delegates only CONNECT.
 This opt-in handoff replaces that init's shell and does not expose a remote shell.
 
-Trusted network setup uses UDP BROADCAST authority for [DHCP](../devices/dhcp.md).
+Trusted network setup uses UDP BROADCAST authority, which only the network
+owner's init receives, for [DHCP](../devices/dhcp.md).
 Its setup session remains alive after successor handoff and shell exit to maintain
 leases or continue link selection/discovery after an initial offline timeout.
 Pending DHCP selection retains UDP creation authority until binding and opening
@@ -275,22 +319,23 @@ launches the supervisor; ordinary remote shells receive application handles only
 
 ## Affinity setup
 
-Trusted init can narrow its space's CPUs within the boot ceiling before
+Trusted init can narrow its space's CPUs within the configured ceiling before
 anything else runs there:
 
 ```sh
 #!boot://shell.pxe
-title --optional "Remote"
 affinity 2-3
 session boot://session.pxe --start-remote-services
 ```
 
-`affinity LIST` uses the same list syntax as the ceiling. The `space` grant that each
-init receives carries `SPACE_RIGHT_SET_AFFINITY`. The `session` handoff forwards
+`affinity LIST` takes comma-separated boot CPU indices and inclusive `A-B`
+ranges. The `space` grant that each space init receives carries
+`SPACE_RIGHT_SET_AFFINITY`. The `session` handoff forwards
 only the title right, so sessions, shells and commands cannot change affinity.
 
 The setup window closes permanently at the space's first launch request, whether
-by init or anyone else, and whatever its outcome. The kernel starting init does not count.
+by init or anyone else, and whatever its outcome. Creating the space and
+starting its init does not count.
 Until then, repeated requests each replace the set. Children then inherit the
 narrowed set. A request fails without changing anything in these cases:
 
@@ -306,16 +351,15 @@ failed command.
 
 ## Space titles
 
-`title "Development"` sets the caller's tab label. Packaged init scripts set
-`Development`, `Read-only` and `Remote` before mounting or handing off. Every
-configured space's init receives the title grant. The scripts still use
-`title --optional`, which ignores only a missing capability; malformed text and
-operation failures still stop a script.
+`title "Development"` sets the caller's tab label. A space's initial title
+comes from its configuration entry, so the packaged scripts no longer set one.
+Every space init receives the title grant. `title --optional` ignores only a
+missing capability; malformed text and operation failures still stop a script.
 
 The initial `space` resource grants `SPACE_RIGHT_SET_TITLE` and, for
 [affinity setup](#affinity-setup), `SPACE_RIGHT_SET_AFFINITY`. It is bound to
 that init's space, and the kernel also requires the caller to belong to the
-same space. No title resource is issued for Caelum. The shell's `session`
+same space. Boot init receives no title resource for Caelum. The shell's `session`
 handoff passes the title right to the session launcher, which passes it to the
 interactive shell. Ordinary foreground/background commands receive no title
 grant. An explicit native launcher can delegate it within its space using the
@@ -329,6 +373,27 @@ handle do not reset it. Titles may repeat; they are display labels, not names
 for lookup, identity or authority. Longer labels are clipped visually to the
 existing tab width, without altering the stored text. The presenter snapshots
 the title under a short lock before drawing; updates do not allocate.
+
+## Space creation
+
+The `space_factory` resource has one right, CREATE, and only boot init holds it;
+it is never forwarded. The [space protocol](../../include/abi/space.h) appends a
+space with a name, a title and either a launch request or an unstarted reason:
+
+- **Launch.** The CPU set becomes the space's ceiling and must name only boot
+  CPUs. The request is an ordinary launch request with no streams. The kernel
+  adds the space's console as `input`, `output` and the three streams, its
+  `keyboard`, `pointer`, `display` and `space` grants, and rejects a request
+  that names those resources itself. The reply is a WAIT process handle; the
+  first process is in no execution group.
+- **Unstarted.** The space gets no CPUs and its tab shows
+  `space NAME not started: REASON`.
+
+Names are unique and identify spaces in logs. A malformed request or a taken
+name creates nothing; a failure while preparing the first process leaves the
+space unstarted, showing the status. Libpyxis exposes `space_create_started()`
+and `space_create_unstarted()` through `<space.h>`, and `program_create_space()`
+through `<launcher.h>` for script inits. Spaces are never destroyed.
 
 ## Space bar
 
@@ -356,26 +421,25 @@ a space can change every tab's width.
 
 ## Startup grants and lifetime
 
-An init path must name an exact `boot://` archive entry. Native init receives
-that URI as `argv[0]`. A script interpreter receives its own URI as `argv[0]`,
-the selected init URI as `argv[1]`, and a READ resource named `script`.
+Boot init and space inits must name exact `boot://` archive entries. A native
+init receives that URI as `argv[0]`. A script interpreter receives its own URI
+as `argv[0]`, the init URI as `argv[1]`, and a READ resource named `script`.
 Interpreter lookup stays inside the boot archive and does not recursively
 interpret scripts. LF/CRLF and bounds follow the [script-launch contract](script-launch.md).
 
-Each workload init receives its space's title, terminal, display, keyboard and
-pointer grants, private memory, launch, clock, randomness, networking services and
-network configuration, caller-scoped [memory profiling](../development/allocation-profiling.md), explicit
+Each space init receives its space's title, terminal, display, keyboard and
+pointer grants from the kernel, and from boot init private memory, launch,
+clock, randomness, networking services, network configuration (WRITE only for
+the network owner), caller-scoped [memory profiling](../development/allocation-profiling.md), explicit
 [endpoint creation](../interfaces/endpoints.md) through the `service` resource,
-read-only boot and writable tmp roots, an initial `tmp://` working directory and
-the initial environment. When virtio-fs is present it also receives `host_mount`,
-scoped to that export. Native disk configuration also supplies
-`native_mount` as described above.
-Space configuration chooses which trusted init runs, not an authority ceiling;
-no workload authority is chosen from a space name or CPU.
+read-only boot and writable tmp roots, its configured roots, an initial
+`tmp://` working directory and the initial environment. Space configuration
+chooses which trusted init runs and its roots, not an authority ceiling; no
+other workload authority is chosen from a space name or CPU.
 
-Mount authority stays with init; the selected directory binding list travels
+Mount authority stays with boot init; the selected directory binding list travels
 through session, service and remote-server handoff and ordinary child launch.
-The list contains at most 16 roots, including app/home/HOST. Each launch queries
+The list contains at most 16 roots, including boot, tmp and HOST. Each launch queries
 and copies the selected grants' actual rights and transport masks; explicit
 read-only attenuation also applies to the working-directory chain. A restricted
 launcher can select fewer roots or rights. It does not recover missing authority
@@ -387,11 +451,12 @@ do not inherit launch authority;
 the trusted programs choose what to delegate. Neither URI names nor selecting
 a different script creates authority beyond the supplied grants.
 
-Failure to select or load an init is a boot error identifying its space and path.
-A running script stops on its first failed command; EOF exits without opening
-a prompt. Init and session are not restarted. Their space, terminal contents
-and shared namespace roots survive exit. Selecting a native shell directly
-bypasses mounting/configuration for recovery. See [later lifecycle work](../wip/later-os-directions.md#execution-lifecycle)
+Failure to load boot init stops the boot. A space init that cannot be opened
+or launched leaves its space unstarted, with the reason on its tab. A running
+script stops on its first failed command; EOF exits without opening a prompt.
+Inits and sessions are not restarted. Their space, terminal contents and shared
+namespace roots survive exit. A space whose init is `boot://shell.pxe` opens a
+shell directly, as the `rescue` space does. See [later lifecycle work](../wip/later-os-directions.md#execution-lifecycle)
 for deferred supervision and process replacement.
 
 Trusted init also holds CREATE_GROUP on its ordinary launcher. The default session

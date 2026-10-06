@@ -80,12 +80,26 @@ observed GUIDs prevent mounting. Keep this copy for later sessions: `usb-image`
 replaces `build/pyxis-usb.img`, and copying a fresh image over the development
 file would discard saved work.
 
-Enable `CONFIG_XHCI=y` in `.config` or menuconfig. Save this trusted script as
-`/tmp/init-usb-development.sh`:
+Enable `CONFIG_XHCI=y` in `.config` or menuconfig. A build with `MOUNT_DISK`
+reads the installed [boot configuration](../userland/init.md#boot-configuration),
+so describe the USB volume and space in `userspace/config/installed.lua`:
+
+```lua
+return {
+  volumes = {
+    usb = { kind = "npfs", partition = 2, volume = "usb-test" },
+  },
+  spaces = {
+    { name = "usb", title = "USB", init = "boot://init", network = true,
+      roots = { usb = "read-write" } },
+  },
+}
+```
+
+Save this trusted script as `/tmp/init-usb-development.sh`:
 
 ```sh
 #!boot://shell.pxe
-mount --partition 2 --volume usb-test --read-write usb://
 namespace create
 service start text boot://textfs.pxe
 session boot://session.pxe --configure-network --start-remote-services
@@ -94,13 +108,14 @@ session boot://session.pxe --configure-network --start-remote-services
 Build the separate ISO and existing remote client:
 
 ```sh
-make -j16 image INIT=/tmp/init-usb-development.sh SPACES=usb=boot://init MOUNT_DISK="$usb_guid"
+make -j16 image INIT=/tmp/init-usb-development.sh MOUNT_DISK="$usb_guid"
 make -C tools remote
 ```
 
-The explicit mount requires configured GUID authority, known clear write
-protection and successful blocking cache synchronization. Failure stops init;
-it does not silently select another disk or fall back to RAM. The session receives
+The mount requires configured GUID authority, known clear write protection and
+successful blocking cache synchronization. A failed mount leaves the space
+unstarted, with the reason on its tab; boot init does not silently select
+another disk or fall back to RAM. The session receives
 ordinary directory/file grants, with no mount or raw installer authority.
 See the [USB storage contract](../devices/usb-storage.md).
 

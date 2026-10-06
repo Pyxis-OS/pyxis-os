@@ -53,33 +53,24 @@ comes first.
 
 ### 2. Extra spaces on the installed system
 
-The installed command line has a single space,
-`space.pyxis=boot://init-installed`. Until [boot init](system-layout.md#boot-init)
-makes spaces part of the pool configuration, the owner adds spaces by hand to
-`boot/limine/limine.conf` on the stick's ESP. [Update](../userland/system-updates.md)
-treats any other command line as rebuildable and writes the single space back,
-so the edited file is copied back after each Update.
+[Boot init](system-layout.md#tasks) reads `system://config/boot.lua` on
+installed boots, so extra spaces need no ESP edit and survive Update. The
+existing archive inits receive `system://` from that configuration instead of
+mounting it, so the two new inits this section once proposed are not needed:
 
-**Gap.** A hand-written space can only name an init that is already in the boot
-archive, and none of the existing ones suits an installed system:
-
-- `init-readonly` and `init-remote` mount only `host://`, which a native boot
-  does not have.
-- A second `init-installed` would configure the network again.
-
-**Proposed task: two archive inits** modelled on `init-installed`. Their names
-are settled in implementation.
-
-| Init | Mounts | Session |
-| --- | --- | --- |
-| Read-only | `system://` read-only | As the existing read-only space; no network configuration |
-| Remote | `system://` read-write | Remote services on port 2323; the main space configures the network |
-
-Example line, with the GUID the installer already wrote:
-
-```text
-cmdline: space.pyxis=boot://init-installed space.docs=boot://init-installed-readonly space.remote=boot://init-installed-remote mount.disk=<GUID>
+```lua
+return {
+  spaces = {
+    { name = "docs", title = "Docs", init = "boot://init-readonly",
+      roots = { system = "read-only" } },
+    { name = "remote", title = "Remote", init = "boot://init-remote",
+      roots = { system = "read-write" } },
+  },
+}
 ```
+
+The default `pyxis` space stays the network owner; `init-remote` waits for its
+address.
 
 - **One pool instance.** A second mount of the same partition reuses the open
   pool (`kernel/fs/npfs.c`), so every space shares one filesystem instance and
@@ -87,7 +78,7 @@ cmdline: space.pyxis=boot://init-installed space.docs=boot://init-installed-read
 - **Remote exposure.** The [remote terminal](../userland/remote-terminal.md) has
   no authentication or encryption. Anyone on the LAN who can reach port 2323
   gets a shell with writable `system://`, so use it only on a trusted network.
-- **Finish when:** on the installed ThinkPad, with the hand-written line:
+- **Finish when:** on the installed ThinkPad, with that override:
   - the read-only space reads `system://` and cannot write to it;
   - the remote space accepts `pyxis-remote` after the main space has
     configured the network;

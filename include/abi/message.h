@@ -43,6 +43,7 @@
 #define PROTOCOL_DISKS UINT64_C(36)
 #define PROTOCOL_DISK UINT64_C(37)
 #define PROTOCOL_POINTER UINT64_C(38)
+#define PROTOCOL_SPACE_FACTORY UINT64_C(39)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

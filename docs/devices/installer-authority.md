@@ -4,13 +4,12 @@ The live image has a separate `Install Pyxis` Limine entry. `BOOT_MENU_TIMEOUT`
 is a build setting, default `0` for immediate normal boot. Build install media
 with `BOOT_MENU_TIMEOUT=5` to show the menu for five seconds. Both entries are
 generated for either value. The install entry's command line is
-`space.install=boot://init-install.pxe boot.install=1`. `boot.install=1` requires
-exactly one configured space. Duplicate install options, values other than `1`
-or another space count fail boot.
+`init=boot://init-install.pxe boot.install=1`. A duplicate install option or a
+value other than `1` fails boot.
 
-Normal init, sessions and applications receive no raw-disk service. Install mode
-gives only that space's trusted init the `disks`, `boot_kernel` and `boot_archive`
-resources. Selecting an executable with the same name during normal boot does
+Boot init, space inits, sessions and applications receive no raw-disk service on
+a normal boot. Install mode gives the install entry's boot init, `init-install`,
+the `disks`, `boot_kernel` and `boot_archive` resources. Selecting an executable with the same name during normal boot does
 not supply these grants. Other init resources retain their ordinary contracts.
 
 ## Boot sources and handoff
@@ -31,12 +30,15 @@ license. The template is the source menu configuration, not the generated
 normal-boot command line or menu timeout; it contains separate placeholders
 for both. These assets are available through read-only `boot`.
 
-Native init opens `boot://installer.pxe` and delegates only the disk service,
-the two source files, private memory, input/output, read-only clock and randomness,
-read-only `boot`, read-only SYSTEM_INFO and standard streams. SYSTEM_INFO supplies
-the live kernel build revision for display and the installed ESP record. It waits for the child and reports its
-completion. It delegates no launcher, writable home, mount, host, network or
-display authority. The packaged [native installer](../userland/installer.md)
+`init-install` opens `boot://installer.pxe` and creates the `install` space
+with it as the first process. It delegates only the disk service, the two
+source files, private memory, read-only clock and randomness, read-only `boot`
+and read-only SYSTEM_INFO. The kernel adds the space's own console, keyboard,
+pointer, display and title grants and the standard streams. SYSTEM_INFO supplies
+the live kernel build revision for display and the installed ESP record.
+`init-install` drops the space factory, waits for the installer and reports its
+completion on the Caelum tab. It delegates no launcher, `tmp`, mount, host or
+network authority. The packaged [native installer](../userland/installer.md)
 implements consent, formatting, installation and
 [system updates](../userland/system-updates.md). Update candidate inspection uses
 raw reads without mounting a pool. After typed `update`, it acquires the same

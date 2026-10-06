@@ -115,9 +115,11 @@ reference. A closed handle is immediately stale; other owners, including the
 space that owns the console, retain their references. Process exit releases
 handles left open. The read-only startup record is not updated after close.
 
-The [boot launcher](../../kernel/user/launch.c) prepares each configured space's
-init on that space's CPU. Both boot
-and userspace launch use [shared image/stack preparation](../../kernel/user/load.c)
+The [boot launcher](../../kernel/user/launch.c) prepares boot init in Caelum's
+space on CPU 0. Space creation through the `space_factory` resource prepares
+each space's first process with the launcher's capture and preparation, adding
+that space's own devices ([spawn](../../kernel/user/spawn.c)). Boot, space
+creation and userspace launch use [shared image/stack preparation](../../kernel/user/load.c)
 to create a process that owns the
 loaded address space and belongs to its space. Before submission, it calls
 `process_prepare_startup()` with named bindings to already installed handles,

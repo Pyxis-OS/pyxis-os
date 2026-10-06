@@ -41,11 +41,15 @@ starting at 1 MiB, then an npfs pool extending to the aligned end before backup
 GPT metadata. The pool has one `system` volume with an empty regular root marker.
 Limine is at `EFI/BOOT/BOOTX64.EFI`; the original kernel, whole boot archive and
 configuration and a newline-terminated kernel `revision` record are under `boot`. The installed configuration fills the packaged
-template with timeout zero and the new disk GUID, and omits the installer entry
-and any global `default_entry`.
-Its command line is `space.pyxis=boot://init-installed mount.disk=<GUID>`, a
-single space. Fixed `init-installed` mounts partition 2's system volume read-write as
-`system://` and starts the ordinary local session. `tmp://` stays RAM-backed.
+template with a three-second timeout and the new disk GUID, and omits the
+installer entry and any global `default_entry`. It has two entries:
+`Pyxis OS (Caelum)`, booted on timeout, with
+`init=boot://boot-init.pxe mount.disk=<GUID>`, and `Pyxis OS (rescue)`, which
+adds `boot.default_config=1` to ignore the pool's boot configuration. Boot init
+then starts the [installed spaces](init.md#boot-configuration): by default the
+`pyxis` space, whose `init-installed` receives partition 2's system volume
+read-write as `system://` and starts the ordinary local session. `tmp://` stays
+RAM-backed.
 
 Success requires flush, explicit raw release/GPT rescan, FAT directory traversal
 and byte-for-byte source comparisons, then normal read-only pool reopening and

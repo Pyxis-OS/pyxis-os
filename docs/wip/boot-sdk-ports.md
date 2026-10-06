@@ -133,6 +133,9 @@ init with a Lua boot configuration, programs on a `bin://` volume with a
 two-stage Update, and a persistent home. Later candidates are dynamic space
 creation (the new-space flow), a file navigator and multiplexing.
 
+[ACPI and space-bar widgets](acpi-and-bar-widgets.md), recorded 2026-10-06 for
+after the system layout, ports uACPI for a real power-off and a battery widget.
+
 [Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md) completed
 2026-10-06: read-only FUSE mounts and in-memory journal replay, with the owner
 confirming physical stick mounting and copying on Arch Linux.
