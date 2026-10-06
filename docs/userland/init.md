@@ -13,7 +13,9 @@ init scripts create a [service namespace](../interfaces/namespaces.md) before se
 it is delegated independently of space membership.
 
 Space inits share the read-only `boot://` archive and writable RAM-backed
-`tmp://` tree. It is not private per space and disappears on reboot. Raw
+`tmp://` tree. It is not private per space and disappears on reboot. Spaces
+normally start in `home://`: the pool's `home` volume on installed systems and
+a RAM volume on live boots. Raw
 installer resources are issued only on the separate install path. Init scripts
 are trusted setup policy; the session handoff delegates resources to ordinary
 applications.
@@ -35,9 +37,9 @@ Normal live and installed boots use `init=boot://boot-init.pxe`.
 
 Boot init runs on CPU 0 in Caelum's space. Its messages go to the Caelum tab and
 to serial. It receives console output but no input, the bootstrap services, the
-`boot://` and `tmp://` roots, the `space_factory` resource, the HOST and native
-mount authority when present, and, on the install entry, the raw installer
-resources. Arguments add `--installed` when a disk is bound and
+`boot://` and `tmp://` roots, the `space_factory` resource, a private RAM
+directory as the `ram` resource, the HOST and native mount authority when
+present, and, on the install entry, the raw installer resources. Arguments add `--installed` when a disk is bound and
 `--default-config` for the rescue entry.
 
 ## Boot configuration
@@ -50,20 +52,26 @@ return {
   volumes = {
     host = { kind = "virtio-fs" },
     system = { kind = "npfs", partition = 2, volume = "system" },
+    home = { kind = "npfs", partition = 2, volume = "home" },
+    scratch = { kind = "ram" },
   },
   spaces = {
     { name = "development", title = "Development", init = "boot://init",
       network = true, cpus = { 1, 2, 3 },
       roots = { host = { access = "read-write", optional = true },
-                system = "read-only" } },
+                system = "read-only", home = "read-write" } },
+    { name = "scratch", title = "Scratch", init = "boot://init-readonly",
+      roots = { scratch = "read-write" }, start = "scratch" },
   },
 }
 ```
 
 - **Volumes.** An `npfs` volume names a one-based GPT partition on the bound
-  disk and a volume name. A `virtio-fs` volume is the HOST export. Names use
-  1–31 characters from `a-z`, `0-9` and `-`, other than `boot` and `tmp`, and
-  become the root's scheme.
+  disk and a volume name. A `virtio-fs` volume is the HOST export. A `ram`
+  volume is an empty directory in boot init's RAM directory, named after the
+  volume; spaces that name it share it until reboot. Names use 1–31 characters
+  from `a-z`, `0-9` and `-`, other than `boot`, `tmp` and `bin`, and become the
+  root's scheme.
 - **Spaces.** `name` follows the same rules, other than `rescue` and `caelum`,
   and identifies the space in logs; it grants nothing. `title` defaults to the
   name. `init` must name a `boot://` entry. `cpus` lists boot CPU indices, the
@@ -73,6 +81,11 @@ return {
   `read-write`, or a table that can also mark it `optional`. A volume is
   mounted once, read-write if any space needs that, and each space receives only
   the access it asks for.
+- **Start.** A space's working directory is `home://`. `start` names another of
+  its roots, such as `tmp`, `boot`, `bin` or a configured one; naming a root
+  the space does not have is an error. A space without the root it would start
+  in, such as one with no `home` root or a missing optional root, starts in
+  `tmp://` and boot init says so.
 - **Network owner.** At most one space sets `network = true`. Only its init
   receives `net_config` WRITE and UDP broadcast authority, so only it can run
   `session --configure-network`; the others get READ and ordinary UDP. A
@@ -94,8 +107,8 @@ it is also the archive, but an installed archive holds only the rescue set.
 Boot init reports which. The shell resolves bare names through `bin://`, then
 `boot://`.
 
-Space inits receive the bootstrap services, `boot://`, `tmp://` as their
-working directory, `bin://`, their configured roots and `OS_NAME`, plus their space's own
+Space inits receive the bootstrap services, `boot://`, `tmp://`, `bin://`,
+their configured roots, the working directory their start selects and `OS_NAME`, plus their space's own
 console, keyboard, pointer, display and space handle from the kernel. They do
 not receive mount authority or the space factory, so `mount` and `sync --disk`
 are unavailable to them; `sync PATH...` still works on their roots.
@@ -103,8 +116,8 @@ are unavailable to them; `sync PATH...` still works on their roots.
 A space whose required volume is missing or fails to mount, whose CPU set names
 an absent CPU, or whose init cannot be opened is created but not started. Its
 tab and the log say why, and the other spaces start. If no space starts, boot
-init creates a `rescue` space running `boot://shell.pxe` with only `boot://` and
-`tmp://`; it cannot repair the pool.
+init creates a `rescue` space running `boot://shell.pxe` with only `boot://`,
+`tmp://` and `bin://`, starting in `tmp://`; it cannot repair the pool.
 
 ### Pool override
 
@@ -113,8 +126,8 @@ volume. It has the same shape. An entry with a default's name replaces it
 whole, new names follow the defaults, and nothing can be removed. It cannot
 redefine the `system` volume. Roots may name volumes from either file. A
 missing override is reported and the default boots. An invalid override (a Lua
-error, an unknown key, a bad value, an undefined volume or a second network
-owner) is ignored whole, with the reason on the Caelum tab and serial.
+error, an unknown key, a bad value, an undefined volume, a start outside the
+space's roots or a second network owner) is ignored whole, with the reason on the Caelum tab and serial.
 
 The override can replace a default space with an unusable one. The installed
 disk's second boot entry, **Pyxis OS (rescue)**, passes
@@ -161,9 +174,12 @@ or child launch automatically.
 The installed configuration has two entries and a three-second menu:
 `init=boot://boot-init.pxe mount.disk=<GUID>`, and the rescue entry, which adds
 `boot.default_config=1`. The archive's installed configuration starts the
-`pyxis` space with `boot://init-installed`, `system://` read-write and network
-ownership. That init starts the ordinary local session and configures
-networking. `tmp://` remains RAM-backed. Installed disks omit the installer
+`pyxis` space with `boot://init-installed`, `system://` and `home://`
+read-write, starting in `home://`, and network ownership. That init starts the
+ordinary local session and configures networking. `tmp://` remains RAM-backed.
+Live boots give the Development and Read-only spaces the RAM `home://`,
+read-write and read-only, and the Remote space read-write, starting in
+`tmp://`. Installed disks omit the installer
 entry; enter install mode through live media.
 
 ## Native disk configuration and mounting
@@ -440,8 +456,8 @@ pointer grants from the kernel, and from boot init private memory, launch,
 clock, randomness, networking services, network configuration (WRITE only for
 the network owner), caller-scoped [memory profiling](../development/allocation-profiling.md), explicit
 [endpoint creation](../interfaces/endpoints.md) through the `service` resource,
-read-only boot and writable tmp roots, its configured roots, an initial
-`tmp://` working directory and the initial environment. Space configuration
+read-only boot and writable tmp roots, its configured roots, the working
+directory its start selects and the initial environment. Space configuration
 chooses which trusted init runs and its roots, not an authority ceiling; no
 other workload authority is chosen from a space name or CPU.
 
