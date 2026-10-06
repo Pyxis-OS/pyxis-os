@@ -221,4 +221,4 @@ exec "$QEMU" -machine "$machine" -accel "$ACCEL" -cpu max \
   -drive "if=pflash,format=raw,unit=0,readonly=on,file=$OVMF_CODE" \
   -drive if=pflash,format=raw,unit=1,file=build/OVMF_VARS.fd \
   -display "$QEMU_DISPLAY" -serial mon:stdio \
-  -no-reboot -no-shutdown "$@"
+  "$@"
