@@ -28,9 +28,9 @@ struct capability_table;
 enum npfs_operation {
   NPFS_ROOT, NPFS_LOOKUP, NPFS_ENUMERATE, NPFS_READ, NPFS_SIZE,
   NPFS_CAPTURE, NPFS_FILESYSTEM_INFO, NPFS_CREATE, NPFS_REMOVE,
-  NPFS_RENAME, NPFS_WRITE, NPFS_RESIZE, NPFS_SYNC, NPFS_DISK_SYNC,
+  NPFS_RENAME, NPFS_WRITE, NPFS_RESIZE, NPFS_SYNC, NPFS_DISK_SYNC, NPFS_CREATE_VOLUME,
   NPFS_RAW_INFO, NPFS_RAW_OPEN, NPFS_RAW_READ, NPFS_RAW_WRITE,
-  NPFS_RAW_FLUSH, NPFS_RAW_RELEASE,
+  NPFS_RAW_FLUSH, NPFS_RAW_RELEASE, NPFS_RAW_CLAIM,
 };
 enum npfs_job_state {
   NPFS_JOB_IDLE, NPFS_JOB_QUEUED, NPFS_JOB_ACTIVE, NPFS_JOB_COMPLETE,
@@ -44,7 +44,8 @@ enum npfs_job_state {
  * CAPTURE transfers owned launch staging (count bytes) on success, none on
  * failure; its allocation is outside the native wrapper cap. FILESYSTEM_INFO
  * copies retained metadata without disk reads. READ/ENUMERATE publish data
- * only on success. Format/backing diagnostics belong to this
+ * only on success. CREATE_VOLUME takes the device, partition, name and a
+ * caller-generated volume ID in data. Format/backing diagnostics belong to this
  * operation alone. */
 struct npfs_job {
   enum npfs_job_state state;
@@ -114,6 +115,7 @@ void npfs_retire(struct npfs_node *node);
 
 /* The sole worker serializes physical-device mount registration and raw claims. */
 bool npfs_device_mounted(block_device_id device);
+bool npfs_partition_mounted(block_device_id device, uint32_t partition);
 /* BSP/IF=0: notify the worker of allocation-free deferred raw cleanup. */
 void npfs_notify(void);
 

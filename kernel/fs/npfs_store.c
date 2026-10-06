@@ -2142,6 +2142,96 @@ enum call_status npfs_store_create(struct npfs_store_context *context, struct np
   return status;
 }
 
+enum call_status npfs_store_create_volume(struct npfs_store_context *context,
+  struct npfs_store_pool *pool, const char *name, size_t length, const uint8_t id[NPFS_ID_SIZE])
+{
+  require_owner();
+  if (!npfs_name_valid((const uint8_t *)name, length) || !npfs_id_valid(id)) {
+    return CALL_BAD_REQUEST;
+  }
+  enum call_status status = begin_namespace(context, pool);
+  if (status != CALL_OK) {
+    return status;
+  }
+  unsigned slot = NPFS_VOLUME_COUNT;
+  for (unsigned i = 0; i < NPFS_VOLUME_COUNT; i++) {
+    const struct npfs_volume *record = &pool->catalog[i];
+    if (record->state != NPFS_VOLUME_LIVE) {
+      if (slot == NPFS_VOLUME_COUNT) {
+        slot = i;
+      }
+      continue;
+    }
+    if (record->name_length == length && !memcmp(record->name, name, length)) {
+      return CALL_ALREADY_EXISTS;
+    }
+    if (!memcmp(record->id, id, NPFS_ID_SIZE)) {
+      return CALL_BAD_REQUEST;
+    }
+  }
+  if (slot == NPFS_VOLUME_COUNT) {
+    return CALL_LIMIT;
+  }
+
+  /* One transaction: the inode file holding root inode 1, the empty root
+   * directory, their bitmap bits and the live volume record. */
+  uint64_t free_previous = pool->free_blocks;
+  uint64_t inode_block = 0, directory_block = 0;
+  uint8_t *inodes, *directory, *records;
+  status = allocate_block(context, pool, &inode_block);
+  if (status == CALL_OK) {
+    status = allocate_block(context, pool, &directory_block);
+  }
+  if (status == CALL_OK) {
+    status = edit_block(context, pool, inode_block, NPFS_METADATA_INODES, true, &inodes);
+  }
+  if (status == CALL_OK) {
+    status = edit_block(context, pool, directory_block, NPFS_METADATA_DIRECTORY, true, &directory);
+  }
+  if (status == CALL_OK) {
+    status = edit_block(context, pool, pool->header.volume_start + slot / 8,
+      NPFS_METADATA_VOLUMES, false, &records);
+  }
+  if (status != CALL_OK) {
+    namespace_abort(pool, free_previous);
+    return status;
+  }
+  struct npfs_inode root = {
+    .kind = NPFS_INODE_DIRECTORY,
+    .mapping = NPFS_MAPPING_POINTERS,
+    .parent = 1,
+    .size = NPFS_BLOCK_SIZE,
+    .pointers = {directory_block},
+  };
+  touch_inode(context, &root, true);
+  struct npfs_dirent unused = {.record_length = NPFS_BLOCK_SIZE};
+  struct npfs_volume volume = {
+    .state = NPFS_VOLUME_LIVE,
+    .mapping = NPFS_MAPPING_POINTERS,
+    .name_length = (uint16_t)length,
+    .root_inode = 1,
+    .inode_bytes = NPFS_BLOCK_SIZE,
+    .pointers = {inode_block},
+  };
+  memcpy(volume.id, id, NPFS_ID_SIZE);
+  memcpy(volume.name, name, length);
+  enum npfs_status encoded = npfs_inode_encode(&pool->header, &root, inodes + NPFS_INODE_SIZE);
+  if (encoded == NPFS_OK) {
+    encoded = npfs_dirent_encode(&pool->header, &unused, directory);
+  }
+  if (encoded == NPFS_OK) {
+    encoded = npfs_volume_encode(&pool->header, &volume,
+      records + (slot % 8) * NPFS_VOLUME_SIZE);
+  }
+  status = encoded == NPFS_OK ? commit(context, pool) : format_failure(context, encoded);
+  if (status != CALL_OK) {
+    namespace_abort(pool, free_previous);
+    return status;
+  }
+  pool->catalog[slot] = volume;
+  return CALL_OK;
+}
+
 enum call_status npfs_store_remove(struct npfs_store_context *context, struct npfs_store_inode *directory,
   const char *name, size_t length, uint64_t kind)
 {

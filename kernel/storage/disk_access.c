@@ -29,6 +29,17 @@ bool disk_device_claimed(block_device_id device)
   return false;
 }
 
+bool disk_partition_claimed(block_device_id device, uint32_t partition)
+{
+  npfs_require_worker();
+  for (struct disk_object *disk = claims; disk; disk = disk->claim_next) {
+    if (disk->device == device && (!disk->partition || disk->partition == partition)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void disk_retire(struct disk_object *disk)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
@@ -228,6 +239,75 @@ static void disk_info(block_device_id device, struct disk_info *reply)
   }
 }
 
+static void add_claim(struct disk_object *disk, uint32_t partition, uint64_t first_block,
+    uint64_t block_count)
+{
+  disk->claimed = true;
+  disk->partition = partition;
+  disk->first_block = first_block;
+  disk->block_count = block_count;
+  disk->claim_next = claims;
+  claims = disk;
+}
+
+/* Claims a partition of an opened disk whose own claim was released. */
+static enum call_status claim_partition(struct npfs_store_context *context,
+    struct disk_object *disk, uint32_t partition)
+{
+  if (disk->claimed) {
+    return CALL_BAD_REQUEST;
+  }
+  struct disk_info info;
+  disk_info(disk->device, &info);
+  if (info.preparation != DISK_READY) {
+    return CALL_UNAVAILABLE;
+  }
+  if (!(info.flags & DISK_FLAG_WRITABLE) || !(info.flags & DISK_FLAG_FLUSH_SUPPORTED)) {
+    return CALL_READ_ONLY;
+  }
+  if (info.flags & DISK_FLAG_WRITE_FAILED) {
+    return CALL_IO;
+  }
+  if (!partition) {
+    if (info.flags & (DISK_FLAG_MOUNTED | DISK_FLAG_CLAIMED)) {
+      return CALL_BUSY;
+    }
+    add_claim(disk, 0, 0, info.block_count);
+    return CALL_OK;
+  }
+  if ((info.flags & DISK_FLAG_CLAIMED) || npfs_partition_mounted(disk->device, partition)) {
+    return CALL_BUSY;
+  }
+  enum call_status status = await_gpt(context, disk->device);
+  if (status != CALL_OK) {
+    return status;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  const struct gpt_snapshot *snapshot = gpt_get_snapshot(disk->device);
+  bool usable = snapshot->status == GPT_HEALTHY || snapshot->status == GPT_DEGRADED;
+  bool found = false;
+  struct gpt_partition selected;
+  for (size_t i = 0; usable && i < snapshot->partition_count; ++i) {
+    if (snapshot->partitions[i].entry_number == partition) {
+      selected = snapshot->partitions[i];
+      found = true;
+    }
+  }
+  cpu_restore_interrupts(flags);
+  if (!usable) {
+    return CALL_UNAVAILABLE;
+  }
+  if (!found) {
+    return CALL_NOT_FOUND;
+  }
+  if (!selected.block_count || selected.first_block >= info.block_count ||
+      selected.block_count > info.block_count - selected.first_block) {
+    return CALL_IO;
+  }
+  add_claim(disk, partition, selected.first_block, selected.block_count);
+  return CALL_OK;
+}
+
 static enum call_status release_claim(struct npfs_store_context *context,
     struct disk_object *disk)
 {
@@ -235,7 +315,9 @@ static enum call_status release_claim(struct npfs_store_context *context,
     return CALL_BAD_REQUEST;
   }
   enum call_status status = raw_transfer(context, disk->device, BLOCK_FLUSH, 0, 0, NULL);
-  enum gpt_status scanned = gpt_rescan(disk->device);
+  /* A partition claim cannot have written the table, and a pool elsewhere on
+   * the device may still rely on the current scan. */
+  enum gpt_status scanned = disk->partition ? GPT_HEALTHY : gpt_rescan(disk->device);
   if (status == CALL_OK) {
     if (scanned == GPT_IO_ERROR) {
       status = CALL_IO;
@@ -309,7 +391,7 @@ enum call_status disk_perform(struct npfs_store_context *context, struct npfs_jo
     flags = cpu_save_interrupts();
     struct disk_object *disk = kmalloc(sizeof(*disk));
     if (disk) {
-      *disk = (struct disk_object){.device = job->device, .claimed = writable};
+      *disk = (struct disk_object){.device = job->device};
       object_init(&disk->object, OBJECT_DISK, destroy_disk);
     }
     cpu_restore_interrupts(flags);
@@ -317,8 +399,7 @@ enum call_status disk_perform(struct npfs_store_context *context, struct npfs_jo
       return CALL_NO_MEMORY;
     }
     if (writable) {
-      disk->claim_next = claims;
-      claims = disk;
+      add_claim(disk, 0, 0, info.block_count);
     }
     job->object = &disk->object;
     return CALL_OK;
@@ -326,14 +407,35 @@ enum call_status disk_perform(struct npfs_store_context *context, struct npfs_jo
   if (!job->raw || job->raw->device != job->device) {
     return CALL_BAD_REQUEST;
   }
+  if (job->operation == NPFS_RAW_CLAIM) {
+    return claim_partition(context, job->raw, (uint32_t)job->offset);
+  }
   if (job->operation != NPFS_RAW_READ && !job->raw->claimed) {
     return CALL_DENIED;
   }
   switch (job->operation) {
   case NPFS_RAW_READ:
     return raw_transfer(context, job->device, BLOCK_READ, job->offset, job->count, job->data);
-  case NPFS_RAW_WRITE:
+  case NPFS_RAW_WRITE: {
+    struct disk_object *disk = job->raw;
+    if (disk->partition) {
+      /* The block size was checked when the partition was claimed. */
+      struct block_info info;
+      uint64_t irq_flags = cpu_save_interrupts();
+      enum block_result result = block_get_info(job->device, &info);
+      cpu_restore_interrupts(irq_flags);
+      if (result != BLOCK_OK) {
+        return block_status(result);
+      }
+      uint64_t first = disk->first_block * info.block_size;
+      uint64_t bytes = disk->block_count * info.block_size;
+      if (job->offset < first || job->offset - first > bytes ||
+          job->count > bytes - (job->offset - first)) {
+        return CALL_DENIED;
+      }
+    }
     return raw_transfer(context, job->device, BLOCK_WRITE, job->offset, job->count, job->data);
+  }
   case NPFS_RAW_FLUSH:
     return raw_transfer(context, job->device, BLOCK_FLUSH, 0, 0, NULL);
   case NPFS_RAW_RELEASE:

@@ -184,7 +184,7 @@ static enum call_status select_partition(struct npfs_store_context *context,
     cpu_restore_interrupts(flags);
     return complete ? CALL_NOT_FOUND : CALL_UNAVAILABLE;
   }
-  if (disk_device_claimed(selected_id)) {
+  if (disk_partition_claimed(selected_id, job->partition)) {
     return CALL_BUSY;
   }
   switch (selected_status) {
@@ -383,6 +383,22 @@ static enum call_status acquire_root(struct npfs_store_context *context, struct 
   return status == CALL_OK ? wrap_inode(inode, job->rights, &job->object) : status;
 }
 
+static enum call_status create_volume(struct npfs_store_context *context, struct npfs_job *job)
+{
+  enum call_status status = check_name(job->name, job->count);
+  if (status != CALL_OK || !job->partition) {
+    return status != CALL_OK ? status : CALL_BAD_REQUEST;
+  }
+  /* Content rights make open_pool admit or upgrade the pool for writing. */
+  job->rights = DIRECTORY_CONTENT_RIGHTS;
+  struct npfs_pool *pool;
+  status = open_pool(context, job, &pool);
+  if (status != CALL_OK) {
+    return status;
+  }
+  return npfs_store_create_volume(context, pool->store, job->name, job->count, job->data);
+}
+
 static enum call_status child(struct npfs_store_context *context, struct npfs_job *job)
 {
   if (job->kind != DIRECTORY_KIND_DIRECTORY && job->kind != DIRECTORY_KIND_FILE) {
@@ -528,6 +544,9 @@ static enum call_status perform(struct npfs_store_context *context, struct npfs_
   }
   if (job->operation == NPFS_ROOT) {
     return acquire_root(context, job);
+  }
+  if (job->operation == NPFS_CREATE_VOLUME) {
+    return create_volume(context, job);
   }
   if (job->operation == NPFS_DISK_SYNC) {
     struct block_info device;
@@ -869,6 +888,17 @@ bool npfs_device_mounted(block_device_id device)
   npfs_require_worker();
   for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
     if (pool->device == device) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool npfs_partition_mounted(block_device_id device, uint32_t partition)
+{
+  npfs_require_worker();
+  for (struct npfs_pool *pool = pools; pool; pool = pool->next) {
+    if (pool->device == device && pool->partition.entry_number == partition) {
       return true;
     }
   }
