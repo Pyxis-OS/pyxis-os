@@ -1,0 +1,16 @@
+boot-init.pxe
+init-install.pxe
+installer.pxe
+shell.pxe
+session.pxe
+textfs.pxe
+httpfs.pxe
+cat.pxe
+ls.pxe
+mkdir.pxe
+rm.pxe
+rmdir.pxe
+mv.pxe
+sync.pxe
+head.pxe
+vi.pxe

@@ -1,5 +1,6 @@
 #include <abi/directory.h>
 #include <abi/mount.h>
+#include <arch/clock.h>
 #include <arch/smp.h>
 #include <kernel/fs/npfs.h>
 #include <kernel/memory.h>
@@ -9,6 +10,7 @@
 #include <kernel/object/mount.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/random.h>
 #include <kernel/user_memory.h>
 
 static void destroy_disks(struct kernel_object *object)
@@ -114,6 +116,50 @@ struct syscall_result disks_call(uint64_t rights, uint64_t operation,
   return (struct syscall_result){status, status == CALL_OK ? reply_size : 0};
 }
 
+static struct syscall_result create_volume(struct disk_object *disk,
+    uintptr_t request_address, size_t request_size)
+{
+  struct disk_create_volume_request create;
+  if (request_size != sizeof(create)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&create, request_address, sizeof(create))) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!create.partition || create.partition > UINT32_MAX ||
+      !create.name_length || create.name_length > MOUNT_VOLUME_NAME_MAX) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  char name[MOUNT_VOLUME_NAME_MAX + 1];
+  if (!copy_from_user(name, create.name, create.name_length)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!npfs_name_valid((const uint8_t *)name, create.name_length)) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  /* The volume's identity comes from the entropy source, which needs a task. */
+  uint8_t id[NPFS_ID_SIZE];
+  enum call_status status = random_read(id, sizeof(id),
+      arch_monotonic_ns() + RANDOM_MAX_WAIT_NS);
+  if (status != CALL_OK) {
+    return (struct syscall_result){status, 0};
+  }
+  if (!npfs_id_valid(id)) {
+    return (struct syscall_result){CALL_IO, 0};
+  }
+  struct npfs_request *request = npfs_request_prepare(NPFS_CREATE_VOLUME);
+  request->job.device = disk->device;
+  request->job.partition = (uint32_t)create.partition;
+  request->job.count = create.name_length;
+  memcpy(request->job.name, name, create.name_length);
+  request->job.name[create.name_length] = '\0';
+  memcpy(request->job.data, id, sizeof(id));
+  npfs_request_submit_and_wait(request);
+  status = request->job.status;
+  npfs_request_release(request);
+  return (struct syscall_result){status, 0};
+}
+
 struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
@@ -123,8 +169,15 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
     if (!(rights & DISK_RIGHT_MOUNT)) {
       return (struct syscall_result){CALL_DENIED, 0};
     }
-    return mount_open_device(disk->device, request_address, request_size,
-        reply_address, reply_capacity);
+    return mount_open_device(disk->device, rights & DISK_RIGHT_WRITE,
+        request_address, request_size, reply_address, reply_capacity);
+  }
+  if (operation == DISK_CREATE_VOLUME) {
+    if ((rights & (DISK_RIGHT_MOUNT | DISK_RIGHT_WRITE)) !=
+        (DISK_RIGHT_MOUNT | DISK_RIGHT_WRITE)) {
+      return (struct syscall_result){CALL_DENIED, 0};
+    }
+    return create_volume(disk, request_address, request_size);
   }
   uint64_t required;
   enum npfs_operation worker_operation;
@@ -151,6 +204,10 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
   case DISK_RELEASE:
     required = DISK_RIGHT_RELEASE;
     worker_operation = NPFS_RAW_RELEASE;
+    break;
+  case DISK_CLAIM:
+    required = DISK_RIGHT_WRITE;
+    worker_operation = NPFS_RAW_CLAIM;
     break;
   default: return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
@@ -179,6 +236,18 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
     offset = write.offset;
     length = write.length;
     source = write.data;
+  } else if (operation == DISK_CLAIM) {
+    struct disk_claim_request claim;
+    if (request_size != sizeof(claim)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&claim, request_address, sizeof(claim))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    if (claim.partition > UINT32_MAX) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    offset = claim.partition;
   } else if (request_size) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }

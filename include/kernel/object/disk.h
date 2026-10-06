@@ -13,6 +13,9 @@ struct disk_object {
   struct kernel_object object;
   block_device_id device;
   bool claimed;
+  /* Claim scope: GPT entry, or zero for the whole disk, and its block range. */
+  uint32_t partition;
+  uint64_t first_block, block_count;
   struct disk_object *claim_next, *retired_next;
   struct execution_group *cleanup_group;
 };
@@ -27,6 +30,8 @@ struct syscall_result disk_call(struct kernel_object *object, uint64_t rights,
 
 /* Filesystem worker only, IF=1. Raw claims and pool registration share its queue. */
 bool disk_device_claimed(block_device_id device);
+/* True when a whole-disk claim exists, or PARTITION is nonzero and claimed. */
+bool disk_partition_claimed(block_device_id device, uint32_t partition);
 enum call_status disk_perform(struct npfs_store_context *context, struct npfs_job *job);
 void disk_cleanup_retired(struct disk_object *disks);
 /* BSP/IF=0: allocation-free retirement transfer to the owning worker. */

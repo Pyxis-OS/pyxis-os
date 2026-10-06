@@ -38,9 +38,15 @@ again under exclusive raw access before the first write.
 
 Installation rebuilds the whole selected disk: a fresh GPT, a 512 MiB FAT32 ESP
 starting at 1 MiB, then an npfs pool extending to the aligned end before backup
-GPT metadata. The pool has one `system` volume with an empty regular root marker.
-Limine is at `EFI/BOOT/BOOTX64.EFI`; the original kernel, whole boot archive and
-configuration and a newline-terminated kernel `revision` record are under `boot`. The installed configuration fills the packaged
+GPT metadata. The pool has a `system` volume with an empty regular root marker
+and a `bin` volume. The installer formats the pool and writes the GPT, releases
+its whole-disk claim, then mounts the pool through the disk handle and writes
+the executables outside the archive's rescue list into `bin/REVISION`, as
+[Update's program stage](system-updates.md#program-stage) does. Only then does
+it claim the ESP partition and write it. Limine is at `EFI/BOOT/BOOTX64.EFI`;
+the original kernel, the rescue boot archive (the live archive without the
+moved executables), the configuration and a newline-terminated kernel
+`revision` record are under `boot`. The installed configuration fills the packaged
 template with a three-second timeout and the new disk GUID, and omits the
 installer entry and any global `default_entry`. It has two entries:
 `Pyxis OS (Caelum)`, booted on timeout, with
@@ -51,18 +57,19 @@ then starts the [installed spaces](init.md#boot-configuration): by default the
 read-write as `system://` and starts the ordinary local session. `tmp://` stays
 RAM-backed.
 
-Success requires flush, explicit raw release/GPT rescan, FAT directory traversal
-and byte-for-byte source comparisons, then normal read-only pool reopening and
-marker verification. Only then does the program report `installed`. Remove the
+Success requires the program copies to match their sources, then ESP flush and
+release, FAT directory traversal and byte-for-byte source comparisons, then
+normal read-only pool reopening and marker verification. Only then does the program report `installed`. Remove the
 live medium and boot from the target. Reinstall requires another live-media
 boot because verification retains the pool until reboot. Delete
 `system://SAFE_TO_WIPE` and sync that directory to mark the installation final.
 
 The first screen also offers **Update**. It lists eligible installations and
 installed/live revisions, then requires the exact word `update`. Update preserves
-the GPT and npfs pool, rechecks eligibility under exclusive raw access, replaces
-the whole ESP, flushes and releases the claim, byte-verifies the boot files and
-reopens `system` read-only before reporting `updated`. Healthy installer-layout
+the GPT and existing volumes, rechecks eligibility under exclusive raw access,
+writes the new revision's programs into `bin`, then replaces the whole ESP,
+flushes and releases the claim, byte-verifies the boot files, reopens `system`
+read-only and removes older program revisions before reporting `updated`. Healthy installer-layout
 GPT and a compatible empty-journal pool also permit rebuilding a damaged or
 missing ESP; readable foreign disk bindings and raw I/O/allocation failures
 refuse. A selected committed journal must first be recovered by booting the

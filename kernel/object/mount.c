@@ -198,7 +198,7 @@ struct syscall_result mount_call(struct kernel_object *object, uint64_t rights,
   return install_root(root, directory_rights, reply_address);
 }
 
-struct syscall_result mount_open_device(block_device_id device,
+struct syscall_result mount_open_device(block_device_id device, bool writable,
     uintptr_t request_address, size_t request_size,
     uintptr_t reply_address, size_t reply_capacity)
 {
@@ -210,8 +210,9 @@ struct syscall_result mount_open_device(block_device_id device,
   }
   struct kernel_object *root = NULL;
   uint64_t directory_rights = 0;
-  enum call_status status = open_native(NULL, device,
-      MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE, request_address, request_size,
+  uint64_t rights = MOUNT_RIGHT_OPEN_ROOT | MOUNT_RIGHT_OBSERVE |
+      (writable ? MOUNT_RIGHT_WRITE : 0);
+  enum call_status status = open_native(NULL, device, rights, request_address, request_size,
       &root, &directory_rights);
   if (status != CALL_OK) {
     KASSERT(!root);

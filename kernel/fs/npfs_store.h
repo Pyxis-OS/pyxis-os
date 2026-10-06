@@ -34,6 +34,12 @@ bool npfs_store_writable(const struct npfs_store_pool *pool);
 enum call_status npfs_store_root(struct npfs_store_context *context,
     struct npfs_store_pool *pool, const char *name, size_t length,
     struct npfs_store_inode **out);
+/* Appends a live volume NAME with identity ID and an empty root directory, in
+ * one committed transaction. A taken name is ALREADY_EXISTS; a full catalog is
+ * LIMIT. The volume is not mounted; npfs_store_root opens it. */
+enum call_status npfs_store_create_volume(struct npfs_store_context *context,
+    struct npfs_store_pool *pool, const char *name, size_t length,
+    const uint8_t id[NPFS_ID_SIZE]);
 /* A successful root/lookup/create returns one owned inode reference. References
  * count handles and retained operations; dirty/cleanup storage lives separately.
  * Release neither flushes nor relinquishes persistent pool state. */

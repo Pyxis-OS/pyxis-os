@@ -1,9 +1,9 @@
 # System layout and boot init
 
 Status: **milestone, agreed 2026-10-05 and 2026-10-06.** It follows the
-[runtime SMP milestone](../kernel/smp.md). Tasks 1 and 2 are implemented. Each task
-starts when the owner says so, after its listed decisions are settled. Any
-decision can be revised by the owner.
+[runtime SMP milestone](../kernel/smp.md). Tasks 1 to 3 are implemented.
+Each task starts when the owner says so, after its listed decisions are
+settled. Any decision can be revised by the owner.
 
 ## Goal
 
@@ -18,12 +18,14 @@ adding a space, without rebuilding boot media.
   [boot configuration](../userland/init.md#boot-configuration). An installed
   system can add or replace spaces through `system://config/boot.lua`, and its
   rescue boot entry ignores that file.
-- All programs, configuration and shared files are in the boot archive, `boot://`.
-  `tmp://` is a RAM directory, and `system://` is the installed pool's `system`
-  volume. `app://` and `home://` are unbound; programs that still default to
+- Installed systems keep ordinary programs in the pool's `bin` volume, one
+  directory per revision, bound as `bin://`; the boot archive, `boot://`, keeps
+  the rescue set, configuration and shared files. Live boots bind `bin://` to
+  the archive. `tmp://` is a RAM directory, and `system://` is the installed
+  pool's `system` volume. `app://` and `home://` are unbound; programs that still default to
   `home://` fail until task 4 ([technical debt](../technical-debt.md#system-layout-renames)).
-- [Update](../userland/system-updates.md) replaces only the ESP and never writes
-  the pool.
+- [Update](../userland/system-updates.md) writes the new revision's programs
+  into `bin`, then replaces the ESP.
 
 ## Decisions
 
@@ -240,26 +242,52 @@ Accepted by the owner on 2026-10-06:
     build of this PR (update from 0.0.2, spaces from the pool configuration)
     and reported that it works.
 
-- [ ] **3. Programs on `bin://` and two-stage Update.**
+- [x] **3. Programs on `bin://` and two-stage Update.**
   - The installer creates the `bin` volume, and ordinary programs move out of
     the archive into a revision directory. Boot init binds `bin://` to the
     running revision's directory, and lookup searches `bin://`, then `boot://`.
   - Update writes the new revision's directory, then the ESP.
-  - **Decisions before starting:**
-    - **Adding a volume to an existing pool.** The installer writes only a
-      `system` volume today, and nothing can add one later. The candidate is a
-      journaled npfs create-volume operation, which task 4 would reuse.
-    - **Mounted pool and raw ESP access.** Writable raw access is refused
-      while a disk's pool is mounted (`kernel/storage/disk_access.c`), mounting
-      is refused while the disk is claimed (`kernel/fs/npfs.c`), and there is
-      no unmount. Update needs both, in order. Candidates are raw access scoped
-      to the ESP partition, or a pool unmount.
-    - **The rescue set:** for example the shell, installer, fsck, mount tools and
-      an editor.
-    - **Cleanup** of older revision directories.
+  - **Decisions, accepted by the owner on 2026-10-06:**
+    - **Adding a volume to an existing pool.** A journaled create-volume
+      operation in the kernel writer adds a live volume with an empty root in
+      one transaction. It is reached through the selected disk's handle, which
+      needs MOUNT and WRITE, and task 4 reuses it.
+    - **Mounted pool and raw ESP access.** The installer gets mount authority
+      scoped to the disk it selected: a read-write disk handle can open volumes
+      writably once its claim is released. For the ESP it claims only that
+      partition, which the kernel allows while the pool partition stays
+      mounted. No unmount was added.
+    - **The rescue set:** boot init, `init-install`, the installer, the init
+      scripts and configuration, the shell and session, `textfs` and `httpfs`,
+      `cat`, `ls`, `mkdir`, `rm`, `rmdir`, `mv`, `sync`, `head` and `vi`
+      (`boot/rescue.list`). `textfs` and `httpfs` stay because the init scripts
+      start them before any shell
+      ([technical debt](../technical-debt.md#rescue-set-programs)).
+    - **What moves:** executables only. `share/`, `sdk/` and configuration
+      stay in `boot://`, because programs and ports name those paths.
+    - **Live boots:** boot init binds `bin://` to the archive, as it does on an
+      installed boot whose revision directory is missing, so `bin://` paths
+      work everywhere.
+    - **Cleanup:** after a verified Update, every revision directory except the
+      new one and the one the disk booted until then is removed. When the
+      previous revision is unknown, nothing is removed.
+    - **Finish condition:** "the rescue set can run Update again" means that
+      after an interrupted Update, Update from live media completes on a rerun.
   - **Finish when:** the 0.0.2 stick updates to the new layout, ordinary
     programs run from `bin://`, an Update interrupted after the program stage
     still boots the old revision, and the rescue set can run Update again.
+  - **Implemented:** see [system updates](../userland/system-updates.md#program-stage)
+    and [boot configuration](../userland/init.md#boot-configuration). In QEMU,
+    0.0.2 updated to the new layout with its `system` file preserved;
+    programs ran from `bin://`; an Update interrupted in the program stage
+    still booted the previous revision; reruns completed after interruptions in
+    either stage; and cleanup kept the current and previous revisions.
+    `fsck.npfs` passed on the pool after the 0.0.2 update, after a fresh
+    install and after a same-revision rerun, and `npfs-fuse` showed the
+    programs identical to the build. On 2026-10-06 the owner updated the
+    ThinkPad stick, then on the block cursor build, with the PXE build of this
+    PR: boot init reported the new revision on `bin://`, and `lspci`, `lsusb`
+    and `fastfetch` ran from it.
 
 - [ ] **4. Persistent home.**
   - A `home` volume mounted as `home://`, created by the installer and added to

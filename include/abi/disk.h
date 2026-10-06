@@ -22,6 +22,8 @@
 #define DISK_FLUSH UINT64_C(4)
 #define DISK_RELEASE UINT64_C(5)
 #define DISK_OPEN_VOLUME UINT64_C(6)
+#define DISK_CREATE_VOLUME UINT64_C(7)
+#define DISK_CLAIM UINT64_C(8)
 #define DISK_IO_MAX_BYTES 4096u
 
 #define DISK_ACCESS_READ_ONLY UINT64_C(0)
@@ -77,11 +79,29 @@ struct disk_write_request { uint64_t offset, length, data; };
  * raw mutation authority on all aliases of this object; failure is reported,
  * not rollback. Last-object close also releases through worker cleanup.
  * OPEN_VOLUME uses mount_volume_request/reply and the normal npfs mount path,
- * allowing read-only directory rights only, after release. Closing the disk
- * does not revoke a returned root. The raw API never authorizes a target by
+ * outside any raw claim on that partition. Read-only directory rights need
+ * MOUNT; mutation rights also need WRITE, which only READ_WRITE opening grants.
+ * CREATE_VOLUME needs MOUNT and WRITE: it appends a live volume with an empty
+ * root to the npfs pool in PARTITION, in one committed transaction, with an
+ * identity from the kernel's entropy source. A taken name is ALREADY_EXISTS
+ * and a full catalog LIMIT; no reply. Closing the disk does not revoke a
+ * returned root. The raw API never authorizes a target by
  * checking its contents; marker consent belongs to the trusted installer. */
 
+struct disk_create_volume_request { uint64_t partition, name, name_length; };
+
+/* CLAIM needs WRITE and re-establishes raw mutation authority on an object
+ * whose claim was released. PARTITION zero claims the whole disk, under
+ * READ_WRITE opening's rules. A one-based GPT entry claims only that
+ * partition: no other claim may exist on the device and that partition must
+ * not hold a mounted pool, though other partitions' pools may stay mounted.
+ * WRITE is then confined to the partition's blocks, mounts of it are refused,
+ * and RELEASE flushes without a GPT rescan, since the table cannot change. */
+struct disk_claim_request { uint64_t partition; };
+
 _Static_assert(sizeof(struct disk_info) == 64, "disk info layout");
+_Static_assert(sizeof(struct disk_create_volume_request) == 24, "disk create volume layout");
+_Static_assert(sizeof(struct disk_claim_request) == 8, "disk claim layout");
 _Static_assert(sizeof(struct disks_open_request) == 16, "disk open layout");
 _Static_assert(sizeof(struct disk_read_request) == 16, "disk read layout");
 _Static_assert(sizeof(struct disk_write_request) == 24, "disk write layout");

@@ -50,7 +50,8 @@ the [boot configuration](docs/userland/init.md#boot-configuration), and the init
 scripts hand off to sessions.
 
 The shell starts at `tmp://`, which is RAM-backed and lost on reboot. `boot://`
-contains the read-only boot archive. Optional [virtio-fs setup](docs/devices/virtio-fs.md)
+contains the read-only boot archive; installed systems run ordinary programs from
+`bin://`, which live boots bind to the archive. Optional [virtio-fs setup](docs/devices/virtio-fs.md)
 provides persistent `host://` files and executable loading; no overlay is needed.
 `VIRTIO_NET=1` adds a QEMU NIC; see [network setup](docs/devices/networking.md)
 for initial link selection and explicit profiles.

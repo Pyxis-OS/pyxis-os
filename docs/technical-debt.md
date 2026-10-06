@@ -880,6 +880,26 @@ The [system layout](wip/system-layout.md) renames leave two gaps until later tas
   place all inits before scheduling, on CPUs 1, 2 and 3. Balancing moves
   runnable tasks later. Revisit if interactive latency suffers.
 
+## Rescue set programs
+
+Installed systems run ordinary programs from `bin://`, but the boot archive's
+rescue set still carries `textfs` and `httpfs`. The init scripts start those
+providers before any shell, and a launch failure stops a script, so without them
+a system whose `bin` volume is missing would get no shell, not even from the
+rescue entry. Most programs should eventually load from the installed system
+rather than the rescue archive. Revisit once inits can start providers from
+`bin://` with a fallback, or tolerate a missing provider.
+
+Related limits of the [program stage](userland/system-updates.md#program-stage):
+
+- Only executables move. `share/`, `sdk/` and configuration stay in `boot://`,
+  because programs and ports name those paths; moving data needs path changes.
+- Builds without a Git revision share `bin/unknown`, so two such builds cannot
+  keep separate program directories.
+- The installer holds the boot archive twice in memory while filtering it,
+  about 90 MiB for today's archive.
+- Spaces receive `bin://` read-only; only the installer writes it.
+
 ## Archive-only network configuration
 
 Network profiles live only in `boot://config/network.lua`. On an installed
