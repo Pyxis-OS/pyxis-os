@@ -127,9 +127,10 @@ The filesystem, USB and networking tracks paused for SMP; which resumes next is
 the owner's choice. Fixes for major problems found by ThinkPad validation remain
 allowed in any track.
 
-The agreed next direction is the [system layout](system-layout.md):
-a userspace boot init, a Lua boot configuration, a rescue archive with writable
-system volumes and a two-stage Update. Other candidates are dynamic space
+The next milestone is the [system layout](system-layout.md), agreed 2026-10-06
+ahead of other parallel work: `boot://` and `tmp://` renames, a userspace boot
+init with a Lua boot configuration, programs on a `bin://` volume with a
+two-stage Update, and a persistent home. Later candidates are dynamic space
 creation (the new tab and its launch flow), a file navigator and multiplexing.
 
 The [native filesystem milestone](native-filesystem.md) has completed format-only
