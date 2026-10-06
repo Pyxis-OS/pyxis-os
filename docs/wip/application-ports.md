@@ -19,6 +19,7 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 
 | Candidate | Intended use and initial investigation |
 | --- | --- |
+| POSIX regex | Implemented in [libc](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion), with BRE/ERE, UTF-8 decoding and ASCII-only classes/folding. vi and less are the next consumers; grep, sed and awk remain later candidates. |
 | fastfetch | [Implemented native port](../userland/fastfetch.md), packaged in the normal image with native system information, the Pyxis ASCII logo, text/JSON and explicit JSONC configuration. |
 | zlib | Reusable compression/decompression, followed by a concrete consumer such as PNG loading or jar files. Not needed for [in-Pyxis development](in-pyxis-development.md) until it handles jars; BusyBox `gzip`/`unzip` would then cover the commands. |
 | libpng | PNG decoding/encoding for viewers, drawing tools and screenshots; depends on zlib. |

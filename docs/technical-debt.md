@@ -27,6 +27,23 @@ back. Linux host atomic publication is validated; the macOS exclusive-rename pat
 still needs an owner run. Revisit staging recovery if interruptions make manual
 cleanup burdensome, with explicit ownership rules rather than age-based deletion.
 
+## Regex character classes and back-references
+
+The [libc regex interface](userland/libc-portability.md#regular-expressions-and-utf-8-conversion)
+decodes UTF-8 but classifies and folds only ASCII. Non-ASCII values have no
+character class and fold to themselves, so Unicode class searches and
+case-insensitive non-ASCII searches are incomplete. Revisit Unicode tables or
+locale policy when a concrete consumer requires them.
+
+Owner decision, 2026-10-07: preserve the pinned musl 1.2.5 TRE matcher behavior.
+BRE back-references remain bytewise under `REG_ICASE`, and the backtracking
+path assumes single-byte lookahead and does not fully restore variable-width
+decoder state. UTF-8 back-reference matches and offsets are therefore unreliable.
+Invalid subject UTF-8 returns `REG_NOMATCH` when encountered, with no whole-string
+validation guarantee. Collating symbols and equivalence classes remain unsupported.
+Revisit the pinned engine or a focused matcher correction when a consumer needs
+these behaviors; the initial vi/less integration must retain the documented limits.
+
 ## SMT placement and later balancing
 
 [Placement](kernel/smp.md#placement-and-migration) prefers idle siblings only
@@ -674,7 +691,8 @@ second data set makes them matter.
 ## vi port limits
 
 [BusyBox vi](userland/vi.md) displays ASCII only and searches literally, because
-Pyxis has no Unicode-capable renderer or `regex.h`. Saves keep upstream's
+Pyxis has no Unicode-capable renderer; vi's regex search remains disabled pending
+its separate integration with libc `regex.h`. Saves keep upstream's
 in-place write followed by `ftruncate`, so a short write or crash can leave a
 truncated or mixed file. Revisit with atomic replacement or a durable-save
 policy alongside the [native filesystem](wip/native-filesystem.md) work.

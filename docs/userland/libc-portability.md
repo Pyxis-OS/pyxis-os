@@ -77,6 +77,60 @@ it retains no reference, becomes stale when its owning descriptor closes, and
 must then neither be used nor forwarded to a child. Number reuse does not
 refresh it. See [stdio](stdio.md) and [stream delegation](shell-streams.md).
 
+## Regular expressions and UTF-8 conversion
+
+The SDK exports `regex.h` with `regcomp`, `regexec`, `regerror` and `regfree`,
+using the existing musl 1.2.5 TRE-derived engine in libc. BRE is the default;
+`REG_EXTENDED` selects ERE. Compilation supports `REG_ICASE`, `REG_NOSUB` and
+`REG_NEWLINE`; execution supports `REG_NOTBOL` and `REG_NOTEOL`. Captures use
+signed byte offsets in `regmatch_t`, with `-1` for unmatched subexpressions.
+`regcomp` returns an error code directly. A successfully compiled `regex_t` owns
+heap storage: do not copy it, and release it with `regfree` after use.
+`regerror` returns readable English messages and the required buffer size
+including NUL, supports a zero-size query, and terminates truncated output.
+
+`stdlib.h` provides stateless UTF-8 `mbtowc`. `MB_CUR_MAX` and `MB_LEN_MAX` are 4.
+The decoder accepts Unicode scalar values, returns bytes consumed (zero for
+NUL), and rejects incomplete, overlong, surrogate and out-of-range sequences
+with `-1` and `EILSEQ`. A NULL input resets the stateless decoder and returns
+zero. A NULL output discards the decoded value; errors leave output unchanged.
+`wchar.h` provides the compiler's 32-bit `wchar_t`, unsigned `wint_t` and `WEOF`.
+No restartable conversion, wide I/O or locale state is added.
+
+`wctype.h` provides all twelve standard `isw*` classifications, `wctype`,
+`iswctype`, `towlower` and `towupper`. Classification and case conversion are
+exact for ASCII only. Every non-ASCII value is outside every class and folds
+to itself; Unicode tables are absent. The regex engine still matches non-ASCII
+literals and code-point ranges, and `.` consumes one whole UTF-8 code point.
+Negated ASCII classes can match non-ASCII characters. Collating symbols and
+equivalence classes are unsupported (`REG_ECOLLATE`).
+
+Owner decision, 2026-10-07: preserve the pinned engine's back-reference limits.
+BRE back-references compare bytes without case folding even with `REG_ICASE`;
+UTF-8 back-reference matching and offsets are unreliable because the backtracking
+path assumes single-byte lookahead and does not fully restore decoder stride.
+Malformed UTF-8 patterns are rejected (usually `REG_BADPAT`, or `REG_ERANGE` for
+an invalid range endpoint). Encountered invalid subject UTF-8 yields
+`REG_NOMATCH`, but validation is lazy: the engine may return before reading the
+whole subject. See [regex limits](../technical-debt.md#regex-character-classes-and-back-references).
+vi and less retain their existing literal search until their separate consumer
+task enables the libc interface.
+
+The 2026-10-07 validation used an uncommitted 37-check program, cross-compiled
+against the exported SDK and uploaded to `tmp://` in a four-CPU QEMU/KVM guest
+(512 MiB, OVMF, virtio-net/rng, no raw disks). It exited successfully with zero
+failures. BRE capture/back-reference/repetition, ERE alternation and leftmost-longest
+selection, named classes/ranges, every listed flag, ASCII folding and UTF-8
+literal/range/dot matching passed. In the subject `é€😀`, `^.(.).$` captured byte
+offsets `[2,5)` and matched `[0,9)`. Malformed brackets, parentheses, class names,
+repetition and UTF-8 returned readable errors; `regerror` size queries and
+truncated buffers passed. The decoder rejected incomplete, overlong, surrogate
+and out-of-range encodings; non-ASCII class exclusion and identity folding passed.
+The accepted case-insensitive back-reference limit was also observed.
+Read-only GDB at `regexec` confirmed one explicit capture and two engine
+submatches for the BRE capture case. The libc/SDK rebuild had no warnings;
+the full source image build passed with warnings in unchanged third-party ports.
+
 ## Public descriptor interface
 
 The SDK exports nested libc headers, including `sys/types.h`. Its current
