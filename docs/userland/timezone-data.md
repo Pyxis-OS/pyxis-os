@@ -7,7 +7,7 @@ and do not install/change the host's local timezone. The selected upstream
 code/data are public domain; the complete license notice is retained.
 
 The ports manifest installs the full standard zone database and aliases at
-`app://share/zoneinfo/`. This is upstream's `main` data with `backward`, without
+`boot://share/zoneinfo/`. This is upstream's `main` data with `backward`, without
 the optional alternative `backzone` history. There is no regional subset.
 Aliases such as `UTC` are independent regular files, including their payloads;
 the current initrd reader does not need hard-link or symbolic-link support.
@@ -19,8 +19,8 @@ Unix seconds. No default localtime link is installed.
 
 The directory also contains `tzdata.zi`, `version`, `iso3166.tab`, `zone.tab`,
 `zone1970.tab` and `zonenow.tab`. Build provenance is at
-`app://share/tzdata/source.txt`; licensing is at
-`app://share/licenses/tzdata/LICENSE`. Host zic and intermediate outputs remain
+`boot://share/tzdata/source.txt`; licensing is at
+`boot://share/licenses/tzdata/LICENSE`. Host zic and intermediate outputs remain
 in the disposable port work directory, outside the guest payload.
 
 `make ports` builds the data recipe alongside the executable ports. Changes to

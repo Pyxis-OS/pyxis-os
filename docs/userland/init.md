@@ -11,8 +11,8 @@ Init also receives an explicit namespace-creation service. The packaged active
 init scripts create a [service namespace](../interfaces/namespaces.md) before session handoff;
 it is delegated independently of space membership.
 
-Initial processes share the read-only `app://` archive and writable RAM-backed
-`home://` tree. Home is not private per space and disappears on reboot. Each
+Initial processes share the read-only `boot://` archive and writable RAM-backed
+`tmp://` tree. It is not private per space and disappears on reboot. Each
 init receives the ordinary available bootstrap grants. Raw installer resources
 are issued only on the separate install path. Init scripts are trusted
 setup policy; the session handoff delegates resources to ordinary applications.
@@ -22,7 +22,7 @@ setup policy; the session handoff delegates resources to ordinary applications.
 The generated Limine configuration carries one option per space, in tab order:
 
 ```text
-space.development=app://init space.readonly=app://init-readonly space.remote=app://init-remote
+space.development=boot://init space.readonly=boot://init-readonly space.remote=boot://init-remote
 ```
 
 Each `space.NAME=IMAGE` option creates a space and starts IMAGE in it as its
@@ -60,15 +60,15 @@ Make takes the list as `SPACES`, separately from the host file used to stage
 
 ```sh
 make run CPUS=4
-make run CPUS=4 SPACES='development=app://init readonly=app://init-readonly'
-make run CPUS=4 SPACES='one=app://init-readonly two=app://init-readonly'
+make run CPUS=4 SPACES='development=boot://init readonly=boot://init-readonly'
+make run CPUS=4 SPACES='one=boot://init-readonly two=boot://init-readonly'
 make run INIT=/tmp/init.sh
 make image INIT=build/userspace/shell.pxe
 make image                         # restore the packaged init and spaces
 ```
 
 `SPACES` defaults to
-`development=app://init readonly=app://init-readonly remote=app://init-remote`.
+`development=boot://init readonly=boot://init-readonly remote=boot://init-remote`.
 `SPACE_CPUS` is an optional whitespace-separated list of `NAME=LIST` ceilings,
 for example `SPACE_CPUS='remote=2-3'`. The build rejects an unknown or repeated
 name, a malformed or reversed list, leading zeros and indices longer than nine
@@ -81,12 +81,12 @@ escaping, in a command line of at most 4095 bytes. Boot fails on:
 - a missing space;
 - malformed, unknown or duplicate options, including CPU sets;
 - a CPU set for an unconfigured space;
-- a non-`app://` init.
+- a non-`boot://` init.
 
 `INIT` names one host file, relative to the repository root or absolute. It is
-staged as `app://init`, replacing the packaged development script; it does not
+staged as `boot://init`, replacing the packaged development script; it does not
 change the space list. It can be a native PXE executable or shebang script. To
-run only that init, also set `SPACES=NAME=app://init`. Additional custom archive
+run only that init, also set `SPACES=NAME=boot://init`. Additional custom archive
 entries belong in the [boot assembly manifest](../development/boot-archive.md).
 
 Selection is checked on every image build. Changing only the space list
@@ -100,22 +100,22 @@ defaults. Kernel-only builds do not select or package init.
 The build setting `BOOT_MENU_TIMEOUT` defaults to `0`, booting normally without
 a menu delay. Set `BOOT_MENU_TIMEOUT=5` when building install media to allow menu
 selection. The `Install Pyxis` entry is generated for either timeout. Its
-command line is `space.install=app://init-install.pxe boot.install=1`.
+command line is `space.install=boot://init-install.pxe boot.install=1`.
 `boot.install=1` requires exactly one configured space, and only that space's
 init receives `disks`, `boot_kernel` and `boot_archive`. Selecting the same
 executable without `boot.install=1` supplies none of these resources.
 
 Native installer init explicitly delegates its bounded installer resources to
-`app://installer.pxe`, waits for completion and reports its result. The installer
+`boot://installer.pxe`, waits for completion and reports its result. The installer
 is packaged and implements the [interactive installation flow](installer.md). See
 [installer authority](../devices/installer-authority.md) for the source-file,
 raw-claim and handoff contracts. These resources do not enter ordinary session
 or child launch automatically.
 
-The installed configuration is `space.pyxis=app://init-installed` with the
+The installed configuration is `space.pyxis=boot://init-installed` with the
 disk's `mount.disk`. That init mounts partition 2's `system` volume read-write
 as `system://`, starts the ordinary local session and configures networking when
-available. `home://` remains RAM-backed. Installed disks use timeout zero and
+available. `tmp://` remains RAM-backed. Installed disks use timeout zero and
 omit the installer entry; enter install mode through live media.
 
 ## Native disk configuration and mounting
@@ -132,7 +132,7 @@ Prepare a populated GPT image using the
 then attach it with configuration matching that image:
 
 ```sh
-make run CPUS=4 INIT=/tmp/init-native.sh SPACES=native=app://init \
+make run CPUS=4 INIT=/tmp/init-native.sh SPACES=native=boot://init \
   VIRTIO_BLK_IMAGE=/absolute/path/to/development.raw \
   MOUNT_DISK=01234567-89ab-cdef-0123-456789abcdef
 ```
@@ -141,9 +141,9 @@ The GUID is illustrative, not a default. Do not change an attached image from th
 host. A trusted script can mount and delegate a writable root:
 
 ```sh
-#!app://shell.pxe
+#!boot://shell.pxe
 mount --partition 1 --volume system --read-write data://
-session app://session.pxe --start-services
+session boot://session.pxe --start-services
 ```
 
 Use `--read-only` and `VIRTIO_BLK_READONLY=1` for a read-only device. Read-only
@@ -156,14 +156,14 @@ image read-only. An ISO can select its actual disk GUID without rebuilding that
 USB image. For the sample image, trusted init can use:
 
 ```sh
-#!app://shell.pxe
+#!boot://shell.pxe
 mount --partition 2 --volume usb-test --read-only usb://
 namespace create
-service start text app://textfs.pxe
-session app://session.pxe --configure-network --start-remote-services
+service start text boot://textfs.pxe
+session boot://session.pxe --configure-network --start-remote-services
 ```
 
-Build with `make image INIT=/tmp/init-usb.sh SPACES=usb=app://init MOUNT_DISK=<actual-GPT-GUID>`
+Build with `make image INIT=/tmp/init-usb.sh SPACES=usb=boot://init MOUNT_DISK=<actual-GPT-GUID>`
 and attach the selected disk through xHCI; see the
 [USB storage bring-up record](../development/usb-storage-bringup.md).
 For explicitly writable attachment of a selected disposable image, init can
@@ -209,31 +209,31 @@ closes. Call sync explicitly before reporting that persistent work is complete.
 
 ## Packaged scripts
 
-The userland repository supplies shebang scripts using `app://shell.pxe`:
+The userland repository supplies shebang scripts using `boot://shell.pxe`:
 
-- `init/development.sh`, installed as `app://init`, opens the optional host export
+- `init/development.sh`, installed as `boot://init`, opens the optional host export
   with `mount --optional --read-write host` and hands off with
-  `session app://session.pxe --configure-network --start-services`.
-- `init/readonly.sh`, installed as `app://init-readonly`, opens the same optional
+  `session boot://session.pxe --configure-network --start-services`.
+- `init/readonly.sh`, installed as `boot://init-readonly`, opens the same optional
   export with `mount --optional --read-only host` and hands off with
-  `session app://session.pxe --start-services`, leaving network settings alone.
-- `init/services.sh`, installed as `app://init-services`, publishes the HTTP
+  `session boot://session.pxe --start-services`, leaving network settings alone.
+- `init/services.sh`, installed as `boot://init-services`, publishes the HTTP
   provider using the configured session environment, then starts a separate
   optional HTTPS provider with read-only trust grants and hands off to the
   interactive shell. A reported HTTPS setup failure leaves HTTPS unpublished
   and permits that handoff. It runs only when session selects `--start-services`.
-- `init/remote.sh`, installed as `app://init-remote`, selects the Remote title,
+- `init/remote.sh`, installed as `boot://init-remote`, selects the Remote title,
   mounts optional HOST read-write, creates the service namespace and hands off
-  through `session app://session.pxe --start-remote-services`.
-- `init/remote-services.sh`, installed as `app://init-remote-services`, starts
+  through `session boot://session.pxe --start-remote-services`.
+- `init/remote-services.sh`, installed as `boot://init-remote-services`, starts
   HTTP/optional HTTPS with the configured environment and hands off through
-  `session app://session.pxe --remote-server 2323`. The trusted launcher waits
+  `session boot://session.pxe --remote-server 2323`. The trusted launcher waits
   for network assignment and delegates one listener to the
   [remote terminal server](remote-terminal.md).
 
 The development profile delegates host write grants for regular-file creation,
 writes, resize and `mkdir`, `rm`, `rmdir` and `mv`; the read-only profile delegates
-only host read grants. Both still start in writable, shared RAM `home://` and
+only host read grants. Both still start in writable, shared RAM `tmp://` and
 must explicitly address or enter `host://` to use the export. A host READ grant
 can load a native executable with the existing launcher authority. An absent
 device leaves either optional mount unbound, while an operational mount error
@@ -248,7 +248,7 @@ before running another; select a single network-setup owner. Other sessions may
 start before networking is configured. Super+Left/Right switches the active tab.
 
 An explicitly selected init script can instead hand off with
-`session app://session.pxe --configure-network --tcp-server ADDRESS PORT`,
+`session boot://session.pxe --configure-network --tcp-server ADDRESS PORT`,
 optionally adding `--tcp-count COUNT`. The trusted launcher creates an exact
 bound listener and starts the [concurrent TCP echo consumer](../devices/tcp.md#concurrent-echo-server)
 with only that listener, memory, clock and output streams. Bootstrap init has
@@ -279,10 +279,10 @@ Trusted init can narrow its space's CPUs within the boot ceiling before
 anything else runs there:
 
 ```sh
-#!app://shell.pxe
+#!boot://shell.pxe
 title --optional "Remote"
 affinity 2-3
-session app://session.pxe --start-remote-services
+session boot://session.pxe --start-remote-services
 ```
 
 `affinity LIST` uses the same list syntax as the ceiling. The `space` grant that each
@@ -356,7 +356,7 @@ a space can change every tab's width.
 
 ## Startup grants and lifetime
 
-An init path must name an exact `app://` archive entry. Native init receives
+An init path must name an exact `boot://` archive entry. Native init receives
 that URI as `argv[0]`. A script interpreter receives its own URI as `argv[0]`,
 the selected init URI as `argv[1]`, and a READ resource named `script`.
 Interpreter lookup stays inside the boot archive and does not recursively
@@ -366,7 +366,7 @@ Each workload init receives its space's title, terminal, display, keyboard and
 pointer grants, private memory, launch, clock, randomness, networking services and
 network configuration, caller-scoped [memory profiling](../development/allocation-profiling.md), explicit
 [endpoint creation](../interfaces/endpoints.md) through the `service` resource,
-read-only app and writable home roots, an initial `home://` working directory and
+read-only boot and writable tmp roots, an initial `tmp://` working directory and
 the initial environment. When virtio-fs is present it also receives `host_mount`,
 scoped to that export. Native disk configuration also supplies
 `native_mount` as described above.

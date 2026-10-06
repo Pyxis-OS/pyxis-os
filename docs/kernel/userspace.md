@@ -40,7 +40,7 @@ exposes its entries as read-only directory/file objects without extracting file
 contents or adding a block device. The text asset is `share/hello.txt`.
 
 The image packages the endpoint client and server examples. From the shell,
-`session app://server.pxe` launches a server and two clients with explicit
+`session boot://server.pxe` launches a server and two clients with explicit
 startup grants; `--wide` exercises full-size payloads and four attachments,
 and `--abandon` demonstrates receipt closure. See [endpoints](../interfaces/endpoints.md).
 
@@ -73,9 +73,9 @@ to find supplied handles and environment values. Lookup borrows an existing
 handle and never duplicates it. Missing resource names return HANDLE_INVALID;
 missing environment values return NULL, while an empty value is an empty string.
 `getenv` borrows these same immutable values; environment mutation is not
-implemented. The shell receives the read-only `app` root, shared RAM-backed
-`home` root, terminal input/output, launcher and caller-scoped
-[private-memory service](memory.md). It starts at `home://`, with an empty RAM
+implemented. The shell receives the read-only `boot` root, shared RAM-backed
+`tmp` root, terminal input/output, launcher and caller-scoped
+[private-memory service](memory.md). It starts at `tmp://`, with an empty RAM
 tree, and explicitly supplies grants, directory context and environment when
 launching foreground children. See [the shell contract](../userland/shell.md).
 

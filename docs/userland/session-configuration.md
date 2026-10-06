@@ -1,10 +1,10 @@
 # Session configuration
 
-`app://session.pxe` is a native userspace launcher that evaluates
-`app://config/session.lua` and optional `app://config/network.lua`, applies
-terminal tab spacing, and hands off to `app://shell.pxe`. The optional
+`boot://session.pxe` is a native userspace launcher that evaluates
+`boot://config/session.lua` and optional `boot://config/network.lua`, applies
+terminal tab spacing, and hands off to `boot://shell.pxe`. The optional
 `--configure-network` argument also applies shared NIC settings.
-`--start-services` selects the trusted `app://init-services` script after
+`--start-services` selects the trusted `boot://init-services` script after
 configuration; it publishes HTTP with the configured resolver, then optionally
 publishes HTTPS with packaged trust before starting the interactive shell.
 Custom CA augmentation is selected by the trusted service command in
@@ -12,20 +12,20 @@ Custom CA augmentation is selected by the trusted service command in
 init script selects it:
 
 ```text
-#!app://shell.pxe
+#!boot://shell.pxe
 mount --optional --read-write host
 namespace create
-session app://session.pxe --configure-network --start-services
+session boot://session.pxe --configure-network --start-services
 ```
 
 `make run` uses this path without overrides. `INIT=/path/to/init.sh` can still
 select a different startup script. A direct native init selection also works.
 Interactive use must go through the shell's
-`session app://session.pxe` handoff so the launcher receives launch authority
+`session boot://session.pxe` handoff so the launcher receives launch authority
 and the parent stops using terminal input.
 
 The installed `userspace/config/session.lua` supplies
-`app://config/session.lua` in the read-only boot archive. Edit that source file
+`boot://config/session.lua` in the read-only boot archive. Edit that source file
 and rebuild the image to change the system selection. It returns one table:
 
 ```lua
@@ -64,7 +64,7 @@ idea, so string-only is not a permanent property of this table.
 
 Timezone names follow libc's IANA-name syntax: slash-separated components of
 ASCII letters, digits, underscore, hyphen and plus. UTC needs no file; other
-names must identify a packaged file under `app://share/zoneinfo` beginning with
+names must identify a packaged file under `boot://share/zoneinfo` beginning with
 the TZif signature. Libc still validates the complete zone data when a child
 first uses local time. There is no second timezone parser in the launcher.
 

@@ -239,7 +239,7 @@ and unpublished-child discard. Closure reviewed early notification, allocation
 failure, concurrent console timeout/handoff and fatal-fault retirement by code
 inspection; it did not force those paths.
 
-The existing `session app://iobench.pxe pipe --buffer 4096` workload verified one
+The existing `session boot://iobench.pxe pipe --buffer 4096` workload verified one
 warmup and five 1 MiB samples per CPU count, each with 256 reads/writes and no
 short transfers or errors. No debugger was attached during timing. Values are
 median milliseconds (minimum–maximum):

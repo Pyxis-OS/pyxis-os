@@ -1,13 +1,13 @@
 # TCC in Pyxis
 
-The normal image includes a guest C compiler at `app://tcc.pxe` and a read-only
-SDK at `app://sdk`. TCC compiles and links native applications inside Pyxis;
+The normal image includes a guest C compiler at `boot://tcc.pxe` and a read-only
+SDK at `boot://sdk`. TCC compiles and links native applications inside Pyxis;
 GCC remains the compiler for the OS and maintained userland. See the
 [edit/build/run walkthrough](../development/edit-build-run.md) for using it with Kilo.
 
 ## Compilation and linking
 
-From the shell's initial `home://` directory:
+From the shell's initial `tmp://` directory:
 
 ```text
 tcc hello.c -o hello.pxe
@@ -47,15 +47,15 @@ are unchanged. ELF objects can contain debug information; P1F executables do not
 
 ## Resources and paths
 
-The shell supplies console output, private-memory management, readable `app://`
-and writable `home://` grants, and an inherited working directory. TCC needs no
+The shell supplies console output, private-memory management, readable `boot://`
+and writable `tmp://` grants, and an inherited working directory. TCC needs no
 launcher authority. Reading source from stdin additionally requires console
 input. Alternative launchers must provide the corresponding grants; paths do
 not confer access by themselves.
 
 An explicitly configured native USB mount can also hold source, objects and
 executable output when the disk qualifies for writes and the session receives
-the writable root grant. The compiler and SDK remain in `app://`; see the
+the writable root grant. The compiler and SDK remain in `boot://`; see the
 [persistent USB development walkthrough](../development/edit-build-run.md#persistent-usb-development)
 for mount configuration, synchronization and checking files after a restart.
 
@@ -88,7 +88,7 @@ GCC's private headers. `-print-search-dirs` displays the configured paths.
   need a readable startup clock; the shell supplies it. Timezone selection is
   deferred. The unsigned millisecond benchmark interval must be under 49 days.
 - Output uses create/truncate streams. A failed write can leave a partial file;
-  compilation does not publish output by atomic replacement. `home://` contents
+  compilation does not publish output by atomic replacement. `tmp://` contents
   are lost on reboot. An explicitly configured, qualified writable USB mount
   can keep source and output across boots; follow the
   [USB walkthrough](../development/edit-build-run.md#persistent-usb-development)

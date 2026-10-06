@@ -5,7 +5,7 @@ Status: deferred experiment, not an implementation assignment.
 Try an opt-in view with a host development
 tree above the read-only boot archive. Higher-layer files would override archive
 files and missing names would fall back to the archive. Init would construct
-and delegate that view as `app://`, keeping normal application paths usable.
+and delegate that view as `boot://`, keeping normal application paths usable.
 There is no global POSIX root implied by this composition.
 
 The host build could publish a rebuilt userspace program or port into that tree

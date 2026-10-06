@@ -7,7 +7,7 @@ episode. No wall-clock, PCI, VirtIO or kernel-interface change is needed.
 
 The unchanged shareware WAD is pinned under `third_party/doom-shareware`, with
 its source, checksums and redistribution terms. Its license and provenance ship
-at `app://share/licenses/doom-shareware/`, separately from the engine's GPL
+at `boot://share/licenses/doom-shareware/`, separately from the engine's GPL
 license. The shareware license permits free redistribution; it does not grant
 permission to charge for the data or redistribute a retail WAD.
 
@@ -20,7 +20,7 @@ make run CPUS=4 DOOM_WAD=/shared/assets/doom-wad/DOOM.WAD \
   DOOM_DEMOS=/shared/assets/doom-demos
 ```
 
-`DOOM_WAD` is copied to `app://share/doom/DOOM.WAD`. The optional `DOOM_DEMOS`
+`DOOM_WAD` is copied to `boot://share/doom/DOOM.WAD`. The optional `DOOM_DEMOS`
 directory supplies `e1m1sec.lmp` and `e1m2sec.lmp`, and can also be used with the
 default shareware WAD. These overrides are local inputs, not repository files.
 A subsequent build without those overrides restores shareware and removes the
@@ -31,8 +31,8 @@ In the application-space shell:
 ```text
 doom
 doom -warp 1 1
-doom -playdemo app://share/doom/e1m1sec.lmp
-doom -playdemo app://share/doom/e1m2sec.lmp
+doom -playdemo boot://share/doom/e1m1sec.lmp
+doom -playdemo boot://share/doom/e1m2sec.lmp
 ```
 
 Use `-iwad path` to select another accessible WAD. Demo playback returns to the

@@ -196,8 +196,8 @@ An opt-in trusted init can create a listener and hand it to the existing `tcp`
 utility. Save this native init script as `/tmp/tcp-init.sh`:
 
 ```text
-#!app://shell.pxe
-session app://session.pxe --configure-network --tcp-server 10.0.2.15 5001 --tcp-count 3
+#!boot://shell.pxe
+session boot://session.pxe --configure-network --tcp-server 10.0.2.15 5001 --tcp-count 3
 ```
 
 Build/boot with `make run INIT=/tmp/tcp-init.sh CPUS=4 VIRTIO_NET=1`, using the

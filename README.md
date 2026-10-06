@@ -48,7 +48,7 @@ Super+Left/Right stops at either end, and the tab bar scrolls when the spaces
 do not fit. Every CPU count gets the same spaces. `SPACES` and the
 [init scripts](docs/userland/init.md) select these spaces and their grants.
 
-The shell starts at `home://`, which is RAM-backed and lost on reboot. `app://`
+The shell starts at `tmp://`, which is RAM-backed and lost on reboot. `boot://`
 contains the read-only boot archive. Optional [virtio-fs setup](docs/devices/virtio-fs.md)
 provides persistent `host://` files and executable loading; no overlay is needed.
 `VIRTIO_NET=1` adds a QEMU NIC; see [network setup](docs/devices/networking.md)

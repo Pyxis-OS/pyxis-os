@@ -101,7 +101,7 @@ variables for every run; use a matching raw code/variables pair with USB boot
 support. `debug-usb` pauses with GDB on `127.0.0.1:1234`, as described in the
 [debugger guide](gdb.md). Ordinary `make run` and `make debug` retain ISO boot.
 
-After firmware boot, exercise `app://` programs and RAM-backed `home://` in the
+After firmware boot, exercise `boot://` programs and RAM-backed `tmp://` in the
 shell. The checked-in `CONFIG_XHCI=y` enables native USB access. With
 that setting, supported boot-present BOT disks provide native block reads and
 GPT discovery. Qualified disks also support explicitly authorized writes and
@@ -156,7 +156,7 @@ disk or boot ISO. Firmware was edk2-ovmf 20260508-8.fc44, using
 
 | Image/ESP configuration | CPUs | Observed result |
 | --- | --- | --- |
-| 1024/256 MiB | 4 | USB firmware loading, GDB stop at `kernel_init`, correct command line/archive extent, interactive `ls`, `date` and `cat app://share/hello.txt` |
+| 1024/256 MiB | 4 | USB firmware loading, GDB stop at `kernel_init`, correct command line/archive extent, interactive `ls`, `date` and `cat boot://share/hello.txt` |
 | 512/128 MiB | 4 | USB boot to the interactive shell; `date` completed |
 | Same 512/128 MiB image | 1 | One pre-kernel file-open failure; later unchanged-image boot and `date` succeeded |
 

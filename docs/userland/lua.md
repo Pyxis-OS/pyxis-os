@@ -1,9 +1,9 @@
 # Lua in Pyxis
 
-The boot archive includes `app://lua.pxe`, resolved as `lua` by the shell.
+The boot archive includes `boot://lua.pxe`, resolved as `lua` by the shell.
 The port uses Lua 5.5.1, pinned to upstream commit
 `7579fc9d7ed90240487251dfb69168f8e64e9294`, with the recorded upstream GC fix.
-The MIT notice is installed at `app://share/licenses/lua/lua.h`.
+The MIT notice is installed at `boot://share/licenses/lua/lua.h`.
 See the [port notes](../../ports/lua/README.md) for the source adaptations.
 Host Lua used by build recipes and image manifests is independent of guest Lua.
 
@@ -63,7 +63,7 @@ against the selected SDK and carried in the [ports bundle](../development/build-
 The SDK itself does not depend on Lua.
 
 The first-party session launcher uses `userspace/libconfig` to evaluate
-`app://config/session.lua` and `app://config/network.lua`. Default init selects
+`boot://config/session.lua` and `boot://config/network.lua`. Default init selects
 Bucharest, applies eight-column tabs and configures the optional QEMU NIC before
 starting the shell. Settings and recovery policies are documented in
 [session configuration](session-configuration.md) and [networking](../devices/networking.md).

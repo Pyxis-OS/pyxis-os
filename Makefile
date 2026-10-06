@@ -28,7 +28,7 @@ export VFIO_PCI
 INIT ?=
 NETWORK_CONFIG ?=
 # Ordered NAME=IMAGE initial spaces; tab order follows Caelum's log space.
-SPACES ?= development=app://init readonly=app://init-readonly remote=app://init-remote
+SPACES ?= development=boot://init readonly=boot://init-readonly remote=boot://init-remote
 # Optional NAME=LIST CPU ceilings, e.g. remote=2-3; unlisted spaces may use every CPU.
 SPACE_CPUS ?=
 MOUNT_DISK ?=

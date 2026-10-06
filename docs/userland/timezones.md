@@ -9,7 +9,7 @@ requires Lua. Monotonic deadlines are unaffected.
 `TZ` comes from the process's startup environment. Absent or empty `TZ` means
 UTC and needs no filesystem capability or allocation. A nonempty value is an
 IANA name such as `Europe/Bucharest`, `Pacific/Auckland` or `Etc/UTC`. Libc reads
-`app://share/zoneinfo/<name>` through the process's existing `app` directory
+`boot://share/zoneinfo/<name>` through the process's existing `boot` directory
 capability. Names allow ASCII letters, digits, `_`, `-`, `+` and nonempty
 slash-separated components. Absolute paths, dots, URI prefixes and raw POSIX
 rule strings are not accepted.

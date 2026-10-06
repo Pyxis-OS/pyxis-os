@@ -1,7 +1,7 @@
 # Links
 
 The image includes [Links](http://links.twibright.com/) 2.30 in text mode at
-`app://links.pxe`. Its GPL licence is at `app://share/licenses/links/COPYING`,
+`boot://links.pxe`. Its GPL licence is at `boot://share/licenses/links/COPYING`,
 and the shell resolves `links` to it. It reads HTML documentation such as the
 Java SE 8 Virtual Machine Specification without leaving Pyxis. The
 [recipe notes](../../ports/links/README.md) record the source pin, patches and
@@ -27,7 +27,7 @@ code is compiled but never reached.
 | URL | How it loads |
 | --- | --- |
 | `index.html`, `docs/a.html` | Becomes `file://index.html`, a path relative to the inherited working directory |
-| A startup root such as `host://`, `home://` or `app://` | Links' file loader over libc `stat`, `open` and `opendir`/`readdir` |
+| A startup root such as `host://`, `tmp://` or `boot://` | Links' file loader over libc `stat`, `open` and `opendir`/`readdir` |
 | A directory in either form | Links' listing: kind, size and name, linked relative to the directory |
 | `http://`, `https://` and any other `scheme://` | Opened with `fopen` through its namespace provider and read to the end |
 
@@ -55,7 +55,7 @@ between Links' internal threads.
   sequences are not sent, and on exit the screen is cleared with the cursor at
   the top, because the terminal has no saved cursor.
 - **Configuration.** None. Options, bookmarks and history are not saved, and
-  saving options reports an inaccessible home directory. `home://` is
+  saving options reports an inaccessible home directory. `tmp://` is
   RAM-backed, and Links' save path needs exclusive creation and private file
   modes.
 - **Switched off.** Fork, signals, other programs, asynchronous DNS, SMB and

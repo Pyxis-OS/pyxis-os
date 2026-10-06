@@ -182,7 +182,7 @@ reused. Receiver closure or provider exit invalidates every export and discards
 control records without waiting for clients or ACKs. Remaining references keep
 only safe backing storage until their final BSP release.
 
-The exported counter example runs with `session app://counter.pxe`. Two objects
+The exported counter example runs with `session boot://counter.pxe`. Two objects
 share a receiver and demonstrate authenticated identity/rights, COPY, launch and
 attachment attenuation, protocol rejection, provider-side denial, SEND and
 acknowledged retirement. `--withdraw` cancels a delivered call, finishes its
@@ -194,10 +194,10 @@ withdrawal so a CALL can queue; debugger inspection can confirm admission.
 all sixteen normal slots remain occupied.
 
 The packaged example runs from the interactive shell with
-`session app://server.pxe`. The server creates an endpoint, launches two clients
+`session boot://server.pxe`. The server creates an endpoint, launches two clients
 with callable grants, receives both requests and replies in reverse order.
-`session app://server.pxe --wide` exercises 4 KiB payloads and four file grants
-in both directions. `session app://server.pxe --abandon` closes one receipt so
+`session boot://server.pxe --wide` exercises 4 KiB payloads and four file grants
+in both directions. `session boot://server.pxe --abandon` closes one receipt so
 its client observes abandonment. `--saturate` retains sixteen received calls,
 observes a seventeenth caller's queue-full result, then completes the retained
 calls in reverse order. `--close` shows receiver closure after and before

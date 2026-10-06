@@ -1,7 +1,7 @@
 # vi
 
-The image includes BusyBox vi at `app://vi.pxe`, with its GPL-2.0-only license
-at `app://share/licenses/busybox/LICENSE`. The shell resolves `vi` to it. It is
+The image includes BusyBox vi at `boot://vi.pxe`, with its GPL-2.0-only license
+at `boot://share/licenses/busybox/LICENSE`. The shell resolves `vi` to it. It is
 the first modal editor, ahead of [Neovim](../wip/neovim-libuv.md); Kilo remains
 available. The [recipe notes](../../ports/busybox/README.md) record the source
 pin, both patches and the adapter.
@@ -120,11 +120,11 @@ following was exercised:
   - the `:q` guard, then `:w NAME` creating a file and refusing to replace it
     on the second try;
   - Ctrl+C delivered to vi as input;
-  - `[Readonly]` and the denied `:w!` on `app://`;
+  - `[Readonly]` and the denied `:w!` on `boot://`;
   - `-R`, ordered `-c` commands and `:n` across files;
   - yank/put with counts, dot repeat, undo, `:s`, `:set` and `:features`;
   - a `:/pattern/` address and `:list`, plus fastfetch using libc `memrchr`.
-- **Large file:** the 1.67 MB, 43,261-line `app://share/hwdata/pci.ids` opened
+- **Large file:** the 1.67 MB, 43,261-line `boot://share/hwdata/pci.ids` opened
   in under 0.5 s, including the polling interval, and `G` reached the end.
 - **Framebuffer console (QEMU `sendkey`):** full-screen drawing, arrows, `A`,
   Escape and `:wq` to `host://`, with a clean prompt after exit.

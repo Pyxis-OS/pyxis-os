@@ -17,7 +17,7 @@ root-port count, or `root ports unknown` when that count was not inspected.
 Controller presentation follows boot registry order, which is stable within the
 boot but otherwise unspecified; no address sorting is guaranteed.
 Devices show their physical root/downstream port path, speed and checked VID/PID,
-with vendor/product labels from `app://share/hwdata/usb.ids` when available. Checked
+with vendor/product labels from `boot://share/hwdata/usb.ids` when available. Checked
 interfaces show their configuration, number, alternate, class/subclass/protocol and
 endpoint count. These descriptors do not imply an active configuration or binding.
 `super` and `super-plus` distinguish USB 3 link categories without claiming a

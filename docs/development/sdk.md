@@ -128,7 +128,7 @@ small math subset; a full libm remains deferred. See the [userspace FP contract]
 ## Guest SDK
 
 `make image` also packages the [TCC port](ports.md#tcc-and-the-guest-sdk) and a
-target-only SDK at `app://sdk`. Shared headers remain in `usr/include`, startup
+target-only SDK at `boot://sdk`. Shared headers remain in `usr/include`, startup
 and runtime archives in `usr/lib`, and TCC-private headers/support in `lib/tcc`.
 The guest payload includes library licenses, exact TCC patches and toolchain
 source provenance. Its manifest adds the ports revision/dirty state to the
@@ -136,8 +136,8 @@ exported SDK record. There is no separate guest ABI version.
 
 The guest receives no GCC/binutils executables, GCC private headers, host
 `elf2pxe` or GNU linker script. TCC writes P1F directly using the same loader
-contract. `app://sdk` is read-only; applications compile source and write output
-in `home://` or other explicitly granted directories.
+contract. `boot://sdk` is read-only; applications compile source and write output
+in `tmp://` or other explicitly granted directories.
 
 ## Runtime build phase
 

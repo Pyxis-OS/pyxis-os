@@ -12,7 +12,7 @@ The supported platform is QEMU Q35 with firmware-assigned PCI resources, modern
 VirtIO PCI transport and split queues. See [PCI discovery and resources](pci.md)
 for MCFG/ECAM, BAR ownership and MSI-X routing. Only `VIRTIO_F_VERSION_1` is
 negotiated; legacy transport, packed queues, indirect descriptors and DAX are
-unsupported. There is no host overlay or change to `app://`. The
+unsupported. There is no host overlay or change to `boot://`. The
 [development overlay](../wip/host-development-overlay.md) remains a separate idea.
 
 ## Start the host service
@@ -77,7 +77,7 @@ same export before session handoff. The development profile delegates
 read-write grants; the read-only profile delegates read-only grants.
 The Remote profile delegates an optional read-write view to its remote
 shell sessions, sharing the same export.
-Both shells start in the shared RAM-backed `home://` directory, so use an
+Both shells start in the shared RAM-backed `tmp://` directory, so use an
 explicit `host://` path or `cd host://` to reach the export.
 From the shell, try:
 
@@ -463,9 +463,9 @@ device/daemon/backing service and cannot isolate any one component or CPU time.
 The default init script is:
 
 ```text
-#!app://shell.pxe
+#!boot://shell.pxe
 mount --optional --read-write host
-session app://session.pxe --configure-network
+session boot://session.pxe --configure-network
 ```
 
 When the selected modern virtio-fs device is present, native init or its script
@@ -485,7 +485,7 @@ apply, with no write probe or silent read-only fallback. A validated zero-byte
 write is a backend-free no-op. Missing required rights fail with DENIED first.
 The packaged development init explicitly requests read-write access; the
 read-only init requests read-only access. Both use `--optional` and leave the
-initial working directory at `home://`.
+initial working directory at `tmp://`.
 The mount operation uses the existing object-call ABI and creates neither a
 global namespace entry nor a kernel URI parser.
 
@@ -504,7 +504,7 @@ continues to resolve immutable startup bindings. The shell owns newly mounted
 roots until exit, and changing its bindings does not change a retained cwd chain.
 
 Session handoff and ordinary child launches query and preserve the actual
-grants on the optional host root, app/home roots and each cwd handle. They never
+grants on the optional host root, boot/tmp roots and each cwd handle. They never
 forward mount authority. The session launcher forwards that root to its interactive shell, whose `cd host://` and
 child launches retain the same navigation boundary and rights. Mount authority,
 root directories and opened children have independent reference lifetimes;

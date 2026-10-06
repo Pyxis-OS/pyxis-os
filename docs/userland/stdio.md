@@ -18,7 +18,7 @@ grants; it creates no authority. `a+` starts reading at offset zero;
 `a` starts at the existing end. Seeking never disables append-on-write.
 
 Paths use the existing [capability path rules](paths.md), including scheme roots
-such as `home://notes.txt` and the initial working-directory chain for relative
+such as `tmp://notes.txt` and the initial working-directory chain for relative
 paths. No process-global chdir or implicit filesystem authority is added. The
 startup roots/chain are borrowed during lookup: explicitly closing those native
 grants can make later fopen calls fail. An already open stream retains its own
@@ -228,7 +228,7 @@ file fill cap. Probe programs were uncommitted.
 - Offset limits: from LONG_MAX - 8193 through UINT64_MAX, `fgetc` on an empty
   file reported the same result as a one-byte `fread_some`, on `host://` and
   `home://`. That is EOF up to the backend's limit (below LONG_MAX on
-  `host://`, below UINT64_MAX on `home://`) and EOVERFLOW past it. Before the
+  `host://`, below UINT64_MAX on `tmp://`) and EOVERFLOW past it. Before the
   LONG_MAX cap, `fgetc` at LONG_MAX - 1 on `host://` failed with EOVERFLOW.
 - Head printed exact lines from pipes, and its producer reported EPIPE. A
   guest-TCC program reading one line from console stdin, and `head -n 1`, left

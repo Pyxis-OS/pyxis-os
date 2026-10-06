@@ -8,7 +8,7 @@ first episode with keyboard and mouse. There is no sound, networking or CD audio
 
 The unchanged shareware `pak0.pak` is pinned under `third_party/quake-shareware`
 with its source, checksums and id's license texts. Those texts ship at
-`app://share/licenses/quake-shareware/`, separately from the engine's GPL
+`boot://share/licenses/quake-shareware/`, separately from the engine's GPL
 license. The shareware license permits free distribution of the shareware only;
 it grants nothing for the registered or retail data.
 
@@ -22,7 +22,7 @@ make run CPUS=4 QUAKE_DATA=/shared/quake/retail
 ```
 
 `pak0.pak` is required and `pak1.pak` optional, in either letter case. They are
-staged as `app://share/quake/id1/pak0.pak` and `pak1.pak`. These are local
+staged as `boot://share/quake/id1/pak0.pak` and `pak1.pak`. These are local
 inputs, not repository files; a later build without `QUAKE_DATA` restores the
 shareware data and its license texts. Normal CI images include only shareware.
 
@@ -34,7 +34,7 @@ quake +map e1m1
 quake +timedemo demo1
 ```
 
-Arguments are Quake's own. `-basedir` replaces `app://share/quake` and
+Arguments are Quake's own. `-basedir` replaces `boot://share/quake` and
 `-writedir` replaces `home://quake`.
 
 ## Controls and resources

@@ -43,9 +43,9 @@ Limine is at `EFI/BOOT/BOOTX64.EFI`; the original kernel, whole boot archive and
 configuration and a newline-terminated kernel `revision` record are under `boot`. The installed configuration fills the packaged
 template with timeout zero and the new disk GUID, and omits the installer entry
 and any global `default_entry`.
-Its command line is `space.pyxis=app://init-installed mount.disk=<GUID>`, a
+Its command line is `space.pyxis=boot://init-installed mount.disk=<GUID>`, a
 single space. Fixed `init-installed` mounts partition 2's system volume read-write as
-`system://` and starts the ordinary local session. Home stays RAM-backed.
+`system://` and starts the ordinary local session. `tmp://` stays RAM-backed.
 
 Success requires flush, explicit raw release/GPT rescan, FAT directory traversal
 and byte-for-byte source comparisons, then normal read-only pool reopening and

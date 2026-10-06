@@ -4,7 +4,7 @@ The live image has a separate `Install Pyxis` Limine entry. `BOOT_MENU_TIMEOUT`
 is a build setting, default `0` for immediate normal boot. Build install media
 with `BOOT_MENU_TIMEOUT=5` to show the menu for five seconds. Both entries are
 generated for either value. The install entry's command line is
-`space.install=app://init-install.pxe boot.install=1`. `boot.install=1` requires
+`space.install=boot://init-install.pxe boot.install=1`. `boot.install=1` requires
 exactly one configured space. Duplicate install options, values other than `1`
 or another space count fail boot.
 
@@ -29,11 +29,11 @@ The [boot manifest](../../boot/initrd.lua) also packages
 `share/installer/BOOTX64.EFI`, `share/installer/limine.conf.template` and Limine's
 license. The template is the source menu configuration, not the generated
 normal-boot command line or menu timeout; it contains separate placeholders
-for both. These assets are available through read-only `app`.
+for both. These assets are available through read-only `boot`.
 
-Native init opens `app://installer.pxe` and delegates only the disk service,
+Native init opens `boot://installer.pxe` and delegates only the disk service,
 the two source files, private memory, input/output, read-only clock and randomness,
-read-only `app`, read-only SYSTEM_INFO and standard streams. SYSTEM_INFO supplies
+read-only `boot`, read-only SYSTEM_INFO and standard streams. SYSTEM_INFO supplies
 the live kernel build revision for display and the installed ESP record. It waits for the child and reports its
 completion. It delegates no launcher, writable home, mount, host, network or
 display authority. The packaged [native installer](../userland/installer.md)
