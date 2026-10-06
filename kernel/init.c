@@ -2,6 +2,7 @@
 #include <arch/clock.h>
 #include <arch/smp.h>
 #include <kernel/init.h>
+#include <kernel/acpi.h>
 #include <kernel/user/launch.h>
 #include <kernel/boot.h>
 #include <kernel/boot_files.h>
@@ -69,6 +70,7 @@
   virtio_blk_prepare(boot);
   block_prepare();
   gpt_prepare();
+  acpi_prepare(boot);
   arch_clock_maintain();
 
   boot_start_cpus();
@@ -93,6 +95,7 @@
   virtio_blk_start();
   gpt_start();
   npfs_start();
+  acpi_start();
   klog("devices: workers started\n");
   arch_clock_maintain();
 

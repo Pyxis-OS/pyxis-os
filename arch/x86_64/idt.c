@@ -4,6 +4,7 @@
 #include <arch/cpu_local.h>
 #include <arch/descriptors.h>
 #include <arch/ps2.h>
+#include <kernel/acpi.h>
 #include <kernel/log.h>
 #include <kernel/net/rtl8111.h>
 #include <kernel/panic.h>
@@ -117,6 +118,11 @@ void interrupt_handler(struct exception_frame *frame)
   }
   if (frame->vector == APIC_VIRTIO_FS_VECTOR) {
     virtio_fs_pci_interrupt();
+    finish_interrupt(frame);
+    return;
+  }
+  if (frame->vector == APIC_ACPI_VECTOR) {
+    acpi_interrupt();
     finish_interrupt(frame);
     return;
   }
