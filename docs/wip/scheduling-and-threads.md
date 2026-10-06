@@ -583,6 +583,8 @@ updates current subsystem docs only for behavior it implements.
    mixed-load results.
 8. [ ] **Validate and close.** Run the CPU/device matrix, independent-space and
    lifetime scenarios, native ThinkPad validation and matched final measurements.
+   Split into 8a (validation; see the [8a record](../development/experiments/smp-task8/README.md))
+   and 8b (closing documentation).
    Document remaining serial services and accepted limits; rewrite this milestone as an implemented kernel
    reference, preserving thread/worker follow-ups in WIP and technical debt.
 
