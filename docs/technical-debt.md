@@ -827,6 +827,10 @@ The [system layout](wip/system-layout.md) renames leave two gaps until later tas
   rejected before creation from a space that was created and left unstarted;
   boot init only reports it. Revisit with the space manager.
 - Spaces are never destroyed.
+- There is no limit on how many spaces a configuration creates, though each
+  costs about 8 MiB at 1080p. The owner chose not to add one (2026-10-06):
+  installed hardware has ample memory, and the rescue entry recovers an
+  override that exhausts it.
 - Space inits must be `boot://` archive entries, and they hold no mount
   authority, so `sync --disk` is unavailable to them; `sync PATH...` works.
 - Every new space's first process receives that space's console, keyboard,
