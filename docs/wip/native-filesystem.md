@@ -413,7 +413,7 @@ Not requirements, and not v1. Recorded so they are not designed out:
 - **A live-system install flow (owner preference).** Boot a usable system in
   which you can inspect disks and the network, then enter the installer when
   ready, as Linux live images do, rather than rebooting into a separate entry.
-  This likely needs the new tab bar for spaces. The second Limine entry is the
+  This likely needs runtime space creation (the new-space flow). The second Limine entry is the
   v1 simplification. Pool retirement is a prerequisite: the current retained
   normal mounts prevent raw installation in the same boot. Define safe pool
   retirement and ownership before adding that flow.

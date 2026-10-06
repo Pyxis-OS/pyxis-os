@@ -131,7 +131,7 @@ The next milestone is the [system layout](system-layout.md), agreed 2026-10-06
 ahead of other parallel work: `boot://` and `tmp://` renames, a userspace boot
 init with a Lua boot configuration, programs on a `bin://` volume with a
 two-stage Update, and a persistent home. Later candidates are dynamic space
-creation (the new tab and its launch flow), a file navigator and multiplexing.
+creation (the new-space flow), a file navigator and multiplexing.
 
 The [native filesystem milestone](native-filesystem.md) has completed format-only
 codecs, host tools and the Caelum-owned cache/writer. Trusted init selects explicit

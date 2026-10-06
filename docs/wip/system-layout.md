@@ -48,7 +48,7 @@ Accepted by the owner on 2026-10-06:
   drops its own grants and exits (decision 4). It does not unmount: the spaces
   keep using what it mounted.
 - The same space-creation operation later serves runtime space creation, such
-  as the new-tab flow. Creating a space becomes an ordinary operation for a
+  as the new-space flow. Creating a space becomes an ordinary operation for a
   holder of that authority, not boot-only kernel configuration.
 - This replaces the `space.NAME` command-line grammar once implemented. The
   space registry and CPU ceilings from SMP tasks 2 and 3 remain; only the caller
