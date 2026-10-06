@@ -21,6 +21,10 @@ applied: MPL's standard secondary-license provisions remain available.
 - `third_party/tlsf/tlsf.c` and `tlsf.h`: retain the BSD terms and copyright
   notices in [tlsf.h](third_party/tlsf/tlsf.h). The Pyxis integration header and
   provenance documentation are original project material.
+- `third_party/uacpi/`: the imported uACPI interpreter retains its
+  [MIT license](third_party/uacpi/LICENSE) and
+  [provenance](third_party/uacpi/UPSTREAM.md). The Caelum host interface in
+  `kernel/acpi` is original project material.
 - `third_party/siphash/`: imported reference code retains
   [CC0](third_party/siphash/LICENSE_CC0) and its provenance notices.
 - `tools/remote/vendor/sha256.c` and `tools/remote/sha256.h`: the imported

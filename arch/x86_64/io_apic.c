@@ -17,10 +17,11 @@
 #define IO_APIC_LEVEL_TRIGGERED (1u << 15)
 #define IO_APIC_MASKED (1u << 16)
 
-static struct isa_irq_route keyboard_route, mouse_route;
-static uint32_t keyboard_register, mouse_register;
-static uint32_t keyboard_entry, mouse_entry;
-static bool initialized, mouse_initialized;
+static struct isa_irq_route keyboard_route, mouse_route, sci_route;
+static uint32_t keyboard_register, mouse_register, sci_register;
+static uint32_t keyboard_entry, mouse_entry, sci_entry;
+static unsigned sci_irq;
+static bool initialized, mouse_initialized, sci_initialized;
 
 static uint32_t io_apic_read(uint32_t reg)
 {
@@ -51,6 +52,7 @@ void io_apic_prepare(const struct boot_info *boot)
   if (!acpi_ps2_routes(boot, &keyboard_route, &mouse_route)) {
     keyboard_route = mouse_route = (struct isa_irq_route){0};
   }
+  acpi_sci_route(boot, &sci_irq, &sci_route);
 }
 
 uint64_t io_apic_physical_address(void)
@@ -107,6 +109,28 @@ bool io_apic_init(void)
     klog("mouse: IRQ 12 -> GSI %u, I/O APIC input %u -> BSP APIC %u\n",
          mouse_route.gsi, mouse_pin, apic_id());
   }
+
+  /* The SCI is level-triggered and may be shared on other platforms. Sharing
+   * a PS/2 input or another controller is unsupported, as for the mouse. */
+  unsigned sci_pin = sci_route.gsi - sci_route.gsi_base;
+  if (!sci_route.io_apic_physical) {
+    klog("ACPI: no SCI route; ACPI events unavailable\n");
+  } else if (sci_route.io_apic_physical != keyboard_route.io_apic_physical ||
+             sci_pin > max_entry || sci_route.gsi == keyboard_route.gsi ||
+             (mouse_initialized && sci_route.gsi == mouse_route.gsi)) {
+    klog("ACPI: unsupported SCI route to GSI %u; ACPI events unavailable\n",
+         sci_route.gsi);
+  } else {
+    sci_register = IO_APIC_REDIRECTION_BASE + sci_pin * IO_APIC_REDIRECTION_REGISTERS;
+    sci_entry = redirection_entry(&sci_route, APIC_ACPI_VECTOR);
+    io_apic_write(sci_register + 1, apic_id() << IO_APIC_DESTINATION_SHIFT);
+    io_apic_write(sci_register, sci_entry | IO_APIC_MASKED);
+    sci_initialized = true;
+    klog("ACPI: SCI IRQ %u -> GSI %u, I/O APIC input %u -> BSP APIC %u, %s %s\n",
+         sci_irq, sci_route.gsi, sci_pin, apic_id(),
+         sci_route.level_triggered ? "level" : "edge",
+         sci_route.active_low ? "active-low" : "active-high");
+  }
   return true;
 }
 
@@ -125,4 +149,22 @@ void io_apic_mouse_enable(void)
 {
   KASSERT(mouse_initialized);
   io_apic_write(mouse_register, mouse_entry);
+}
+
+bool io_apic_sci_available(unsigned *irq)
+{
+  *irq = sci_initialized ? sci_irq : 0;
+  return sci_initialized;
+}
+
+void io_apic_sci_mask(void)
+{
+  KASSERT(sci_initialized);
+  io_apic_write(sci_register, sci_entry | IO_APIC_MASKED);
+}
+
+void io_apic_sci_unmask(void)
+{
+  KASSERT(sci_initialized);
+  io_apic_write(sci_register, sci_entry);
 }

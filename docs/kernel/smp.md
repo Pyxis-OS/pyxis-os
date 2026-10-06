@@ -536,7 +536,7 @@ These stay on the BSP:
   creation, capability growth, namespace creation, endpoint creation and export,
   RAMFS entries, RAM-file replacement, launch preparation, display, HOST and
   native filesystem admission, readiness waits and system-info memory;
-- the network, native filesystem, HOST transport, virtio-blk, USB and
+- the network, native filesystem, HOST transport, virtio-blk, USB, ACPI and
   presentation workers;
 - task reaping, object retirement and the general kernel VM;
 - device interrupt routing.

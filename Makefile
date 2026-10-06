@@ -68,6 +68,7 @@ OBJECTS := $(patsubst %.c,build/%.o,$(C_SOURCES)) $(patsubst %.S,build/%.o,$(ASM
 .DEFAULT_GOAL := all
 include kernel/net/lwip/build.mk
 include kernel/fs/build.mk
+include kernel/acpi/build.mk
 
 .PHONY: all menuconfig kernel bundle-kernel bundle-sdk bundle-userspace bundle-ports image-inputs tools fs-tools sdk sdk-headers userspace ports initrd image usb-image run debug run-usb debug-usb clean check-toolchain FORCE
 all: kernel
