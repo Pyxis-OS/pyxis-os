@@ -389,7 +389,7 @@ around these calls and restore them afterward; being pinned to the BSP alone doe
 not prevent same-CPU reentry. Other heap allocation by syscalls, such as
 capability growth or RAM-file backing, still goes through BSP requests.
 
-Three lower layers are already safe on any CPU with interrupts disabled,
+Three lower layers are safe on any CPU with interrupts disabled,
 outside interrupt and fault entry:
 
 - **Kernel heap.** `kmalloc()` and `kfree()` hold a short heap lock around
@@ -494,9 +494,10 @@ shared services.
 
 These stay on the BSP:
 
-- the request executor and its services: capability growth, namespaces,
-  endpoints, RAMFS, RAM-file replacement, the launcher, display and HOST/native
-  filesystem admission;
+- the request executor and every service in its catalog: pipe and terminal
+  creation, capability growth, namespace creation, endpoint creation and export,
+  RAMFS entries, RAM-file replacement, launch preparation, display, HOST and
+  native filesystem admission, readiness waits and system-info memory;
 - the network, native filesystem, HOST transport, virtio-blk, USB and
   presentation workers;
 - task reaping, object retirement and the general kernel VM;
