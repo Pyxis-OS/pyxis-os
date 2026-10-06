@@ -19,6 +19,7 @@ enum bsp_service {
   BSP_SERVICE_NPFS,
   BSP_SERVICE_READINESS,
   BSP_SERVICE_SYSTEM_INFO_MEMORY,
+  BSP_SERVICE_POWER,
   BSP_SERVICE_COUNT,
 };
 
@@ -36,8 +37,8 @@ enum bsp_request_state {
  * FREE/PREPARED and completed results after waiting; the BSP owns published
  * requests. DEFERRED belongs to the caller until its scheduler establishes the
  * parked handoff. Queue publication and wait notification synchronize loans.
- * FORWARDED belongs to the HOST, native filesystem or readiness worker until
- * final completion.
+ * FORWARDED belongs to the HOST, native filesystem, readiness or ACPI worker
+ * until final completion.
  * COMPLETE is read after notification, never polled as an asynchronous result. */
 struct bsp_request {
   struct bsp_request *next;

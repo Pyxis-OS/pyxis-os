@@ -28,6 +28,7 @@
 #include <kernel/log.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
+#include <kernel/object/power.h>
 #include <kernel/syscall.h>
 #include <kernel/task.h>
 #include <kernel/user.h>
@@ -243,6 +244,11 @@ static struct syscall_result call_object(handle_t handle,
     }
     return space_factory_call(rights, header.operation, request_address, request_size,
         reply_address, reply_capacity);
+  case OBJECT_POWER:
+    if (header.protocol != PROTOCOL_POWER) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return power_call(rights, header.operation, request_size, reply_capacity);
   case OBJECT_KEYBOARD:
     if (header.protocol != PROTOCOL_KEYBOARD) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

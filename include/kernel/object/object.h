@@ -46,6 +46,7 @@ enum object_type {
   OBJECT_DISK = 39,
   OBJECT_POINTER = 40,
   OBJECT_SPACE_FACTORY = 41,
+  OBJECT_POWER = 42,
 };
 
 struct execution_group;

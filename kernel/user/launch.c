@@ -33,6 +33,8 @@
 #include <kernel/initrd.h>
 #include <kernel/boot_files.h>
 #include <kernel/object/disk.h>
+#include <kernel/object/power.h>
+#include <abi/power.h>
 #include <kernel/fs/initrd_tree.h>
 #include <kernel/object/directory.h>
 #include <kernel/log.h>
@@ -94,6 +96,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct kernel_object *namespace_service = NULL, *terminal_service = NULL;
   struct kernel_object *system_info = NULL;
   struct kernel_object *disks = NULL;
+  struct kernel_object *power = NULL;
   struct file_object *boot_kernel = NULL, *boot_archive = NULL;
   struct file_object *script_file = NULL;
   struct kernel_object *factory = NULL, *profile = NULL, *pipe = NULL, *service = NULL;
@@ -131,19 +134,20 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   udp = udp_service_create();
   tcp = tcp_service_create();
   random = random_create();
+  power = power_create();
   profile = profile_create();
   pipe = pipe_service_create();
   service = endpoint_service_create();
   namespace_service = namespace_service_create();
   terminal_service = terminal_service_create();
-  if (!memory || !launcher || !clock || !system_info || !echo || !net_config || !udp || !tcp || !random || !profile || !pipe || !service || !namespace_service || !terminal_service) {
+  if (!memory || !launcher || !clock || !system_info || !echo || !net_config || !udp || !tcp || !random || !power || !profile || !pipe || !service || !namespace_service || !terminal_service) {
     goto fail;
   }
 
   handle_t memory_handle, launcher_handle, boot, tmp, ram;
   handle_t clock_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
   handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
-  handle_t system_info_handle;
+  handle_t system_info_handle, power_handle;
   handle_t script_handle = HANDLE_INVALID;
   handle_t standard_output, standard_error;
   struct kernel_object *console = &process->space->console->object;
@@ -157,6 +161,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, 0, &memory_handle) != CAP_OK ||
       capability_install(&process->capabilities, net_config, NET_CONFIG_RIGHTS, 0, &net_config_handle) != CAP_OK ||
       capability_install(&process->capabilities, random, RANDOM_RIGHT_READ, 0, &random_handle) != CAP_OK ||
+      capability_install(&process->capabilities, power, POWER_RIGHTS, 0, &power_handle) != CAP_OK ||
       capability_install(&process->capabilities, tcp, TCP_SERVICE_RIGHTS, 0, &tcp_handle) != CAP_OK ||
       capability_install(&process->capabilities, udp,
           UDP_SERVICE_RIGHT_OPEN | UDP_SERVICE_RIGHT_BROADCAST, 0, &udp_handle) != CAP_OK ||
@@ -248,6 +253,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   pipe = NULL;
   object_release(random);
   random = NULL;
+  object_release(power);
+  power = NULL;
   object_release(udp);
   udp = NULL;
   object_release(tcp);
@@ -265,7 +272,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[22] = {
+  struct process_binding resources[23] = {
     {"memory", memory_handle},
     {"launcher", launcher_handle},
     {"clock", clock_handle},
@@ -280,8 +287,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     {"service", service_handle},
     {"namespace_service", namespace_service_handle},
     {"terminal", terminal_service_handle},
+    {"power", power_handle},
   };
-  size_t resource_count = 14;
+  size_t resource_count = 15;
   resources[resource_count++] = (struct process_binding){"space_factory", factory_handle};
   resources[resource_count++] = (struct process_binding){"ram", ram};
   if (script_handle != HANDLE_INVALID) {
@@ -374,6 +382,9 @@ fail:
   }
   if (random) {
     object_release(random);
+  }
+  if (power) {
+    object_release(power);
   }
   if (udp) {
     object_release(udp);

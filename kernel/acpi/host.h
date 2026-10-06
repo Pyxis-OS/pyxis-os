@@ -1,5 +1,7 @@
 #ifndef KERNEL_ACPI_HOST_H
 #define KERNEL_ACPI_HOST_H
+#include <abi/syscall.h>
+#include <kernel/acpi.h>
 #include <kernel/boot.h>
 #include <kernel/mm/types.h>
 #include <stddef.h>
@@ -26,6 +28,11 @@ bool acpi_map_prepare(const struct boot_info *boot);
 void *acpi_map(phys_addr_t physical, size_t bytes);
 void acpi_unmap(void *address, size_t bytes);
 size_t acpi_map_pages(void);
+
+/* ACPI worker, IF=1, top level. Holds user tasks, flushes the native pools,
+ * then enters S5 or resets. Returns only on failure, with user tasks released
+ * and pools unsealed, so the system keeps running. */
+enum call_status acpi_power_run(enum acpi_power_action action);
 
 /* Requested bytes and blocks currently allocated by uACPI. Worker only. */
 struct acpi_heap_use {
