@@ -67,7 +67,7 @@ Accepted for task 1 on 2026-10-07:
 
 ## Tasks
 
-- [ ] **1. Bring in uACPI.**
+- [x] **1. Bring in uACPI.**
   - Vendor [uACPI](https://github.com/uACPI/uACPI) (MIT) at a pinned revision,
     with its notices, under the kernel's vendor-dependency rules.
   - Implement its kernel interface on Caelum's primitives, following decision 1
@@ -79,10 +79,9 @@ Accepted for task 1 on 2026-10-07:
   - Load the ACPI namespace at boot. No device is used yet.
   - **Finish when:** QEMU and the ThinkPad both boot with the namespace loaded and
     no AML errors, and the memory and boot-time cost is recorded.
-  - **Status:** implemented. QEMU boots with one and four CPUs without AML
-    errors, and the costs are recorded in [ACPI](../kernel/acpi.md#measurements).
-    The ThinkPad boot is the owner's check; its `ACPI:` log lines, including any
-    refused mappings or PCI writes, finish the task.
+  - **Status:** done. QEMU with one and four CPUs and the ThinkPad (owner,
+    2026-10-07) load the namespace without AML errors, refused mappings or
+    refused PCI writes. Costs are recorded in [ACPI](../kernel/acpi.md#measurements).
 
 - [ ] **2. Clean power-off and reboot.**
   - The `power` capability and its boot-init forwarding (decision 2), plus the

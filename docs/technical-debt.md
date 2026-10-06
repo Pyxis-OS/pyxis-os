@@ -348,8 +348,8 @@ milestone task:
   for functions that drivers own.
 - **The firmware mapping window is never reused.** Its 64 MiB of address space
   bounds every distinct mapping for the whole boot, and an operation region
-  is mapped whole. QEMU uses 14 pages. Revisit if a machine fills the window or
-  maps very large regions.
+  is mapped whole. QEMU uses 14 pages and the ThinkPad 2,127 (8.3 MiB).
+  Revisit if a machine fills the window or maps very large regions.
 - **AML is trusted with hardware.** It may use any I/O port, including the
   legacy PCI configuration ports, and its device-memory mappings can alias
   registers that the kernel owns, such as the HPET and APICs. Revisit if a
