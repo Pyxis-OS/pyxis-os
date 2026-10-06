@@ -1,8 +1,7 @@
 # System layout and boot init
 
 Status: **milestone, agreed 2026-10-05 and 2026-10-06.** It follows the
-[runtime SMP milestone](../kernel/smp.md). Tasks 1 and 2 are implemented; task 2's
-ThinkPad check is pending. Each task
+[runtime SMP milestone](../kernel/smp.md). Tasks 1 and 2 are implemented. Each task
 starts when the owner says so, after its listed decisions are settled. Any
 decision can be revised by the owner.
 
@@ -114,7 +113,7 @@ Accepted by the owner on 2026-10-06:
     Update moves a 0.0.2 installation to the renamed layout with `system://`
     preserved.
 
-- [ ] **2. Boot init and space creation.**
+- [x] **2. Boot init and space creation.**
   - **Kernel:** a native create-space operation, held only by boot init. It
     takes the name, CPU ceiling, init image, and the new init's roots and
     grants. The kernel command line keeps only the boot init and `mount.disk`;
@@ -237,7 +236,9 @@ Accepted by the owner on 2026-10-06:
     configuration and [space creation](../userland/init.md#space-creation). In
     QEMU, an installed disk gained three override spaces without an Update,
     and broken and unusable overrides, the rescue entry and Update were
-    checked. The ThinkPad check remains.
+    checked. On 2026-10-06 the owner ran the ThinkPad check with the PXE
+    build of this PR (update from 0.0.2, spaces from the pool configuration)
+    and reported that it works.
 
 - [ ] **3. Programs on `bin://` and two-stage Update.**
   - The installer creates the `bin` volume, and ordinary programs move out of
