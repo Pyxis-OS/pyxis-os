@@ -5,6 +5,7 @@
 #include <kernel/panic.h>
 
 #define RSDP_V1_BYTES 20
+#define FADT_SCI_INTERRUPT_OFFSET 46
 #define FADT_BOOT_ARCH_OFFSET 109
 #define FADT_BOOT_ARCH_REVISION 3
 #define FADT_HAS_8042 (1u << 1)
@@ -165,10 +166,17 @@ enum isa_route_result {
   ISA_ROUTE_INVALID,
 };
 
+/* Without an override, or for conforming fields, the bus defaults apply: ISA
+ * inputs are active-high and edge-triggered, the ACPI SCI active-low and
+ * level-triggered. */
 static enum isa_route_result isa_route(const struct acpi_madt *madt, unsigned isa_irq,
-                                       struct isa_irq_route *route)
+                                       bool default_low_level, struct isa_irq_route *route)
 {
-  *route = (struct isa_irq_route){.gsi = isa_irq};
+  *route = (struct isa_irq_route){
+    .gsi = isa_irq,
+    .active_low = default_low_level,
+    .level_triggered = default_low_level,
+  };
   bool overridden = false;
   for (size_t offset = sizeof(*madt); offset < madt->header.length;) {
     const struct madt_entry *entry = madt_entry_at(madt, offset);
@@ -188,10 +196,13 @@ static enum isa_route_result isa_route(const struct acpi_madt *madt, unsigned is
           *route = (struct isa_irq_route){0};
           return ISA_ROUTE_INVALID;
         }
-        /* ISA defaults are active-high and edge-triggered. */
         route->gsi = override->gsi;
-        route->active_low = polarity == INTI_LOW_OR_LEVEL;
-        route->level_triggered = trigger == INTI_LOW_OR_LEVEL;
+        if (polarity != INTI_CONFORMS) {
+          route->active_low = polarity == INTI_LOW_OR_LEVEL;
+        }
+        if (trigger != INTI_CONFORMS) {
+          route->level_triggered = trigger == INTI_LOW_OR_LEVEL;
+        }
         overridden = true;
       }
     }
@@ -254,7 +265,7 @@ bool acpi_ps2_routes(const struct boot_info *boot, struct isa_irq_route *keyboar
     return false;
   }
 
-  switch (isa_route(madt, KEYBOARD_ISA_IRQ, keyboard)) {
+  switch (isa_route(madt, KEYBOARD_ISA_IRQ, false, keyboard)) {
   case ISA_ROUTE_INVALID:
     panic("invalid MADT keyboard interrupt override");
   case ISA_ROUTE_ABSENT:
@@ -263,9 +274,52 @@ bool acpi_ps2_routes(const struct boot_info *boot, struct isa_irq_route *keyboar
     break;
   }
   /* The mouse is optional: a bad IRQ 12 description leaves only it unusable. */
-  if (isa_route(madt, MOUSE_ISA_IRQ, mouse) == ISA_ROUTE_INVALID) {
+  if (isa_route(madt, MOUSE_ISA_IRQ, false, mouse) == ISA_ROUTE_INVALID) {
     klog("mouse: invalid MADT IRQ 12 override; mouse unavailable\n");
   }
+  return true;
+}
+
+bool acpi_sci_route(const struct boot_info *boot, unsigned *sci_irq,
+                    struct isa_irq_route *route)
+{
+  *sci_irq = 0;
+  *route = (struct isa_irq_route){0};
+  if (!boot->acpi_rsdp) {
+    return false;
+  }
+
+  size_t entry_bytes;
+  const struct acpi_header *root = root_table(boot, &entry_bytes);
+  const struct acpi_madt *madt = NULL;
+  const struct acpi_header *fadt = NULL;
+  for (size_t offset = sizeof(*root); offset < root->length; offset += entry_bytes) {
+    uint64_t physical = 0;
+    memcpy(&physical, (const uint8_t *)root + offset, entry_bytes);
+    const struct acpi_header *table = read_table(boot, physical);
+    if (!memcmp(table->signature, "APIC", 4) && !madt && table->length >= sizeof(*madt)) {
+      madt = (const void *)table;
+    } else if (!memcmp(table->signature, "FACP", 4) && !fadt) {
+      fadt = table;
+    }
+  }
+
+  uint16_t interrupt;
+  if (!madt || !fadt ||
+      fadt->length < FADT_SCI_INTERRUPT_OFFSET + sizeof(interrupt)) {
+    return false;
+  }
+  memcpy(&interrupt, (const uint8_t *)fadt + FADT_SCI_INTERRUPT_OFFSET, sizeof(interrupt));
+  /* Hardware-reduced platforms report zero and signal events otherwise. */
+  if (!interrupt) {
+    return false;
+  }
+
+  if (isa_route(madt, interrupt, true, route) != ISA_ROUTE_FOUND) {
+    *route = (struct isa_irq_route){0};
+    return false;
+  }
+  *sci_irq = interrupt;
   return true;
 }
 

@@ -18,6 +18,11 @@ struct isa_irq_route {
 bool acpi_ps2_routes(const struct boot_info *boot, struct isa_irq_route *keyboard,
                      struct isa_irq_route *mouse);
 
+/* Same bootstrap lifetime as PS/2 routing. Copies the FADT's SCI interrupt and
+ * its MADT route; an override's conforming fields mean active-low, level.
+ * False when there are no tables, no SCI or no I/O APIC for its GSI. */
+bool acpi_sci_route(const struct boot_info *boot, unsigned *sci_irq,
+                    struct isa_irq_route *route);
 /* Same bootstrap lifetime as PS/2 routing. Requires a memory-mapped HPET. */
 uint64_t acpi_hpet_address(const struct boot_info *boot);
 

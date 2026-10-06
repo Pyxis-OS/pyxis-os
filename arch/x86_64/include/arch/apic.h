@@ -13,6 +13,7 @@
 #define APIC_XHCI_VECTOR 39
 #define APIC_RTL8111_VECTOR 40
 #define APIC_MOUSE_VECTOR 41
+#define APIC_ACPI_VECTOR 42
 #define APIC_SPURIOUS_VECTOR 255
 
 /* xAPIC IDs are 8 bits and every CPU's is distinct, which bounds the CPU count. */
