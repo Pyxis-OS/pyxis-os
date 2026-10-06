@@ -98,7 +98,7 @@ OVMF code/variables pair. The host is the Ryzen 5 PRO 4650U ThinkPad;
 Commands ran sequentially in the CPU 3 remote shell without debugger stops:
 
 ```text
-iobench read app://share/iobench-small.bin --bytes 32768 --rounds 5
+iobench read boot://share/iobench-small.bin --bytes 32768 --rounds 5
 allocbench pages --rounds 3 --live 64 --size 65536 --profile
 ```
 

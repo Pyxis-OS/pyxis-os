@@ -121,10 +121,52 @@ Accepted by the owner on 2026-10-06:
     optional pool override, mounts each pool once, creates the spaces, drops its
     grants and exits. An invalid or missing override falls back to the default
     with a message.
-  - **Decisions before starting:**
-    - the configuration's shape: spaces, CPU sets, inits and mounts;
-    - what happens when a configured volume is missing at boot;
-    - the create-space operation's arguments and authority.
+  - **Decisions, accepted by the owner on 2026-10-06:**
+    - **Configuration shape.** Two archive defaults, `boot://config/live.lua`
+      and `boot://config/installed.lua`. Boot init uses the installed one when
+      `mount.disk` is bound. Each returns a table of named `volumes` and a list
+      of `spaces`:
+
+      ```lua
+      return {
+        volumes = {
+          system = { partition = 2, volume = "system" },
+        },
+        spaces = {
+          { name = "pyxis", title = "Pyxis", init = "boot://init-installed",
+            cpus = { 1, 2, 3 },                       -- omitted: every CPU
+            roots = { system = "read-write" } },
+        },
+      }
+      ```
+
+      Live boots name `host` as a volume, replacing today's per-init host
+      mounts. `SPACES` and `SPACE_CPUS` are removed; development builds edit
+      `live.lua`. Only installed boots read the pool override,
+      `system://config/boot.lua`. It merges by name: an entry with a default's
+      name replaces it whole, new names follow the defaults, and nothing can be
+      removed, so the default spaces always remain for rescue. Space inits
+      stop mounting and receive the roots their entry lists.
+    - **Missing volume.** A root can be marked optional. A missing or
+      unmountable required volume leaves that space created but not started,
+      with the reason on its tab, as an absent CPU does today; other spaces
+      start. An invalid override (syntax, unknown key, bad CPU set) is ignored
+      whole in favour of the default, reported on the Caelum tab and serial; a
+      missing volume does not make it invalid. If no space starts, boot init
+      starts a rescue shell with only `boot://` and `tmp://`.
+    - **Create-space operation.** A `space_factory` resource with a CREATE
+      right, issued by the kernel only to boot init, which closes it before
+      exiting. Space inits never receive it. The call takes the space's name,
+      title and CPU set, rejecting absent CPUs, plus an ordinary launch
+      request: image and script, argv, named resources, roots and working
+      directory. The kernel adds only the new space's own devices: console,
+      keyboard, pointer, display and the space handle. Boot init forwards
+      everything else and does not forward `native_mount` or `host_mount`, so
+      mount authority stays with it. Spaces are still never destroyed.
+    - **Command line.** Normal boot is `init=boot://boot-init.pxe
+      mount.disk=GUID`. The install entry is `init=boot://init-install.pxe
+      boot.install=1`; `init-install` becomes a boot init that creates the
+      install space and forwards the raw-disk grants to it.
   - **Finish when:** the installed ThinkPad gains a second space by editing the
     pool configuration, with no Update, and a broken override boots the default.
 
