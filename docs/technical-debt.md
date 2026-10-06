@@ -318,7 +318,7 @@ option.
 ## BSP userspace and kernel workers
 
 Since SMP task 7b, user tasks run on the BSP alongside the kernel workers:
-presentation, the BSP request executor, network, native filesystem and USB.
+presentation, the BSP request executor, network, native filesystem, USB and ACPI.
 
 - **Placement:** ties go to the APs first, and the BSP pulls only while none of
   its workers is runnable.
@@ -336,6 +336,30 @@ Display smoothness and input latency under BSP load were not measured.
 Revisit if the native check in SMP task 8 or interactive use shows worker or
 presentation latency under load. Options include excluding the BSP again by
 policy, worker priority, or preemptible long syscalls.
+
+## ACPI interpreter host limits
+
+The [ACPI host interface](kernel/acpi.md) makes these choices for the first
+milestone task:
+
+- **PCI configuration writes are refused.** AML that needs them fails the
+  access and logs the function, offset and value. Revisit if the ThinkPad or a
+  later ACPI task logs refusals; a write path would need its own ownership rule
+  for functions that drivers own.
+- **The firmware mapping window is never reused.** Its 64 MiB of address space
+  bounds every distinct mapping for the whole boot, and an operation region
+  is mapped whole. QEMU uses 14 pages. Revisit if a machine fills the window or
+  maps very large regions.
+- **AML is trusted with hardware.** It may use any I/O port, including the
+  legacy PCI configuration ports, and its device-memory mappings can alias
+  registers that the kernel owns, such as the HPET and APICs. Revisit if a
+  firmware access interferes with a driver.
+- **The SCI must share the keyboard's I/O APIC.** It is installed only on the
+  controller mapped for PS/2 routing, and not when no PS/2 route exists. ACPI
+  events are then unavailable.
+- **Waiting for deferred work runs it inline.** Nothing in the first task
+  installs or removes the GPE or notify handlers that wait. Revisit when the
+  battery and power-button tasks add them.
 
 ## Synchronous launch preparation
 

@@ -17,10 +17,11 @@ Each task starts when the owner says so.
 
 ## Today
 
-- The kernel reads only static ACPI tables (`arch/x86_64/acpi.c`): the MADT for
-  CPUs and interrupt routing, the FADT's legacy flags, the HPET and the PCI
-  configuration space. There is no AML interpreter, so ACPI devices and methods
-  cannot be used.
+- Early boot reads static ACPI tables directly (`arch/x86_64/acpi.c`): the MADT
+  for CPUs and interrupt routing, the FADT's legacy flags and SCI, the HPET and
+  the PCI configuration space. Task 1 adds the uACPI interpreter, which loads
+  the namespace on a BSP worker ([ACPI](../kernel/acpi.md)). No ACPI device is
+  used yet.
 - On the T14, as on most laptops, the battery is an ACPI control-method battery.
   Its charge comes from AML methods that read the embedded controller.
 - The native filesystem flushes periodically and on `sync`. It already plans to
@@ -51,6 +52,19 @@ Accepted by the owner on 2026-10-07:
 
    A protocol for asking services to stop comes later, with service supervision.
 
+Accepted for task 1 on 2026-10-07:
+
+4. **Firmware mappings** live in a kernel window reserved before AP startup.
+   A page address is mapped at most once and never reused. ACPI and firmware
+   memory is cached; reserved or unlisted memory is uncached; RAM, kernel and
+   loader memory are refused.
+5. **PCI configuration** may be read by AML through ECAM. Writes return an
+   error and are logged. Revisit with ThinkPad evidence if AML needs them.
+6. **Scope and failure.** Task 1 leaves GPEs and fixed events disabled. The
+   embedded controller driver and GPE enabling move to task 3, and the power
+   button's fixed event to task 4. If uACPI fails to initialize, boot continues
+   without ACPI and logs why.
+
 ## Tasks
 
 - [ ] **1. Bring in uACPI.**
@@ -65,6 +79,10 @@ Accepted by the owner on 2026-10-07:
   - Load the ACPI namespace at boot. No device is used yet.
   - **Finish when:** QEMU and the ThinkPad both boot with the namespace loaded and
     no AML errors, and the memory and boot-time cost is recorded.
+  - **Status:** implemented. QEMU boots with one and four CPUs without AML
+    errors, and the costs are recorded in [ACPI](../kernel/acpi.md#measurements).
+    The ThinkPad boot is the owner's check; its `ACPI:` log lines, including any
+    refused mappings or PCI writes, finish the task.
 
 - [ ] **2. Clean power-off and reboot.**
   - The `power` capability and its boot-init forwarding (decision 2), plus the
@@ -81,6 +99,10 @@ Accepted by the owner on 2026-10-07:
     - a space without `power` is refused.
 
 - [ ] **3. Battery reading and the battery widget.**
+  - An embedded controller driver: the `EmbeddedControl` operation region
+    handler, from the ECDT or the `PNP0C09` device, plus its query GPE. uACPI
+    does not include one, and the battery methods read through it.
+  - Enable GPEs once the embedded controller is ready (decision 6).
   - Read the battery through the AML methods `_BST`, and `_BIF` or `_BIX`: the
     remaining and full capacity, the charging state and whether AC is present.
   - Draw a fixed-width widget at the right end of the space bar, inside the
@@ -93,6 +115,8 @@ Accepted by the owner on 2026-10-07:
 - [ ] **4. Power button.**
   - A short press of the physical power button runs the same clean power-off as
     `poweroff`. Holding it remains the firmware's emergency path.
+  - Enable the power button's fixed event, or its control-method device on
+    machines that use one (decision 6).
   - **Finish when:** a short press on the ThinkPad powers off cleanly, with an
     empty journal on the next boot.
 
