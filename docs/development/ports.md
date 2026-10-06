@@ -339,12 +339,18 @@ With no arguments, `lua` starts a libterm REPL with expression results,
 multiline statements and persistent globals. Ctrl+C discards pending input;
 Ctrl+D on an empty line exits, including at a continuation prompt. Language
 errors are reported without leaving the REPL; allocation/terminal failures exit
-nonzero. Cancellation cannot interrupt an executing chunk.
+nonzero. The parent shell can terminate an executing chunk with Ctrl+C;
+Lua has no cooperative signal hook.
 
-Base, coroutine, table, string and UTF-8 libraries are available. Script and
-`-e` errors return a nonzero process status; runtime errors include a traceback.
-Stdin scripts, shebang handoff, package loading, io/os, debug
-and the full math library remain deferred, as does signal-driven interruption.
+Base, coroutine, table, string, UTF-8, io, bounded os and pure-Lua package
+libraries are available. Module lookup uses exact `LUA_PATH` when set, otherwise
+the script's directory and then `boot://share/lua/`. Native `pyxis` helpers run
+argv lists, enumerate directories and hash files through Mbed TLS PSA. Lua's
+recipe therefore requires an explicit `--mbedtls` development prefix in addition
+to the SDK; the embedding archive stays independent of crypto and the bridge.
+Script and `-e` errors return a nonzero process status with runtime tracebacks.
+Stdin scripts, shebang handoff, debug, full math, process CPU time, buffer controls,
+shell execution and dynamic modules remain deferred.
 This does not replace the host Lua used by build recipes. See the
 [port notes](../../ports/lua/README.md) and
 [Lua runtime reference](../userland/lua.md).

@@ -77,6 +77,22 @@ it retains no reference, becomes stale when its owning descriptor closes, and
 must then neither be used nor forwarded to a child. Number reuse does not
 refresh it. See [stdio](stdio.md) and [stream delegation](shell-streams.md).
 
+## Temporary files and live stream delegation
+
+`mkstemp` maps exclusive named creation onto the SDK's `path_create_file`;
+existing names fail, without the open-or-create fallback used by `fopen`.
+Templates end in six `X` characters and require clock/random capabilities.
+`tmpfile` preflights removal authority and immediately unlinks its exclusive
+`tmp://` file, leaving the real held file object alive. See
+[temporary-file ownership](stdio.md#temporary-files). No fake `tmpnam` or
+buffer-control functions are exported.
+
+The native `<pyxis/stdio.h>` accessor borrows a current FILE-owned stream for
+launch delegation. It adds no descriptor alias or native reference and preserves
+private stdio state. Closed standard streams are NONE even after descriptor
+reuse; allocated invalid streams fail with EBADF. See
+[live stream delegation](stdio.md).
+
 ## Regular expressions and UTF-8 conversion
 
 The SDK exports `regex.h` with `regcomp`, `regexec`, `regerror` and `regfree`,

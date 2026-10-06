@@ -343,6 +343,16 @@ handle independently. After the owner closes, the snapshot is stale and must
 neither be used nor forwarded to a child. Descriptor-number reuse does not
 refresh it. Before owner close, native code may explicitly copy a borrowed handle
 when it needs a separately owned reference, but must close that copy itself.
+For native launch adapters, `<pyxis/stdio.h>` provides
+`pyxis_stdio_stream(FILE *, struct startup_stream *)`. It checks the current FILE
+registry and descriptor association, returning a borrowed protocol/handle.
+Closed or absent standard wrappers return NONE; descriptor-number reuse never
+reconnects them. Success preserves errno, indicators, cursor, pushback and
+read-ahead, and acquires no reference. The caller must not close the handle or
+use it after owner close. This lets [Lua](lua.md) delegate live C streams without
+reusing the stale startup snapshot. Child files begin at offset zero; buffered
+pipe bytes and append state are not transferred.
+
 Named `input`/`output` console grants, plus `keyboard`, remain separate terminal
 resources; libc never uses them to fill a missing standard-stream binding.
 
@@ -355,8 +365,8 @@ Normal exit calls it, closes each live descriptor once, then disposes of FILE
 metadata, including invalid associations. Cleanup errors do not replace the
 requested exit status. `_Exit` and fatal faults bypass libc cleanup; the kernel
 still reclaims process resources. There are no
-atexit callbacks, buffering controls, pushback, scanning, wide I/O or fdopen/fileno
-in this slice.
+atexit callbacks, buffering controls, wide I/O or fdopen/fileno. Scanning and
+one-byte pushback are described above.
 
 `fclose` invalidates the association and makes one native close attempt. Success
 returns zero without changing errno. Failure returns EOF with the translated
@@ -430,3 +440,22 @@ The native WRONG_TYPE result does not distinguish a file from an intermediate
 directory mismatch, so libc does not invent that distinction. Permission checks
 may reject a mutation before the backing reports READ_ONLY. Code should inspect
 native statuses directly when it needs the original protocol detail.
+
+## Temporary files
+
+`tmpfile()` returns a real read/write FILE in the space's `tmp://` root. It
+preflights creation, removal and read/write authority, allocates its wrapper and
+reserves its descriptor before creating an exclusive random name. The retained
+parent removes that name immediately, without further allocation or path
+resolution; the file handle survives removal. Clock/random grants are required.
+Failure returns NULL with errno and unwinds local ownership. Failed or uncertain
+creation/removal, or abrupt death between those calls, can leave a named file;
+no automatic stale-file cleanup runs.
+
+`mkstemp(char *)` in `<stdlib.h>` is the exclusive named-file extension. Its
+mutable template must end in six `X` characters. It substitutes a native-random
+suffix, retries collisions a bounded number of times and returns a read/write
+descriptor; it never opens an existing name. Paths follow the same roots/cwd
+policy as `fopen`. The caller closes the descriptor and removes the reserved
+name. There is no ISO C `tmpnam`: Lua's `os.tmpname` deliberately reserves a file
+instead of returning an unreserved name.
