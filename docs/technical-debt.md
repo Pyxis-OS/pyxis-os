@@ -299,6 +299,18 @@ Editing assumes exclusive output use of the space's terminal.
 The current editor accepts only one-cell ASCII and keeps the prompt/line/cursor
 on screen. History, Unicode widths and larger-line viewports are not implemented. These boundaries are recorded in [the terminal contract](userland/terminal.md).
 
+## Presenter-drawn block cursor
+
+The presenter draws the [block cursor](userland/terminal.md) by recoloring the
+cursor cell's pixels: the top-left pixel stands for the cell's background, which
+takes the scheme's `cursor` color, and every other pixel takes `cursor_text`.
+The TTY keeps no cell grid, so the glyph cannot be redrawn with its own
+foreground and background. A cell whose top-left pixel belongs to the glyph,
+such as a block or box-drawing character, inverts the wrong way, and a font
+with more than two colors per cell would break the rule. Revisit by keeping a
+TTY cell grid (character, foreground, background, style) and letting the TTY
+render the cursor cell with the scheme's colors.
+
 ## Early console and post-handoff panics
 
 The [early boot console](kernel/early-console.md) shows boot progress and
