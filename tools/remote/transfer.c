@@ -38,6 +38,8 @@ struct file_transfer {
   char id[64], query_id[64], file_id[64];
   char path[4097], name[256], staging[256];
   bool staging_owned;
+  char authorized_path[1025];
+  bool automatic_upload;
   unsigned char *bytes;
   size_t size, position, written;
   char digest[65];
@@ -308,12 +310,16 @@ static void reset(struct file_transfer *transfer)
   transfer->phase = IDLE;
   transfer->size = transfer->position = 0;
   transfer->deadline = 0;
+  transfer->authorized_path[0] = '\0';
+  transfer->automatic_upload = false;
 }
 
 static void fail(struct file_transfer *transfer, struct byte_buffer *outgoing,
     const char *message, int64_t now)
 {
   cleanup(transfer);
+  transfer->authorized_path[0] = '\0';
+  transfer->automatic_upload = false;
   char safe[2049];
   escaped(message, safe);
   notice(transfer, "\nxfer: %s\n", safe);
@@ -611,7 +617,12 @@ static void command(struct file_transfer *transfer, struct presentation *screen,
     strcpy(transfer->query_id, frame.file_id);
     char safe[16389];
     escaped(transfer->path, safe);
-    notice(transfer, "\nUpload host file \"%s\" to Pyxis? [y/N] ", safe);
+    transfer->automatic_upload = transfer->authorized_path[0] &&
+        !strcmp(transfer->authorized_path, transfer->path);
+    transfer->authorized_path[0] = '\0';
+    if (!transfer->automatic_upload) {
+      notice(transfer, "\nUpload host file \"%s\" to Pyxis? [y/N] ", safe);
+    }
     transfer->phase = CONFIRM_UPLOAD;
     return;
   }
@@ -700,6 +711,25 @@ struct file_transfer *transfer_create(const char *download_directory,
     }
   }
   return transfer;
+}
+
+bool transfer_active(const struct file_transfer *transfer)
+{
+  return transfer->phase != IDLE;
+}
+
+bool transfer_idle(const struct file_transfer *transfer)
+{
+  return transfer->phase == IDLE && transfer->notice_position == transfer->notice_length;
+}
+
+void transfer_authorize_upload(struct file_transfer *transfer, const char *path)
+{
+  transfer->authorized_path[0] = '\0';
+  transfer->automatic_upload = false;
+  if (path && transfer_idle(transfer) && strlen(path) < sizeof(transfer->authorized_path)) {
+    strcpy(transfer->authorized_path, path);
+  }
 }
 
 void transfer_destroy(struct file_transfer *transfer)
@@ -822,6 +852,8 @@ bool transfer_input(struct file_transfer *transfer, struct presentation *screen,
   }
   if (byte == 3 || byte == 27) {
     if (transfer->phase != CANCELING && transfer->phase != FAILED) {
+      transfer->automatic_upload = false;
+      transfer->authorized_path[0] = '\0';
       packet(outgoing, "ac=cancel;id=%s", transfer->id);
       notice(transfer, "\nxfer: cancelling transfer\n");
       transfer->phase = CANCELING;
@@ -848,11 +880,19 @@ void transfer_pump(struct file_transfer *transfer, struct presentation *screen,
       transfer->fatal = true;
       cleanup(transfer);
     } else {
+      transfer->automatic_upload = false;
+      transfer->authorized_path[0] = '\0';
       packet(outgoing, "ac=cancel;id=%s", transfer->id);
       notice(transfer, "\nxfer: transfer timed out; cancelling\n");
       transfer->phase = CANCELING;
       transfer->deadline = now + CANCEL_WAIT_MS;
     }
+  }
+  if (transfer->phase == CONFIRM_UPLOAD && transfer->automatic_upload &&
+      transfer->notice_position == transfer->notice_length &&
+      buffer_space(outgoing) >= TRANSFER_REPLY_RESERVE) {
+    transfer->automatic_upload = false;
+    transfer_input(transfer, screen, outgoing, 'y', now);
   }
   /* Publication advances one bounded step per event-loop turn, allowing
    * cancellation input between writes, synchronization and the rename. */
@@ -935,7 +975,7 @@ bool transfer_failed(const struct file_transfer *transfer)
 int transfer_timeout(const struct file_transfer *transfer, int64_t now, bool can_present, bool can_reply)
 {
   if ((can_present && transfer->notice_position < transfer->notice_length) ||
-      (can_reply && (transfer->phase == UPLOAD_READY ||
+      (can_reply && (transfer->automatic_upload || transfer->phase == UPLOAD_READY ||
        (transfer->phase >= DOWNLOAD_WRITE && transfer->phase <= DOWNLOAD_RENAME)))) {
     return 0;
   }

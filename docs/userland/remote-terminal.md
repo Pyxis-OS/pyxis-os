@@ -94,6 +94,47 @@ and the [native program notes](../../userspace/xfer/README.md) for authority,
 filename limits and the OSC 5113 SHA-256 extension. Stock kitty does not implement
 this required extension and is unsupported.
 
+## Dropping a host file
+
+Interactive `pyxis-remote` enables bracketed paste on the host terminal and
+restores it on exit. At a known empty remote prompt, one pasted absolute or `~/`
+path to an existing regular host file offers an upload into the current guest
+directory. Single/double quotes and shell backslash escaping are removed without
+executing a host shell. Accept with `y`; `n`, Enter, Ctrl+C or Escape refuses the
+drop. Acceptance enters a safely quoted `xfer receive HOST_PATH NAME` command and
+authorizes only its exact host-file query, with no second confirmation and no
+`--overwrite`. Explicit transfers retain their usual confirmation.
+
+Ordinary text, multiple paths, directories, final symlinks, non-ASCII/control
+characters and unsupported quoting remain ordinary paste. The bounded candidate
+buffer is 2048 bytes; longer pastes stream through normally. Paths are at most
+1024 bytes and names at most 200 bytes. An injected command must fit the shell's
+1024-byte buffer and a conservative visible-area bound, or the paste falls back.
+Bracket delimiters are consumed locally; fallback sends the original body with
+the client's existing Enter normalization. While a transfer or drop confirmation
+is active, another paste is consumed without answering the confirmation.
+
+The root remote shell opts into OSC 133;B after drawing an empty prompt.
+The host combines this marker with ordered command completion and invalidates
+readiness on ordinary input. Empty Enter/Ctrl+C and refused drops wait for the
+next marker. Editing makes readiness unknown until a completed command and its
+new prompt; canceling a partially edited line can therefore miss the next drop.
+If input is forwarded while a submitted command is pending, including typing
+into vi or queuing multiple commands, detection stays disabled for that connection.
+Reconnect to restore it. This avoids mistaking an earlier command's prompt for
+an idle shell while later queued input launches an application. Within a running
+program, a dropped path is ordinary pasted text, never an injected upload command.
+See [the tracking limit](../technical-debt.md#remote-drop-prompt-tracking).
+
+Machine mode neither enables bracketed paste nor recognizes paths/markers.
+Default machine sessions preserve the root shell's OSC marker bytes in OUTPUT;
+`--no-shell-echo` uses the quiet editor and emits no prompt markers. No kernel,
+terminal wire frame or filesystem grant is added.
+
+Linux client/guest protocol checks pass; actual macOS terminal drag/drop and
+macOS publication still require owner validation. See the
+[task and acceptance record](../wip/remote-file-transfer.md#task-2-validation-2026-10-07).
+
 ## Client modes
 
 Interactive mode uses a raw host terminal with fixed dimensions and restores its
