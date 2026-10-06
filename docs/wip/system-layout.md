@@ -2,7 +2,7 @@
 
 Status: **milestone, agreed 2026-10-05 and 2026-10-06.** It follows the
 [runtime SMP milestone](../kernel/smp.md). Tasks 1 to 3 are implemented; task
-4 is implemented, with its ThinkPad check and a later-Update check pending.
+4 is implemented and checked on the ThinkPad, with a later-Update check pending.
 Each task starts when the owner says so, after its listed decisions are
 settled. Any decision can be revised by the owner.
 
@@ -327,8 +327,11 @@ Accepted by the owner on 2026-10-06:
     `home` refused writes, a `start` outside the space's roots was rejected
     and the rescue entry received `home://`. Live boots shared a RAM `home://`
     between Development and Read-only, and Doom saved there. `fsck.npfs`
-    passed after the Update and after a fresh install. The ThinkPad check
-    remains.
+    passed after the Update and after a fresh install. On 2026-10-06 the owner
+    updated the ThinkPad stick, then on the task 3 build, with the PXE build
+    of this PR: `home://` worked, and a Doom save written after finishing
+    Hangar, synced and followed by a reboot loaded correctly with
+    `doom -loadgame 0`.
 
 ## After the milestone
 
