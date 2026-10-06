@@ -57,17 +57,15 @@ callbacks.
 
 ## Topology-aware placement
 
-Placement treats every hardware thread as an independent CPU. On the ThinkPad
-T14, SMT siblings are adjacent Pyxis CPUs ([topology](../targets/t14-gen1-amd/notes.md)).
+The [core-aware tie-break](../kernel/smp.md#placement-and-migration) is implemented:
+least logical load, then idle SMT siblings, then the previous parent/AP/BSP order.
+CPUID supplies immutable core records; unavailable topology remains isolated.
+Pulling and the push threshold retain their previous behavior, including the
+observed possibility of later consolidation onto siblings.
 
-In the [task-8 native check](../development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run),
-four compute clients finished at 1.30, 1.45, 2.26 and 2.26 s. The tie rule
-(lowest AP first) places four clients on CPUs 1–4, so CPUs 2 and 3 share a core
-while three cores stay idle. That reading comes from the rule and the timings;
-the placement was not traced. Filling one thread per core first would have run
-all four at about single-client speed: about 1.3 s for the batch instead of
-2.35 s. That would be a separate, measured change to the tie-breaking rule, not
-a new scheduling policy.
+The remaining check is the owner's native ThinkPad run of heap ×4, ×8 and ×11.
+The [measurement record and checklist](../development/experiments/core-placement/README.md)
+keep that result pending, separate from the completed nested-QEMU checks.
 
 ## Smaller candidates
 

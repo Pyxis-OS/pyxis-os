@@ -120,8 +120,9 @@ independent of CPUs, and existing single-task processes run in parallel on every
 CPU, including the BSP. Private memory operations run on the caller's CPU. Each
 step's measurements are listed under [SMP measurements](../kernel/smp.md#measurements);
 the final record includes a native ThinkPad check.
-[Follow-ups](scheduling-and-threads.md) cover threads, moving workers off the BSP
-and topology-aware placement.
+[Follow-ups](scheduling-and-threads.md) cover threads and moving workers off the
+BSP. [Topology-aware placement](../kernel/smp.md#placement-and-migration) is
+implemented, with its native ThinkPad timing check still pending.
 
 The filesystem, USB and networking tracks paused for SMP; which resumes next is
 the owner's choice. Fixes for major problems found by ThinkPad validation remain

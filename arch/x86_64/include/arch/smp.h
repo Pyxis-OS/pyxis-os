@@ -29,6 +29,8 @@ size_t arch_cpu_count(void);
 size_t arch_cpu_index(void);
 
 struct cpu_local *arch_cpu_at(size_t index);
+/* Immutable after SMP startup. Unknown topology is isolated to its own CPU. */
+bool arch_cpus_share_core(size_t first, size_t second);
 /* IF=0, after SMP startup: prompt an online CPU to check its runnable work. */
 void arch_cpu_reschedule(size_t index);
 

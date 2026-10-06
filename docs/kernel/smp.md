@@ -1,7 +1,9 @@
 # Scheduling on multiple CPUs
 
 `make run CPUS=4` boots one QEMU socket with four cores and one thread per core.
-`CPUS` defaults to one and also applies to `make debug`. With multiple CPUs,
+`CPUS` is the total logical CPU count and defaults to one. `THREADS` defaults
+to one and must divide `CPUS`; `make run CPUS=8 THREADS=2` creates four cores
+with two threads each. Both settings also apply to debug and USB launches. With multiple CPUs,
 CPU 0 (the BSP) services allocation and cleanup. Boot init creates the configured
 [spaces](../userland/init.md) independently of the CPU count. User tasks run on
 any CPU their space allows, including the BSP, which also runs the kernel
@@ -43,6 +45,28 @@ startup messages; the BSP reports their APIC IDs, stack tops and timer counts.
 After all handoffs, the adapter removes its temporary mappings and drops its
 startup references. No CPU continues to depend on Limine's stacks, page tables
 or response pointers. The original bootloader frames remain reserved.
+
+### Core topology
+
+Each CPU samples CPUID after its local APIC is enabled, before publishing online
+state. The BSP logs its index, APIC ID and core key, and logs AP records after
+acquiring their online state. These records are immutable before scheduling.
+
+A valid SMT level in CPUID leaf `0xB`, subleaf zero, supplies the low APIC thread
+bit width. Shifting the full APIC ID by that width retains package identity in
+the core key. The implementation follows the [Intel SDM CPUID definition](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html).
+
+Without that leaf, AMD Zen-family CPUs (`AuthenticAMD`, family >= `0x17`) with
+TopologyExtensions use leaf `0x8000001E`'s full APIC ID and threads-per-core count.
+The fallback accepts power-of-two counts to derive an integral SMT bit width.
+Older AMD fields describe compute units instead; see the
+[Zen OSRR](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/56255_OSRR.pdf)
+(pp. 36, 74–75) and [Family 15h BKDG](https://www.amd.com/content/dam/amd/en/documents/archived-tech-docs/programmer-references/42301_15h_Mod_00h-0Fh_BKDG.pdf).
+
+Two CPUs share a core only when both records are known and their width/key pairs
+match. Missing, unsupported or mismatched topology is logged as unknown and
+isolated to that CPU. Core keys may have gaps and are distinct from dense Pyxis
+CPU indices. No ACPI or public ABI is involved.
 
 ## Scheduling and ownership
 
@@ -94,7 +118,10 @@ then always moves a task off a CPU its space no longer allows, and the syscall
 return completes on the new CPU from the task's own kernel stack.
 
 - **Publication** places each new task on the least-loaded CPU it may use. Ties
-  prefer the launching parent's CPU, then the lowest AP index, then the BSP. Members of a batch
+  first prefer a CPU whose other SMT siblings all have zero load, then the
+  launching parent's CPU, the lowest AP index, and the BSP. Sibling loads include
+  CPUs outside the space's allowed set; the selected CPU still must be allowed.
+  Members of a batch
   are placed one at a time, each seeing those already queued, so a pipeline
   spreads across idle CPUs. The parent's CPU is a tie-break only; the parent is
   blocked in its launch syscall and cannot move meanwhile.
@@ -106,6 +133,14 @@ return completes on the new CPU from the task's own kernel stack.
   from the busiest other queue, provided that queue's CPU keeps a task. The BSP
   pulls only while none of its kernel workers is runnable. Idle CPUs keep their
   120 Hz timer, so they retry every tick without extra IPIs.
+
+Topology breaks ties only; it does not override logical CPU load, the push
+threshold or pulling. Initial publication can spread four compute tasks over
+four cores, then a transient queued task can make the existing push consolidate
+compute onto siblings. Equal logical loads do not trigger a corrective move.
+The [core-placement measurements](../development/experiments/core-placement/README.md)
+record both initial placement and this observed limit; native ThinkPad timing
+confirmation remains owner-run.
 
 Only a user task outside a syscall moves. It is either new or was preempted in
 user mode, so its whole continuation is on its own kernel stack. Dispatch on the

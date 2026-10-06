@@ -9,6 +9,7 @@ QEMU ?= qemu-system-x86_64
 QEMU_DISPLAY ?= gtk
 MEMORY ?= 8G
 CPUS ?= 1
+THREADS ?= 1
 ACCEL ?= kvm
 VIRTIO_FS_SOCKET ?=
 VIRTIO_NET ?= 0
@@ -214,12 +215,12 @@ image-inputs: kernel sdk
 	  echo 'Kernel and SDK interfaces differ; select matching bundles.' >&2; exit 1; }
 
 run debug: image
-	QEMU="$(QEMU)" QEMU_DISPLAY="$(QEMU_DISPLAY)" MEMORY="$(MEMORY)" CPUS="$(CPUS)" ACCEL="$(ACCEL)" \
+	QEMU="$(QEMU)" QEMU_DISPLAY="$(QEMU_DISPLAY)" MEMORY="$(MEMORY)" CPUS="$(CPUS)" THREADS="$(THREADS)" ACCEL="$(ACCEL)" \
 	OVMF_CODE="$(OVMF_CODE)" OVMF_VARS="$(OVMF_VARS)" ./scripts/run-qemu.sh $@
 
 # Launch an existing image; rebuilding would replace its pool and identities.
 run-usb debug-usb:
-	QEMU="$(QEMU)" QEMU_DISPLAY="$(QEMU_DISPLAY)" MEMORY="$(MEMORY)" CPUS="$(CPUS)" ACCEL="$(ACCEL)" \
+	QEMU="$(QEMU)" QEMU_DISPLAY="$(QEMU_DISPLAY)" MEMORY="$(MEMORY)" CPUS="$(CPUS)" THREADS="$(THREADS)" ACCEL="$(ACCEL)" \
 	OVMF_CODE="$(OVMF_CODE)" OVMF_VARS="$(OVMF_VARS)" USB_BOOT_IMAGE="$(USB_BOOT_IMAGE)" \
 	./scripts/run-qemu.sh $@
 

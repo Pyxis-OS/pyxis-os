@@ -27,6 +27,23 @@ back. Linux host atomic publication is validated; the macOS exclusive-rename pat
 still needs an owner run. Revisit staging recovery if interruptions make manual
 cleanup burdensome, with explicit ownership rules rather than age-based deletion.
 
+## SMT placement and later balancing
+
+[Placement](kernel/smp.md#placement-and-migration) prefers idle siblings only
+between equally loaded logical CPUs. The existing preemption push and idle pull
+still balance logical load; they do not guarantee one compute task per core.
+Read-only GDB on an eight-CPU/four-core QEMU run showed four tasks initially
+occupying four cores,
+then a push moved one onto an occupied sibling while a different core became
+idle. The [measurement record](development/experiments/core-placement/README.md)
+keeps that observation separate from the native performance expectation.
+
+Revisit topology-aware balancing if owner-run workloads show that these later
+moves erase the benefit. This task leaves the push threshold and pulling policy
+unchanged. CPUID-unavailable CPUs, older AMD compute-unit encodings and AMD
+non-power-of-two thread counts remain isolated; extend detection when a concrete
+supported target requires it.
+
 ## Contiguous RAM-file backing
 
 RAM files currently own one kernel heap buffer. Growth reserves geometric spare

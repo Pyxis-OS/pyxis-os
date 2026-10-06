@@ -40,19 +40,22 @@ indices follow that order, and the sibling and CCX columns are inferred:
 
 The inference follows AMD's usual APIC ID layout: bit 0 selects the SMT thread, and the
 gap at 6–7 starts the second CCX. Neither Fedora capture records per-thread APIC or
-core IDs, and Pyxis does not read CPUID topology leaves. The grouping is therefore
+core IDs, and that Pyxis revision did not read CPUID topology leaves. The grouping is therefore
 consistent with the hardware, not enumerated by it. It means:
 
 - SMT siblings are adjacent Pyxis CPUs.
 - Pyxis CPU 1 shares a core with the BSP (CPU 0).
 
-The scheduler treats all 12 as independent CPUs. In the
+That scheduler treated all 12 as independent CPUs. In the
 [SMP task-4a native check](../../development/experiments/smp-task4a/README.md#native-thinkpad-check-owner-run),
 four concurrent compute clients finished as two near the single-client time and two
 about 1.8× slower. That fits two clients sharing one core, and the
 [task-8 check](../../development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)
-repeated it. Topology-aware placement remains an unscheduled
-[follow-up](../../wip/scheduling-and-threads.md#topology-aware-placement).
+repeated it. The current [topology-aware tie-break](../../kernel/smp.md#placement-and-migration)
+reads CPUID, with [native confirmation pending](../../development/experiments/core-placement/README.md#native-thinkpad-check-owner-run).
+For these APIC IDs and SMT width 1, its expected core keys are
+`0, 0, 1, 1, 2, 2, 4, 4, 5, 5, 6, 6`; they retain the APIC gap, unlike the
+dense inferred labels in the historical table.
 
 ## USB controllers and observed port routes
 
