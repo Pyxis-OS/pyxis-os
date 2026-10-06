@@ -232,9 +232,9 @@ geometry is deferred. The consumer reads up to the first 64 KiB and the final
 logical block, requiring complete requested block data. It retains the first
 64 bytes of each read, geometry, sense, protection/qualification details and
 command/read/write/flush/recovery counters in `usb_device_record.storage` for
-debugger inspection. Logs identify controller,
-discovered path, unsupported/failure reason, successful geometry/read bytes and
-write/flush qualification.
+debugger inspection. The normal log reports an unsupported or failed device
+with its controller, path and reason. Successful geometry, read bytes and
+write/flush qualification go to the trace log (`LOG_LEVEL=trace`).
 Storage outcomes are separate from descriptor-inventory completeness.
 
 The [manual bring-up record](../development/usb-storage-bringup.md) describes QEMU

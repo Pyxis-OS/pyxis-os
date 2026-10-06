@@ -779,8 +779,8 @@ void usb_inventory_prepare(void)
     } else {
       controller->info.state = SYSTEM_INFO_USB_CONTROLLER_UNSUPPORTED;
       inventory.incomplete = true;
-      klog("usb: %x:%x.%u host interface %x unsupported\n", device->address.bus,
-           device->address.device, device->address.function, device->interface);
+      ktrace("usb: %x:%x.%u host interface %x unsupported\n", device->address.bus,
+             device->address.device, device->address.function, device->interface);
     }
   }
   publish_inventory();
@@ -1501,26 +1501,34 @@ static void log_device(const struct usb_device_record *device)
   }
   const struct system_info_pci_function *pci =
     &inventory.controllers[device->owner->registry_index].info.pci;
-  klog("usb: %x:%x.%u port %s device %x:%x%s%s%s\n", pci->bus, pci->device,
-       pci->function, cursor, device->info.vendor_id, device->info.product_id,
-       device->incomplete ? " (incomplete)" : "", device->detail ? ": " : "",
-       device->detail ? device->detail : "");
+  /* Enumerated devices and ready storage are trace detail; problems stay visible. */
+  if (device->incomplete || device->detail) {
+    klog("usb: %x:%x.%u port %s device %x:%x%s%s%s\n", pci->bus, pci->device,
+         pci->function, cursor, device->info.vendor_id, device->info.product_id,
+         device->incomplete ? " (incomplete)" : "", device->detail ? ": " : "",
+         device->detail ? device->detail : "");
+  } else {
+    ktrace("usb: %x:%x.%u port %s device %x:%x\n", pci->bus, pci->device,
+           pci->function, cursor, device->info.vendor_id, device->info.product_id);
+  }
   const struct usb_bot *storage = &device->storage;
   if (storage->state == USB_BOT_UNBOUND) {
     return;
   }
-  klog("usb-bot: %x:%x.%u port %s: %s%s%s\n", pci->bus, pci->device,
-       pci->function, cursor, storage->state == USB_BOT_READY ? "media probe ready" :
-       storage->state == USB_BOT_UNSUPPORTED ? "unsupported" : "failed",
-       storage->detail ? ": " : "", storage->detail ? storage->detail : "");
-  if (storage->state == USB_BOT_READY) {
-    klog("usb-bot: %x:%x.%u port %s: blocks=%llu block-bytes=%u read-bytes=%llu\n",
+  if (storage->state != USB_BOT_READY) {
+    klog("usb-bot: %x:%x.%u port %s: %s%s%s\n", pci->bus, pci->device,
+         pci->function, cursor, storage->state == USB_BOT_UNSUPPORTED ? "unsupported" : "failed",
+         storage->detail ? ": " : "", storage->detail ? storage->detail : "");
+    return;
+  }
+  ktrace("usb-bot: %x:%x.%u port %s: media probe ready%s%s\n", pci->bus, pci->device,
+         pci->function, cursor, storage->detail ? ": " : "", storage->detail ? storage->detail : "");
+  ktrace("usb-bot: %x:%x.%u port %s: blocks=%llu block-bytes=%u read-bytes=%llu\n",
          pci->bus, pci->device, pci->function, cursor, (unsigned long long)storage->blocks,
          storage->block_bytes, (unsigned long long)storage->read_bytes);
-    klog("usb-bot: %x:%x.%u port %s: writable=%u flush=%u; %s\n",
+  ktrace("usb-bot: %x:%x.%u port %s: writable=%u flush=%u; %s\n",
          pci->bus, pci->device, pci->function, cursor, storage->writable,
          storage->flush_supported, storage->write_detail);
-  }
 }
 
 void usb_enumerate(struct usb_discovery *discovery, uint64_t deadline)

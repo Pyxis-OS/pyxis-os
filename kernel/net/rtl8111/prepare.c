@@ -123,7 +123,7 @@ static const char *quiesce(struct rtl8111_controller *controller)
                  RTL_MCU_FIFO_EMPTY, RTL_FIFO_TIMEOUT_NS)) {
       return "FIFOs did not drain after confirmed recovery reset";
     }
-    klog("rtl8111: previous FIFOs cleared by confirmed recovery reset\n");
+    ktrace("rtl8111: previous FIFOs cleared by confirmed recovery reset\n");
   }
   rtl_write8(controller, RTL_CHIP_COMMAND,
              rtl_read8(controller, RTL_CHIP_COMMAND) & ~(RTL_COMMAND_TX | RTL_COMMAND_RX));
@@ -365,8 +365,14 @@ void rtl8111_prepare(const struct boot_info *boot)
     }
     const char *failure = prepare_controller(controller, boot);
     if (failure) {
-      klog("rtl8111 %x:%x.%u XID=%x: %s\n",
-           address.bus, address.device, address.function, controller->xid, failure);
+      /* An identified other variant, such as the dock's, is expected hardware. */
+      if (controller->identified && controller->xid != RTL_XID_8168H) {
+        ktrace("rtl8111 %x:%x.%u XID=%x: %s\n",
+               address.bus, address.device, address.function, controller->xid, failure);
+      } else {
+        klog("rtl8111 %x:%x.%u XID=%x: %s\n",
+             address.bus, address.device, address.function, controller->xid, failure);
+      }
       if (release_failed_controller(controller)) {
         /* Confirmed quiescence and bus mastering off make stale DMA addresses harmless. */
         dma_buffer_release(&controller->counters);
@@ -387,9 +393,9 @@ void rtl8111_prepare(const struct boot_info *boot)
         inventory_complete = false;
       }
     } else {
-      klog("rtl8111 %x:%x.%u XID=%x: firmware-free PHY prepared; "
-           "RX/TX, DMA and delivery disabled\n", address.bus, address.device,
-           address.function, controller->xid);
+      ktrace("rtl8111 %x:%x.%u XID=%x: firmware-free PHY prepared; "
+             "RX/TX, DMA and delivery disabled\n", address.bus, address.device,
+             address.function, controller->xid);
     }
     controller->next = controllers;
     controllers = controller;
