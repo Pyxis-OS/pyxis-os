@@ -17,6 +17,9 @@ POSIX compatibility is not a requirement.
 
 ## Session experience
 
+Spaces are what matter; a tab is only a space's visual representation in the
+space bar. Name flows and operations after spaces: "new space", not "new tab".
+
 The shared session interface could initially be a text display with a tab bar:
 
 ```text
@@ -29,8 +32,8 @@ changes selection and reveals the next neighbour in that direction when possible
 These navigation choices do not implement the future dynamic creation flow below;
 the reserved chevron slots leave room for its add-space control.
 
-Starting a new space begins with an empty tab. The user enters the program they
-want to run in that tab and presses Enter to launch it, without requiring an
+Starting a new space shows it with an empty tab. The user enters the program to
+run in the new space and presses Enter to launch it, without requiring an
 intermediate shell. Tabs have a fixed width to simplify the initial interface.
 
 A shell, editor, game or complete desktop environment is an ordinary application
@@ -147,7 +150,7 @@ assigned work.
 Owner direction, 2026-10-05; neither is scheduled, and neither authorizes
 placeholder APIs:
 
-- Users will create and destroy spaces at runtime, through the new-tab flow
+- Users will create and destroy spaces at runtime, through the new-space flow
   described above.
 - A running application that holds the capability will be able to change its
   space's title. Today `SPACE_RIGHT_SET_TITLE` reaches only init, session and the
