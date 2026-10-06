@@ -24,6 +24,13 @@ cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifes
   provenance=build/guest-sdk-manifest.txt "init=${INIT:-}" "network_config=${NETWORK_CONFIG:-}" \
   "wad=${DOOM_WAD:-}" "demos=${DOOM_DEMOS:-}" \
   "quake_pak0=$quake_pak0" "quake_pak1=$quake_pak1"
+# Installed systems keep only these executables in boot://; the rest go to bin://.
+while IFS= read -r program; do
+  [ -f "build/initrd-root/$program" ] || {
+    echo "boot/rescue.list names $program, which the archive lacks" >&2
+    exit 1
+  }
+done < boot/rescue.list
 (cd build/initrd-root && find . -mindepth 1 -printf '%P\0' | LC_ALL=C sort -z) > build/initrd-files.list
 (cd build/initrd-root && cpio --null --create --format=newc --reproducible \
   --owner=0:0 --quiet < ../initrd-files.list > ../initrd.cpio.tmp)
