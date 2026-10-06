@@ -1348,8 +1348,9 @@ Revisit only if a consumer needs wider dates or a stronger change-detection cont
 Unknown required features refuse opening; unknown read-only-compatible features
 refuse writes, including recovery writes; unknown compatible features are ignored.
 Conflicting valid headers require repair. These are accepted compatibility rules.
-The owner accepted refusal of committed journals for read-only opening and no
-home-metadata checksums in v1. Writable fsck replays the journal; checksums cannot
+Kernel read-only mounts and image-only inspection/checking refuse committed
+journals; the Linux FUSE adapter separately provides a RAM replay view. The owner
+accepted no home-metadata checksums in v1. Writable fsck replays the journal; checksums cannot
 detect every later metadata corruption once it is cleared. Revisit metadata
 checksums when integrity needs justify a feature-gated layout change. Committed
 replay has been exercised at runtime; see the
@@ -1371,7 +1372,15 @@ that immutable view. Directory handles retain sorted metadata snapshots and can
 exhaust host memory for very large open directories; global ownership checking
 remains fsck's job. Revisit snapshot/caching policy with measured large-directory
 workloads or a separately designed shared-writer protocol. Committed journals
-are refused until the milestone's in-memory replay task. Native timestamp xattrs
+are fully validated and replayed into RAM without source writes. The full payload
+and sorted home-block index live until unmount; validation also temporarily holds
+a pool-sized target bitset. Large pools/journals can exhaust host memory and fail
+the mount. This recovery view shares fsck's payload validation, not its writable
+feature admission or sequence increment. The
+[task-2 record](development/experiments/npfs-fuse-task2/README.md) qualifies a
+real interrupted write and unchanged source bytes; it does not measure worst-case
+replay memory or startup cost. Revisit those costs with a concrete recovery
+workload. Native timestamp xattrs
 preserve unknown status and creation time that ordinary Linux attributes cannot
 represent; Linux access/change time and allocated-block accounting are not native
 npfs metadata.

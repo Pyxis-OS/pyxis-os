@@ -14,15 +14,17 @@ concept of spaces: it shows every volume in the pool.
 
 ## Today
 
-The [host tools](../../fs/docs/npfs-host-tools.md) already read pools through the
-shared format library. `npfs-inspect` lists volumes and directories, stats and
-prints files, and extracts single files. Three gaps remain:
+The [host tools](../../fs/docs/npfs-host-tools.md) read pools through the shared
+format library. `npfs-fuse` mounts regular pool images and npfs partition devices
+read-only, with one top-level directory per volume. It validates committed
+journals and retains their metadata images in RAM for the mount's lifetime.
+The source must remain unchanged throughout; regular images keep a shared lock,
+while devices have no external writer exclusion. Other tools retain their
+image-only contract and refuse COMMITTED without writable fsck replay.
 
-- the tools open only regular image files, not partition devices or GPT
-  selection;
-- journal replay exists only as writing recovery (`fsck.npfs --replay`), with no
-  read-only replay held in memory;
-- the runtime writer belongs to Caelum, so there is no host writer.
+There is no GPT selection, automatic mounting or host writer. The runtime writer
+belongs to Caelum. The owner's physical ThinkPad-stick mount/copy and builder
+publication remain pending; the builder rebuild is in progress.
 
 ## Decisions
 
@@ -31,10 +33,11 @@ Accepted by the owner on 2026-10-06:
 1. **Scope:** read-only first. A manual command mounts a partition device or an
    image file, with one top-level directory per volume. Automatic mounting and
    writing are separate follow-ups.
-2. **Committed journal:** the first version refuses a pool whose journal holds a
-   committed transaction, and says how to recover: boot Pyxis once, or run
-   `fsck.npfs --replay` on a copy of the image. Replaying in memory is the next
-   task.
+2. **Committed journal:** task 1 refused committed transactions. Task 2 replaces
+   that refusal in FUSE with a validated read-only RAM view. Writable fsck and
+   RAM replay share payload integrity validation; RAM replay retains read-only
+   feature admission and does not increment the sequence or clear the source
+   control. Invalid payloads or memory exhaustion fail before publishing a view.
 3. **Build:** an optional `npfs-fuse` target, built only when the libfuse3
    development package is present. The implementing agent may also add that
    package to `ci/Containerfile` in pyxis-os. The owner then rebuilds and
@@ -67,11 +70,15 @@ Accepted by the owner on 2026-10-06:
   - **Finish when:**
     - a pool image made by Pyxis in QEMU, on RAM-backed storage, mounts on
       Linux, and its files match their SHA-256 sums taken inside Pyxis;
-    - a pool with a committed journal is refused with the recovery message;
+    - the initial version refuses a committed journal with the recovery message
+      (qualified in task 1, superseded by task 2);
     - the source bytes are unchanged after unmounting;
     - the owner mounts the ThinkPad stick and copies a file from `system://`.
 
-- [ ] **2. In-memory journal replay.**
+- [x] **2. In-memory journal replay.**
+  Implementation, current-main QEMU interruption, read-only partition access and
+  the merged review follow-ups are recorded in the
+  [task-2 validation](../development/experiments/npfs-fuse-task2/README.md).
   - A committed journal is validated as `fsck.npfs --replay` does, then applied
     to an in-memory view of the affected blocks. Nothing is written to the
     source.
