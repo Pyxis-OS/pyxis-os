@@ -102,14 +102,15 @@ now serves session and network settings. Further consumers should keep their own
 schemas, defaults and application policy; a generic schema framework is not needed.
 
 Build scripting for [in-Pyxis development](in-pyxis-development.md#4-lua-for-build-scripts)
-selects the first slices: `io`, `os` and pure-Lua `require`, plus a native module for
-running programs, listing directories and hashing files.
-Further interpreter work includes a module search policy for pure-Lua `require`,
-stdin scripts, and consuming the existing script capability for shebang launches.
-Broader io/os, debug and full math libraries remain separate slices. The earlier
-io/os audit identified pushback, temporary files, stream-buffer control, process
-CPU time and calendar formatting/conversion as missing runtime pieces. Do not
-substitute wall time for CPU time or add successful stubs for missing operations.
+now has `io`, bounded `os`, pure-Lua `require` and a native module for running
+programs, listing directories and hashing files. Libc supplies pushback,
+exclusive temporary files and C-locale calendar formatting. The
+[runtime reference](../userland/lua.md) records implemented behavior and absent
+functions.
+
+Further interpreter work includes stdin scripts and consuming the existing
+script capability for shebang launches. Stream-buffer controls, process CPU
+time, reverse calendar conversion, debug and full math remain separate slices.
 Dynamic modules, live configuration reload and per-user/space settings policy
 also remain deferred. Existing initrd/RAM filesystems suffice for Lua scripts;
 these tasks do not depend on virtio-fs.

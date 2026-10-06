@@ -108,11 +108,11 @@ $(TCC_OUTPUTS) &: $(TCC_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	rm -rf build/ports/tcc
 	$(LUA) ports/build.lua tcc --sdk $(abspath build/sdk) --work $(abspath build/ports/tcc)
 
-$(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) &: $(LUA_INPUTS) $(SDK_INPUTS) scripts/ports.mk
+$(LUA_IMAGE) $(LUA_LICENSE) $(LUA_DEVELOP) &: $(LUA_INPUTS) $(SDK_INPUTS) $(MBEDTLS_OUTPUTS) scripts/ports.mk
 	@command -v $(LUA) >/dev/null 2>&1 || { \
 	  echo 'Missing Lua 5.4: install it or set LUA=lua5.4.' >&2; exit 1; }
 	rm -rf build/ports/lua
-	$(LUA) ports/build.lua lua --sdk $(abspath build/sdk) --work $(abspath build/ports/lua)
+	$(LUA) ports/build.lua lua --sdk $(abspath build/sdk) --work $(abspath build/ports/lua) --mbedtls $(abspath build/ports/mbedtls/stage/dev)
 
 $(DOOM_IMAGE) $(DOOM_LICENSE) &: $(DOOM_INPUTS) $(SDK_INPUTS) scripts/ports.mk
 	@command -v $(LUA) >/dev/null 2>&1 || { \

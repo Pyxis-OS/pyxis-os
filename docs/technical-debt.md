@@ -459,8 +459,10 @@ The [shell terminates its foreground job on Ctrl+C](userland/shell.md#interrupti
 stage by stage, with immediate termination and no cooperative interrupt.
 Accepted limits of this first slice:
 - **Descendants.** Only the shell's direct children are terminated. Processes a
-  stage launched itself keep running. Today ordinary commands receive no
-  launcher, so none exist.
+  stage launched itself keep running. Opted-in spaces now delegate LAUNCH to
+  ordinary foreground commands, so `pyxis.run` children can outlive interrupted
+  Lua. Revisit with an explicit descendant lifetime design; remote execution
+  groups already provide their separate group-wide lifetime policy.
 - **Background jobs** cannot be interrupted, and there is no job control.
 - **Passthrough holders** cannot be interrupted while passthrough is held.
   Locally that leaves no recovery short of ending the session.
@@ -588,8 +590,8 @@ to their next owner; do not work around it in individual ports.
 
 Buffered file bytes are a private copy. If another descriptor or process
 writes the same file, a stream can return stale bytes until `fseek`, `rewind`
-or input `fflush` refetches them. `setvbuf`, `setbuf` and `ungetc` remain
-absent, so programs cannot size or disable the buffer or push back input.
+or input `fflush` refetches them. `setvbuf` and `setbuf` remain absent, so
+programs cannot size or disable the buffer. One-byte `ungetc` is implemented.
 Revisit together with output buffering in a later stdio completeness task. See
 [input read-ahead](userland/stdio.md#input-read-ahead).
 
@@ -1913,3 +1915,31 @@ relative only: there is no on-screen cursor or absolute positioning. Doom has no
 mouse support yet, although pointer sessions would allow it. Revisit Synaptics
 absolute mode when gestures or scrolling are wanted, and USB mice after bulk
 endpoints exist.
+
+## Lua build runtime limits
+
+[Lua](userland/lua.md) supplies io/os, pure-Lua modules and native build helpers.
+`file:setvbuf`, `io.popen`, `os.execute`, `os.clock`, `os.setlocale`, debug, full
+math and dynamic modules remain absent. `os.time` accepts wall time only;
+calendar-table conversion needs an explicit `mktime` policy for ambiguous and
+nonexistent local input. Revisit each missing interface for a concrete consumer.
+
+`os.tmpname` reserves a real exclusive empty file; callers must remove it.
+`io.tmpfile` creates and immediately unlinks a real file, but abrupt death
+between those operations, or a failed unlink, can leave a recognizable named
+file. No stale-name cleanup runs. Revisit atomic anonymous creation only if a
+concrete lifecycle need warrants a native operation; reserved names are not
+ISO C `tmpnam`.
+
+`pyxis.run` inherits live C streams, omitting closed ones. Cursors, append mode,
+pushback and read-ahead belong to the parent runtime, not its delegated native
+handle. Child file streams begin at zero, and unread buffered pipe bytes remain
+in Lua. Lua `io.input`/`io.output` rebinding is local. Revisit shared stream state
+only with a native ownership design, rather than silently forwarding private
+buffer contents or copying stale startup bindings.
+
+C-locale `strftime` supports standard conversions and E/O forms, but no width
+or flag extensions. `%z` loses historical offset seconds by its standard minute
+precision; `tm_gmtoff` retains them. A `tm_zone` designation is borrowed until
+successful timezone-cache replacement or process exit. Locale selection and
+reverse calendar conversion remain deferred.

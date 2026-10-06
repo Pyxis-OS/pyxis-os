@@ -31,8 +31,11 @@ or empty; libc's default has not changed.
 
 `<time.h>` adds `localtime_r(const time_t *, struct tm *)` and
 `localtime(const time_t *)`. `struct tm` includes `long tm_gmtoff`, measured in
-seconds east of UTC. `tm_isdst` follows the database; daylight time need not mean
-a larger UTC offset. UTC conversion sets both fields to zero.
+seconds east of UTC, and a borrowed `const char *tm_zone` designation.
+`tm_isdst` follows the database; daylight time need not mean
+a larger UTC offset. UTC conversion sets offset and DST to zero and names the
+zone `UTC`. Local designations point into the validated TZif cache and remain
+valid until a successful cache replacement or process exit.
 
 `localtime_r` returns the destination on success, preserving errno. It returns
 NULL on failure without changing the destination. `localtime` uses its own
@@ -70,8 +73,15 @@ offsets with nonzero seconds retain those seconds in an `+HH:MM:SS` suffix.
 `date -u` ignores `TZ` and prints UTC with `Z`. Both diagnose clock/conversion
 errors and years outside the four-digit display range.
 
-Reverse conversion (`mktime`), ambiguous/nonexistent local input, `strftime`,
-timezone abbreviations in `struct tm`, locale, per-user policy and live
-configuration reload remain outside this interface. TCC's existing calendar
+`strftime` formats the C locale's English names, numeric calendar fields,
+composite dates/times, ISO week dates, `%z` and `%Z`. Standard E/O alternatives
+use the same C-locale forms. `%z` uses minute precision even when `tm_gmtoff`
+contains historical seconds; `%Z` uses the actual UTC or TZif designation.
+Invalid formats report EINVAL; insufficient output space returns zero. Format
+flags and field widths are not supported. `difftime` subtracts timestamps before
+conversion to double, retaining small intervals at large timestamps.
+
+Reverse conversion (`mktime`), ambiguous/nonexistent local input, locale,
+per-user policy and live configuration reload remain outside this interface. TCC's existing calendar
 macros continue to use UTC. Firmware-clock precision and synchronization limits
 remain as described in [wall-clock support](../kernel/wall-clock.md).

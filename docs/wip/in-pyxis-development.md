@@ -91,29 +91,37 @@ downloading backups of the work. It is accepted and not yet started.
 
 ### 4. Lua for build scripts
 
-**Agreed 2026-10-06.** The owner writes the build tool, in Lua, as part of this
-experiment; it lives in the JVM project until it grows further. Pyxis supplies
-only the runtime underneath, as a small milestone after the
-[system layout](../userland/system-layout.md):
+- [x] [Lua build runtime](../userland/lua.md): io/os, pure-Lua require and native
+  `pyxis.run`, `pyxis.dir` and `pyxis.sha256`.
 
-1. **Lua's `io` and `os` libraries and pure-Lua `require`,** on libc. The gaps
-   found by the earlier [io/os audit](later-os-directions.md#lua-follow-ups)
-   are filled in libc, or the affected function stays absent. For example,
-   `os.clock` needs process CPU time, not wall time, and there are no successful
-   stubs.
-2. **A small native Pyxis module** for what libc does not cover:
-   - running a program from an argument list and waiting for its exit status,
-     with the same explicit grants the shell would give it;
-   - listing a directory;
-   - hashing a file.
+The owner writes the build tool in the JVM project; Pyxis supplies its runtime
+only. Agreed 2026-10-06/07 and implemented with the following bounded contracts:
 
-Decisions:
+- Programs start from an argument list through the native launch API.
+  `os.execute` and `io.popen` remain absent. Normal exit returns its actual
+  integer status; launch/wait failures, faults and termination raise errors.
+  Interruption remains process-only, so a child may outlive interrupted Lua.
+- Launch delegation is opt-in per space with `launch = true`. Live Development
+  and installed `pyxis` opt in, Read-only and default Remote do not. A separate
+  LAUNCH-only grant travels through init/session/shell to ordinary foreground
+  commands; no administrative launcher right is added.
+- Live C standard streams are inherited, with closed streams omitted.
+  Lua default-file rebinding remains local, and cursors/read-ahead stay private.
+- Rebuild detection belongs to the owner's content-hashing build tool.
+  No modification times are added to native files or `stat`.
+- `require` uses exact `LUA_PATH` when set; otherwise the script directory then
+  `boot://share/lua/`. Only preload and pure-Lua file searchers are installed.
+- `os.tmpname` reserves an exclusive empty `tmp://` file; the caller removes it.
+  `io.tmpfile` creates and unlinks a real file immediately. `file:setvbuf` stays
+  absent. No stale temporary names are automatically deleted.
+- `os.time()` reads wall time; calendar tables are rejected. `os.date` uses
+  real C-locale `strftime` and actual UTC/TZif designations. `os.clock`,
+  `os.setlocale` and dynamic modules remain absent.
 
-- **Starting programs** uses that argument-list module, not a standard
-  `system()` through the shell, so `os.execute` stays absent.
-- **Rebuild detection** compares content hashes of inputs and commands. No
-  modification times are added to the native filesystem or `stat`.
-- **Timing:** its own milestone after the system layout, in the order above.
+[Runtime limits](../technical-debt.md#lua-build-runtime-limits) record the
+consequences and revisit points. The port's PSA SHA-256 adapter consumes the
+configured Mbed TLS development prefix; embedding liblua stays independent
+of the native bridge and does not open these libraries in configuration files.
 
 ## Out of scope
 
