@@ -98,8 +98,8 @@ void rtl8111_start(struct rtl8111_controller *controller)
     stop_controller(controller, "activation rejected");
     return;
   }
-  klog("rtl8111: RX/TX active, %u buffers per ring, link %s; BSP worker owns completions\n",
-       RTL_RING_COUNT, controller->link_up ? "up" : "down");
+  ktrace("rtl8111: RX/TX active, %u buffers per ring, link %s; BSP worker owns completions\n",
+         RTL_RING_COUNT, controller->link_up ? "up" : "down");
 }
 
 void rtl8111_interrupt(void)

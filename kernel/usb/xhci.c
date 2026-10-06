@@ -257,10 +257,10 @@ static bool inspect_capabilities(struct usb_host_controller *controller)
     }
     memset(controller->descendants, 0, controller->descendant_capacity * sizeof(*controller->descendants));
   }
-  klog("xHCI %x:%x.%u: version=%x slots=%u ports=%u context=%u scratchpads=%u\n",
-       controller->address.bus, controller->address.device, controller->address.function,
-       version, controller->slot_count, controller->port_count,
-       controller->context_bytes, controller->scratchpad_count);
+  ktrace("xHCI %x:%x.%u: version=%x slots=%u ports=%u context=%u scratchpads=%u\n",
+         controller->address.bus, controller->address.device, controller->address.function,
+         version, controller->slot_count, controller->port_count,
+         controller->context_bytes, controller->scratchpad_count);
   return true;
 }
 
@@ -802,9 +802,9 @@ static void prepare_controller(struct usb_host_controller *controller, size_t pc
     goto fail;
   }
   controller->prepared = true;
-  klog("xHCI %x:%x.%u: controller prepared, command/event rings=%u TRBs; DMA disabled\n",
-       controller->address.bus, controller->address.device, controller->address.function,
-       (unsigned)XHCI_RING_TRBS);
+  ktrace("xHCI %x:%x.%u: controller prepared, command/event rings=%u TRBs; DMA disabled\n",
+         controller->address.bus, controller->address.device, controller->address.function,
+         (unsigned)XHCI_RING_TRBS);
   return;
 
 fail:
@@ -1188,9 +1188,9 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
       if (port->state == PORT_UNSUPPORTED) {
         char revision[sizeof("ff.f.f")];
         format_protocol_revision(port, revision);
-        klog("xHCI %x:%x.%u: port %u unsupported protocol %s\n",
-             controller->address.bus, controller->address.device, controller->address.function,
-             i + 1, revision);
+        ktrace("xHCI %x:%x.%u: port %u unsupported protocol %s\n",
+               controller->address.bus, controller->address.device, controller->address.function,
+               i + 1, revision);
       }
       continue;
     }
@@ -1244,9 +1244,9 @@ static bool prepare_ports(struct usb_host_controller *controller, uint64_t deadl
     port->state = PORT_RESERVED;
     char revision[sizeof("ff.f.f")];
     format_protocol_revision(port, revision);
-    klog("xHCI %x:%x.%u: root port %u USB %s speed-id=%u slot=%u enabled; addressing pending\n",
-         controller->address.bus, controller->address.device, controller->address.function,
-         i + 1, revision, port->speed, port->slot);
+    ktrace("xHCI %x:%x.%u: root port %u USB %s speed-id=%u slot=%u enabled; addressing pending\n",
+           controller->address.bus, controller->address.device, controller->address.function,
+           i + 1, revision, port->speed, port->slot);
   }
   return true;
 }
@@ -2285,8 +2285,8 @@ static void controller_worker(void *argument)
   if (!controller->running || controller->failed) {
     return;
   }
-  klog("xHCI %x:%x.%u: boot USB enumeration finished\n",
-       controller->address.bus, controller->address.device, controller->address.function);
+  ktrace("xHCI %x:%x.%u: boot USB enumeration finished\n",
+         controller->address.bus, controller->address.device, controller->address.function);
   for (;;) {
     if (!controller_healthy(controller) || !drain_events(controller) ||
         !control_deadlines(controller) || !update_ports(controller)) {

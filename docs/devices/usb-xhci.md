@@ -85,7 +85,8 @@ Empty polls do not
 rewrite an unchanged dequeue pointer. Payload stores precede cycle publication
 and the doorbell. Each command has an absolute five-second limit bounded by
 the startup enumeration deadline.
-After the boot scan, a running controller logs `boot USB enumeration finished`.
+After the boot scan, a running controller logs `boot USB enumeration finished` to
+the trace log (`LOG_LEVEL=trace`).
 Inventory completeness is reported separately by the immutable system_info
 snapshot and `lsusb`, including partial observations from unsupported devices.
 Changing IMAN interrupt enablement writes zero to the W1C pending bit to preserve
