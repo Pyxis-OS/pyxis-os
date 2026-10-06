@@ -68,8 +68,8 @@ fetched source and intermediate outputs. Make source changes in the recipe/patch
 For port development with a separately managed work directory, use the
 [standalone runner](../../ports/README.md).
 
-The normal boot archive includes Kilo at `app://kilo.pxe` and its BSD-2-Clause
-license at `app://share/licenses/kilo/LICENSE`. The shell resolves the bare
+The normal boot archive includes Kilo at `boot://kilo.pxe` and its BSD-2-Clause
+license at `boot://share/licenses/kilo/LICENSE`. The shell resolves the bare
 command `kilo` to that executable. The ports-owned `install.lua` selects guest
 payloads into a dedicated tree, which the root [archive manifest](boot-archive.md)
 combines with userland and the guest SDK. Intermediate and host outputs stay out.
@@ -98,13 +98,13 @@ The base/guest SDK stays independent of TLS.
 ## PCI ID database
 
 The `pciids` data recipe stages `pci.ids` from the PCI ID Project unchanged at
-`app://share/hwdata/pci.ids`. The pinned upstream commit is recorded in
+`boot://share/hwdata/pci.ids`. The pinned upstream commit is recorded in
 [its metadata](../../ports/pciids/metadata.lua), and the source, commit and
-database version are written to `app://share/pciids/source.txt`. Pyxis uses the
+database version are written to `boot://share/pciids/source.txt`. Pyxis uses the
 3-clause BSD option of the database's GPL-2.0-or-later or BSD-3-Clause license.
 The upstream repository has no separate license file, so the recipe supplies the
 BSD text with the copyright holders named in the database header. It and a
-notice explaining that choice are installed under `app://share/licenses/pciids/`.
+notice explaining that choice are installed under `boot://share/licenses/pciids/`.
 [lspci](../userland/lspci.md) reads the file, and so can ordinary text tools.
 Updating means picking a new commit and rebuilding; nothing should depend on
 fixed line counts or particular entries. See the
@@ -113,9 +113,9 @@ fixed line counts or particular entries. See the
 ## Public CA roots
 
 The `ca-certificates` data recipe installs curl's Mozilla-derived 2026-09-25
-snapshot at `app://share/ca-certificates/cacert.pem`, with its SHA-256 and
+snapshot at `boot://share/ca-certificates/cacert.pem`, with its SHA-256 and
 provenance beside it. MPL-2.0 and retained notices are installed under
-`app://share/licenses/ca-certificates/`. The selected bundle contains 121
+`boot://share/licenses/ca-certificates/`. The selected bundle contains 121
 certificates in 188,900 bytes, pinned by SHA-256
 `a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505`.
 The PEM export omits Mozilla's additional trust-store constraints; it is not the
@@ -130,14 +130,14 @@ rules; configuration, platform integration and limits are described in
 
 ## Checksums with sbase cksum
 
-The image includes `app://cksum.pxe`, resolved as `cksum` by the shell. The
+The image includes `boot://cksum.pxe`, resolved as `cksum` by the shell. The
 [sbase recipe](../../ports/sbase/README.md) pins the task-1 source revision and
 builds cksum, a restricted tee, uniq and sha256sum with their helpers. Ordered
 patches narrow private util.h, restore the declarations uniq needs, and adapt
 tee's options and descriptor lifetimes; cksum, uniq, sha256sum and helper bodies
 remain unchanged and use conventional libc I/O calls. The full license/contributor list, arg.h notice and
-OpenBSD strtonum notice are packaged at `app://share/licenses/sbase/LICENSE`,
-`app://share/licenses/sbase/arg.h` and `app://share/licenses/sbase/strtonum.c`.
+OpenBSD strtonum notice are packaged at `boot://share/licenses/sbase/LICENSE`,
+`boot://share/licenses/sbase/arg.h` and `boot://share/licenses/sbase/strtonum.c`.
 
 ```text
 cksum host://hello.c
@@ -159,7 +159,7 @@ See the [accepted terminal limit](../technical-debt.md#console-input-completion)
 
 ## Copying streams with sbase tee
 
-The shell resolves `tee` to `app://tee.pxe`:
+The shell resolves `tee` to `boot://tee.pxe`:
 
 ```text
 cat host://input | tee home://first home://second | cksum
@@ -182,7 +182,7 @@ for the exact upstream adaptations.
 
 ## Adjacent duplicates with sbase uniq
 
-The shell resolves `uniq` to `app://uniq.pxe`:
+The shell resolves `uniq` to `boot://uniq.pxe`:
 
 ```text
 uniq host://input
@@ -200,7 +200,7 @@ stdout. File and pipe input is fetched in blocks by
 
 ## SHA-256 digests with sbase sha256sum
 
-The shell resolves `sha256sum` to `app://sha256sum.pxe`:
+The shell resolves `sha256sum` to `boot://sha256sum.pxe`:
 
 ```text
 sha256sum host://image.raw home://notes.txt
@@ -220,7 +220,7 @@ See the [recipe notes](../../ports/sbase/README.md) for remaining upstream limit
 
 ## Editing in Pyxis
 
-Select the Development space with Super+Right. The shell starts at `home://`:
+Select the Development space with Super+Right. The shell starts at `tmp://`:
 
 ```text
 kilo hello.c
@@ -244,19 +244,19 @@ seconds using the inherited monotonic clock, including while idle; an active
 search prompt remains visible until the search ends. Actual terminal input EOF
 exits cleanly for an unchanged buffer and reports failure if unsaved edits are
 lost. Allocation failure reports an error and exits, losing unsaved edits.
-`home://` remains volatile across reboot, while `app://` is read-only. An optional
+`tmp://` remains volatile across reboot, while `boot://` is read-only. An optional
 `host://` mount persists files in its host export, subject to host permissions and
 the [virtiofs setup](../devices/virtio-fs.md). Processes receive a fixed 1 MiB
 stack with a reserved, unmapped guard page below it and no automatic growth.
 
 The same editor runs through the [remote host client](../userland/remote-terminal.md).
 Native writable disk storage and atomic replacement remain separate work.
-[BusyBox vi](../userland/vi.md) is packaged at `app://vi.pxe` with its GPL-2.0-only
-license at `app://share/licenses/busybox/LICENSE`, and the shell resolves `vi`
+[BusyBox vi](../userland/vi.md) is packaged at `boot://vi.pxe` with its GPL-2.0-only
+license at `boot://share/licenses/busybox/LICENSE`, and the shell resolves `vi`
 to it. It is a modal alternative to Kilo, with the same terminal grants and
 Ctrl+C passthrough; see the [recipe notes](../../ports/busybox/README.md).
-[Links](../userland/links.md) is packaged at `app://links.pxe` with its GPL
-license at `app://share/licenses/links/COPYING`. It is a text web browser that
+[Links](../userland/links.md) is packaged at `boot://links.pxe` with its GPL
+license at `boot://share/licenses/links/COPYING`. It is a text web browser that
 loads local files and HTTP(S) pages through libc; see the
 [recipe notes](../../ports/links/README.md).
 
@@ -265,12 +265,12 @@ The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and TCC;
 
 ## TCC and the guest SDK
 
-The normal image includes `app://tcc.pxe`; the shell resolves `tcc` to it.
+The normal image includes `boot://tcc.pxe`; the shell resolves `tcc` to it.
 The [recipe](../../ports/tcc/README.md) builds TCC with the prebuilt Pyxis GCC and
 exports the guest executable, target libtcc1, compiler-private headers, licenses
 and ordered patch provenance. No compiler-container rebuild is needed.
 
-`app://sdk` contains:
+`boot://sdk` contains:
 
 - `usr/include`: shared libc/libpyxis/libterm, ABI/P1F and npfs format headers.
 - `usr/lib`: `crt0.o`, libc, libterm, libpyxis, npfs format and target libgcc archives.
@@ -279,10 +279,10 @@ and ordered patch provenance. No compiler-container rebuild is needed.
   the selected toolchain's hashes, patches and runtime licensing.
 - `manifest.txt`: SDK provenance plus the ports bundle's source and dependency record.
 
-From `home://`, compile a saved C source with `tcc hello.c -o hello.pxe`, then
+From `tmp://`, compile a saved C source with `tcc hello.c -o hello.pxe`, then
 launch `./hello.pxe`. TCC supports `-E`, ELF object output with `-c`, and static
 P1F linking; the port notes list supported options and limits. The compiler uses
-inherited read-only `app` and writable `home` grants and needs no launch authority.
+inherited read-only `boot` and writable `tmp` grants and needs no launch authority.
 The SDK packages target runtime files, not host compilers or a host converter.
 GCC remains the compiler for the OS and maintained applications.
 
@@ -291,16 +291,16 @@ See the [edit/build/run walkthrough](edit-build-run.md) and
 
 ## Fastfetch
 
-The image includes `app://fastfetch.pxe` and notices under
-`app://share/licenses/fastfetch`. Run `fastfetch` for native system information
+The image includes `boot://fastfetch.pxe` and notices under
+`boot://share/licenses/fastfetch`. Run `fastfetch` for native system information
 and the Pyxis ASCII logo, or `fastfetch --json` for structured output. See the
 [usage and limits](../userland/fastfetch.md) and
 [recipe reference](../../ports/fastfetch/README.md).
 
 ## Guest Lua
 
-The image includes `app://lua.pxe` and the upstream MIT notice at
-`app://share/licenses/lua/lua.h`. The first interpreter accepts one expression
+The image includes `boot://lua.pxe` and the upstream MIT notice at
+`boot://share/licenses/lua/lua.h`. The first interpreter accepts one expression
 chunk through the shell:
 
 ```text
@@ -330,17 +330,17 @@ This does not replace the host Lua used by build recipes. See the
 
 The `tzdata` recipe builds matching host zic and the pinned IANA database. The
 [packaged data](../userland/timezone-data.md) includes all standard zones/aliases and notices
-under `app://share`, with no dependency on the host's installed timezone version.
+under `boot://share`, with no dependency on the host's installed timezone version.
 It travels in the same ports bundle as the executable ports. Libc provides
 [local-time conversion](../userland/timezones.md); absent or empty `TZ` defaults to UTC.
 
 ## USB ID database
 
 The `usbids` data recipe stages the pinned upstream text unchanged at
-`app://share/hwdata/usb.ids`. The [metadata](../../ports/usbids/metadata.lua)
-records its commit; `app://share/usbids/source.txt` records provenance. Pyxis elects
+`boot://share/hwdata/usb.ids`. The [metadata](../../ports/usbids/metadata.lua)
+records its commit; `boot://share/usbids/source.txt` records provenance. Pyxis elects
 the USB ID Project's BSD database grant, independently of the mirror repository's
-GPL license. Terms and NOTICE are packaged under `app://share/licenses/usbids/`.
+GPL license. Terms and NOTICE are packaged under `boot://share/licenses/usbids/`.
 [lsusb](../userland/lsusb.md) uses the data only for descriptive names and falls
 back to numeric IDs when names are unavailable. Updating the database requires
 no compiler-container rebuild. See [recipe notes](../../ports/usbids/README.md).

@@ -3,14 +3,14 @@
 The shell runs foreground programs with arguments, named resources and an
 explicit working directory. It waits for completion, reports a nonzero exit or
 user fault, and returns to the prompt. The default [init script](init.md) hands
-off to an interactive shell at `home://` in the Development space. See [the shell reference](shell.md) for commands, quoting, scripts and
+off to an interactive shell at `tmp://` in the Development space. See [the shell reference](shell.md) for commands, quoting, scripts and
 a short walkthrough.
 
 ## Filesystem and authority
 
 The kernel exposes directory and file objects through tagged synchronous calls
-and process-local capabilities. `app://` selects the read-only initrd tree;
-`home://` selects a shared writable RAM tree. Home contents survive process
+and process-local capabilities. `boot://` selects the read-only initrd tree;
+`tmp://` selects a shared writable RAM tree. Its contents survive process
 exit but disappear on reboot. These names select explicitly granted startup
 roots, not a global namespace available to every process.
 

@@ -99,8 +99,8 @@ exits naturally after all its exports retire.
 ## Boot and use
 
 Development and read-only init create separate namespaces and publish `textfs`
-as `text`. They launch `app://session.pxe` with `--start-services`, which applies
-configuration before running `app://init-services`. That script publishes `httpfs`
+as `text`. They launch `boot://session.pxe` with `--start-services`, which applies
+configuration before running `boot://init-services`. That script publishes `httpfs`
 as `http` with the configured DNS server, then optionally publishes a separate
 `httpfs --https` instance as `https` with read-only trust grants before handing
 off to the interactive shell. Explicitly reported HTTPS setup failure leaves
@@ -123,9 +123,9 @@ cat < text://guide
 cat http://example.com/
 cat https://example.com/
 cat http://example.com/ | tee home://example.html | cksum
-service replace text app://textfs.pxe --welcome "Replacement service"
+service replace text boot://textfs.pxe --welcome "Replacement service"
 namespace remove http
-service start http app://httpfs.pxe
+service start http boot://httpfs.pxe
 ```
 
 The publication command receives an exported grant through IPC and binds it before

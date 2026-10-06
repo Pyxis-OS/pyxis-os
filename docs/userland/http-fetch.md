@@ -32,10 +32,10 @@ host directory. QEMU user networking exposes that listener at `10.0.2.2`.
 
 Development and read-only init each create a namespace and request
 `session --start-services`. After reading configuration and applying any requested
-NIC settings, session launches `app://init-services` with the configured
+NIC settings, session launches `boot://init-services` with the configured
 `DNS_SERVER` and ordinary session grants. That trusted script publishes
-`service start http app://httpfs.pxe`, followed by
-`service start --optional --read-only https app://httpfs.pxe --https`, then hands
+`service start http boot://httpfs.pxe`, followed by
+`service start --optional --read-only https boot://httpfs.pxe --https`, then hands
 off to the interactive shell. A reported HTTPS setup failure is logged and
 leaves HTTPS unpublished while startup continues. The read-only profile
 restricts host-file writes, not HTTP or HTTPS reads. Idle spaces
@@ -48,9 +48,9 @@ without DNS traffic. Publication uses the explicit grant handoff; providers
 receive neither the parent namespace nor namespace-creation authority.
 
 ```text
-service replace --read-only https app://httpfs.pxe --https --ca-bundle home://custom-ca.pem
+service replace --read-only https boot://httpfs.pxe --https --ca-bundle home://custom-ca.pem
 namespace remove https
-service start --read-only https app://httpfs.pxe --https
+service start --read-only https boot://httpfs.pxe --https
 ```
 
 The `--read-only` service option attenuates native directory roots and working

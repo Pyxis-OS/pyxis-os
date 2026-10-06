@@ -30,7 +30,7 @@ again. Directory merging, rename and replacement semantics remain open.
 
 A concrete follow-up candidate is a
 [host-backed development overlay](host-development-overlay.md)
-above the boot archive, exposed through the existing `app://` namespace. Host
+above the boot archive, exposed through the existing `boot://` namespace. Host
 builds could publish replacement programs without rebuilding the ISO, while
 the guest keeps read-only access. This remains an opt-in experiment after the
 plain virtio-fs mount; it does not implement the full private-overlay or system
@@ -118,7 +118,7 @@ Any manifest resource requests would remain subject to launcher authority;
 package metadata could not grant itself capabilities.
 
 This is a future direction, not a change to the first-shell milestone. Keep its
-current initrd tree and `app://` lookup while developing that milestone; no
+current initrd tree and `boot://` lookup while developing that milestone; no
 bundle format, namespace migration or packaging implementation is assigned here.
 
 ### Signing, development spaces and requested grants

@@ -7,7 +7,7 @@ per lookup; it has no path parser or process-global working directory.
 
 ## Syntax and authority
 
-`app://share/hello.txt` selects the supplied `app` root. A relative name such as
+`boot://share/hello.txt` selects the supplied `boot` root. A relative name such as
 `hello.txt` starts from the context's current directory. Scheme and component
 names are case-sensitive. Unknown schemes fail without falling back to a global
 root. Root binding names are nonempty and contain neither `:` nor `/`.
@@ -20,7 +20,7 @@ requires a directory. Components are resolved in order: `missing/..` fails at
 
 Only a leading `scheme://` selects a root. There is no URL decoding, wildcard or
 environment expansion, query syntax or fragment syntax. Other name bytes are
-literal. Bare command lookup under `app://` is future shell policy; ordinary
+literal. Bare command lookup under `boot://` is future shell policy; ordinary
 relative file lookup does not implicitly search there.
 
 An explicit scheme path starts a new chain with that root as its boundary.
@@ -122,8 +122,8 @@ its output on failure. This is local copying, not an endpoint attachment or move
 
 ## Consumer and failures
 
-The optional Hello example starts with `app://` as its working-directory boundary. It enumerates the
-application tree, reads `app://share/hello.txt`, changes into `app://share`, and
+The optional Hello example starts with `boot://` as its working-directory boundary. It enumerates the
+application tree, reads `boot://share/hello.txt`, changes into `boot://share`, and
 reads `hello.txt` relatively. It releases discovered handles and the context
 before closing its original startup grants.
 

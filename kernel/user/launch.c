@@ -54,10 +54,10 @@
 #include <kernel/user/startup.h>
 
 /* Namespace roots survive init and session exit; RAM contents remain until shutdown. */
-static struct directory_object *application_root;
-static struct directory_object *home_root;
+static struct directory_object *boot_root;
+static struct directory_object *tmp_root;
 
-/* Boot exposes only the immutable app archive. Match its exact entry names;
+/* Boot exposes only the immutable archive. Match its exact entry names;
  * userspace path walking and its wider namespace policy stay in libpyxis. */
 static enum initrd_result select_image(const char *name, struct initrd_file *image,
     struct initrd_file *script, char interpreter[SHEBANG_PREFIX_SIZE])
@@ -75,14 +75,15 @@ static enum initrd_result select_image(const char *name, struct initrd_file *ima
   if (format != SHEBANG_OK) {
     return INITRD_INVALID;
   }
-  if (header.length <= 6 || memcmp(header.interpreter, "app://", 6)) {
+  if (header.length <= USER_BOOT_ROOT_PREFIX_LENGTH ||
+      memcmp(header.interpreter, USER_BOOT_ROOT_PREFIX, USER_BOOT_ROOT_PREFIX_LENGTH)) {
     return INITRD_UNSUPPORTED;
   }
   memcpy(interpreter, header.interpreter, header.length);
   interpreter[header.length] = '\0';
   *script = *image;
   /* No recursive interpretation: the selected bytes go directly to PXE. */
-  return initrd_lookup(interpreter + 6, image);
+  return initrd_lookup(interpreter + USER_BOOT_ROOT_PREFIX_LENGTH, image);
 }
 
 void user_launch_init(struct space *space, const char *image_uri,
@@ -99,19 +100,20 @@ void user_launch_init(struct space *space, const char *image_uri,
   struct kernel_object *space_control = NULL, *profile = NULL, *pipe = NULL, *service = NULL;
   struct kernel_object *mount = NULL, *echo = NULL, *net_config = NULL, *udp = NULL, *tcp = NULL, *random = NULL;
 
-  if (!application_root) {
-    if (initrd_tree_create(&application_root) != INITRD_OK) {
+  if (!boot_root) {
+    if (initrd_tree_create(&boot_root) != INITRD_OK) {
       goto fail;
     }
-    home_root = directory_create(DIRECTORY_RAM);
-    if (!home_root) {
+    tmp_root = directory_create(DIRECTORY_RAM);
+    if (!tmp_root) {
       goto fail;
     }
   }
   struct initrd_file image, script;
   char interpreter[SHEBANG_PREFIX_SIZE];
   uintptr_t entry;
-  enum initrd_result selection = select_image(image_uri + 6, &image, &script, interpreter);
+  enum initrd_result selection = select_image(image_uri + USER_BOOT_ROOT_PREFIX_LENGTH,
+      &image, &script, interpreter);
   if (selection != INITRD_OK) {
     klog("userspace: cannot select %s (initrd result %u)\n", image_uri, (unsigned)selection);
     goto fail;
@@ -138,7 +140,7 @@ void user_launch_init(struct space *space, const char *image_uri,
     goto fail;
   }
 
-  handle_t input, output, memory_handle, launcher_handle, display_handle, app, home;
+  handle_t input, output, memory_handle, launcher_handle, display_handle, boot, tmp;
   handle_t clock_handle, keyboard_handle, pointer_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
   handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
   handle_t system_info_handle;
@@ -183,12 +185,12 @@ void user_launch_init(struct space *space, const char *image_uri,
   }
   object_release(space_control);
   space_control = NULL;
-  uint64_t app_rights = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE |
-                        DIRECTORY_RIGHT_READ_FILES;
-  uint64_t home_rights = app_rights | DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
-                         DIRECTORY_RIGHT_REMOVE;
-  if (capability_install(&process->capabilities, &application_root->object, app_rights, 0, &app) != CAP_OK ||
-      capability_install(&process->capabilities, &home_root->object, home_rights, 0, &home) != CAP_OK) {
+  uint64_t boot_rights = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE |
+                         DIRECTORY_RIGHT_READ_FILES;
+  uint64_t tmp_rights = boot_rights | DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
+                        DIRECTORY_RIGHT_REMOVE;
+  if (capability_install(&process->capabilities, &boot_root->object, boot_rights, 0, &boot) != CAP_OK ||
+      capability_install(&process->capabilities, &tmp_root->object, tmp_rights, 0, &tmp) != CAP_OK) {
     goto fail;
   }
   handle_t mount_handle = HANDLE_INVALID;
@@ -309,7 +311,7 @@ void user_launch_init(struct space *space, const char *image_uri,
     resources[resource_count++] = (struct process_binding){"boot_kernel", kernel_handle};
     resources[resource_count++] = (struct process_binding){"boot_archive", archive_handle};
   }
-  const struct process_binding roots[] = {{"app", app}, {"home", home}};
+  const struct process_binding roots[] = {{"boot", boot}, {"tmp", tmp}};
   const char *arguments[] = {script.data ? interpreter : image_uri, image_uri};
   const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
   const struct process_startup startup = {
@@ -322,9 +324,9 @@ void user_launch_init(struct space *space, const char *image_uri,
     .resource_count = resource_count,
     .roots = roots,
     .root_count = sizeof(roots) / sizeof(roots[0]),
-    .working_directories = &home,
+    .working_directories = &tmp,
     .working_directory_count = 1,
-    .working_path = "home://",
+    .working_path = "tmp://",
     .environment = environment,
     .environment_count = sizeof(environment) / sizeof(environment[0]),
     .argc = script.data ? 2 : 1,
@@ -407,13 +409,13 @@ fail:
   if (process) {
     KASSERT(process_destroy(process) == MM_OK);
   }
-  if (application_root) {
-    object_release(&application_root->object);
-    application_root = NULL;
+  if (boot_root) {
+    object_release(&boot_root->object);
+    boot_root = NULL;
   }
-  if (home_root) {
-    object_release(&home_root->object);
-    home_root = NULL;
+  if (tmp_root) {
+    object_release(&tmp_root->object);
+    tmp_root = NULL;
   }
   while (object_reap_pending()) {
     object_reap();

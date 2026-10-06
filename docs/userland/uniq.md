@@ -1,11 +1,11 @@
 # Uniq
 
-The normal image includes upstream sbase `uniq` at `app://uniq.pxe`; the shell
+The normal image includes upstream sbase `uniq` at `boot://uniq.pxe`; the shell
 resolves the bare command `uniq`. It is built from sbase
 `c546c3a5724c81cee9a11d816a38ccdf17472129` by the
 [sbase recipe](../../ports/sbase/README.md), which also packages cksum and tee.
 The sbase MIT license, arg.h notice and OpenBSD ISC notice for
-`libutil/strtonum.c` are installed under `app://share/licenses/sbase`.
+`libutil/strtonum.c` are installed under `boot://share/licenses/sbase`.
 
 ```text
 uniq host://input
@@ -91,7 +91,7 @@ diagnostic, which the shell only produces when every stage exits 0. Cases:
 - A missing input, `-x`, `-f abc`, `-s -1` and three operands. Diagnostics match
   upstream except for native error text, such as `Not found` for a missing file.
 
-Guest-only checks: an output under read-only `app://` failed with
+Guest-only checks: an output under read-only `boot://` failed with
 `Permission denied`, status 1, and was not created. In `uniq | head -n 1`,
 head printed the first line, uniq reported `ferror <stdout>: Endpoint closed`
 with status 1, and the pipeline completed. Output written to `home://` matched

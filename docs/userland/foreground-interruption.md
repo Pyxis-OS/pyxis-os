@@ -112,7 +112,7 @@ for the kernel traces.
 - **Doom.** Ctrl and Ctrl+C acted as game input (ammo dropped from 50 to 47) and
   Doom kept running. After F10/Y, Ctrl+C interrupted the next command.
 - **Startup script.** With a temporary `lua` loop added to the Development
-  startup script, Ctrl+C reported `app://init:6: shell: lua: Process
+  startup script, Ctrl+C reported `boot://init:6: shell: lua: Process
   terminated` and the script stopped with status 1.
 
 Some paths were reviewed in source only:

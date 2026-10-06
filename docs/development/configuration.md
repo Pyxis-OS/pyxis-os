@@ -95,7 +95,7 @@ make -j16 usb-image NETWORK_CONFIG=/private/path/network.lua
 
 Assembly replaces `config/network.lua` in the initrd with the supplied regular
 file, without modifying the userspace checkout or its staged bundle. The session
-launcher reads it as `app://config/network.lua`; see
+launcher reads it as `boot://config/network.lua`; see
 [network configuration](../devices/networking.md#boot-configuration-and-use)
 for the profile fields and selector policy. Keep hardware MAC selectors in this
 local file, outside the repository and published captures.

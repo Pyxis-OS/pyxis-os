@@ -1,6 +1,6 @@
 # Remote terminal server and host client
 
-The default four-CPU image selects `app://init-remote` on CPU 3, titled Remote.
+The default four-CPU image selects `boot://init-remote` on CPU 3, titled Remote.
 It starts the native TCP terminal server on the configured guest IPv4 address,
 port 2323. CPU 1 remains the network configuration owner; Remote waits for an
 assigned address with a 100 ms clock sleep. Remote looks up the configured
@@ -30,8 +30,8 @@ Remote init opens optional `host://` with read-write grants, using the same
 [virtiofs setup](../devices/virtio-fs.md) as Development. Missing hardware leaves
 HOST absent; operational mount errors stop that init. Host daemon restrictions
 and host permissions still apply. All sessions share the actual export and
-RAM-backed `home://`; they have independent terminals and execution groups,
-not private files. `app://` stays read-only.
+RAM-backed `tmp://`; they have independent terminals and execution groups,
+not private files. `boot://` stays read-only.
 
 The trusted `session --start-remote-services` handoff applies session/network
 configuration to the provider environment and starts the remote service script.
@@ -49,7 +49,7 @@ group supervision authority. Nested launches remain in their execution group.
 
 For a single-CPU manual boot, select a trusted init which mounts HOST if wanted,
 creates its namespace, and calls
-`session app://session.pxe --configure-network --start-remote-services`.
+`session boot://session.pxe --configure-network --start-remote-services`.
 Do not give multiple init scripts network configuration ownership.
 
 ## Client modes
@@ -356,11 +356,11 @@ Kilo created `host://hello.c`, searched for and edited its message, saved,
 reopened and quit. Its idle status message cleared without another keypress.
 TCC compiled the saved source to `host://hello.pxe`, which printed the edited
 message and completed successfully. Missing compiler input produced a readable
-diagnostic and status 1. The other session retained its independent `app://share`
+diagnostic and status 1. The other session retained its independent `boot://share`
 working directory while running a pipeline with redirection and reading back
 its saved output. The shared HOST source and executable were visible on the host.
 
-`iobench read app://share/iobench-small.bin --bytes 32768 --rounds 1` reported a
+`iobench read boot://share/iobench-small.bin --bytes 32768 --rounds 1` reported a
 verified warmup and sample with 32,768 bytes consumed and no failed pass.
 `allocbench heap --rounds 64 --profile` reported 8,192 allocation attempts and
 releases, zero failures and no backing-allocation requests in its measured
@@ -425,7 +425,7 @@ input redirect and a missing background image reported `launch_failed`. A
 background Lua loop reported `launched`, and its output arrived after that
 completion. At 20x2, both modes accepted a 30-byte line and rejected 31 bytes,
 matching the limit derived from the 9-byte prompt. EOF after an unfinished line
-emitted nothing. `exit` and a `session app://shell.pxe` handoff each reported
+emitted nothing. `exit` and a `session boot://shell.pxe` handoff each reported
 builtin success before FINAL.
 
 HELLO with option bit 1, option bit 31 or the former 8-byte payload each

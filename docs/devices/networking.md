@@ -463,7 +463,7 @@ there is no per-space network isolation.
 
 ## Boot configuration and use
 
-The session launcher reads `app://config/network.lua`, installed from
+The session launcher reads `boot://config/network.lua`, installed from
 `userspace/config/network.lua`. The packaged profile selects a linked controller:
 
 ```lua
@@ -861,7 +861,7 @@ printf 'GET / HTTP/1.0\r\nHost: localhost\r\n\r\n' > "$export_dir/request"
 ```
 
 Then run `tcp 10.0.2.2 18080 host://request` in the guest. A request saved in
-`home://` with an editor also works; ensure its final header line is followed by
+`tmp://` with an editor also works; ensure its final header line is followed by
 an empty line, and use line endings accepted by the chosen server.
 
 The response includes raw HTTP headers; this utility does not interpret HTTP.

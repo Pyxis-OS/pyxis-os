@@ -10,7 +10,7 @@ make image
 make run CPUS=4
 ```
 
-Select the application space with Super+Right. From the shell's initial `home://`
+Select the application space with Super+Right. From the shell's initial `tmp://`
 directory, run `kilo hello.c` and enter:
 
 ```c
@@ -42,10 +42,10 @@ executable, or a partial file if output writing began. The shell reports nonzero
 child exit status. Kilo saves by truncating and rewriting, so a failed save can
 also leave partial content.
 
-Sources, objects and executables in `home://` are RAM-backed and disappear on
+Sources, objects and executables in `tmp://` are RAM-backed and disappear on
 reboot. For opt-in persistence, use the [USB workflow below](#persistent-usb-development)
 or a [writable host export](../devices/virtio-fs.md#persistent-development-walkthrough),
-keeping source and output under the corresponding root. `app://`, including `app://sdk`, is
+keeping source and output under the corresponding root. `boot://`, including `boot://sdk`, is
 read-only. Atomic Kilo saves, a package manager and toolchain self-hosting
 remain unsupported. GCC continues to build maintained OS/userland sources.
 
@@ -56,7 +56,7 @@ and [terminal behavior](../userland/terminal.md) for details.
 
 An explicitly configured USB-backed npfs volume can hold source, objects and
 native executable output across boots. The compiler and SDK stay in the read-only
-archive; `home://` stays RAM-backed. This QEMU walkthrough uses a private disk
+archive; `tmp://` stays RAM-backed. This QEMU walkthrough uses a private disk
 copy and a separately booted ISO. Physical installation uses the
 [native installer](../userland/installer.md); see
 [USB installation](../devices/usb-installation.md#validation).
@@ -84,17 +84,17 @@ Enable `CONFIG_XHCI=y` in `.config` or menuconfig. Save this trusted script as
 `/tmp/init-usb-development.sh`:
 
 ```sh
-#!app://shell.pxe
+#!boot://shell.pxe
 mount --partition 2 --volume usb-test --read-write usb://
 namespace create
-service start text app://textfs.pxe
-session app://session.pxe --configure-network --start-remote-services
+service start text boot://textfs.pxe
+session boot://session.pxe --configure-network --start-remote-services
 ```
 
 Build the separate ISO and existing remote client:
 
 ```sh
-make -j16 image INIT=/tmp/init-usb-development.sh SPACES=usb=app://init MOUNT_DISK="$usb_guid"
+make -j16 image INIT=/tmp/init-usb-development.sh SPACES=usb=boot://init MOUNT_DISK="$usb_guid"
 make -C tools remote
 ```
 
@@ -237,7 +237,7 @@ redraws from captured output. Program output is base64 JSON data, separate from 
 Existing benchmarks can report through that same connection, for example:
 
 ```text
-iobench read app://share/iobench-small.bin --bytes 32768 --rounds 1
+iobench read boot://share/iobench-small.bin --bytes 32768 --rounds 1
 allocbench heap --rounds 64 --profile
 ```
 
@@ -260,7 +260,7 @@ CA's PEM certificate must be available as a native file, for example
 In the guest, replace HTTPS with an instance that augments packaged public trust:
 
 ```text
-service replace --read-only https app://httpfs.pxe --https --ca-bundle home://custom-ca.pem
+service replace --read-only https boot://httpfs.pxe --https --ca-bundle home://custom-ca.pem
 cat https://tls.pyxis.test:8443/hello.c > home://hello.c
 cat home://hello.c
 tcc home://hello.c -o home://hello.pxe

@@ -3,7 +3,7 @@
 `make userspace` builds the SDK, shell and core utilities. Normal boot runs the
 default [init script](init.md) and [session launcher](session-configuration.md),
 which by default start separate shells in the Development and Read-only spaces,
-with shared `home://` as their working directory. Boot starts on Caelum's tab;
+with shared `tmp://` as their working directory. Boot starts on Caelum's tab;
 use Super+Right to select Development before typing. The normal initrd contains init,
 shell, ls, cat, head, mkdir, rm, rmdir, mv, [Kilo and its license](../development/ports.md), and `share/hello.txt`;
 home is initially empty and its RAM
@@ -12,12 +12,12 @@ contents disappear on reboot.
 A first walkthrough:
 
 ```text
-ls app://
-cat app://share/hello.txt
+ls boot://
+cat boot://share/hello.txt
 mkdir notes
 cd notes
 ls
-cd app://share
+cd boot://share
 cat hello.txt
 exit
 ```
@@ -38,7 +38,7 @@ prompt-derived line limit are unchanged. Application output and shell
 diagnostics are unaffected, and the option is never passed to children or
 session successors. Other interactive-shell arguments are rejected; the remote
 server selects `--no-echo` for machine clients that request it. The prompt shows the working path, for example
-`home://notes> `. Long paths show an ellipsis and their tail, keeping at least half the first row for
+`tmp://notes> `. Long paths show an ellipsis and their tail, keeping at least half the first row for
 input; control and non-ASCII bytes display as `?`. Whitespace separates
 arguments. Single and double quotes preserve whitespace and allow empty
 arguments; adjacent quoted/unquoted
@@ -50,7 +50,7 @@ backslash is an ordinary character. For example:
 mkdir 'two words'
 cd two\ words
 ls
-cd app://share
+cd boot://share
 cat "hello.txt"
 ```
 
@@ -107,9 +107,9 @@ space's trusted init receives, and it works only before the space's first
 launch. See [affinity setup](init.md#affinity-setup). Indices above 8191 are a
 usage error. Like the other builtins, `affinity` cannot run with `&`.
 
-A command without `/` is a bare name: `cat` opens `app://cat.pxe`. There is no
+A command without `/` is a bare name: `cat` opens `boot://cat.pxe`. There is no
 PATH search or fallback. Names already ending in `.pxe` still receive the suffix
-when bare; use `app://cat.pxe` or `./cat.pxe` to name an image directly. Paths
+when bare; use `boot://cat.pxe` or `./cat.pxe` to name an image directly. Paths
 containing `/` are resolved as written. Builtins are recognized after quote
 removal. An empty command name is an error. Opened programs use the
 [script-launch helper](script-launch.md), which can dispatch a shebang to a native
@@ -146,7 +146,7 @@ Init scripts can create and populate an explicit [service namespace](../interfac
 
 ```text
 namespace create
-service start counter app://counter.pxe --provide
+service start counter boot://counter.pxe --provide
 counter --lookup counter
 namespace remove counter
 ```
@@ -171,7 +171,7 @@ with `httpfs --https --ca-bundle URI`. See [HTTPS startup](http-fetch.md).
 Foreground external commands accept `< file`, `> file` and `2> file`. For example:
 
 ```text
-cat app://share/hello.txt > home://copy.txt
+cat boot://share/hello.txt > home://copy.txt
 cat < home://copy.txt
 cat missing 2> home://errors.txt
 cat home://errors.txt
@@ -258,8 +258,8 @@ EOF/error or 4 KiB; byte output forwards each available read.
 For example:
 
 ```text
-cat app://share/hello.txt | head -n 2
-cat app://tcc.pxe | head -c 16 > home://prefix
+cat boot://share/hello.txt | head -n 2
+cat boot://tcc.pxe | head -c 16 > home://prefix
 head -c 0 home://copy.txt
 ```
 
@@ -275,7 +275,7 @@ Ctrl+D does not close either input stream.
 Connect two through eight external commands with `|`:
 
 ```text
-cat app://share/hello.txt | cat > home://copy.txt
+cat boot://share/hello.txt | cat > home://copy.txt
 cat < home://copy.txt | cat | cat
 cat missing 2> home://errors.txt | cat > home://empty.txt
 ```
@@ -488,7 +488,7 @@ when held; it cannot restore an omitted grant.
 
 `session program [arguments...]` launches a successor in the same space and on
 its assigned CPU, then exits the calling shell successfully without waiting.
-For example, an init script can finish with `session app://shell.pxe`. The
+For example, an init script can finish with `session boot://shell.pxe`. The
 command also works interactively; failed launch returns to the prompt, while
 script mode reports the script name/line and exits with failure as usual.
 Program lookup and quoting use the ordinary command rules, including shebang
@@ -521,7 +521,7 @@ cannot keep a successor running after that shell exits.
 ## Startup and child authority
 
 The shell expects named `input`, `output`, `memory` and `launcher` resources,
-plus `app` and `home` roots. Input/output are separate console READ/WRITE grants;
+plus `boot` and `tmp` roots. Input/output are separate console READ/WRITE grants;
 memory permits MANAGE and launcher permits LAUNCH. Normally app supplies LOOKUP,
 ENUMERATE and READ_FILES, and home additionally supplies CREATE, WRITE_FILES and
 REMOVE. Directory grants can be restricted by the launcher; the shell queries
@@ -537,7 +537,7 @@ An initial directory chain is copied from startup, preserving its navigation
 boundary. A supplied chain requires a descriptive working path beginning with a
 `NAME://` scheme for prompt display. The path is not resolved to replace the
 chain: actual handles remain authoritative, and insufficient grants
-fail normally. With no initial chain the shell starts at `home://`. Explicit
+fail normally. With no initial chain the shell starts at `tmp://`. Explicit
 scheme changes use the bound root's actual grant; each descendant lookup retains
 its parent's grant. Crossing a retained ancestor boundary fails as in the native
 path API.

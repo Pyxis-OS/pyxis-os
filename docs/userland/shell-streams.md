@@ -6,9 +6,9 @@ foreground pipelines, and `cat` and `head` consume the selected streams without
 knowing their backing. The shell-streams milestone is complete.
 
 ```text
-cat app://share/hello.txt > home://copy.txt
+cat boot://share/hello.txt > home://copy.txt
 cat < home://copy.txt | head -n 2
-cat app://tcc.pxe | head -c 16 > home://prefix
+cat boot://tcc.pxe | head -c 16 > home://prefix
 cat missing 2> home://errors | cat > home://empty
 ```
 

@@ -1,6 +1,6 @@
 # lspci
 
-The normal image includes native `lspci` at `app://lspci.pxe`. It lists the
+The normal image includes native `lspci` at `boot://lspci.pxe`. It lists the
 kernel's boot PCI inventory through the
 [system-information PCI queries](../interfaces/system-information.md#pci-inventory)
 and resolves names from the packaged
@@ -36,7 +36,7 @@ kernel discovers segment zero only.
 | Option | Effect |
 | --- | --- |
 | `-n` | Numeric only, as `BB:DD.F CCSS: VVVV:DDDD (rev RR)`; the database is not read |
-| `-i FILE` | Read names from FILE instead of `app://share/hwdata/pci.ids` |
+| `-i FILE` | Read names from FILE instead of `boot://share/hwdata/pci.ids` |
 
 The database is read in one streaming pass. Vendor, device, class and subclass
 lines are used. Subsystem and programming-interface lines are skipped, and

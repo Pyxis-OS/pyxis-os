@@ -1,7 +1,7 @@
 # System layout and boot init
 
 Status: **milestone, agreed 2026-10-05 and 2026-10-06.** It follows the
-[runtime SMP milestone](../kernel/smp.md). Nothing here is implemented. Each task
+[runtime SMP milestone](../kernel/smp.md). Task 1 is implemented; the rest is not. Each task
 starts when the owner says so, after its listed decisions are settled. Any
 decision can be revised by the owner.
 
@@ -17,9 +17,10 @@ adding a space, without rebuilding boot media.
 - The kernel creates spaces from `space.NAME=IMAGE` options on the kernel command
   line ([boot selection](../userland/init.md#boot-selection)).
   An installed system always gets the single space the installer writes.
-- All programs, configuration and shared files are in the boot archive, `app://`.
-  `home://` is a RAM directory, and `system://` is the installed pool's `system`
-  volume.
+- All programs, configuration and shared files are in the boot archive, `boot://`.
+  `tmp://` is a RAM directory, and `system://` is the installed pool's `system`
+  volume. `app://` and `home://` are unbound; programs that still default to
+  `home://` fail until task 4 ([technical debt](../technical-debt.md#system-layout-renames)).
 - [Update](../userland/system-updates.md) replaces only the ESP and never writes
   the pool.
 
@@ -97,7 +98,7 @@ Accepted by the owner on 2026-10-06:
 
 ## Tasks
 
-- [ ] **1. Renames.**
+- [x] **1. Renames.**
   - The archive root becomes `boot://`, and today's RAM `home://` becomes
     `tmp://`. `app://` stays unbound and reserved. Shells start in `tmp://`
     until task 4.

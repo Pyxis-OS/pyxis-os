@@ -1,7 +1,7 @@
 # Directory capabilities
 
-The launcher retains two trees for the kernel lifetime: read-only `app`, built
-from the boot initrd, and initially empty `home`, backed by RAM. The shell receives
+The launcher retains two trees for the kernel lifetime: read-only `boot`, built
+from the boot initrd, and initially empty `tmp`, backed by RAM. The shell receives
 both roots and explicitly passes grants to its children. RAM contents survive
 process exit and disappear on reboot.
 

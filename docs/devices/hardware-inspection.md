@@ -29,8 +29,8 @@ Userland resolves descriptive labels from pinned plain-text databases:
 
 | Database | Guest path | Recipe |
 | --- | --- | --- |
-| PCI IDs | `app://share/hwdata/pci.ids` | [pciids](../../ports/pciids/README.md) |
-| USB IDs | `app://share/hwdata/usb.ids` | [usbids](../../ports/usbids/README.md) |
+| PCI IDs | `boot://share/hwdata/pci.ids` | [pciids](../../ports/pciids/README.md) |
+| USB IDs | `boot://share/hwdata/usb.ids` | [usbids](../../ports/usbids/README.md) |
 
 The recipes preserve source revision, provenance and the elected BSD database
 license. Database updates must not depend on a fixed size, line count or known

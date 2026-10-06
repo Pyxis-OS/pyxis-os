@@ -23,8 +23,12 @@ enum mm_result user_process_load(struct space *space, const void *bytes, size_t 
  * line order and start its trusted init. Fatal on invalid configuration. */
 void user_launch_initial(const char *command_line);
 
+/* Initial inits and their interpreters name boot archive entries by this root. */
+#define USER_BOOT_ROOT_PREFIX "boot://"
+#define USER_BOOT_ROOT_PREFIX_LENGTH (sizeof(USER_BOOT_ROOT_PREFIX) - 1)
+
 /* Boot startup only: load one archive image/script with full bootstrap grants.
- * App and RAM home roots are shared between initial processes. Fatal on failure. */
+ * Boot and RAM tmp roots are shared between initial processes. Fatal on failure. */
 void user_launch_init(struct space *space, const char *image_uri,
     const struct mount_config *mount_config, bool install);
 

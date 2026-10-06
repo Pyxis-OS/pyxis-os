@@ -92,7 +92,7 @@ service may be published under another compatible name. `textfs --welcome MESSAG
 selects an alternative immutable welcome message, for example:
 
 ```text
-service replace text app://textfs.pxe --welcome "Replacement service"
+service replace text boot://textfs.pxe --welcome "Replacement service"
 cat text://welcome
 namespace remove text
 ```

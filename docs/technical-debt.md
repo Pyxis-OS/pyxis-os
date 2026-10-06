@@ -802,6 +802,19 @@ synced power-off and one Update round trip passed natively; see the
 Power loss during writes, uncertain I/O and other devices, ports or the dock
 path remain unqualified. The internal NVMe remains unsupported.
 
+## System layout renames
+
+The [system layout](wip/system-layout.md) renames leave two gaps until later tasks.
+
+- `home://` is unbound until task 4 adds the persistent home volume. Doom saves,
+  Quake's write directory, the hello demo and the `home://` examples in the
+  shell, port and tool guides fail until then. They keep the name so task 4
+  needs no second rename; use `tmp://` or a mounted volume meanwhile.
+- Update recognizes only `space.pyxis=boot://init-installed`. An installation
+  from before the rename, such as 0.0.2, is reported as having damaged or
+  missing boot files and an unknown revision, and is rebuilt. The pool is unaffected. Revisit with task 3's
+  two-stage Update.
+
 ## USB image updates and firmware qualification
 
 The [raw USB image builder](development/usb-image.md) creates fresh images and

@@ -69,7 +69,7 @@ do not interrupt arbitrary CPU-bound cryptography.
 
 ## Trust configuration and updates
 
-Public roots always load from `app://share/ca-certificates/cacert.pem`. The
+Public roots always load from `boot://share/ca-certificates/cacert.pem`. The
 [CA recipe](../../ports/ca-certificates/README.md) pins curl's Mozilla-derived
 2026-09-25 PEM snapshot and preserves its checksum, source/conversion provenance,
 MPL-2.0 license and notices. It is 188,900 bytes containing 121 certificates.

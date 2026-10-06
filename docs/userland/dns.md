@@ -8,7 +8,7 @@ ICMP echo. There is no DNS syscall, service daemon or libc resolver.
 ## Resolver configuration
 
 Session reads the optional `dns` table alongside `net0` in
-`app://config/network.lua`:
+`boot://config/network.lua`:
 
 ```lua
 dns = { server = "1.1.1.1" },

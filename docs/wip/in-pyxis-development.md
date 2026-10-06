@@ -54,7 +54,7 @@ comes first.
 ### 2. Extra spaces on the installed system
 
 The installed command line has a single space,
-`space.pyxis=app://init-installed`. Until [boot init](system-layout.md#boot-init)
+`space.pyxis=boot://init-installed`. Until [boot init](system-layout.md#boot-init)
 makes spaces part of the pool configuration, the owner adds spaces by hand to
 `boot/limine/limine.conf` on the stick's ESP. [Update](../userland/system-updates.md)
 treats any other command line as rebuildable and writes the single space back,
@@ -78,7 +78,7 @@ are settled in implementation.
 Example line, with the GUID the installer already wrote:
 
 ```text
-cmdline: space.pyxis=app://init-installed space.docs=app://init-installed-readonly space.remote=app://init-installed-remote mount.disk=<GUID>
+cmdline: space.pyxis=boot://init-installed space.docs=boot://init-installed-readonly space.remote=boot://init-installed-remote mount.disk=<GUID>
 ```
 
 - **One pool instance.** A second mount of the same partition reuses the open

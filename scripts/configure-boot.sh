@@ -1,11 +1,11 @@
 #!/bin/sh
 set -eu
 # These select archive entries, not host files. INIT still stages a host file
-# as app://init. Keep this grammar free of shell quoting and Limine expansion.
+# as boot://init. Keep this grammar free of shell quoting and Limine expansion.
 valid_image() {
   case "$1" in
-    app://?*) ;;
-    *) echo "Init must name an app:// archive entry: $1" >&2; exit 1 ;;
+    boot://?*) ;;
+    *) echo "Init must name a boot:// archive entry: $1" >&2; exit 1 ;;
   esac
   case "$1" in
     *[!a-zA-Z0-9_./:+-]*) echo "Unsupported character in init path: $1" >&2; exit 1 ;;

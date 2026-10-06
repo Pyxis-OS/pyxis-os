@@ -1,9 +1,9 @@
 # Fastfetch
 
-The normal image includes Fastfetch 2.69.0 at `app://fastfetch.pxe`. The shell
+The normal image includes Fastfetch 2.69.0 at `boot://fastfetch.pxe`. The shell
 resolves the bare command `fastfetch`. Its upstream MIT license, bundled yyjson
 notice, MPL-2.0 license and native port notice are installed under
-`app://share/licenses/fastfetch`.
+`boot://share/licenses/fastfetch`.
 
 ```text
 fastfetch

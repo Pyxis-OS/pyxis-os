@@ -13,17 +13,17 @@ handoffs for this first milestone.
 
 ## Current programs
 
-Normal boot starts the [shell](../userland/shell.md) at home:// with terminal, launcher,
+Normal boot starts the [shell](../userland/shell.md) at tmp:// with terminal, launcher,
 memory, display, clock, keyboard, pointer, optional [space-title authority](../userland/init.md#space-titles)
-and app/home root grants. It launches foreground utilities
+and boot/tmp root grants. It launches foreground utilities
 with explicit resources, waits for completion and returns to its prompt. Its space and TTY
 survive shell exit; no supervisor restarts it.
 
 Hello and the client/server examples remain explicit build targets, outside the
 normal initrd. Their demonstration flows require the grants described below.
 
-Hello receives output through a named resource and an application directory
-through the `app` startup scheme binding, plus a shared RAM root under `home`. It lists that directory, looks up and
+Hello receives output through a named resource and the boot archive directory
+through the `boot` startup scheme binding, plus a shared RAM root under `home`. It lists that directory, looks up and
 lists `share`, then opens `hello.txt` with READ and prints it through the console.
 The [path helpers](../userland/paths.md) compose lookups and retain working-directory handles.
 Hello reads through an explicit scheme path and again after changing directory.
@@ -119,8 +119,8 @@ still reclaims remaining handles on exit or fault. See [stdio](../userland/stdio
 Scheme roots have their own name/handle table. Preparation checks that each root
 is an installed directory capability and that root names are nonempty, unique
 and contain neither ':' nor '/'.
-The shell receives the read-only application root under `app` and a shared RAM
-root under `home`. No lookup right is added by the startup binding.
+The shell receives the read-only boot archive root under `boot` and a shared RAM
+root under `tmp`. No lookup right is added by the startup binding.
 Startup also copies a launcher-ordered chain of installed directory handles,
 boundary first and current last, plus an optional descriptive path. The kernel
 validates their types without inferring ancestry or granting parent access. The
@@ -154,7 +154,7 @@ Its return value goes to exit. Programs use
 record. The boot launcher supplies three dedicated console stream handles in
 addition to the shell's named terminal input/output, memory,
 launcher, [display](graphics.md), [clock](../kernel/timekeeping.md) and
-[keyboard](../devices/keyboard.md) resources, app/home roots, a home directory chain, argv[0] and an OS_NAME environment entry.
+[keyboard](../devices/keyboard.md) resources, boot/tmp roots, a tmp directory chain, argv[0] and an OS_NAME environment entry.
 
 ## First operation shapes
 

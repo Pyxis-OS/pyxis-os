@@ -246,8 +246,9 @@ void user_launch_initial(const char *command_line)
       cpu_sets[cpu_set_count++] = (struct space_selection){.name = name, .cpus = value};
       continue;
     }
-    if (strlen(value) <= 6 || memcmp(value, "app://", 6)) {
-      panic("space %s init must name an app:// archive entry: %s", name, value);
+    if (strlen(value) <= USER_BOOT_ROOT_PREFIX_LENGTH ||
+        memcmp(value, USER_BOOT_ROOT_PREFIX, USER_BOOT_ROOT_PREFIX_LENGTH)) {
+      panic("space %s init must name a " USER_BOOT_ROOT_PREFIX " archive entry: %s", name, value);
     }
     if (find_selection(selections, selection_count, name)) {
       panic("duplicate space configuration: %s", name);

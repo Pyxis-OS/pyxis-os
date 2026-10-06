@@ -34,7 +34,7 @@ script: the interpreter receives the same file object, which other authorized
 writers may still change.
 
 Boot shares the parser, but its interpreter lookup is deliberately limited to
-`app://` followed by an exact initrd archive entry name. It neither walks general
+`boot://` followed by an exact initrd archive entry name. It neither walks general
 kernel paths nor normalizes archive names. Boot installs the same script grant
 and argument convention with its explicit initial-process resources.
 
