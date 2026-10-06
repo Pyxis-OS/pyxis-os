@@ -9,6 +9,11 @@ building the SDK.
 
 ## Contents and ownership
 
+Libc headers include `regex.h`, the minimal `wchar.h` type interface, and ASCII
+`wctype.h`. The four POSIX regex functions and UTF-8 `mbtowc` live in `libc.a`;
+there is no extra link library. See
+[interfaces and limits](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion).
+
 | SDK path | Contents |
 | --- | --- |
 | `sysroot/usr/include` | libc, libpyxis and libterm headers, plus public `abi/`, `pxe/` and `pyxis_fs/npfs.h` headers |
@@ -16,7 +21,7 @@ building the SDK.
 | `bin/elf2pxe` | Host executable for converting the linked ELF to PXE |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
-| `share/licenses` | TLSF and musl licenses/adaptation records and the npfs MPL-2.0 license |
+| `share/licenses` | TLSF and musl licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |
 | `share/toolchain` | Installed toolchain source hashes, patches, GPLv3 and GCC Runtime Library Exception |
 | `manifest.txt` | Pyxis, userland and filesystem revisions/dirty states, compiler/linker identities, libgcc hash and host identity |
 

@@ -69,6 +69,9 @@ milestone's remaining interface details before starting its code work.
     shared with stdio, public open/read/write/close, and packaged sbase cksum and
     restricted tee. The documentation handoff is complete; accepted compatibility
     limits and their revisit points are recorded in technical debt.
+    [POSIX regex](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion)
+    is also complete, with UTF-8 conversion and ASCII-only classes/folding;
+    vi/less consumer integration remains a separate task.
 
 22. Complete: [userspace services and HTTP snapshots](../interfaces/userspace-services.md),
     with bounded call/send/receive, deadlines, exported objects, scoped namespaces
