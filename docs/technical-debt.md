@@ -214,7 +214,13 @@ There are two options:
   most slot use, and single-CPU cost, entirely.
 
 Revisit after the native ThinkPad check in SMP task 8, which shows whether the
-cost matters on real hardware.
+cost matters on real hardware. The owner prefers the recursive walk (2026-10-06,
+not yet decided). Frame zeroing would still use a slot. It could instead go
+through the frame's final mapping before anyone can see it, which would change
+the "zeroed before mapping" rule, or keep one padded zeroing slot per CPU.
+Copy-on-write zero pages were considered and set aside. They only move the
+zeroing to the first write, need allocating page faults, and defer NO_MEMORY
+from ALLOCATE to an ordinary store.
 
 ## Never-reused kernel heap arena
 
@@ -241,6 +247,28 @@ Revisit in SMP task 7, when frames are allocated on several CPUs, and whenever
 `heap_stats` shows retired bytes or arena use approaching its size, or growth
 latency becomes material. Moving RAM-file backing out of the heap is the first
 option.
+
+## BSP userspace and kernel workers
+
+Since SMP task 7b, user tasks run on the BSP alongside the kernel workers:
+presentation, the BSP request executor, network, native filesystem and USB.
+
+- **Placement:** ties go to the APs first, and the BSP pulls only while none of
+  its workers is runnable.
+- **Preemption:** a woken worker preempts a BSP user task at the next interrupt.
+- **No priorities:** user tasks and workers otherwise share the BSP's queue on
+  equal terms.
+- **Interrupt-masked syscalls:** user syscalls run with interrupts masked, so a
+  long BSP user syscall delays workers and device interrupts until it returns.
+  For example, a large private allocation must zero its pages first.
+
+With all four CPUs loaded in the nested VM, ttcp and RAM-file writes stayed
+within their spread ([7b record](development/experiments/smp-task7b/README.md)).
+Display smoothness and input latency under BSP load were not measured.
+
+Revisit if the native check in SMP task 8 or interactive use shows worker or
+presentation latency under load. Options include excluding the BSP again by
+policy, worker priority, or preemptible long syscalls.
 
 ## Synchronous launch preparation
 

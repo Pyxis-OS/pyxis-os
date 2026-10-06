@@ -60,23 +60,19 @@ static struct syscall_result set_affinity(struct space *space, uintptr_t request
   if (request.cpu_count % 64 && staging[words - 1] >> (request.cpu_count % 64)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  bool any = false, outside = false, user_cpu = false;
+  bool any = false, outside = false;
   for (size_t cpu = 0; cpu < request.cpu_count; ++cpu) {
     if (!((staging[cpu / 64] >> (cpu % 64)) & 1)) {
       continue;
     }
     any = true;
     outside |= !space_ceiling_allows(space, cpu);
-    user_cpu |= cpu != 0 || count == 1;
   }
   if (!any) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   if (outside) {
     return (struct syscall_result){CALL_DENIED, 0};
-  }
-  if (!user_cpu) {
-    return (struct syscall_result){CALL_UNAVAILABLE, 0};
   }
   return (struct syscall_result){task_space_set_affinity(space, staging), 0};
 }

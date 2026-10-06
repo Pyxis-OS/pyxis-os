@@ -4,10 +4,10 @@
 `CPUS` defaults to one and also applies to `make debug`. With multiple CPUs,
 CPU 0 (the BSP) services allocation and cleanup. Boot creates the configured
 [spaces](../userland/init.md) independently of the CPU count. User tasks run on
-any CPU their space allows except, on a multicore boot, the BSP, which takes
-userspace only once private memory is serviced locally (SMP task 7). A
-single-CPU boot runs everything on the BSP. Placement and balancing are
-described below; the defaults put Development, Read-only and Remote on CPUs 1–3.
+any CPU their space allows, including the BSP, which also runs the kernel
+workers. A single-CPU boot runs everything on the BSP. Placement and balancing
+are described below; on four CPUs the defaults put Development, Read-only and
+Remote on CPUs 1–3.
 CPU indices are dense, stable for the boot, and distinct from hardware APIC IDs.
 
 ## Boot handoff
@@ -73,8 +73,9 @@ process.
 ### Placement and migration
 
 Each CPU's load is its queued tasks plus one while a task occupies it, kept under
-the queue lock. A user task may run on a CPU in its space's effective set; on a
-multicore boot the BSP is excluded. There are no priorities or other scoring.
+the queue lock. A user task may run on any CPU in its space's effective set,
+the BSP included. Kernel workers queued on the BSP count toward its load. There
+are no priorities or other scoring.
 
 Each space keeps two CPU sets:
 
@@ -91,7 +92,7 @@ then always moves a task off a CPU its space no longer allows, and the syscall
 return completes on the new CPU from the task's own kernel stack.
 
 - **Publication** places each new task on the least-loaded CPU it may use. Ties
-  prefer the launching parent's CPU, then the lowest index. Members of a batch
+  prefer the launching parent's CPU, then the lowest AP index, then the BSP. Members of a batch
   are placed one at a time, each seeing those already queued, so a pipeline
   spreads across idle CPUs. The parent's CPU is a tie-break only; the parent is
   blocked in its launch syscall and cannot move meanwhile.
@@ -99,9 +100,10 @@ return completes on the new CPU from the task's own kernel stack.
   that CPU's load is at least two below the local one. The threshold stops equal
   neighbours trading a task every tick. The destination's reschedule IPI is its
   only notification.
-- **An idle CPU** pulls the first movable task it may run from the busiest other
-  queue, provided that queue's CPU keeps a task. Idle APs keep their 120 Hz
-  timer, so they retry every tick without extra IPIs.
+- **An idle CPU**, the BSP included, pulls the first movable task it may run
+  from the busiest other queue, provided that queue's CPU keeps a task. The BSP
+  pulls only while none of its kernel workers is runnable. Idle CPUs keep their
+  120 Hz timer, so they retry every tick without extra IPIs.
 
 Only a user task outside a syscall moves. It is either new or was preempted in
 user mode, so its whole continuation is on its own kernel stack. Dispatch on the

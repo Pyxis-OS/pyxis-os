@@ -108,23 +108,6 @@ static size_t parse_cpu_list(const char *name, const char *list, uint64_t *allow
   }
 }
 
-/* The scheduler places tasks; boot only checks that one CPU can take them.
- * Multicore userspace does not run on the BSP yet. */
-static bool has_user_cpu(const uint64_t *allowed)
-{
-  size_t count = arch_cpu_count();
-  if (count == 1) {
-    return allowed[0] & 1;
-  }
-  for (size_t cpu = 1; cpu < count; ++cpu) {
-    if ((allowed[cpu / 64] >> (cpu % 64)) & 1) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/* The space keeps its tab, which explains why its init did not start. */
 static void report_unstarted(struct space *space, const char *name, const char *reason)
 {
   /* Bounded: a 31-byte name and a reason of at most 96 bytes. */
@@ -315,8 +298,6 @@ void user_launch_initial(const char *command_line)
     if (absent != NO_ABSENT_CPU) {
       sprintf(absent_reason, "CPU set names absent CPU %zu", absent);
       reason = absent_reason;
-    } else if (!has_user_cpu(allowed)) {
-      reason = "CPU set allows only CPU 0, which runs no userspace on a multicore boot yet";
     }
     if (reason) {
       /* An unstarted space accepts no tasks. */

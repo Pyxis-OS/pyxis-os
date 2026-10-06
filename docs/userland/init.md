@@ -40,18 +40,16 @@ ceiling.
 
 The scheduler places each task on the least-loaded CPU its space allows and
 balances tasks between CPUs; see [placement and migration](../kernel/smp.md#placement-and-migration).
-On a multicore boot, userspace stays off CPU 0 for now. With a single CPU,
-everything runs on CPU 0. Each init is placed as it starts, so the default
+CPU 0, the BSP, runs userspace too, but placement ties prefer the other CPUs,
+because it also runs the kernel workers. With a single CPU, everything runs on
+CPU 0. Each init is placed as it starts, so on four CPUs the default
 configuration still puts Development, Read-only and Remote on CPUs 1, 2 and 3.
 No space is created for further CPUs.
 
-A space can still be created without starting its init. The tab and the kernel
-log then say why. This happens in two cases:
-
-- **Absent CPU:** its ceiling names a CPU this boot does not have, for example
-  `8-11` on a four-CPU machine. The set is never narrowed to the CPUs present.
-- **CPU 0 only:** on a multicore boot, the ceiling allows only CPU 0, and
-  multicore boots do not yet run userspace on CPU 0.
+A space can still be created without starting its init, when its ceiling names
+a CPU this boot does not have, for example `8-11` on a four-CPU machine. The set
+is never narrowed to the CPUs present. The tab and the kernel log then say why.
+A ceiling of only CPU 0 is valid on any boot.
 
 Other spaces and the rest of the boot continue. An unstarted space runs no
 tasks. If it was the one that configures networking, other sessions start
@@ -300,7 +298,6 @@ narrowed set. A request fails without changing anything in these cases:
 | --- | --- |
 | Empty set, or a CPU this boot does not have | BAD_REQUEST |
 | A CPU outside the ceiling, or no grant | DENIED |
-| Only CPU 0 on a multicore boot | UNAVAILABLE |
 | After the first launch | ENDPOINT_CLOSED |
 
 If the caller's own CPU is excluded, it moves to an allowed CPU before it
