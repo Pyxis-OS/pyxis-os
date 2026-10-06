@@ -121,16 +121,20 @@ Accepted by the owner on 2026-10-06:
     optional pool override, mounts each pool once, creates the spaces, drops its
     grants and exits. An invalid or missing override falls back to the default
     with a message.
-  - **Decisions, accepted by the owner on 2026-10-06:**
+  - **Decisions, accepted by the owner on 2026-10-06** (revised after the #434
+    review):
     - **Configuration shape.** Two archive defaults, `boot://config/live.lua`
       and `boot://config/installed.lua`. Boot init uses the installed one when
       `mount.disk` is bound. Each returns a table of named `volumes` and a list
-      of `spaces`:
+      of `spaces`. An npfs volume names its partition and volume; a virtio-fs
+      export is its own kind. A root is an access string, or a table when it
+      is optional:
 
       ```lua
+      -- installed.lua
       return {
         volumes = {
-          system = { partition = 2, volume = "system" },
+          system = { kind = "npfs", partition = 2, volume = "system" },
         },
         spaces = {
           { name = "pyxis", title = "Pyxis", init = "boot://init-installed",
@@ -138,35 +142,75 @@ Accepted by the owner on 2026-10-06:
             roots = { system = "read-write" } },
         },
       }
+
+      -- live.lua (excerpt)
+      return {
+        volumes = {
+          host = { kind = "virtio-fs" },
+        },
+        spaces = {
+          { name = "development", title = "Development", init = "boot://init",
+            roots = { host = { access = "read-write", optional = true } } },
+        },
+      }
       ```
 
-      Live boots name `host` as a volume, replacing today's per-init host
-      mounts. `SPACES` and `SPACE_CPUS` are removed; development builds edit
-      `live.lua`. Only installed boots read the pool override,
-      `system://config/boot.lua`. It merges by name: an entry with a default's
-      name replaces it whole, new names follow the defaults, and nothing can be
-      removed, so the default spaces always remain for rescue. Space inits
-      stop mounting and receive the roots their entry lists.
+      The `host` volume replaces today's per-init host mounts. `SPACES` and
+      `SPACE_CPUS` are removed; development builds edit `live.lua`. Only
+      installed boots read the pool override, `system://config/boot.lua`. It
+      merges by name: an entry with a default's name replaces it whole, new
+      names follow the defaults, and nothing can be removed. Because the
+      override can replace a default space with an unusable one, the
+      default-configuration boot entry below, not the merge, is the guaranteed
+      way back. Space inits stop mounting and receive the roots their entry
+      lists.
     - **Missing volume.** A root can be marked optional. A missing or
       unmountable required volume leaves that space created but not started,
       with the reason on its tab, as an absent CPU does today; other spaces
       start. An invalid override (syntax, unknown key, bad CPU set) is ignored
       whole in favour of the default, reported on the Caelum tab and serial; a
-      missing volume does not make it invalid. If no space starts, boot init
-      starts a rescue shell with only `boot://` and `tmp://`.
+      missing volume does not make it invalid.
+    - **Boot init's space and rescue.** Boot init runs in the Caelum space,
+      which the kernel still creates first, so its messages appear in the log
+      view and on serial. If no configured space starts, boot init creates a
+      `rescue` space with the factory and starts a shell there with only
+      `boot://` and `tmp://`.
     - **Create-space operation.** A `space_factory` resource with a CREATE
       right, issued by the kernel only to boot init, which closes it before
       exiting. Space inits never receive it. The call takes the space's name,
-      title and CPU set, rejecting absent CPUs, plus an ordinary launch
-      request: image and script, argv, named resources, roots and working
-      directory. The kernel adds only the new space's own devices: console,
-      keyboard, pointer, display and the space handle. Boot init forwards
-      everything else and does not forward `native_mount` or `host_mount`, so
-      mount authority stays with it. Spaces are still never destroyed.
+      title and CPU set, and then either an ordinary launch request (image and
+      script, argv, named resources, roots and working directory) or an
+      **unstarted reason**. With a reason, the kernel creates the space with no
+      CPUs and shows the reason on its tab, as `report_unstarted()` does today.
+      Absent CPUs and missing volumes are reasons boot init supplies, not
+      kernel rejections. The kernel adds only the new space's own devices:
+      console, keyboard, pointer, display and the space handle. Boot init
+      forwards everything else and does not forward `native_mount` or
+      `host_mount`, so mount authority stays with it. Spaces are still never
+      destroyed.
     - **Command line.** Normal boot is `init=boot://boot-init.pxe
       mount.disk=GUID`. The install entry is `init=boot://init-install.pxe
       boot.install=1`; `init-install` becomes a boot init that creates the
       install space and forwards the raw-disk grants to it.
+    - **Default-configuration entry.** Installed systems get a second Limine
+      entry that ignores the pool override and boots the archive default. The
+      installer and Update write both entries, and the menu timeout is
+      nonzero so the entry is reachable.
+  - **Proposed, awaiting owner confirmation:**
+    - **Entry title:** `Pyxis OS (default configuration)`, after the normal
+      `Pyxis OS (Caelum)` entry, which stays first and is booted on timeout.
+    - **Option:** `boot.default_config=1`. The kernel accepts it only once,
+      with value 1, and passes it to boot init as an argument; boot init then
+      skips `system://config/boot.lua`.
+    - **Timeout:** 3 seconds. Every installed boot waits that long at the menu
+      unless a key is pressed.
+    - **Update:** its installed-configuration check accepts exactly this
+      two-entry form. A single-entry installation from before task 2 takes the
+      existing rebuild path.
+  - **Later:** write access to `system://config/boot.lua` chooses which inits
+    run with forwarded grants on the next boot. The
+    [users milestone](users-and-authority.md) should treat it as
+    administrative.
   - **Finish when:** the installed ThinkPad gains a second space by editing the
     pool configuration, with no Update, and a broken override boots the default.
 
