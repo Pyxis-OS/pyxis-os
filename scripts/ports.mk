@@ -12,7 +12,7 @@ QUAKE_IMAGE := build/ports/quake/stage/bin/quake.pxe
 QUAKE_LICENSE := build/ports/quake/stage/share/licenses/quake/LICENSE
 BUSYBOX_INPUTS := $(wildcard ports/busybox/*.lua ports/busybox/Makefile ports/busybox/*.c \
                             ports/busybox/*.h ports/busybox/patches/*.patch) ports/ports.lua ports/build.lua
-BUSYBOX_IMAGE := build/ports/busybox/stage/bin/vi.pxe
+BUSYBOX_IMAGE := $(addprefix build/ports/busybox/stage/bin/,vi.pxe less.pxe tar.pxe)
 BUSYBOX_LICENSE := build/ports/busybox/stage/share/licenses/busybox/LICENSE
 LINKS_INPUTS := $(wildcard ports/links/*.lua ports/links/Makefile ports/links/*.c ports/links/*.h \
                           ports/links/include/*.h ports/links/include/*/*.h ports/links/patches/*.patch) \

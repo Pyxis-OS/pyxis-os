@@ -42,7 +42,7 @@ concept, that tool should have been native.
   unsupported metadata rather than pretending to create them.
 
 Every port's finish criteria include at least one check of this behaviour. For
-BusyBox `tar`, that could be extracting a `home://` archive into `system://` and
+BusyBox `tar`, that includes extracting a `tmp://` archive into `system://` and
 a clear refusal without write access. Platform support follows the
 [libc portability rules](../userland/libc-portability.md): standard libc
 functions built on native constructs, not POSIX-shaped kernel mechanisms.
@@ -262,6 +262,29 @@ loads local files and HTTP(S) pages through libc; see the
 
 The [edit/build/run walkthrough](edit-build-run.md) combines Kilo and TCC;
 [guest Lua](../userland/lua.md) is independent of the host recipe runner.
+
+## Paging and archives with BusyBox
+
+[BusyBox less](../userland/less.md) and [uncompressed tar](../userland/tar.md)
+are selected separately in the existing BusyBox recipe and packaged at
+`boot://less.pxe` and `boot://tar.pxe`, with the shared GPL-2.0-only license.
+No default BusyBox configuration or native-command replacement is enabled.
+
+```text
+less boot://share/hwdata/pci.ids
+ls boot:// | less
+tar tf tmp://manuals.tar
+tar xf tmp://manuals.tar
+tar cf tmp://backup.tar system://project
+```
+
+Less reads keys from the named console even when content comes from a pipe.
+The [shell's final-stage grant](../userland/shell.md#foreground-pipelines) adds
+READ alone when stdin is a pipe/file and stdout is a console, without keyboard,
+pointer or interrupt-arming authority. Tar validates its full input snapshot
+before extracting, refuses unrepresentable/unsafe members, and ignores metadata
+that Pyxis does not expose. Host archives use `tar --format=ustar`; the
+[recipe notes](../../ports/busybox/README.md) record memory and format limits.
 
 ## TCC and the guest SDK
 

@@ -198,8 +198,10 @@ executable, then opens all redirect targets in written order. Input must exist;
 output is opened or created without truncation. Only after every target is open
 are output files truncated, in written order, and the child launched. The child
 receives independent native file grants, not filenames to reopen. Temporary shell
-handles close after launch or failure. `<` withholds terminal input, keyboard and
-pointer grants; the separate terminal-output grant remains available for explicit terminal
+handles close after launch or failure. `<` withholds keyboard and pointer grants.
+If stdout remains a console, the final foreground stage receives named terminal
+input with READ alone, so a pager can read keys independently of its file stdin.
+The separate terminal-output grant remains available for explicit terminal
 operations. Unredirected standard streams retain their inherited bindings.
 
 A syntax error or missing executable path does not touch redirect targets. A later
@@ -297,9 +299,19 @@ separately. Explicit redirects override that stage's defaults:
 - `cat missing 2> errors | cat` writes child errors to `errors`, leaving the
   pipeline's byte stream independent of stderr.
 
-Only the first stage, when its selected stdin is a console, receives named
-terminal-input, keyboard and pointer grants. Other stages cannot bypass their stdin with
-those grants. Separate terminal-output and display capabilities retain the
+The first stage, when its selected stdin is a console, receives named terminal
+input, keyboard and pointer grants as before. The final foreground stage also
+receives named terminal input with READ alone when its stdin is a pipe or file
+and its stdout is a console. It receives no interrupt-arming, keyboard or pointer
+right through this exception. This lets `ls boot:// | less` read keys separately
+from the pipe; readers can hold Ctrl+C passthrough with READ authority.
+
+There is one console input queue. A pipeline whose first stage reads console
+stdin while its final stage also reads console keys, such as `cat | less`, has
+competing readers and is unsupported. Use a named file, redirected input or a
+producer that does not read the console. Intermediate stages, a final stage with
+non-console stdout, background jobs and services gain no input through this rule.
+Separate terminal-output and display capabilities retain the
 ordinary child policy. Programs explicitly using those capabilities can still
 write to or draw on the terminal. Ordinary stages receive neither launcher nor
 pipe-creation authority; shebang adaptation does not add authority.
@@ -551,8 +563,8 @@ The script interpreter and session handoff preserve these bindings too.
 Each foreground child receives explicit copies of terminal output, memory and
 the explicitly selected roots with their actual rights and transport masks, and
 the current directory chain preserving each handle's rights independently.
-Terminal input and keyboard are withheld for file/pipe stdin and downstream
-pipeline stages as described above. It does not
+Keyboard and pointer grants require the first stage's console stdin. Named
+terminal input additionally follows the final-stage rule above. The child does not
 receive the shell's launcher. When available, the [display](../interfaces/graphics.md),
 [clock](../kernel/timekeeping.md), [random](../devices/randomness.md) and [keyboard](../devices/keyboard.md) grants are also forwarded
 to eligible foreground children and session successors; background children omit keyboard input.

@@ -36,7 +36,7 @@ comes first.
 
 ### 1. BusyBox tar
 
-**Agreed 2026-10-05:** BusyBox `tar`, without compression.
+- [x] BusyBox `tar`, without compression: [implemented behavior and validation](../userland/tar.md).
 
 - **Use:** pack the HTML documentation on a host as a plain `.tar` file. Then
   fetch it with `cat https://HOST/jvms.tar > jvms.tar`, or over HTTP from a host
@@ -45,8 +45,8 @@ comes first.
   and shares its support library with vi and `less`.
 - **Scope:** archive members are regular files and directories. Hard and
   symbolic links, devices, absolute paths and `..` components are refused.
-  Which metadata (owner, mode, time) is ignored is settled in the port's
-  investigation.
+  Extraction ignores owners, permissions and timestamps; creation writes
+  uid/gid zero, 0644/0755 modes and mtime zero (owner decision, 2026-10-06).
 - **Not now:** `gzip`, `unzip` and zlib wait until jars are needed. At that
   point, the BusyBox applets would cover the commands and zlib the library. See
   [application ports](application-ports.md).

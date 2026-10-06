@@ -69,9 +69,14 @@ The [shell guide](shell.md#foreground-pipelines) defines quoting, per-stage
 redirection and last-stage success. The shell checks the whole command line and
 opens every image before redirect targets, opens redirects before truncating,
 and closes temporary endpoints before waiting for every child. Redirects override
-pipe defaults. Only the first stage with console stdin receives named terminal
-input, keyboard and pointer grants. Ordinary stages receive no launcher or pipe-creation
-authority; shebang adaptation does not add authority.
+pipe defaults. The first stage with console stdin receives named terminal input,
+keyboard and pointer grants. The final foreground stage receives named terminal
+input with READ alone when stdin is a pipe or file and stdout is a console;
+no keyboard, pointer or interrupt-arming right is added. Programs such as
+[less](less.md) use this grant for keys independently of the pipe. Both stages
+reading the console, as in `cat | less`, is unsupported because they share one
+input queue. Ordinary stages receive no launcher or pipe-creation authority;
+shebang adaptation does not add authority.
 
 [Head](shell.md#bounded-input-with-head) copies ten lines by default, or the
 selected line/byte count from one input. It stops at the exact requested boundary
