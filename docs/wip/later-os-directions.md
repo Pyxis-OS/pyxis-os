@@ -101,6 +101,9 @@ The shared [C configuration helper](../userland/lua.md#embedding-and-session-con
 now serves session and network settings. Further consumers should keep their own
 schemas, defaults and application policy; a generic schema framework is not needed.
 
+Build scripting for [in-Pyxis development](in-pyxis-development.md#4-lua-for-build-scripts)
+selects the first slices: `io`, `os` and pure-Lua `require`, plus a native module for
+running programs, listing directories and hashing files.
 Further interpreter work includes a module search policy for pure-Lua `require`,
 stdin scripts, and consuming the existing script capability for shebang launches.
 Broader io/os, debug and full math libraries remain separate slices. The earlier

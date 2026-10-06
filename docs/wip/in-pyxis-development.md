@@ -98,7 +98,33 @@ cmdline: space.pyxis=boot://init-installed space.docs=boot://init-installed-read
 [Remote file transfer](remote-file-transfer.md) covers uploading class files and
 downloading backups of the work. It is accepted and not yet started.
 
+### 4. Lua for build scripts
+
+**Agreed 2026-10-06.** The owner writes the build tool, in Lua, as part of this
+experiment; it lives in the JVM project until it grows further. Pyxis supplies
+only the runtime underneath, as a small milestone after the
+[system layout](system-layout.md):
+
+1. **Lua's `io` and `os` libraries and pure-Lua `require`,** on libc. The gaps
+   found by the earlier [io/os audit](later-os-directions.md#lua-follow-ups)
+   are filled in libc, or the affected function stays absent. For example,
+   `os.clock` needs process CPU time, not wall time, and there are no successful
+   stubs.
+2. **A small native Pyxis module** for what libc does not cover:
+   - running a program from an argument list and waiting for its exit status,
+     with the same explicit grants the shell would give it;
+   - listing a directory;
+   - hashing a file.
+
+Decisions:
+
+- **Starting programs** uses that argument-list module, not a standard
+  `system()` through the shell, so `os.execute` stays absent.
+- **Rebuild detection** compares content hashes of inputs and commands. No
+  modification times are added to the native filesystem or `stat`.
+- **Timing:** its own milestone after the system layout, in the order above.
+
 ## Out of scope
 
 A JIT, a Java compiler on Pyxis, porting a Java class library, and compression
-before jars are needed.
+before jars are needed. The build tool is the owner's own code, not Pyxis work.
