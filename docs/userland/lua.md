@@ -167,7 +167,9 @@ files worked. UTC, historical/future Bucharest abbreviations, wall time and ISO
 year boundaries formatted correctly; table-form `os.time` failed explicitly.
 
 Read-only and default Remote denied `pyxis.run`; a plain Read-only command had
-no launcher. A C stream closed before descriptor-number reuse remained NONE.
+no launcher. A separate Remote opt-in boot ran the complete workflow with its
+group-bound LAUNCH-only grant. A C stream closed before descriptor-number reuse
+remained NONE.
 Piped `pyxis.run` retained C stdin after Lua default-input rebinding; bytes read
 ahead remained in Lua rather than appearing in the child. Default-output
 rebinding was also local. Read-only GDB inspection at `program_launch` found
