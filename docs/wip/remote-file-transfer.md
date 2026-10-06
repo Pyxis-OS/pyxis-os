@@ -176,6 +176,17 @@ reviewed in code; corruption/fault injection was not run. macOS host publication
 and persistent-backend durability were not measured. QEMU/client/debugger jobs
 were stopped after validation.
 
+Review follow-up: an existing guest destination now reports `NAME already exists;
+use --overwrite to replace it`, with EEXIST status. That certain refusal no
+longer uses the rename-outcome uncertainty wording; other rename failures retain
+the existing diagnostic. Both task branches were rebased onto current main after
+the system-layout merge, keeping its repository changes in the base. A full
+source `make -j16 image` and native-client build passed; transfer compilation had
+no warnings (the full ports build still emitted existing vendor warnings).
+On the refreshed four-CPU nested-KVM image, refusal printed the new message,
+retained the original SHA-256, and left no staging name; explicit `--overwrite`
+still published the empty fixture with the matching empty-file digest.
+
 ## Out of scope
 
 Directories, archives, resume of partial transfers, compression, transfers
