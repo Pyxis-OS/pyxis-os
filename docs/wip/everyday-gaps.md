@@ -13,6 +13,7 @@ text tools may be ports.
 | --- | --- | --- | --- |
 | `echo` | 2026-10-07, while testing `home://`: `echo hi > note.txt` reported `echo: Not found` | Native, a shell builtin or a small core command | `cat boot://share/hello.txt > FILE` was the workaround. |
 | `ls` options | 2026-10-07: `ls -a` was taken as a path (`ls: -a: Not found`) | Native, extending the existing `ls` | `ls` accepts only paths. It already lists every entry, so `-a` itself is not needed; a long listing with sizes (`-l`) is the useful one. |
+| Colored `ls` entries | 2026-10-07, owner request | Native, in the existing `ls` | Color entries by kind: directories, regular files, programs (`.pxe`, since Pyxis has no execute bit) and scripts with a `#!` line, or whatever else fits. Only when output is a terminal, never in pipes. |
 
 Related candidates already tracked elsewhere: grep, tail, wc, sort and hexdump in
 [application ports](application-ports.md), and the boot configuration checker in
