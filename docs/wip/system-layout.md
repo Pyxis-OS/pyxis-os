@@ -281,10 +281,13 @@ Accepted by the owner on 2026-10-06:
     0.0.2 updated to the new layout with its `system` file preserved;
     programs ran from `bin://`; an Update interrupted in the program stage
     still booted the previous revision; reruns completed after interruptions in
-    either stage; and cleanup kept the current and previous revisions. On
-    2026-10-06 the owner updated the ThinkPad stick, then on the block cursor
-    build, with the PXE build of this PR: boot init reported the new
-    revision on `bin://`, and `lspci`, `lsusb` and `fastfetch` ran from it.
+    either stage; and cleanup kept the current and previous revisions.
+    `fsck.npfs` passed on the pool after the 0.0.2 update, after a fresh
+    install and after a same-revision rerun, and `npfs-fuse` showed the
+    programs identical to the build. On 2026-10-06 the owner updated the
+    ThinkPad stick, then on the block cursor build, with the PXE build of this
+    PR: boot init reported the new revision on `bin://`, and `lspci`, `lsusb`
+    and `fastfetch` ran from it.
 
 - [ ] **4. Persistent home.**
   - A `home` volume mounted as `home://`, created by the installer and added to

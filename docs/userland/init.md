@@ -88,9 +88,11 @@ CPU 1; balancing later moves runnable tasks to idle CPUs.
 
 Every space also receives `bin://`, read-only. On installed boots it is
 `bin/REVISION` on the system pool, for the running kernel's revision; the
-[installer](installer.md) writes it. On live boots, or when that directory is
-missing, it is the archive itself, which then holds every program; boot init
-reports which. The shell resolves bare names through `bin://`, then `boot://`.
+[installer](installer.md) writes it. On live boots it is the archive itself,
+which holds every program. When that directory is missing on an installed boot
+it is also the archive, but an installed archive holds only the rescue set.
+Boot init reports which. The shell resolves bare names through `bin://`, then
+`boot://`.
 
 Space inits receive the bootstrap services, `boot://`, `tmp://` as their
 working directory, `bin://`, their configured roots and `OS_NAME`, plus their space's own

@@ -74,6 +74,11 @@ new kernel, the disk boots its old kernel, and boot init binds that kernel's
 own `bin/REVISION`. An Update interrupted in the program stage therefore leaves
 the previous revision running.
 
+When the new revision equals the running one, as on a rerun, the program stage
+rewrites the directory `bin://` is bound to. An interruption can then leave it
+mixed until an Update completes. Builds of the same commit have the same files,
+so this matters mainly for builds without a revision, which share `bin/unknown`.
+
 ## Replacement and verification
 
 The installer then claims only the ESP partition, leaving the pool mounted.
