@@ -9,9 +9,9 @@ elf2pxe: ../build/tools/elf2pxe
 
 remote: ../build/tools/pyxis-remote
 
-../build/tools/pyxis-remote: remote/main.c remote/presentation.c remote/presentation.h remote/buffer.h ../include/remote/terminal.h
+../build/tools/pyxis-remote: remote/main.c remote/presentation.c remote/transfer.c remote/transfer.h remote/sha256.h remote/vendor/sha256.c remote/presentation.h remote/buffer.h ../include/remote/terminal.h
 	@mkdir -p $(@D)
-	$(HOSTCC) $(CPPFLAGS) $(CFLAGS) remote/main.c remote/presentation.c -o $@
+	$(HOSTCC) $(CPPFLAGS) $(CFLAGS) remote/main.c remote/presentation.c remote/transfer.c remote/vendor/sha256.c -o $@
 
 ../build/tools/elf2pxe: elf2pxe.c ../include/pxe/p1f.h
 	@mkdir -p $(@D)

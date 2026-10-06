@@ -52,6 +52,48 @@ creates its namespace, and calls
 `session boot://session.pxe --configure-network --start-remote-services`.
 Do not give multiple init scripts network configuration ownership.
 
+## Explicit file transfer
+
+Connect with an existing host download directory when downloads are wanted:
+
+```sh
+build/tools/pyxis-remote --download-dir /home/user/downloads 127.0.0.1 2323
+```
+
+In the remote shell, `xfer receive /home/user/Example.class Example.class`
+uploads a host file into the current directory; `xfer send Example.class`
+downloads it. Both ask for host confirmation before opening a host source or
+accepting file data. Relative host paths, including `~/`, resolve under the host
+user's home directory without shell expansion. Download names are reduced to a
+single basename under the opened download directory. Without `--download-dir`,
+downloads are refused. Host targets never replace existing names. Guest targets
+require `xfer receive --overwrite HOST_PATH NAME` for replacement.
+
+During a transfer the host consumes confirmation keys and Ctrl+C/Escape for
+cancellation; Ctrl+] still closes the session. Pyxis holds raw terminal
+passthrough and handles Ctrl+C itself. Other host input is consumed until the
+transfer ends. A reply/confirmation can wait up to 120 seconds; unacknowledged
+cancellation closes the host connection after five seconds rather than returning
+late transfer bytes to the shell. Machine mode preserves OSC bytes in its normal
+base64 output events and provides no transfer interception; `--download-dir` is
+an interactive option.
+
+Each side buffers at most 16 MiB and requires negotiated SHA-256 before data.
+Whole-file size/hash verification precedes exclusive sibling staging creation.
+The staging file is synchronized, renamed atomically, and its directory
+synchronized. A handled failure/cancellation removes only that transfer's staging
+file. Abrupt death may leave `.NAME.xfer-partial-ID`; stale names are never
+automatically removed. Atomic rename commits the complete destination, which
+survives a later cancellation, synchronization failure or lost acknowledgement.
+Host publication uses Linux `renameat2(RENAME_NOREPLACE)` or macOS
+`renameatx_np(RENAME_EXCL)`; other host platforms fail publication explicitly.
+Linux behavior is validated; the macOS path requires owner validation.
+
+See the [transfer contract and remaining drag/drop task](../wip/remote-file-transfer.md)
+and the [native program notes](../../userspace/xfer/README.md) for authority,
+filename limits and the OSC 5113 SHA-256 extension. Stock kitty does not implement
+this required extension and is unsupported.
+
 ## Client modes
 
 Interactive mode uses a raw host terminal with fixed dimensions and restores its

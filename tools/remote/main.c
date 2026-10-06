@@ -3,6 +3,7 @@
 
 #include "buffer.h"
 #include "presentation.h"
+#include "transfer.h"
 #include <remote/terminal.h>
 
 #include <errno.h>
@@ -51,6 +52,7 @@ struct client {
   struct byte_buffer outgoing;
   struct byte_buffer output;
   struct presentation screen;
+  struct file_transfer *transfer;
   unsigned char incoming[REMOTE_HEADER_SIZE + REMOTE_PAYLOAD_MAX];
   size_t received;
   size_t frame_size;
@@ -294,8 +296,10 @@ static int present_frame(struct client *client)
   if (type == REMOTE_OUTPUT && !client->machine) {
     unsigned budget = 128;
     while (client->presented < length && budget-- &&
-           buffer_space(&client->output) >= RENDER_BYTE_RESERVE) {
-      presentation_data(&client->screen, payload + client->presented, 1);
+           buffer_space(&client->output) >= RENDER_BYTE_RESERVE &&
+           buffer_space(&client->outgoing) >= TRANSFER_REPLY_RESERVE) {
+      transfer_output(client->transfer, &client->screen, &client->outgoing,
+          payload[client->presented], monotonic_ms());
       ++client->presented;
     }
     if (client->presented < length) {
@@ -319,6 +323,7 @@ static int present_frame(struct client *client)
       if (client->machine) {
         output_text(client, "{\"type\":\"fresh_line\"}\n");
       } else {
+        transfer_fresh_line(client->transfer, &client->screen);
         presentation_fresh_line(&client->screen);
       }
       break;
@@ -437,6 +442,9 @@ static void input_byte(struct client *client, unsigned char byte)
     client->close_deadline = monotonic_ms() + LOCAL_CLOSE_TIMEOUT_MS;
     return;
   }
+  if (transfer_input(client->transfer, &client->screen, &client->outgoing, byte, monotonic_ms())) {
+    return;
+  }
   if (byte == '\r') {
     byte = '\n';
   }
@@ -537,6 +545,14 @@ static int run_client(struct client *client)
       snprintf(client->diagnostic, sizeof(client->diagnostic), "invalid server payload");
       return 1;
     }
+    if (!client->machine && !client->closing) {
+      transfer_pump(client->transfer, &client->screen, &client->outgoing, monotonic_ms());
+      if (transfer_failed(client->transfer)) {
+        snprintf(client->diagnostic, sizeof(client->diagnostic),
+            "file-transfer session did not end cleanly; disconnecting");
+        return 1;
+      }
+    }
     if (client->final && !client->output.length) {
       return client->result;
     }
@@ -546,7 +562,7 @@ static int run_client(struct client *client)
     }
     bool can_read_input = client->ready && !client->rejected && !client->final &&
                           !client->input_ended && !client->closing &&
-                          buffer_space(&client->outgoing) >= 8192;
+                          buffer_space(&client->outgoing) >= (client->machine ? 8192 : TRANSFER_REPLY_RESERVE);
     bool can_read_socket = !client->final && client->received < client->frame_size;
     short socket_events = (can_read_socket ? POLLIN : 0) |
                           (!client->final && client->outgoing.length ? POLLOUT : 0);
@@ -557,7 +573,16 @@ static int run_client(struct client *client)
     };
     /* A buffered DATA frame must make progress even with no fresh readiness. */
     int timeout = client->received == client->frame_size &&
-                  buffer_space(&client->output) >= RENDER_BYTE_RESERVE ? 0 : -1;
+                  buffer_space(&client->output) >= RENDER_BYTE_RESERVE &&
+                  (client->machine || buffer_space(&client->outgoing) >= TRANSFER_REPLY_RESERVE) ? 0 : -1;
+    if (!client->machine && !client->closing) {
+      int transfer_wait = transfer_timeout(client->transfer, monotonic_ms(),
+          buffer_space(&client->output) >= RENDER_BYTE_RESERVE,
+          buffer_space(&client->outgoing) >= TRANSFER_REPLY_RESERVE);
+      if (transfer_wait >= 0 && (timeout < 0 || transfer_wait < timeout)) {
+        timeout = transfer_wait;
+      }
+    }
     if (client->input_escape_length &&
         buffer_space(&client->outgoing) >= INPUT_ESCAPE_CAPACITY + REMOTE_HEADER_SIZE) {
       int64_t remaining = client->input_escape_deadline - monotonic_ms();
@@ -630,6 +655,7 @@ static unsigned dimension(const char *text, unsigned maximum)
 int main(int argc, char **argv)
 {
   bool machine = false;
+  const char *download_directory = NULL;
   uint32_t options = 0;
   unsigned columns = 0;
   unsigned rows = 0;
@@ -637,6 +663,8 @@ int main(int argc, char **argv)
   for (; argument < argc && argv[argument][0] == '-'; ++argument) {
     if (!strcmp(argv[argument], "--machine")) {
       machine = true;
+    } else if (!strcmp(argv[argument], "--download-dir") && argument + 1 < argc) {
+      download_directory = argv[++argument];
     } else if (!strcmp(argv[argument], "--no-shell-echo")) {
       options |= REMOTE_OPTION_NO_SHELL_ECHO;
     } else if ((!strcmp(argv[argument], "--columns") || !strcmp(argv[argument], "--rows")) &&
@@ -657,8 +685,8 @@ int main(int argc, char **argv)
     }
   }
   if (argc - argument != 2 || !dimension(argv[argument + 1], 65535) ||
-      (options && !machine)) {
-    fprintf(stderr, "usage: pyxis-remote [--machine [--no-shell-echo]] [--columns N] [--rows N] "
+      (options && !machine) || (download_directory && machine)) {
+    fprintf(stderr, "usage: pyxis-remote [--machine [--no-shell-echo]] [--columns N] [--rows N] [--download-dir DIR] "
             "HOST PORT\n");
     return 1;
   }
@@ -735,6 +763,15 @@ int main(int argc, char **argv)
   client.screen.rows = rows;
   client.screen.output = &client.output;
   if (!machine) {
+    client.transfer = transfer_create(download_directory, &interrupted);
+    if (!client.transfer) {
+      int failure = errno;
+      restore_terminal();
+      disconnect_socket(socket_fd, false);
+      errno = failure;
+      perror("pyxis-remote: file transfer setup");
+      return 1;
+    }
     presentation_begin(&client.screen);
     terminal_screen = true;
   }
@@ -746,6 +783,7 @@ int main(int argc, char **argv)
   int result = run_client(&client);
   disconnect_socket(socket_fd, client.acknowledged);
   restore_terminal();
+  transfer_destroy(client.transfer);
   if (client.diagnostic[0]) {
     fprintf(stderr, "pyxis-remote: %s\n", client.diagnostic);
   }
