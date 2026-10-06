@@ -23,8 +23,8 @@ while devices have no external writer exclusion. Other tools retain their
 image-only contract and refuse COMMITTED without writable fsck replay.
 
 There is no GPT selection, automatic mounting or host writer. The runtime writer
-belongs to Caelum. The owner's physical ThinkPad-stick mount/copy and builder
-publication remain pending; the builder rebuild is in progress.
+belongs to Caelum. The owner's physical ThinkPad-stick mount/copy remains pending.
+The published builder with libfuse3 has been pulled and its host build qualified.
 
 ## Decisions
 

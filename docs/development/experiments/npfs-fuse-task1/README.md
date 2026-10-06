@@ -160,7 +160,7 @@ allocation ownership; whole-pool checking remains fsck's job.
 Inputs, ISO, digests, copied file and build logs are retained outside Git under
 `/home/chronium/src/pyxis-npfs-fuse-validation/task1/`. All own QEMU/FUSE processes
 were stopped and the read-only loop device detached. Physical ThinkPad mount/copy
-is still an owner action. Before marking task 1 complete, the owner also needs to
-rebuild/publish the builder from the updated `ci/Containerfile` so existing fs CI
-compiles the optional target; an old builder's success only checks the targets
-whose dependencies are present.
+is still an owner action. The rebuilt builder was subsequently published and its
+optional FUSE compilation qualified in the
+[task-2 record](../npfs-fuse-task2/README.md); an old builder's success only checked
+the targets whose dependencies were present.

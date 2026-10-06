@@ -2,8 +2,8 @@
 
 Manual validation on 2026-10-06 for [task 2](../../../wip/npfs-fuse.md), including
 the merged filesystem #30 / Pyxis #437 review follow-ups. Task 2 is complete;
-task 1's physical ThinkPad-stick mount/copy and builder publication remain owner
-actions. The builder rebuild is in progress, not reported published.
+task 1's physical ThinkPad-stick mount/copy remains an owner action. The rebuilt
+builder has been published and its optional FUSE compilation qualified below.
 
 ## Revisions and environment
 
@@ -31,6 +31,15 @@ No prebuilt-bundle substitution was used. Image assembly used the existing
 configuration was restored afterward. A separate `make -j16 PKG_CONFIG=false`
 build passed for ordinary host tools without libfuse. Host builds use `-Werror`.
 No tests, committed fixtures, fault hooks or CI/boot automation were added.
+
+The newly published
+`git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47` was freshly pulled
+at digest `sha256:e9af03bd0bd0ffb5e31651d1e864d6b42a157009fd948f105c7331afb5bf0ec4`.
+It reports libfuse3 3.17.2, cross GCC 16.2.0 and Binutils 2.47.20260726. A
+network-disabled container with the published filesystem source mounted read-only
+and a separate writable output directory passed `make -j16`, including
+`npfs-fuse`; its linked libfuse library resolved. This confirms the optional target
+build in the updated builder, not a FUSE mount inside the container.
 
 ## Interrupted current-main write
 
@@ -145,5 +154,5 @@ Inputs, copied files, digests, ACL snapshots, raw repeated timings and build log
 are retained outside Git at
 `/home/chronium/src/pyxis-npfs-fuse-validation/task2/`. All own QEMU, GDB and FUSE
 processes ended, and the read-only loop device was detached. A successful job in
-the old builder can skip the optional FUSE target; publishing the rebuilt builder
-and the ThinkPad mount/copy are still owner actions.
+the old builder could skip the optional FUSE target; the freshly pulled builder's
+direct build above confirms its compilation. ThinkPad mount/copy is still pending.
