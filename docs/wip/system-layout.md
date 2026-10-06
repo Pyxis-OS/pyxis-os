@@ -1,10 +1,9 @@
 # System layout and boot init
 
 Status: **milestone, agreed 2026-10-05 and 2026-10-06.** It follows the
-[runtime SMP milestone](../kernel/smp.md). Tasks 1 and 2 are implemented; task 3
-is implemented, with its ThinkPad check pending. Each task
-starts when the owner says so, after its listed decisions are settled. Any
-decision can be revised by the owner.
+[runtime SMP milestone](../kernel/smp.md). Tasks 1 to 3 are implemented.
+Each task starts when the owner says so, after its listed decisions are
+settled. Any decision can be revised by the owner.
 
 ## Goal
 
@@ -243,7 +242,7 @@ Accepted by the owner on 2026-10-06:
     build of this PR (update from 0.0.2, spaces from the pool configuration)
     and reported that it works.
 
-- [ ] **3. Programs on `bin://` and two-stage Update.**
+- [x] **3. Programs on `bin://` and two-stage Update.**
   - The installer creates the `bin` volume, and ordinary programs move out of
     the archive into a revision directory. Boot init binds `bin://` to the
     running revision's directory, and lookup searches `bin://`, then `boot://`.
@@ -282,8 +281,10 @@ Accepted by the owner on 2026-10-06:
     0.0.2 updated to the new layout with its `system` file preserved;
     programs ran from `bin://`; an Update interrupted in the program stage
     still booted the previous revision; reruns completed after interruptions in
-    either stage; and cleanup kept the current and previous revisions. The
-    ThinkPad check remains.
+    either stage; and cleanup kept the current and previous revisions. On
+    2026-10-06 the owner updated the ThinkPad stick, then on the block cursor
+    build, with the PXE build of this PR: boot init reported the new
+    revision on `bin://`, and `lspci`, `lsusb` and `fastfetch` ran from it.
 
 - [ ] **4. Persistent home.**
   - A `home` volume mounted as `home://`, created by the installer and added to
