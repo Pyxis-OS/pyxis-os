@@ -113,42 +113,24 @@ for the persistent development loop or as a replacement for the boot archive.
 
 ## Current focus and later candidates
 
-### Kernel focus: runtime SMP
+### Kernel focus: runtime SMP (complete)
 
-Owner direction, 2026-10-04. The [runtime SMP milestone](scheduling-and-threads.md)
-is the next kernel work. It touches the scheduler, launch and process lifetime,
-private memory and the heap, presentation and input routing, and the
-BSP-owned service rules. Other kernel feature tracks therefore pause at these
-exits, so SMP has a stable base:
+The [runtime SMP milestone](../kernel/smp.md) completed on 2026-10-06. Spaces are
+independent of CPUs, and existing single-task processes run in parallel on every
+CPU, including the BSP. Private memory operations run on the caller's CPU. Each
+step's measurements are listed under [SMP measurements](../kernel/smp.md#measurements);
+the final record includes a native ThinkPad check.
+[Follow-ups](scheduling-and-threads.md) cover threads, moving workers off the BSP
+and topology-aware placement.
 
-- **Filesystem:** after [system updates](../userland/system-updates.md) task 2,
-  merged 2026-10-05.
-- **USB:** complete. The owner moved the first native installation ahead of
-  SMP on 2026-10-05. That day the installer gained USB raw authority, `4dc804a`
-  was installed natively from PXE media onto a USB stick and tagged `0.0.1`, and
-  the Update round trip passed after SMP task 2a. See
-  [USB installation](../devices/usb-installation.md). Further USB work waits
-  until after SMP.
-- **Networking:** after the link-selection task, merged 2026-10-05. Native lease-renewal
-  qualification can wait.
+The filesystem, USB and networking tracks paused for SMP; which resumes next is
+the owner's choice. Fixes for major problems found by ThinkPad validation remain
+allowed in any track.
 
-Fixes for major problems found by ThinkPad validation remain allowed in any
-track. Ports may continue when they need only userland and libc additions, not
-new kernel facilities; for example vi, [Links](../userland/links.md) and less.
-
-The first SMP step is a spike: task 1 of the milestone, which rebases the
-investigation, captures the baseline and settles its open decisions. It starts
-when resources allow and no major kernel work conflicts. A throwaway prototype
-branch is not part of task 1 unless the owner asks for one. On 2026-10-05 the
-audit and [baseline](../development/experiments/smp-task1-baseline/README.md)
-were recorded and all task-1 decisions accepted; implementation tasks
-have not started.
-
-After SMP, the agreed next direction is the [system layout](system-layout.md):
+The agreed next direction is the [system layout](system-layout.md):
 a userspace boot init, a Lua boot configuration, a rescue archive with writable
 system volumes and a two-stage Update. Other candidates are dynamic space
-creation (the new tab and its launch flow), a file navigator and multiplexing. The scrolling space bar itself
-is part of SMP task 2.
+creation (the new tab and its launch flow), a file navigator and multiplexing.
 
 The [native filesystem milestone](native-filesystem.md) has completed format-only
 codecs, host tools and the Caelum-owned cache/writer. Trusted init selects explicit
@@ -240,18 +222,15 @@ libc directory reading and a narrow `stat`. BusyBox less is queued next in
 experiment of writing a program on the installed system, and the tooling it
 needs: BusyBox `tar` and archive inits for extra hand-configured spaces.
 
-After native filesystem writer completion, the agreed
-[runtime SMP milestone](scheduling-and-threads.md) separates spaces and boot sessions
-from CPU topology, schedules existing single-task processes across eligible CPUs
-including the BSP, and brings private-memory operations onto the caller's CPU.
-Trusted init requests affinity within a launcher-supplied ceiling; initial
-per-task fairness and a scrolling space bar are explicit. Capture matched
-before/after performance records; selected services remain serial initially.
-Declarative YAML init is a separate userspace follow-up, not an SMP prerequisite.
-User threads and off-BSP service-worker placement follow separately. Native writable
-mount integration is complete and adds no separate prerequisite to this SMP work.
-The [backend interfaces and scoped dependency direction](later-os-directions.md#backend-interfaces-and-scoped-service-dependencies)
-is parked for later; it does not change the native-writer-then-spaces/SMP order.
+After the native filesystem writer, the
+[runtime SMP milestone](../kernel/smp.md) separated spaces and boot sessions from
+CPU topology. It schedules existing single-task processes across eligible CPUs,
+including the BSP, and runs private-memory operations on the caller's CPU.
+Trusted init requests affinity within a launcher-supplied ceiling. Selected
+services remain serial on the BSP. User threads and off-BSP service-worker
+placement [follow separately](scheduling-and-threads.md). The
+[backend interfaces and scoped dependency direction](later-os-directions.md#backend-interfaces-and-scoped-service-dependencies)
+is parked for later.
 
 The [block-storage foundation](../devices/block-storage.md) is complete:
 [configurable split queues](../devices/virtio-queues.md) serve filesystem, entropy

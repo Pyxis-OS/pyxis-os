@@ -389,7 +389,7 @@ around these calls and restore them afterward; being pinned to the BSP alone doe
 not prevent same-CPU reentry. Other heap allocation by syscalls, such as
 capability growth or RAM-file backing, still goes through BSP requests.
 
-Three lower layers are already safe on any CPU with interrupts disabled,
+Three lower layers are safe on any CPU with interrupts disabled,
 outside interrupt and fault entry:
 
 - **Kernel heap.** `kmalloc()` and `kfree()` hold a short heap lock around
@@ -479,6 +479,59 @@ serialization; the low-level log lock interface requires interrupts disabled.
 
 Kernel tasks stay on the BSP. Shared user address spaces and kernel-task fault
 recovery are not supported; a kernel-task fault is fatal.
+
+## Spaces and fairness
+
+Spaces exist independently of the CPU count: boot creates the configured spaces
+in registry order, with Caelum first ([init](../userland/init.md)). A space's
+ceiling and effective CPU set constrain where its tasks may run; they reserve no
+CPU and are not budgets. Each CPU runs its queue round-robin, so a space with
+more runnable tasks receives more CPU time. There are no priorities, per-space
+quotas or memory limits, and CPU sets do not protect against exhaustion of
+shared services.
+
+## Remaining serial services and limits
+
+These stay on the BSP:
+
+- the request executor and every service in its catalog: pipe and terminal
+  creation, capability growth, namespace creation, endpoint creation and export,
+  RAMFS entries, RAM-file replacement, launch preparation, display, HOST and
+  native filesystem admission, readiness waits and system-info memory;
+- the network, native filesystem, HOST transport, virtio-blk, USB and
+  presentation workers;
+- task reaping, object retirement and the general kernel VM;
+- device interrupt routing.
+
+Private memory, the heap, the PMM and the scratch mappings work on any CPU.
+Moving a worker off the BSP is a later step; see the
+[follow-ups](../wip/scheduling-and-threads.md#serial-services-off-the-bsp).
+
+Accepted limits are recorded in [technical debt](../technical-debt.md):
+
+- [BSP userspace and kernel workers](../technical-debt.md#bsp-userspace-and-kernel-workers)
+- [scratch-slot false sharing](../technical-debt.md#scratch-slot-false-sharing)
+- [PMM first-fit search](../technical-debt.md#pmm-first-fit-search-under-its-lock)
+- [the never-reused heap arena](../technical-debt.md#never-reused-kernel-heap-arena)
+- [BSP-only allocation and VM mutation](../technical-debt.md#bsp-only-allocation-and-vm-mutation)
+
+Placement is not topology-aware: SMT siblings count as separate CPUs.
+
+## Measurements
+
+The runtime SMP milestone recorded matched results at each step. All are
+nested-VM runs unless marked native:
+
+| Record | Covers |
+| --- | --- |
+| [Task-1 baseline](../development/experiments/smp-task1-baseline/README.md) | Pre-milestone baseline, heap growth |
+| [Task 4a](../development/experiments/smp-task4a/README.md) | Placement, balancing, migration; native ThinkPad check |
+| [Task 5](../development/experiments/smp-task5/README.md) | PMM lock, per-CPU scratch slots, stress |
+| [Task 6](../development/experiments/smp-task6/README.md) | Concurrent heap growth, arena, stress |
+| [Task 7a](../development/experiments/smp-task7a/README.md) | Local private memory |
+| [Task-7 PMM](../development/experiments/smp-task7-pmm/README.md) | PMM word search, scratch false sharing |
+| [Task 7b](../development/experiments/smp-task7b/README.md) | Userspace on the BSP |
+| [Task 8](../development/experiments/smp-task8/README.md) | Final matched set, native ThinkPad check, lifetime scenarios |
 
 ## Debugger inspection
 

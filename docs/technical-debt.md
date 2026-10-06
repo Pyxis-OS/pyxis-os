@@ -166,15 +166,15 @@ Reconsider BSP-only service when its latency becomes material or before allowing
 concurrent use and mutation of one private address space. The
 [implemented BSP request contract](kernel/bsp-service-requests.md) has separated operation
 ownership, submission/completion and subsystem service from scheduling while
-retaining BSP-only allocation and the inactive-root handoff. The agreed
-[runtime SMP milestone](wip/scheduling-and-threads.md), after native writer completion,
-will introduce independent spaces, single-task migration and local private-memory
-operations with allocator synchronization and explicit mapping lifetime rules.
-Since SMP tasks 5–7a the heap, physical allocator and scratch mappings are safe
-on any CPU, and private memory operations use them locally; other allocating
-services still run on the BSP. Selected serial services
-and deferred destruction remain BSP-owned initially. Worker relocation and shared
-kernel mapping reuse need their own handoff/invalidation contracts. Eager
+retaining BSP-only allocation and the inactive-root handoff. The
+[runtime SMP milestone](kernel/smp.md), completed on 2026-10-06, introduced
+independent spaces, single-task migration and local private-memory operations,
+with allocator synchronization and explicit mapping lifetime rules. The heap,
+physical allocator and scratch mappings are safe on any CPU, and private memory
+operations use them locally; other allocating services still run on the BSP.
+Serial services and deferred destruction remain BSP-owned. Worker relocation and
+shared kernel mapping reuse need their own handoff/invalidation contracts
+([follow-ups](wip/scheduling-and-threads.md#serial-services-off-the-bsp)). Eager
 task-lifetime storage and long non-preemptible operations remain explicit costs;
 measure them in matched before/after workloads.
 
@@ -213,16 +213,16 @@ There are two options:
 - **Walk the active address space through the recursive mapping.** This removes
   most slot use, and single-CPU cost, entirely.
 
-Natively the cost is small. On the ThinkPad, two page clients each took 1.15–1.25
-times one alone, and eight up to 1.5 times
-([task-8 record](development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)).
+Natively the cost is small. On the ThinkPad, two page clients each took
+1.15–1.25 times one alone, and eight up to 1.5 times ([task-8
+record](development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)).
 The owner prefers the recursive walk (2026-10-06); with the native numbers, it
-is a later optimization rather than an SMP prerequisite. Frame zeroing would still use a slot. It could instead go
-through the frame's final mapping before anyone can see it, which would change
-the "zeroed before mapping" rule, or keep one padded zeroing slot per CPU.
-Copy-on-write zero pages were considered and set aside. They only move the
-zeroing to the first write, need allocating page faults, and defer NO_MEMORY
-from ALLOCATE to an ordinary store.
+is a later optimization rather than an SMP prerequisite. Frame zeroing would
+still use a slot. It could instead go through the frame's final mapping before
+anyone can see it, which would change the "zeroed before mapping" rule, or keep
+one padded zeroing slot per CPU. Copy-on-write zero pages were considered and
+set aside. They only move the zeroing to the first write, need allocating page
+faults, and defer NO_MEMORY from ALLOCATE to an ordinary store.
 
 ## Never-reused kernel heap arena
 

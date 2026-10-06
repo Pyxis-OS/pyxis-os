@@ -143,11 +143,17 @@ Output is in [lifetime.txt](lifetime.txt).
 | PMM free frames before and after | identical |
 | Heap live allocations before and after | within ±4 |
 
-The heap count moves up and down by a few allocations between reads. It never
-only grows, and one 2-CPU rerun ended exactly where it started, then one lower.
-lwIP's PCBs come from the kernel heap (`MEMP_MEM_MALLOC`), and closed connections
-linger in TIME_WAIT for 120 s, so remote sessions opened before a read show up
-there. No boot logged a panic.
+The heap count moves up and down by a few allocations between reads; it does not
+only grow. lwIP's PCBs come from the kernel heap (`MEMP_MEM_MALLOC`), and closed
+connections linger in TIME_WAIT for 120 s, so remote sessions opened shortly
+before a read show up there.
+
+A 2-CPU rerun (`life2c` in [lifetime.txt](lifetime.txt)) also read the heap 30 s
+and 130 s after the last session closed. The count matched the idle value right
+after the scenarios, 2196. It was 2195 at both later reads: one fewer than the
+idle read, which itself came shortly after a warm-up session. That is consistent
+with TIME_WAIT PCBs expiring, though no PCB was identified directly. No boot
+logged a panic.
 
 ## QEMU: preemption push
 
@@ -171,7 +177,6 @@ busiest CPU.
 
 These still run only on the BSP:
 
-- private memory's callers' other kernel work;
 - the BSP request executor and its services, from capability growth and
   namespaces to RAM-file replacement, the launcher and display;
 - the network, native filesystem, HOST transport, virtio-blk, USB and

@@ -15,8 +15,8 @@ milestone; this does not commit to Unix PID 1 semantics.
 
 Agreed direction to revisit later, not an implementation task. The
 [native filesystem writer](../devices/filesystem-native-adapter.md) is complete;
-the [runtime SMP and independent spaces milestone](scheduling-and-threads.md)
-follows. This idea adds no prerequisites or tasks to either milestone.
+the [runtime SMP and independent spaces milestone](../kernel/smp.md) completed
+on 2026-10-06. This idea adds no prerequisites or tasks to either.
 
 Borrow explicit dependency wiring and scoped resolution from inversion of control
 and dependency injection. Launchers already supply capabilities, and FILE and

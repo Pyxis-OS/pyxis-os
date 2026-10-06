@@ -157,7 +157,7 @@ and leaving its private address space before the BSP mutates it. A second thread
 invalidates that assumption. Capability-table operations, pending I/O buffers,
 process exit and VM mutation must become safe with siblings before a runtime
 thread may operate concurrently. Follow the
-[scheduling/thread direction](scheduling-and-threads.md); Go does not require
+[thread direction](scheduling-and-threads.md#multiple-user-threads); Go does not require
 space migration or multi-CPU sibling execution as the first functional result.
 
 ### Reservation is not physical allocation

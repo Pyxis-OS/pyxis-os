@@ -49,8 +49,10 @@ consistent with the hardware, not enumerated by it. It means:
 The scheduler treats all 12 as independent CPUs. In the
 [SMP task-4a native check](../../development/experiments/smp-task4a/README.md#native-thinkpad-check-owner-run),
 four concurrent compute clients finished as two near the single-client time and two
-about 1.8× slower. That fits two clients sharing one core. Topology-aware placement
-remains an unscheduled candidate in the [SMP milestone](../../wip/scheduling-and-threads.md).
+about 1.8× slower. That fits two clients sharing one core, and the
+[task-8 check](../../development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)
+repeated it. Topology-aware placement remains an unscheduled
+[follow-up](../../wip/scheduling-and-threads.md#topology-aware-placement).
 
 ## USB controllers and observed port routes
 

@@ -95,8 +95,8 @@ applications alongside navigators.
 The first slice is implemented as [native remote terminal sessions](../userland/remote-terminal.md),
 with a text-based agent/developer client and independent session lifetime.
 The [native filesystem writer](../devices/filesystem-native-adapter.md) is complete.
-The agreed continuation is [runtime SMP and independent spaces](scheduling-and-threads.md),
-followed by these focused milestones:
+[Runtime SMP and independent spaces](../kernel/smp.md) completed on 2026-10-06.
+The agreed continuation is these focused milestones:
 
 1. [VirtIO GPU presentation and dynamic display resizing](desktop-graphics.md#virtio-gpu-presentation-and-display-resizing):
    present the software framebuffer and propagate changed terminal dimensions,
