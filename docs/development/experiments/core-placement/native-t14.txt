@@ -1,0 +1,33 @@
+heap x1: wall 1.299 s; each 1.294 s; failures 0
+heap x4: wall 1.389 s; each 1.290, 1.291, 1.292, 1.295 s; failures 0
+heap x8: wall 3.486 s; each 2.316, 2.338, 2.380, 2.582, 3.280, 3.303, 3.327, 3.350 s; failures 0
+heap x11: wall 4.436 s; each 2.716, 3.565, 3.697, 4.009, 4.033, 4.042, 4.046, 4.049, 4.096, 4.165, 4.286 s; failures 0
+pages x1: wall 0.096 s; each 0.091 s; failures 0
+pages x2: wall 0.198 s; each 0.148, 0.149 s; failures 0
+pages x4: wall 0.275 s; each 0.173, 0.185, 0.205, 0.222 s; failures 0
+pages x8: wall 0.472 s; each 0.215, 0.223, 0.231, 0.257, 0.265, 0.318, 0.319, 0.344 s; failures 0
+
+SMP: CPU 0 APIC 0 core 0, SMT shift 1
+SMP: APIC 1 online, stack=0xffff800003059000, timer=52000 counts per ~8.33 ms
+SMP: CPU 1 APIC 1 core 0, SMT shift 1
+SMP: APIC 2 online, stack=0xffff800003061000, timer=52004 counts per ~8.33 ms
+SMP: CPU 2 APIC 2 core 1, SMT shift 1
+SMP: APIC 3 online, stack=0xffff800003069000, timer=52005 counts per ~8.33 ms
+SMP: CPU 3 APIC 3 core 1, SMT shift 1
+SMP: APIC 4 online, stack=0xffff800003071000, timer=51999 counts per ~8.33 ms
+SMP: CPU 4 APIC 4 core 2, SMT shift 1
+SMP: APIC 5 online, stack=0xffff800003079000, timer=52003 counts per ~8.33 ms
+SMP: CPU 5 APIC 5 core 2, SMT shift 1
+SMP: APIC 8 online, stack=0xffff800003081000, timer=52002 counts per ~8.33 ms
+SMP: CPU 6 APIC 8 core 4, SMT shift 1
+SMP: APIC 9 online, stack=0xffff800003089000, timer=52000 counts per ~8.33 ms
+SMP: CPU 7 APIC 9 core 4, SMT shift 1
+SMP: APIC 10 online, stack=0xffff800003091000, timer=52006 counts per ~8.33 ms
+SMP: CPU 8 APIC 10 core 5, SMT shift 1
+SMP: APIC 11 online, stack=0xffff800003099000, timer=51999 counts per ~8.33 ms
+SMP: CPU 9 APIC 11 core 5, SMT shift 1
+SMP: APIC 12 online, stack=0xffff8000030a1000, timer=52006 counts per ~8.33 ms
+SMP: CPU 10 APIC 12 core 6, SMT shift 1
+SMP: APIC 13 online, stack=0xffff8000030a9000, timer=51998 counts per ~8.33 ms
+SMP: CPU 11 APIC 13 core 6, SMT shift 1
+SMP: 12 CPU(s) online; APs waiting for scheduler startup

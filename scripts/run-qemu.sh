@@ -4,6 +4,7 @@ set -eu
 : "${QEMU_DISPLAY:=gtk}"
 : "${MEMORY:=8G}"
 : "${CPUS:=1}"
+: "${THREADS:=1}"
 : "${ACCEL:=tcg}"
 : "${OVMF_CODE:=/usr/share/OVMF/OVMF_CODE.fd}"
 : "${OVMF_VARS:=/usr/share/OVMF/OVMF_VARS.fd}"
@@ -16,6 +17,16 @@ set -eu
 : "${USB_BOOT_IMAGE:=}"
 : "${UDP_FORWARD:=}"
 : "${TCP_FORWARD:=}"
+for count in "$CPUS" "$THREADS"; do
+  case "$count" in
+    ''|0*|*[!0-9]*) echo 'CPUS and THREADS must be positive decimal integers.' >&2; exit 1 ;;
+  esac
+done
+[ "$((CPUS % THREADS))" = 0 ] || {
+  echo 'THREADS must divide CPUS.' >&2
+  exit 1
+}
+cores=$((CPUS / THREADS))
 command -v "$QEMU" >/dev/null 2>&1 || {
   echo "Missing $QEMU: install QEMU or set QEMU, then run make run." >&2
   exit 1
@@ -206,7 +217,7 @@ if [ -n "$VFIO_PCI" ]; then
 fi
 exec "$QEMU" -machine "$machine" -accel "$ACCEL" -cpu max \
   -rtc base=utc \
-  -smp "cpus=$CPUS,sockets=1,cores=$CPUS,threads=1" -m "$MEMORY" \
+  -smp "cpus=$CPUS,sockets=1,cores=$cores,threads=$THREADS" -m "$MEMORY" \
   -drive "if=pflash,format=raw,unit=0,readonly=on,file=$OVMF_CODE" \
   -drive if=pflash,format=raw,unit=1,file=build/OVMF_VARS.fd \
   -display "$QEMU_DISPLAY" -serial mon:stdio \

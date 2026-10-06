@@ -55,20 +55,6 @@ Private memory operations now rely on the single-task model
 fake threading, and no separate-process substitute for shared-pointer worker
 callbacks.
 
-## Topology-aware placement
-
-Placement treats every hardware thread as an independent CPU. On the ThinkPad
-T14, SMT siblings are adjacent Pyxis CPUs ([topology](../targets/t14-gen1-amd/notes.md)).
-
-In the [task-8 native check](../development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run),
-four compute clients finished at 1.30, 1.45, 2.26 and 2.26 s. The tie rule
-(lowest AP first) places four clients on CPUs 1–4, so CPUs 2 and 3 share a core
-while three cores stay idle. That reading comes from the rule and the timings;
-the placement was not traced. Filling one thread per core first would have run
-all four at about single-client speed: about 1.3 s for the batch instead of
-2.35 s. That would be a separate, measured change to the tie-breaking rule, not
-a new scheduling policy.
-
 ## Smaller candidates
 
 - **Scratch-slot walks.** Walk the active address space through the recursive

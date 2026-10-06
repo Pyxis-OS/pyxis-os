@@ -25,6 +25,9 @@ struct cpu_local {
   _Atomic bool online;
   uintptr_t stack_top, double_fault_stack_top;
   struct cpu_descriptors descriptors;
+  uint32_t core_id;
+  unsigned smt_shift;
+  bool topology_known;
 };
 
 /* Kernel GS names this CPU. User entry/return exchanges it with the user base.

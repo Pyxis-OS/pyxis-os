@@ -15,6 +15,24 @@
 
 #define AP_STACK_BYTES (16 * 1024)
 #define AP_STARTUP_TIMER_PERIODS 600
+#define CPUID_TOPOLOGY_COUNT_MASK 0xffffu
+#define CPUID_TOPOLOGY_SHIFT_MASK 0x1fu
+#define CPUID_TOPOLOGY_TYPE_SHIFT 8
+#define CPUID_TOPOLOGY_TYPE_MASK 0xffu
+#define CPUID_TOPOLOGY_TYPE_SMT 1
+#define CPUID_EXTENDED_MAX 0x80000000u
+#define CPUID_AMD_TOPOLOGY 0x8000001eu
+#define CPUID_AMD_TOPOLOGY_EXTENSIONS (1u << 22)
+#define CPUID_AMD_THREADS_SHIFT 8
+#define CPUID_AMD_THREADS_MASK 0xffu
+#define CPUID_FAMILY_SHIFT 8
+#define CPUID_FAMILY_MASK 0xfu
+#define CPUID_EXTENDED_FAMILY_SHIFT 20
+#define CPUID_EXTENDED_FAMILY_MASK 0xffu
+#define CPUID_AMD_ZEN_FAMILY 0x17u
+#define CPUID_VENDOR_AMD_EBX 0x68747541u
+#define CPUID_VENDOR_AMD_EDX 0x69746e65u
+#define CPUID_VENDOR_AMD_ECX 0x444d4163u
 
 static struct cpu_local *bsp_only[1];
 static struct cpu_local **cpus;
@@ -22,6 +40,67 @@ static size_t cpu_count, cpu_capacity;
 /* The handoff must be in the kernel image, mapped by both Limine and Caelum.
  * The AP copies these fields before acknowledging; only then may we reuse it. */
 static struct ap_boot handoff;
+
+static void detect_topology(struct cpu_local *cpu)
+{
+  uint32_t eax, ebx, ecx, edx;
+  cpuid(CPUID_VENDOR, &eax, &ebx, &ecx, &edx);
+  bool amd = ebx == CPUID_VENDOR_AMD_EBX && edx == CPUID_VENDOR_AMD_EDX &&
+    ecx == CPUID_VENDOR_AMD_ECX;
+  if (eax >= CPUID_X2APIC_TOPOLOGY) {
+    cpuid(CPUID_X2APIC_TOPOLOGY, &eax, &ebx, &ecx, &edx);
+    unsigned type = (ecx >> CPUID_TOPOLOGY_TYPE_SHIFT) & CPUID_TOPOLOGY_TYPE_MASK;
+    if ((ebx & CPUID_TOPOLOGY_COUNT_MASK) && type == CPUID_TOPOLOGY_TYPE_SMT &&
+        edx == cpu->lapic_id) {
+      cpu->smt_shift = eax & CPUID_TOPOLOGY_SHIFT_MASK;
+      cpu->core_id = edx >> cpu->smt_shift;
+      cpu->topology_known = true;
+      return;
+    }
+  }
+  if (!amd) {
+    return;
+  }
+  cpuid(CPUID_BASIC_FEATURES, &eax, &ebx, &ecx, &edx);
+  unsigned family = (eax >> CPUID_FAMILY_SHIFT) & CPUID_FAMILY_MASK;
+  if (family == CPUID_FAMILY_MASK) {
+    family += (eax >> CPUID_EXTENDED_FAMILY_SHIFT) & CPUID_EXTENDED_FAMILY_MASK;
+  }
+  /* Before Zen, leaf 1e describes cores per compute unit, not SMT threads. */
+  if (family < CPUID_AMD_ZEN_FAMILY) {
+    return;
+  }
+  cpuid(CPUID_EXTENDED_MAX, &eax, &ebx, &ecx, &edx);
+  if (eax < CPUID_AMD_TOPOLOGY) {
+    return;
+  }
+  cpuid(CPUID_EXTENDED_FEATURES, &eax, &ebx, &ecx, &edx);
+  if (!(ecx & CPUID_AMD_TOPOLOGY_EXTENSIONS)) {
+    return;
+  }
+  /* The extended APIC ID is defined only with the local APIC enabled. */
+  cpuid(CPUID_AMD_TOPOLOGY, &eax, &ebx, &ecx, &edx);
+  unsigned threads = ((ebx >> CPUID_AMD_THREADS_SHIFT) & CPUID_AMD_THREADS_MASK) + 1;
+  if (eax != cpu->lapic_id || (threads & (threads - 1))) {
+    return;
+  }
+  while (threads > 1) {
+    ++cpu->smt_shift;
+    threads >>= 1;
+  }
+  cpu->core_id = eax >> cpu->smt_shift;
+  cpu->topology_known = true;
+}
+
+static void log_topology(const struct cpu_local *cpu)
+{
+  if (cpu->topology_known) {
+    klog("SMP: CPU %zu APIC %u core %u, SMT shift %u\n",
+         cpu->index, cpu->lapic_id, cpu->core_id, cpu->smt_shift);
+  } else {
+    klog("SMP: CPU %zu APIC %u core unknown (isolated)\n", cpu->index, cpu->lapic_id);
+  }
+}
 
 void arch_smp_prepare(size_t count, uint32_t bsp_lapic_id)
 {
@@ -39,8 +118,10 @@ void arch_smp_prepare(size_t count, uint32_t bsp_lapic_id)
   cpu_count = 1;
   cpus[0] = cpu_bsp();
   cpus[0]->lapic_id = bsp_lapic_id;
+  detect_topology(cpus[0]);
   atomic_store_explicit(&cpus[0]->online, true, memory_order_release);
   klog("SMP: BSP APIC %u; %zu CPU(s) reported\n", bsp_lapic_id, count);
+  log_topology(cpus[0]);
 }
 
 struct ap_boot *arch_ap_prepare(uint32_t lapic_id)
@@ -101,6 +182,7 @@ void arch_ap_wait(void)
   arch_clock_maintain();
   klog("SMP: APIC %u online, stack=%p, timer=%u counts per ~8.33 ms\n",
        cpu->lapic_id, (void *)cpu->stack_top, cpu->timer_count);
+  log_topology(cpu);
 }
 
 void arch_smp_finish(void)
@@ -125,6 +207,13 @@ struct cpu_local *arch_cpu_at(size_t index)
   return cpus[index];
 }
 
+bool arch_cpus_share_core(size_t first, size_t second)
+{
+  struct cpu_local *a = arch_cpu_at(first), *b = arch_cpu_at(second);
+  return first == second || (a->topology_known && b->topology_known &&
+    a->smt_shift == b->smt_shift && a->core_id == b->core_id);
+}
+
 [[noreturn]] void arch_ap_main(struct cpu_local *cpu)
 {
   gdt_init(&cpu->descriptors, cpu->double_fault_stack_top);
@@ -134,6 +223,7 @@ struct cpu_local *arch_cpu_at(size_t index)
   KASSERT(read_cr3() == cpu->active_space->root);
   apic_init();
   KASSERT(apic_id() == cpu->lapic_id);
+  detect_topology(cpu);
   arch_user_init();
   arch_syscall_init();
 

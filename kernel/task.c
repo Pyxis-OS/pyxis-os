@@ -235,20 +235,39 @@ static bool task_movable(const struct task *task)
   return task->kind == TASK_USER && !task->in_syscall;
 }
 
-/* queues_locked. The least-loaded CPU SPACE may use; ties prefer PREFERRED,
- * then the lowest AP, then the BSP, which also runs the kernel workers. */
+static bool siblings_idle_locked(size_t cpu_index)
+{
+  for (size_t other = 0; other < arch_cpu_count(); ++other) {
+    if (other != cpu_index && arch_cpus_share_core(cpu_index, other) && load_locked(other)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* queues_locked. Ties between least-loaded allowed CPUs prefer idle siblings,
+ * then PREFERRED, then the lowest AP, then the BSP. */
 static size_t place_locked(const struct space *space, size_t preferred)
 {
   size_t count = arch_cpu_count();
   size_t best = SIZE_MAX;
+  size_t best_load = SIZE_MAX;
+  bool best_idle = false;
   for (size_t i = 0; i < count; ++i) {
     size_t cpu_index = (i + 1) % count;
     if (!space_allows_cpu(space, cpu_index)) {
       continue;
     }
-    if (best == SIZE_MAX || load_locked(cpu_index) < load_locked(best) ||
-        (load_locked(cpu_index) == load_locked(best) && cpu_index == preferred)) {
+    size_t load = load_locked(cpu_index);
+    if (load > best_load) {
+      continue;
+    }
+    bool idle = siblings_idle_locked(cpu_index);
+    if (best == SIZE_MAX || load < best_load || (idle && !best_idle) ||
+        (idle == best_idle && cpu_index == preferred)) {
       best = cpu_index;
+      best_load = load;
+      best_idle = idle;
     }
   }
   KASSERT(best != SIZE_MAX);

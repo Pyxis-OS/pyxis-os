@@ -23,6 +23,7 @@ make -j16 image           # kernel, userspace and ports: build/pyxis.iso
 make sdk                  # export build/sdk; see docs/development/sdk.md
 make fs-tools             # opt-in host formatter/inspector
 make run CPUS=4
+make run CPUS=8 THREADS=2 # four cores with two threads each
 make run CPUS=4 VIRTIO_NET=1
 make run ACCEL=tcg        # software emulation when KVM is unavailable
 make image INIT=/tmp/init.sh  # optional native PXE or shebang init
@@ -32,7 +33,7 @@ make clean
 ```
 
 Make defaults to KVM, one CPU, 8 GiB RAM and GTK display. Override
-`CROSS_COMPILE`, `QEMU`, `CPUS`, `MEMORY`, `ACCEL`, `QEMU_DISPLAY`, `OVMF_CODE`
+`CROSS_COMPILE`, `QEMU`, `CPUS`, `THREADS`, `MEMORY`, `ACCEL`, `QEMU_DISPLAY`, `OVMF_CODE`
 and `OVMF_VARS` on the command line as needed. Firmware defaults are
 `/usr/share/OVMF/x64/OVMF_CODE.4m.fd` and `OVMF_VARS.4m.fd` in the same directory;
 select matching paths for your distribution. Each run copies firmware variables
