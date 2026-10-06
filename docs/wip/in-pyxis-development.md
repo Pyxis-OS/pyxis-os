@@ -53,7 +53,7 @@ comes first.
 
 ### 2. Extra spaces on the installed system
 
-[Boot init](system-layout.md#tasks) reads `system://config/boot.lua` on
+[Boot init](../userland/init.md#boot-configuration) reads `system://config/boot.lua` on
 installed boots, so extra spaces need no ESP edit and survive Update. The
 existing archive inits receive `system://` from that configuration instead of
 mounting it, so the two new inits this section once proposed are not needed:
@@ -94,7 +94,7 @@ downloading backups of the work. It is accepted and not yet started.
 **Agreed 2026-10-06.** The owner writes the build tool, in Lua, as part of this
 experiment; it lives in the JVM project until it grows further. Pyxis supplies
 only the runtime underneath, as a small milestone after the
-[system layout](system-layout.md):
+[system layout](../userland/system-layout.md):
 
 1. **Lua's `io` and `os` libraries and pure-Lua `require`,** on libc. The gaps
    found by the earlier [io/os audit](later-os-directions.md#lua-follow-ups)

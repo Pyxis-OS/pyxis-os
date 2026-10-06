@@ -127,11 +127,13 @@ The filesystem, USB and networking tracks paused for SMP; which resumes next is
 the owner's choice. Fixes for major problems found by ThinkPad validation remain
 allowed in any track.
 
-The next milestone is the [system layout](system-layout.md), agreed 2026-10-06
-ahead of other parallel work: `boot://` and `tmp://` renames, a userspace boot
-init with a Lua boot configuration, programs on a `bin://` volume with a
-two-stage Update, and a persistent home. Later candidates are dynamic space
-creation (the new-space flow), a file navigator and multiplexing.
+The [system layout](../userland/system-layout.md) milestone completed
+2026-10-07: `boot://` and `tmp://` renames, a userspace boot init with a Lua
+boot configuration, programs on a `bin://` volume with a two-stage Update, and
+a persistent home. Its follow-ups are moving network configuration onto the
+pool and the [boot configuration checker](boot-configuration-checker.md).
+Later candidates are dynamic space creation (the new-space flow), a file
+navigator and multiplexing.
 
 [ACPI power control and battery](acpi-and-bar-widgets.md), agreed 2026-10-07 as
 the milestone after the system layout: uACPI, clean power-off and reboot, the
