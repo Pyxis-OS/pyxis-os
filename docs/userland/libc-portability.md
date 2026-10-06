@@ -113,8 +113,8 @@ Malformed UTF-8 patterns are rejected (usually `REG_BADPAT`, or `REG_ERANGE` for
 an invalid range endpoint). Encountered invalid subject UTF-8 yields
 `REG_NOMATCH`, but validation is lazy: the engine may return before reading the
 whole subject. See [regex limits](../technical-debt.md#regex-character-classes-and-back-references).
-vi and less retain their existing literal search until their separate consumer
-task enables the libc interface.
+vi and less use this interface for BRE search; vi also uses it for substitution.
+Their display and bounded-input limits remain in the respective port docs.
 
 The 2026-10-07 validation used an uncommitted 37-check program, cross-compiled
 against the exported SDK and uploaded to `tmp://` in a four-CPU QEMU/KVM guest

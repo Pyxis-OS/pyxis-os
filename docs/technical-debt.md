@@ -42,7 +42,7 @@ decoder state. UTF-8 back-reference matches and offsets are therefore unreliable
 Invalid subject UTF-8 returns `REG_NOMATCH` when encountered, with no whole-string
 validation guarantee. Collating symbols and equivalence classes remain unsupported.
 Revisit the pinned engine or a focused matcher correction when a consumer needs
-these behaviors; the initial vi/less integration must retain the documented limits.
+these behaviors; vi/less retain the documented limits.
 
 ## SMT placement and later balancing
 
@@ -698,15 +698,17 @@ second data set makes them matter.
 
 ## vi port limits
 
-[BusyBox vi](userland/vi.md) displays ASCII only and searches literally, because
-Pyxis has no Unicode-capable renderer; vi's regex search remains disabled pending
-its separate integration with libc `regex.h`. Saves keep upstream's
+[BusyBox vi](userland/vi.md) displays ASCII only. Its BRE search/substitution
+uses libc's [regex limits](#regex-character-classes-and-back-references).
+Owner decision, 2026-10-07: adapt GNU regex calls using bounded copies; matching
+stops at an embedded NUL within each copied slice. Revisit bounded/binary regex
+interfaces when a concrete consumer needs them. Saves keep upstream's
 in-place write followed by `ftruncate`, so a short write or crash can leave a
 truncated or mixed file. Revisit with atomic replacement or a durable-save
 policy alongside the [native filesystem](wip/native-filesystem.md) work.
 `:!` and shell filters need a native launch adapter, and the read-only marker
 probes WRITE authority because truthful file metadata does not exist yet. The
-recipe's libbb adapter covers only vi's helpers; BusyBox less will extend it.
+recipe's libbb adapter covers the selected vi/less helpers only.
 Input EOF exits and loses unsaved edits, as upstream does; Kilo handles that
 case explicitly.
 
@@ -714,8 +716,9 @@ case explicitly.
 
 The [BusyBox pager](userland/less.md) retains read display lines for backward
 paging, with the selected line-count limit and process-memory bound. It measures
-screen dimensions once, displays ASCII, and searches literal case-sensitive text
-without highlights. There are no raw escapes, regex, shell commands or live
+screen dimensions once and displays ASCII. BRE search/highlighting inherits
+libc's [regex limits](#regex-character-classes-and-back-references).
+There are no raw escapes, shell commands or live
 refresh. A content read during refill/search blocks, so a stalled producer can
 delay keys; cached navigation performs no extra read. Revisit native readiness
 through a proven libc extension when an actual live-stream consumer needs it,

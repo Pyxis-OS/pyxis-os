@@ -24,7 +24,7 @@ The build enables:
 
 - counts, operators with motions, registers and marks;
 - dot repeat and undo with its queue;
-- literal search with `/`, `?`, `n` and `N`, and `:s` substitution;
+- BRE search with `/`, `?`, `n` and `N`, and `:s` substitution;
 - `:set` options, multiple files with `:n`, `:e`, `:r` and `:w NAME`;
 - read-only viewing (`-R`) and startup commands from `-c` or `EXINIT`.
 
@@ -69,11 +69,22 @@ Patch 0002 fixes an upstream defect: the per-file read-only bit was never
 cleared, so after one read-only file every later `:n`/`:e` file was also
 treated as read-only.
 
+Patch 0001 adapts GNU regex calls to the
+[libc POSIX interface](libc-portability.md#regular-expressions-and-utf-8-conversion).
+Search uses bounded, NUL-terminated copies; substitution captures count bytes
+in the original line. Compile failures report `regerror`, preserve the cursor
+and avoid freeing an unsuccessfully compiled pattern. Global substitutions
+keep line anchors and advance after zero-length matches.
+
 ## Limits
 
 - **Display:** ASCII only. Control characters display as `^X`, and bytes above
   127 display as `.`.
-- **Search:** literal, because there is no `regex.h`.
+- **Search:** BRE, with ASCII-only character classes/case folding and the
+  [pinned TRE back-reference limits](../technical-debt.md#regex-character-classes-and-back-references).
+  Owner decision, 2026-10-07: regex matching stops at an embedded NUL within
+  each copied search/substitution slice. The renderer remains ASCII even when
+  the regex engine consumes a whole UTF-8 code point.
 - **Shell:** there is no `:!` and no shell filters.
 - **Screen size:** a change takes effect at the next redraw, since there is no
   resize notification.
@@ -94,7 +105,7 @@ using host import analysis and a compile probe against the Pyxis SDK.
 - **BusyBox** was chosen. It draws with cursor positioning, line/screen erase
   and reverse video, all inside the existing [VT subset](terminal.md#tty-output-controls).
   Its missing facilities sat in a few small functions, and Kconfig disables
-  regex, signals and `:!` cleanly.
+  unsupported signals and `:!` cleanly. Regex now uses the libc interface.
 - **toybox** was rejected. Its vi is unfinished upstream, keeps the file
   memory-mapped as piece-table storage, always requires regex and assumes UTF-8
   widths.
@@ -106,7 +117,36 @@ write-then-truncate save via a libc `ftruncate`, and add the string functions to
 libc. `stat`, `fstat` and `access` stay out of libc until truthful file metadata
 exists.
 
-## Validation
+## Regex validation (2026-10-07)
+
+Ordinary SDK/image builds passed with the existing compiler. The complete patch
+series applied to the exact BusyBox pin; vi/less and their adapter compiled
+without warnings. Interactive QEMU 10.2.2/OVMF used nested KVM, four CPUs,
+512 MiB, virtio-net/rng, no raw disks, the 1280×800 framebuffer and an 80×24
+remote terminal. A Linux BusyBox vi built from the same pin used the same
+240-line file and `EXINIT` options. The current-line captures agreed:
+
+| Command sequence | Matched line on Linux and Pyxis |
+| --- | ---: |
+| `/fo\+` from the beginning | 4 |
+| `/^#include` after that match | 120 |
+| `n`, wrapping forward | 2 |
+| `N`, wrapping backward | 120 |
+| `?fo\+` | 5 |
+
+`:%s/old/new/g` made 475 substitutions on 238 lines in both editors. The saved
+240-line results compared byte-for-byte, with SHA-256
+`2132d572b1a4de6d44a5f007b6d29d9e2d0b9115de0969f7694863f1921e4c53`.
+Search/substitution also worked on the framebuffer. `?[` at the first character
+and a malformed substitution both reported `Missing ']'` without moving the
+cursor or crashing. Pyxis's empty-match progress checks gave one prefix for
+`:s/^/X/g`, and `_a_b_c_` for `:s/x*/_/g` on `abc`, including the terminal empty
+match. These guarded cases fix the newly enabled upstream loop; they were not
+run through the looping Linux path. GDB stopped in the adapted `char_search`
+with the `fo\+` pattern and forward/full range. All validation processes stopped;
+fixtures, capture files and screenshots remain uncommitted.
+
+## Initial port validation
 
 The validation build used pyxis-os sources identical outside `docs/` to
 `aef3c26`, userland `877d04f` and ports `55b6f8e`, with `make -j16 image` and no

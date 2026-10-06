@@ -19,14 +19,14 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 
 | Candidate | Intended use and initial investigation |
 | --- | --- |
-| POSIX regex | Implemented in [libc](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion), with BRE/ERE, UTF-8 decoding and ASCII-only classes/folding. vi and less are the next consumers; grep, sed and awk remain later candidates. |
+| POSIX regex | Implemented in [libc](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion), with BRE/ERE, UTF-8 decoding and ASCII-only classes/folding. vi and less use it; grep, sed and awk remain later candidates. |
 | fastfetch | [Implemented native port](../userland/fastfetch.md), packaged in the normal image with native system information, the Pyxis ASCII logo, text/JSON and explicit JSONC configuration. |
 | zlib | Reusable compression/decompression, followed by a concrete consumer such as PNG loading or jar files. Not needed for [in-Pyxis development](in-pyxis-development.md) until it handles jars; BusyBox `gzip`/`unzip` would then cover the commands. |
 | libpng | PNG decoding/encoding for viewers, drawing tools and screenshots; depends on zlib. |
 | SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. |
-| vi | [Implemented BusyBox vi port](../userland/vi.md), packaged in the normal image as the first modal editor before Neovim, with libc `ftruncate` and literal search. |
+| vi | [Implemented BusyBox vi port](../userland/vi.md), packaged in the normal image as the first modal editor before Neovim, with libc `ftruncate` and BRE search/substitution. |
 | Links | [Implemented Links 2.30 port](../userland/links.md), packaged in the normal image as a text web browser. Every page loads through libc, so local files, directory listings and the HTTP(S) providers work alike, with libc directory reading and a narrow `stat`. |
-| less | [Implemented BusyBox pager](../userland/less.md) for files and pipelines, with literal search and libterm console input independent of stdin. |
+| less | [Implemented BusyBox pager](../userland/less.md) for files and pipelines, with BRE search/highlighting and libterm console input independent of stdin. |
 | tar | [Implemented uncompressed BusyBox ustar subset](../userland/tar.md) for [in-Pyxis development](in-pyxis-development.md#1-busybox-tar), with whole-archive validation and regular files/directories only. |
 | PDCurses | Investigate a native libterm backend for terminal applications, using its documented platform hooks for drawing, input, cursor control and delays. |
 | SQLite | Port the library and CLI through a native SQLite VFS adapter, then consider database scheme views. |
