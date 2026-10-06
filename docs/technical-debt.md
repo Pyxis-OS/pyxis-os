@@ -36,7 +36,8 @@ Read-only GDB on an eight-CPU/four-core QEMU run showed four tasks initially
 occupying four cores,
 then a push moved one onto an occupied sibling while a different core became
 idle. The [measurement record](development/experiments/core-placement/README.md)
-keeps that observation separate from the native performance expectation.
+records that observation and the owner-run native improvement: heap ×4 wall fell
+from 2.352 s to 1.389 s, with all four clients near the solo-client time.
 
 Revisit topology-aware balancing if owner-run workloads show that these later
 moves erase the benefit. This task leaves the push threshold and pulling policy

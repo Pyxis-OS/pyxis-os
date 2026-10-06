@@ -122,7 +122,8 @@ step's measurements are listed under [SMP measurements](../kernel/smp.md#measure
 the final record includes a native ThinkPad check.
 [Follow-ups](scheduling-and-threads.md) cover threads and moving workers off the
 BSP. [Topology-aware placement](../kernel/smp.md#placement-and-migration) is
-implemented, with its native ThinkPad timing check still pending.
+implemented and
+[validated on the native ThinkPad](../development/experiments/core-placement/README.md#native-thinkpad-check-owner-run).
 
 The filesystem, USB and networking tracks paused for SMP; which resumes next is
 the owner's choice. Fixes for major problems found by ThinkPad validation remain

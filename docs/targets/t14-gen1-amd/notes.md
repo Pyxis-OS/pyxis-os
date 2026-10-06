@@ -52,8 +52,8 @@ four concurrent compute clients finished as two near the single-client time and 
 about 1.8× slower. That fits two clients sharing one core, and the
 [task-8 check](../../development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)
 repeated it. The current [topology-aware tie-break](../../kernel/smp.md#placement-and-migration)
-reads CPUID, with [native confirmation pending](../../development/experiments/core-placement/README.md#native-thinkpad-check-owner-run).
-For these APIC IDs and SMT width 1, its expected core keys are
+reads CPUID. The [native check on 2026-10-07](../../development/experiments/core-placement/README.md#native-thinkpad-check-owner-run)
+confirmed these APIC IDs and SMT shift 1, with core keys
 `0, 0, 1, 1, 2, 2, 4, 4, 5, 5, 6, 6`; they retain the APIC gap, unlike the
 dense inferred labels in the historical table.
 

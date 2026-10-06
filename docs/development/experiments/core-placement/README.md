@@ -3,7 +3,7 @@
 Recorded 2026-10-07 for the [topology-aware tie-break](../../../kernel/smp.md#placement-and-migration).
 Kernel base: main `ebe6cdf`; changed code adds CPUID core records and the accepted
 idle-siblings tie-break. SDK, userspace, ports, filesystem and lwIP inputs match.
-Native ThinkPad confirmation remains pending.
+The owner completed native ThinkPad confirmation on 2026-10-07.
 
 ## Build and QEMU configuration
 
@@ -91,25 +91,52 @@ elapsed milliseconds (median, range), with zero failures:
 
 ## Native ThinkPad check (owner-run)
 
-- [ ] Boot the PR's image on the T14 with the default all-CPU configuration and
-  SMT enabled. Record the source revision/kernel identity and CPU topology lines.
-  Expect 12 logical CPUs and sibling pairs 0–1, 2–3, 4–5, 6–7, 8–9 and 10–11.
-  Their expected core keys are 0, 1, 2, 4, 5 and 6; gaps are valid.
-- [ ] Run the existing checker from the desktop against the native remote server,
-  substituting its actual IPv4 address if needed:
+The owner booted the published PXE entry **Core placement PR #451 (bd48949)**
+on the T14 Gen 1 AMD (Ryzen 5 PRO 4650U), using the default all-CPU configuration.
+The clean source revision was `bd48949bf04b3cd64f7e0733d8c3846cb1a64825`, with ELF
+SHA-256 `9648a9e26464d4864bd4af40f9e9e3ea06a9857edcec87c27ffea5338aa6078e`.
+This build refreshed the embedded revision identity after committing; placement
+code and kernel configuration match the measured QEMU build above.
 
-  ```sh
-  mkdir -p build/core-placement-native
-  cd build/core-placement-native
-  python3 ../../docs/development/experiments/smp-task8/smp8-check.py \
-    ../tools/pyxis-remote core-placement-t14 192.168.0.50 2323
-  ```
+- [x] Boot the PR image with all CPUs and SMT enabled; return topology lines.
+- [x] Run the unchanged task-8 checker from the desktop against the native server.
+- [x] Return the results; compare heap ×4, ×8 and ×11 and confirm zero failures.
 
-- [ ] Return the boot topology lines and `smp8-core-placement-t14.txt`. Record
-  heap ×4, ×8 and ×11 against the [task-8 native record](../smp-task8/README.md#native-thinkpad-check-owner-run):
-  2.352, 3.598 and 4.432 s wall respectively. Heap ×4 near the roughly 1.3 s
-  solo-client time is the owner's expectation, not a measured result here.
-  Confirm zero failures and compare ×8/×11 for regression.
+The [owner-returned capture](native-t14.txt) includes all eight batches and boot
+topology lines. Twelve logical CPUs were online, with SMT shift 1 throughout:
 
-If the native results do not show the expected benefit, discuss a separate
-balancing follow-up before changing the accepted push threshold or pull policy.
+| Pyxis CPU pair | APIC IDs | Core key |
+| --- | --- | ---: |
+| 0–1 | 0–1 | 0 |
+| 2–3 | 2–3 | 1 |
+| 4–5 | 4–5 | 2 |
+| 6–7 | 8–9 | 4 |
+| 8–9 | 10–11 | 5 |
+| 10–11 | 12–13 | 6 |
+
+The sibling pairs and APIC-derived key gaps match the expected native topology.
+Wall seconds below compare this run with the historical
+[task-8 native record](../smp-task8/README.md#native-thinkpad-check-owner-run),
+rather than a fresh paired baseline boot:
+
+| Batch | Task 8 wall (s) | Core placement wall (s) | Each client (s) |
+| --- | ---: | ---: | --- |
+| heap ×1 | 1.296 | 1.299 | 1.294 |
+| heap ×4 | 2.352 | 1.389 | 1.290, 1.291, 1.292, 1.295 |
+| heap ×8 | 3.598 | 3.486 | 2.316–3.350 |
+| heap ×11 | 4.432 | 4.436 | 2.716–4.286 |
+| pages ×1 | 0.100 | 0.096 | 0.091 |
+| pages ×2 | 0.163 | 0.198 | 0.148–0.149 |
+| pages ×4 | 0.263 | 0.275 | 0.173–0.222 |
+| pages ×8 | 0.423 | 0.472 | 0.215–0.344 |
+
+Every batch reported zero failures. Heap ×4 wall fell about 41%; all four clients
+finished near the solo-client time, meeting the requested native expectation.
+Heap ×8 was about 3% faster and ×11 differed by 0.004 s. These single historical
+comparisons do not establish statistical significance. Pages ×2/×4/×8 were slower
+than the task-8 record; this run does not isolate their cause. The matched nested
+checks above did not isolate a repeatable regression.
+
+The native result completes the placement task. Later topology-aware balancing
+remains a separate decision if concrete workloads show the existing moves erase
+the benefit; the push threshold and pull policy remain unchanged.

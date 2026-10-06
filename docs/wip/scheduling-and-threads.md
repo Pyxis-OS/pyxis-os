@@ -55,18 +55,6 @@ Private memory operations now rely on the single-task model
 fake threading, and no separate-process substitute for shared-pointer worker
 callbacks.
 
-## Topology-aware placement
-
-The [core-aware tie-break](../kernel/smp.md#placement-and-migration) is implemented:
-least logical load, then idle SMT siblings, then the previous parent/AP/BSP order.
-CPUID supplies immutable core records; unavailable topology remains isolated.
-Pulling and the push threshold retain their previous behavior, including the
-observed possibility of later consolidation onto siblings.
-
-The remaining check is the owner's native ThinkPad run of heap ×4, ×8 and ×11.
-The [measurement record and checklist](../development/experiments/core-placement/README.md)
-keep that result pending, separate from the completed nested-QEMU checks.
-
 ## Smaller candidates
 
 - **Scratch-slot walks.** Walk the active address space through the recursive
