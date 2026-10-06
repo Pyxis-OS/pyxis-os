@@ -146,8 +146,11 @@ Agreed 2026-10-07:
     - cancelling on either side leaves no partial file;
     - unrelated output and paste still behave exactly as before.
 
-- [ ] **2. Drag and drop.** Implementation is complete in this PR; Linux
-  client/guest checks passed. Actual GUI terminal acceptance remains pending.
+- [ ] **2. Drag and drop.** Implementation is complete in
+  [Pyxis PR #455](https://git.internal/PyxisOS/pyxis-os/pulls/455), branch
+  `remote/drag-drop`, with [userland PR #137](https://git.internal/PyxisOS/pyxis-userland/pulls/137)
+  (`remote/drop-prompt`, published `352cf14`) merged first. Linux client/guest
+  checks passed. Actual GUI terminal acceptance remains pending.
   - [x] Bracketed-paste detection, shell signaling and one-confirmation upload.
   - [x] Linux QEMU checks for transfer, refusal and ordinary/editor fallback.
   - [ ] Owner GUI-drop validation from Linux and macOS host terminals.
@@ -222,7 +225,7 @@ ports still emitted their existing vendor warnings. The marked editor changes
 libterm, so SDK and ports were rebuilt as well as userland. No compiler-container
 rebuild is needed. Kernel, filesystem, lwIP and ports source pins are unchanged
 from parent main `c76bb80`; the userland dependency starts at `56b9c0e`
-and is published as `5ba8efc` in [userland PR #137](https://git.internal/PyxisOS/pyxis-userland/pulls/137).
+and is published as `352cf14` in [userland PR #137](https://git.internal/PyxisOS/pyxis-userland/pulls/137).
 
 Interactive QEMU used the patched 10.2.2 emulator, raw OVMF, four CPUs, 512 MiB,
 nested KVM, virtio-net/rng and loopback forwarding `2423:2323`. The Linux native
@@ -264,6 +267,15 @@ Actual Linux GUI drops and macOS terminal drops/publication were not measured.
 The milestone remains open for owner terminal acceptance. After that passes,
 close the task checkbox, turn this WIP document into the implemented file-transfer
 reference and update links as specified by AGENTS.md.
+
+Rebase follow-up: main advanced through the libc regex merge during validation.
+The task branches were rebased onto Pyxis `ee69871` and userland `ea0f48c`,
+resolving the parent gitlink/debt-note conflicts while preserving both features.
+A new full source `make -j16 image` passed. On the rebuilt four-CPU nested-KVM
+image, `rebased.class` again uploaded with one confirmation and the matching
+`.class` digest above. Quiet machine completion, FINAL and acknowledged client
+closure still worked. Those client/QEMU jobs were stopped as well. The final
+published userland dependency is `352cf14`; the base's other pins are unchanged.
 
 ## Out of scope
 
