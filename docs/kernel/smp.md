@@ -40,8 +40,10 @@ Only after acquiring that state may the BSP reuse the handoff for another AP.
 The BSP's running APIC timer supplies a startup timeout of approximately five
 seconds without requiring interrupts on the BSP.
 
-PIT calibration is serialized by this startup order. APs do not print normal
-startup messages; the BSP reports their APIC IDs, stack tops and timer counts.
+PIT calibration is serialized by this startup order. APs do not print startup
+messages. The normal log has one line with the online CPU count; with
+`LOG_LEVEL=trace`, the BSP also reports each AP's APIC ID, stack top and timer
+count.
 After all handoffs, the adapter removes its temporary mappings and drops its
 startup references. No CPU continues to depend on Limine's stacks, page tables
 or response pointers. The original bootloader frames remain reserved.
@@ -49,8 +51,9 @@ or response pointers. The original bootloader frames remain reserved.
 ### Core topology
 
 Each CPU samples CPUID after its local APIC is enabled, before publishing online
-state. The BSP logs its index, APIC ID and core key, and logs AP records after
-acquiring their online state. These records are immutable before scheduling.
+state. With `LOG_LEVEL=trace`, the BSP logs its index, APIC ID and core key, and
+logs AP records after acquiring their online state. These records are immutable
+before scheduling.
 
 A valid SMT level in CPUID leaf `0xB`, subleaf zero, supplies the low APIC thread
 bit width. Shifting the full APIC ID by that width retains package identity in
