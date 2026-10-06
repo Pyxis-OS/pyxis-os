@@ -26,6 +26,8 @@ the exported SDK manifest records dirty userland and filesystem inputs.
 Kernel source builds require the pinned native filesystem format library.
 `make -j16 fs-tools` builds `build/fs-tools/libnpfs-format.a`,
 `mkfs.npfs`, `fsck.npfs` and `npfs-inspect`.
+When libfuse3 development files are installed, it also builds the optional Linux
+`npfs-fuse` mount tool; that tool and its RAM journal replay are host-only.
 Caelum owns the native cache and writer; the shared library owns codecs only.
 SDK source builds also require it to export the target codec archive and header. See the
 [native host-tool guide](../../fs/docs/npfs-host-tools.md) for source import,
@@ -58,7 +60,7 @@ the checked-out revision or dependency pins.
 | pyxis-userland | libc, libpyxis, libterm, native TLS adapter, startup/link support, applications, initial boot scripts and its TLSF vendor copy |
 | pyxis-ports | Host Lua runner, pinned third-party recipes, ordered patches and staged executables/licenses and development libraries/headers |
 | pyxis-lwip | Pinned lwIP source subset, license/provenance and any local upstream adaptations |
-| pyxis-fs | Native filesystem format codecs and Linux formatter, checker and inspector/extractor |
+| pyxis-fs | Native filesystem format codecs and Linux formatter, checker, inspector/extractor and read-only FUSE mount |
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime and target codecs, then installs startup, libraries,
