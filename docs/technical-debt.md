@@ -213,9 +213,11 @@ There are two options:
 - **Walk the active address space through the recursive mapping.** This removes
   most slot use, and single-CPU cost, entirely.
 
-Revisit after the native ThinkPad check in SMP task 8, which shows whether the
-cost matters on real hardware. The owner prefers the recursive walk (2026-10-06,
-not yet decided). Frame zeroing would still use a slot. It could instead go
+Natively the cost is small. On the ThinkPad, two page clients each took 1.15–1.25
+times one alone, and eight up to 1.5 times
+([task-8 record](development/experiments/smp-task8/README.md#native-thinkpad-check-owner-run)).
+The owner prefers the recursive walk (2026-10-06); with the native numbers, it
+is a later optimization rather than an SMP prerequisite. Frame zeroing would still use a slot. It could instead go
 through the frame's final mapping before anyone can see it, which would change
 the "zeroed before mapping" rule, or keep one padded zeroing slot per CPU.
 Copy-on-write zero pages were considered and set aside. They only move the

@@ -1,0 +1,8 @@
+heap x1: wall 1.296 s; each 1.289 s; failures 0
+heap x4: wall 2.352 s; each 1.296, 1.445, 2.255, 2.258 s; failures 0
+heap x8: wall 3.598 s; each 2.184, 2.465, 3.298, 3.298, 3.308, 3.309, 3.325, 3.328 s; failures 0
+heap x11: wall 4.432 s; each 2.754, 3.421, 3.770, 4.030, 4.055, 4.060, 4.064, 4.065, 4.074, 4.077, 4.086 s; failures 0
+pages x1: wall 0.100 s; each 0.092 s; failures 0
+pages x2: wall 0.163 s; each 0.105, 0.115 s; failures 0
+pages x4: wall 0.263 s; each 0.105, 0.113, 0.116, 0.117 s; failures 0
+pages x8: wall 0.423 s; each 0.106, 0.114, 0.115, 0.116, 0.119, 0.120, 0.125, 0.137 s; failures 0

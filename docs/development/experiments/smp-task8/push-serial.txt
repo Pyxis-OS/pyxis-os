@@ -1,0 +1,10 @@
+# push.patch on main 7748db5, default image, 4 CPUs (QEMU, nested KVM)
+# load: 2 rounds of 4 background heap + ttcp, 4 background heap + RAM write, then 4 concurrent heap clients
+push 1: task 0xffff8010002a2ef0 CPU 3 (load 2) -> CPU 1 (load 0)
+push 2: task 0xffff80100029a5b0 CPU 1 (load 2) -> CPU 2 (load 0)
+push 3: task 0xffff80100029c450 CPU 1 (load 2) -> CPU 3 (load 0)
+push 4: task 0xffff80100029d040 CPU 1 (load 3) -> CPU 2 (load 1)
+push 5: task 0xffff80100029d040 CPU 0 (load 4) -> CPU 1 (load 1)
+push 6: task 0xffff80100029d040 CPU 1 (load 3) -> CPU 2 (load 1)
+push 7: task 0xffff8010002e13c0 CPU 0 (load 3) -> CPU 1 (load 1)
+push 8: task 0xffff80100029a5b0 CPU 1 (load 3) -> CPU 2 (load 1)

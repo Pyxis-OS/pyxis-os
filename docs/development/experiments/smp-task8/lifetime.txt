@@ -1,0 +1,82 @@
+######## life4
+## idle before
+$1 = {total_frames = 42316, free_frames = 31627, allocated_frames = 10689, metadata_pages = 4}
+$2 = {pools = 15, pool_bytes = 5160960, live_allocations = 2198, live_block_bytes = 3575112, arena_bytes = 5160960, retired_bytes = 0}
+### pipelines and rollback
+ls app:// | head -n 2: exited 0 0.017s
+cat app://share/iobench.bin | head -c 16 | cat: exited 0 0.020s
+ls app:// | app://missing.pxe: launch_failed None 0.005s
+ls app://missing-dir: exited 1 0.010s
+### Ctrl-C: blocked reader, running pipeline, compute job
+1.009s {"type": "command_complete", "command": 1, "kind": "terminated"}
+1.013s {"type": "command_complete", "command": 1, "kind": "terminated"}
+0.510s {"type": "command_complete", "command": 1, "kind": "terminated"}
+### session exit with background jobs
+exit with 4 background jobs: {'type': 'final', 'cause': 'shell_exit', 'process_reason': 1, 'process_reason_name': 'exited', 'exit_status': 0, 'drain': 'complete'}
+## idle after
+$1 = {total_frames = 42316, free_frames = 31627, allocated_frames = 10689, metadata_pages = 4}
+$2 = {pools = 15, pool_bytes = 5160960, live_allocations = 2198, live_block_bytes = 3575112, arena_bytes = 5160960, retired_bytes = 0}
+panics: 0
+######## life2
+## idle before
+$1 = {total_frames = 42399, free_frames = 31726, allocated_frames = 10673, metadata_pages = 4}
+$2 = {pools = 15, pool_bytes = 5160960, live_allocations = 2196, live_block_bytes = 3574600, arena_bytes = 5160960, retired_bytes = 0}
+### pipelines and rollback
+ls app:// | head -n 2: exited 0 0.015s
+cat app://share/iobench.bin | head -c 16 | cat: exited 0 0.018s
+ls app:// | app://missing.pxe: launch_failed None 0.006s
+ls app://missing-dir: exited 1 0.009s
+### Ctrl-C: blocked reader, running pipeline, compute job
+1.011s {"type": "command_complete", "command": 1, "kind": "terminated"}
+1.013s {"type": "command_complete", "command": 1, "kind": "terminated"}
+0.510s {"type": "command_complete", "command": 1, "kind": "terminated"}
+### session exit with background jobs
+exit with 4 background jobs: {'type': 'final', 'cause': 'shell_exit', 'process_reason': 1, 'process_reason_name': 'exited', 'exit_status': 0, 'drain': 'complete'}
+## idle after
+$1 = {total_frames = 42399, free_frames = 31726, allocated_frames = 10673, metadata_pages = 4}
+$2 = {pools = 15, pool_bytes = 5160960, live_allocations = 2200, live_block_bytes = 3575448, arena_bytes = 5160960, retired_bytes = 0}
+panics: 0
+######## life12
+## idle before
+$1 = {total_frames = 41981, free_frames = 31164, allocated_frames = 10817, metadata_pages = 4}
+$2 = {pools = 16, pool_bytes = 5423104, live_allocations = 2206, live_block_bytes = 3577576, arena_bytes = 5423104, retired_bytes = 0}
+### pipelines and rollback
+ls app:// | head -n 2: exited 0 0.018s
+cat app://share/iobench.bin | head -c 16 | cat: exited 0 0.021s
+ls app:// | app://missing.pxe: launch_failed None 0.005s
+ls app://missing-dir: exited 1 0.010s
+### Ctrl-C: blocked reader, running pipeline, compute job
+1.011s {"type": "command_complete", "command": 1, "kind": "terminated"}
+1.015s {"type": "command_complete", "command": 1, "kind": "terminated"}
+0.508s {"type": "command_complete", "command": 1, "kind": "terminated"}
+### session exit with background jobs
+exit with 4 background jobs: {'type': 'final', 'cause': 'shell_exit', 'process_reason': 1, 'process_reason_name': 'exited', 'exit_status': 0, 'drain': 'complete'}
+## idle after
+$1 = {total_frames = 41981, free_frames = 31164, allocated_frames = 10817, metadata_pages = 4}
+$2 = {pools = 16, pool_bytes = 5423104, live_allocations = 2208, live_block_bytes = 3578000, arena_bytes = 5423104, retired_bytes = 0}
+panics: 0
+######## life2c
+## idle before
+$1 = {total_frames = 42399, free_frames = 31726, allocated_frames = 10673, metadata_pages = 4}
+$2 = {pools = 15, pool_bytes = 5160960, live_allocations = 2196, live_block_bytes = 3574552, arena_bytes = 5160960, retired_bytes = 0}
+### pipelines and rollback
+ls app:// | head -n 2: exited 0 0.016s
+cat app://share/iobench.bin | head -c 16 | cat: exited 0 0.017s
+ls app:// | app://missing.pxe: launch_failed None 0.005s
+ls app://missing-dir: exited 1 0.010s
+### Ctrl-C: blocked reader, running pipeline, compute job
+1.009s {"type": "command_complete", "command": 1, "kind": "terminated"}
+1.015s {"type": "command_complete", "command": 1, "kind": "terminated"}
+0.518s {"type": "command_complete", "command": 1, "kind": "terminated"}
+### session exit with background jobs
+exit with 4 background jobs: {'type': 'final', 'cause': 'shell_exit', 'process_reason': 1, 'process_reason_name': 'exited', 'exit_status': 0, 'drain': 'complete'}
+## idle after
+$1 = {total_frames = 42399, free_frames = 31726, allocated_frames = 10673, metadata_pages = 4}
+$2 = {pools = 15, pool_bytes = 5160960, live_allocations = 2196, live_block_bytes = 3574552, arena_bytes = 5160960, retired_bytes = 0}
+## idle after 30 s more
+$1 = {total_frames = 42399, free_frames = 31726, allocated_frames = 10673, metadata_pages = 4}
+$2 = {pools = 15, pool_bytes = 5160960, live_allocations = 2195, live_block_bytes = 3574504, arena_bytes = 5160960, retired_bytes = 0}
+## idle 130 s after the last session closed
+$1 = {total_frames = 42399, free_frames = 31726, allocated_frames = 10673, metadata_pages = 4}
+$2 = {pools = 15, pool_bytes = 5160960, live_allocations = 2195, live_block_bytes = 3574504, arena_bytes = 5160960, retired_bytes = 0}
+panics: 0
