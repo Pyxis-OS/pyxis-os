@@ -44,6 +44,9 @@ static struct space *active_space;
 static size_t viewport_first;
 
 static struct framebuffer *spaces_nav_fb;
+/* One text row of the space area. The cursor's row is composed here, cursor
+ * included, so the screen never shows that row without the cursor. */
+static struct framebuffer *cursor_row_fb;
 
 static struct framebuffer *fb_alloc(const struct boot_framebuffer *boot_fb,
     size_t width, size_t height)
@@ -202,6 +205,7 @@ void space_init(const struct boot_framebuffer *boot_fb)
   active_space = caelum_space;
   log_set_tty(caelum_space->tty);
   spaces_nav_fb = fb_alloc(boot_fb, boot_fb->width, SPACES_NAV_HEIGHT);
+  cursor_row_fb = fb_alloc(boot_fb, boot_fb->width, bizcat.height);
 }
 
 bool space_name_valid(const char *name, size_t length)
@@ -444,6 +448,23 @@ static void draw_spaces_nav()
   }
 }
 
+/* Block cursor: the cell's background becomes the cursor color and its glyph
+ * the cursor text color. Fonts are two-color bitmaps with blank padding, so
+ * the top-left pixel is the cell's background. */
+static void draw_block_cursor(struct framebuffer *row, size_t x, const struct tty *tty)
+{
+  uint32_t block = framebuffer_color(row, tty->scheme->cursor);
+  uint32_t text = framebuffer_color(row, tty->scheme->cursor_text);
+  uint32_t *origin = (uint32_t *)row->address + x;
+  uint32_t background = origin[0];
+  for (size_t line = 0; line < tty->font->height; ++line) {
+    uint32_t *pixel = (uint32_t *)(row->address + line * row->pitch) + x;
+    for (size_t i = 0; i < tty->font->width; ++i) {
+      pixel[i] = pixel[i] == background ? block : text;
+    }
+  }
+}
+
 /* Presenter-owned: set once the early console has handed over the screen. */
 static bool presenting;
 
@@ -483,25 +504,32 @@ void space_present()
   cpu_restore_interrupts(flags);
   const struct framebuffer *source = frame ? &frame->fb : space->fb;
 
-  // Copy active space framebuffer
-  memcpy((void *)(screen->address + dst_offset),
-      (const void *)source->address, source->size);
-
-  /* Composite the cursor onto the display, leaving the TTY pixels intact.
-   * Snapshot under the output lock; never keep it held while copying a frame. */
+  /* Snapshot the cursor under the output lock; never keep it held while
+   * copying a frame. The TTY pixels themselves stay cursor-free. */
   flags = cpu_save_interrupts();
   bool locked = log_begin();
   const struct tty *tty = space->tty;
-  bool visible = !frame && locked && tty->cursor_visible;
+  bool visible = !frame && locked && tty->cursor_visible &&
+      tty->x < tty->width && tty->y < tty->height;
   size_t x = tty->x, y = tty->y;
   log_end(locked);
   cpu_restore_interrupts(flags);
-  if (visible) {
-    struct framebuffer display = *space->fb;
-    display.address = screen->address + dst_offset;
-    fb_fill_rect(&display, x * tty->font->width,
-        (y + 1) * tty->font->height - 1, tty->font->width, 1,
-        tty->scheme->cursor);
+
+  uint8_t *target = (uint8_t *)(screen->address + dst_offset);
+  const uint8_t *pixels = (const uint8_t *)source->address;
+  if (!visible) {
+    memcpy(target, pixels, source->size);
+  } else {
+    /* Every screen write carries final pixels: rows above and below the
+     * cursor go straight across, and the cursor row goes via cursor_row_fb. */
+    size_t row_start = y * tty->font->height * source->pitch;
+    size_t row_bytes = tty->font->height * source->pitch;
+    memcpy(target, pixels, row_start);
+    memcpy((void *)cursor_row_fb->address, pixels + row_start, row_bytes);
+    draw_block_cursor(cursor_row_fb, x * tty->font->width, tty);
+    memcpy(target + row_start, (const void *)cursor_row_fb->address, row_bytes);
+    memcpy(target + row_start + row_bytes, pixels + row_start + row_bytes,
+        source->size - row_start - row_bytes);
   }
 
   cpu_store_fence();

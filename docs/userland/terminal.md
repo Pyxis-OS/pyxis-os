@@ -35,7 +35,7 @@ All non-success results discard the initial text just as they discard typed
 text. The existing line helpers start empty.
 
 Editing supports insertion, Backspace, Delete, Left/Right, Home/End and Enter.
-A steady underline cursor marks the editing position, including the blank cell
+A steady block cursor marks the editing position, including the blank cell
 after the last character. The prompt and line wrap with the TTY, including when
 older output scrolls upward. The helper redraws the line and uses relative row
 movement to reach the editing position. It does not need the screen's absolute
@@ -97,7 +97,7 @@ The TTY keeps its parser state across writes. The supported subset is:
 | `CSI row;column H` | Set position (one-based) |
 | `CSI 0/1/2 K` | Erase line after/before/around cursor, including its cell |
 | `CSI 0/1/2 J` | Erase screen after/before/around cursor, including its cell |
-| `CSI ? 25 h/l` | Show/hide the nonblinking underline cursor |
+| `CSI ? 25 h/l` | Show/hide the nonblinking block cursor |
 | `CSI ... m` | Reset, reverse video, palette/default foreground and background |
 
 `CSI` is Escape followed by `[`. Movement defaults to one; position defaults to
@@ -137,10 +137,15 @@ This permits a full-width line followed by CR/LF without a second line advance,
 and permits writing the bottom-right cell before repositioning without scrolling.
 
 Cursor state belongs to each TTY and defaults to visible. Presentation snapshots
-its position/visibility under the output lock and draws it onto the display after
-blitting. The cursor never modifies the space framebuffer, so moving, hiding or
-switching spaces leaves no saved-pixel restoration work. Framebuffer presentation
-still permits tearing; no frame transaction or resize handling is added.
+its position/visibility under the output lock before copying the frame. The
+cursor's text row is composed off-screen with the cursor already drawn, then
+copied, so the screen never shows that row without the cursor. The block uses
+the scheme's cursor color for the cell's background and its cursor-text color
+for the glyph, taking the cell's top-left pixel as its background. The cursor
+never modifies the space framebuffer, so moving, hiding or switching spaces
+leaves no saved-pixel restoration work. The framebuffer has no page flip or
+vertical sync, so presentation still permits tearing; no frame transaction or
+resize handling is added.
 
 The shell uses the helper for command input, then stops reading while a child
 runs. It retries after cancellation or input loss and rejects submitted lines
