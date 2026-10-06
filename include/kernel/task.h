@@ -122,6 +122,12 @@ void kernel_task_sleep_until(uint64_t deadline);
  * only when another task is runnable; otherwise return. Resumes with IF=1. */
 void kernel_task_yield_if_runnable(void);
 
+/* ACPI worker on the BSP, IF=0. Power-off hold of all user execution: each user
+ * task parks at its next return to user mode, whether from a syscall, a timer
+ * preemption or the ready queue. Tasks inside syscalls finish them first.
+ * Release requeues every parked task. Hold and release alternate. */
+void task_user_hold(void);
+void task_user_release(void);
 /* Round-robin queue per CPU. The boot stack becomes the scheduler/cleanup
  * stack. Call once per CPU with IF=0; the BSP releases waiting AP schedulers.
  * Only kernel task bodies and userspace run with interrupts enabled. */

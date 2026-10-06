@@ -85,6 +85,12 @@ static struct task_wait *timed_waits; /* queues_locked, expired by the BSP. */
 /* Sleeping kernel tasks belong to the BSP and are accessed only with IF=0. */
 static struct task *sleeping_tasks;
 
+/* Power-off hold. Changed under queues_locked; read without it at user
+ * boundaries, where a stale value only moves the stop to the next boundary.
+ * Held tasks are parked user tasks with saved stacks, outside every queue. */
+static atomic_bool user_hold;
+static struct task *held_tasks;
+
 /* Protects queue links and wait state. Resource and group locks may be held
  * while taking it; it nests inside them, never the reverse. */
 static void lock_queues(void)
@@ -181,10 +187,11 @@ void task_syscall_leave(void)
   struct scheduler *scheduler = local_scheduler();
   struct task *task = scheduler->current_task;
   task->in_syscall = false;
-  if (task->relocate) {
-    /* The caller's space no longer allows this CPU. Switch out before any user
-     * instruction runs; the scheduler requeues the task on an allowed CPU, and
-     * the rest of the syscall return runs there from this kernel stack. */
+  if (task->relocate || atomic_load_explicit(&user_hold, memory_order_acquire)) {
+    /* The caller's space no longer allows this CPU, or user tasks are held.
+     * Switch out before any user instruction runs; the scheduler requeues or
+     * holds the task, and the rest of the syscall return later runs from this
+     * kernel stack. */
     task->relocate = false;
     arch_user_save(&task->cpu);
     arch_context_switch(&task->saved_stack, scheduler->stack);
@@ -605,6 +612,49 @@ static void requeue_preempted(struct task *task, size_t cpu_index)
   notify_remote_cpu(destination);
 }
 
+/* Scheduler, IF=0, for a user task outside a syscall that is about to run, or
+ * has just stopped running, user code. True when the hold parked it. */
+static bool hold_user_task(struct task *task)
+{
+  if (task->kind != TASK_USER || task->in_syscall) {
+    return false;
+  }
+  lock_queues();
+  bool held = atomic_load_explicit(&user_hold, memory_order_relaxed);
+  if (held) {
+    task->next = held_tasks;
+    held_tasks = task;
+  }
+  unlock_queues();
+  return held;
+}
+
+void task_user_hold(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  lock_queues();
+  KASSERT(!atomic_load_explicit(&user_hold, memory_order_relaxed));
+  atomic_store_explicit(&user_hold, true, memory_order_release);
+  unlock_queues();
+}
+
+void task_user_release(void)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  lock_queues();
+  KASSERT(atomic_load_explicit(&user_hold, memory_order_relaxed));
+  atomic_store_explicit(&user_hold, false, memory_order_release);
+  struct task *task = held_tasks;
+  held_tasks = NULL;
+  unlock_queues();
+  while (task) {
+    struct task *next = task->next;
+    task->next = NULL;
+    requeue_preempted(task, task->cpu_index);
+    task = next;
+  }
+}
+
 [[noreturn]] static void enter_task(void)
 {
   struct task *task = local_scheduler()->current_task;
@@ -971,6 +1021,10 @@ void kernel_task_yield_if_runnable(void)
       complete_task(task);
       continue;
     }
+    if (hold_user_task(task)) {
+      scheduler->current_task = NULL;
+      continue;
+    }
 
     /* Reload CR3 before touching a newly published task stack. This also
      * discards translations from a previous use of its kernel virtual range. */
@@ -1004,7 +1058,7 @@ void kernel_task_yield_if_runnable(void)
     } else if (task->sleep_deadline) {
       task->next = sleeping_tasks;
       sleeping_tasks = task;
-    } else {
+    } else if (!hold_user_task(task)) {
       requeue_preempted(task, cpu_index);
     }
   }
@@ -1044,6 +1098,9 @@ void task_preempt(bool user_mode)
     (arch_cpu_index() == 0 &&
      completed_head != NULL);
   unlock_queues();
+  if (task->kind == TASK_USER && atomic_load_explicit(&user_hold, memory_order_acquire)) {
+    schedule_needed = true;
+  }
   if (arch_cpu_index() == 0 && object_reap_pending()) {
     schedule_needed = true;
   }
