@@ -45,8 +45,9 @@ The first tab is Caelum's live kernel log, and boot starts there. Super+Right
 selects the Development shell, then the Read-only host-access session, then
 Remote, which starts the [remote terminal server](docs/userland/remote-terminal.md).
 Super+Left/Right stops at either end, and the tab bar scrolls when the spaces
-do not fit. Every CPU count gets the same spaces. `SPACES` and the
-[init scripts](docs/userland/init.md) select these spaces and their grants.
+do not fit. Every CPU count gets the same spaces. Boot init creates them from
+the [boot configuration](docs/userland/init.md#boot-configuration), and the init
+scripts hand off to sessions.
 
 The shell starts at `tmp://`, which is RAM-backed and lost on reboot. `boot://`
 contains the read-only boot archive. Optional [virtio-fs setup](docs/devices/virtio-fs.md)

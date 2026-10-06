@@ -72,9 +72,9 @@ not contain commas, which delimit QEMU options.
 
 Successful initialization logs the prepared queue addresses followed by a FUSE
 session-ready message. The default Development and Read-only spaces start
-shells; Super+Right selects their tabs. Each interactive init mounts the
-same export before session handoff. The development profile delegates
-read-write grants; the read-only profile delegates read-only grants.
+shells; Super+Right selects their tabs. Boot init mounts the export once,
+read-write, and gives each space the access its `live.lua` entry asks for:
+Development receives read-write grants and Read-only receives read-only grants.
 The Remote profile delegates an optional read-write view to its remote
 shell sessions, sharing the same export.
 Both shells start in the shared RAM-backed `tmp://` directory, so use an
@@ -120,8 +120,8 @@ With the writable daemon above and the default init selections, CPU 1 can use
 Kilo, TCC, `mkdir`, `rm`, `rmdir` and `mv` in the export. CPU 2 sees the live
 tree through read-only grants; its attempted mutations fail even when the host
 daemon permits writes. Neither CPU number nor the `host://` name sets authority:
-the selected trusted init delegates the root grants. See
-[init selection](../userland/init.md#boot-selection) and the
+boot init delegates the root grants from the configuration. See
+[boot configuration](../userland/init.md#boot-configuration) and the
 [future user/authority checkpoint](../wip/users-and-authority.md).
 
 In CPU 1's shell, create a directory and edit a source file there:
@@ -460,16 +460,19 @@ device/daemon/backing service and cannot isolate any one component or CPU time.
 
 ## Init mount and delegation
 
-The default init script is:
+`live.lua` names the export as a `virtio-fs` volume, and spaces name it as a
+`host` root:
 
-```text
-#!boot://shell.pxe
-mount --optional --read-write host
-session boot://session.pxe --configure-network
+```lua
+volumes = { host = { kind = "virtio-fs" } },
+spaces = {
+  { name = "development", init = "boot://init", network = true,
+    roots = { host = { access = "read-write", optional = true } } },
+},
 ```
 
-When the selected modern virtio-fs device is present, native init or its script
-interpreter receives a `host_mount` resource. This mount object is authority over
+When the selected modern virtio-fs device is present, boot init receives a
+`host_mount` resource; space inits do not. This mount object is authority over
 that one boot-lifetime export; knowing the device tag supplies no authority.
 Presence is recorded before preparation, so a failed device is never confused
 with an absent one.
@@ -483,9 +486,10 @@ opening another root cannot widen existing handles. Read-write authorizes
 mutation attempts, not a promise of host writability. Host/backend errors still
 apply, with no write probe or silent read-only fallback. A validated zero-byte
 write is a backend-free no-op. Missing required rights fail with DENIED first.
-The packaged development init explicitly requests read-write access; the
-read-only init requests read-only access. Both use `--optional` and leave the
-initial working directory at `tmp://`.
+Boot init opens the root once, read-write if any space asks for that, and
+forwards read-only grants to read-only roots. The packaged roots are optional
+and leave the initial working directory at `tmp://`. The shell's
+`mount ... host` command still works for a holder of `host_mount`.
 The mount operation uses the existing object-call ABI and creates neither a
 global namespace entry nor a kernel URI parser.
 

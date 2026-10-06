@@ -1,8 +1,8 @@
 # Remote terminal server and host client
 
-The default four-CPU image selects `boot://init-remote` on CPU 3, titled Remote.
+The live boot configuration starts `boot://init-remote` in the Remote space.
 It starts the native TCP terminal server on the configured guest IPv4 address,
-port 2323. CPU 1 remains the network configuration owner; Remote waits for an
+port 2323. The Development space is the network owner; Remote waits for an
 assigned address with a 100 ms clock sleep. Remote looks up the configured
 selector under READ authority, then waits for the configuration owner to bind
 and assign that candidate; lookup never activates hardware. An absent or unavailable NIC is

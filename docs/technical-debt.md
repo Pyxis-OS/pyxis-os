@@ -810,10 +810,33 @@ The [system layout](wip/system-layout.md) renames leave two gaps until later tas
   Quake's write directory, the hello demo and the `home://` examples in the
   shell, port and tool guides fail until then. They keep the name so task 4
   needs no second rename; use `tmp://` or a mounted volume meanwhile.
-- Update recognizes only `space.pyxis=boot://init-installed`. An installation
-  from before the rename, such as 0.0.2, is reported as having damaged or
-  missing boot files and an unknown revision, and is rebuilt. The pool is unaffected. Revisit with task 3's
-  two-stage Update.
+- Update recognizes only the current installed form, boot init's normal and
+  rescue entries. An installation from before task 2, such as 0.0.2, is
+  reported as having damaged or missing boot files and an unknown revision, and
+  is rebuilt. The pool is unaffected. Revisit with task 3's two-stage Update.
+
+## Boot init and space creation
+
+[Boot init](userland/init.md#boot-configuration) and the
+[space factory](userland/init.md#space-creation) have these limits:
+
+- Space creation panics on memory exhaustion, as boot-time creation always
+  did. Only boot init can create spaces, early in boot. Make creation fallible
+  before the new-space flow lets users create spaces.
+- A failed launch returns only a status. The caller cannot tell a request
+  rejected before creation from a space that was created and left unstarted;
+  boot init only reports it. Revisit with the space manager.
+- Spaces are never destroyed.
+- Space inits must be `boot://` archive entries, and they hold no mount
+  authority, so `sync --disk` is unavailable to them; `sync PATH...` works.
+- Every new space's first process receives that space's console, keyboard,
+  pointer, display and space grants, so the installer now holds input,
+  display and title authority it does not use.
+- Configuration errors are Lua messages and call statuses are numbers.
+- Spaces created one after another usually start their inits on the same AP,
+  because earlier inits are blocked and do not count toward load; boot used to
+  place all inits before scheduling, on CPUs 1, 2 and 3. Balancing moves
+  runnable tasks later. Revisit if interactive latency suffers.
 
 ## Archive-only network configuration
 
