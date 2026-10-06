@@ -303,6 +303,11 @@ Accepted by the owner on 2026-10-06:
       `system`, and spaces name it in their roots, read-write or read-only.
       The default `pyxis` space gets it read-write, and so does the rescue
       entry, which boots that default.
+    - **Optional in the default** (owner, 2026-10-07, from the review).
+      `installed.lua` marks `home` optional for `pyxis`, so an unmountable home
+      volume starts `pyxis` in `tmp://` with the message instead of leaving it
+      unstarted, and the rescue entry does not depend on it. `system` stays
+      required.
     - **Start directory.** Spaces start in `home://`. A `start` key naming
       another of the space's roots overrides that; naming a root the space
       does not have is a configuration error. A space without the root it

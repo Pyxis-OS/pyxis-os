@@ -175,7 +175,9 @@ The installed configuration has two entries and a three-second menu:
 `init=boot://boot-init.pxe mount.disk=<GUID>`, and the rescue entry, which adds
 `boot.default_config=1`. The archive's installed configuration starts the
 `pyxis` space with `boot://init-installed`, `system://` and `home://`
-read-write, starting in `home://`, and network ownership. That init starts the
+read-write, starting in `home://`, and network ownership. `home` is optional:
+if the volume cannot be mounted, `pyxis` still starts, in `tmp://`, in both
+the normal and the rescue entry. `system` is required. That init starts the
 ordinary local session and configures networking. `tmp://` remains RAM-backed.
 Live boots give the Development and Read-only spaces the RAM `home://`,
 read-write and read-only, and the Remote space read-write, starting in
