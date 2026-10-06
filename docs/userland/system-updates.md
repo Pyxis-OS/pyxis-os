@@ -32,12 +32,14 @@ replays, migrates or writes the pool. Finalized and unfinalized installations
 both qualify; Update needs no `SAFE_TO_WIPE` marker and has no Read the room mode.
 
 ESP inspection distinguishes valid contents, rebuildable contents and refusal.
-A valid installed command line carries this disk's `mount.disk` and exactly one
-`space.pyxis=boot://init-installed`; any other configuration is rebuildable.
-Installations from before the `boot://` rename, including 0.0.2, name
-`app://init-installed`. Update offers them as rebuildable, reporting damaged or
-missing boot files and an unknown installed revision, and replaces the ESP as
-usual.
+A valid installed configuration has exactly two command lines: one with only
+`init=boot://boot-init.pxe` and this disk's `mount.disk`, and the rescue entry's,
+which adds `boot.default_config=1`. Any other configuration is rebuildable.
+Installations from before boot init, including 0.0.2 and the `boot://` rename,
+have a single `space.pyxis=` command line. Update offers them as rebuildable,
+reporting damaged or missing boot files and an unknown installed revision, and
+replaces the ESP as usual. The pool, including any `system://config/boot.lua`,
+is untouched.
 Missing or structurally damaged FAT/boot contents are rebuildable using the
 healthy GPT and compatible empty-journal pool as the recovery anchor. When the
 installed configuration is readable, it must not carry a foreign or invalid disk

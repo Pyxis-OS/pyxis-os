@@ -1,4 +1,5 @@
 #include <abi/console.h>
+#include <arch/console.h>
 #include <arch/smp.h>
 #include <arch/cpu.h>
 #include <kernel/keyboard.h>
@@ -208,6 +209,9 @@ bool console_write(struct console_object *console, const char *bytes, size_t siz
 
   for (size_t i = 0; i < size; ++i) {
     tty_put_char(console->tty, bytes[i]);
+    if (console->serial) {
+      console_putc(bytes[i]);
+    }
   }
   log_end(locked);
   return true;

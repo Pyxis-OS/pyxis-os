@@ -27,13 +27,9 @@ export VIRTIO_FS_SOCKET VIRTIO_NET TCP_FORWARD UDP_FORWARD VIRTIO_RNG VIRTIO_BLK
 export VFIO_PCI
 INIT ?=
 NETWORK_CONFIG ?=
-# Ordered NAME=IMAGE initial spaces; tab order follows Caelum's log space.
-SPACES ?= development=boot://init readonly=boot://init-readonly remote=boot://init-remote
-# Optional NAME=LIST CPU ceilings, e.g. remote=2-3; unlisted spaces may use every CPU.
-SPACE_CPUS ?=
 MOUNT_DISK ?=
 BOOT_MENU_TIMEOUT ?= 0
-export SPACES SPACE_CPUS MOUNT_DISK BOOT_MENU_TIMEOUT
+export MOUNT_DISK BOOT_MENU_TIMEOUT
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)

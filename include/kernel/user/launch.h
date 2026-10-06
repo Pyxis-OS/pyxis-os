@@ -19,17 +19,21 @@ struct space;
 enum mm_result user_process_load(struct space *space, const void *bytes, size_t size,
                                   struct process **process, uintptr_t *entry);
 
-/* BSP, IF=0, before scheduler startup. Create each configured space in command
- * line order and start its trusted init. Fatal on invalid configuration. */
+/* BSP, IF=0, before scheduler startup. Parses init=, mount.disk=, boot.install=1
+ * and boot.default_config=1, then starts boot init. Fatal on invalid options. */
 void user_launch_initial(const char *command_line);
 
 /* Initial inits and their interpreters name boot archive entries by this root. */
 #define USER_BOOT_ROOT_PREFIX "boot://"
 #define USER_BOOT_ROOT_PREFIX_LENGTH (sizeof(USER_BOOT_ROOT_PREFIX) - 1)
 
-/* Boot startup only: load one archive image/script with full bootstrap grants.
- * Boot and RAM tmp roots are shared between initial processes. Fatal on failure. */
-void user_launch_init(struct space *space, const char *image_uri,
-    const struct mount_config *mount_config, bool install);
+/* Boot startup only: load boot init, an archive image or script, in Caelum's
+ * space with the bootstrap services, the boot and RAM tmp roots, the space
+ * factory, mount authority and, with INSTALL, the raw installer grants. It
+ * gets console output but no input or other space devices. Its arguments add
+ * --installed when a disk is bound and --default-config for the rescue entry.
+ * Fatal on failure. */
+void user_launch_boot_init(const char *image_uri, const struct mount_config *mount_config,
+    bool install, bool default_config);
 
 #endif

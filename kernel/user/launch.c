@@ -13,8 +13,6 @@
 #include <kernel/object/mount.h>
 #include <kernel/block.h>
 #include <kernel/virtio/pci.h>
-#include <kernel/object/keyboard.h>
-#include <kernel/object/pointer.h>
 #include <kernel/object/space.h>
 #include <kernel/object/profile.h>
 #include <abi/clock.h>
@@ -25,8 +23,6 @@
 #include <kernel/object/clock.h>
 #include <kernel/object/system_info.h>
 #include <abi/launcher.h>
-#include <abi/display.h>
-#include <kernel/object/display.h>
 #include <abi/memory.h>
 #include <abi/directory.h>
 #include <abi/console.h>
@@ -86,10 +82,11 @@ static enum initrd_result select_image(const char *name, struct initrd_file *ima
   return initrd_lookup(interpreter + USER_BOOT_ROOT_PREFIX_LENGTH, image);
 }
 
-void user_launch_init(struct space *space, const char *image_uri,
-    const struct mount_config *mount_config, bool install)
+void user_launch_boot_init(const char *image_uri, const struct mount_config *mount_config,
+    bool install, bool default_config)
 {
   KASSERT(arch_cpu_index() == 0);
+  struct space *space = space_caelum();
   struct process *process = NULL;
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
   struct kernel_object *namespace_service = NULL, *terminal_service = NULL;
@@ -97,7 +94,7 @@ void user_launch_init(struct space *space, const char *image_uri,
   struct kernel_object *disks = NULL;
   struct file_object *boot_kernel = NULL, *boot_archive = NULL;
   struct file_object *script_file = NULL;
-  struct kernel_object *space_control = NULL, *profile = NULL, *pipe = NULL, *service = NULL;
+  struct kernel_object *factory = NULL, *profile = NULL, *pipe = NULL, *service = NULL;
   struct kernel_object *mount = NULL, *echo = NULL, *net_config = NULL, *udp = NULL, *tcp = NULL, *random = NULL;
 
   if (!boot_root) {
@@ -140,29 +137,21 @@ void user_launch_init(struct space *space, const char *image_uri,
     goto fail;
   }
 
-  handle_t input, output, memory_handle, launcher_handle, display_handle, boot, tmp;
-  handle_t clock_handle, keyboard_handle, pointer_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
+  handle_t memory_handle, launcher_handle, boot, tmp;
+  handle_t clock_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
   handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
   handle_t system_info_handle;
   handle_t script_handle = HANDLE_INVALID;
-  handle_t standard_input, standard_output, standard_error;
+  handle_t standard_output, standard_error;
   struct kernel_object *console = &process->space->console->object;
   if (capability_install(&process->capabilities, terminal_service, TERMINAL_SERVICE_RIGHT_CREATE, 0, &terminal_service_handle) != CAP_OK ||
       capability_install(&process->capabilities, namespace_service, NAMESPACE_SERVICE_RIGHT_CREATE, 0, &namespace_service_handle) != CAP_OK ||
       capability_install(&process->capabilities, service, ENDPOINT_SERVICE_RIGHT_CREATE, 0, &service_handle) != CAP_OK ||
       capability_install(&process->capabilities, profile, PROFILE_RIGHT_MEMORY | PROFILE_RIGHT_FILE | PROFILE_RIGHT_HOST, 0, &profile_handle) != CAP_OK ||
       capability_install(&process->capabilities, pipe, PIPE_SERVICE_RIGHT_CREATE, 0, &pipe_handle) != CAP_OK ||
-      capability_install(&process->capabilities, console,
-          CONSOLE_RIGHT_READ | CONSOLE_RIGHT_INTERRUPT, 0, &input) != CAP_OK ||
-      capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &output) != CAP_OK ||
-      capability_install(&process->capabilities, console, CONSOLE_RIGHT_READ, 0, &standard_input) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &standard_output) != CAP_OK ||
       capability_install(&process->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &standard_error) != CAP_OK ||
       capability_install(&process->capabilities, memory, MEMORY_RIGHT_MANAGE, 0, &memory_handle) != CAP_OK ||
-      capability_install(&process->capabilities, &process->space->keyboard->object,
-          KEYBOARD_RIGHT_INPUT, 0, &keyboard_handle) != CAP_OK ||
-      capability_install(&process->capabilities, &process->space->pointer->object,
-          POINTER_RIGHT_INPUT, 0, &pointer_handle) != CAP_OK ||
       capability_install(&process->capabilities, net_config, NET_CONFIG_RIGHTS, 0, &net_config_handle) != CAP_OK ||
       capability_install(&process->capabilities, random, RANDOM_RIGHT_READ, 0, &random_handle) != CAP_OK ||
       capability_install(&process->capabilities, tcp, TCP_SERVICE_RIGHTS, 0, &tcp_handle) != CAP_OK ||
@@ -172,19 +161,17 @@ void user_launch_init(struct space *space, const char *image_uri,
       capability_install(&process->capabilities, clock, CLOCK_RIGHTS, 0, &clock_handle) != CAP_OK ||
       capability_install(&process->capabilities, system_info, SYSTEM_INFO_RIGHT_READ, 0, &system_info_handle) != CAP_OK ||
       capability_install(&process->capabilities, launcher,
-          LAUNCHER_RIGHT_LAUNCH | LAUNCHER_RIGHT_CREATE_GROUP, 0, &launcher_handle) != CAP_OK ||
-      capability_install(&process->capabilities, &process->space->display->object,
-          DISPLAY_RIGHT_DRAW, 0, &display_handle) != CAP_OK) {
+          LAUNCHER_RIGHT_LAUNCH | LAUNCHER_RIGHT_CREATE_GROUP, 0, &launcher_handle) != CAP_OK) {
     goto fail;
   }
-  handle_t space_handle;
-  space_control = space_control_create(process->space);
-  if (!space_control || capability_install(&process->capabilities, space_control,
-        SPACE_RIGHT_SET_TITLE | SPACE_RIGHT_SET_AFFINITY, 0, &space_handle) != CAP_OK) {
+  handle_t factory_handle;
+  factory = space_factory_create();
+  if (!factory || capability_install(&process->capabilities, factory,
+        SPACE_FACTORY_RIGHT_CREATE, 0, &factory_handle) != CAP_OK) {
     goto fail;
   }
-  object_release(space_control);
-  space_control = NULL;
+  object_release(factory);
+  factory = NULL;
   uint64_t boot_rights = DIRECTORY_RIGHT_LOOKUP | DIRECTORY_RIGHT_ENUMERATE |
                          DIRECTORY_RIGHT_READ_FILES;
   uint64_t tmp_rights = boot_rights | DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
@@ -274,12 +261,9 @@ void user_launch_init(struct space *space, const char *image_uri,
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[26] = {
-    {"input", input},
-    {"output", output},
+  struct process_binding resources[22] = {
     {"memory", memory_handle},
     {"launcher", launcher_handle},
-    {"display", display_handle},
     {"clock", clock_handle},
     {"system_info", system_info_handle},
     {"echo", echo_handle},
@@ -287,16 +271,14 @@ void user_launch_init(struct space *space, const char *image_uri,
     {"tcp", tcp_handle},
     {"random", random_handle},
     {"net_config", net_config_handle},
-    {"keyboard", keyboard_handle},
-    {"pointer", pointer_handle},
     {"profile", profile_handle},
     {"pipe", pipe_handle},
     {"service", service_handle},
     {"namespace_service", namespace_service_handle},
     {"terminal", terminal_service_handle},
   };
-  size_t resource_count = 19;
-  resources[resource_count++] = (struct process_binding){"space", space_handle};
+  size_t resource_count = 14;
+  resources[resource_count++] = (struct process_binding){"space_factory", factory_handle};
   if (script_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"script", script_handle};
   }
@@ -312,11 +294,18 @@ void user_launch_init(struct space *space, const char *image_uri,
     resources[resource_count++] = (struct process_binding){"boot_archive", archive_handle};
   }
   const struct process_binding roots[] = {{"boot", boot}, {"tmp", tmp}};
-  const char *arguments[] = {script.data ? interpreter : image_uri, image_uri};
+  /* Boot init learns the bound disk and the rescue selection from its arguments. */
+  const char *arguments[4] = {script.data ? interpreter : image_uri, image_uri};
+  size_t argument_count = script.data ? 2 : 1;
+  if (mount_config->enabled) {
+    arguments[argument_count++] = "--installed";
+  }
+  if (default_config) {
+    arguments[argument_count++] = "--default-config";
+  }
   const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
   const struct process_startup startup = {
     .streams = {
-      [STARTUP_STDIN] = {PROTOCOL_CONSOLE, standard_input},
       [STARTUP_STDOUT] = {PROTOCOL_CONSOLE, standard_output},
       [STARTUP_STDERR] = {PROTOCOL_CONSOLE, standard_error},
     },
@@ -329,14 +318,13 @@ void user_launch_init(struct space *space, const char *image_uri,
     .working_path = "tmp://",
     .environment = environment,
     .environment_count = sizeof(environment) / sizeof(environment[0]),
-    .argc = script.data ? 2 : 1,
+    .argc = argument_count,
     .argv = arguments,
   };
   if (process_prepare_startup(process, &startup) != MM_OK) {
     goto fail;
   }
-  /* The title still holds the configured name: no task has run yet. */
-  klog("userspace: space %s: %s entry=%p\n", space->title, image_uri, (void *)entry);
+  klog("userspace: boot init %s entry=%p\n", image_uri, (void *)entry);
   if (user_task_create(process, entry,
         USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE) != MM_OK) {
     goto fail;
@@ -373,8 +361,8 @@ fail:
   if (profile) {
     object_release(profile);
   }
-  if (space_control) {
-    object_release(space_control);
+  if (factory) {
+    object_release(factory);
   }
   if (tcp) {
     object_release(tcp);
@@ -420,5 +408,5 @@ fail:
   while (object_reap_pending()) {
     object_reap();
   }
-  panic("cannot prepare init %s for space %s", image_uri, space->title);
+  panic("cannot prepare boot init %s", image_uri);
 }

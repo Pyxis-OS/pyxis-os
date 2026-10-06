@@ -237,6 +237,12 @@ static struct syscall_result call_object(handle_t handle,
     }
     return space_control_call(object, rights, header.operation,
         request_address, request_size);
+  case OBJECT_SPACE_FACTORY:
+    if (header.protocol != PROTOCOL_SPACE_FACTORY) {
+      return (struct syscall_result){CALL_BAD_OPERATION, 0};
+    }
+    return space_factory_call(rights, header.operation, request_address, request_size,
+        reply_address, reply_capacity);
   case OBJECT_KEYBOARD:
     if (header.protocol != PROTOCOL_KEYBOARD) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};

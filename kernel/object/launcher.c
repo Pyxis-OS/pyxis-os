@@ -132,6 +132,12 @@ void launcher_request_execute(struct launcher_request *request)
         request->parent_cpu, request->execution_group, &request->child);
     discard_capture(request->capture);
     break;
+  case LAUNCH_CREATE_SPACE:
+    KASSERT(request->capture && request->parent && !request->group);
+    request->result = launcher_create_space(request->capture, request->parent,
+        &request->child);
+    discard_capture(request->capture);
+    break;
   case LAUNCH_BATCH_PREPARE:
     KASSERT(request->capture && request->group && request->parent);
     request->result = launcher_batch_prepare(request->group, request->capture,
@@ -177,7 +183,7 @@ static struct launcher_request *request_launch_service(enum launcher_action acti
     .child = HANDLE_INVALID,
   };
   if (action == LAUNCH_START || action == LAUNCH_BATCH_PREPARE ||
-      action == LAUNCH_CREATE_EXECUTION_GROUP) {
+      action == LAUNCH_CREATE_SPACE || action == LAUNCH_CREATE_EXECUTION_GROUP) {
     request->parent = process_current();
     KASSERT(request->parent);
     request->parent_cpu = arch_cpu_index();
@@ -246,8 +252,8 @@ static void discard_launch_batch(struct launch_preparation *group)
 
 /* Arrays use at most 8-byte alignment. All pointer/count arithmetic is bounded
  * by this one capture budget before user addresses are indexed. */
-static void *capture_array(struct launch_capture *capture, uintptr_t address,
-                             size_t count, size_t item_size)
+void *launcher_capture_array(struct launch_capture *capture, uintptr_t address,
+    size_t count, size_t item_size)
 {
   if (!count || capture->error != CALL_OK) {
     return NULL;
@@ -298,7 +304,7 @@ static struct process_binding *capture_bindings(struct launch_capture *capture,
    * never dereference a caller-supplied address as a kernel string. */
   _Static_assert(sizeof(struct launch_binding) == sizeof(struct process_binding),
                  "binding capture storage");
-  struct process_binding *bindings = capture_array(capture, address, count, sizeof(*bindings));
+  struct process_binding *bindings = launcher_capture_array(capture, address, count, sizeof(*bindings));
   if (!bindings) {
     return NULL;
   }
@@ -429,7 +435,7 @@ static void capture_namespace(struct launch_capture *capture, uint64_t namespace
 static void capture_startup(struct launch_capture *capture, const struct launch_request *source)
 {
   capture->grant_count = source->grant_count;
-  capture->grants = capture_array(capture, source->grants, source->grant_count,
+  capture->grants = launcher_capture_array(capture, source->grants, source->grant_count,
       sizeof(*capture->grants));
   struct process_startup *startup = &capture->startup;
   startup->resource_count = source->resource_count;
@@ -437,7 +443,7 @@ static void capture_startup(struct launch_capture *capture, const struct launch_
   startup->root_count = source->root_count;
   startup->roots = capture_bindings(capture, source->roots, source->root_count);
   startup->working_directory_count = source->working_directory_count;
-  startup->working_directories = capture_array(capture, source->working_directories,
+  startup->working_directories = launcher_capture_array(capture, source->working_directories,
       source->working_directory_count, sizeof(handle_t));
   for (size_t i = 0; i < source->working_directory_count && capture->error == CALL_OK; ++i) {
     if (startup->working_directories[i] >= source->grant_count) {
@@ -453,7 +459,7 @@ static void capture_startup(struct launch_capture *capture, const struct launch_
   _Static_assert(sizeof(struct startup_variable) == sizeof(struct process_variable),
                  "environment capture storage");
   startup->environment_count = source->environment_count;
-  struct process_variable *environment = capture_array(capture, source->environment,
+  struct process_variable *environment = launcher_capture_array(capture, source->environment,
       source->environment_count, sizeof(*environment));
   startup->environment = environment;
   for (size_t i = 0; i < source->environment_count && capture->error == CALL_OK; ++i) {
@@ -464,15 +470,15 @@ static void capture_startup(struct launch_capture *capture, const struct launch_
   }
 
   startup->argc = source->argc;
-  const char **argv = capture_array(capture, source->argv, source->argc, sizeof(*argv));
+  const char **argv = launcher_capture_array(capture, source->argv, source->argc, sizeof(*argv));
   startup->argv = argv;
   for (size_t i = 0; i < source->argc && capture->error == CALL_OK; ++i) {
     argv[i] = capture_string(capture, (uintptr_t)argv[i]);
   }
 }
 
-static enum call_status capture_launch_request(const struct launch_request *request,
-                                               struct launch_capture **result)
+enum call_status launcher_capture_request(const struct launch_request *request,
+    struct launch_capture **result)
 {
   *result = NULL;
   struct kernel_object *image;
@@ -546,6 +552,30 @@ static enum call_status capture_launch_request(const struct launch_request *requ
   return CALL_OK;
 }
 
+struct launch_capture *launcher_capture_empty(void)
+{
+  return allocate_launch_capture();
+}
+
+void launcher_capture_discard(struct launch_capture *capture)
+{
+  if (capture->image && (capture->image->backing == FILE_INITRD ||
+      capture->image->backing == FILE_RAM)) {
+    file_end_operation(capture->image);
+  }
+  discard_launch_capture(capture);
+}
+
+enum call_status launcher_submit_space(struct launch_capture *capture, handle_t *child)
+{
+  struct launcher_request *request = request_launch_service(LAUNCH_CREATE_SPACE, capture,
+      NULL, NULL);
+  *child = request->child;
+  enum call_status result = request->result;
+  bsp_request_release(&request->request);
+  return result;
+}
+
 static struct syscall_result launch_one(struct execution_group *execution_group,
     uintptr_t request_address, size_t request_size,
                                         uintptr_t reply_address, size_t reply_capacity)
@@ -560,7 +590,7 @@ static struct syscall_result launch_one(struct execution_group *execution_group,
   }
 
   struct launch_capture *capture;
-  enum call_status status = capture_launch_request(&request, &capture);
+  enum call_status status = launcher_capture_request(&request, &capture);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }
@@ -618,7 +648,7 @@ static struct syscall_result launch_batch(struct execution_group *execution_grou
 
   for (size_t i = 0; i < batch.count; ++i) {
     struct launch_capture *capture;
-    enum call_status status = capture_launch_request(&requests[i], &capture);
+    enum call_status status = launcher_capture_request(&requests[i], &capture);
     if (status == CALL_OK) {
       /* The BSP releases this stage's image operation before the next stage
        * acquires one, including repeated reads of the same file object. */

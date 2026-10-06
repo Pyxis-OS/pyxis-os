@@ -2,12 +2,13 @@
 
 `make run CPUS=4` boots one QEMU socket with four cores and one thread per core.
 `CPUS` defaults to one and also applies to `make debug`. With multiple CPUs,
-CPU 0 (the BSP) services allocation and cleanup. Boot creates the configured
+CPU 0 (the BSP) services allocation and cleanup. Boot init creates the configured
 [spaces](../userland/init.md) independently of the CPU count. User tasks run on
 any CPU their space allows, including the BSP, which also runs the kernel
 workers. A single-CPU boot runs everything on the BSP. Placement and balancing
-are described below; on four CPUs the defaults put Development, Read-only and
-Remote on CPUs 1–3.
+are described below; on four CPUs the default space inits start on CPU 1, since
+each earlier init is blocked when the next space is created, and balancing
+spreads runnable work.
 CPU indices are dense, stable for the boot, and distinct from hardware APIC IDs.
 
 ## Boot handoff
@@ -79,7 +80,8 @@ are no priorities or other scoring.
 
 Each space keeps two CPU sets:
 
-- **Ceiling:** fixed at boot from `space.NAME.cpus`.
+- **Ceiling:** fixed when boot init creates the space, from its configured
+  `cpus`.
 - **Effective set:** starts as the ceiling, and only trusted init's
   [affinity setup](../userland/init.md#affinity-setup) narrows it, before the
   space's first launch.
@@ -482,8 +484,9 @@ recovery are not supported; a kernel-task fault is fatal.
 
 ## Spaces and fairness
 
-Spaces exist independently of the CPU count: boot creates the configured spaces
-in registry order, with Caelum first ([init](../userland/init.md)). A space's
+Spaces exist independently of the CPU count: boot init creates the configured
+spaces in registry order, after Caelum ([init](../userland/init.md)). Creation
+runs as a BSP request, appends to the registry and never removes a space. A space's
 ceiling and effective CPU set constrain where its tasks may run; they reserve no
 CPU and are not budgets. Each CPU runs its queue round-robin, so a space with
 more runnable tasks receives more CPU time. There are no priorities, per-space

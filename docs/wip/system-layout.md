@@ -1,7 +1,7 @@
 # System layout and boot init
 
 Status: **milestone, agreed 2026-10-05 and 2026-10-06.** It follows the
-[runtime SMP milestone](../kernel/smp.md). Task 1 is implemented; the rest is not. Each task
+[runtime SMP milestone](../kernel/smp.md). Tasks 1 and 2 are implemented. Each task
 starts when the owner says so, after its listed decisions are settled. Any
 decision can be revised by the owner.
 
@@ -14,9 +14,10 @@ adding a space, without rebuilding boot media.
 
 ## Today
 
-- The kernel creates spaces from `space.NAME=IMAGE` options on the kernel command
-  line ([boot selection](../userland/init.md#boot-selection)).
-  An installed system always gets the single space the installer writes.
+- Boot init creates the spaces from the archive's Lua
+  [boot configuration](../userland/init.md#boot-configuration). An installed
+  system can add or replace spaces through `system://config/boot.lua`, and its
+  rescue boot entry ignores that file.
 - All programs, configuration and shared files are in the boot archive, `boot://`.
   `tmp://` is a RAM directory, and `system://` is the installed pool's `system`
   volume. `app://` and `home://` are unbound; programs that still default to
@@ -112,7 +113,7 @@ Accepted by the owner on 2026-10-06:
     Update moves a 0.0.2 installation to the renamed layout with `system://`
     preserved.
 
-- [ ] **2. Boot init and space creation.**
+- [x] **2. Boot init and space creation.**
   - **Kernel:** a native create-space operation, held only by boot init. It
     takes the name, CPU ceiling, init image, and the new init's roots and
     grants. The kernel command line keeps only the boot init and `mount.disk`;
@@ -138,6 +139,7 @@ Accepted by the owner on 2026-10-06:
         },
         spaces = {
           { name = "pyxis", title = "Pyxis", init = "boot://init-installed",
+            network = true,
             cpus = { 1, 2, 3 },                       -- omitted: every CPU
             roots = { system = "read-write" } },
         },
@@ -150,6 +152,7 @@ Accepted by the owner on 2026-10-06:
         },
         spaces = {
           { name = "development", title = "Development", init = "boot://init",
+            network = true,
             roots = { host = { access = "read-write", optional = true } } },
         },
       }
@@ -159,10 +162,12 @@ Accepted by the owner on 2026-10-06:
       `SPACE_CPUS` are removed; development builds edit `live.lua`. Only
       installed boots read the pool override, `system://config/boot.lua`. It
       merges by name: an entry with a default's name replaces it whole, new
-      names follow the defaults, and nothing can be removed. Because the
-      override can replace a default space with an unusable one, the rescue
-      boot entry below, not the merge, is the guaranteed way back. Space inits stop mounting and receive the roots their entry
-      lists.
+      names follow the defaults, and nothing can be removed. The override
+      cannot redefine the `system` volume it is read from; doing so makes it
+      invalid (owner, 2026-10-06). Because the override can replace a default
+      space with an unusable one, the rescue boot entry below, not the merge,
+      is the guaranteed way back. Space inits stop mounting and receive the
+      roots their entry lists.
     - **Missing volume.** A root can be marked optional. A missing or
       unmountable required volume leaves that space created but not started,
       with the reason on its tab, as an absent CPU does today; other spaces
@@ -173,7 +178,8 @@ Accepted by the owner on 2026-10-06:
       which the kernel still creates first, so its messages appear in the log
       view and on serial. If no configured space starts, boot init creates a
       `rescue` space with the factory and starts a shell there with only
-      `boot://` and `tmp://`.
+      `boot://` and `tmp://`. It has no disk authority and cannot repair the
+      pool.
     - **Create-space operation.** A `space_factory` resource with a CREATE
       right, issued by the kernel only to boot init, which closes it before
       exiting. Space inits never receive it. The call takes the space's name,
@@ -192,7 +198,9 @@ Accepted by the owner on 2026-10-06:
       WRITE and UDP broadcast authority only to that space, and READ with
       ordinary UDP to the others. Its init still runs `session
       --configure-network`, and the DHCP maintainer stays in that space. This
-      turns today's single-owner convention into authority. Starting setup
+      turns today's single-owner convention into authority. A configuration
+      without an owner is valid and leaves the network unconfigured (owner,
+      2026-10-06). Starting setup
       from boot init in the Caelum space was rejected for now: it would leave a
       long-lived, unsupervised process there. If an override replaces the
       owner space with a broken one, the rescue entry restores networking.
@@ -207,7 +215,9 @@ Accepted by the owner on 2026-10-06:
       default. "Rescue" rather than "default" keeps it from reading as the
       usual choice. It follows the normal `Pyxis OS (Caelum)` entry, which stays
       first and is booted on timeout. The installer and Update write both
-      entries.
+      entries. It restores the archive configuration, not the pool: if
+      `system` cannot be mounted, the `pyxis` space stays unstarted and the
+      fallback `rescue` space has only `boot://` and `tmp://`.
       - **Option:** `boot.default_config=1`. The kernel accepts it only once,
         with value 1, and passes it to boot init as an argument; boot init
         then skips `system://config/boot.lua`.
@@ -222,6 +232,13 @@ Accepted by the owner on 2026-10-06:
     administrative.
   - **Finish when:** the installed ThinkPad gains a second space by editing the
     pool configuration, with no Update, and a broken override boots the default.
+  - **Implemented:** see [init](../userland/init.md#boot-configuration) for the
+    configuration and [space creation](../userland/init.md#space-creation). In
+    QEMU, an installed disk gained three override spaces without an Update,
+    and broken and unusable overrides, the rescue entry and Update were
+    checked. On 2026-10-06 the owner ran the ThinkPad check with the PXE
+    build of this PR (update from 0.0.2, spaces from the pool configuration)
+    and reported that it works.
 
 - [ ] **3. Programs on `bin://` and two-stage Update.**
   - The installer creates the `bin` volume, and ordinary programs move out of

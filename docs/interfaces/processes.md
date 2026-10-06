@@ -13,7 +13,8 @@ handoffs for this first milestone.
 
 ## Current programs
 
-Normal boot starts the [shell](../userland/shell.md) at tmp:// with terminal, launcher,
+[Boot init](../userland/init.md) creates each space and its init; the session
+then starts the [shell](../userland/shell.md) at tmp:// with terminal, launcher,
 memory, display, clock, keyboard, pointer, optional [space-title authority](../userland/init.md#space-titles)
 and boot/tmp root grants. It launches foreground utilities
 with explicit resources, waits for completion and returns to its prompt. Its space and TTY

@@ -36,7 +36,8 @@
 #define SPACES_NAV_TITLE_PADDING_CELLS 1
 
 static const struct boot_framebuffer *screen;
-/* Registry order starts at Caelum. Boot appends before the presenter starts. */
+/* Registry order starts at Caelum. space_create appends on the BSP at any time. */
+#define CAELUM_SPACE_NAME "caelum"
 static struct space *caelum_space, *last_space;
 static struct space *active_space;
 /* Registry index of the leftmost visible tab. Presenter-owned. */
@@ -101,6 +102,11 @@ static struct tty *tty_alloc(const struct framebuffer *fb) {
   return tty;
 }
 
+struct space *space_caelum(void)
+{
+  return caelum_space;
+}
+
 size_t space_cpu_words(void)
 {
   return (arch_cpu_count() + 63) / 64;
@@ -132,9 +138,11 @@ static uint64_t *cpu_set_copy(const uint64_t *source)
   return copy;
 }
 
-static struct space *space_alloc(const char *title, uint64_t *ceiling_cpus, bool focused)
+static struct space *space_alloc(const char *name, const char *title,
+    uint64_t *ceiling_cpus, bool focused)
 {
   KASSERT(arch_cpu_index() == 0 && ceiling_cpus);
+  KASSERT(space_name_valid(name, strlen(name)));
   arch_clock_maintain();
   struct space *space = kmalloc(sizeof(*space));
   if (!space) {
@@ -147,6 +155,7 @@ static struct space *space_alloc(const char *title, uint64_t *ceiling_cpus, bool
     .setup_open = true,
   };
   atomic_init(&space->title_locked, false);
+  memcpy(space->name, name, strlen(name) + 1);
   size_t length = strlen(title);
   KASSERT(length && length <= SPACE_TITLE_MAX);
   memcpy(space->title, title, length + 1);
@@ -180,24 +189,54 @@ void space_init(const struct boot_framebuffer *boot_fb)
 {
   screen = boot_fb;
   static_assert(sizeof(KERNEL_NAME) <= SPACE_TITLE_MAX + 1);
-  /* Caelum runs no userspace; its set only records its kernel-owned CPU. */
+  /* Caelum's only user process is boot init, which runs on the BSP. */
   uint64_t *allowed = kmalloc(space_cpu_words() * sizeof(*allowed));
   if (!allowed) {
     panic("cannot allocate space CPU set");
   }
   memset(allowed, 0, space_cpu_words() * sizeof(*allowed));
   allowed[0] = 1;
-  caelum_space = space_alloc(KERNEL_NAME, allowed, true);
+  caelum_space = space_alloc(CAELUM_SPACE_NAME, KERNEL_NAME, allowed, true);
+  caelum_space->console->serial = true;
   last_space = caelum_space;
   active_space = caelum_space;
   log_set_tty(caelum_space->tty);
   spaces_nav_fb = fb_alloc(boot_fb, boot_fb->width, SPACES_NAV_HEIGHT);
 }
 
-struct space *space_create(const char *name, uint64_t *ceiling_cpus)
+bool space_name_valid(const char *name, size_t length)
 {
-  struct space *space = space_alloc(name, ceiling_cpus, false);
-  last_space->next = space;
+  if (!length || length > SPACE_NAME_MAX) {
+    return false;
+  }
+  for (size_t i = 0; i < length; ++i) {
+    char c = name[i];
+    if (!(c >= 'a' && c <= 'z') && !(c >= '0' && c <= '9') && c != '-') {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool space_name_taken(const char *name)
+{
+  KASSERT(arch_cpu_index() == 0);
+  size_t length = strlen(name);
+  for (struct space *space = caelum_space; space; space = space->next) {
+    if (strlen(space->name) == length && !memcmp(space->name, name, length)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+struct space *space_create(const char *name, const char *title, uint64_t *ceiling_cpus)
+{
+  KASSERT(!space_name_taken(name));
+  struct space *space = space_alloc(name, title, ceiling_cpus, false);
+  /* The presenter may be preempted mid-walk on this CPU; it only ever sees a
+   * complete node at the tail. */
+  __atomic_store_n(&last_space->next, space, __ATOMIC_RELEASE);
   last_space = space;
   return space;
 }
@@ -212,6 +251,20 @@ void space_report(struct space *space, const char *text)
   }
   log_end(locked);
   cpu_restore_interrupts(flags);
+}
+
+void space_report_unstarted(struct space *space, const char *reason)
+{
+  KASSERT(arch_cpu_index() == 0);
+  /* No task has run in the space, so nothing else reads its CPU sets yet. */
+  memset(space->ceiling_cpus, 0, space_cpu_words() * sizeof(*space->ceiling_cpus));
+  memset(space->effective_cpus, 0, space_cpu_words() * sizeof(*space->effective_cpus));
+  /* Bounded: a 31-byte name and a reason of at most SPACE_REASON_MAX bytes. */
+  char text[SPACE_NAME_MAX + SPACE_REASON_MAX + 32];
+  KASSERT(strlen(reason) <= SPACE_REASON_MAX);
+  sprintf(text, "space %s not started: %s\n", space->name, reason);
+  klog("userspace: %s", text);
+  space_report(space, text);
 }
 
 static void lock_title(struct space *space)
