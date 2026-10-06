@@ -57,7 +57,7 @@ return {
   },
   spaces = {
     { name = "development", title = "Development", init = "boot://init",
-      network = true, cpus = { 1, 2, 3 },
+      network = true, launch = true, cpus = { 1, 2, 3 },
       roots = { host = { access = "read-write", optional = true },
                 system = "read-only", home = "read-write" } },
     { name = "scratch", title = "Scratch", init = "boot://init-readonly",
@@ -90,6 +90,13 @@ return {
   receives `net_config` WRITE and UDP broadcast authority, so only it can run
   `session --configure-network`; the others get READ and ordinary UDP. A
   configuration without an owner is valid and leaves the network unconfigured.
+- **Ordinary child launch.** `launch` is an optional boolean, defaulting to
+  `false`. With `launch = true`, boot init supplies a separate `child_launcher`
+  resource with LAUNCH alone. Trusted init and session handoff preserve it;
+  the shell delegates it as `launcher` to ordinary foreground commands,
+  including every foreground pipeline stage. Background commands and services
+  do not receive it. This does not delegate the trusted launcher's CREATE_GROUP
+  authority or add terminal input rights.
 
 The scheduler places each task on the least-loaded CPU its space allows and
 balances tasks between CPUs; see [placement and migration](../kernel/smp.md#placement-and-migration).
@@ -179,6 +186,8 @@ read-write, starting in `home://`, and network ownership. `home` is optional:
 if the volume cannot be mounted, `pyxis` still starts, in `tmp://`, in both
 the normal and the rescue entry. `system` is required. That init starts the
 ordinary local session and configures networking. `tmp://` remains RAM-backed.
+The packaged live Development and installed `pyxis` entries set `launch = true`;
+the live Read-only and Remote entries leave it disabled.
 Live boots give the Development and Read-only spaces the RAM `home://`,
 read-write and read-only, and the Remote space read-write, starting in
 `tmp://`. Installed disks omit the installer
@@ -460,8 +469,9 @@ the network owner), caller-scoped [memory profiling](../development/allocation-p
 [endpoint creation](../interfaces/endpoints.md) through the `service` resource,
 read-only boot and writable tmp roots, its configured roots, the working
 directory its start selects and the initial environment. Space configuration
-chooses which trusted init runs and its roots, not an authority ceiling; no
-other workload authority is chosen from a space name or CPU.
+chooses which trusted init runs, its roots and whether to supply `child_launcher`;
+it is not an authority ceiling. A space name or CPU does not grant workload
+authority.
 
 Mount authority stays with boot init; the selected directory binding list travels
 through session, service and remote-server handoff and ordinary child launch.
@@ -471,9 +481,10 @@ read-only attenuation also applies to the working-directory chain. A restricted
 launcher can select fewer roots or rights. It does not recover missing authority
 from a URI label or the capability table. Root/working-directory names and other
 startup data still share the 64 KiB capture bound. Network-configuration authority
-reaches the session launcher but not its interactive shell. Ordinary commands
-do not inherit launch authority;
-`session` delegates it explicitly. The kernel enforces capability rights, while
+reaches the session launcher but not its interactive shell. Ordinary foreground
+commands receive LAUNCH only when the shell holds `child_launcher`; `session`
+preserves that separate resource as well as the shell's own launcher. The
+kernel enforces capability rights, while
 the trusted programs choose what to delegate. Neither URI names nor selecting
 a different script creates authority beyond the supplied grants.
 
@@ -492,3 +503,7 @@ use its bound launcher while remaining outside that group. The trusted shell
 `session` handoff preserves the actual launcher LAUNCH/CREATE_GROUP rights and
 terminal CREATE grant; the remote supervisor then delegates only a group-bound
 LAUNCH grant to each shell.
+If Remote explicitly opts into `launch = true`, the supervisor also supplies
+`child_launcher` from that same group-bound launcher. Foreground commands and
+their launched descendants then remain in the remote execution group. The
+packaged Remote entry leaves this opt-in disabled.

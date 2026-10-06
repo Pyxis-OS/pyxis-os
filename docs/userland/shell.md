@@ -316,8 +316,11 @@ producer that does not read the console. Intermediate stages, a final stage with
 non-console stdout, background jobs and services gain no input through this rule.
 Separate terminal-output and display capabilities retain the
 ordinary child policy. Programs explicitly using those capabilities can still
-write to or draw on the terminal. Ordinary stages receive neither launcher nor
-pipe-creation authority; shebang adaptation does not add authority.
+write to or draw on the terminal. In spaces that opt into
+[ordinary child launch](init.md#boot-configuration), each foreground stage
+receives LAUNCH through the shell's separate `child_launcher` grant. It receives
+no CREATE_GROUP or pipe-creation authority; shebang adaptation does not add
+authority.
 
 The shell parses and validates the entire pipeline, then opens all executable
 images before opening redirect targets. It opens redirects in written order
@@ -373,6 +376,11 @@ For each foreground job, the shell:
 Diagnostics and typed completion are unchanged. Each interrupted stage reports
 `Process terminated`, and a pipeline's completion follows its last stage. A
 stage that finished before its termination took effect keeps its real result.
+
+Termination covers only the foreground stage processes launched by the shell.
+The shell does not supervise their descendants. A child launched by Lua can
+outlive an interrupted, exited or faulted Lua process; Ctrl+C does not terminate
+that child. Remote disconnect still terminates the whole remote execution group.
 
 Input typed before Ctrl+C is discarded, so text typed into a hung command never
 runs as the next shell command. Ctrl+C at the prompt still cancels the line,
@@ -446,9 +454,12 @@ diagnostics include
 format. EOF or `exit` succeeds. Neither falls back to an interactive prompt.
 
 Script mode needs the same startup resources as interactive mode, including an
-explicit launcher grant. Ordinary shell children do not receive the launcher,
-so launching a shell script as an ordinary foreground command currently fails
-its resource check. Boot explicitly grants the init interpreter launch authority;
+explicit launcher grant. In a space with `launch = true`, an ordinary foreground
+shell script receives LAUNCH as `launcher`; its other required startup resources
+must still be present. It does not receive `child_launcher`, so its own ordinary
+commands receive no launcher. This does not provide general nested shell-script
+execution. Without the opt-in, an ordinary shell script still fails its launcher
+resource check. Boot explicitly grants the init interpreter launch authority;
 the default init uses `session` to pass it to the configuration launcher, which
 then delegates it to the interactive shell.
 
@@ -511,12 +522,12 @@ launch. The `session` word is removed from the child's arguments.
 
 The successor receives copies of the usual terminal and memory grants, the
 explicit selected root list and working-directory grants, current working-path
-metadata and initial environment, plus an explicit `launcher` resource with
-LAUNCH authority. Other startup
+metadata and initial environment, plus an explicit `launcher` resource preserving
+the caller's LAUNCH and any CREATE_GROUP authority. An optional `child_launcher`
+is forwarded separately with LAUNCH alone. Other startup
 resources, including the caller's `script`, `host_mount` and `native_mount`, are
 not forwarded. Launching another script supplies that target's own READ script
 grant through `program_launch`.
-Ordinary foreground commands still receive no launcher.
 
 Successful launch ends script execution immediately: later lines do not run,
 and the caller never reads terminal input again. Closing its process observer
@@ -548,6 +559,15 @@ Additional selected roots, including optional HOST and native mounts, retain
 the access granted by init. Root names do not determine permissions. The shell
 preserves at most 16 startup roots and fails explicitly if that limit is exceeded.
 
+An optional `child_launcher` resource controls delegation to ordinary foreground
+commands, including every pipeline stage. The packaged Development and installed
+`pyxis` profiles provide it; Read-only and Remote do not. When present, the shell
+passes this grant as `launcher` with LAUNCH alone. It never substitutes its own
+launcher or adds CREATE_GROUP, and background commands and services gain no
+launcher through this policy. Trusted `session` handoff preserves
+`child_launcher` as a distinct resource. If Remote explicitly opts in, that grant
+is bound to the remote session's execution group.
+
 An initial directory chain is copied from startup, preserving its navigation
 boundary. A supplied chain requires a descriptive working path beginning with a
 `NAME://` scheme for prompt display. The path is not resolved to replace the
@@ -567,8 +587,9 @@ Each foreground child receives explicit copies of terminal output, memory and
 the explicitly selected roots with their actual rights and transport masks, and
 the current directory chain preserving each handle's rights independently.
 Keyboard and pointer grants require the first stage's console stdin. Named
-terminal input additionally follows the final-stage rule above. The child does not
-receive the shell's launcher. When available, the [display](../interfaces/graphics.md),
+terminal input additionally follows the final-stage rule above. Optional ordinary
+launch authority follows the separate `child_launcher` policy above. When
+available, the [display](../interfaces/graphics.md),
 [clock](../kernel/timekeeping.md), [random](../devices/randomness.md) and [keyboard](../devices/keyboard.md) grants are also forwarded
 to eligible foreground children and session successors; background children omit keyboard input.
 The immutable initial environment is forwarded in full using
@@ -585,5 +606,5 @@ only when its cursor is not already at column zero, preserving unterminated chil
 output without inserting an extra blank line after newline-terminated output.
 Failed launch returns to the prompt; failed wait ends the shell because
 input ownership can no longer be assumed. Fatal user faults are reported through
-the existing completion kind, with details left in the kernel log. No process
-cancellation or terminal ownership mechanism is added.
+the existing completion kind, with details left in the kernel log. No descendant
+supervision or terminal ownership mechanism is added.

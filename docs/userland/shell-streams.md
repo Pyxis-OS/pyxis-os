@@ -75,8 +75,11 @@ input with READ alone when stdin is a pipe or file and stdout is a console;
 no keyboard, pointer or interrupt-arming right is added. Programs such as
 [less](less.md) use this grant for keys independently of the pipe. Both stages
 reading the console, as in `cat | less`, is unsupported because they share one
-input queue. Ordinary stages receive no launcher or pipe-creation authority;
-shebang adaptation does not add authority.
+input queue. In a space with `launch = true`, every ordinary foreground stage
+receives LAUNCH from the shell's separate `child_launcher` resource. No
+CREATE_GROUP or pipe-creation authority is added, and background commands and
+services gain no launcher. Shebang adaptation does not add authority. See
+[startup and child authority](shell.md#startup-and-child-authority).
 
 [Head](shell.md#bounded-input-with-head) copies ten lines by default, or the
 selected line/byte count from one input. It stops at the exact requested boundary
@@ -87,8 +90,11 @@ success. A successful pipe write alone never proves that its bytes were consumed
 
 ## Limits
 
-There is no cancellation, job control, background pipeline, builtin pipeline,
-pipefail option, terminal EOF convention or child interruption from Ctrl+C.
+There is no job control, background pipeline, builtin pipeline, pipefail option
+or local terminal EOF convention. [Ctrl+C](shell.md#interrupting-foreground-commands)
+terminates the directly launched foreground stages; it does not supervise or
+terminate their descendants. A child launched by Lua can outlive Lua's
+interruption, exit or fault.
 A child waiting on terminal input or doing unrelated work can keep the shell
 waiting indefinitely after peers finish. Pipes have no message boundaries,
 guaranteed atomic write size, strict fairness, nonblocking mode or wait sets.
