@@ -22,6 +22,8 @@ struct console_interrupt {
 struct console_object {
   struct kernel_object object;
   struct tty *tty;
+  /* Caelum's log console: writes are also copied to serial, as klog is. */
+  bool serial;
   struct console_interrupt interrupt;
   atomic_bool input_locked;
   char input[CONSOLE_INPUT_CAPACITY];

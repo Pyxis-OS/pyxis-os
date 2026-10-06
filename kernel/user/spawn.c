@@ -1,11 +1,24 @@
+#include <abi/console.h>
+#include <abi/display.h>
+#include <abi/keyboard.h>
+#include <abi/pointer.h>
 #include <arch/smp.h>
+#include <kernel/format.h>
+#include <kernel/log.h>
+#include <kernel/memory.h>
+#include <kernel/object/console.h>
+#include <kernel/object/display.h>
 #include <kernel/object/file.h>
+#include <kernel/object/keyboard.h>
 #include <kernel/object/launcher.h>
+#include <kernel/object/pointer.h>
 #include <kernel/object/process.h>
 #include <kernel/object/execution_group.h>
+#include <kernel/object/space.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/space.h>
+#include <kernel/string.h>
 #include <kernel/task.h>
 #include <kernel/user.h>
 #include <kernel/user/launch.h>
@@ -101,9 +114,87 @@ struct launch_preparation *launcher_batch_create(void)
   return group;
 }
 
-enum call_status launcher_batch_prepare(struct launch_preparation *group,
-    struct launch_capture *capture, struct process *parent, size_t parent_cpu,
-    struct execution_group *execution_group)
+/* Kernel-added resources for a new space's first process. */
+#define SPACE_DEVICE_RESOURCES 6
+
+/* BSP, IF=0. Installs the new space's devices in CHILD and points STARTUP at
+ * an owned resource array that appends them, plus console streams. */
+static enum call_status install_space_devices(struct process *child, struct space *space,
+    struct process_startup *startup, struct process_binding **owned)
+{
+  struct kernel_object *console = &space->console->object;
+  handle_t input, output, keyboard, pointer, display, control;
+  handle_t streams[STARTUP_STREAM_COUNT];
+  enum capability_result result = capability_install(&child->capabilities, console,
+      CONSOLE_RIGHT_READ | CONSOLE_RIGHT_INTERRUPT, 0, &input);
+  if (result == CAP_OK) {
+    result = capability_install(&child->capabilities, console, CONSOLE_RIGHT_WRITE, 0, &output);
+  }
+  if (result == CAP_OK) {
+    result = capability_install(&child->capabilities, console, CONSOLE_RIGHT_READ, 0,
+        &streams[STARTUP_STDIN]);
+  }
+  if (result == CAP_OK) {
+    result = capability_install(&child->capabilities, console, CONSOLE_RIGHT_WRITE, 0,
+        &streams[STARTUP_STDOUT]);
+  }
+  if (result == CAP_OK) {
+    result = capability_install(&child->capabilities, console, CONSOLE_RIGHT_WRITE, 0,
+        &streams[STARTUP_STDERR]);
+  }
+  if (result == CAP_OK) {
+    result = capability_install(&child->capabilities, &space->keyboard->object,
+        KEYBOARD_RIGHT_INPUT, 0, &keyboard);
+  }
+  if (result == CAP_OK) {
+    result = capability_install(&child->capabilities, &space->pointer->object,
+        POINTER_RIGHT_INPUT, 0, &pointer);
+  }
+  if (result == CAP_OK) {
+    result = capability_install(&child->capabilities, &space->display->object,
+        DISPLAY_RIGHT_DRAW, 0, &display);
+  }
+  if (result == CAP_OK) {
+    struct kernel_object *space_control = space_control_create(space);
+    if (!space_control) {
+      return CALL_NO_MEMORY;
+    }
+    result = capability_install(&child->capabilities, space_control,
+        SPACE_RIGHT_SET_TITLE | SPACE_RIGHT_SET_AFFINITY, 0, &control);
+    object_release(space_control);
+  }
+  if (result != CAP_OK) {
+    return capability_status(result);
+  }
+
+  size_t count = startup->resource_count;
+  struct process_binding *resources = kmalloc((count + SPACE_DEVICE_RESOURCES) *
+      sizeof(*resources));
+  if (!resources) {
+    return CALL_NO_MEMORY;
+  }
+  if (count) {
+    memcpy(resources, startup->resources, count * sizeof(*resources));
+  }
+  resources[count++] = (struct process_binding){"input", input};
+  resources[count++] = (struct process_binding){"output", output};
+  resources[count++] = (struct process_binding){"keyboard", keyboard};
+  resources[count++] = (struct process_binding){"pointer", pointer};
+  resources[count++] = (struct process_binding){"display", display};
+  resources[count++] = (struct process_binding){"space", control};
+  startup->resources = resources;
+  startup->resource_count = count;
+  for (size_t i = 0; i < STARTUP_STREAM_COUNT; ++i) {
+    startup->streams[i] = (struct startup_stream){PROTOCOL_CONSOLE, streams[i]};
+  }
+  *owned = resources;
+  return CALL_OK;
+}
+
+/* SPACE receives the child. A new space also gives it the space's devices. */
+static enum call_status prepare_child(struct launch_preparation *group,
+    struct launch_capture *capture, struct process *parent, struct space *space,
+    size_t preferred_cpu, struct execution_group *execution_group, bool new_space)
 {
   KASSERT(arch_cpu_index() == 0);
   KASSERT(group && group->count < LAUNCH_BATCH_MAX);
@@ -111,22 +202,20 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
   KASSERT(!group->count || group->execution_group == execution_group);
   group->parent = parent;
   group->execution_group = execution_group;
-  /* Affinity setup ends at the space's first launch request, whatever its outcome. */
-  task_space_close_setup(parent->space);
   struct process *child;
   uintptr_t entry;
   bool external = capture->image->backing == FILE_HOST ||
       capture->image->backing == FILE_NPFS;
   const void *bytes = external ? capture->external_image : capture->image->data;
   size_t size = external ? capture->external_image_size : capture->image->size;
-  enum call_status status = execution_group_check(execution_group, parent->space);
+  enum call_status status = execution_group_check(execution_group, space);
   if (status != CALL_OK) {
     if (!external) {
       file_end_operation(capture->image);
     }
     return status;
   }
-  enum mm_result loaded = user_process_load(parent->space, bytes, size, &child, &entry);
+  enum mm_result loaded = user_process_load(space, bytes, size, &child, &entry);
   if (!external) {
     file_end_operation(capture->image);
   }
@@ -146,16 +235,24 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
   if (status != CALL_OK) {
     goto fail;
   }
+  struct process_binding *resources = NULL;
+  if (new_space) {
+    status = install_space_devices(child, space, &capture->startup, &resources);
+    if (status != CALL_OK) {
+      goto fail;
+    }
+  }
   enum mm_result prepared = process_prepare_startup(child, &capture->startup);
+  kfree(resources);
   if (prepared != MM_OK) {
     status = prepared == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
     goto fail;
   }
 
   struct task *task;
-  /* Publication places the child; equal loads favour the parent's CPU. */
+  /* Publication places the child; equal loads favour the preferred CPU. */
   enum mm_result submitted = user_task_prepare(child, entry,
-      USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE, parent_cpu, &task);
+      USER_INITIAL_STACK_BASE + USER_INITIAL_STACK_SIZE, preferred_cpu, &task);
   if (submitted != MM_OK) {
     status = submitted == MM_NO_MEMORY ? CALL_NO_MEMORY : CALL_BAD_REQUEST;
     goto fail;
@@ -176,6 +273,16 @@ enum call_status launcher_batch_prepare(struct launch_preparation *group,
 fail:
   KASSERT(process_destroy(child) == MM_OK);
   return status;
+}
+
+enum call_status launcher_batch_prepare(struct launch_preparation *group,
+    struct launch_capture *capture, struct process *parent, size_t parent_cpu,
+    struct execution_group *execution_group)
+{
+  /* Affinity setup ends at the space's first launch request, whatever its outcome. */
+  task_space_close_setup(parent->space);
+  return prepare_child(group, capture, parent, parent->space, parent_cpu,
+      execution_group, false);
 }
 
 enum call_status launcher_batch_publish(struct launch_preparation *group, handle_t *children)
@@ -219,4 +326,53 @@ enum call_status launcher_start(struct launch_capture *capture, struct process *
     launcher_batch_abort(&group);
   }
   return status;
+}
+
+enum call_status launcher_create_space(struct launch_capture *capture, struct process *parent,
+    handle_t *result)
+{
+  KASSERT(arch_cpu_index() == 0);
+  *result = HANDLE_INVALID;
+  struct launch_space *request = &capture->space;
+  bool in_memory = capture->image && capture->image->backing != FILE_HOST &&
+      capture->image->backing != FILE_NPFS;
+  enum call_status status = space_name_taken(request->name) ? CALL_BAD_REQUEST : CALL_OK;
+  size_t words = space_cpu_words();
+  uint64_t *ceiling = NULL;
+  if (status == CALL_OK) {
+    ceiling = kmalloc(words * sizeof(*ceiling));
+    status = ceiling ? CALL_OK : CALL_NO_MEMORY;
+  }
+  if (status != CALL_OK) {
+    if (in_memory) {
+      file_end_operation(capture->image);
+    }
+    return status;
+  }
+  memset(ceiling, 0, words * sizeof(*ceiling));
+  for (size_t cpu = 0; cpu < request->cpu_count; ++cpu) {
+    ceiling[cpu / 64] |= request->cpus[cpu / 64] & (UINT64_C(1) << (cpu % 64));
+  }
+  struct space *space = space_create(request->name, request->title, ceiling);
+  if (!capture->image) {
+    space_report_unstarted(space, request->reason);
+    return CALL_OK;
+  }
+
+  /* The creator's CPU says nothing about the new space: no placement preference,
+   * so ties fall to the lowest AP, as for any unrelated task. */
+  struct launch_preparation group = {0};
+  status = prepare_child(&group, capture, parent, space, SIZE_MAX, NULL, true);
+  if (status == CALL_OK) {
+    status = launcher_batch_publish(&group, result);
+  }
+  if (status != CALL_OK) {
+    launcher_batch_abort(&group);
+    char reason[40];
+    sprintf(reason, "init launch failed (status %u)", (unsigned)status);
+    space_report_unstarted(space, reason);
+    return status;
+  }
+  klog("userspace: space %s started\n", space->name);
+  return CALL_OK;
 }

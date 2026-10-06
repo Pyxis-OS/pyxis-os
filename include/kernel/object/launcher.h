@@ -20,13 +20,14 @@ enum launcher_action {
   LAUNCH_BATCH_PREPARE,
   LAUNCH_BATCH_PUBLISH,
   LAUNCH_BATCH_DISCARD,
+  LAUNCH_CREATE_SPACE,
 };
 
 /* Capture/batch storage survives successive requests independently. START and
  * BATCH_PREPARE lend the parent table and stable image operation; every loan
  * is cleared before completion. CREATE_EXECUTION_GROUP also lends the parent
  * table for atomic handle installation. Allocation results transfer to the caller
- * before release, while START/DISCARD/PREPARE consume their capture and
+ * before release, while START/CREATE_SPACE/DISCARD/PREPARE consume their capture and
  * PUBLISH/DISCARD consume their batch. No caller private mappings are mutated. */
 struct launcher_request {
   struct bsp_request request;

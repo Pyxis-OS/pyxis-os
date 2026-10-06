@@ -41,4 +41,43 @@ struct space_affinity_request {
 
 _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity request layout");
 
+#define SPACE_FACTORY_RIGHT_CREATE (UINT64_C(1) << 0)
+#define SPACE_FACTORY_RIGHTS SPACE_FACTORY_RIGHT_CREATE
+#define SPACE_FACTORY_CREATE UINT64_C(1)
+#define SPACE_NAME_MAX 31
+#define SPACE_REASON_MAX 96
+
+/* CREATE requires CREATE authority. It appends a space after every existing
+ * one; spaces are never destroyed. NAME is 1..31 bytes of a-z, 0-9 and '-',
+ * unique among spaces, and identifies the space in logs; it grants nothing.
+ * TITLE follows SET_TITLE. Lengths exclude any NUL.
+ *
+ * Exactly one of REASON or LAUNCH is present. With REASON (1..96 printable
+ * ASCII bytes), the space gets no CPUs, its tab shows the reason and the call
+ * replies nothing; CPUS must be absent (zero CPU_COUNT).
+ *
+ * With LAUNCH, the address of a launch_request, CPUS uses SET_AFFINITY's
+ * encoding and becomes the space's ceiling: nonempty, every index a boot CPU.
+ * The request's streams must be NONE, and its resources must not use the names
+ * the kernel adds: input, output, keyboard, pointer, display and space. The
+ * kernel gives the child the new space's console as input (READ|INTERRUPT),
+ * output (WRITE) and all three streams, its keyboard and pointer (INPUT), its
+ * display (DRAW) and the space itself (SET_TITLE|SET_AFFINITY). Everything else
+ * comes from the request's grants, as for LAUNCHER_LAUNCH; no execution group.
+ * Success replies with one WAIT process-control handle.
+ *
+ * A malformed request, a duplicate name or a launch request rejected before
+ * loading creates nothing. A failure while preparing the child after the
+ * space exists leaves it without CPUs and shows the failure on its tab. */
+struct space_create_request {
+  struct message_header header;
+  uint64_t name, name_length;
+  uint64_t title, title_length;
+  uint64_t cpus, cpu_count;
+  uint64_t reason, reason_length;
+  uint64_t launch;
+};
+
+_Static_assert(sizeof(struct space_create_request) == 88, "space create request layout");
+
 #endif
