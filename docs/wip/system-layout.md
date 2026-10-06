@@ -250,6 +250,18 @@ Accepted by the owner on 2026-10-06:
   - **Decision before starting:** whether every space shares one home volume
     before users exist.
 
+## After the milestone
+
+- **Configuration checker** (owner idea, 2026-10-06; deferred until this
+  milestone is done). A native shell command that reads the boot configuration
+  and reports problems without blocking anything, for use while editing it:
+  more than one network owner, invalid volumes, CPUs that are not present.
+  Proposed, not yet agreed:
+  - share parsing and validation with boot init, so the two cannot disagree;
+  - separate static checks from checks against this machine's CPUs and
+    volumes, and say "not checked" where it lacks the authority to look;
+  - show the merged result: replaced entries, and which spaces would start.
+
 ## Still open
 
 - **Writes:** write, deletion and copy semantics wherever overlays are still
