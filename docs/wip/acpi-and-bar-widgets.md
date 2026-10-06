@@ -74,6 +74,17 @@ Accepted on 2026-10-07, after task 1:
 9. **Notifications instead of polling** wait until after task 3. They depend on
    events being re-armed after an unclaimed SCI, which belongs with that work.
 
+Accepted for task 2 on 2026-10-07:
+
+10. **Stopping user tasks** is a reversible hold. Each user task stops at its next
+    return to user mode and is parked; a failed flush releases them. After the
+    final flush, the native filesystem refuses further pool changes until the hold
+    is released, so a task inside a syscall cannot change a pool afterwards.
+11. **`poweroff` and `reboot` are shell builtins.** The shell keeps the `power`
+    handle and never forwards it to the programs it runs.
+12. **Remote shells do not receive `power`,** even in a space that has it; the
+    remote terminal server is unauthenticated on the LAN.
+
 ## Tasks
 
 - [x] **1. Bring in uACPI.**
