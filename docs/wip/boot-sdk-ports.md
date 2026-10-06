@@ -133,6 +133,10 @@ init with a Lua boot configuration, programs on a `bin://` volume with a
 two-stage Update, and a persistent home. Later candidates are dynamic space
 creation (the new-space flow), a file navigator and multiplexing.
 
+[Mounting Pyxis volumes on Linux](npfs-fuse.md), agreed 2026-10-06, runs in
+parallel as host tooling: a read-only FUSE mount of the stick's volumes, then
+in-memory journal replay.
+
 The [native filesystem milestone](native-filesystem.md) has completed format-only
 codecs, host tools and the Caelum-owned cache/writer. Trusted init selects explicit
 read-only or writable roots; native file, directory and configured-disk sync
