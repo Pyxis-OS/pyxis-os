@@ -1,5 +1,6 @@
 #include <abi/directory.h>
 #include <abi/mount.h>
+#include <arch/clock.h>
 #include <arch/smp.h>
 #include <kernel/fs/npfs.h>
 #include <kernel/memory.h>
@@ -10,7 +11,6 @@
 #include <kernel/panic.h>
 #include <kernel/process.h>
 #include <kernel/random.h>
-#include <kernel/task.h>
 #include <kernel/user_memory.h>
 
 static void destroy_disks(struct kernel_object *object)
@@ -140,7 +140,7 @@ static struct syscall_result create_volume(struct disk_object *disk,
   /* The volume's identity comes from the entropy source, which needs a task. */
   uint8_t id[NPFS_ID_SIZE];
   enum call_status status = random_read(id, sizeof(id),
-      task_deadline_after_ms(NPFS_TIMEOUT_MS));
+      arch_monotonic_ns() + RANDOM_MAX_WAIT_NS);
   if (status != CALL_OK) {
     return (struct syscall_result){status, 0};
   }

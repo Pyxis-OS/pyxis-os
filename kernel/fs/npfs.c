@@ -817,7 +817,7 @@ enum call_status npfs_submit(struct npfs_job *job)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   if (!job || job->state != NPFS_JOB_IDLE || job->object || job->captured || job->next ||
-      job->user_request || job->admitted || (unsigned)job->operation > NPFS_RAW_RELEASE) {
+      job->user_request || job->admitted || (unsigned)job->operation > NPFS_RAW_CLAIM) {
     return CALL_BAD_REQUEST;
   }
   if (!available) {
