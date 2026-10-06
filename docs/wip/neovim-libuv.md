@@ -245,10 +245,10 @@ change.
    do not add locks to the old ownership model and hope it holds. Make libc shared state
    safe. Useful consumers: libuv worker callbacks and Lua background work; eager vs
    guarded/lazy stacks and cross-CPU execution can be separately bounded decisions.
-   The agreed [runtime SMP milestone](scheduling-and-threads.md) first separates
-   spaces from CPUs, migrates existing single-task processes and makes private
-   memory operations local. That SMP milestone does not establish shared-process
-   safety; user threads remain separate work. Sibling coordination is required even
+   The [runtime SMP milestone](../kernel/smp.md) separated spaces from CPUs,
+   migrates existing single-task processes and made private memory operations
+   local. It does not establish shared-process safety; user threads remain
+   [separate work](scheduling-and-threads.md#multiple-user-threads). Sibling coordination is required even
    if the first threaded processes stay on one CPU.
 3. **Truthful native file metadata, identity and editor conflict information.** Define
    identity comparison scope/lifetime, file kind/size, modification indication and

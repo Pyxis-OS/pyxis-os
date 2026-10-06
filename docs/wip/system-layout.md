@@ -1,7 +1,7 @@
 # System layout and boot init
 
 Status: **agreed direction, 2026-10-05**, for work after the
-[runtime SMP milestone](scheduling-and-threads.md). Nothing here is implemented,
+[runtime SMP milestone](../kernel/smp.md), which completed on 2026-10-06. Nothing here is implemented,
 and it authorizes no code or placeholder APIs. Agreed choices and open questions
 are listed separately below. Any decision can be revised by the owner.
 
@@ -15,7 +15,7 @@ adding a space, without rebuilding boot media.
 ## Today
 
 - The kernel creates spaces from `space.NAME=IMAGE` options on the kernel command
-  line ([SMP task-1 decision 1](scheduling-and-threads.md#task-1-decisions)).
+  line ([boot selection](../userland/init.md#boot-selection)).
   An installed system always gets the single space the installer writes.
 - All programs, configuration and shared files are in the boot archive, `app://`.
   `home://` is a RAM directory, and `system://` is the installed pool's `system`

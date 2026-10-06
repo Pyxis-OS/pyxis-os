@@ -208,7 +208,7 @@ The four clients took 6.533 s in aggregate, including the stop.
 
 ### Kernel heap growth
 
-This is context for [decision 4](../../../wip/scheduling-and-threads.md#task-1-decisions).
+This is context for task-1 decision 4, the heap arena, now [implemented](../../../kernel/smp.md#memory-and-output-boundaries).
 Three further boots used the same image and configuration, each with a freshly
 made pool disk. Their timings were not used, because GDB attached between groups.
 

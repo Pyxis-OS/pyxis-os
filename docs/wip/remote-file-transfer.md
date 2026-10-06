@@ -15,8 +15,7 @@ remote terminal session itself:
 - **Download:** copy a Pyxis file to the host, for example to back up work in
   progress in case of filesystem corruption.
 
-This is userland and host-tool work with no kernel change, so it fits the
-[runtime SMP focus](scheduling-and-threads.md).
+This is userland and host-tool work with no kernel change.
 
 **Until then:** a host file server such as dufs or `python3 -m http.server`
 already serves uploads: `cat http://HOST:PORT/Foo.class > Foo.class` works today.

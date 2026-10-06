@@ -90,8 +90,8 @@ accounting boundaries.
 
 ## Execution placement
 
-The original prototype associated one space with each CPU. The agreed
-[runtime SMP milestone](scheduling-and-threads.md) replaces that association with
+The original prototype associated one space with each CPU. The
+[runtime SMP milestone](../kernel/smp.md) replaced that association with
 independent space identity and CPU eligibility. Trusted init can request affinity
 within its launcher's permitted CPU set before session handoff. Workload spaces
 share all online CPUs by default, including the BSP, or may be restricted to a
@@ -141,3 +141,14 @@ This document records a design direction. It does not authorize implementing
 spaces, adding placeholder APIs or structures, or restructuring the current
 kernel in anticipation of them. Development continues through separately
 assigned work.
+
+## Later directions
+
+Owner direction, 2026-10-05; neither is scheduled, and neither authorizes
+placeholder APIs:
+
+- Users will create and destroy spaces at runtime, through the new-tab flow
+  described above.
+- A running application that holds the capability will be able to change its
+  space's title. Today `SPACE_RIGHT_SET_TITLE` reaches only init, session and the
+  interactive shell.

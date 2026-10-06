@@ -282,4 +282,4 @@ independent captures.
 Concurrent sibling execution would invalidate today's exclusive process/table
 loans and must first replace that ownership contract. Kernel clients likewise
 need an explicit nesting/dependency contract before synchronous submission can be
-allowed. See the separate [scheduling direction](../wip/scheduling-and-threads.md).
+allowed. See the [thread follow-ups](../wip/scheduling-and-threads.md#multiple-user-threads).
