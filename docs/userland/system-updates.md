@@ -4,7 +4,8 @@ Boot the newer live image, select **Install Pyxis** in Limine, then choose
 **Update** in the [native installer](installer.md). Update has two stages. It
 first writes the new revision's programs into the pool's `bin` volume, then
 replaces the installed boot files. It preserves the GPT, partition identities
-and bounds, and every existing volume, including `system://` data. It uses the
+and bounds, and every existing volume, including `system://` and `home://`
+data. It uses the
 same trusted [raw-disk and boot-source authority](../devices/installer-authority.md)
 as install.
 
@@ -64,7 +65,9 @@ The installed boot archive keeps only the rescue set: the executables named in
 `boot://share/installer/rescue.list` and every non-executable entry. The other
 `.pxe` executables move to the pool's `bin` volume, one directory per kernel
 revision. The installer releases its whole-disk claim and mounts the pool
-through the disk handle. It creates the `bin` volume when it is missing, writes
+through the disk handle. It creates an empty `home` volume when the pool has
+none, without opening it, and stops there if that fails. It creates the `bin`
+volume when it is missing, writes
 every moved executable into `bin/REVISION`, syncs the pool and compares each
 copy with its source. A rerun replaces the files of an earlier partial
 `bin/REVISION`. Builds without a revision use `bin/unknown`.

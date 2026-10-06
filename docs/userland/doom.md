@@ -68,8 +68,10 @@ Saves live under `home://doom/saves/<iwad-name>/`. Shareware uses `doom1.wad`,
 registered/Ultimate Doom uses `doom.wad`, and other missions use upstream's
 canonical IWAD name. The engine detects the game mode from the data; renaming
 the input WAD does not mix shareware and retail saves. The first save creates
-these directories using the `home` capability. Saves survive process exit,
-**not reboot**: the filesystem is still RAM-backed.
+these directories using the `home` capability. On installed systems `home://`
+is the pool's home volume and saves survive reboot once written back, within
+the periodic flush interval (30 seconds by default) or at `sync home://`. On
+live boots `home://` is RAM and saves last until reboot.
 
 A save writes its own exclusively reserved temporary file, checks writes and
 close, then atomically replaces the destination. Failure preserves the previous

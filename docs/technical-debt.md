@@ -626,8 +626,8 @@ The VirtIO RTC driver remains deferred.
 ## Doom configuration and save-format limits
 
 [Doom save/load](userland/doom.md#saves) now uses checked temporary writes and atomic
-replacement through the [RAM filesystem](interfaces/filesystem-mutations.md). Saves remain
-volatile across reboot. The upstream parser assumes trusted saves matching the
+replacement through the [filesystem mutations](interfaces/filesystem-mutations.md). Saves
+persist on installed systems and last until reboot on live boots. The upstream parser assumes trusted saves matching the
 loaded game data; full malformed-file validation and separation by PWAD are not
 implemented. Interrupted saves can leave temporary files for manual removal.
 
@@ -864,16 +864,21 @@ path remain unqualified. The internal NVMe remains unsupported.
 
 ## System layout renames
 
-The [system layout](wip/system-layout.md) renames leave two gaps until later tasks.
+Update recognizes only the current installed form of the
+[system layout](wip/system-layout.md), boot init's normal and rescue entries.
+An installation from before task 2, such as 0.0.2, is reported as having
+damaged or missing boot files and an unknown revision, and is rebuilt. The
+pool is unaffected. Task 3's two-stage Update kept this; because the previous
+revision is unknown, it then removes no program directories.
 
-- `home://` is unbound until task 4 adds the persistent home volume. Doom saves,
-  Quake's write directory, the hello demo and the `home://` examples in the
-  shell, port and tool guides fail until then. They keep the name so task 4
-  needs no second rename; use `tmp://` or a mounted volume meanwhile.
-- Update recognizes only the current installed form, boot init's normal and
-  rescue entries. An installation from before task 2, such as 0.0.2, is
-  reported as having damaged or missing boot files and an unknown revision, and
-  is rebuilt. The pool is unaffected. Revisit with task 3's two-stage Update.
+## RAM volumes
+
+Boot init makes each configured `ram` volume, such as the live `home://`, as a
+subdirectory of one private RAM directory the kernel hands it as the `ram`
+resource. No ABI creates a detached RAM directory, so only boot init can make
+RAM volumes, all share one RAM filesystem, and nothing limits their size apart
+from memory. Add an ABI that creates RAM volumes when a second user, such as a
+per-session scratch volume or a size limit, needs one.
 
 ## Boot init and space creation
 

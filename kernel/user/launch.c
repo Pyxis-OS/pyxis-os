@@ -52,6 +52,8 @@
 /* Namespace roots survive init and session exit; RAM contents remain until shutdown. */
 static struct directory_object *boot_root;
 static struct directory_object *tmp_root;
+/* Boot init's private RAM directory, from which it makes configured RAM volumes. */
+static struct directory_object *ram_root;
 
 /* Boot exposes only the immutable archive. Match its exact entry names;
  * userspace path walking and its wider namespace policy stay in libpyxis. */
@@ -102,7 +104,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       goto fail;
     }
     tmp_root = directory_create(DIRECTORY_RAM);
-    if (!tmp_root) {
+    ram_root = directory_create(DIRECTORY_RAM);
+    if (!tmp_root || !ram_root) {
       goto fail;
     }
   }
@@ -137,7 +140,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     goto fail;
   }
 
-  handle_t memory_handle, launcher_handle, boot, tmp;
+  handle_t memory_handle, launcher_handle, boot, tmp, ram;
   handle_t clock_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
   handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
   handle_t system_info_handle;
@@ -177,7 +180,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   uint64_t tmp_rights = boot_rights | DIRECTORY_RIGHT_CREATE | DIRECTORY_RIGHT_WRITE_FILES |
                         DIRECTORY_RIGHT_REMOVE;
   if (capability_install(&process->capabilities, &boot_root->object, boot_rights, 0, &boot) != CAP_OK ||
-      capability_install(&process->capabilities, &tmp_root->object, tmp_rights, 0, &tmp) != CAP_OK) {
+      capability_install(&process->capabilities, &tmp_root->object, tmp_rights, 0, &tmp) != CAP_OK ||
+      capability_install(&process->capabilities, &ram_root->object, tmp_rights, 0, &ram) != CAP_OK) {
     goto fail;
   }
   handle_t mount_handle = HANDLE_INVALID;
@@ -279,6 +283,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   };
   size_t resource_count = 14;
   resources[resource_count++] = (struct process_binding){"space_factory", factory_handle};
+  resources[resource_count++] = (struct process_binding){"ram", ram};
   if (script_handle != HANDLE_INVALID) {
     resources[resource_count++] = (struct process_binding){"script", script_handle};
   }
@@ -404,6 +409,10 @@ fail:
   if (tmp_root) {
     object_release(&tmp_root->object);
     tmp_root = NULL;
+  }
+  if (ram_root) {
+    object_release(&ram_root->object);
+    ram_root = NULL;
   }
   while (object_reap_pending()) {
     object_reap();

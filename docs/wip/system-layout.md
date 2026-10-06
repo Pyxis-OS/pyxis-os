@@ -1,7 +1,8 @@
 # System layout and boot init
 
 Status: **milestone, agreed 2026-10-05 and 2026-10-06.** It follows the
-[runtime SMP milestone](../kernel/smp.md). Tasks 1 to 3 are implemented.
+[runtime SMP milestone](../kernel/smp.md). Tasks 1 to 3 are implemented; task
+4 is implemented and checked on the ThinkPad, with a later-Update check pending.
 Each task starts when the owner says so, after its listed decisions are
 settled. Any decision can be revised by the owner.
 
@@ -22,8 +23,9 @@ adding a space, without rebuilding boot media.
   directory per revision, bound as `bin://`; the boot archive, `boot://`, keeps
   the rescue set, configuration and shared files. Live boots bind `bin://` to
   the archive. `tmp://` is a RAM directory, and `system://` is the installed
-  pool's `system` volume. `app://` and `home://` are unbound; programs that still default to
-  `home://` fail until task 4 ([technical debt](../technical-debt.md#system-layout-renames)).
+  pool's `system` volume. `home://` is the pool's `home` volume, shared by the
+  installed spaces, and a RAM volume on live boots; spaces start there unless
+  their `start` names another root. `app://` is unbound.
 - [Update](../userland/system-updates.md) writes the new revision's programs
   into `bin`, then replaces the ESP.
 
@@ -292,8 +294,49 @@ Accepted by the owner on 2026-10-06:
 - [ ] **4. Persistent home.**
   - A `home` volume mounted as `home://`, created by the installer and added to
     existing pools with task 3's operation.
-  - **Decision before starting:** whether every space shares one home volume
-    before users exist.
+  - **Decisions, accepted by the owner on 2026-10-06:**
+    - **One shared volume.** Every space that names `home` shares the pool's one
+      `home` volume. It is a pre-users prototype with no ownership on disk; the
+      [users work](users-and-authority.md) decides how a user's `home://`
+      relates to it.
+    - **A configured root.** `home` is declared in `installed.lua` like
+      `system`, and spaces name it in their roots, read-write or read-only.
+      The default `pyxis` space gets it read-write, and so does the rescue
+      entry, which boots that default.
+    - **Optional in the default** (owner, 2026-10-07, from the review).
+      `installed.lua` marks `home` optional for `pyxis`, so an unmountable home
+      volume starts `pyxis` in `tmp://` with the message instead of leaving it
+      unstarted, and the rescue entry does not depend on it. `system` stays
+      required.
+    - **Start directory.** Spaces start in `home://`. A `start` key naming
+      another of the space's roots overrides that; naming a root the space
+      does not have is a configuration error. A space without the root it
+      would start in starts in `tmp://`, with a boot init message.
+    - **Live boots.** `live.lua` declares `home` as a `ram` volume, lost at
+      reboot: read-write for Development, read-only for Read-only, and
+      read-write for Remote, which starts in `tmp://`. Boot init makes RAM
+      volumes from a private RAM directory; an ABI to create them is
+      [technical debt](../technical-debt.md#ram-volumes).
+    - **Install and Update** create `home` when it is missing and never open it.
+  - **Finish when:** on the ThinkPad, Update adds `home` to the existing pool; a
+    file in `home://` survives a reboot; Doom saves to `home://` on installed
+    and live boots. **Pending until the owner says a real later Update has
+    happened:** the file also survives that Update.
+  - **Implemented:** see [boot configuration](../userland/init.md#boot-configuration),
+    the [installer](../userland/installer.md) and
+    [system updates](../userland/system-updates.md#program-stage). In QEMU, a
+    disk installed with the task 3 build gained `home` through Update with its
+    `system` file kept. The installed space started in `home://`, and a
+    synced file and a Doom save survived a power-off and loaded again. An
+    override without `home` started in `tmp://` with the message, a read-only
+    `home` refused writes, a `start` outside the space's roots was rejected
+    and the rescue entry received `home://`. Live boots shared a RAM `home://`
+    between Development and Read-only, and Doom saved there. `fsck.npfs`
+    passed after the Update and after a fresh install. On 2026-10-06 the owner
+    updated the ThinkPad stick, then on the task 3 build, with the PXE build
+    of this PR: `home://` worked, and a Doom save written after finishing
+    Hangar, synced and followed by a reboot loaded correctly with
+    `doom -loadgame 0`.
 
 ## After the milestone
 

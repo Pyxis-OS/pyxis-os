@@ -38,10 +38,10 @@ again under exclusive raw access before the first write.
 
 Installation rebuilds the whole selected disk: a fresh GPT, a 512 MiB FAT32 ESP
 starting at 1 MiB, then an npfs pool extending to the aligned end before backup
-GPT metadata. The pool has a `system` volume with an empty regular root marker
-and a `bin` volume. The installer formats the pool and writes the GPT, releases
-its whole-disk claim, then mounts the pool through the disk handle and writes
-the executables outside the archive's rescue list into `bin/REVISION`, as
+GPT metadata. The pool has a `system` volume with an empty regular root marker,
+a `bin` volume and an empty `home` volume. The installer formats the pool and
+writes the GPT, releases its whole-disk claim, then creates `home` through the
+disk handle, mounts the pool and writes the executables outside the archive's rescue list into `bin/REVISION`, as
 [Update's program stage](system-updates.md#program-stage) does. Only then does
 it claim the ESP partition and write it. Limine is at `EFI/BOOT/BOOTX64.EFI`;
 the original kernel, the rescue boot archive (the live archive without the
@@ -53,9 +53,9 @@ installer entry and any global `default_entry`. It has two entries:
 `init=boot://boot-init.pxe mount.disk=<GUID>`, and `Pyxis OS (rescue)`, which
 adds `boot.default_config=1` to ignore the pool's boot configuration. Boot init
 then starts the [installed spaces](init.md#boot-configuration): by default the
-`pyxis` space, whose `init-installed` receives partition 2's system volume
-read-write as `system://` and starts the ordinary local session. `tmp://` stays
-RAM-backed.
+`pyxis` space, whose `init-installed` receives partition 2's system and home
+volumes read-write as `system://` and `home://`, starts in `home://` and starts
+the ordinary local session. `tmp://` stays RAM-backed.
 
 Success requires the program copies to match their sources, then ESP flush and
 release, FAT directory traversal and byte-for-byte source comparisons, then
