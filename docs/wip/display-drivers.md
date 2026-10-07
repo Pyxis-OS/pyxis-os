@@ -439,8 +439,10 @@ columns that fit; fill new cells/margins with the TTY background. Translate/clam
 the cursor and clear pending wrap. Keep colours, tab width and escape-parser
 state. Cropped or dropped text is lost: no text grid or scrollback exists today.
 
-Recompute the bar viewport/widget placement and pointer bounds. Keep space
-identity, selection and input capture. Terminal dimensions are
+Recompute the bar viewport and widget placement. Kernel pointer input reports
+relative motion and has no coordinate bounds to resize; application coordinate
+bounds follow their fixed mapping until adaptation. Keep space identity,
+selection, input focus and capture. Terminal dimensions are
 `width / font_width` and `(height - bar_height) / font_height` in every local
 space, including inactive spaces. Existing remote terminal sessions retain their
 own rows/columns, input/output queues and size policy.
