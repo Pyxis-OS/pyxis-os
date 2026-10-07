@@ -920,6 +920,11 @@ GPU, space/TTY and ABI commits. The userland query wrappers are published as
 [`6aff4ad`, PR #145](https://git.internal/PyxisOS/pyxis-userland/pulls/145);
 Fastfetch's direct console caller is updated in
 [`5985092`, ports PR #49](https://git.internal/PyxisOS/pyxis-ports/pulls/49).
+The userland branch also merges current main `24068aa` to preserve the accepted
+LLVM SDK selection changes; the parent pins its published combined revision
+`21502e7540d80689f4cfad4a3abaff8db21a34c3`. Parent main `29a1777` is integrated
+after the initial qualification. Ordinary validation uses the default GCC
+toolchain; no new LLVM performance result is claimed here.
 Merge both dependencies before the parent PR. No compiler-container rebuild or
 new source mirror is needed; the SDK exports the changed ABI and runtime.
 
