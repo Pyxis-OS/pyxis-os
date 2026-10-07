@@ -755,7 +755,7 @@ bounded implementation; damage tracking is a measured follow-up, not this task.
 
 - **Physical GPUs.** A driver for real hardware, investigated against an Intel
   integrated GPU passed through from horse, or natively on the ThinkPad over PXE
-  with [remote debugging](remote-debugging.md). The owner prepares the physical
+  with [remote debugging](../development/remote-debugging.md). The owner prepares the physical
   GPUs. Loading vendor firmware blobs is acceptable (owner, 2026-10-07).
   Passing the ThinkPad's GPU through VFIO is ruled out: its IOMMU group also
   holds the PSP, both USB controllers and the audio devices.

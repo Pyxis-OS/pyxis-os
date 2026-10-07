@@ -524,8 +524,10 @@ Discovery owns UDP port 2324 on net0 exclusively while waiting; a conflicting
 binding stops that daemon with a diagnostic. One reverse session runs at a time,
 and the host tool accepts one session per invocation. Beacon cadence adds up
 to approximately one second after discovery opens, plus network, scheduling
-and connection/cleanup delays. Native subnet broadcast and ThinkPad PXE
-qualification remain owner checks. Revisit these limits if a concrete multi-host
+and connection/cleanup delays. Reverse discovery and log following passed the
+owner's ThinkPad PXE check; macOS listener behavior remains unqualified. See
+[remote-debugging qualification](development/remote-debugging.md#qualification).
+Revisit these limits if a concrete multi-host
 or unattended development workflow needs more.
 
 ## Kernel log retention and LAN visibility
@@ -557,9 +559,12 @@ ordinary TX capacity to 15/16 VirtIO descriptors or 30/32 RTL8111 descriptors.
 The ThinkPad's panic and disabled checks passed in
 [PR #476](https://git.internal/PyxisOS/pyxis-os/pulls/476). Normal replay waits
 for an IPv4 address, and a plain enabled boot then delivered the whole boot log
-natively (main `fcf142e`, 2026-10-07). Revisit polling budgets, capacity and
-disclosure with concrete recovery/authentication requirements; checked NIC completion alone cannot
-guarantee host delivery.
+natively (main `fcf142e`, 2026-10-07;
+[PR #480](https://git.internal/PyxisOS/pyxis-os/pulls/480)). RTL's ambiguous-slot
+duplication and stalled-NIC abandonment remain code-inspected rather than
+hardware-qualified. Revisit those paths, polling budgets, capacity and disclosure
+with concrete recovery/authentication requirements; checked NIC completion
+alone cannot guarantee host delivery.
 
 ## PS/2 scan-set query compatibility
 

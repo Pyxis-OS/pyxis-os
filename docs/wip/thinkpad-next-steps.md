@@ -18,9 +18,9 @@ Caelum reaches an interactive shell on all 12 CPUs with the full 32 GB:
 - **Display:** occasional tearing in Doom is expected, because nothing is double
   buffered. It is accepted for now.
 
-Remaining native gaps, in the order the owner chose to address them (a
-[reverse remote terminal](remote-debugging.md) is now part of the remote
-debugging milestone):
+Remaining native gaps, in the order the owner chose to address them
+([remote debugging](../development/remote-debugging.md) now provides the reverse
+terminal and log capture):
 
 1. **No entropy source.** QEMU's virtio-rng doesn't exist on hardware, so
    `random` reads fail. TLS setup fails (`httpfs: TLS setup failed (native
@@ -295,8 +295,11 @@ without automatic preference or an exactly-one-NIC restriction.
 
 ## 3. Reverse remote terminal
 
-Moved on 2026-10-07 into the [remote debugging milestone](remote-debugging.md),
-with its owner decisions.
+Implemented and qualified on the ThinkPad. The
+[remote debugging reference](../development/remote-debugging.md) covers capture
+and connection setup; the
+[remote terminal guide](../userland/remote-terminal.md#reverse-connections)
+defines discovery and session ownership.
 
 ## 4. Parked: DASH serial-over-LAN for boot logs
 
@@ -361,7 +364,7 @@ driver. Caelum already only reads this controller's XID and leaves it untouched
 
 **Owner decision, 2026-10-07: not relied on.** The setup is fragile: the
 20-second enable window, SSH not working, and old tools. Remote boot logs go
-through the [kernel log over UDP](remote-debugging.md) instead. Caelum still
+through the [kernel log over UDP](../development/remote-debugging.md) instead. Caelum still
 writes serial output only to COM1 (`0x3f8`). If DASH is revisited, the findings
 above say what a writer for `0x3200` would need: find the UART by PCI ID, never
 wait for a session, and replay the log ring once found.
