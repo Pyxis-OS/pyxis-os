@@ -8,6 +8,8 @@
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <uacpi/kernel_api.h>
+#include <uacpi/namespace.h>
+#include <uacpi/notify.h>
 #include <uacpi/uacpi.h>
 #include "host.h"
 
@@ -306,6 +308,21 @@ static bool load_namespace(void)
   return true;
 }
 
+/* Deferred work. Nothing acts on notifications yet; this root handler sees
+ * every one, which also stops uACPI warning in the log about each one that
+ * has no listener. */
+static uacpi_status trace_notify(uacpi_handle context, uacpi_namespace_node *node,
+                                 uacpi_u64 value)
+{
+  (void)context;
+  const char *path = uacpi_namespace_node_generate_absolute_path(node);
+  ktrace("ACPI: Notify(%s, 0x%llx)\n", path ? path : "?", (unsigned long long)value);
+  if (path) {
+    uacpi_free_absolute_path(path);
+  }
+  return UACPI_STATUS_OK;
+}
+
 /* Top level only, like deferred work. Returns only when the operation failed,
  * after completing the request. */
 static void run_power_request(void)
@@ -331,6 +348,11 @@ static void acpi_worker(void *argument)
   (void)argument;
   if (!load_namespace()) {
     return;
+  }
+  uacpi_status status = uacpi_install_notify_handler(uacpi_namespace_root(), trace_notify,
+                                                     UACPI_NULL);
+  if (status != UACPI_STATUS_OK) {
+    klog("ACPI: error: notify handler not installed: %s\n", uacpi_status_to_string(status));
   }
   acpi_ec_start();
   acpi_battery_start();
