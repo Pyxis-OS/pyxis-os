@@ -34,6 +34,19 @@ size_t acpi_map_pages(void);
  * and pools unsealed, so the system keeps running. */
 enum call_status acpi_power_run(enum acpi_power_action action);
 
+/* Embedded controller. Load_ecdt runs after the namespace is loaded and
+ * before it is initialized, so _INI and _STA can reach an ECDT controller;
+ * start runs after initialization, finds the PNP0C09 device when there was no
+ * usable ECDT, then enables the controller's GPE. Worker only. */
+void acpi_ec_load_ecdt(void);
+void acpi_ec_start(void);
+
+/* Batteries and the AC adapter. Start finds the devices after acpi_ec_start.
+ * Poll reads them when NOW has reached the next poll, and returns that next
+ * poll time, UINT64_MAX without any device. Worker only, top level. */
+void acpi_battery_start(void);
+uint64_t acpi_battery_poll(uint64_t now);
+
 /* Requested bytes and blocks currently allocated by uACPI. Worker only. */
 struct acpi_heap_use {
   size_t bytes, blocks;

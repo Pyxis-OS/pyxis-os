@@ -12,6 +12,9 @@
 #include "host.h"
 
 #define NANOSECONDS_PER_MICROSECOND 1000
+/* An unclaimed level-triggered SCI would fire again at once; it stays masked
+ * this long before the worker tries again. */
+#define SCI_REARM_NS UINT64_C(1000000000)
 
 struct acpi_work {
   struct acpi_work *next;
@@ -35,6 +38,8 @@ static struct sci_registration {
 } sci;
 static struct acpi_work *work_head, *work_tail;
 static bool running_work;
+static uint64_t sci_rearm_at;
+static size_t unclaimed_scis;
 static char worker_identity;
 
 /* Bootstrap only, then read by the worker. */
@@ -102,8 +107,8 @@ void acpi_interrupt(void)
   wake_worker();
 }
 
-/* Runs uACPI's handler with IF=0, as interrupt entry would. A level-triggered
- * SCI that nothing claims would fire again at once, so it stays masked. */
+/* Runs uACPI's handler with IF=0, as interrupt entry would. An unclaimed SCI
+ * stays masked until the top level re-arms it. */
 static void service_sci(void)
 {
   uint64_t flags = cpu_save_interrupts();
@@ -113,11 +118,31 @@ static void service_sci(void)
       if (sci.handler(sci.context) == UACPI_INTERRUPT_HANDLED) {
         io_apic_sci_unmask();
       } else {
-        klog("ACPI: error: unclaimed SCI; ACPI events stopped\n");
+        if (unclaimed_scis++ == 0) {
+          klog("ACPI: error: unclaimed SCI; ACPI events paused for 1 s at a time\n");
+        } else {
+          ktrace("ACPI: unclaimed SCI %zu\n", unclaimed_scis);
+        }
+        sci_rearm_at = arch_monotonic_ns() + SCI_REARM_NS;
       }
     }
   }
   cpu_restore_interrupts(flags);
+}
+
+/* Top level. Returns when the masked SCI is next due, or UINT64_MAX. */
+static uint64_t rearm_sci(uint64_t now)
+{
+  uint64_t flags = cpu_save_interrupts();
+  if (sci_rearm_at && now >= sci_rearm_at) {
+    sci_rearm_at = 0;
+    if (sci.handler) {
+      io_apic_sci_unmask();
+    }
+  }
+  uint64_t due = sci_rearm_at ? sci_rearm_at : UINT64_MAX;
+  cpu_restore_interrupts(flags);
+  return due;
 }
 
 /* IF=1. Sleep until an SCI arrives, deferred work is queued when WORK_WAKES,
@@ -181,6 +206,7 @@ uacpi_status uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler ha
   io_apic_sci_mask();
   sci = (struct sci_registration){0};
   sci_pending = false;
+  sci_rearm_at = 0;
   cpu_restore_interrupts(flags);
   return UACPI_STATUS_OK;
 }
@@ -249,7 +275,8 @@ uacpi_status uacpi_kernel_get_rsdp(uacpi_phys_addr *address)
 }
 
 /* Loads tables, enters ACPI mode, loads the namespace (installing the SCI
- * handler) and runs _STA/_INI. GPEs and fixed events stay disabled. */
+ * handler), attaches an ECDT embedded controller and runs _STA/_INI. GPEs and
+ * fixed events stay disabled. */
 static bool load_namespace(void)
 {
   uint64_t start = arch_monotonic_ns();
@@ -260,6 +287,7 @@ static bool load_namespace(void)
     status = uacpi_namespace_load();
   }
   if (status == UACPI_STATUS_OK) {
+    acpi_ec_load_ecdt();
     step = "namespace initialization";
     status = uacpi_namespace_initialize();
   }
@@ -304,6 +332,8 @@ static void acpi_worker(void *argument)
   if (!load_namespace()) {
     return;
   }
+  acpi_ec_start();
+  acpi_battery_start();
   uint64_t flags = cpu_save_interrupts();
   ready = true;
   cpu_restore_interrupts(flags);
@@ -311,6 +341,9 @@ static void acpi_worker(void *argument)
     service_sci();
     run_work();
     run_power_request();
-    sleep_for_events(UINT64_MAX, true);
+    uint64_t now = arch_monotonic_ns();
+    uint64_t sci_due = rearm_sci(now);
+    uint64_t poll_due = acpi_battery_poll(now);
+    sleep_for_events(sci_due < poll_due ? sci_due : poll_due, true);
   }
 }
