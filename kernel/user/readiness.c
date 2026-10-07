@@ -2,11 +2,16 @@
 #include <arch/cpu.h>
 #include <arch/smp.h>
 #include <kernel/net/interface.h>
+#include <kernel/display.h>
+#include <kernel/log.h>
 #include <kernel/object/console.h>
+#include <kernel/object/display.h>
+#include <kernel/object/keyboard.h>
 #include <kernel/object/terminal.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/object/process.h>
 #include <kernel/panic.h>
+#include <kernel/space.h>
 #include <kernel/task.h>
 #include <kernel/user/readiness.h>
 #include <stdatomic.h>
@@ -55,8 +60,26 @@ void readiness_complete(struct readiness_request *request, enum call_status stat
     request->interests[i].object = NULL;
   }
   object_cleanup_leave(previous);
+  request->caller = NULL;
   request->status = status;
   bsp_request_complete(&request->request);
+}
+
+static uint64_t display_ready(struct display_object *display,
+    uint64_t observed_generation)
+{
+  uint64_t flags = cpu_save_interrupts();
+  uint64_t ready = WAIT_ERROR;
+  if (display_available()) {
+    bool locked = log_begin();
+    if (locked) {
+      ready = display->space->tty->geometry_generation != observed_generation ?
+          WAIT_RESIZED : 0;
+    }
+    log_end(locked);
+  }
+  cpu_restore_interrupts(flags);
+  return ready;
 }
 
 bool readiness_service(struct bsp_request **active_list)
@@ -84,11 +107,21 @@ bool readiness_service(struct bsp_request **active_list)
         interest->ready = terminal_attachment_ready(interest->object, interest->events);
         break;
       case OBJECT_TERMINAL_INPUT:
-        interest->ready = terminal_input_ready(interest->object);
+      case OBJECT_TERMINAL_OUTPUT:
+        interest->ready = terminal_application_ready(interest->object,
+            interest->events, interest->observed_generation);
         break;
       case OBJECT_CONSOLE:
-        interest->ready = console_interrupt_ready(
-            &((struct console_object *)interest->object)->interrupt);
+        interest->ready = console_ready((struct console_object *)interest->object,
+            interest->events, interest->observed_generation);
+        break;
+      case OBJECT_KEYBOARD:
+        interest->ready = keyboard_ready((struct keyboard_object *)interest->object,
+            request->caller);
+        break;
+      case OBJECT_DISPLAY:
+        interest->ready = display_ready((struct display_object *)interest->object,
+            interest->observed_generation);
         break;
       default:
         KASSERT(false);

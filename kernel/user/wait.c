@@ -1,18 +1,24 @@
 #include <arch/clock.h>
 #include <abi/console.h>
+#include <abi/display.h>
+#include <abi/keyboard.h>
 #include <abi/tcp.h>
 #include <abi/execution_group.h>
 #include <abi/process.h>
 #include <abi/terminal.h>
 #include <kernel/object/object.h>
+#include <kernel/object/console.h>
+#include <kernel/object/display.h>
+#include <kernel/object/keyboard.h>
 #include <kernel/process.h>
+#include <kernel/space.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/user_memory.h>
 #include <kernel/user/wait.h>
 
 static enum call_status interest_authority(const struct kernel_object *object,
-    uint64_t rights, uint64_t events)
+    struct process *caller, uint64_t rights, uint64_t events)
 {
   if (!events) {
     return CALL_BAD_REQUEST;
@@ -44,10 +50,47 @@ static enum call_status interest_authority(const struct kernel_object *object,
       required |= TERMINAL_RIGHT_INJECT;
     }
   } else if (object->type == OBJECT_CONSOLE || object->type == OBJECT_TERMINAL_INPUT) {
-    if (events != WAIT_INTERRUPT) {
+    uint64_t allowed = WAIT_READABLE | WAIT_INTERRUPT | WAIT_RESIZED;
+    if (object->type == OBJECT_TERMINAL_INPUT) {
+      allowed |= WAIT_PEER_FIN;
+    }
+    if (events & ~allowed) {
       return CALL_BAD_REQUEST;
     }
-    required = CONSOLE_RIGHT_ARMED;
+    if (object->type == OBJECT_CONSOLE && object != &caller->space->console->object) {
+      return CALL_DENIED;
+    }
+    if (events & (WAIT_READABLE | WAIT_PEER_FIN)) {
+      required |= CONSOLE_RIGHT_READ;
+    }
+    if (events & WAIT_INTERRUPT) {
+      required |= CONSOLE_RIGHT_ARMED;
+    }
+    if ((events & WAIT_RESIZED) && !(rights & CONSOLE_RIGHTS)) {
+      return CALL_DENIED;
+    }
+  } else if (object->type == OBJECT_TERMINAL_OUTPUT) {
+    if (events != WAIT_RESIZED) {
+      return CALL_BAD_REQUEST;
+    }
+    required = CONSOLE_RIGHT_WRITE;
+  } else if (object->type == OBJECT_DISPLAY) {
+    if (events != WAIT_RESIZED) {
+      return CALL_BAD_REQUEST;
+    }
+    if (((const struct display_object *)object)->space != caller->space) {
+      return CALL_DENIED;
+    }
+    required = DISPLAY_RIGHT_DRAW;
+  } else if (object->type == OBJECT_KEYBOARD) {
+    if (events != WAIT_READABLE) {
+      return CALL_BAD_REQUEST;
+    }
+    struct keyboard_object *keyboard = (struct keyboard_object *)object;
+    if (keyboard->space != caller->space || !keyboard_owned(keyboard, caller)) {
+      return CALL_DENIED;
+    }
+    required = KEYBOARD_RIGHT_INPUT;
   } else if (object->type == OBJECT_PROCESS_CONTROL) {
     if (events != WAIT_COMPLETE) {
       return CALL_BAD_REQUEST;
@@ -80,16 +123,17 @@ struct syscall_result user_wait_many(uintptr_t interests, uint64_t count,
   }
 
   struct kernel_object *objects[WAIT_MAX_INTERESTS];
+  struct process *caller = process_current();
   size_t retained = 0;
   enum call_status status = CALL_OK;
   for (size_t i = 0; i < count; ++i) {
     uint64_t rights;
-    if (capability_resolve(&process_current()->capabilities, input[i].handle,
+    if (capability_resolve(&caller->capabilities, input[i].handle,
           0, 0, &objects[i], &rights, NULL) != CAP_OK) {
       status = CALL_BAD_HANDLE;
       break;
     }
-    status = interest_authority(objects[i], rights, input[i].events);
+    status = interest_authority(objects[i], caller, rights, input[i].events);
     if (status != CALL_OK) {
       break;
     }
@@ -110,8 +154,12 @@ struct syscall_result user_wait_many(uintptr_t interests, uint64_t count,
       (struct readiness_request *)bsp_request_prepare(BSP_SERVICE_READINESS);
   request->count = count;
   request->deadline = deadline;
+  request->caller = caller;
   for (size_t i = 0; i < count; ++i) {
-    request->interests[i] = (struct readiness_interest){objects[i], input[i].events, 0};
+    request->interests[i] = (struct readiness_interest){
+      .object = objects[i], .events = input[i].events,
+      .observed_generation = input[i].observed_generation,
+    };
   }
   bsp_request_submit_and_wait(&request->request);
   status = task_stop_requested() ? CALL_ENDPOINT_CLOSED : request->status;

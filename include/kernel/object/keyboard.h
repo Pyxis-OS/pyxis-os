@@ -31,6 +31,10 @@ void keyboard_process_exit(struct process *process);
 void keyboard_route_event(struct keyboard_object *keyboard, const struct key_event *event);
 void keyboard_focus(struct keyboard_object *keyboard, bool focused);
 void keyboard_reset_input(struct keyboard_object *keyboard);
+/* Any CPU, preserves IF. INPUT and same-space authority are checked by caller;
+ * ownership validation and event observation use the keyboard lock. */
+bool keyboard_owned(struct keyboard_object *keyboard, struct process *process);
+uint64_t keyboard_ready(struct keyboard_object *keyboard, struct process *process);
 /* Current user task, IF=0. No allocation; READ may block. */
 struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t rights,
     uint64_t operation, uintptr_t request_address, size_t request_size,

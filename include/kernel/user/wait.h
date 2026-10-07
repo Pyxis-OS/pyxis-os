@@ -7,10 +7,12 @@
 #include <stddef.h>
 
 struct kernel_object;
+struct process;
 
 struct readiness_interest {
   struct kernel_object *object;
   uint64_t events;
+  uint64_t observed_generation;
   uint64_t ready;
 };
 
@@ -18,6 +20,9 @@ struct readiness_interest {
  * Results live in the task's shared request area, never a private user stack. */
 struct readiness_request {
   struct bsp_request request;
+  /* Borrowed until completion: the sole caller task cannot retire while its
+   * published request remains outstanding. Cleared before waking that task. */
+  struct process *caller;
   size_t count;
   uint64_t deadline;
   enum call_status status;

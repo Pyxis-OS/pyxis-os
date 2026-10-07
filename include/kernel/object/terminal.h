@@ -29,8 +29,10 @@ void terminal_authority_release(struct kernel_object *object, uint64_t rights);
 
 /* Any CPU, preserves IF. Snapshot under the lock; reserves no queue capacity. */
 uint64_t terminal_attachment_ready(struct kernel_object *object, uint64_t events);
-/* Any CPU, preserves IF. Armed input: WAIT_INTERRUPT, and WAIT_ERROR after hangup. */
-uint64_t terminal_input_ready(struct kernel_object *object);
+/* Any CPU, preserves IF. Application input/output snapshot; input admission
+ * reserves no reader slot. Geometry is independent and stays at generation 1. */
+uint64_t terminal_application_ready(struct kernel_object *object, uint64_t events,
+    uint64_t observed_generation);
 
 struct syscall_result terminal_service_call(uint64_t rights, uint64_t operation,
     uintptr_t request_address, size_t request_size,

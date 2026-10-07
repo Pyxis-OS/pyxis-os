@@ -14,10 +14,12 @@
 #define WAIT_ERROR (UINT64_C(1) << 6) /* Output only; automatic for every interest. */
 #define WAIT_COMPLETE (UINT64_C(1) << 7)
 #define WAIT_INTERRUPT (UINT64_C(1) << 8)
+#define WAIT_RESIZED (UINT64_C(1) << 9)
 
 struct wait_interest {
   handle_t handle;
   uint64_t events;
+  uint64_t observed_generation; /* Used only by RESIZED; otherwise ignored. */
 };
 
 /* WAIT_MANY takes interests/count/deadline/output in RDI/RSI/RDX/R10.
@@ -43,17 +45,30 @@ struct wait_interest {
  * Terminal attachment READABLE/PEER_FIN require DRAIN (output records/EOF);
  * WRITABLE/WRITE_CLOSED require INJECT (input capacity/closure). Ordinary
  * interests include their respective closure flag; hangup reports ERROR.
- * Console and terminal input accept only INTERRUPT, on an ARMED handle; other
- * console and terminal application handles are not wait targets.
+ * Console and terminal input READABLE require READ; terminal input also accepts
+ * PEER_FIN and automatically includes it with READABLE after END_INPUT. Drain
+ * buffered input before interpreting a zero-byte read as EOF. Ordinary input
+ * readiness excludes an active reader and reserves no FIFO admission. Input
+ * loss reports ERROR for console READABLE; terminal hangup reports ERROR.
+ * INTERRUPT requires ARMED and observes the Ctrl+C latch without consuming it.
+ * Local console interests require the caller's own space. Console RESIZED
+ * requires READ or WRITE;
+ * terminal input/output RESIZED requires READ/WRITE respectively. Remote
+ * terminal geometry stays at generation 1. Display RESIZED requires DRAW and
+ * the caller's own space, without acquiring graphics. Keyboard accepts only
+ * READABLE with INPUT in the caller's own space and an acquired session.
+ * RESIZED reports observed_generation != current generation, level-triggered
+ * and coalesced; re-query geometry to obtain its generation before waiting again.
+ * Backend unavailability reports ERROR for display interests.
  * Process observers and execution groups accept only COMPLETE, requiring their
  * WAIT right. Completion is immutable and reports finished cleanup, not program
  * success. PROCESS_WAIT retrieves the observer's immutable result; group
  * completion additionally observes attributed deferred cleanup.
- * Process/group/terminal/console/TCP interests may be mixed; waits without TCP need no
- * network device.
+ * Process/group/terminal/console/display/keyboard/TCP interests may be mixed;
+ * waits without TCP need no network device.
  * Poll and try operations may park for the BSP worker handoff, never for I/O
  * readiness. */
 
-_Static_assert(sizeof(struct wait_interest) == 16, "wait interest layout");
+_Static_assert(sizeof(struct wait_interest) == 24, "wait interest layout");
 
 #endif
