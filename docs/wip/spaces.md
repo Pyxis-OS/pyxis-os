@@ -118,9 +118,9 @@ Pyxis
 
 Asterism is today's spaces plus:
 
-- **A supervisor in every space** that stays alive. Today each space's init
-  hands off and exits, so nothing keeps the space's grants to start a program
-  again.
+- **Continuum, a supervisor in every space,** that stays alive. Today each
+  space's init hands off and exits, so nothing keeps the space's grants to start
+  a program again.
 - **Configurable startup and recovery policies:** what a space starts, and what
   happens when something in it fails: restart, give up after repeated failures,
   or keep the tab for inspection.
@@ -129,6 +129,18 @@ Asterism is today's spaces plus:
   owns: its processes, terminal, display and tab.
 - **Perhaps, later, persistent environment reconstruction:** bringing back a
   set of spaces and what ran in them after a reboot.
+
+Names (owner, 2026-10-07):
+
+- **Continuum** is the supervisor. It oversees both kinds of space below.
+- **A haven** is a space without a terminal, managed exclusively by Continuum:
+  a web server, S3-style storage, or today's remote space. Nobody types into a
+  haven; its programs are services. Whether a haven shows a tab, and how its
+  output and failures are seen, remain open.
+- **Polaris** is the tool that validates space and supervisor configuration and
+  applies a change to Continuum, as a migration from the running configuration
+  to the new one. The [boot configuration checker](boot-configuration-checker.md)
+  idea is its validation half.
 
 The owner considers supervision, startup and recovery policies and runtime
 configuration needed; they are mostly planned already. Pieces in place or
