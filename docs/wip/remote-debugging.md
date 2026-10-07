@@ -200,10 +200,16 @@ Accepted reader contract for task 1 on 2026-10-07:
       card reports link. Frames in the first seconds after Pyxis resets the
       card can be dropped before reaching the host, for example while the
       switch port starts forwarding. DHCP survives that by retrying.
-      **Follow-up (owner, 2026-10-07):** start sending the retained history
-      only once the network has an IPv4 address. A completed DHCP shows the
-      path forwards, and the ring keeps everything until then. Fatal output
-      keeps sending at once. Then repeat a plain enabled boot natively.
+      **Follow-up (owner, 2026-10-07; native results in
+      [PR #476](https://git.internal/PyxisOS/pyxis-os/pulls/476)):** normal
+      sending now waits until net0 has an IPv4 address. While waiting it does
+      not consume the ring cursor or packet sequence. A completed DHCP shows
+      the path to its server forwards; static configuration also satisfies the
+      address gate but does not prove forwarding readiness. The ring retains
+      history subject to its ordinary capacity limit. Fatal output keeps
+      sending at once, with or without an address. Native qualification is now
+      a plain enabled boot with `log.udp=1` delivering the whole boot log;
+      no panic build is needed.
   - Usage, wire format, ownership and limits are in
     [kernel log](../interfaces/kernel-log.md#udp-capture).
 
@@ -218,10 +224,12 @@ into the remote-terminal guide. The owner accepted these choices on 2026-10-07:
    A separate host log receiver prints text and packet/fragment sequence gaps.
    This exposes enabled log traffic across the trusted LAN and avoids ARP,
    routing and reverse-terminal beacon dependence.
-2. Begin after the already selected net0 driver activates, without changing
-   NIC selection or requiring DHCP. Use source zero before IPv4 assignment;
-   replay retained ring history once ready, then follow new text asynchronously
-   on the BSP network worker. Panics before driver activation cannot use UDP.
+2. After the owner's native follow-up on 2026-10-07, normal replay begins once
+   the already selected net0 driver is active and net0 has an IPv4 address.
+   Static configuration and DHCP both qualify; NIC selection is unchanged.
+   Follow new text asynchronously on the BSP network worker. Fatal output
+   sends immediately after driver activation, using source zero before IPv4
+   assignment. Panics before driver activation cannot use UDP.
 3. Reserve fatal TX capacity only when enabled: ordinary VirtIO capacity is
    15 of 16 descriptors and RTL8111 capacity is 30 of 32. Panic irreversibly
    hands the selected TX path to the first panicking CPU, with bounded handoff
@@ -241,7 +249,8 @@ qualified; the implementation uses existing rings rather than assuming it works.
 ### Task 3 implementation and qualification, 2026-10-07
 
 The implementation is on `debug/kernel-udp-log`, based on main `800f979`.
-The final implementation revision is `8a4b944`; no dependency pins changed.
+The #474 implementation revision was `8a4b944`, before the IPv4 gate below;
+no dependency pins changed in that PR.
 Ordinary image builds and `make -C tools log remote -j16` passed. Kernel and
 host changes compile without warnings; existing third-party port warnings are
 not counted as a warning-free full build. No compiler-container rebuild is
@@ -302,10 +311,33 @@ RTL descriptors is the accepted capacity tradeoff, not a measured 6.25%
 throughput loss. Idle following adds a 100 ms deadline; caught-up reads honor
 it even when unrelated traffic keeps the worker running.
 
-Remaining: the boot-log follow-up above and its native enabled boot. The
-disabled and panic checks passed on the ThinkPad on 2026-10-07. Keep task 3 and
-the milestone open until the boot log arrives reliably. All task-owned QEMU, debugger, host-client,
+Remaining: the native plain enabled boot must deliver the whole boot log; no
+panic build is needed. The disabled and panic checks passed on the ThinkPad on
+2026-10-07. Keep task 3 and the milestone open until the boot log arrives
+reliably. All task-owned QEMU, debugger, host-client,
 receiver and packet-capture jobs are stopped; the temporary TAP is removed.
+
+### IPv4 gate follow-up, 2026-10-07
+
+Branch `debug/udp-log-after-ipv4` in `/home/chronium/src/pyxis-remote-debugging`
+starts from main `164b463`, including the native results in #476. The normal
+service checks net0's current IPv4 address before reading history, reserving a
+packet sequence or retrying a staged datagram. Fatal entry and TX are unchanged
+and still allow source zero. This implements the owner decision above; task 3
+remains open for the plain enabled ThinkPad boot.
+
+Validation: the ordinary `make -j16 image LOG_UDP=1` build passed. A manual
+four-CPU, 2 GiB Q35/VirtIO nested-KVM QEMU boot used an isolated TAP and the
+default DHCP profile. Before a lease was available, GDB showed an active NIC,
+IPv4 zero, 73 retained lines, cursor `{0, 0}` and sequence zero; the receiver
+had no text. After the local dnsmasq service became reachable, DHCP assigned
+`10.77.0.2`. Capture recorded the first log packet 127.528 seconds after the
+first DISCOVER, followed by contiguous sequences 0–72, all with that source
+address. The receiver's 4397 bytes matched an ordinary remote `log` read byte
+for byte, including the first boot line and boot-init output, with no gap notice.
+Fatal behavior is preserved by code inspection and the earlier native panic
+result; this follow-up needed no panic build. The temporary TAP/firewall zone
+assignment and all task-owned QEMU, debugger, DHCP and capture jobs were removed.
 
 ## Working rules
 

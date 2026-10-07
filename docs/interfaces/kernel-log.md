@@ -98,9 +98,17 @@ not deliver this traffic to the host receiver. Use a TAP/bridge network for
 QEMU capture, with the normal net0 configuration for that network.
 
 The sole BSP network worker follows the retained ring after the selected net0
-driver activates. It uses Ethernet and IPv4 limited broadcast
+driver activates and net0 has an IPv4 address, assigned statically or by DHCP.
+Until then it leaves the read cursor and packet sequence untouched; retained
+history is delayed rather than sent during early link-up. Clearing the address
+pauses normal sending, including queue-full retries, until an address returns.
+The fixed ring's usual overwrite limits still apply while waiting. DHCP
+completion demonstrates that the path to its server forwards; a static address
+does not establish that forwarding is ready or guarantee host delivery.
+It uses Ethernet and IPv4 limited broadcast
 `255.255.255.255:2325`, with TTL 1, source port 2325 and the current IPv4 source
-address, or zero while unassigned. There is no ARP, route lookup, lwIP or
+address. Fatal output sends immediately after driver activation, including with
+source zero while unassigned. There is no ARP, route lookup, lwIP or
 userspace forwarder. No interface is selected or initialized for logging.
 When caught up, the worker checks every 100 ms; ring overwrite and UDP loss are
 possible. Each datagram carries one line fragment of at most 1024 text bytes.
