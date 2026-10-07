@@ -11,6 +11,33 @@ compatibility, recovery and commands. Initialize `fs` and run `make -j16 fs-tool
 to build `libnpfs-format.a`, `mkfs.npfs`, `fsck.npfs` and
 `npfs-inspect` in `build/fs-tools/`. No compiler rebuild is required.
 
+## Design rules
+
+The owner set these rules on 2026-10-02, when npfs replaced the portable pyxis-fs
+writer. That writer took 13–80 ms per logical operation in its
+[RAM measurements](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/overflow-split-measurements.md),
+against 0.12–0.16 ms for Btrfs.
+
+- **Deliberately simple, ext2-class structure.** New capability arrives through
+  reserved bytes and feature flags, which the format carried from the start.
+  Files use direct and indirect block pointers; each inode has a mapping-type
+  field, so extents can be added later behind a feature flag.
+- **Native to Caelum.** The kernel owns mount state, caching and the writer.
+  The shared library covers the format only. What it needs from its environment
+  is an external symbol that the host tools, Caelum or the installer define at
+  link time, with no callback tables.
+- **No users or permissions on disk.** Access control stays with capabilities
+  until there is a concrete need.
+- **Explicit durability.** `fsync` and `sync` are the durability points; close
+  promises nothing. A metadata journal with ordered data, as in ext3/ext4, keeps
+  metadata consistent after a crash; data not yet written back may be lost.
+- **A pool with growable volumes.** One partition holds one pool; volumes grow
+  inside it rather than being sized up front.
+- **Measured from the start.** Latency and bytes written are measured from the
+  first implementation. The wear budget is no faster than one SSD every six
+  months; recompute it from the device's own SMART data, as the
+  [T14 inventory](../targets/t14-gen1-amd/notes.md) does.
+
 ## Repository and platform boundary
 
 pyxis-fs owns freestanding GNU C23 encoding/decoding, checksums, geometry,
@@ -65,7 +92,12 @@ and reserves; it is not a per-volume allowance.
 
 ## Validation
 
-The tool guide records task-2 host validation. Task-3 kernel runtime validation is
-pending; the [measurement record](../development/experiments/native-filesystem-task3/README.md)
-contains an obsolete-adapter baseline, not a writer result. Successful builds or
-structural checks do not establish power-loss behavior or physical SSD wear.
+The tool guide records host validation of the codecs and tools. The kernel writer's
+[measurement record](../development/experiments/native-filesystem-task3/README.md)
+covers its latency, device writes and persistence in QEMU. Installation was
+qualified end to end in
+[QEMU](../development/experiments/native-filesystem-task5/README.md) and
+[natively on a USB stick](usb-installation.md#validation), with a file kept
+across a synced power-off and an Update round trip. The owner reported it working
+across repeated runs since (2026-10-07). Power loss, crash
+recovery on physical media and SSD wear remain unmeasured.

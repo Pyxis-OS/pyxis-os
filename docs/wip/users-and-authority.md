@@ -5,7 +5,7 @@ restricted permissions and the identity/authority separation below are agreed.
 Persistent grants, prospective policy changes and the creation/move rules below
 are also agreed; explicit revocation mechanisms remain open. This is not an
 implementation assignment. See the [milestone index](boot-sdk-ports.md) and
-[native filesystem direction](native-filesystem.md). The native v1 format has no
+[native filesystem design rules](../devices/filesystem-readonly.md#design-rules). The native v1 format has no
 users or persistent permissions; it supersedes the former portable-core ownership
 implementation. The identity and sharing directions below remain deferred until
 a concrete consumer needs them.

@@ -188,6 +188,18 @@ login and a Pyxis-wide credential store. The master key is sealed in the TPM und
 a measured-boot policy, a password or PIN is the root factor, and biometrics only
 gate use after a root-factor unlock. It follows local users, USB and a TPM driver.
 
+## Clock source
+
+Accepted direction (owner, 2026-10-03), not scheduled: TSC with extended-HPET
+fallback. The [software-extended HPET](../kernel/timekeeping.md) came first and
+works natively. TSC needs per-CPU invariant-TSC detection, frequency from CPUID
+`0x15` or HPET calibration, ordered reads, and agreement across CPUs, which
+decides whether a shared nondecreasing floor is required. Runtime switching,
+suspend/resume and VM migration are separate scopes; KVM pvclock is another
+possible source. The
+[investigation](https://git.internal/PyxisOS/pyxis-os/src/commit/93851aebce74c71ceea93774c4d97e01bc2a60e7/docs/wip/thinkpad-kvm-tsc.md#what-caelum-must-establish-for-tsc)
+records the requirements and references in detail.
+
 ## Power and ACPI
 
 Follow-ups to the completed [ACPI](../kernel/acpi.md) milestone. None is agreed.
@@ -217,25 +229,30 @@ Follow-ups to the completed [ACPI](../kernel/acpi.md) milestone. None is agreed.
 
 ## Persistent storage and installation
 
-[Writable virtio-fs](../devices/virtio-fs.md) lets the Kilo/TCC workflow keep source and
-executables across boots without first choosing a disk filesystem. Trusted init
-selects access grants over one host-service identity; the
-[users/authority checkpoint](users-and-authority.md) records what that prototype
-boundary leaves open. [Space titles](../userland/init.md#space-titles) are also implemented.
-
+[npfs](../devices/filesystem-readonly.md) holds installed systems, the
+[native installer](../userland/installer.md) installs and updates them, and
+[Linux mounts](../development/npfs-linux-mount.md) read them on the host.
+[Writable virtio-fs](../devices/virtio-fs.md) still serves port development.
 Keep three choices separate: Pyxis file/directory capability requests, a backend
 operation interface, and the disk format. A FUSE-inspired backend need not force
 Linux FUSE's complete wire ABI, Unix permissions or path semantics on applications.
-The selected [native format](../../fs/docs/npfs-format.md) has shared freestanding
-codecs and host tools; Caelum owns its implemented cache/writer and I/O/allocation
-policy. A future Linux FUSE adapter could consume the same codecs with its own
-runtime state. Host mounting requires a separate assignment and does not require
-moving the native kernel writer into userspace.
 
-Installer design remains separate from the completed native writer. Virtio-fs
-continues to support port development alongside native disk storage.
+Ideas recorded when npfs was planned, none of them agreed:
+
+- **A live-system install flow (owner preference).** Boot a usable live system,
+  inspect disks and the network, then enter the installer, as Linux live images
+  do, instead of rebooting into the separate "Install Pyxis" entry. This likely
+  needs the new-space flow, and first a safe way to retire a mounted pool: today
+  mounted pools stay retained until reboot, which prevents raw installation in
+  the same boot.
+- **Choosing inits at install time.** An interactive step that chooses which
+  inits start which spaces.
+- **Filesystem overlays,** for example a volume overlaid on the boot archive.
+- **Writing from Linux.** The host mount is read-only; writing is a later step.
+- **NVMe.** Installing onto the ThinkPad's internal disk needs an NVMe driver.
+  With it, the Fedora disk would appear under Read the room as a foreign disk,
+  which the owner accepted.
 
 ## References
 
-- [Broader development candidates](development-paths.md).
 - [Filesystem direction](vfs.md) and [space direction](spaces.md).

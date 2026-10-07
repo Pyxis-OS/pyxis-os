@@ -62,7 +62,7 @@ an explicit disk identity, partition entry and volume. The sample seeds storage
 validation; it is not mounted as a persistent home volume by default.
 `SAFE_TO_WIPE` is a regular empty file in the volume root, marking every volume this builder creates
 as disposable for the installer. Removing the marker makes the volume final;
-see the [installer consent rules](../wip/native-filesystem.md#target-consent).
+see the [installer consent rules](../userland/installer.md).
 
 `usb-image` reuses ordinary kernel, SDK, ports, archive and Limine configuration
 assembly, including its interface checks and `INIT` selections. Explicit

@@ -856,20 +856,20 @@ idle waits, restoring the measured unprofiled transfer times to baseline. Active
 deadlines and profiling still pay the clock cost. The current source requires
 a memory-mapped HPET; there is no source registry or fallback. On 2026-10-03
 the owner chose
-[software-extended HPET first](wip/thinkpad-kvm-tsc.md#accepted-direction-and-implementation-handoff).
+[software-extended HPET first](kernel/timekeeping.md#software-extension-sampling-and-support-limit),
+with TSC as the [later direction](wip/later-os-directions.md#clock-source).
 The implementation preserves direct 64-bit reads and extends 32-bit counters
 with a shared CAS accumulator. Each advancing extension read publishes to one
 cache line and may retry under contention. BSP maintenance is configurable in
 timer deliveries, default 120 (nominally one second), with explicit early-boot
-sampling. The [matched host-KVM observations](wip/thinkpad-kvm-tsc.md#local-implementation-results)
+sampling. The [matched host-KVM observations](https://git.internal/PyxisOS/pyxis-os/src/commit/93851aebce74c71ceea93774c4d97e01bc2a60e7/docs/wip/thinkpad-kvm-tsc.md#local-implementation-results)
 show lower clock-call cost for forced low-32-bit extension, with shared-state
 cost included, but do not establish native performance. The direct profiled
 allocation median was about 2.6% higher, mostly in BSP queue time; its cause
-was not isolated. The owner has reached native userspace on all 12 ThinkPad
-CPUs, as [recorded from a screen photo](wip/thinkpad-kvm-tsc.md#native-bring-up-continuation).
-The owner recorded the 32-bit/software-extended path log; the native multi-wrap
-clock check remains pending. Missing keyboard input is a separate bring-up
-blocker; the diagnostic follow-up identified an absent scan-set query ID.
+was not isolated. On the ThinkPad the owner recorded the 32-bit
+software-extended path log and, on 2026-10-07, a native session of more than
+15 minutes with the clock holding; see the
+[target notes](targets/t14-gen1-amd/notes.md#native-status).
 
 The accepted support requirement is strictly less than one advancing-counter
 wrap between incorporated samples, including individual boot operations, long
@@ -945,7 +945,7 @@ stops at an embedded NUL within each copied slice. Revisit bounded/binary regex
 interfaces when a concrete consumer needs them. Saves keep upstream's
 in-place write followed by `ftruncate`, so a short write or crash can leave a
 truncated or mixed file. Revisit with atomic replacement or a durable-save
-policy alongside the [native filesystem](wip/native-filesystem.md) work.
+policy alongside the [native filesystem](devices/filesystem-native-adapter.md).
 `:!` and shell filters need a native launch adapter, and the read-only marker
 probes WRITE authority because truthful file metadata does not exist yet. The
 recipe's libbb adapter covers the selected vi/less helpers only.
@@ -1723,7 +1723,7 @@ is claimed by the native writer's ordinary QEMU workflow.
 
 ## Native filesystem design limits
 
-The [native format decisions](wip/native-filesystem-format.md#decision-status)
+The [native format design rules](devices/filesystem-readonly.md#design-rules)
 now have [implemented codecs and host tools](../fs/docs/npfs-host-tools.md).
 Caelum owns the mounted inode/cache/writer state. Accepted limits include 64 volume slots, roughly 513 GiB per-file block-pointer capacity, and linear directory lookup.
 Revisit only when a concrete workload exceeds those bounds or lookup becomes costly;
