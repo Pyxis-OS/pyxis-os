@@ -3,7 +3,8 @@
 `make sdk` exports `build/sdk` using the prebuilt `x86_64-unknown-pyxis-`
 [toolchain](../../toolchain/README.md). `make userspace` builds that SDK first, then
 the ports development files and applications against it; `make image` continues through initrd and ISO assembly.
-GCC and binutils remain prebuilt; image builds also build the guest TCC port. Initialize the [userspace submodule](sdk-and-repositories.md)
+GCC and binutils remain prebuilt and the default; `TOOLCHAIN=llvm` selects the
+prebuilt Clang/LLD toolchain instead. Image builds also build the guest TCC port. Initialize the [userspace submodule](sdk-and-repositories.md)
 and filesystem submodules with `git submodule update --init userspace fs` before
 building the SDK.
 
@@ -17,17 +18,20 @@ there is no extra link library. See
 | SDK path | Contents |
 | --- | --- |
 | `sysroot/usr/include` | libc, libpyxis and libterm headers, plus public `abi/`, `pxe/` and `pyxis_fs/npfs.h` headers |
-| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libnpfs-format.a`, `libgcc.a` and `pyxis.ld` |
+| `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libnpfs-format.a`, the compiler runtime (`libgcc.a` or `libclang_rt.builtins.a`) and `pyxis.ld` |
 | `bin/elf2pxe` | Host executable for converting the linked ELF to PXE |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
+| `share/toolchain.mk` | The toolchain (`gcc` or `llvm`) that built the runtime archives; `pyxis.mk` selects the same one |
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
 | `share/licenses` | TLSF and musl licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |
-| `share/toolchain` | Installed toolchain source hashes, patches, GPLv3 and GCC Runtime Library Exception |
-| `manifest.txt` | Pyxis, userland and filesystem revisions/dirty states, compiler/linker identities, libgcc hash and host identity |
+| `share/toolchain` | Installed toolchain provenance: GCC source hashes, patches, GPLv3 and the GCC Runtime Library Exception, or the LLVM fork revision and license |
+| `manifest.txt` | Pyxis, userland and filesystem revisions/dirty states, toolchain, compiler/linker identities, runtime hash and host identity |
 
 The compiler supplies its own builtin headers. SDK export copies its target
-libgcc archive and installed `share/pyxis-toolchain` provenance into the SDK;
-it does not copy GCC's private headers. The compiler stays outside the SDK,
+runtime archive (libgcc, or Clang's compiler-rt builtins) and installed
+`share/pyxis-toolchain` provenance into the SDK; it does not copy compiler
+private headers. A consumer uses the toolchain the SDK records, because the
+runtime archives belong to it. The compiler stays outside the SDK,
 as does the host C runtime needed by elf2pxe. Use a compatible host for that
 executable and the compiler recorded in the manifest. The manifest records build
 provenance, not an ABI version or compatibility guarantee. Modified checkouts
@@ -116,6 +120,9 @@ x86_64-unknown-pyxis-gcc --sysroot=/path/to/sdk/sysroot \
   -I/path/to/sdk/sysroot/usr/include program.c -o program.elf
 /path/to/sdk/bin/elf2pxe --format p1f -o program.pxe program.elf
 ```
+
+With an LLVM-built SDK, use `x86_64-unknown-pyxis-clang` the same way. Its
+driver supplies compiler-rt builtins instead of libgcc and links with LLD.
 
 Add `-lterm` when using terminal helpers. Format-library consumers explicitly
 link `libnpfs-format.a` and supply `npfs_memory_copy` and `npfs_memory_zero`;
