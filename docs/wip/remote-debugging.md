@@ -97,15 +97,30 @@ Accepted reader contract for task 1 on 2026-10-07:
     overflow (first line 1562, next line 7386, 262101 occupied bytes).
   - **Memory:** 262144-byte ring including four-byte line headers; 262208 bytes
     of BSS including bookkeeping/alignment. It replaces the old 32768-byte
-    early-log store. Bounded kernel reply storage is 4128 bytes per read.
+    early-log store. Bounded kernel reply storage is 1056 bytes per read.
   - **Limits:** oversized-line and clipped partial-snapshot cases were reviewed
     in code, without fault injection or new tests. No native ThinkPad run or
     isolated boot-time/presentation-cost measurement is claimed. An attempted
     GDB allocator call faulted at its NX-stack return trampoline; runtime
     validation used a fresh boot and read-only debugger inspection afterward.
+  - **Review follow-up:** retain boot-init serial-mirrored console output,
+    reduce `LOG_READ_MAX` to 1024 to bound stack use, and record the cost of
+    locating cursors under the ring lock in technical debt. Baseline at main
+    `30e127b` and the follow-up source used the same nested-KVM configuration
+    (4 CPUs, 2 GiB, VirtIO networking, info logging) and compiler flags. Three
+    `log` sessions completed in 0.02 s each before and after, measured with
+    `/usr/bin/time -p` around `pyxis-remote --machine --no-shell-echo`; each
+    session received `log` on stdin and then EOF. This measures connect, read
+    and teardown together at 0.01 s reporting resolution, not isolated ring
+    latency. Output grew from 4131 to 4393 bytes because it now includes five
+    boot-init messages, including the unavailable HOST volume. All six
+    snapshots exited successfully. Compiler stack reservations fell from
+    4184 to 1112 bytes in `log_call` and 4208 to 1136 bytes in TTY replay
+    (disassembled `sub rsp`, excluding pushes and callees).
   - **Delivery:** userland [PR #140](https://git.internal/PyxisOS/pyxis-userland/pulls/140)
-    at `bb66de52cd7fb11bf1d701548d61c8ef9e95529d` must merge before the
-    companion Pyxis PR which pins it. `fj pr status` cannot parse userland's
+    at `bb66de52cd7fb11bf1d701548d61c8ef9e95529d` and Pyxis
+    [PR #465](https://git.internal/PyxisOS/pyxis-os/pulls/465) are merged.
+    `fj pr status` cannot parse userland's
     empty combined state (`unknown variant`); dependency CI is unavailable.
 
 - [ ] **2. The reverse remote terminal.**

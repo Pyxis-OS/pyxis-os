@@ -11,6 +11,7 @@
 #include <kernel/user_memory.h>
 #include <kernel/fb/tty.h>
 #include <kernel/log.h>
+#include <kernel/log_ring.h>
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
 
@@ -210,6 +211,7 @@ bool console_write(struct console_object *console, const char *bytes, size_t siz
   for (size_t i = 0; i < size; ++i) {
     tty_put_char(console->tty, bytes[i]);
     if (console->serial) {
+      log_ring_putc(bytes[i]);
       console_putc(bytes[i]);
     }
   }
