@@ -1,3 +1,4 @@
+#include <arch/cpu.h>
 #include <kernel/memory.h>
 #include <stdint.h>
 
@@ -10,13 +11,11 @@ void *memset(void *dest, int value, size_t count)
   return dest;
 }
 
+/* Presentation copies whole frames, megabytes per tick, into the framebuffer;
+ * string moves issue an eighth of the stores of a byte loop. */
 void *memcpy(void *restrict dest, const void *restrict src, size_t count)
 {
-  unsigned char *dest_bytes = dest;
-  const unsigned char *src_bytes = src;
-  for (size_t i = 0; i < count; ++i) {
-    dest_bytes[i] = src_bytes[i];
-  }
+  cpu_copy_forward(dest, src, count);
   return dest;
 }
 

@@ -173,6 +173,16 @@ all-CPU TLB acknowledgements and real allocation refusal. See merged
 revisions and validation limits. Geometry copy/swap measurements across four
 TTYs ranged from 0.45 to 4.39 ms in nested KVM.
 
+Frame copies use the kernel `memcpy`, which moves eight-byte words with
+`rep movsq` and finishes with `rep movsb`. It was a byte loop before
+2026-10-07. Twelve idle `space_present` samples, measured with the GDB HPET
+method below, used standard VGA at 1280x800 with the cursor visible. The other
+settings were four CPUs, 2 GiB, nested KVM and GCC builds. The median fell
+from 1.007 ms (main `70a4e20`, range 0.938–1.967 ms) to 0.640 ms (range
+0.473–1.055 ms). Native framebuffers are write-combining device memory, and
+there the eightfold fewer stores may matter more. No native figure is
+recorded yet.
+
 Task 5b's baseline used main `3b84214`, userland `c4bcf16`, ports `eb648d5`, an
 ordinary GCC image, q35, GTK VirtIO 640x480, four CPUs, 256 MiB, nested KVM and
 raw OVMF. Build with `make -j16 image`; the interactive command was equivalent to:

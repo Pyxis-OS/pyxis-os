@@ -1,6 +1,7 @@
 #ifndef ARCH_CPU_H
 #define ARCH_CPU_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <arch/syscall.h>
 
@@ -80,6 +81,17 @@ static inline void cpu_restore_interrupts(uint64_t flags)
 static inline void cpu_store_fence(void)
 {
   __asm__ volatile("sfence" : : : "memory");
+}
+
+/* Forward copy with string moves: eight-byte words, then the remaining bytes.
+ * Every kernel entry clears DF (isr.S and the syscall FMASK), so the moves run
+ * forward. Overlapping ranges are not supported. */
+static inline void cpu_copy_forward(void *dest, const void *src, size_t count)
+{
+  size_t words = count / sizeof(uint64_t);
+  size_t bytes = count % sizeof(uint64_t);
+  __asm__ volatile("rep movsq" : "+D"(dest), "+S"(src), "+c"(words) : : "memory");
+  __asm__ volatile("rep movsb" : "+D"(dest), "+S"(src), "+c"(bytes) : : "memory");
 }
 
 static inline void outb(uint16_t port, uint8_t value)
