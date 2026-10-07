@@ -33,7 +33,8 @@ struct boot_module {
 
 /* One 32-bit RGB framebuffer with eight bits per channel. Physical storage is
  * device-owned; address is filled by paging_init with a supervisor-only kernel
- * mapping. Pitch includes row padding. No Limine pointers are retained. */
+ * mapping. Pitch includes row padding. No Limine pointers are retained.
+ * All fields are zero when firmware supplies no usable direct framebuffer. */
 struct boot_framebuffer {
   uint64_t physical;
   uintptr_t address;

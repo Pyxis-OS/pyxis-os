@@ -495,6 +495,22 @@ A serial port that stops accepting output remains latched off for the boot.
 Revisit retry policy when reliable late recovery is needed; an absent/stuck port
 must not block early boot or panic output.
 
+## VirtIO GPU fixed geometry and runtime retention
+
+The [2D display driver](wip/display-drivers.md#task-3-implementation-and-validation)
+uses one initial-size kernel RAM surface and full-frame transfer/flush. It does
+not handle display-change events or resize buffers yet; revisit in display task
+5a. There is no vblank guarantee, hardware cursor, 3D or recovery after driver
+failure. Graphics acquisition/presentation then returns unavailable, while
+release remains usable; the last screen may stay stale or blank.
+
+Runtime failure retains backing, queue/control storage and PCI mappings until
+reboot, even after confirmed reset. No runtime VM mutation or DMA release is
+introduced. An uncertain bootstrap shutdown retains temporary storage too; a
+PCI claim that ever enabled DMA stays retained even after successful bootstrap
+reset. Revisit reclamation only with an explicit runtime allocation/ownership
+contract. VirtIO panic reporting remains serial-only without GPU operations.
+
 ## Reverse remote terminal discovery
 
 [Reverse connections](userland/remote-terminal.md#reverse-connections) remain

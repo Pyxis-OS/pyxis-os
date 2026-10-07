@@ -49,6 +49,7 @@ struct virtio_queue_info {
  * each driver owns feature policy, queue storage and its worker lifetime. */
 struct virtio_pci_transport {
   const char *name;
+  bool trace_details; /* Opt in without changing existing drivers' log levels. */
   struct pci_claim claim;
   struct pci_region common, notify, isr, device;
   struct pci_msix msix;

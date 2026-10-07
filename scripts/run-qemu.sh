@@ -2,6 +2,7 @@
 set -eu
 : "${QEMU:=qemu-system-x86_64}"
 : "${QEMU_DISPLAY:=gtk}"
+: "${QEMU_VIDEO:=std}"
 : "${MEMORY:=8G}"
 : "${CPUS:=1}"
 : "${THREADS:=1}"
@@ -46,6 +47,11 @@ case "$mode" in
   debug|debug-usb) set -- -S -gdb tcp:127.0.0.1:1234 ;;
   run|run-usb) set -- ;;
   *) echo 'Launch mode must be run, debug, run-usb or debug-usb.' >&2; exit 1 ;;
+esac
+case "$QEMU_VIDEO" in
+  std) ;;
+  virtio) set -- "$@" -vga none -device virtio-gpu-pci,disable-legacy=on ;;
+  *) echo 'QEMU_VIDEO must be std or virtio.' >&2; exit 1 ;;
 esac
 if [ "$mode" = run-usb ] || [ "$mode" = debug-usb ]; then
   [ -f "$USB_BOOT_IMAGE" ] || {

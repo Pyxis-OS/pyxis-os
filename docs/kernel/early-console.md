@@ -3,7 +3,9 @@
 Caelum draws kernel log output directly on the boot framebuffer from shortly
 after Limine handoff until the display presenter's first frame. Before that
 frame, no space TTY is visible, so this console is the only on-screen record of
-boot progress and early panics. It is for hardware bring-up, not a terminal.
+boot progress and early panics. If Limine supplies no framebuffer, early output
+stays serial-only until a display driver presents. It is for hardware bring-up,
+not a terminal.
 
 ## Lifetime
 
@@ -11,7 +13,8 @@ boot progress and early panics. It is for hardware bring-up, not a terminal.
    memory map, ahead of the command-line, ACPI and initrd checks. It then
    starts the console through Limine's write-combining direct map. Earlier
    failures are serial-only: an unsupported base revision, missing responses,
-   executable placement and an invalid memory map.
+   executable placement and an invalid memory map. An absent framebuffer is
+   accepted; malformed supplied metadata remains fatal.
 2. **Rebind.** `paging_init` switches the console to the kernel's own
    framebuffer mapping immediately after the CR3 write, before the next log
    line. The direct map no longer exists at that point.
@@ -100,8 +103,11 @@ claims either `ACTIVE` or `RETIRED` by compare-exchange; `PANIC` is terminal:
     reset reports on serial without recursive rendering.
   - The panic starts at the top-left, independent of the active space/graphics.
     It uses the driver's pitch and format, including on physical hardware that
-    still uses the boot framebuffer. Task 2 implements only that driver;
-    future VirtIO panic reporting remains serial-only by the agreed contract.
+    still uses the boot framebuffer. A selected VirtIO GPU returns no panic
+    target and performs no device operation on the panic-reporting path; its
+    early console is retired before AP startup. Normal device work observes the
+    gate and abandons its queue without releasing DMA storage. An AP claim does
+    not retract a normal operation already past its last gate check.
 - **Other panics.** Panics on other CPUs are serial-only. The owner re-enters
   through `panic()` after an exception report and keeps drawing. A fault raised
   while the owner is drawing stops its drawing, because the fault may come from
@@ -117,14 +123,19 @@ A failed remote-writer takeover or framebuffer fault remains serial-only. See
 ## Physical display interface
 
 [`display.h`](../../include/kernel/display.h) separates the physical screen
-from per-space graphics capabilities. `display_init()` copies the validated boot
-layout before AP startup. Spaces obtain dimensions/format through
+from per-space graphics capabilities. `display_init()` retains a valid boot
+layout and prepares the supported VirtIO driver before AP startup. Without a
+boot framebuffer, a bounded pre-AP GPU query supplies the initial dimensions.
+Spaces obtain dimensions/format through
 `display_layout()`; no space retains a boot framebuffer descriptor. The boot
 driver retains the existing mapping and makes no new allocation or mode change.
 
 The sole BSP presenter pairs `display_begin_frame()` with `display_end_frame()`
 and sends every physical write through `display_copy()`. A failed begin writes
-nothing. End also runs after cancelled copies, fences stores, then releases
+nothing. `display_start()` activates the chosen driver once on that task.
+VirtIO end submits a full transfer and flush and waits for validated fenced
+responses without blocking other BSP tasks. End also runs after cancelled
+copies, fences stores, then releases
 physical ownership before graphics snapshot cleanup. The bar, cursor composition,
 full-frame cadence and userspace mapping/PRESENT lifetime are unchanged.
 
@@ -211,6 +222,7 @@ Panics were triggered by redirecting an existing kernel context to `panic()`
 with an existing read-only format string, using breakpoints and register writes.
 No debugger-injected function call, test hook or fault-injection code was added.
 The AP handoff used debugger-controlled real writer/gate transitions; timeout
-and bad mapping were simulated state changes. Native ThinkPad confirmation and
-naturally occurring concurrent failures remain unmeasured. Presenter timing is
+and bad mapping were simulated state changes. The owner confirmed normal
+ThinkPad output in PR #471; native panic and naturally occurring concurrent
+failures remain unmeasured. Presenter timing is
 recorded in the [display milestone](../wip/display-drivers.md#refreshed-presenter-cost).

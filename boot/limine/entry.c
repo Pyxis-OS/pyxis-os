@@ -288,9 +288,11 @@ static void copy_acpi_address(void)
 static void copy_framebuffer(void)
 {
   const struct limine_framebuffer_response *response = framebuffer_request.response;
-  if (!response || !response->framebuffer_count || !response->framebuffers ||
-      !response->framebuffers[0]) {
-    panic("missing Limine framebuffer");
+  if (!response || !response->framebuffer_count) {
+    return;
+  }
+  if (!response->framebuffers || !response->framebuffers[0]) {
+    panic("invalid Limine framebuffer response");
   }
 
   const struct limine_framebuffer *source = response->framebuffers[0];
@@ -384,8 +386,12 @@ static void copy_command_line(void)
   copy_memory_map();
   /* Validation needs the memory map; start the screen before other checks. */
   copy_framebuffer();
-  early_console_start(&boot.framebuffer, boot.bootstrap_direct_offset + boot.framebuffer.physical);
-  klog("early console: %zux%zu framebuffer\n", boot.framebuffer.width, boot.framebuffer.height);
+  if (boot.framebuffer.size) {
+    early_console_start(&boot.framebuffer, boot.bootstrap_direct_offset + boot.framebuffer.physical);
+    klog("early console: %zux%zu framebuffer\n", boot.framebuffer.width, boot.framebuffer.height);
+  } else {
+    klog("early console: no framebuffer; serial output only\n");
+  }
   copy_command_line();
   copy_acpi_address();
   copy_boot_files();

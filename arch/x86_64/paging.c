@@ -422,7 +422,9 @@ void paging_init(struct boot_info *boot)
   map_kernel_section(boot, __text_start, __text_end, PAGE_EXEC);
   map_kernel_section(boot, __rodata_start, __rodata_end, 0);
   map_kernel_section(boot, __data_start, __data_end, PAGE_WRITE);
-  map_framebuffer(&boot->framebuffer);
+  if (boot->framebuffer.size) {
+    map_framebuffer(&boot->framebuffer);
+  }
   map_local_apic();
   map_hpet();
   unsigned pci_buses = map_pci_ecam(boot);
@@ -458,7 +460,9 @@ void paging_init(struct boot_info *boot)
        read_cr3(), kernel_space.root);
   write_cr3(kernel_space.root);
   /* The bootstrap direct map that the early console drew through is gone. */
-  early_console_rebind(boot->framebuffer.address);
+  if (boot->framebuffer.size) {
+    early_console_rebind(boot->framebuffer.address);
+  }
   active = true;
   cpu_current()->active_space = &kernel_space;
   pmm_rebase((void *)PMM_METADATA_BASE);

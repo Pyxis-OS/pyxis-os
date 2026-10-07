@@ -54,9 +54,12 @@ through the memory service.
 After PRESENT, the kernel reads the same backing pages that the application
 writes. Further changes may appear without another request. This single-buffer
 contract permits tearing; PRESENT neither freezes pixels nor promises vblank,
-atomic frames or completion notification. There is still a copy to the boot
-framebuffer. There is no VirtIO GPU driver, double buffering or userspace
-compositor in this milestone.
+atomic frames or completion notification. The kernel copies pixels into the
+physical driver's target: directly to the boot framebuffer, or into kernel RAM
+followed by a fenced VirtIO transfer and flush. Application backing is never
+attached to the GPU. A failed physical driver makes ACQUIRE/PRESENT unavailable;
+RELEASE still tears down an existing session. Double buffering, a compositor and
+live resizing remain separate work in the [display milestone](../wip/display-drivers.md).
 
 The TTY keeps its own framebuffer and continues accepting output while graphics
 is selected. Its cursor is not composited over graphics. Releasing graphics or

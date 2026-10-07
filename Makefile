@@ -7,6 +7,8 @@ PYTHON ?= python3
 export CROSS_COMPILE HOSTCC LUA
 QEMU ?= qemu-system-x86_64
 QEMU_DISPLAY ?= gtk
+QEMU_VIDEO ?= std
+export QEMU_VIDEO
 MEMORY ?= 8G
 CPUS ?= 1
 THREADS ?= 1

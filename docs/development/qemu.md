@@ -1,5 +1,24 @@
 # QEMU launcher and boot troubleshooting
 
+## Display device
+
+`QEMU_VIDEO=std` is the default and retains q35's standard VGA. Select the
+VirtIO GPU 2D device independently of the window backend:
+
+```sh
+make run CPUS=4 QEMU_VIDEO=virtio
+make debug CPUS=4 QEMU_VIDEO=virtio QEMU_DISPLAY=none
+```
+
+The launcher adds `-vga none -device virtio-gpu-pci,disable-legacy=on`; no VGA
+can mask a missing GPU driver. The same setting applies to USB run/debug.
+Unknown selections fail before launch. With no Limine framebuffer, early output
+stays serial and the driver queries the initial GPU pixel size before AP startup.
+With a framebuffer it retains its initial dimensions. The kernel presents with
+one 2D resource, full-frame transfers and flushes. Resizing, hardware cursors, 3D
+and multiple monitors are later work. VirtIO panic output is serial-only.
+The [display milestone](../wip/display-drivers.md) records interfaces and limits.
+
 ## PCI passthrough
 
 `VFIO_PCI` is empty by default. Set it to a full lowercase PCI address

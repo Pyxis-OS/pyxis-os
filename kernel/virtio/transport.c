@@ -26,6 +26,14 @@
 #define VIRTIO_COMMON_STATUS offsetof(struct virtio_pci_common, device_status)
 #define VIRTIO_MSIX_ENTRY 0
 
+#define transport_log(pci, ...) do { \
+  if ((pci)->trace_details) { \
+    ktrace(__VA_ARGS__); \
+  } else { \
+    klog(__VA_ARGS__); \
+  } \
+} while (0)
+
 bool virtio_pci_disable_msix(struct virtio_pci_transport *pci)
 {
   return pci_msix_disable(&pci->msix);
@@ -46,7 +54,7 @@ bool virtio_pci_prepare_msix(struct virtio_pci_transport *pci, uint8_t vector)
   if (common->config_msix_vector != VIRTIO_MSIX_ENTRY) {
     return false;
   }
-  klog("%s PCI: MSI-X entry %u -> BSP APIC %u vector %u; route masked\n",
+  transport_log(pci, "%s PCI: MSI-X entry %u -> BSP APIC %u vector %u; route masked\n",
        pci->name, VIRTIO_MSIX_ENTRY, cpu_bsp()->lapic_id, (unsigned)vector);
   return true;
 }
@@ -85,7 +93,7 @@ bool virtio_pci_inspect_queue(struct virtio_pci_transport *pci, unsigned index,
     .max_size = size,
     .notify_address = pci->notify.mapping.address + offset,
   };
-  klog("%s PCI: queue %u maximum=%u notify=%p, disabled\n", pci->name,
+  transport_log(pci, "%s PCI: queue %u maximum=%u notify=%p, disabled\n", pci->name,
        index, (unsigned)size, (void *)queue->notify_address);
   return true;
 }
@@ -181,7 +189,7 @@ static bool reset_before_probe(struct virtio_pci_transport *pci)
   pci_write32(claim, access + VIRTIO_CAP_OFFSET, saved_offset);
   pci_write32(claim, access + VIRTIO_CAP_REGION_LENGTH, saved_length);
   if (stopped) {
-    klog("%s PCI: reset confirmed before BAR probing\n", pci->name);
+    transport_log(pci, "%s PCI: reset confirmed before BAR probing\n", pci->name);
   }
   return stopped;
 }
@@ -301,10 +309,10 @@ static bool map_region(struct virtio_pci_transport *pci, const char *name,
   enum mm_result result = pci_map_bar(&pci->claim, region->bar, region->offset,
                                       needed, boot, &region->mapping);
   if (result != MM_OK) {
-    klog("%s PCI: cannot map %s (error %u)\n", pci->name, name, (unsigned)result);
+    transport_log(pci, "%s PCI: cannot map %s (error %u)\n", pci->name, name, (unsigned)result);
     return false;
   }
-  klog("%s PCI: %s BAR%u offset=0x%x bytes=0x%zx address=%p\n", pci->name,
+  transport_log(pci, "%s PCI: %s BAR%u offset=0x%x bytes=0x%zx address=%p\n", pci->name,
        name, region->bar, region->offset, needed, (void *)region->mapping.address);
   return true;
 }
@@ -315,9 +323,9 @@ bool virtio_pci_prepare(struct virtio_pci_transport *pci, struct pci_device *dev
   struct pci_claim *claim = &pci->claim;
   if (!pci_claim_device(device, claim)) {
     if (claim->device) {
-      klog("%s PCI: cannot confirm DMA/INTx disable; claim retained until reboot\n", pci->name);
+      transport_log(pci, "%s PCI: cannot confirm DMA/INTx disable; claim retained until reboot\n", pci->name);
     } else {
-      klog("%s PCI: function busy or unsupported; resources not claimed\n", pci->name);
+      transport_log(pci, "%s PCI: function busy or unsupported; resources not claimed\n", pci->name);
     }
     return false;
   }
@@ -363,13 +371,13 @@ bool virtio_pci_prepare(struct virtio_pci_transport *pci, struct pci_device *dev
     failure = "device did not remain reset";
     goto fail;
   }
-  klog("%s PCI: register resources owned; %u MSI-X entries, DMA and interrupts disabled\n",
+  transport_log(pci, "%s PCI: register resources owned; %u MSI-X entries, DMA and interrupts disabled\n",
        pci->name, pci->msix.entries);
 
   return true;
 
 fail:
-  klog("%s PCI: %s; releasing resources with DMA and interrupts disabled\n",
+  transport_log(pci, "%s PCI: %s; releasing resources with DMA and interrupts disabled\n",
        pci->name, failure);
   pci_release_device(claim);
   const char *name = pci->name;
