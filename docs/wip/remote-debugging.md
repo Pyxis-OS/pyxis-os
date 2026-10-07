@@ -1,7 +1,7 @@
 # Remote debugging without serial
 
 Status: **milestone, agreed 2026-10-07.** A second Codex instance implements it,
-alongside the [ACPI](acpi-and-bar-widgets.md) and
+alongside the [ACPI](../kernel/acpi.md) and
 [display drivers](display-drivers.md) milestones. Each task starts when the owner
 says so.
 

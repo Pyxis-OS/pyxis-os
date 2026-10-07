@@ -383,7 +383,7 @@ milestone task:
 ## Power-off and restart limits
 
 [Power-off and restart](kernel/acpi.md#power-off-and-restart) follow the first
-version of "clean" agreed for the ACPI milestone:
+version of "clean" agreed for the ACPI milestone (user tasks held, pools flushed):
 
 - **No orderly stop of programs or services.** User tasks are held where they
   are; nothing is asked to exit or save. Revisit with service supervision.
@@ -405,7 +405,7 @@ version of "clean" agreed for the ACPI milestone:
   from the button. The T14 and QEMU use the fixed event. Revisit on such a
   machine, with the notifications work.
 - **A button press interrupts an Update.** A press powers off at once
-  (decision 16), even while the installer rewrites a stick's ESP through raw
+  without asking, even while the installer rewrites a stick's ESP through raw
   disk writes, which are not flushed, so the stick could be left unbootable.
   Typing `poweroff` had the same effect, but a button is easier to press by
   accident. Revisit with installer work: it could hold off power operations
@@ -436,8 +436,9 @@ reader is the smallest that serves the space-bar widget:
   percentage.
 - **Polled, not notified.** Charge changes appear within five seconds, and a
   battery's full capacity is only reread when it reappears. Battery and AC
-  notifications from `_Qxx` methods only reach the trace log. Revisit with the
-  notifications that follow task 3.
+  notifications from `_Qxx` methods only reach the trace log. Revisit with
+  [ACPI notifications](wip/later-os-directions.md#power-and-acpi); that work
+  also rereads full capacity and cycle count on `Notify(0x81)`, as Linux does.
 
 ## Synchronous launch preparation
 

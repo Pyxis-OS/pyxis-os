@@ -3,7 +3,7 @@
 Status: **milestone, agreed 2026-10-07.** It replaces the parked VirtIO GPU
 direction that was in [desktop and graphics](desktop-graphics.md). Codex
 implements it; each task starts when the owner says so. It runs alongside the
-[ACPI milestone](acpi-and-bar-widgets.md).
+[ACPI milestone](../kernel/acpi.md), completed 2026-10-07.
 
 ## Goal
 

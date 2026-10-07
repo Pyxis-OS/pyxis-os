@@ -3,11 +3,32 @@
 Caelum runs the [uACPI](../../third_party/uacpi/UPSTREAM.md) interpreter to
 use ACPI devices and AML methods. Static tables that early boot needs (the
 MADT, FADT flags, HPET and MCFG) are still read directly by
-`arch/x86_64/acpi.c` before the CR3 switch. This page describes what the
-[ACPI milestone](../wip/acpi-and-bar-widgets.md) has implemented so far: the
-namespace is loaded, the kernel powers off and restarts through it, also when
-the power button is pressed, and it reads the battery through the embedded
-controller for the space bar.
+`arch/x86_64/acpi.c` before the CR3 switch. Through uACPI the kernel powers
+off and restarts cleanly, also on a power-button press, and reads the battery
+and AC adapter through the embedded controller for the
+[space-bar widget](../userland/init.md#space-bar) and the
+[`system_info` power queries](../interfaces/system-information.md#power-and-batteries).
+
+The ACPI milestone (2026-10-06 to 2026-10-07) chose uACPI, then added clean
+power-off and reboot, the battery widget, the power button and the userspace
+battery queries. Its policy choices, all made by the owner:
+
+- **One owner.** A single BSP worker owns uACPI, AML, the SCI and deferred work;
+  other code reaches it through BSP requests.
+- **Firmware access.** Firmware memory is mapped once in a window reserved
+  before AP startup; AML may read PCI configuration but not write it.
+- **Power authority.** The `power` capability (OFF, RESTART) goes to spaces
+  configured with `power = true`, never to remote shells, and the shell keeps
+  it for its builtins. A physical button press needs no capability.
+- **What "clean" means.** User tasks are held, not asked to exit; every pool is
+  flushed and sealed before S5 or reset, and a failed flush keeps the system
+  up.
+- **Events.** Only the embedded controller's GPE and the fixed-feature power
+  button are enabled. An unclaimed SCI is re-armed after one second.
+- **Battery data.** The kernel polls every five seconds. The widget is always
+  three characters on a red-to-green gradient; userspace reads firmware
+  values, unconverted, through `system_info` READ. Fastfetch has no Power
+  Adapter module, since ACPI reports no wattage.
 
 ## Ownership
 
@@ -46,9 +67,8 @@ memory map and reserves the mapping window. After `task_init()`,
 
 It logs one summary line with the elapsed time, uACPI's heap use and the
 window pages used. A failure at any step is logged and leaves ACPI
-unavailable; boot continues. GPEs and fixed events stay disabled: the
-embedded controller driver and GPE enabling come with the battery task, and
-the power button with its own task.
+unavailable; boot continues. GPEs and fixed events stay disabled until the
+worker starts the embedded controller and the power button, after loading.
 
 uACPI's informational messages, such as the table list and AML load
 statistics, go to the trace log (`LOG_LEVEL=trace`). Warnings and errors go to
@@ -357,7 +377,9 @@ notify handler was added afterwards and checked only in QEMU.
 
 The first poll mapped 17 more pages of operation regions; the next two mapped
 none. Later polls were not recorded. At up to 8.3 ms every five seconds, the
-busy-waiting worker uses under 0.2% of the BSP.
+busy-waiting worker uses under 0.2% of the BSP. With the root notify handler
+(main after the #467–#470 merges), plugging and unplugging AC printed no
+`Notify` warnings in the normal log (owner).
 
 ### Power button
 
@@ -378,8 +400,31 @@ button. Nested-VM checks with the same QEMU, KVM and OVMF:
 - uACPI heap and the firmware window are unchanged; kernel text grew by 368
   bytes.
 
+On the ThinkPad (owner, 2026-10-07, installed system updated to main after
+the #467–#470 merges), a short press, not a hold, switched the machine off. A
+file created and written just before a press was present on the next boot,
+with no journal replay.
+
 Repeated presses, a press during a running operation and a request during a
 press's power-off were checked by code inspection only.
+
+### Battery queries
+
+In QEMU without a battery, Fastfetch's default output has no Battery line, and
+`fastfetch -s battery --show-errors` reports no batteries. Local test tables,
+not part of the change, checked the rest with one and four CPUs:
+
+- a `_BIX` battery discharging at 10 W from 40,000 mWh showed
+  `Battery (FAKE01): 86% (3 hours, 28 mins remaining) [Discharging]` for 34,600
+  mWh left;
+- its JSON gave the table's manufacturer, model, technology, serial, cycle count
+  42 and a 11,160 s time remaining for 31,000 mWh;
+- with `_BST` charging and `_PSR` online, the status was
+  `[AC Connected, Charging]`.
+
+On the ThinkPad (owner, 2026-10-07), Fastfetch's Battery line matched Fedora's
+reading. Polls evaluate the same methods as before, and queries copy published
+data, so no new timing was taken.
 
 ## Limits
 

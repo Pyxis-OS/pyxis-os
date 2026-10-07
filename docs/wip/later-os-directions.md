@@ -180,6 +180,28 @@ login and a Pyxis-wide credential store. The master key is sealed in the TPM und
 a measured-boot policy, a password or PIN is the root factor, and biometrics only
 gate use after a root-factor unlock. It follows local users, USB and a TPM driver.
 
+## Power and ACPI
+
+Follow-ups to the completed [ACPI](../kernel/acpi.md) milestone. None is agreed.
+
+- **Notifications instead of polling.** Battery and AC `Notify` calls from the
+  embedded controller's query methods would refresh the reading at once, and
+  `Notify(0x81)` would reread a battery's full capacity and cycle count, which
+  are read only when it appears today. They reach only the trace log now.
+- **Battery-aware Update.** The installer warns, or refuses, on battery below a
+  threshold without AC, as firmware updaters do; the ThinkPad switched itself
+  off on low battery just before a planned Update on 2026-10-07. It could also
+  hold off power operations while it writes.
+- **Low battery.** The widget changes style at a low level, and later a clean
+  power-off runs automatically at a critical level, before the firmware cuts
+  power.
+- **More widgets.** A way for userspace services to publish short bounded widget
+  text in the space bar. Pyxis's resolutions leave room for several; if there
+  are ever too many, mouse support could show the less important ones on click
+  (owner, 2026-10-07).
+- **Later ACPI uses.** Lid and AC-adapter events, thermal zones, sleep, and
+  control-method power buttons.
+
 ## Persistent storage and installation
 
 [Writable virtio-fs](../devices/virtio-fs.md) lets the Kilo/TCC workflow keep source and
