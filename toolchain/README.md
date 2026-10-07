@@ -74,6 +74,18 @@ installation earlier in `PATH` cannot supply it.
 
 A build directory belongs to one toolchain: switching needs `make clean`.
 
+LLD in the fork writes Pyxis P1F executables with `--oformat=p1f`. The Pyxis
+driver passes it for every executable link, so `clang -o hello.pxe hello.c`
+produces a runnable PXE, and an executable without `-o` is `a.pxe`.
+- **ELF output:** a later `-Wl,--oformat=elf` gives an ELF executable. The
+  kernel link uses it, because Limine loads ELF. Until GCC is retired, so does
+  the SDK Make fragment, which then converts with `elf2pxe` like the GCC path.
+- **Relocatable output:** `-c` and `-r` produce ordinary ELF relocatables.
+- **Equivalence:** LLD's P1F conversion applies the same checks as `elf2pxe`
+  and produces the same bytes. `include/pxe/p1f.h` remains the format's
+  definition; a format change must update the kernel loader, `elf2pxe`, the TCC
+  port's writer and the fork's `lld/ELF/P1F.cpp` together.
+
 ## Target contract
 
 The target is little-endian x86-64 LP64: 8-bit char, 16-bit short, 32-bit int,

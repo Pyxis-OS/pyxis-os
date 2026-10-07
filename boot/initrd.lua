@@ -11,7 +11,7 @@ return function(inputs)
     { file = "boot/rescue.list", at = "share/installer/rescue.list" },
     { file = "third_party/limine/LICENSE", at = "share/licenses/limine/LICENSE" },
   }
-  for _, library in ipairs({ "crt0.o", "libc.a", "libterm.a", "libpyxis.a", "libnpfs-format.a", "libgcc.a" }) do
+  for _, library in ipairs({ "crt0.o", "libc.a", "libterm.a", "libpyxis.a", "libnpfs-format.a", inputs.sdk_runtime }) do
     entries[#entries + 1] = {
       file = inputs.sdk .. "/sysroot/usr/lib/" .. library,
       at = "sdk/usr/lib/" .. library,
