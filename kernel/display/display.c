@@ -3,8 +3,11 @@
 #include <kernel/fb/early_console.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
+#include <kernel/pci.h>
+#include <kernel/memory.h>
 #include <stdatomic.h>
 #include "boot.h"
+#include "bochs.h"
 #include "virtio_gpu.h"
 #include "internal.h"
 
@@ -12,35 +15,55 @@
 #define DISPLAY_PANIC_WAIT_LIMIT 1000000
 #define DISPLAY_NO_WRITER UINT32_MAX
 
-enum display_driver { DISPLAY_BOOT, DISPLAY_VIRTIO_GPU };
+enum display_driver { DISPLAY_BOOT, DISPLAY_VIRTIO_GPU, DISPLAY_BOCHS };
 static enum display_driver driver;
 static const struct framebuffer *target;
 static bool available, failed;
 static atomic_bool panic_claimed;
+static atomic_bool direct_disabled;
 /* Sequential consistency pairs writer publication/recheck with panic's
  * claim/load. Either the writer sees the claim or the claimant sees it. */
 static _Atomic uint32_t writer = DISPLAY_NO_WRITER;
 
-void display_init(const struct boot_info *boot)
+bool display_modeset_begin(void)
+{
+  atomic_store(&direct_disabled, true);
+  bool locked = log_begin();
+  bool retired = locked && early_console_retire();
+  log_end(locked);
+  return retired && !display_is_panicking();
+}
+
+void display_init(const struct boot_info *boot, const char *size)
 {
   if (boot->framebuffer.size) {
     target = boot_display_init(&boot->framebuffer);
   }
-  bool selected;
-  const struct framebuffer *gpu = virtio_gpu_prepare(boot, &selected);
-  if (selected) {
+  struct pci_device *selected = NULL;
+  /* Discovery prepends records; its first supported device is the last match. */
+  for (const struct pci_device *device = pci_device_at(0); device; device = device->next) {
+    if (virtio_gpu_matches(device) || bochs_display_matches(device)) {
+      selected = (struct pci_device *)device;
+    }
+  }
+  if (selected && virtio_gpu_matches(selected)) {
     driver = DISPLAY_VIRTIO_GPU;
+    const struct framebuffer *gpu = display_modeset_begin() ?
+        virtio_gpu_prepare(boot, selected) : NULL;
     failed = !gpu;
     if (gpu) {
       target = gpu;
     }
-    /* Firmware scanout cannot survive the transport reset. Retire drawing before
-     * AP startup; VirtIO panic reporting remains serial-only. */
-    bool locked = log_begin();
-    if (locked) {
-      early_console_retire();
+  } else if (selected) {
+    const struct framebuffer *bochs = bochs_display_prepare(boot, selected, size);
+    if (bochs) {
+      driver = DISPLAY_BOCHS;
+      target = bochs;
     }
-    log_end(locked);
+    /* Refusal leaves the firmware mode intact or verifies its restoration. */
+    atomic_store(&direct_disabled, false);
+  } else if (size) {
+    klog("display: no supported mode-setting device; keeping boot framebuffer\n");
   }
   if (!target) {
     panic("no usable display: firmware framebuffer or supported driver required");
@@ -51,6 +74,7 @@ bool display_start(void)
 {
   switch (driver) {
     case DISPLAY_BOOT:
+    case DISPLAY_BOCHS:
       available = true;
       break;
     case DISPLAY_VIRTIO_GPU:
@@ -101,6 +125,9 @@ void display_copy(size_t offset, const void *pixels, size_t bytes)
       case DISPLAY_BOOT:
         boot_display_copy(offset, source, count);
         break;
+      case DISPLAY_BOCHS:
+        memcpy((void *)(target->address + offset), source, count);
+        break;
       case DISPLAY_VIRTIO_GPU:
         virtio_gpu_copy(offset, source, count);
         break;
@@ -124,7 +151,7 @@ void display_end_frame(void)
 const struct framebuffer *display_panic_target(void)
 {
   atomic_store(&panic_claimed, true);
-  if (driver == DISPLAY_VIRTIO_GPU) {
+  if (driver == DISPLAY_VIRTIO_GPU || atomic_load(&direct_disabled)) {
     return NULL;
   }
   uint32_t self = cpu_initial_apic_id();

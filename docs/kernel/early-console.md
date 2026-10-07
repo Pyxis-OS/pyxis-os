@@ -1,7 +1,7 @@
 # Early boot console
 
 Caelum draws kernel log output directly on the boot framebuffer from shortly
-after Limine handoff until the display presenter's first frame. Before that
+after Limine handoff until display handoff. Before the presenter's first
 frame, no space TTY is visible, so this console is the only on-screen record of
 boot progress and early panics. If Limine supplies no framebuffer, early output
 stays serial-only until a display driver presents. It is for hardware bring-up,
@@ -23,10 +23,16 @@ not a terminal.
    continues after space 0's TTY attaches. Attaching the TTY replays retained text once under
    the log lock, then enables live TTY output. The TTY draws into an off-screen
    buffer that is not yet presented; replay does not duplicate serial output.
-4. **Handoff.** Before its first framebuffer write, the presenter takes the log
-   lock and retires ordinary console output. Panic may later reclaim the direct
-   screen through the display interface. At handoff,
-   the presenter logs `display: presentation started; early console retired`.
+4. **Handoff.** The boot driver retires ordinary console output at its first
+   presenter frame under the log lock. Device preparation withdraws direct
+   output and retires the console before pre-AP PCI decoding/mode changes.
+   Panic may reclaim a verified boot/Bochs target through the display interface;
+   VirtIO stays serial-only. On its first frame the presenter logs
+   `display: presentation started; early console retired`.
+
+After a Bochs refusal that follows early-console retirement, serial stays live
+but the screen may remain stale or blank until the first presenter frame shows
+the Caelum TTY, including intervening retained logs.
 
 ## Retained boot log
 
@@ -124,7 +130,7 @@ A failed remote-writer takeover or framebuffer fault remains serial-only. See
 
 [`display.h`](../../include/kernel/display.h) separates the physical screen
 from per-space graphics capabilities. `display_init()` retains a valid boot
-layout and prepares the supported VirtIO driver before AP startup. Without a
+layout and prepares the first supported VirtIO or Bochs driver before AP startup. Without a
 boot framebuffer, a bounded pre-AP GPU query supplies the initial dimensions.
 Spaces obtain dimensions/format through
 `display_layout()`; no space retains a boot framebuffer descriptor. The boot
@@ -136,7 +142,11 @@ nothing. `display_start()` activates the chosen driver once on that task.
 VirtIO end submits a full transfer and flush and waits for validated fenced
 responses without blocking other BSP tasks. End also runs after cancelled
 copies, fences stores, then releases
-physical ownership before graphics snapshot cleanup. The bar, cursor composition,
+physical ownership before graphics snapshot cleanup. Bochs selects its exact
+initial mode before AP startup, with direct panic output withdrawn while PCI
+decoding or mode registers change. It publishes the immutable selected target
+only after readback, or returns to a verified firmware target on failure.
+Unverifiable restoration halts boot on serial. The bar, cursor composition,
 full-frame cadence and userspace mapping/PRESENT lifetime are unchanged.
 
 ## Serial

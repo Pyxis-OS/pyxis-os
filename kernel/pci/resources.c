@@ -1,6 +1,7 @@
 #include <arch/clock.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
+#include <arch/paging.h>
 #include <arch/pci.h>
 #include <kernel/log.h>
 #include <kernel/mm/vm.h>
@@ -454,4 +455,64 @@ enum mm_result pci_map_bar(struct pci_claim *claim, unsigned bar, uint64_t offse
     return MM_INVALID;
   }
   return map_resource(claim, claim->bars[bar].physical + offset, bytes, boot, mapping);
+}
+
+enum mm_result pci_map_display_bar(struct pci_claim *claim, unsigned bar,
+    const struct boot_info *boot, uintptr_t *address)
+{
+  require_owner(claim);
+  KASSERT(!claim->reserved && !claim->dma_started);
+  if (!boot || !address) {
+    return MM_INVALID;
+  }
+  *address = 0;
+  if (bar >= PCI_BAR_COUNT) {
+    return MM_INVALID;
+  }
+  const struct pci_bar *resource = &claim->bars[bar];
+  phys_addr_t first = resource->physical;
+  if (!first || !resource->bytes || resource->bytes > SIZE_MAX ||
+      (first & (PAGE_SIZE - 1)) || (resource->bytes & (PAGE_SIZE - 1)) ||
+      resource->bytes > UINT64_MAX - first ||
+      !arch_pci_mmio_available(first, resource->bytes)) {
+    return MM_INVALID;
+  }
+  phys_addr_t end = first + resource->bytes;
+  const struct boot_framebuffer *fb = &boot->framebuffer;
+  if (fb->size && (fb->physical != first || fb->size > resource->bytes)) {
+    return MM_INVALID;
+  }
+  for (size_t i = 0; i < boot->region_count; ++i) {
+    const struct boot_region *region = &boot->regions[i];
+    if (region->length > UINT64_MAX - region->base) {
+      return MM_INVALID;
+    }
+    phys_addr_t region_end = region->base + region->length;
+    if (region->base >= end || first >= region_end || region->type == BOOT_RESERVED) {
+      continue;
+    }
+    if (region->type != BOOT_FRAMEBUFFER || !fb->size || region->base < first ||
+        region_end > end || region->base >= fb->physical + fb->size ||
+        fb->physical >= region_end) {
+      return MM_INVALID;
+    }
+  }
+  /* Existing PCI mappings are UC. Display memory must not alias
+   * them with a different cache type, even when firmware reported it reserved. */
+  for (size_t i = 0; i < pci_device_count(); ++i) {
+    const struct pci_device *device = pci_device_at(i);
+    if (!device->owner) {
+      continue;
+    }
+    for (const struct pci_mapping *mapping = device->owner->mappings; mapping; mapping = mapping->next) {
+      for (size_t offset = 0; offset < mapping->bytes; offset += PAGE_SIZE) {
+        struct page_translation page;
+        KASSERT(arch_page_query(arch_kernel_space(), mapping->base + offset, &page) == MM_OK);
+        if (page.physical < end && first < page.physical + PAGE_SIZE) {
+          return MM_INVALID;
+        }
+      }
+    }
+  }
+  return paging_display_aperture(first, resource->bytes, fb, address);
 }

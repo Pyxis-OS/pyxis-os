@@ -113,9 +113,10 @@ enum mm_result pci_map_bootstrap_bar(struct pci_claim *claim, unsigned bar,
 
 /* BSP/IF=0 before AP startup. Caller keeps claim/mapping records at stable
  * addresses, initially zeroed. Endpoint functions with MSI/MSI-X disabled only.
- * Claim disables bus mastering and INTx; the driver must confirm device reset
- * and disable address decoding before sizing BARs. Release is boot failure
- * unwinding, not hot-unplug: unmap resources, restore original decoding with
+ * Claim disables bus mastering and INTx; the driver must confirm quiescence
+ * and disable address decoding before sizing BARs. DMA/IRQ controllers must
+ * reset/halt; a QEMU display instead retires its CPU writers (no DMA/IRQ).
+ * Release is boot failure unwinding, not hot-unplug: unmap resources, restore original decoding with
  * DMA/INTx kept disabled, and withdraw configuration write access. A reset is
  * not reversible. The driver must not start DMA before this unwind path. */
 bool pci_claim_device(struct pci_device *device, struct pci_claim *claim);
@@ -125,6 +126,12 @@ bool pci_capability_fits(const struct pci_claim *claim, unsigned offset, size_t 
 enum mm_result pci_map_bar(struct pci_claim *claim, unsigned bar, uint64_t offset,
                            size_t bytes, const struct boot_info *boot,
                            struct pci_mapping *mapping);
+/* Sized display memory BAR, BSP/IF=0 before AP startup, completed claim/no DMA.
+ * Reuses a boot framebuffer only when it starts at the BAR base, retaining WC.
+ * Returns a permanent fixed aperture, outside claim->mappings; release never
+ * withdraws the boot/panic framebuffer. Other BARs still use pci_map_bar. */
+enum mm_result pci_map_display_bar(struct pci_claim *claim, unsigned bar,
+    const struct boot_info *boot, uintptr_t *address);
 /* Established owner, BSP/IF=0, including activation after AP startup. Does not
  * change mappings; claim/release and BAR preparation remain boot-only. Command
  * writes are 16-bit and require a completed claim. Any later BME-enable write

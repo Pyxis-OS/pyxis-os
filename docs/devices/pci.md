@@ -104,8 +104,11 @@ the saved command and writable PMCSR fields. The caller must perform no other ha
 this cancellation path. Confirmed controllers continue to driver handoff and
 ordinary claim completion, retaining the normalized power/decoding state.
 
-The driver must confirm the device is stopped and disable address decoding before
-calling `pci_size_bars`. Sizing handles firmware-assigned 32-bit and paired 64-bit
+The driver must confirm quiescence and disable address decoding before
+calling `pci_size_bars`. DMA/IRQ controllers retain their reset/halt requirements.
+The QEMU-only Bochs device has neither a DMA engine nor an interrupt source;
+retiring CPU pixel writers makes its BAR probe quiescent without destroying the
+firmware scanout mode. Sizing handles firmware-assigned 32-bit and paired 64-bit
 memory BARs. Each probe restores both original halves before returning, including
 on malformed size/alignment or overlapping BARs. Unassigned resources and obsolete
 memory BAR encodings are rejected. I/O BARs stay untouched and are not mapped.
@@ -117,6 +120,16 @@ kernel virtual pages. `vm_map_mmio` installs supervisor RW/NX/uncached leaves;
 it neither allocates nor owns the physical device frames. The caller keeps each
 `pci_mapping` at a stable address for the claim's lifetime. Capability regions
 sharing a physical page use the same uncached memory type.
+
+`pci_map_display_bar` is a separate boot-only WC aperture path. It accepts a
+sized display BAR containing the matching boot-framebuffer reservation and
+preserves its existing mapping only when that framebuffer starts at BAR base.
+It validates all existing WC leaves, creates only a missing suffix, and rolls
+that suffix back on failure. Existing PCI owners' UC mappings must not overlap;
+the full permanent aperture then excludes later PCI and direct VM UC mappings.
+General `pci_map_bar` reservation and UC checks remain intact. Successful display
+leaves are retained until reboot, outside the claim's releasable mapping list;
+BAR2 registers still use ordinary UC mapping.
 
 Partial mapping failure removes installed leaves and releases the reservation.
 `pci_release_device` unwinds boot preparation: it removes all owned mappings,

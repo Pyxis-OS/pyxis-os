@@ -3,6 +3,7 @@
 
 #include <kernel/mm/types.h>
 
+struct boot_options;
 struct process;
 struct mount_config;
 struct space;
@@ -19,10 +20,9 @@ struct space;
 enum mm_result user_process_load(struct space *space, const void *bytes, size_t size,
                                   struct process **process, uintptr_t *entry);
 
-/* BSP, IF=0, before scheduler startup. Parses init=, mount.disk=, boot.install=1
- * boot.default_config=1 and remote.beacon=NAME, then starts boot init.
- * Fatal on invalid options. */
-void user_launch_initial(const char *command_line);
+/* BSP, IF=0, before scheduler startup. Enables requested UDP logging and
+ * starts boot init using the previously parsed boot options. */
+void user_launch_initial(const struct boot_options *options);
 
 /* Initial inits and their interpreters name boot archive entries by this root. */
 #define USER_BOOT_ROOT_PREFIX "boot://"

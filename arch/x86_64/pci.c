@@ -74,6 +74,9 @@ void arch_pci_write32(struct pci_address address, unsigned offset, uint32_t valu
 
 bool arch_pci_mmio_available(phys_addr_t physical, size_t bytes)
 {
+  if (paging_display_aperture_overlaps(physical, bytes)) {
+    return false;
+  }
   struct page_translation ecam;
   if (arch_page_query(arch_kernel_space(), PCI_ECAM_BASE, &ecam) != MM_OK) {
     return false;

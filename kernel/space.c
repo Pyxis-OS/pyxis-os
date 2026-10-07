@@ -198,12 +198,17 @@ static struct space *space_alloc(const char *name, const char *title,
   return space;
 }
 
+bool space_display_size_supported(size_t width, size_t height)
+{
+  size_t navigation_cells = 2 * SPACES_NAV_CHEVRON_CELLS + BATTERY_WIDGET_CELLS + 1;
+  return width / bizcat.width >= navigation_cells &&
+      height >= SPACES_NAV_HEIGHT + bizcat.height;
+}
+
 void space_init(void)
 {
   screen = display_layout();
-  size_t navigation_cells = 2 * SPACES_NAV_CHEVRON_CELLS + BATTERY_WIDGET_CELLS + 1;
-  if (screen->width / bizcat.width < navigation_cells ||
-      screen->height < SPACES_NAV_HEIGHT + bizcat.height) {
+  if (!space_display_size_supported(screen->width, screen->height)) {
     panic("display too small for navigation and a terminal");
   }
   static_assert(sizeof(KERNEL_NAME) <= SPACE_TITLE_MAX + 1);

@@ -21,14 +21,14 @@ implements it; each task starts when the owner says so. It runs alongside the
 
 ## Today
 
-- Boot-framebuffer and VirtIO GPU 2D drivers present through the physical display
-  interface. Bochs mode setting and live resizing remain tasks 4–5.
+- Boot-framebuffer, VirtIO GPU 2D and Bochs drivers present through the physical
+  display interface. Live resizing remains tasks 5a–5b.
 - The sole BSP presenter composes the bar and active TTY/graphics space about
   60 times a second. Boot output copies directly; VirtIO copies into kernel RAM,
   transfers the full frame to the host and flushes. Buffers use the selected
   immutable layout; application graphics mappings remain fixed for this boot.
 - With a directly writable Limine framebuffer, the early console mirrors serial
-  until retirement. Without one, early output is serial-only. Boot-driver panics
+  until retirement. Without one, early output is serial-only. Boot/Bochs panics
   can reclaim the direct screen; VirtIO panics stay serial-only.
 - `QEMU_VIDEO=std` retains q35's default VGA. `virtio` removes VGA and attaches
   the modern VirtIO GPU. The qualified OVMF VirtIO GOP is PixelBltOnly and Limine
@@ -72,7 +72,7 @@ carried into the next task at the owner's request on 2026-10-07:
    VirtIO panics are serial-only. Do not add an emergency VirtIO queue, device
    reset path, 3 MiB reserve or exception to BSP ownership.
 7. **Bochs boot option:** `display.size=WIDTHxHEIGHT`, matching the dotted kernel
-   option names. Task 4 documents it in the boot command-line table in
+   option names. Task 4 adds it to the boot command-line table in
    [init](../userland/init.md#boot-command-line).
 8. **Resize delivery:** split task 5 into kernel geometry/cropping (5a) and
    readiness, mapping replacement and application adaptation (5b).
@@ -84,6 +84,18 @@ Task-3 boot clarification accepted by the owner on 2026-10-07:
    command before AP startup to obtain initial geometry. This explicitly permits
    the sole BSP to use the queue helper with IF=0 for that boot-only query, without
    scheduler waits. Runtime queue ownership remains the BSP presenter with IF=1.
+
+Task-4 failure policy accepted by the owner on 2026-10-07:
+
+10. **Unverified Bochs restoration:** missing or unsupported sizes keep firmware
+    output. If an attempted mode fails and firmware restoration cannot be verified,
+    stop boot with a serial panic; do not publish an uncertain direct target.
+
+Review follow-up from merged [PR #473](https://git.internal/PyxisOS/pyxis-os/pulls/473):
+when VirtIO is selected, failure does not try a separate VGA firmware screen in a
+hand-built mixed-device VM. Record that limit; multiple monitors/failover remain
+outside this milestone. Full-frame idle cost stays accepted for now and is to be
+remeasured after resizing; changed-region work remains a separate follow-up.
 
 ## Tasks
 
@@ -131,14 +143,16 @@ Task-3 boot clarification accepted by the owner on 2026-10-07:
     - the presenter cost is recorded against the task 2 figures;
     - the default standard-VGA run is unchanged.
 
-- [ ] **4. Bochs.**
+- [x] **4. Bochs.**
   - Set the mode through the Bochs display registers at the boot-option size
     (decision 3), on QEMU's standard VGA and on `bochs-display`.
+  - **Status:** implemented and qualified below on `display/bochs`, based on
+    main `164b463`.
   - **Finish when:**
     - QEMU boots at a size different from the firmware's, with a correct space
       bar, terminal and Mandelbrot;
-    - an unsupported or missing size falls back to the boot framebuffer, with a
-      message;
+    - an unsupported requested size falls back with a message; a missing size
+      keeps the boot framebuffer without an ordinary log line;
     - a post-handoff panic is visible in the selected Bochs mode.
 
 - [ ] **5a. Kernel live resizing and size queries.**
@@ -170,8 +184,8 @@ Task-3 boot clarification accepted by the owner on 2026-10-07:
 
 Delivered against main `7bc196e` in merged PR #463 on 2026-10-07. The
 owner-directed review follow-up above supersedes the original VirtIO panic
-proposal. This section records the design for the pending implementation tasks;
-current behavior and the baseline are identified separately. No driver or resize
+proposal. This section records the investigation/design; implementation results for
+tasks 2–4 and the pending resize work are identified separately. No driver or resize
 implementation is claimed by checking task 1.
 
 ### Device interface and ownership
@@ -483,7 +497,7 @@ The image's DISPLAY_SIZE and the host's QEMU_VIDEO have separate lifetimes.
 
 | Selection | Device arguments | Required observation |
 | --- | --- | --- |
-| std | `-vga std` | Default unchanged; task 2 direct-copy baseline, task 4 boot-option size and missing/invalid-size fallback. |
+| std | q35 default VGA, no added video arguments | Default unchanged; task 2 direct-copy baseline, task 4 boot-option size and missing/invalid-size fallback. |
 | virtio | `-vga none -device virtio-gpu-pci,disable-legacy=on` | Sole VirtIO display, boot-size UI/shell/Mandelbrot and serial-only panic in task 3; tasks 5a/5b resize while shell/Kilo/graphics are idle or drawing. |
 | bochs | `-vga none -device bochs-display` | Exact boot-option size, UI/graphics/panic and checked fallback in task 4. |
 
@@ -500,7 +514,7 @@ resource ownership, mapping extents, inactive-space dimensions, resize refusal,
 release/exit during a preempted frame and panic takeover. Do not add boot tests,
 fault-injection features or output automation. Task 1 measures existing output;
 task 2 implements the boot driver below and task 3 implements VirtIO. Bochs mode
-setting and resizing remain unimplemented.
+setting is recorded in task 4; resizing remains unimplemented.
 
 ### Investigation sources
 
@@ -750,6 +764,125 @@ task 2 and the refreshed baseline; no regression or speedup is established.
 These small nested-VM debugger samples do not establish achieved throughput,
 GTK cadence or native performance. Full-frame transfer stays the selected
 bounded implementation; damage tracking is a measured follow-up, not this task.
+
+## Task 4 implementation and validation
+
+Branch `display/bochs` starts from main `164b463`, after merged PRs #472–#476.
+Implementation is commit `29f14d2`, with a one-pass inventory walk in `cbad116` and explicit pre-AP parser ownership
+in `4b57bd0`. The owner authorized task 4 after reading
+#473 and selected serial panic when
+firmware restoration cannot be verified. The #473 mixed-device failure and idle
+cost notes are carried into limits/technical debt; no failover or damage tracking
+is added. The QEMU results and material limits are recorded below.
+
+The kernel parses native boot options once before display/AP initialization,
+retaining typed options and strings in static storage. Boot init consumes that
+same result later; UDP-log enabling keeps its previous late activation point.
+`display.size` value refusal belongs to the driver, while duplicate keys and
+unknown/missing-value options preserve fatal parsing. `DISPLAY_SIZE` assembles
+normal/rescue/installer command lines independently of `QEMU_VIDEO`.
+
+Display selection walks supported PCI functions in discovery order. Missing
+Bochs size keeps its boot screen rather than trying a later device. VirtIO
+selection still has no separate-device fallback after reset. All layout and
+mapping changes finish before AP startup and initial space allocation.
+
+Hardware access lives in `arch/x86_64/bochs_display.c`; native selection/layout
+lives in `kernel/display/bochs.c`. The driver supports QEMU PCI `1234:1111`
+VGA/display-other functions with revision-2 register extensions. It checks
+DISPI identity, assigned BAR0/BAR2, exact register extent and VRAM capacity.
+Mode dimensions follow hardware bounds, width alignment and the common space
+bar/font fit predicate. There is no guessed closest mode or runtime resizing.
+
+Before PCI decoding or mode changes, display handoff retires early drawing and
+withdraws direct panic output. Bochs has no DMA/IRQ source; retiring CPU writes
+makes its temporary BAR probe quiescent without destroying firmware mode.
+The driver verifies BAR/decoding restoration, saves firmware DISPI and byte-order
+fields, and switches with NOCLEARMEM. It verifies width, height, BPP, enable,
+virtual width/height, offsets, bank and byte order. Standard VGA derives virtual
+height from VRAM/pitch; the display-only device stores it explicitly. Failure
+restores and verifies the saved state before allowing direct firmware output.
+Unverifiable restoration leaves direct output withdrawn and panics on serial.
+
+The display-only aperture helper maps BAR0 WC at the existing fixed framebuffer
+address. Boot pixels must start at BAR0; nonzero placement refuses mode setting.
+Existing leaves are verified and unchanged; only missing suffix leaves are added,
+with rollback on failure. BAR2 stays UC. Existing PCI owners' mappings must not
+alias the new aperture; later PCI/ACPI UC mapping also rejects it. The permanent
+aperture is not a releasable VM/PCI mapping and remains until reboot. No general
+PCI overlap check or mutable-address restriction is relaxed.
+
+Normal/panic copies use the selected immutable direct target and the existing
+writer gate/store fences. There is no device operation after AP startup. Current
+limits are in [technical debt](../technical-debt.md#bochs-boot-mode-scope-and-aperture-retention):
+an enabled firmware DISPI mode is required (no legacy VGA state restoration),
+and claims/register mappings/aperture are retained after preparation/refusal.
+
+### Validation
+
+Current main and SDK/userland/ports built with `make -j16 image`; subsequent
+kernel builds use verified matching `PREBUILT="sdk userspace ports"`. Pinned
+inputs: userland `1b153b16`, ports `e18117d5`, fs `b427df29`, lwIP `a1aadb91`.
+No dependency changes or compiler-container rebuild. Changed kernel builds
+complete without warnings.
+
+Interactive QEMU uses `983d31c61557` (10.2.2 plus the AHCI fix), q35, nested KVM,
+`-cpu max`, four CPUs, 256 MiB, headless output, entropy, no NIC/export/block disk
+and fresh raw OVMF variables. The firmware mode is 1280×800.
+
+- Standard VGA, `DISPLAY_SIZE=1024x768`: GDB before AP startup observed the
+  selected 1024×768/pitch-4096 target and preserved 1280×800 boot metadata,
+  BAR0 16 MiB and BAR2 4 KiB extents. Source review confirms WC pixel
+  and UC register mapping paths. All spaces, bar, Development shell and
+  Mandelbrot displayed; Escape restored the prompt. A post-handoff BSP redirect
+  into the existing panic function cleared the selected 1024×768 screen and
+  printed the panic at top-left, also on serial; owner APIC 0 was published.
+- `bochs-display` with no VGA, `DISPLAY_SIZE=800x600`: before AP startup, GDB
+  observed the selected 800×600/pitch-3200 target, direct panic enabled and the
+  display-only register variant. The bar, all spaces, shell and Mandelbrot
+  displayed correctly, Escape restored the TTY, and post-handoff BSP panic
+  reached serial and the selected 800×600 direct target.
+
+- Default standard VGA with missing `DISPLAY_SIZE`, four CPUs: BOOT remains
+  selected at 1280×800/pitch 5120, no Bochs claim/aperture is created, and the first
+  frame is visible. The initial missing-size info message moved to trace in #485
+  review; explicit malformed, too-small and unsupported requests still warn.
+- Standard VGA with `DISPLAY_SIZE=garbage`, four CPUs: malformed-value refusal
+  keeps the same BOOT target without a Bochs claim; boot continues and presents.
+- `bochs-display` with `DISPLAY_SIZE=16000x12000`, one CPU: capacity refusal
+  reports VRAM/BAR overflow, keeps the 1280×800 BOOT target and presents normally.
+  Individual 16-bit MMIO reads confirmed width 1280, height 800 and enable 65;
+  no DISPI mode or WC aperture was installed.
+
+### Matched presenter cost
+
+Matched idle Caelum TTY/cursor samples at 1280×800 use task 1's direct HPET/GDB
+entry/finish method, 10 ns/tick, after startup/warmup. Both boots use standard VGA,
+the same font/pitch/format, four CPUs and the profile above. The new boot selects
+Bochs at that same size; initial mode setup is outside the measured call.
+
+| Source | Five whole-call samples, ms | Median, ms |
+| --- | --- | --- |
+| Main `164b463`, boot driver | 1.14367, 1.52225, 3.14138, 1.47683, 1.20291 | 1.47683 |
+| Task 4 `29f14d2`, Bochs driver | 1.12928, 1.23989, 1.50068, 1.25868, 1.24480 | 1.24480 |
+
+The medians differ by -15.7%, with overlapping sample ranges. No regression is
+observed; these small nested-VM/debugger samples do not establish a speedup.
+They measure guest elapsed time including preemption/host/debugger effects,
+not isolated CPU cycles, achieved cadence or native performance. Full-frame
+traffic stays 4,096,000 bytes/call, calculated at 234.375 MiB/s for nominal 60 Hz.
+No profiler, benchmark infrastructure or optimization is added. The later
+inventory-loop cleanup changes boot selection only, outside these measurements.
+
+Allocation failure, register-readback failure and failed restoration were
+inspected, not fault-injected. Direct panic tests use manual GDB register redirects,
+not naturally occurring exceptions. Installer/rescue configuration propagation
+and literal command-line limits were reviewed; USB boots are not repeated for
+this display task. The final VirtIO regression boot selects its 1280×800 RAM
+layout without a boot framebuffer, completes the first fenced presentation,
+returns all queue ownership, and displays the normal UI. The updated boot-option
+ownership guard runs before AP startup. No source tests or boot automation were
+added. All task-specific QEMU/GDB jobs were closed.
 
 ## After the milestone
 

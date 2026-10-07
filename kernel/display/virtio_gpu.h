@@ -4,11 +4,13 @@
 #include <kernel/boot.h>
 #include <kernel/fb/fb.h>
 
-/* BSP/IF=0 before AP startup. Without a boot framebuffer, a bounded temporary
- * queue queries the enabled output's size. Selected remains true on failure:
- * a detected GPU cannot promise firmware scanout after transport reset.
- * The RAM layout remains until reboot. */
-const struct framebuffer *virtio_gpu_prepare(const struct boot_info *boot, bool *selected);
+struct pci_device;
+bool virtio_gpu_matches(const struct pci_device *device);
+/* BSP/IF=0 before AP startup, selected device and early console retired.
+ * Without a boot framebuffer, a bounded temporary queue queries geometry.
+ * The RAM layout remains until reboot; reset prevents firmware fallback. */
+const struct framebuffer *virtio_gpu_prepare(const struct boot_info *boot,
+    struct pci_device *device);
 /* Sole BSP presenter, IF=1. Start creates and attaches the prepared resource;
  * present transfers a complete frame before selecting its scanout and flushing.
  * Failure is permanent and retains all runtime DMA storage until reboot. */

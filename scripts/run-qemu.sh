@@ -51,7 +51,8 @@ esac
 case "$QEMU_VIDEO" in
   std) ;;
   virtio) set -- "$@" -vga none -device virtio-gpu-pci,disable-legacy=on ;;
-  *) echo 'QEMU_VIDEO must be std or virtio.' >&2; exit 1 ;;
+  bochs) set -- "$@" -vga none -device bochs-display ;;
+  *) echo 'QEMU_VIDEO must be std, virtio or bochs.' >&2; exit 1 ;;
 esac
 if [ "$mode" = run-usb ] || [ "$mode" = debug-usb ]; then
   [ -f "$USB_BOOT_IMAGE" ] || {

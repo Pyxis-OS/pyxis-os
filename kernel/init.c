@@ -5,6 +5,7 @@
 #include <kernel/acpi.h>
 #include <kernel/user/launch.h>
 #include <kernel/boot.h>
+#include <kernel/boot/options.h>
 #include <kernel/boot_files.h>
 #include <kernel/initrd.h>
 #include <kernel/log.h>
@@ -74,7 +75,8 @@
   acpi_prepare(boot);
   arch_clock_maintain();
 
-  display_init(boot);
+  const struct boot_options *options = boot_options_parse(boot->command_line);
+  display_init(boot, options->display_size);
 
   boot_start_cpus();
   system_info_init();
@@ -127,7 +129,7 @@
        heap.pools, heap.pool_bytes, heap.live_allocations, heap.arena_bytes,
        heap.retired_bytes);
 
-  user_launch_initial(boot->command_line);
+  user_launch_initial(options);
   arch_clock_maintain();
   klog("Caelum ready: starting preemptive userspace\n");
   task_schedule();
