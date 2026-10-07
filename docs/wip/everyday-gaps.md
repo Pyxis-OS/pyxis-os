@@ -9,8 +9,11 @@ Commands follow the [ports and native commands](../development/ports.md#ports-an
 boundary: anything that shows or changes a Pyxis concept is native, and familiar
 text tools may be ports.
 
-No unscheduled gaps are currently listed. The
-[everyday commands](../userland/everyday-commands.md) reference covers `echo`,
+| Gap | Noticed | Likely kind | Notes |
+| --- | --- | --- | --- |
+| Reboot at the end of installation | 2026-10-07, owner, after a successful native install | Native, in the [installer](../userland/installer.md) | The installer could finish with "press Enter to restart". The installer space has no `power` grant today, so this needs a small authority decision: restart only, for the install space. |
+
+The [everyday commands](../userland/everyday-commands.md) reference covers `echo`,
 `cp`, sorted/colorized `ls` and foreground shell-script launch authority.
 
 Related candidates already tracked elsewhere: grep, tail, wc, sort and hexdump in
