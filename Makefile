@@ -73,6 +73,10 @@ CFLAGS := -std=gnu23 -O2 -g3 -ffreestanding -fno-stack-protector \
           -Wmissing-prototypes -MMD -MP
 LDFLAGS := -nostdlib -static -no-pie -Wl,-T,arch/x86_64/linker.ld \
            -Wl,--build-id=none -Wl,-z,max-page-size=0x1000 -Wl,-Map,build/caelum.map
+# The Pyxis Clang driver links P1F executables; Limine loads the kernel as ELF.
+ifeq ($(TOOLCHAIN),llvm)
+LDFLAGS += -Wl,--oformat=elf
+endif
 
 C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
              third_party/tlsf/tlsf.c
