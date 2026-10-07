@@ -7,6 +7,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
+#include <uacpi/event.h>
 #include <uacpi/kernel_api.h>
 #include <uacpi/namespace.h>
 #include <uacpi/notify.h>
@@ -32,6 +33,8 @@ static bool sci_pending;
 static bool ready;
 static struct acpi_power_request *power_request;
 static bool power_started;
+/* A power operation started by the power button rather than a request. */
+static bool power_running;
 
 /* Worker only. The registration's address is uACPI's opaque SCI handle. */
 static struct sci_registration {
@@ -42,6 +45,8 @@ static struct acpi_work *work_head, *work_tail;
 static bool running_work;
 static uint64_t sci_rearm_at;
 static size_t unclaimed_scis;
+/* Set by the power button's fixed event, which runs in SCI service. */
+static bool button_pressed;
 static char worker_identity;
 
 /* Bootstrap only, then read by the worker. */
@@ -91,7 +96,7 @@ static void wake_worker(void)
 void acpi_power_forward(struct acpi_power_request *request)
 {
   KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  if (!ready || power_request) {
+  if (!ready || power_request || power_running) {
     request->status = ready ? CALL_BUSY : CALL_UNAVAILABLE;
     bsp_request_complete(&request->request);
     return;
@@ -153,7 +158,7 @@ static void sleep_for_events(uint64_t deadline, bool work_wakes)
 {
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
-  bool power = power_request && !power_started;
+  bool power = (power_request && !power_started) || button_pressed;
   if (!sci_pending && !(work_wakes && (work_head || power))) {
     struct task_wait *wait = task_wait_prepare();
     worker_wait = wait;
@@ -323,6 +328,16 @@ static uacpi_status trace_notify(uacpi_handle context, uacpi_namespace_node *nod
   return UACPI_STATUS_OK;
 }
 
+/* Top level. Returns only when the operation failed. A press during the
+ * operation is serviced here and dropped, so it does not start another. */
+static enum call_status run_power(enum acpi_power_action action)
+{
+  enum call_status status = acpi_power_run(action);
+  service_sci();
+  button_pressed = false;
+  return status;
+}
+
 /* Top level only, like deferred work. Returns only when the operation failed,
  * after completing the request. */
 static void run_power_request(void)
@@ -335,12 +350,52 @@ static void run_power_request(void)
     return;
   }
 
-  enum call_status status = acpi_power_run(request->action);
+  enum call_status status = run_power(request->action);
   flags = cpu_save_interrupts();
   power_request = NULL;
   request->status = status;
   bsp_request_complete(&request->request);
   cpu_restore_interrupts(flags);
+}
+
+/* SCI service, IF=0. The press itself needs no authority (decision 16); the
+ * worker runs the same power-off as a request. */
+static uacpi_interrupt_ret power_button(uacpi_handle context)
+{
+  (void)context;
+  button_pressed = true;
+  return UACPI_INTERRUPT_HANDLED;
+}
+
+static void run_button_press(void)
+{
+  if (!button_pressed) {
+    return;
+  }
+  button_pressed = false;
+  klog("power: power button pressed\n");
+
+  uint64_t flags = cpu_save_interrupts();
+  power_running = true;
+  cpu_restore_interrupts(flags);
+  run_power(ACPI_POWER_OFF);
+  flags = cpu_save_interrupts();
+  power_running = false;
+  cpu_restore_interrupts(flags);
+}
+
+/* A press latched before boot, such as the one that powered the machine on,
+ * is cleared first so that it does not power off at once. */
+static void start_power_button(void)
+{
+  uacpi_status status = uacpi_clear_fixed_event(UACPI_FIXED_EVENT_POWER_BUTTON);
+  if (status == UACPI_STATUS_OK) {
+    status = uacpi_install_fixed_event_handler(UACPI_FIXED_EVENT_POWER_BUTTON, power_button,
+                                               UACPI_NULL);
+  }
+  if (status != UACPI_STATUS_OK) {
+    klog("ACPI: error: power button not enabled: %s\n", uacpi_status_to_string(status));
+  }
 }
 
 static void acpi_worker(void *argument)
@@ -356,6 +411,7 @@ static void acpi_worker(void *argument)
   }
   acpi_ec_start();
   acpi_battery_start();
+  start_power_button();
   uint64_t flags = cpu_save_interrupts();
   ready = true;
   cpu_restore_interrupts(flags);
@@ -363,6 +419,7 @@ static void acpi_worker(void *argument)
     service_sci();
     run_work();
     run_power_request();
+    run_button_press();
     uint64_t now = arch_monotonic_ns();
     uint64_t sci_due = rearm_sci(now);
     uint64_t poll_due = acpi_battery_poll(now);

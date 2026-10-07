@@ -400,6 +400,10 @@ version of "clean" agreed for the ACPI milestone:
   reaches them.
 - **Held tasks ignore stop requests until release.** A group stopped during a
   failed power operation stops when its tasks resume.
+- **Control-method power buttons are ignored.** Machines that report presses as
+  `Notify(PNP0C0C, 0x80)` instead of the fixed event get no clean power-off
+  from the button. The T14 and QEMU use the fixed event. Revisit on such a
+  machine, with the notifications work.
 - **A failed S5 entry freezes the BSP for 10 s.** uACPI waits that long with
   interrupts disabled before reporting that the machine did not power off.
   Revisit if a machine reaches that path.

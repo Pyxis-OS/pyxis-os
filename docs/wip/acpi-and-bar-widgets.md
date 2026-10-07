@@ -95,6 +95,16 @@ Accepted for task 3 on 2026-10-07:
 15. **`QEMU_NO_REBOOT=1`** makes `run-qemu.sh` pass `-no-reboot` again, so a
     triple fault stops QEMU. Ordinary runs keep rebooting like hardware.
 
+Accepted for task 4 on 2026-10-07:
+
+16. **A press needs no authority.** The physical power button runs the clean
+    power-off directly, whatever capabilities any space holds, with no
+    confirmation.
+17. **Fixed-feature power button only.** The T14 and QEMU both report presses
+    through the fixed event. Machines whose power button is a control-method
+    device (`Notify(PNP0C0C, 0x80)`) are a recorded limit; neither target could
+    test that path.
+
 ## Tasks
 
 - [x] **1. Bring in uACPI.**
@@ -186,8 +196,11 @@ Accepted for task 3 on 2026-10-07:
 - [ ] **4. Power button.**
   - A short press of the physical power button runs the same clean power-off as
     `poweroff`. Holding it remains the firmware's emergency path.
-  - Enable the power button's fixed event, or its control-method device on
-    machines that use one (decision 6).
+  - Enable the power button's fixed event (decisions 6 and 17).
+  - **Status:** implemented ([ACPI](../kernel/acpi.md#power-off-and-restart));
+    the ThinkPad check is pending. In QEMU, `system_powerdown` powers off
+    cleanly with one and four CPUs, and unsynced files survive with an empty
+    journal. The unclaimed-SCI note is handled by decision 14.
   - **Finish when:** a short press on the ThinkPad powers off cleanly, with an
     empty journal on the next boot.
   - The unclaimed-SCI note under task 3 applies here too: a spurious SCI must
@@ -200,7 +213,9 @@ Accepted for task 3 on 2026-10-07:
   - Its fields, units and authority are settled when the task starts.
 
 After task 3, battery and AC changes can be signalled by ACPI notifications
-instead of polling (decision 9).
+instead of polling (decision 9). That work also rereads a battery's full
+capacity on `Notify(0x81)`, as Linux does; until then it is read only when a
+battery appears (#464 review).
 
 ## Proposals, not agreed
 
