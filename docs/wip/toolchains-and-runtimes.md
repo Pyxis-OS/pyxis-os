@@ -56,8 +56,8 @@ compiler, assembler, linker and runtime pieces. Cross-compilation and LLVM hosti
 have different requirements: a host-running compiler targeting Pyxis does not
 prove that LLVM's own OS-facing support library can run there.
 
-The [planning agenda](storage-and-terminal-agenda.md) pairs a bounded LLVM hosting
-requirements probe with Neovim/libuv inspection. Record missing native contracts,
+A bounded LLVM hosting requirements probe, like the
+[Neovim/libuv investigation](neovim-libuv.md), should record missing native contracts,
 dependency/runtime gaps and measured resource needs. Select one implementation
 milestone afterward rather than starting all prerequisites concurrently.
 
@@ -143,7 +143,7 @@ The first complete workflow should retain device identity across reboot, resolve
 and connect to tailnet machines, and provide interactive sessions with working
 control keys, terminal dimensions and escape sequences. Authentication checks
 and disconnects need clear handling. Multiple sessions can later use the proposed
-[terminal multiplexer](storage-and-terminal-agenda.md).
+[terminal multiplexer](terminal-applications.md).
 
 Probe Tailscale's Go runtime, networking, timers, cryptography and persistent
 credential requirements before choosing port tasks. Cross-compiling the client

@@ -111,7 +111,7 @@ They expose shell authority and kernel addresses on the trusted development
 LAN. [Technical debt](../technical-debt.md#kernel-log-retention-and-lan-visibility)
 records disclosure, capacity and recovery revisit points. DASH serial-over-LAN
 stays parked because its setup is fragile; the
-[ThinkPad findings](../wip/thinkpad-next-steps.md#4-parked-dash-serial-over-lan-for-boot-logs)
+[ThinkPad findings](../targets/t14-gen1-amd/notes.md#dash-management-controller-parked)
 remain available if it is revisited.
 
 ## Qualification

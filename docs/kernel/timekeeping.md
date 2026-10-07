@@ -55,6 +55,12 @@ HPET advances must still satisfy the bound. Operation after a violating gap is
 unsupported and requires reboot. Suspend/resume and migration are not qualified.
 A pause that also stops HPET does not consume the counter's wrap interval.
 
+The ThinkPad T14 Gen 1 AMD uses this path natively. On 2026-10-07 the owner
+kept a native session running for more than 15 minutes, about three wraps, with
+the clock holding; see the [target notes](../targets/t14-gen1-amd/notes.md#native-status).
+TSC with extended-HPET fallback is the accepted
+[later direction](../wip/later-os-directions.md#clock-source).
+
 ## Clock capability
 
 Boot grants init a named `clock` resource. The shell forwards it to foreground

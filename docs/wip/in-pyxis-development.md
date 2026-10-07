@@ -86,8 +86,10 @@ address.
 
 ### 3. Moving files
 
-[Remote file transfer](remote-file-transfer.md) covers uploading class files and
-downloading backups of the work. It is accepted and not yet started.
+- [x] [File transfer through the remote terminal](../userland/remote-terminal.md#explicit-file-transfer)
+  uploads class files and downloads backups by explicit command. Drag-and-drop
+  upload is implemented and awaits the owner's
+  [GUI-drop check](remote-file-transfer.md#tasks).
 
 ### 4. Lua for build scripts
 

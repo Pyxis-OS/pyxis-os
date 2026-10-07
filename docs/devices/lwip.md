@@ -20,6 +20,19 @@ INSPECT/ACCEPT rights. Streams expose INSPECT, READ, WRITE, SHUTDOWN_WRITE and A
 The [tcp and ttcp utilities](tcp.md) consume these interfaces.
 Traffic to closed ports still receives lwIP's normal reset response.
 
+## Why lwIP
+
+lwIP was chosen for the outbound TCP milestone over three alternatives. A native
+TCP stack would fit the existing ownership model directly, but Pyxis would own
+all protocol recovery, interoperability and maintenance. smoltcp is 0BSD and
+needs no heap, but it is Rust, so this C kernel would need a Rust build and an
+FFI boundary. picoTCP publishes GPLv2/GPLv3 terms, a licensing choice that was
+not to be made incidentally. lwIP is BSD-licensed C with a single-context
+callback mode (`NO_SYS=1`); its IP, packet-buffer, timer and resource policies
+needed the deliberate adapter described below. The
+[comparison](https://git.internal/PyxisOS/pyxis-os/src/commit/93851aebce74c71ceea93774c4d97e01bc2a60e7/docs/wip/tcp-stack-comparison.md)
+records the source review.
+
 ## Worker and memory ownership
 
 All lwIP entry points, callbacks, allocation and frees run in the existing BSP

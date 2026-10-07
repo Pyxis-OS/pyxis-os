@@ -296,4 +296,4 @@ ahead of remotely accessible services. Writable virtio-fs is an independent
 candidate for persisting the existing edit/build/run workflow.
 
 See [networking](networking.md), [DNS](../userland/dns.md), [randomness](randomness.md),
-[technical debt](../technical-debt.md) and the [stack comparison](../wip/tcp-stack-comparison.md).
+[technical debt](../technical-debt.md) and [why lwIP](lwip.md#why-lwip).
