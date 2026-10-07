@@ -118,6 +118,12 @@ removal. An empty command name is an error. Opened programs use the
 [script-launch helper](script-launch.md), which can dispatch a shebang to a native
 interpreter.
 
+[`ls [-1] [-l] [--] [directory...]`](ls.md) sorts directory names by byte order.
+Console output uses colored columns fitted to its width; pipes and files keep
+plain one-name-per-line output. `-1` forces lines, and `-l` shows kind, byte size
+and name with no time column. Directory sizes are `-`; unavailable file sizes
+are `?`, with diagnostics and failure status. Unknown options are usage errors.
+
 `echo [-n] [ARG...]` is a native external program. It prints arguments separated
 by one space, followed by a newline. An exact first argument `-n` suppresses the
 newline; later `-n` arguments and all other option-like text are literal. It

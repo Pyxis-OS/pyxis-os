@@ -20,14 +20,9 @@ not BusyBox applets.
 - **`echo` is implemented.** The native external program supports redirects
   and pipelines, with usage in the [shell guide](../userland/shell.md#commands-and-quoting).
 - **`cp` is missing.** Copying a file needs `cat SRC > DST`.
-- **`ls` is minimal** (`userspace/ls/main.c`, about 80 lines). It accepts only
-  paths, so `ls -a` reports `-a: Not found`.
-  - It prints one name per line, with `/` after directories, in the order the
-    filesystem returns them.
-  - A large directory doesn't fit on the screen. `boot://` alone has about 50
-    entries, and the terminal has no scrollback.
-  - `ls boot:// | less` already pages a long listing
-    ([less](../userland/less.md)).
+- **`ls` is implemented** with sorting, terminal columns/colors, `-1` and `-l`.
+  See [usage and limits](../userland/ls.md). Pipes and files keep plain names;
+  `ls boot:// | less` pages a listing ([less](../userland/less.md)).
 - **The pieces exist:**
   - `term_size` reports the terminal's columns;
   - directory enumeration reports each entry's kind;
@@ -59,6 +54,11 @@ Accepted by the owner on 2026-10-07:
    - **Options:**
      - `-1` forces one per line;
      - `-l` gives a long listing: kind, size and name. There is no time column.
+   - **Unreadable details (accepted 2026-10-07):** keep enumerated names visible.
+     If `#!` cannot be checked, use regular-file color; `.pxe` still identifies
+     a program by name. With `-l`, unavailable file sizes are `?`, with an error
+     and nonzero exit status. Directory sizes are `-`, since no directory byte
+     size is exposed.
 3. **`cp` behaviour.**
    - `cp SRC DST`, or several sources into a directory.
    - Files only at first; `-r` for directories comes later.
@@ -80,12 +80,19 @@ Accepted by the owner on 2026-10-07:
     handling was reviewed in code. Implemented in
     [userland PR #143](https://git.internal/PyxisOS/pyxis-userland/pulls/143).
 
-- [ ] **2. `ls`.** Sorting, terminal columns, colors, `-1` and `-l`
+- [x] **2. `ls`.** Sorting, terminal columns, colors, `-1` and `-l`
   (decision 2), with usage errors for unknown options.
   - **Finish when:**
     - `ls boot://` fits in a few rows on a terminal, with colored kinds;
     - `ls boot:// | cat` prints one plain name per line;
     - `ls -l` shows kinds and sizes.
+  - **Validated 2026-10-07:** full source image build; manual four-CPU
+    QEMU/KVM (512 MiB, nested VM) covered terminal/pipe/file output, RAM/HOST
+    names and sizes, permission fallback and options. The 59-name boot listing
+    used 15 rows at 80 columns and 7 at 160, versus 59 baseline rows. GDB
+    observed a two-byte prefix read with READ-only file authority. See the
+    [validation record](../userland/ls.md#validation). Implemented in
+    [userland PR #146](https://git.internal/PyxisOS/pyxis-userland/pulls/146).
 
 - [ ] **3. `cp`** (decision 3).
   - **Finish when:**
