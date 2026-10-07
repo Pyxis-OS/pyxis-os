@@ -1016,7 +1016,7 @@ const struct framebuffer *virtio_gpu_resize_prepare(void)
   uint32_t height = info->scanouts[gpu.scanout_id].rectangle.height;
   if (!info->scanouts[gpu.scanout_id].enabled ||
       !space_display_size_supported(width, height)) {
-    klog("virtio-gpu: resize %ux%u refused: disabled or too small\n", width, height);
+    klog("virtio-gpu: resize %ux%u refused: disabled or unsupported geometry\n", width, height);
     return NULL;
   }
   if (width == gpu.target.width && height == gpu.target.height) {

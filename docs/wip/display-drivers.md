@@ -1006,6 +1006,14 @@ when adaptive consumers land. Reference ELF SHA-256 is
 task ELF is
 `f95448d3762d85cd3b67057bf20d7093ec8a011ca7198effd2e895d80ff70ca0`.
 
+After integrating main `29a1777` and published userland `21502e7`, the ordinary
+default-GCC image build passed again. A four-CPU, 256 MiB GTK boot resized
+640×480 to 800×573, committed generation 2 in every space, acknowledged the
+flush and reclaimed the retired GPU resource. The four-TTY copy/swap section
+took 1.48204 ms in that run. Standard VGA also kept its boot driver and
+generation 1. The final refusal message covers both the minimum and maximum
+representable TTY geometry; its wording does not change acceptance policy.
+
 ## Related
 
 [Mapped graphics buffers](../interfaces/graphics.md),
