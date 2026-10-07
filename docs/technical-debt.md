@@ -2151,6 +2151,10 @@ concurrent overwrites can mix contents, and same-file aliases replace the object
 Staging requires destination CREATE/WRITE_FILES/REMOVE rather than permission to
 write an existing file alone. It has no direct-truncation fallback.
 
+Recursive directory copying remains deferred; cp currently accepts files only.
+Revisit it with a bounded directory-tree copying contract when ordinary use
+needs it.
+
 Interruption can leave a named temporary file. Unconfirmed creation/publication
 is reported without retry or name removal; failed cleanup can leave partial
 storage. No stale-file sweeper or crash-durability guarantee is provided, and

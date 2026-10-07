@@ -33,7 +33,7 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | awk | Text filtering, field processing and small scripts; select an implementation after a libc/dependency probe. |
 | uniq | [Implemented sbase port](../userland/uniq.md), packaged in the normal image with libc `getline`/`isblank` and validated against host upstream output. |
 | grep, tail, wc, sort, hexdump | Small everyday commands that remain useful alongside awk. Decide which to port or implement separately; this is not a commitment to a complete Unix utility suite. Pure text filters can be ports; commands that inspect system state are native. |
-| Everyday gaps | Small missing commands and options noticed in use, such as `echo`, are collected in [everyday gaps](everyday-gaps.md) until they are scheduled. |
+| Everyday gaps | Small missing commands and options noticed in use are collected in [everyday gaps](everyday-gaps.md) until they are scheduled. Implemented native commands are covered in [everyday commands](../userland/everyday-commands.md). |
 | jq | JSON inspection and transformation, initially on local files. Audit libc/math and the selected regex configuration/dependency. |
 | pup | A Go command-line HTML parser and CSS-selector tool, with JSON output for pipelines. It is a small Go utility candidate; see the [Go runtime direction](toolchains-and-runtimes.md#go-cross-compiler-then-hosted-go-toolchain). |
 

@@ -41,7 +41,8 @@ be mounted.
 
 The installed archive keeps only the rescue set listed in `boot/rescue.list`,
 packaged as `boot://share/installer/rescue.list`: boot init, the installer, the
-shell and session, the init providers and a few file commands. Every other
+shell and session, the init providers and a few file commands, including
+`echo` and `cp` for writing configuration and copying recovery files. Every other
 executable lives in `bin/REVISION`, one directory per kernel revision. Boot
 init binds the running kernel's directory. When that directory is missing it
 binds the archive instead, which on an installed system holds only the rescue
