@@ -124,7 +124,7 @@ bool net_log_udp_service(void)
   }
   poll_deadline = task_deadline_after_ms(LOG_UDP_POLL_MS);
   const uint8_t *mac = net_driver_mac();
-  if (!mac || !net_driver_available()) {
+  if (!net_ipv4_address() || !mac || !net_driver_available()) {
     return false;
   }
   if (!normal_length) {
