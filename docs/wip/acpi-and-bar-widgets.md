@@ -103,16 +103,18 @@ Accepted for task 2 on 2026-10-07:
     2026-10-07) load the namespace without AML errors, refused mappings or
     refused PCI writes. Costs are recorded in [ACPI](../kernel/acpi.md#measurements).
 
-- [ ] **2. Clean power-off and reboot.**
+- [x] **2. Clean power-off and reboot.**
   - The `power` capability and its boot-init forwarding (decision 2), plus the
     native `poweroff` and `reboot` commands.
   - The shutdown sequence from decision 3. Power-off enters S5 through uACPI.
     Reboot uses the FADT reset register, with a documented fallback if a machine
     lacks one.
-  - **Status:** implemented ([ACPI](../kernel/acpi.md#power-off-and-restart)).
-    QEMU meets every check below with one and four CPUs; the ThinkPad checks
-    are the owner's. The run script no longer passes `-no-reboot -no-shutdown`,
-    so a guest power-off exits QEMU and a reset reboots it.
+  - **Status:** done ([ACPI](../kernel/acpi.md#power-off-and-restart)). QEMU
+    meets every check below with one and four CPUs. On 2026-10-07 the owner
+    updated the installed ThinkPad to this build: `poweroff` turned it off,
+    `reboot` restarted it, and a file edited just before either survived without
+    `sync`. The run script no longer passes `-no-reboot -no-shutdown`, so a
+    guest power-off exits QEMU and a reset reboots it.
   - **Finish when:**
     - `poweroff` makes QEMU exit;
     - the ThinkPad turns off;

@@ -222,6 +222,11 @@ mode (`MOUNT_DISK`) with one and four CPUs:
   `poweroff` and `reboot` from a Remote shell printed `this space has no power
   authority` and the kernel logged nothing.
 
+On the ThinkPad T14 Gen 1 AMD (owner, 2026-10-07, installed system updated to
+this build), `poweroff` turned the machine off and `reboot` restarted it. A file
+edited immediately before each survived without `sync`. The journal state and
+which reset path the restart took were not inspected there.
+
 The flush-failure, firmware-failure and fallback-reset paths were not exercised.
 
 The scheduler hold adds a check at every syscall return and user-mode timer
