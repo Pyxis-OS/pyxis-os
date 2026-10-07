@@ -58,31 +58,49 @@ static struct framebuffer *spaces_nav_fb;
  * included, so the screen never shows that row without the cursor. */
 static struct framebuffer *cursor_row_fb;
 
+static struct framebuffer *fb_try_alloc(const struct framebuffer *layout,
+    size_t width, size_t height)
+{
+  if (!width || !height || width > SIZE_MAX / sizeof(uint32_t) ||
+      layout->pitch < width * sizeof(uint32_t) || height > SIZE_MAX / layout->pitch) {
+    return NULL;
+  }
+  size_t bytes = height * layout->pitch;
+  if (bytes > SIZE_MAX - (PAGE_SIZE - 1)) {
+    return NULL;
+  }
+  struct framebuffer *fb = kmalloc(sizeof(*fb));
+  if (!fb) {
+    return NULL;
+  }
+  *fb = (struct framebuffer){
+    .width = width, .height = height, .pitch = layout->pitch, .size = bytes,
+    .red_shift = layout->red_shift, .green_shift = layout->green_shift,
+    .blue_shift = layout->blue_shift,
+  };
+  if (vm_alloc(vm_kernel_space(), bytes, PAGE_SIZE, PAGE_WRITE, &fb->address) != MM_OK) {
+    kfree(fb);
+    return NULL;
+  }
+  return fb;
+}
+
 static struct framebuffer *fb_alloc(const struct framebuffer *layout,
     size_t width, size_t height)
 {
-  struct framebuffer *fb;
-  fb = (struct framebuffer *)kmalloc(sizeof(struct framebuffer));
-
-  fb->pitch = layout->pitch;
-
-  fb->width = width;
-  fb->height = height;
-
-  fb->size = fb->height * fb->pitch;
-  
-  fb->red_shift = layout->red_shift;
-  fb->green_shift = layout->green_shift;
-  fb->blue_shift = layout->blue_shift;
-
-  enum mm_result status = vm_alloc(vm_kernel_space(), 
-      fb->size, PAGE_SIZE, PAGE_WRITE, &fb->address);
-
-  if (status != MM_OK) {
-    panic("cannot allocate space framebuffer (error %d)", (uint32_t)status);
+  struct framebuffer *fb = fb_try_alloc(layout, width, height);
+  if (!fb) {
+    panic("cannot allocate space framebuffer");
   }
-
   return fb;
+}
+
+static void fb_free(struct framebuffer *fb)
+{
+  if (fb) {
+    KASSERT(vm_free(vm_kernel_space(), fb->address, fb->size) == MM_OK);
+    kfree(fb);
+  }
 }
 
 static struct tty *tty_alloc(const struct framebuffer *fb) {
@@ -99,6 +117,7 @@ static struct tty *tty_alloc(const struct framebuffer *fb) {
   tty->width = fb->width / bizcat.width;
   tty->height = fb->height / bizcat.height;
   tty->tab_width = TTY_DEFAULT_TAB_WIDTH;
+  tty->geometry_generation = 1;
 
   tty->fg = aardvark_scheme.foreground;
   tty->bg = aardvark_scheme.background;
@@ -202,7 +221,9 @@ bool space_display_size_supported(size_t width, size_t height)
 {
   size_t navigation_cells = 2 * SPACES_NAV_CHEVRON_CELLS + BATTERY_WIDGET_CELLS + 1;
   return width / bizcat.width >= navigation_cells &&
-      height >= SPACES_NAV_HEIGHT + bizcat.height;
+      width / bizcat.width <= UINT16_MAX &&
+      height >= SPACES_NAV_HEIGHT + bizcat.height &&
+      (height - SPACES_NAV_HEIGHT) / bizcat.height <= UINT16_MAX;
 }
 
 void space_init(void)
@@ -582,6 +603,187 @@ static bool begin_presenting(void)
   return owned;
 }
 
+struct resize_space {
+  struct space *space;
+  struct framebuffer *fb;
+  struct resize_space *next;
+};
+
+struct resize_buffers {
+  struct resize_space *spaces;
+  struct framebuffer *navigation;
+  struct framebuffer *cursor;
+};
+
+/* A missing remote flush acknowledgement keeps one old batch mapped for the
+ * boot. Further resizing stops before it can create another retained batch. */
+static struct resize_buffers retained_resize;
+
+static void resize_buffers_free(struct resize_buffers *buffers)
+{
+  while (buffers->spaces) {
+    struct resize_space *entry = buffers->spaces;
+    buffers->spaces = entry->next;
+    fb_free(entry->fb);
+    kfree(entry);
+  }
+  fb_free(buffers->navigation);
+  fb_free(buffers->cursor);
+  *buffers = (struct resize_buffers){0};
+}
+
+/* BSP, IF=0: registry and geometry cannot change during this walk. Nothing
+ * becomes visible to AP console writers until the complete set is ready. */
+static bool resize_buffers_prepare(struct resize_buffers *buffers,
+    const struct framebuffer *layout)
+{
+  struct resize_space **tail = &buffers->spaces;
+  for (struct space *space = caelum_space; space; space = space->next) {
+    if (space->tty->geometry_generation == UINT64_MAX) {
+      return false;
+    }
+    struct resize_space *entry = kmalloc(sizeof(*entry));
+    if (!entry) {
+      return false;
+    }
+    *entry = (struct resize_space){.space = space};
+    *tail = entry;
+    tail = &entry->next;
+    entry->fb = fb_try_alloc(layout, layout->width, layout->height - SPACES_NAV_HEIGHT);
+    if (!entry->fb) {
+      return false;
+    }
+  }
+  buffers->navigation = fb_try_alloc(layout, layout->width, SPACES_NAV_HEIGHT);
+  buffers->cursor = fb_try_alloc(layout, layout->width, bizcat.height);
+  return buffers->navigation && buffers->cursor;
+}
+
+/* Sole presenter, between frame leases. Device waits retain the published
+ * TTY set, including output that APs write while scanout is being changed. */
+static void resize_display(void)
+{
+  const struct framebuffer *layout = display_resize_prepare();
+  if (!layout) {
+    return;
+  }
+  struct resize_buffers buffers = {0};
+  uint64_t flags = cpu_save_interrupts();
+  struct space *registry_tail = last_space;
+  struct framebuffer previous = *screen;
+  bool prepared = space_display_size_supported(layout->width, layout->height) &&
+      resize_buffers_prepare(&buffers, layout);
+  if (!prepared) {
+    resize_buffers_free(&buffers);
+  }
+  cpu_restore_interrupts(flags);
+  if (!prepared) {
+    display_resize_cancel();
+    klog("display: resize refused; cannot prepare all space buffers\n");
+    return;
+  }
+
+  flags = cpu_save_interrupts();
+  bool current = registry_tail == last_space && previous.address == screen->address &&
+      previous.width == screen->width && previous.height == screen->height &&
+      previous.pitch == screen->pitch;
+  cpu_restore_interrupts(flags);
+  if (!current) {
+    display_resize_defer();
+    flags = cpu_save_interrupts();
+    resize_buffers_free(&buffers);
+    cpu_restore_interrupts(flags);
+    return;
+  }
+  if (!display_resize_switch()) {
+    display_resize_cancel();
+    flags = cpu_save_interrupts();
+    resize_buffers_free(&buffers);
+    cpu_restore_interrupts(flags);
+    return;
+  }
+
+  flags = cpu_save_interrupts();
+  current = registry_tail == last_space && previous.address == screen->address &&
+      previous.width == screen->width && previous.height == screen->height &&
+      previous.pitch == screen->pitch;
+  if (!current) {
+    cpu_restore_interrupts(flags);
+    display_resize_defer();
+    flags = cpu_save_interrupts();
+    resize_buffers_free(&buffers);
+    cpu_restore_interrupts(flags);
+    return;
+  }
+
+  bool locked = log_begin();
+  if (!locked) {
+    cpu_restore_interrupts(flags);
+    display_resize_cancel();
+    flags = cpu_save_interrupts();
+    resize_buffers_free(&buffers);
+    cpu_restore_interrupts(flags);
+    return;
+  }
+  uint64_t started = arch_monotonic_ns();
+  size_t count = 0;
+  for (struct resize_space *entry = buffers.spaces; entry; entry = entry->next) {
+    struct framebuffer *old = entry->space->fb;
+    tty_resize(entry->space->tty, entry->fb);
+    entry->space->fb = entry->fb;
+    entry->fb = old;
+    ++count;
+  }
+  struct framebuffer *old = spaces_nav_fb;
+  spaces_nav_fb = buffers.navigation;
+  buffers.navigation = old;
+  old = cursor_row_fb;
+  cursor_row_fb = buffers.cursor;
+  buffers.cursor = old;
+  display_resize_commit();
+  screen = display_layout();
+  uint64_t elapsed = arch_monotonic_ns() - started;
+  log_end(locked);
+  cpu_restore_interrupts(flags);
+
+  /* The previous presentation finished before this transaction. Its old GPU
+   * backing has separate device ownership; TTY backing needs remote TLB flushes
+   * even though no writer can retain an old pixel pointer beyond the lock. */
+  display_resize_finish();
+  if (vm_kernel_flush_remote()) {
+    flags = cpu_save_interrupts();
+    resize_buffers_free(&buffers);
+    cpu_restore_interrupts(flags);
+  } else {
+    KASSERT(!retained_resize.spaces);
+    retained_resize = buffers;
+    display_resize_disable();
+    klog("display: remote TLB flush timed out; old buffers retained, resizing stopped\n");
+  }
+  klog("display: resized to %lux%lu; copied %lu TTYs under output lock in %lu ns\n",
+      screen->width, screen->height, count, elapsed);
+}
+
+/* A session keeps its original extent and pitch. The destination alone changes;
+ * fill exposed margins and copy the top-left intersection by each source row. */
+static void present_graphics(const struct framebuffer *source, uint32_t background)
+{
+  size_t height = screen->height - SPACES_NAV_HEIGHT;
+  size_t columns = MIN(source->width, screen->width);
+  size_t row_bytes = columns * sizeof(uint32_t);
+  fb_fill_rect(cursor_row_fb, 0, 0, cursor_row_fb->width, 1, background);
+  for (size_t y = 0; y < height; ++y) {
+    if (y < source->height) {
+      memcpy((void *)cursor_row_fb->address,
+          (const void *)(source->address + y * source->pitch), row_bytes);
+    } else if (y == source->height) {
+      fb_fill_rect(cursor_row_fb, 0, 0, cursor_row_fb->width, 1, background);
+    }
+    display_copy((SPACES_NAV_HEIGHT + y) * screen->pitch,
+        (const void *)cursor_row_fb->address, screen->pitch);
+  }
+}
+
 void space_present()
 {
   if (!presenting && !begin_presenting()) {
@@ -610,11 +812,14 @@ void space_present()
   bool visible = !frame && locked && tty->cursor_visible &&
       tty->x < tty->width && tty->y < tty->height;
   size_t x = tty->x, y = tty->y;
+  uint32_t background = tty->bg;
   log_end(locked);
   cpu_restore_interrupts(flags);
 
   const uint8_t *pixels = (const uint8_t *)source->address;
-  if (!visible) {
+  if (frame) {
+    present_graphics(source, background);
+  } else if (!visible) {
     display_copy(dst_offset, pixels, source->size);
   } else {
     /* Every screen write carries final pixels: rows above and below the
@@ -755,6 +960,9 @@ void space_present_task(void *argument)
     handle_space_input();
     handle_pointer_input();
     if (available) {
+      if (presenting || begin_presenting()) {
+        resize_display();
+      }
       space_present();
     }
     deadline += PRESENT_INTERVAL_NS;
