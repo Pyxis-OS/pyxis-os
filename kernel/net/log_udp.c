@@ -119,6 +119,9 @@ bool net_log_udp_service(void)
   if (!net_log_udp_enabled() || net_log_udp_panicking()) {
     return false;
   }
+  if (!normal_length && !task_deadline_expired(poll_deadline)) {
+    return false;
+  }
   poll_deadline = task_deadline_after_ms(LOG_UDP_POLL_MS);
   const uint8_t *mac = net_driver_mac();
   if (!mac || !net_driver_available()) {
@@ -163,6 +166,9 @@ bool net_log_udp_service(void)
   }
   normal_cursor = normal_next;
   normal_length = 0;
+  /* Drain known history promptly; caught-up reads wait for the poll deadline
+   * even when unrelated network traffic keeps the worker running. */
+  poll_deadline = 0;
   return true;
 }
 
