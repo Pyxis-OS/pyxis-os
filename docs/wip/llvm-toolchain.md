@@ -1,6 +1,6 @@
 # LLVM toolchain on the host
 
-Status: **milestone, agreed 2026-10-07; tasks 1 and 2 done the same day.**
+Status: **milestone, agreed 2026-10-07; tasks 1 to 3 done the same day.**
 This is the first of the three LLVM
 milestones in [hosted toolchains](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
 whose direction was chosen on 2026-09-29. Claude implements it; each task starts
@@ -94,6 +94,11 @@ Accepted by the owner on 2026-10-07, after the task 1 probe:
      the LLVM setting.
    - `elf2pxe` becomes a candidate for removal once no build uses GCC. It is
      not removed automatically in task 4.
+   - The owner chose on 2026-10-07 that userland and port Makefiles switch to
+     direct PXE links in task 4, together with GCC's removal. That avoids a
+     temporary two-path link in every Makefile. Until then, the SDK's LLVM
+     setting links ELF and converts it with `elf2pxe`. Task 3 instead checked
+     LLD's P1F against `elf2pxe` for every executable.
 5. **Pin and sources.**
    - LLVM 23.1.3.
    - The owner started the pull mirror `mirrors/llvm-project` and created the
@@ -296,9 +301,9 @@ owns in the GCC patch.
   - `-Wl,--oformat=elf` still produces an ELF with symbols when one is
     wanted. P1F carries no symbols, and today's userland `.elf` files have no
     documented consumer.
-- **The SDK.** Its Make settings link straight to `.pxe` under the LLVM
-  setting. `elf2pxe` stays in the SDK as a fallback until no build uses GCC
-  ([decision 4](#decisions)).
+- **The SDK.** Its Make settings link straight to `.pxe` once GCC is
+  retired (task 4). `elf2pxe` stays in the SDK as a fallback until no build
+  uses GCC ([decision 4](#decisions)).
 - **The format's owners.** P1F would be written by TCC's patch, LLD and
   `elf2pxe`, and read by the kernel loader. `include/pxe/p1f.h` stays the
   authoritative definition.
@@ -336,17 +341,17 @@ owns in the GCC patch.
 
 ### Work found for later tasks
 
-- **Task 3:**
-  - fastfetch's missing `return`;
-  - the mbedtls `-MD` duplication;
-  - the libtcc1 overlap with compiler-rt;
-  - the hosted TCC's library name;
-  - the TCC size growth;
-  - `ports/build.lua` selecting the compiler from the SDK's toolchain record;
-  - port recipes and CMake files taking `ar` and the other tools from the
-    LLVM installation, because both toolchains install `x86_64-unknown-pyxis-ar`;
-  - booting an all-LLVM userland. The ports bundle is tied to its SDK, so a
-    GCC ports bundle cannot complete an LLVM-SDK image.
+- **Task 4:**
+  - userland and port Makefiles link `.pxe` directly, without `.elf` and
+    `elf2pxe` steps;
+  - the SDK drops `-Wl,--oformat=elf` and its GCC branches;
+  - `elf2pxe` becomes a removal candidate for the owner.
+- **For the owner, from task 3:**
+  - the allocator regression;
+  - the Quake difference;
+  - a stale TCC README example.
+
+  See [task 3 results](#task-3-results).
 
 ## Task 2 results
 
@@ -446,6 +451,127 @@ compiler differs.
 - **Quake `timedemo`** belongs to task 3.
 
 
+## Task 3 results
+
+Recorded on 2026-10-07 in Claude's Fedora 44 VM: nested KVM, 8 vCPUs, the
+patched QEMU 10.2.2, `CPUS=4`. The toolchain was `pyxis-llvm` `41ab6043cc4f`,
+built by `toolchain/build-llvm.sh`, on main `29a1777`. "All-GCC" and
+"all-LLVM" images are full `make image` builds from the same branch with each
+`TOOLCHAIN`.
+
+After rebasing onto main `4bc128e` (#487's display resize, userland `c4bcf16`
+with the new `ls`, ports main plus this task), both toolchains built the image
+again:
+- **Warnings:** none in the kernel or userland.
+- **P1F:** all 50 outputs were still identical to `elf2pxe`'s.
+- **Spot checks** in the all-LLVM image passed:
+  - fastfetch;
+  - sbase, tar and Links;
+  - `ls -l`.
+
+### What changed
+
+- **P1F from LLD** (decision 4):
+  - LLD writes the finished ELF image to memory, then converts its `PT_LOAD`
+    segments with `elf2pxe`'s checks and byte layout (`lld/ELF/P1F.cpp`).
+  - The Pyxis driver passes `--oformat=p1f` for every executable link, and
+    an executable without `-o` is `a.pxe`.
+  - The kernel link adds `-Wl,--oformat=elf`. So does the SDK's LLVM setting,
+    until task 4.
+- **Ports:**
+  - `ports/build.lua` checks the compiler that the SDK's `share/toolchain.mk`
+    names.
+  - Recipes take every tool, including `llvm-ar`, from `pyxis.mk`.
+  - The CMake ports drop the SDK's `-MMD -MP`.
+  - fastfetch's Pyxis `main` returns 0.
+  - fastfetch and TCC link the SDK's runtime by its `PYXIS_RUNTIME_LIBRARY`
+    name.
+- **Guest SDK:** the boot archive's `boot://sdk/usr/lib` carries the
+  compiler runtime that the SDK records: `libgcc.a` or
+  `libclang_rt.builtins.a`.
+
+### Builds
+
+- **The all-LLVM image builds with no GCC or binutils program.** It covers
+  the kernel, SDK, the 36 userland programs and every port.
+- **Port warnings match GCC's,** port by port. The only addition is 12
+  `-Wattribute-alias` warnings in TCC's upstream `lib/builtin.c`, which stay
+  upstream.
+- **GCC still builds the full image** from this branch, with its same 402
+  port warnings.
+- **Build time:** one cold full image build each took 30.6 s with GCC and
+  23.8 s with LLVM, both including port source downloads.
+- **P1F equality:** every one of the 50 userland and port links was rerun
+  with `-Wl,--oformat=p1f`. Each output was byte-identical to `elf2pxe`'s
+  conversion of the same link's ELF.
+
+### Port checks in the all-LLVM image
+
+| Port | Check | Result |
+| --- | --- | --- |
+| fastfetch | `fastfetch --structure OS:Kernel:CPU:Memory:Uptime` | passed |
+| Lua | the README's two `lua -e` examples | `1.4142135623730951`, `1,2,3` |
+| sbase | `cksum`, `sha256sum` (and `-c`), `uniq -c`, `tee` on `tmp://` files | match the host's values |
+| BusyBox tar | `tar cf` then `tar tf` of a `tmp://` tree | lists the tree |
+| BusyBox less | `less boot://share/hwdata/pci.ids`, then `q` | shows the file |
+| BusyBox vi | edit, `:wq`, `cat` | saved text read back |
+| kilo | type, Ctrl-S, Ctrl-Q, `cat` | saved text read back |
+| TCC | see below | passed |
+| Links | `links -dump https://example.com/` | page text, over Mbed TLS and the CA bundle |
+| pciids | `lspci` | device names resolved |
+| Doom | `doom` from the Development shell | renders (screendump) |
+| Quake | `quake +timedemo demo1` | 969 frames; see below |
+
+**TCC** was checked on the guest and with `host://` sources over virtio-fs:
+- it built and ran a program converting `long double` through compiler-rt;
+- it preprocessed the shell (`-E -P`);
+- it compiled (`-g -c`) and linked Mandelbrot;
+- it compiled and ran `cat` with `-include stdbool.h`.
+
+**A stale example.** The TCC README compiles `boot://src/cat/main.c`, but no
+image ships `boot://src`. `cat` also needs `-include stdbool.h` now that it
+uses C23 `bool`. Both behave the same with GCC; this is left for the owner.
+
+### Matched measurements (all-GCC vs all-LLVM)
+
+| Measurement | All-GCC | All-LLVM |
+| --- | --- | --- |
+| Quake `timedemo demo1` (fps, 5 alternating samples) | 1621.1, 1671.5, 1673.6, 1678.7, 1671.5 (median 1671.5) | 1609.6, 1644.5, 1620.8, 1620.8, 1601.2 (median 1620.8) |
+| QEMU start to `Caelum ready` (s, 3 boots) | 2.033, 2.087, 2.064 | 1.979, 1.947, 1.959 |
+| `iobench read boot://share/iobench.bin`, payload median (MiB/s) | 3973, 3741, 4001 | 4509, 4634, 4513 |
+| `iobench write tmp://…`, median (MiB/s) | 112.2, 102.0, 94.9 | 121.0, 87.0, 118.9 |
+| `allocbench heap` (ns/operation) | 12.5, 12.0, 12.3 | 16.6, 15.9, 16.0 |
+| `allocbench pages` (ns/operation) | 37837, 38426, 40078 | 38453, 44021, 38163 |
+
+| Size | All-GCC | All-LLVM | Change |
+| --- | ---: | ---: | ---: |
+| Text plus data, 50 userland and port executables (bytes) | 8,320,903 | 8,409,043 | +1.1% |
+| Kernel text (bytes) | 806,869 | 798,053 | −1.1% |
+| `pyxis.iso` (bytes) | 53,690,368 | 46,204,928 | −14% |
+
+The ISO shrinks mostly through smaller debug information in the guest SDK's
+archives.
+
+**Two regressions, for the owner:**
+- **The heap allocator is about 33% slower** (`allocbench heap`). It is
+  libc's vendored TLSF. A host build of the same `tlsf.c` reproduces most of
+  it outside Pyxis, with identical flags (`-O2 -mno-red-zone`), over five
+  passes of 2^23 operations:
+
+  | Compiler | Time (ns/operation) |
+  | --- | --- |
+  | Clang 22 | 14.1–14.2 |
+  | GCC 16 | 11.5–12.2 |
+
+  So this is code generation, not the Pyxis integration. It has not been
+  optimized.
+- **Quake `timedemo` is about 3% slower.** The software renderer's
+  executable is 3.5% larger.
+
+TCC's guest compiler is 31% larger, because Clang inlines more in its
+single-translation-unit build. Its largest stack frame is 2,824 bytes,
+against GCC's 2,720.
+
 ## Tasks
 
 - [x] **1. Probe and proposal.** Recorded in [probe results](#probe-results)
@@ -464,7 +590,7 @@ compiler differs.
     - the power, display and network paths behave as with GCC;
     - the matched measurements are recorded against GCC.
 
-- [ ] **3. Userland and ports with LLVM.**
+- [x] **3. Userland and ports with LLVM.** See [task 3 results](#task-3-results).
   - Every userland program and port builds with the LLVM setting.
   - For decision 4:
     - LLD gains `--oformat=p1f`, with checks that mirror `elf2pxe`'s. P1F then
@@ -474,7 +600,8 @@ compiler differs.
       because the fork cannot include the header. A format change must update
       the loader and all three writers together;
     - the Pyxis driver uses it for executables;
-    - the SDK's LLVM setting links straight to PXE.
+    - direct PXE links in the SDK and Makefiles move to task 4 (owner,
+      2026-10-07).
   - **Finish when:** every port's documented check passes in QEMU, including
     Doom, Quake, Lua, TCC compiling a program, Links, BusyBox and Fastfetch.
     Any port that needs a recipe change records it in its README.
@@ -482,7 +609,8 @@ compiler differs.
 - [ ] **4. Switch the default and retire GCC.**
   - The owner builds and publishes the LLVM builder container.
   - LLVM becomes the default, and the GCC and binutils patches and build script
-    are removed. `elf2pxe` then becomes a removal candidate; the owner
+    are removed. Userland and port Makefiles link PXE directly with LLD.
+    `elf2pxe` then becomes a removal candidate; the owner
     decides whether to remove it. The toolchain and SDK docs describe the LLVM contract.
   - The switch lands at a quiet point between Codex tasks.
   - **Finish when:**
