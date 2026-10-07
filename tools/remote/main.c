@@ -5,6 +5,8 @@
 #include "presentation.h"
 #include "transfer.h"
 #include "paste.h"
+#include "listen.h"
+#include <remote/beacon.h>
 #include <remote/terminal.h>
 
 #include <errno.h>
@@ -876,6 +878,8 @@ int main(int argc, char **argv)
 {
   bool machine = false;
   const char *download_directory = NULL;
+  const char *listen_name = NULL;
+  const char *beacon_address = NULL;
   uint32_t options = 0;
   unsigned columns = 0;
   unsigned rows = 0;
@@ -883,6 +887,10 @@ int main(int argc, char **argv)
   for (; argument < argc && argv[argument][0] == '-'; ++argument) {
     if (!strcmp(argv[argument], "--machine")) {
       machine = true;
+    } else if (!strcmp(argv[argument], "--listen") && argument + 1 < argc) {
+      listen_name = argv[++argument];
+    } else if (!strcmp(argv[argument], "--beacon-address") && argument + 1 < argc) {
+      beacon_address = argv[++argument];
     } else if (!strcmp(argv[argument], "--download-dir") && argument + 1 < argc) {
       download_directory = argv[++argument];
     } else if (!strcmp(argv[argument], "--no-shell-echo")) {
@@ -905,9 +913,11 @@ int main(int argc, char **argv)
     }
   }
   if (argc - argument != 2 || !dimension(argv[argument + 1], 65535) ||
-      (options && !machine) || (download_directory && machine)) {
+      (options && !machine) || (download_directory && machine) ||
+      (listen_name && !remote_beacon_name_length(listen_name)) ||
+      (beacon_address && !listen_name)) {
     fprintf(stderr, "usage: pyxis-remote [--machine [--no-shell-echo]] [--columns N] [--rows N] [--download-dir DIR] "
-            "HOST PORT\n");
+            "[--listen NAME [--beacon-address IPv4]] HOST PORT\n");
     return 1;
   }
   if (!machine) {
@@ -939,7 +949,10 @@ int main(int argc, char **argv)
   }
   signal(SIGPIPE, SIG_IGN);
   atexit(restore_terminal);
-  int socket_fd = connect_host(argv[argument], argv[argument + 1]);
+  int socket_fd = listen_name ?
+      listen_host(listen_name, argv[argument], (uint16_t)dimension(argv[argument + 1], 65535),
+          beacon_address ? beacon_address : "255.255.255.255", &interrupted) :
+      connect_host(argv[argument], argv[argument + 1]);
   if (socket_fd < 0) {
     return interrupted ? 128 + interrupted : 1;
   }

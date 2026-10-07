@@ -20,7 +20,8 @@ enum mm_result user_process_load(struct space *space, const void *bytes, size_t 
                                   struct process **process, uintptr_t *entry);
 
 /* BSP, IF=0, before scheduler startup. Parses init=, mount.disk=, boot.install=1
- * and boot.default_config=1, then starts boot init. Fatal on invalid options. */
+ * boot.default_config=1 and remote.beacon=NAME, then starts boot init.
+ * Fatal on invalid options. */
 void user_launch_initial(const char *command_line);
 
 /* Initial inits and their interpreters name boot archive entries by this root. */
@@ -32,8 +33,9 @@ void user_launch_initial(const char *command_line);
  * factory, mount authority and, with INSTALL, the raw installer grants. It
  * gets console output but no input or other space devices. Its arguments add
  * --installed when a disk is bound and --default-config for the rescue entry.
+ * Reverse mode adds --remote-beacon NAME; boot init selects the Remote space.
  * Fatal on failure. */
 void user_launch_boot_init(const char *image_uri, const struct mount_config *mount_config,
-    bool install, bool default_config);
+    bool install, bool default_config, const char *remote_beacon);
 
 #endif

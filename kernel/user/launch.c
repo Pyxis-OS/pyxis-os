@@ -89,7 +89,7 @@ static enum initrd_result select_image(const char *name, struct initrd_file *ima
 }
 
 void user_launch_boot_init(const char *image_uri, const struct mount_config *mount_config,
-    bool install, bool default_config)
+    bool install, bool default_config, const char *remote_beacon)
 {
   KASSERT(arch_cpu_index() == 0);
   struct space *space = space_caelum();
@@ -316,13 +316,17 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   }
   const struct process_binding roots[] = {{"boot", boot}, {"tmp", tmp}};
   /* Boot init learns the bound disk and the rescue selection from its arguments. */
-  const char *arguments[4] = {script.data ? interpreter : image_uri, image_uri};
+  const char *arguments[6] = {script.data ? interpreter : image_uri, image_uri};
   size_t argument_count = script.data ? 2 : 1;
   if (mount_config->enabled) {
     arguments[argument_count++] = "--installed";
   }
   if (default_config) {
     arguments[argument_count++] = "--default-config";
+  }
+  if (remote_beacon) {
+    arguments[argument_count++] = "--remote-beacon";
+    arguments[argument_count++] = remote_beacon;
   }
   const struct process_variable environment[] = {{"OS_NAME", "Pyxis OS"}};
   const struct process_startup startup = {

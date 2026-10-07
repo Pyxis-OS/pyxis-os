@@ -479,6 +479,22 @@ accepting output is latched off for the rest of boot and not retried.
 Revisit with real-hardware bring-up, if post-boot panics need to be visible
 without serial.
 
+## Reverse remote terminal discovery
+
+[Reverse connections](userland/remote-terminal.md#reverse-connections) remain
+unauthenticated and unencrypted. A matching non-secret name selects a host,
+which then receives the configured shell's authority. The owner accepted this
+for a trusted development LAN; revisit when Pyxis gains authentication or is
+used on untrusted networks.
+
+Discovery owns UDP port 2324 on net0 exclusively while waiting; a conflicting
+binding stops that daemon with a diagnostic. One reverse session runs at a time,
+and the host tool accepts one session per invocation. Beacon cadence adds up
+to approximately one second after discovery opens, plus network, scheduling
+and connection/cleanup delays. Native subnet broadcast and ThinkPad PXE
+qualification remain owner checks. Revisit these limits if a concrete multi-host
+or unattended development workflow needs more.
+
 ## Kernel log retention and LAN visibility
 
 The [kernel log](interfaces/kernel-log.md) retains 256 KiB in static storage,

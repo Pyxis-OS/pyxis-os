@@ -22,7 +22,7 @@ applications.
 
 ## Boot command line
 
-The kernel accepts four options, each at most once, in a command line of at
+The kernel accepts five options, each at most once, in a command line of at
 most 4095 bytes without quoting or escaping:
 
 | Option | Meaning |
@@ -31,6 +31,7 @@ most 4095 bytes without quoting or escaping:
 | `mount.disk=GUID` | The disk native mounts may use; boot init then reads the installed configuration. |
 | `boot.install=1` | The install entry: boot init also receives the raw installer resources. |
 | `boot.default_config=1` | The rescue entry: boot init ignores the pool override. |
+| `remote.beacon=NAME` | The configured `remote` space discovers a host beacon and connects out. |
 
 Anything else, a repeated option or a non-`boot://` init stops the boot.
 Normal live and installed boots use `init=boot://boot-init.pxe`.
@@ -41,6 +42,12 @@ to serial. It receives console output but no input, the bootstrap services, the
 directory as the `ram` resource, the HOST and native mount authority when
 present, and, on the install entry, the raw installer resources. Arguments add `--installed` when a disk is bound and
 `--default-config` for the rescue entry.
+`remote.beacon` adds `--remote-beacon NAME`. The name is 1–63 printable ASCII
+bytes without spaces, compared case-sensitively. Boot init supplies it only to
+the configured space named `remote`, together with separate BROADCAST-only
+`udp_beacons` authority. The trusted session bootstrap passes both to the
+remote daemon; its shells receive neither. The option creates no space when
+the boot configuration lacks `remote`. See [reverse connections](remote-terminal.md#reverse-connections).
 
 ## Boot configuration
 
