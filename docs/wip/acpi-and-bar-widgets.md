@@ -85,6 +85,16 @@ Accepted for task 2 on 2026-10-07:
 12. **Remote shells do not receive `power`,** even in a space that has it; the
     remote terminal server is unauthenticated on the LAN.
 
+Accepted for task 3 on 2026-10-07:
+
+13. **Only the embedded controller's GPE is enabled.** GPEs with AML handlers
+    (lid, thermal, PCIe hotplug, wake) stay disabled until a later ACPI use
+    needs them.
+14. **An unclaimed SCI is re-armed after 1 s** instead of staying masked until
+    reboot. The first one is logged; repeats go to ktrace.
+15. **`QEMU_NO_REBOOT=1`** makes `run-qemu.sh` pass `-no-reboot` again, so a
+    triple fault stops QEMU. Ordinary runs keep rebooting like hardware.
+
 ## Tasks
 
 - [x] **1. Bring in uACPI.**
@@ -134,6 +144,11 @@ Accepted for task 2 on 2026-10-07:
   - Draw a fixed-width widget at the right end of the space bar, inside the
     chevron. It shows the percentage, refreshes every few seconds and is hidden
     without a battery. The kernel presenter reads the value directly.
+  - **Widget design (owner, 2026-10-07):** always three characters, so the
+    width never changes: `100` at full charge, `10%` to `99%`, and `00%` to
+    `09%` with a leading zero. The background color is taken from the
+    three-point gradient `#a00` at 0%, `#730` at 25% and `#690` at 100%,
+    interpolated linearly at the current percentage.
   - **Finish when:** the ThinkPad shows a percentage that tracks charging and
     discharging and matches Linux's reading within a few percent, and QEMU,
     which has no battery, shows no widget.
