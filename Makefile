@@ -1,10 +1,18 @@
 CROSS_COMPILE ?= x86_64-unknown-pyxis-
+# GCC remains the default until the LLVM toolchain replaces it.
+TOOLCHAIN ?= gcc
+ifeq ($(TOOLCHAIN),gcc)
 CC := $(CROSS_COMPILE)gcc
+else ifeq ($(TOOLCHAIN),llvm)
+CC := $(CROSS_COMPILE)clang
+else
+$(error TOOLCHAIN must be gcc or llvm)
+endif
 HOSTCC ?= cc
 HOSTAR ?= ar
 LUA ?= lua
 PYTHON ?= python3
-export CROSS_COMPILE HOSTCC LUA
+export CROSS_COMPILE TOOLCHAIN HOSTCC LUA
 QEMU ?= qemu-system-x86_64
 QEMU_DISPLAY ?= gtk
 QEMU_VIDEO ?= std
@@ -99,7 +107,7 @@ fs-tools:
 	  exit 1; }
 	$(MAKE) -C fs SOURCE=$(abspath fs) BUILD=$(abspath build/fs-tools) HOST_CC="$(HOSTCC)" HOST_AR="$(HOSTAR)"
 
-sdk-headers:
+sdk-headers: build/toolchain
 	@test -f userspace/runtime.mk || { \
 	  echo 'Missing userspace submodule: run git submodule update --init userspace.' >&2; \
 	  exit 1; }
@@ -156,10 +164,18 @@ build/initrd.cpio: userspace ports Makefile boot/initrd.lua boot/rescue.list scr
                    boot/limine/limine.conf third_party/limine/BOOTX64.EFI third_party/limine/LICENSE
 	./scripts/assemble-initrd.sh
 
-check-toolchain:
+check-toolchain: build/toolchain
 	@command -v $(CC) >/dev/null 2>&1 || { \
 	  echo "Missing $(CC): add the cross-toolchain to PATH or set CROSS_COMPILE." >&2; \
 	  exit 1; }
+
+# Objects and SDK archives from the two toolchains must not mix in one build.
+build/toolchain: FORCE
+	@mkdir -p $(@D)
+	@if [ ! -f $@ ]; then echo $(TOOLCHAIN) > $@; \
+	elif [ "$$(cat $@)" != $(TOOLCHAIN) ]; then \
+	  echo "build/ was made with TOOLCHAIN=$$(cat $@); run make clean first." >&2; \
+	  exit 1; fi
 
 ifneq ($(filter kernel,$(PREBUILT)),)
 build/caelum.elf: | kernel

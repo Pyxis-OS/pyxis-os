@@ -42,6 +42,38 @@ podman build -f ci/Containerfile \
 podman push git.internal/pyxisos/pyxis-builder:pyxis-gcc16.2-binutils2.47
 ```
 
+## LLVM toolchain
+
+During the [LLVM migration](../docs/wip/llvm-toolchain.md), GCC stays the
+default and `TOOLCHAIN=llvm` selects Clang and LLD. `build-llvm.sh` builds the
+pinned commit of the [`pyxis-llvm`](https://git.internal/PyxisOS/pyxis-llvm)
+fork: LLVM 23.1.3 with the Pyxis commits on the `pyxis-23.1.3` branch. It needs
+CMake, Ninja, Python 3, git and a host C/C++ compiler.
+
+```sh
+JOBS=8 toolchain/build-llvm.sh "$HOME/opt/pyxis-llvm" /tmp/pyxis-llvm-build
+export PATH="$HOME/opt/pyxis-llvm/bin:$PATH"
+make clean
+make -j16 image TOOLCHAIN=llvm
+```
+
+The script fetches only the pinned commit. `LLVM_SOURCE=/path/to/checkout`
+builds a local fork checkout instead, for work on the fork itself.
+`CC`/`CXX`, `LLVM_USE_LINKER` and `LINK_JOBS` tune the host build.
+
+The installation contains:
+- Clang and LLD for the X86 target, with `x86_64-unknown-pyxis` as the
+  default target;
+- the LLVM archive and object tools;
+- compiler-rt builtins for Pyxis in Clang's resource directory.
+
+`x86_64-unknown-pyxis-` names (`clang`, `ld.lld`, `ar`, `nm`, `ranlib`,
+`objcopy`, `strip`, `objdump`, `readelf`, `size`, `addr2line`) point at
+those tools. The SDK Make fragment asks Clang for `llvm-ar` by path, so a GCC
+installation earlier in `PATH` cannot supply it.
+
+A build directory belongs to one toolchain: switching needs `make clean`.
+
 ## Target contract
 
 The target is little-endian x86-64 LP64: 8-bit char, 16-bit short, 32-bit int,
@@ -58,13 +90,23 @@ red zone; it is not a libc or libm implementation. The target has no 32-bit/x32
 multilib, shared libraries, PIE, C++ runtime, thread runtime or exception-handling
 contract.
 
+The Pyxis Clang driver keeps the same contract:
+- it predefines `__pyxis__`, `__ELF__` and `__SIZEOF_FLOAT128__`, and no
+  Unix macros;
+- it defaults to no red zone;
+- it rejects other ABIs, shared libraries and PIE.
+
+Its compiler-rt builtins replace static libgcc. They include the x87, quad,
+half-precision and complex helpers and are built without the red zone.
+
 Applications select an external SDK with `--sysroot=/path/to/sdk/sysroot`.
 The driver finds `crt0.o`, `pyxis.ld`, libc and libpyxis there, and its own libgcc
 in the compiler installation. The SDK owns the linker script and fixed load
 layout; binutils continues to use ordinary ELF objects, executables and `.a`
 archives. `elf2pxe` remains a separate SDK tool.
 
-A normal C link supplies startup and a grouped libc/libpyxis/libgcc sequence.
+A normal C link supplies startup and a grouped libc/libpyxis/libgcc sequence;
+Clang groups compiler-rt builtins, libc and libpyxis and links with LLD.
 Pass `-lterm` for terminal helpers. `-nostdlib` suppresses the runtime and default
 SDK script for kernel/custom links; `-T` overrides the default script. Existing
 SDK Make settings name runtime inputs explicitly for dependency tracking.
@@ -83,6 +125,11 @@ compiler; changing SDK headers/libraries/startup/linker script does not.
   GCC retains its builtin headers; SDK-owned integer/limit headers take
   precedence in SDK builds. This does not introduce a newlib dependency.
 
+- [LLVM 23.1.3](https://github.com/llvm/llvm-project/releases/tag/llvmorg-23.1.3),
+  through the `mirrors/llvm-project` mirror and the `pyxis-llvm` fork: Pyxis
+  OS support in LLVM's triple, Clang's target information and its driver. The
+  installation records the commit in `share/pyxis-toolchain/llvm-revision`.
+
 Upstream sources retain their licenses: GCC/binutils are primarily
 GPL-3.0-or-later, with the GCC Runtime Library Exception 3.1 for covered runtime
 components; individual files retain their own notices. Local patches follow
@@ -90,3 +137,5 @@ the licenses of the files they modify. The installation records the patches,
 source hashes, this document, GPLv3 and the runtime exception under
 `share/pyxis-toolchain`. Preserve corresponding source availability when
 redistributing compiler binaries; the pinned URLs and patches identify it.
+LLVM, including Clang, LLD and compiler-rt, is Apache-2.0 WITH LLVM-exception.
+Its installation records `LICENSE.TXT` beside this document.
