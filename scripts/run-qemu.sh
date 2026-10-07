@@ -11,6 +11,7 @@ set -eu
 : "${VIRTIO_FS_SOCKET:=}"
 : "${VIRTIO_NET:=0}"
 : "${VIRTIO_RNG:=1}"
+: "${QEMU_NO_REBOOT:=0}"
 : "${VIRTIO_BLK_IMAGE:=}"
 : "${VIRTIO_BLK_READONLY:=0}"
 : "${VFIO_PCI:=}"
@@ -127,6 +128,12 @@ case "$VIRTIO_RNG" in
   1) set -- "$@" -object rng-random,id=pyxis_rng,filename=/dev/urandom \
        -device virtio-rng-pci,rng=pyxis_rng,disable-legacy=on ;;
   *) echo 'VIRTIO_RNG must be 0 or 1.' >&2; exit 1 ;;
+esac
+# QEMU cannot tell a reset register write from a triple fault.
+case "$QEMU_NO_REBOOT" in
+  0) ;;
+  1) set -- "$@" -no-reboot ;;
+  *) echo 'QEMU_NO_REBOOT must be 0 or 1.' >&2; exit 1 ;;
 esac
 case "$VIRTIO_BLK_READONLY" in
   0) blk_readonly=off ;;
