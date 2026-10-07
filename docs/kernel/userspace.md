@@ -11,8 +11,8 @@ kernel builds and `HOSTCC` for the converter. Outputs live under `build/`.
 Runtime libraries and startup are built separately by
 [userspace/runtime.mk](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/runtime.mk) into `build/runtime`, then exported
 to `build/sdk/sysroot/usr/lib`. Applications link the SDK's startup object,
-libc, libpyxis and libterm archives, plus the compiler-provided runtime (libgcc,
-or compiler-rt builtins with the LLVM toolchain). Only referenced
+libc, libpyxis and libterm archives, plus the compiler-provided runtime (compiler-rt
+builtins). Only referenced
 archive objects are pulled in. No host runtime is linked. Libpyxis owns native
 operations and startup accessors; libc owns C entry/exit, allocation and the
 initial C support routines.
@@ -329,7 +329,7 @@ and blocking save this state; dispatch restores it before returning to the task.
 Syscalls preserve it even when they park. AVX/XSAVE state is not supported;
 do not compile for a newer CPU baseline or enable AVX.
 
-Static libgcc provides compiler arithmetic/conversion helpers. This does not
+Compiler-rt builtins provide compiler arithmetic/conversion helpers. This does not
 provide a full libm. The libc conversion/scaling subset is described
 [above](#foundational-libc); floating-point output uses the
 [shared printf formatter](../userland/stdio.md#standard-streams-formatting-and-exit).

@@ -37,9 +37,6 @@ applied: MPL's standard secondary-license provisions remain available.
   both Pyxis code and the Doom engine.
 - `docs/userland/libc-probe/scratch.patch` contains sbase-derived code covered by
   [LICENSE.sbase](docs/userland/libc-probe/LICENSE.sbase).
-- `toolchain/*.patch`: upstream-derived patches follow the licenses of the
-  files they modify, including applicable GNU runtime exceptions. See
-  [toolchain provenance](toolchain/README.md).
 - Kconfiglib is an externally installed, ISC-licensed host build dependency,
   pinned in `requirements.txt`, with no local changes. See
   [configuration setup](docs/development/configuration.md).

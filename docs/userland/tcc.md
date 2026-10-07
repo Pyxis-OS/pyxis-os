@@ -2,7 +2,7 @@
 
 The normal image includes a guest C compiler at `boot://tcc.pxe` and a read-only
 SDK at `boot://sdk`. TCC compiles and links native applications inside Pyxis;
-GCC remains the compiler for the OS and maintained userland. See the
+Clang on the host remains the compiler for the OS and maintained userland. See the
 [edit/build/run walkthrough](../development/edit-build-run.md) for using it with Kilo.
 
 ## Compilation and linking
@@ -32,8 +32,8 @@ Libc provides floating-point formatting alongside literal conversion and a
 small math subset; a full libm remains deferred. See the [FP contract](../kernel/userspace.md#floating-point).
 
 Default linking places `crt0.o` before application inputs, then rescans libc,
-libterm, libpyxis, libtcc1 and the SDK's compiler runtime (libgcc, or
-compiler-rt builtins in an LLVM-built image) until no more archive members are
+libterm, libpyxis, libtcc1 and the SDK's compiler runtime (compiler-rt
+builtins) until no more archive members are
 extracted.
 Explicit archives and `-l` inputs retain command-line order; put them after their
 users. `-nostdlib` omits startup and default libraries. The TCC support archive
@@ -70,12 +70,12 @@ directories. Overlong filenames are diagnosed rather than truncated.
 The [guest SDK layout](../development/ports.md#tcc-and-the-guest-sdk) contains shared headers,
 startup and runtime archives, TCC's four private headers and support archive,
 and source/license provenance. It excludes host compilers, host elf2pxe and
-GCC's private headers. `-print-search-dirs` displays the configured paths.
+Clang's private headers. `-print-search-dirs` displays the configured paths.
 
 ## Remaining limits
 
 - No self-hosting or complete language/ABI coverage is claimed. TCC is built by
-  Pyxis GCC; it need not compile the kernel or all runtime implementation sources.
+  the Pyxis Clang; it need not compile the kernel or all runtime implementation sources.
 - Shared libraries, PIE, TLS, indirect functions, dynamic relocations,
   constructor/destructor arrays, linker scripts and arbitrary `-Wl` controls
   are unsupported. Strong unresolved symbols fail the link.
@@ -99,12 +99,12 @@ GCC's private headers. `-print-search-dirs` displays the configured paths.
   [walkthrough](../devices/virtio-fs.md#persistent-development-walkthrough).
 - Each process has a fixed 1 MiB stack without growth and an unmapped guard
   page below it. Recursive parsing and larger inputs can exceed it. The largest fixed compiler frame observed in the
-  GCC build was 2,720 bytes, not a bound on total stack use or source complexity.
+  Clang 23 build was 2,824 bytes, not a bound on total stack use or source complexity.
   Heap backing grows through private-memory requests and is reclaimed at exit;
   there is no compiler-specific resource quota.
 
 Ordinary guest builds have exercised cat, shell preprocessing, Mandelbrot,
-TCC-generated variadic code with GCC-built runtime helpers, and compile/link
+TCC-generated variadic code with compiler-built runtime helpers, and compile/link
 error reporting. These establish a useful application workflow, not exhaustive
 compiler conformance or a promise that arbitrary inputs fit available resources.
 

@@ -1,15 +1,16 @@
 # Hosted toolchains and language runtimes
 
 Status: LLVM/Clang is the chosen toolchain direction as of 2026-09-29, including
-Clang as the first large hosted C toolchain. The current build still uses
-GCC/binutils; no migration or hosted LLVM support is implemented. The boundaries
+Clang as the first large hosted C toolchain. Since the
+[host milestone](llvm-toolchain.md), Pyxis builds with its Clang and LLD on the
+host and GCC/binutils are retired; no hosted LLVM support is implemented. The boundaries
 below guide a pinned investigation, not an implementation assignment or a fixed
 schedule. Other language runtimes remain future candidates.
 
 ## Distinct results
 
-The existing [GCC/binutils toolchain](../../toolchain/README.md) runs on the host
-and targets Pyxis. TCC already provides a native [edit/build/run loop](../development/edit-build-run.md).
+The [LLVM toolchain](../../toolchain/README.md) runs on the host and targets
+Pyxis. TCC already provides a native [edit/build/run loop](../development/edit-build-run.md).
 Keep three larger achievements separate:
 
 1. A host-running compiler produces programs that run on Pyxis.
