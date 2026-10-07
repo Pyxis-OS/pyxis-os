@@ -99,17 +99,21 @@ struct console_read_reply {
 };
 
 /* Character cells, excluding session navigation. SIZE needs READ or WRITE;
- * its fixed-size payload is ignored. No resize notifications yet. */
+ * its fixed-size payload is ignored. Geometry and generation are one snapshot.
+ * Generation starts at 1; local consoles advance it on committed screen resize.
+ * Remote sessions retain their independent fixed geometry and generation.
+ * No resize notifications yet. */
 struct console_size_reply {
   uint64_t columns;
   uint64_t rows;
+  uint64_t generation;
 };
 
 _Static_assert(sizeof(struct console_handle_reply) == 8, "console handle reply layout");
 _Static_assert(sizeof(struct console_read_request) == 24, "console read layout");
 _Static_assert(sizeof(struct console_tab_width_request) == 8, "console tab width layout");
 _Static_assert(sizeof(struct console_read_reply) == 8, "console read reply layout");
-_Static_assert(sizeof(struct console_size_reply) == 16, "console size reply layout");
+_Static_assert(sizeof(struct console_size_reply) == 24, "console size reply layout");
 _Static_assert(sizeof(struct console_write_request) == 16, "console request layout");
 _Static_assert(sizeof(struct console_write_reply) == 8, "console reply layout");
 _Static_assert(offsetof(struct console_message, body) == 16, "console payload offset");

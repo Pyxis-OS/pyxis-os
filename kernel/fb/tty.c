@@ -4,6 +4,7 @@
 
 #include <kernel/fb/tty.h>
 #include <kernel/memory.h>
+#include <kernel/panic.h>
 #include <arch/cpu.h>
 #include <arch/cpu_local.h>
 
@@ -19,7 +20,7 @@ const struct color_scheme aardvark_scheme = {
     .selection_background = 0x0f141f
 };
 
-struct tty global_tty = {0};
+struct tty global_tty = {.geometry_generation = 1};
 
 void tty_plot_char_raw(const struct framebuffer *fb, const struct font *font,
     char c, size_t x, size_t y, uint32_t fg, uint32_t bg)
@@ -56,8 +57,8 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
 {
   const struct font *font = tty->font;
 
-  uint16_t x_dst = x * font->width;
-  uint16_t y_dst = y * font->height;
+  size_t x_dst = (size_t)x * font->width;
+  size_t y_dst = (size_t)y * font->height;
 
   tty_plot_char_raw(tty->fb, font, c, x_dst, y_dst, fg, bg);
 }
@@ -290,4 +291,39 @@ void tty_fresh_line(struct tty *tty)
   if (tty->x || tty->wrap_pending) {
     tty_newline(tty);
   }
+}
+
+void tty_resize(struct tty *tty, const struct framebuffer *fb)
+{
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  size_t width = fb->width / tty->font->width;
+  size_t height = fb->height / tty->font->height;
+  KASSERT(width && width <= UINT16_MAX && height && height <= UINT16_MAX);
+  KASSERT(tty->geometry_generation && tty->geometry_generation < UINT64_MAX);
+
+  size_t first_row = tty->y >= height ? tty->y - height + 1 : 0;
+  size_t rows = MIN((size_t)tty->height - first_row, height);
+  size_t columns = MIN((size_t)tty->width, width);
+  uint32_t background = framebuffer_color(fb, tty->bg);
+  for (size_t y = 0; y < fb->height; ++y) {
+    uint32_t *pixels = (uint32_t *)(fb->address + y * fb->pitch);
+    for (size_t x = 0; x < fb->width; ++x) {
+      pixels[x] = background;
+    }
+  }
+
+  size_t source_y = first_row * tty->font->height;
+  size_t row_bytes = columns * tty->font->width * sizeof(uint32_t);
+  for (size_t y = 0; y < rows * tty->font->height; ++y) {
+    memcpy((void *)(fb->address + y * fb->pitch),
+        (const void *)(tty->fb->address + (source_y + y) * tty->fb->pitch), row_bytes);
+  }
+
+  tty->fb = fb;
+  tty->width = width;
+  tty->height = height;
+  tty->x = MIN((size_t)tty->x, width - 1);
+  tty->y = MIN((size_t)tty->y - first_row, height - 1);
+  tty->wrap_pending = false;
+  ++tty->geometry_generation;
 }

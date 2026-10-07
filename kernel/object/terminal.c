@@ -621,7 +621,9 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
     return application_write(session, &request.write, reply_address, reply_capacity);
   }
   if (operation == CONSOLE_SIZE) {
-    struct console_size_reply reply = {.columns = session->columns, .rows = session->rows};
+    struct console_size_reply reply = {
+      .columns = session->columns, .rows = session->rows, .generation = 1,
+    };
     if (reply_capacity < sizeof(reply)) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }

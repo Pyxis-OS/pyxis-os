@@ -29,6 +29,7 @@ struct tty
   uint16_t width;
   uint16_t height;
   uint16_t tab_width; /* Nonzero; changes share the TTY output lock. */
+  uint64_t geometry_generation; /* Starts at one; output lock protects geometry. */
 
   /* Colors use 0xRRGGBB, independent of the framebuffer channel layout. */
   uint32_t fg;
@@ -76,6 +77,9 @@ void tty_plot_char(struct tty *tty, char c, uint16_t x, uint16_t y,
 void tty_put_char(struct tty *tty, char c);
 void tty_clear(struct tty *tty);
 void tty_fresh_line(struct tty *tty);
+/* Output lock, IF=0. Copies whole cells without reflow into disjoint backing,
+ * keeps the cursor visible, and replaces geometry without replacing the TTY. */
+void tty_resize(struct tty *tty, const struct framebuffer *fb);
 
 
 #endif // KERNEL_FB_TTY_H

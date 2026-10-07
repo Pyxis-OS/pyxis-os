@@ -496,24 +496,39 @@ A serial port that stops accepting output remains latched off for the boot.
 Revisit retry policy when reliable late recovery is needed; an absent/stuck port
 must not block early boot or panic output.
 
-## VirtIO GPU fixed geometry and runtime retention
+## VirtIO GPU resize limits and runtime retention
 
-The [2D display driver](wip/display-drivers.md#task-3-implementation-and-validation)
-uses one initial-size kernel RAM surface and full-frame transfer/flush. It does
-not handle display-change events or resize buffers yet; revisit in display task
-5a. There is no vblank guarantee, hardware cursor, 3D or recovery after driver
-failure. Graphics acquisition/presentation then returns unavailable, while
-release remains usable; the last screen may stay stale or blank. A selected
-VirtIO GPU's failure does not try a separate VGA firmware framebuffer even in a
+The [2D display driver](interfaces/graphics.md#live-destination-geometry)
+handles selected-output size changes and uses full-frame transfer/flush.
+Boot and Bochs geometry remains fixed. Acquired application mappings retain
+their original layout; presentation clips them and fills exposed margins.
+There are no geometry wakeups, mapping replacement or application adaptation
+yet; revisit in display task 5b. Idle applications do not learn a resize until
+they query SIZE again. There is no vblank guarantee, hardware cursor, 3D or
+recovery after driver failure. Graphics acquisition, presentation and size
+queries then return unavailable, while release remains usable; the last screen
+may stay stale or blank. A selected VirtIO GPU's failure does not try a separate
+VGA firmware framebuffer even in a
 hand-built mixed-device VM. Revisit failover only with an explicit multi-device
-policy. Full-frame idle cost should be remeasured after display resizing.
+policy. Revisit full-frame idle cost with measurements at the new geometries.
 
-Runtime failure retains backing, queue/control storage and PCI mappings until
-reboot, even after confirmed reset. No runtime VM mutation or DMA release is
-introduced. An uncertain bootstrap shutdown retains temporary storage too; a
+Successful resize reclaims old GPU backing only after confirmed fenced detach
+and resource unreference. Runtime failure retains uncertain backing,
+queue/control storage and PCI mappings until reboot, even after confirmed reset.
+An uncertain bootstrap shutdown retains temporary storage too; a
 PCI claim that ever enabled DMA stays retained even after successful bootstrap
-reset. Revisit reclamation only with an explicit runtime allocation/ownership
+reset. Revisit failure recovery only with a device teardown/reconnect ownership
 contract. VirtIO panic reporting remains serial-only without GPU operations.
+
+Old AP-visible TTY buffers use
+[quiescent acknowledged TLB retirement](kernel/smp.md#memory-and-output-boundaries).
+A missing acknowledgement retains one mapped old TTY/navigation/cursor batch
+until reboot and disables further resizing; the newly committed display keeps
+working. The implementation uses one one-second deadline, not an ABI latency
+guarantee. Revisit retention only with a defined recovery protocol; an eventual
+acknowledgement alone does not free that batch. Preparing and copying every
+space's pixels also costs a whole old/new pair during resize and pauses AP output
+under the output lock for the copy; revisit with measured copy durations.
 
 ## Bochs boot-mode scope and aperture retention
 
@@ -972,9 +987,10 @@ confirmed reset does not make it safe to change shared kernel mappings without
 a TLB invalidation and
 reader-lifetime contract. No reconnect or repeated allocation occurs.
 
-Revisit reclamation alongside shared-mapping invalidation and a defined device
-teardown/reconnect lifecycle. Never free an outstanding DMA buffer solely because
-a request timed out. Idle daemon disconnection is not necessarily observable
+The display's quiescent TLB-flush helper does not establish this transport's
+reader or DMA lifetime. Revisit reclamation with that ownership contract and a
+defined device teardown/reconnect lifecycle. Never free an outstanding DMA
+buffer solely because a request timed out. Idle daemon disconnection is not necessarily observable
 until the next request or device event; there is no heartbeat.
 
 ## Shared split-queue scaling and validation

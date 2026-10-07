@@ -13,8 +13,26 @@ bool display_start(void);
 bool display_available(void);
 /* BSP interrupt, IF=0: record activity and wake the presenter; no queue work. */
 void display_interrupt(void);
-/* Immutable for this boot; only the display driver writes address. */
+/* Stable descriptor address. Read geometry under the output lock at runtime;
+ * only the display owner replaces geometry/backing during resize commit. */
 const struct framebuffer *display_layout(void);
+
+/* Sole BSP presenter, IF=1, between frame leases. NULL prepare means no change,
+ * refusal, or permanent failure (check display_available). A candidate remains
+ * private while spaces stage their allocations. Switch leaves the old layout
+ * published during hardware waits. Cancel restores scanout when necessary and
+ * retires the candidate before freeing it; false retains device-owned storage.
+ * Defer cancels and retries latest host geometry even without a fresh event. */
+const struct framebuffer *display_resize_prepare(void);
+bool display_resize_switch(void);
+bool display_resize_cancel(void);
+bool display_resize_defer(void);
+/* BSP IF=0 under the output lock: publish without waiting or allocation. */
+void display_resize_commit(void);
+/* IF=1 after logical commit: fence retirement of old GPU storage. */
+void display_resize_finish(void);
+/* Prevent new resizes while leaving ordinary presentation available. */
+void display_resize_disable(void);
 
 /* Sole BSP presenter, after early-console retirement. Successful begin must
  * pair with end, including cancelled frames. Copy checks panic ownership in

@@ -15,6 +15,7 @@
 
 #define AP_STACK_BYTES (16 * 1024)
 #define AP_STARTUP_TIMER_PERIODS 600
+#define TLB_FLUSH_TIMEOUT_NS UINT64_C(1000000000)
 #define CPUID_TOPOLOGY_COUNT_MASK 0xffffu
 #define CPUID_TOPOLOGY_SHIFT_MASK 0x1fu
 #define CPUID_TOPOLOGY_TYPE_SHIFT 8
@@ -40,6 +41,9 @@ static size_t cpu_count, cpu_capacity;
 /* The handoff must be in the kernel image, mapped by both Limine and Caelum.
  * The AP copies these fields before acknowledging; only then may we reuse it. */
 static struct ap_boot handoff;
+static _Atomic uint64_t tlb_flush_generation;
+/* BSP-only, protected against preempting kernel callers by IF=0. */
+static bool tlb_flush_busy;
 
 static void detect_topology(struct cpu_local *cpu)
 {
@@ -141,6 +145,7 @@ struct ap_boot *arch_ap_prepare(uint32_t lapic_id)
   memset(cpu, 0, sizeof(*cpu));
   atomic_init(&cpu->online, false);
   atomic_init(&cpu->timer_interrupts, 0);
+  atomic_init(&cpu->tlb_flush_ack, 0);
   uintptr_t stacks;
   if (vm_alloc(vm_kernel_space(), 2 * AP_STACK_BYTES, PAGE_SIZE, PAGE_WRITE, &stacks) != MM_OK) {
     kfree(cpu);
@@ -236,4 +241,83 @@ void arch_cpu_reschedule(size_t index)
   struct cpu_local *cpu = arch_cpu_at(index);
   KASSERT(cpu && atomic_load_explicit(&cpu->online, memory_order_acquire));
   apic_send_reschedule(cpu->lapic_id);
+}
+
+void arch_tlb_flush_interrupt(void)
+{
+  uint64_t generation = atomic_load_explicit(&tlb_flush_generation,
+                                             memory_order_acquire);
+  /* PCID and global pages are disabled. Flush shared kernel translations even
+   * if this CPU currently runs a private root; keep its ownership unchanged. */
+  write_cr3(read_cr3());
+  atomic_store_explicit(&cpu_current()->tlb_flush_ack, generation,
+                        memory_order_release);
+}
+
+bool arch_kernel_flush_remote(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
+  KASSERT(cpu_current() == cpu_bsp() && cpus && cpu_count == cpu_capacity);
+  KASSERT(cpu_current()->active_space == arch_kernel_space());
+  uint64_t generation = atomic_load_explicit(&tlb_flush_generation,
+                                             memory_order_relaxed);
+  if (tlb_flush_busy || generation == UINT64_MAX) {
+    cpu_restore_interrupts(flags);
+    return false;
+  }
+  tlb_flush_busy = true;
+  uint64_t now = arch_monotonic_ns();
+  uint64_t deadline = TLB_FLUSH_TIMEOUT_NS > UINT64_MAX - now ? UINT64_MAX :
+    now + TLB_FLUSH_TIMEOUT_NS;
+  ++generation;
+  /* Publication follows the caller's quiescence handoff. ACK acquires on the
+   * BSP observe a CR3 reload after that publication, never an earlier flush. */
+  atomic_store_explicit(&tlb_flush_generation, generation, memory_order_release);
+  arch_tlb_flush_interrupt();
+  cpu_restore_interrupts(flags);
+
+  bool complete = false;
+  /* CPU membership is immutable after boot. Keep IF=1 between short ICR writes
+   * so timer delivery and kernel-task preemption continue during this wait. */
+  for (size_t i = 1; i < cpu_count; ++i) {
+    struct cpu_local *cpu = cpus[i];
+    if (!atomic_load_explicit(&cpu->online, memory_order_acquire)) {
+      continue;
+    }
+    for (;;) {
+      if (arch_monotonic_ns() >= deadline) {
+        goto finished;
+      }
+      flags = cpu_save_interrupts();
+      bool sent = apic_try_send_tlb_flush(cpu->lapic_id);
+      cpu_restore_interrupts(flags);
+      if (sent) {
+        break;
+      }
+      __asm__ volatile("pause");
+    }
+  }
+
+  for (;;) {
+    complete = true;
+    for (size_t i = 1; i < cpu_count; ++i) {
+      struct cpu_local *cpu = cpus[i];
+      if (atomic_load_explicit(&cpu->online, memory_order_acquire) &&
+          atomic_load_explicit(&cpu->tlb_flush_ack, memory_order_acquire) != generation) {
+        complete = false;
+        break;
+      }
+    }
+    if (complete || arch_monotonic_ns() >= deadline) {
+      break;
+    }
+    __asm__ volatile("pause");
+  }
+
+finished:
+  flags = cpu_save_interrupts();
+  tlb_flush_busy = false;
+  cpu_restore_interrupts(flags);
+  return complete;
 }

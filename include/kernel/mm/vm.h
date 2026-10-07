@@ -14,6 +14,13 @@ struct vm_stats {
 
 void vm_init(void);
 struct vm_space *vm_kernel_space(void);
+/* BSP kernel task, IF=1, after SMP startup, no output/queue/allocator locks.
+ * Caller must first stop every remote access to the retiring shared ranges,
+ * including cached pointers, and prevent refills until unmap. Ranges remain
+ * mapped and their frames owned throughout the wait. Success permits vm_free
+ * with IF=0; timeout requires retaining the mappings and backing until reboot.
+ * This flush changes neither page tables nor VM ownership. */
+bool vm_kernel_flush_remote(void);
 /* Requires an initialized heap. New spaces share kernel mappings and start
  * with an empty user area. Failure sets *result to NULL. Allocation, queries
  * and mutation are BSP-only, IF=0, and asserted for the kernel space, whose
@@ -38,7 +45,9 @@ enum mm_result vm_space_destroy(struct vm_space *space);
  * A reservation owns no frames. Caller mappings must be removed before release.
  * Shared kernel mappings must remain stable while another CPU uses them.
  * Publishing a new task and retiring an old one provide the required local
- * TLB flushes for task stacks; arbitrary remote mapping changes are unsupported. */
+ * TLB flushes for task stacks. Other retirement requires explicit quiescence
+ * and vm_kernel_flush_remote(); concurrent remote mapping changes remain
+ * unsupported. */
 enum mm_result vm_reserve(struct vm_space *space, size_t bytes, size_t alignment,
                           uintptr_t *result);
 enum mm_result vm_reserve_at(struct vm_space *space, uintptr_t base, size_t bytes);
