@@ -67,8 +67,8 @@ produces a runnable PXE, and an executable without `-o` is `a.pxe`.
   ELF; use it to give a debugger an application's symbols.
 - **Relocatable output:** `-c` and `-r` produce ordinary ELF relocatables.
 - **Format owners:** `include/pxe/p1f.h` remains the format's definition. The
-  kernel loader reads it; the fork's `lld/ELF/P1F.cpp`, the TCC port and
-  `elf2pxe` write it. A format change must update all four together.
+  kernel loader reads it; the fork's `lld/ELF/P1F.cpp` and the TCC port write
+  it. A format change must update all three together.
 
 ## Target contract
 

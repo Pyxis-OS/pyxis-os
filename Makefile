@@ -111,7 +111,7 @@ ifneq ($(filter sdk,$(PREBUILT)),)
 sdk:
 	./scripts/bundle.sh verify sdk
 else
-sdk: tools sdk-headers
+sdk: sdk-headers
 	$(MAKE) -C userspace -f runtime.mk SDK=$(abspath build/sdk) BUILD=$(abspath build/runtime)
 	$(MAKE) -f scripts/npfs-sdk.mk SDK=$(abspath build/sdk)
 	./scripts/export-sdk.sh complete

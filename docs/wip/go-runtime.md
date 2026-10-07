@@ -10,8 +10,8 @@ not investigated.
 ## Conclusion
 
 This is a native runtime port with OS prerequisites, rather than a new compiler
-flag or a libc-only port. The existing ELF-to-P1F converter already accepts the
-two static Linux Go examples built here. Their Linux startup, TLS and syscall
+flag or a libc-only port. The ELF-to-P1F converter of the time, `elf2pxe`,
+accepted the two static Linux Go examples built here. Their Linux startup, TLS and syscall
 contracts still make those files unusable as Pyxis applications.
 
 For the normal threaded runtime, the largest gaps are shared-process threads and
@@ -55,7 +55,9 @@ import "fmt"
 func main() { fmt.Println("Hello, Pyxis") }
 ```
 
-From the repository root, with `probe_dir` naming that directory:
+From the repository root, with `probe_dir` naming that directory. `elf2pxe` was
+removed with GCC on 2026-10-07; run these conversion steps from a checkout of
+`625fd2a` or earlier:
 
 ```sh
 GOTOOLCHAIN=local GOOS=pyxis GOARCH=amd64 CGO_ENABLED=0 \
@@ -138,7 +140,7 @@ default route to the future Go application list.
 
 | Area | Existing Pyxis foundation | Work still required |
 | --- | --- | --- |
-| Target and output | amd64 CPU, static P1F loading, working ELF converter | Register Pyxis in Go's target/build-tag/generated GOOS tables, select native runtime files, and define linker/TLS behavior. Audit `internal/syslist`, `internal/platform`, `cmd/dist`, `cmd/internal/objabi`, amd64 assembler and linker switches. This is not a proved exhaustive patch list. Do not select Unix build tags merely to reuse Linux files. |
+| Target and output | amd64 CPU, static P1F loading | Register Pyxis in Go's target/build-tag/generated GOOS tables, select native runtime files, and define linker/TLS behavior. Audit `internal/syslist`, `internal/platform`, `cmd/dist`, `cmd/internal/objabi`, amd64 assembler and linker switches. This is not a proved exhaustive patch list. Do not select Unix build tags merely to reuse Linux files. Make Go's linker write P1F, as LLD does, or restore an ELF-to-P1F converter. |
 | Startup and calls | [startup ABI](../../include/abi/startup.h), [syscall ABI](../../include/abi/syscall.h) | Native Go assembly entry and syscall wrappers, preserving Go's ABI, stack-growth and runtime lock constraints. Early helpers must work before Go heap/scheduler initialization. A normal libc/libpyxis C call is not automatically a valid Go runtime call. |
 | Threads and TLS | Per-task execution state and internal FS/GS-base preservation | User-visible thread creation/exit/join or equivalent lifecycle, stacks, TLS-base setup and shared-process cleanup. There is no public TLS setter; FSGSBASE is disabled. Kernel GS remains CPU-local. |
 | Synchronization | Scheduler wait/wake machinery and object readiness | Thread-safe, lost-wakeup-safe parking/waking with deadlines and shutdown behavior. Existing `wait_many` observes selected capability objects and permits one active wait per process; it is not a user-word futex or a complete runtime semaphore API. Choose native semantics first. |

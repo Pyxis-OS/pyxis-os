@@ -26,7 +26,7 @@ case "${1:-}" in
     install -C -m 644 userspace/target.mk "$sdk/share/pyxis.mk"
     ;;
   complete)
-    mkdir -p "$sdk/sysroot/usr/lib" "$sdk/bin" "$sdk/share/licenses"
+    mkdir -p "$sdk/sysroot/usr/lib" "$sdk/share/licenses"
     # Compiler helpers are compiler-rt builtins from Clang's resource directory.
     # The installation records its provenance and license under
     # share/pyxis-toolchain.
@@ -55,7 +55,6 @@ case "${1:-}" in
     install -C -m 644 build/runtime/libc/start.o "$sdk/sysroot/usr/lib/crt0.o"
     install -C -m 644 build/npfs-sdk/libnpfs-format.a "$sdk/sysroot/usr/lib/libnpfs-format.a"
     install -C -m 644 userspace/linker.ld "$sdk/sysroot/usr/lib/pyxis.ld"
-    install -C -m 755 build/tools/elf2pxe "$sdk/bin/elf2pxe"
     # tlsf.h carries the complete upstream license; do not export its API.
     install -C -m 644 userspace/third_party/tlsf/tlsf.h "$sdk/share/licenses/tlsf.h"
     install -C -m 644 userspace/third_party/tlsf/UPSTREAM.md "$sdk/share/licenses/tlsf-upstream.md"

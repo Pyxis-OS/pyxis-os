@@ -69,7 +69,7 @@ directories. Overlong filenames are diagnosed rather than truncated.
 
 The [guest SDK layout](../development/ports.md#tcc-and-the-guest-sdk) contains shared headers,
 startup and runtime archives, TCC's four private headers and support archive,
-and source/license provenance. It excludes host compilers, host elf2pxe and
+and source/license provenance. It excludes host compilers and
 Clang's private headers. `-print-search-dirs` displays the configured paths.
 
 ## Remaining limits

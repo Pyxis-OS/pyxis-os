@@ -17,18 +17,14 @@ archive objects are pulled in. No host runtime is linked. Libpyxis owns native
 operations and startup accessors; libc owns C entry/exit, allocation and the
 initial C support routines.
 
-To convert an already linked executable:
-
-```sh
-build/sdk/bin/elf2pxe --format p1f -o hello.pxe hello.elf
-```
-
-The input must be a fixed-address, little-endian x86_64 ELF executable with no
-interpreter, dynamic linking, runtime relocations or TLS. The
+The Pyxis Clang driver links executables straight to P1F: LLD lays out the
+fixed-address image, then writes its loadable segments and entry point. It
+rejects an interpreter, dynamic linking, runtime relocations and TLS. The
 [linker script](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/linker.ld) separates segment permissions on page
 boundaries; writable executable mappings are rejected. The
 [P1F header](../../include/pxe/p1f.h) defines the image layout and constraints.
-Keep the ELF for debugging; the converted image does not replace its symbols.
+P1F carries no symbols; relink with `-Wl,--oformat=elf` to give a debugger an
+ELF with symbols at the same addresses.
 See [gdb.md](../development/gdb.md) for kernel debugger usage.
 
 ## Entry and loading

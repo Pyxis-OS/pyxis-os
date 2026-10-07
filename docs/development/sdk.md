@@ -18,7 +18,6 @@ there is no extra link library. See
 | --- | --- |
 | `sysroot/usr/include` | libc, libpyxis and libterm headers, plus public `abi/`, `pxe/` and `pyxis_fs/npfs.h` headers |
 | `sysroot/usr/lib` | `crt0.o`, `libc.a`, `libpyxis.a`, `libterm.a`, target `libnpfs-format.a`, the compiler runtime `libclang_rt.builtins.a` and `pyxis.ld` |
-| `bin/elf2pxe` | Host executable for converting the linked ELF to PXE |
 | `share/pyxis.mk` | Relocatable compiler, compile/link flags and exported artifact paths |
 | `share/pyxis/shebang.c` | Authoritative shared parser source, compiled into libpyxis |
 | `share/licenses` | TLSF and musl licenses/adaptation records, TRE's BSD notice and the npfs MPL-2.0 license |
@@ -29,9 +28,8 @@ The compiler supplies its own builtin headers. SDK export copies its target
 runtime archive (Clang's compiler-rt builtins) and installed
 `share/pyxis-toolchain` provenance into the SDK; it does not copy compiler
 private headers. Consumers use the same compiler, because the runtime archive
-belongs to it. The compiler stays outside the SDK,
-as does the host C runtime needed by elf2pxe. Use a compatible host for that
-executable and the compiler recorded in the manifest. The manifest records build
+belongs to it. The compiler stays outside the SDK; use the one recorded in the
+manifest. The SDK contains no host executables. The manifest records build
 provenance, not an ABI version or compatibility guarantee. Modified checkouts
 are marked as such; publish SDKs from committed source for an exact revision.
 
@@ -85,7 +83,7 @@ These development prefixes are exported by the ports build. Other application ta
 the SDK alone.
 
 The userspace Makefile builds applications and their support archives. It consumes a complete SDK
-and does not build the converter or runtime. `SDK` defaults to `build/sdk`
+and does not build the runtime. `SDK` defaults to `build/sdk`
 within the userland checkout; application `BUILD` defaults to `build/apps`. The integrated
 Pyxis build passes both paths explicitly to keep its outputs in
 `build/userspace`. The SDK can be copied to another path.
@@ -143,8 +141,8 @@ The guest payload includes library licenses, exact TCC patches and toolchain
 source provenance. Its manifest adds the ports revision/dirty state to the
 exported SDK record. There is no separate guest ABI version.
 
-The guest receives no compiler or linker executables, Clang private headers, host
-`elf2pxe` or SDK linker script. TCC writes P1F directly using the same loader
+The guest receives no compiler or linker executables, Clang private headers or
+SDK linker script. TCC writes P1F directly using the same loader
 contract. `boot://sdk` is read-only; applications compile source and write output
 in `tmp://` or other explicitly granted directories.
 
@@ -152,7 +150,7 @@ in `tmp://` or other explicitly granted directories.
 
 The root build first exports public headers and compiler settings, then invokes
 `userspace/runtime.mk` to build startup and the three libraries under
-`build/runtime`. It installs those outputs, linker support and the host converter
+`build/runtime`. It installs those outputs and linker support
 alongside the target npfs codecs built by `scripts/npfs-sdk.mk`, before invoking
 the separate application build. This avoids a dependency cycle
 between SDK production and applications.
