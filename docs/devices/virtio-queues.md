@@ -1,6 +1,6 @@
 # Shared VirtIO split queues
 
-Filesystem, entropy and block storage use the direct split-queue helper in
+Filesystem, entropy, block storage and GPU presentation use the direct split-queue helper in
 [`queue.h`](../../include/kernel/virtio/queue.h). Drivers own protocol buffers,
 concurrency, deadlines and device reset; the helper owns descriptors, ring
 publication, notification ordering and checked completions. Networking retains
@@ -92,6 +92,11 @@ outstanding requests, each with separate control and up to 64 KiB data storage.
 Numeric generation IDs associate completions with tickets independently of
 submission order. Flush drains earlier I/O and holds later I/O until completion.
 
+[VirtIO GPU](../wip/display-drivers.md#task-3-implementation-and-validation)
+selects up to 16 descriptors, one fenced control command at a time, separate
+request/reply storage and page-list backing for its kernel RAM surface. Only its
+initial geometry query uses the bounded boot-only exception below.
+
 Validation used QEMU 10.2.2 with nested KVM, 256 MiB RAM, one and four CPUs,
 virtiofsd 1.14.0, and filesystem, entropy and network devices enabled. Single-CPU
 file copy/readback and DNS lookup passed. On four CPUs, the existing iobench
@@ -111,3 +116,14 @@ reads completing out of order; both tickets returned the correct 64 KiB contents
 See [block validation](block-storage.md#validation). Malformed completion,
 reset-failure and allocation-failure paths are inspected rather than fault-injected.
 No throughput improvement is claimed by this refactoring.
+
+## Boot-only GPU geometry query
+
+Before AP startup, the BSP may submit and complete a bounded polled command with
+IF=0. No scheduler wait or interrupt routing is used. The same coherent-DMA,
+validated completion and returned-ownership rules apply. VirtIO GPU uses this
+only to obtain initial geometry when firmware has no directly writable screen.
+It confirms reset and retires that temporary queue and command backing before
+allocating the normal presenter-owned queue. Runtime submission still requires
+the sole BSP worker with IF=1. A PCI claim that has enabled DMA remains retained
+even after reset; bootstrap polling does not weaken the PCI-release contract.

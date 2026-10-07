@@ -21,27 +21,20 @@ implements it; each task starts when the owner says so. It runs alongside the
 
 ## Today
 
-- **One fixed framebuffer.** Limine passes the framebuffer that the firmware
-  (GOP) set up, with its size fixed for the whole boot (`struct boot_framebuffer`
-  in `include/kernel/boot.h`).
-- **The presenter copies everything.** `space_present()` in `kernel/space.c` copies
-  the space bar and then the whole active space into that framebuffer, about 60
-  times a second. The source is the space's TTY buffer or a program's
-  [mapped graphics buffer](../interfaces/graphics.md).
-- **Every buffer has the boot layout.** Space buffers, the cursor row, the space
-  bar and program graphics buffers all copy the boot framebuffer's width, pitch
-  and pixel format. The graphics ABI promises fixed dimensions.
-- **Panics use the direct screen** through the early console before handoff
-  and through display takeover afterwards. Task 2 validates the new takeover in
-  QEMU; ThinkPad validation is pending.
-- **QEMU devices:**
-  - `scripts/run-qemu.sh` passes no display device, so q35 provides the
-    standard VGA. That device already has the Bochs mode registers.
-  - With `virtio-gpu-pci`, OVMF's GOP driver supplies the boot framebuffer. That
-    framebuffer is ordinary RAM: nothing copies it to the screen once boot
-    services exit.
-- **The ThinkPad** has an AMD integrated GPU. Pyxis has no driver for it,
-  so it keeps the boot framebuffer.
+- Boot-framebuffer and VirtIO GPU 2D drivers present through the physical display
+  interface. Bochs mode setting and live resizing remain tasks 4–5.
+- The sole BSP presenter composes the bar and active TTY/graphics space about
+  60 times a second. Boot output copies directly; VirtIO copies into kernel RAM,
+  transfers the full frame to the host and flushes. Buffers use the selected
+  immutable layout; application graphics mappings remain fixed for this boot.
+- With a directly writable Limine framebuffer, the early console mirrors serial
+  until retirement. Without one, early output is serial-only. Boot-driver panics
+  can reclaim the direct screen; VirtIO panics stay serial-only.
+- `QEMU_VIDEO=std` retains q35's default VGA. `virtio` removes VGA and attaches
+  the modern VirtIO GPU. The qualified OVMF VirtIO GOP is PixelBltOnly and Limine
+  supplies no framebuffer; the driver queries initial geometry before AP startup.
+- The ThinkPad has no native AMD GPU driver and keeps its boot framebuffer.
+  The owner confirmed normal task-2 output in PR #471; native panic is untested.
 
 ## Decisions
 
@@ -49,7 +42,8 @@ Agreed with the earlier VirtIO GPU direction:
 
 - 2D presentation of the software-rendered screen; no 3D acceleration, shaders or
   compositor.
-- Limine's framebuffer stays the boot-time output.
+- Limine's framebuffer stays the boot-time output when present; absent output
+  uses serial until the selected driver presents.
 - Display pixel size is separate from terminal rows and columns.
 - A resize never silently invalidates a program's mapping, and no step assumes a
   resize allocation succeeds.
@@ -82,6 +76,14 @@ carried into the next task at the owner's request on 2026-10-07:
    [init](../userland/init.md#boot-command-line).
 8. **Resize delivery:** split task 5 into kernel geometry/cropping (5a) and
    readiness, mapping replacement and application adaptation (5b).
+
+Task-3 boot clarification accepted by the owner on 2026-10-07:
+
+9. **Missing boot framebuffer:** support an all-zero absent framebuffer, with
+   serial-only early output. A detected VirtIO GPU uses a bounded GET_DISPLAY_INFO
+   command before AP startup to obtain initial geometry. This explicitly permits
+   the sole BSP to use the queue helper with IF=0 for that boot-only query, without
+   scheduler waits. Runtime queue ownership remains the BSP presenter with IF=1.
 
 ## Tasks
 
@@ -118,9 +120,10 @@ carried into the next task at the owner's request on 2026-10-07:
     - a post-handoff panic is visible on the boot framebuffer;
     - the presenter cost matches the task 1 baseline within run-to-run variation.
 
-- [ ] **3. VirtIO GPU 2D at the boot size.**
+- [x] **3. VirtIO GPU 2D at the initial size.**
   - Create a 2D resource, attach guest memory as its backing, set the scanout,
     then present by transferring to the host and flushing.
+  - **Status:** implemented and qualified below, including framebufferless boot.
   - **Finish when:**
     - with `virtio-gpu-pci` and no VGA device, QEMU shows the space bar, spaces,
       the shell and Mandelbrot after boot;
@@ -222,15 +225,15 @@ including standard VGA: `early_console_retire()` made RETIRED terminal. Task 2
 now permits direct boot-framebuffer takeover; task 4 extends this to Bochs. The boot mapping remains reserved, even when retired
 as normal output; it is not a fallback screen after another device owns scanout.
 VirtIO transport preparation resets the device before BAR sizing, destroying
-GOP scanout resources. Even before reset, its firmware framebuffer is RAM that
-OVMF no longer transfers after ExitBootServices. Retaining this mapping cannot
-promise live early output or visible fallback after failed VirtIO activation;
-that interval/failure is serial-only until a driver resource is established.
-This is a device limit, unlike Bochs firmware-mode restoration.
+firmware scanout resources. Task 1 incorrectly assumed OVMF supplies a writable
+VirtIO boot framebuffer: the qualified firmware exposes PixelBltOnly GOP and
+Limine does not export it. Early output is therefore serial-only. A retained
+firmware descriptor, if another firmware supplies one, still cannot promise live
+fallback after reset. This differs from Bochs firmware-mode restoration.
 
-Keep the early console until the driver's resources and the first screen are
-ready. Retire its ordinary writer under the log lock before any mode/scanout
-change. A separate atomic display ownership gate coordinates normal mutation,
+For direct-screen drivers, keep the early console until handoff. VirtIO retires
+it before AP startup, once transport preparation has invalidated firmware output.
+Retire its ordinary writer under the log lock before mode/scanout changes. A separate atomic display ownership gate coordinates normal mutation,
 layout publication and the first panic claim. For boot/Bochs, publish an
 immutable panic descriptor only when its mappings and mode are valid. During
 Bochs activation, retain the old descriptor or exclude takeover during the
@@ -258,8 +261,9 @@ VirtIO 2D requires VERSION_1, the control queue, GET_DISPLAY_INFO, RESOURCE_CREA
 RESOURCE_ATTACH_BACKING, TRANSFER_TO_HOST_2D, SET_SCANOUT and RESOURCE_FLUSH.
 Use checked response types/lengths and fences for completion that changes resource
 or backing ownership. Select the first enabled scanout, retain its index and
-ignore other outputs for this milestone. Task 3 creates it at boot pixel size;
-task 5a follows the selected output's reported size. With no usable output,
+ignore other outputs for this milestone. Task 3 creates it at the initial pixel
+size: the boot framebuffer's dimensions when present, otherwise the bounded
+pre-AP query's result. Task 5a follows later reported size changes. With no usable output,
 activation fails rather than silently selecting a different monitor later.
 
 Resource backing can be a list of physical page extents from BSP-owned VM RAM.
@@ -495,8 +499,8 @@ Use ordinary builds, interactive boots and debugger inspection: initial/retired
 resource ownership, mapping extents, inactive-space dimensions, resize refusal,
 release/exit during a preempted frame and panic takeover. Do not add boot tests,
 fault-injection features or output automation. Task 1 measures existing output;
-task 2 implements the boot driver below. VirtIO, Bochs mode setting and resizing
-have not been implemented or qualified.
+task 2 implements the boot driver below and task 3 implements VirtIO. Bochs mode
+setting and resizing remain unimplemented.
 
 ### Investigation sources
 
@@ -615,9 +619,137 @@ fs `b427df29`, lwIP `a1aadb91`.
   reached serial. This is a simulated stuck-writer record, not a measured native
   scheduling timeout.
 
-The owner-run ThinkPad normal-boot/visual confirmation remains required, so
-this task's checkbox stays open. No compiler-container rebuild is needed.
-Tasks 3–5 have not started. All task-specific QEMU/GDB jobs were closed.
+The owner subsequently confirmed normal ThinkPad output in merged PR #471,
+completing task 2 as recorded above. Native panic remains untested.
+No compiler-container rebuild was needed. Task-2 QEMU/GDB jobs were closed.
+
+## Task 3 implementation and validation
+
+Branch `display/virtio-gpu` starts from merged main `800f979` (#471), which
+records the owner's task-2 ThinkPad check. The driver is in
+`kernel/display/virtio_gpu.c`; integration adds explicit enum dispatch, an IRQ
+route and `display_start`/availability handling. Public graphics ABI and
+submodule pins are unchanged. The implementation is commit `fe66d2d`.
+
+### Boot and protocol
+
+The qualified sole-GPU profile has no VGA and no RAMFB. Installed raw OVMF
+`edk2-ovmf-20260508-8.fc44` exposes [PixelBltOnly GOP](https://github.com/tianocore/edk2/blob/b03a21a63e3b/OvmfPkg/VirtioGpuDxe/Gop.c#L254-L262).
+Pinned [Limine v12.9.0 accepts directly writable pixel formats](https://github.com/Limine-Bootloader/Limine/blob/34fe53c3d27d229ea25c28fc3e04db362543715b/common/drivers/gop.c#L64-L106),
+so it supplies no framebuffer. This corrects task 1's GOP assumption and led to
+accepted decision 9. The adapter keeps absent metadata all zero; it still rejects
+malformed supplied metadata and does not invent a framebuffer reservation.
+
+Before AP startup the driver claims/maps the modern PCI device, negotiates only
+VERSION_1, prepares MSI-X under the function/entry masks and allocates a temporary
+control queue. With no firmware layout, a fenced GET_DISPLAY_INFO command polls
+with IF=0 and a one-second deadline, without a task wait. Configuration/control
+routes are NO_VECTOR. After selecting the first enabled nonzero output, it
+confirms reset and MASTER disable before releasing temporary queue/control
+storage. It retains the PCI claim's permanent DMA-started latch, renegotiates,
+restores masked normal vector routes and prepares new queue/backing storage.
+No bootstrap queue is reused after AP startup.
+
+The normal queue has at most 16 descriptors and one command in flight. The
+cursor queue stays disabled. Backing is page-rounded kernel VM RAM; an explicit
+pre-AP physical page list attaches it to one B8G8R8X8 2D resource. Commands and
+replies occupy separate persistent DMA storage beside that list. Application
+mapping pages are never attached to the device.
+
+The sole BSP presenter with IF=1 enables DMA/IRQ delivery, checks the selected
+output, creates the resource and attaches backing. Each complete composed frame
+uses TRANSFER_TO_HOST_2D and RESOURCE_FLUSH; only the first frame adds SET_SCANOUT,
+after its transfer. Every command checks descriptor completion, exact reply
+length/type and matching fence/header fields. Pending runtime requests use IRQ
+wakeups and finite timed sleeps; the BSP request service can continue running.
+No allocation or VM mutation occurs in presentation.
+
+A command/device failure permanently stops normal presentation, masks interrupts,
+disables MASTER and attempts bounded reset. Runtime storage and PCI records
+remain until reboot, even after successful reset. ACQUIRE/PRESENT then return
+unavailable; RELEASE still tears down mappings. A selected GPU's preparation
+failure also cannot claim visible firmware fallback after transport reset. If
+neither a usable initial layout nor firmware layout exists, initialization
+panics on serial. Layout must fit navigation and at least one terminal row
+(current font minimum 80×48); too-small geometry fails explicitly. The
+boot-framebuffer path remains selected when no supported GPU is present.
+
+The panic-reporting path closes the display gate and returns no target, without
+VirtIO submission, reset or device-register access. Normal work observing the
+gate abandons its queue and retains storage. This does not retract an operation
+already past its last check when an AP claims panic; no global CPU-stop protocol
+is claimed. No emergency queue, reserve or panic log replay was added. The
+last-lines replay suggestion from #468 remains an owner-decision follow-up for
+remote debugging or direct-screen panic output.
+
+### Runtime observations
+
+Ordinary `make -j16 image` built current main and its SDK/userland/ports. Changed
+kernel builds reused those verified unchanged bundles with
+`PREBUILT="sdk userspace ports"`; they completed without kernel warnings.
+Pinned inputs are userland `d81475f7`, ports `48911d63`, fs `b427df29` and lwIP
+`a1aadb91`. No compiler-container rebuild or dependency PR is required.
+
+Interactive QEMU used `983d31c61557` (10.2.2 plus the documented AHCI fix), q35,
+nested KVM, `-cpu max`, 256 MiB, headless output, entropy enabled, no NIC/export/
+block disk and fresh copied raw OVMF variables. The VirtIO profile used exactly
+`-vga none -device virtio-gpu-pci,disable-legacy=on`.
+
+- Four CPUs: GDB before AP startup observed an all-zero boot framebuffer, a
+  completed geometry query, a fresh empty 16-descriptor queue, normal DMA disabled
+  and a 1280×800/pitch-5120 RAM target. First presentation completed the fenced
+  transfer/scanout/flush, bound output 0 and returned all descriptors.
+- The bar and all four spaces displayed; navigation selected the Development
+  shell. Mandelbrot rendered correctly; Escape restored the prompt and bar.
+  Afterwards GDB observed no queue loans and no driver failure.
+- One CPU, final implementation source: framebufferless geometry query and
+  first presentation completed at the same layout, with all 16 descriptors free.
+  The bar, cursor, four spaces and Development shell were visible, navigation
+  worked and the driver remained free of errors.
+- Standard VGA: the selected driver stayed BOOT with the original pitch/format.
+  The bar, space navigation, shell and Mandelbrot looked as before; Escape
+  restored the TTY. The launcher adds no video arguments for the default profile.
+- A manual BSP redirect into the existing panic function after handoff printed
+  `Caelum panic: fatal kernel exception` on serial. The display gate closed,
+  screen owner stayed unset, and GPU fence ID 8123, available/used indices 8122
+  and device status 15 were unchanged across the panic. This is a debugger-driven
+  panic, not a naturally occurring exception.
+
+All task-specific QEMU/GDB jobs were closed. Launcher syntax and invalid
+`QEMU_VIDEO` rejection were checked; documentation links and diff whitespace
+were reviewed.
+
+Malformed replies, allocation failure and uncertain reset paths were reviewed,
+not fault-injected. GTK resizing and uninstrumented frame cadence are not
+qualified by this task. Geometry stays fixed until task 5a.
+
+### Presenter cost
+
+Use task 1's direct HPET reads (10 ns/tick), manual GDB stops after warmup and
+idle Caelum TTY with cursor. Task 3 splits entry-to-`display_end_frame` composition
+from end-to-return transfer/flush; `space_present` tail-calls end, so its finish
+returns directly to `space_present_task`. No profiler code was added. Values
+include preemption and host/trap scheduling, not just CPU cycles or host GPU time.
+
+| Source/stage | Five elapsed samples, ms | Median, ms |
+| --- | --- | --- |
+| Task 2 `58e0024`, standard VGA, whole call | 1.46491, 1.07368, 1.04355, 1.19968, 1.42558 | 1.19968 |
+| Fresh main `800f979`, standard VGA, whole call | 1.55327, 1.24939, 2.68717, 1.23738, 2.15198 | 1.55327 |
+| Task 3, standard VGA, whole call | 1.48476, 1.19591, 1.22034, 1.30288, 1.22494 | 1.22494 |
+| Task 3, VirtIO RAM composition | 2.76871, 1.56492, 2.14839, 1.45731, 1.29583 | 1.56492 |
+| Task 3, VirtIO transfer/flush completion interval | 2.25720, 1.67253, 0.89907, 0.83809, 1.25917 | 1.25917 |
+| Task 3, VirtIO whole call | 5.02591, 3.23745, 3.04746, 2.29540, 2.55500 | 3.04746 |
+
+VirtIO's whole-call median is about 2.54 times the older task-2 median and 1.96
+times the refreshed same-main baseline. It occupies about 18.3% of the nominal
+16.67 ms frame budget. RAM composition is close to the refreshed direct-copy
+median; transfer/flush adds a separate cost. Each frame copies and transfers
+4,096,000 bytes, each stage calculated at 234.375 MiB/s for nominal 60 Hz.
+The unchanged standard-VGA path measured 1.22494 ms, with ranges overlapping
+task 2 and the refreshed baseline; no regression or speedup is established.
+These small nested-VM debugger samples do not establish achieved throughput,
+GTK cadence or native performance. Full-frame transfer stays the selected
+bounded implementation; damage tracking is a measured follow-up, not this task.
 
 ## After the milestone
 
