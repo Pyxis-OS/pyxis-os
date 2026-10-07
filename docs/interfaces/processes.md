@@ -184,14 +184,14 @@ rejected. Operation numbers are local to each protocol and may overlap.
 | --- | --- | --- | --- |
 | Console write | `CONSOLE_RIGHT_WRITE` | Source user address, byte length | Bytes written |
 | Console read | `CONSOLE_RIGHT_READ` | Destination user address, capacity | Bytes read |
-| Console size | Console READ or WRITE | Unused | Columns, rows |
+| Console size | Console READ or WRITE | Unused | Columns, rows, generation |
 | File read at offset | `FILE_RIGHT_READ` | Byte offset, capacity | Byte count, copied bytes |
 | File size | File READ or WRITE | None | File byte size |
 | File write at offset | `FILE_RIGHT_WRITE` | Byte offset, length, copied bytes | Bytes written |
 | File resize | `FILE_RIGHT_WRITE` | New byte size | None |
 | File sync | `FILE_RIGHT_WRITE` | None | None |
 
-Send the complete 32-byte `console_message`, including unused union storage;
+Send the complete 40-byte `console_message`, including unused union storage;
 the wrappers initialize it to zero. FILE uses exact operation extents after the
 16-byte tag: READ has 16 payload bytes, WRITE has 16 plus its inline byte count,
 RESIZE has eight, and SIZE/SYNC have none. FILE request and reply payloads are
@@ -200,7 +200,7 @@ WRITE length at most 4,080; larger native payloads are rejected. Libpyxis caps
 larger application requests to one transfer and returns its actual short count.
 READ requires reply capacity for its eight-byte count plus the requested bytes,
 but copies only the returned bytes. Its successful reply is exactly eight bytes
-plus that count. Console SIZE needs a 16-byte reply; the other count/size replies
+plus that count. Console SIZE needs a 24-byte reply; the other count/size replies
 contain one eight-byte field. `RDX` reports reply bytes, including FILE READ data;
 the transferred data count is a field in the reply, not `RDX`. RESIZE and SYNC
 return zero reply bytes and ignore the reply buffer. Errors return no reply bytes.
