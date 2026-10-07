@@ -20,12 +20,14 @@ mkdir -p "$prefix" "$work"
 cd "$work"
 
 # Existing archives may be supplied for offline builds, but always verify them.
+# Downloads come only from the internal cache of ftp.gnu.org.
+gnu_cache=https://repo.internal/repository/raw-gnu/gnu
 if [ ! -f binutils-2.47.tar.xz ]; then
-  curl -fL --retry 3 https://ftp.gnu.org/gnu/binutils/binutils-2.47.tar.xz \
+  curl -fL --retry 3 "$gnu_cache/binutils/binutils-2.47.tar.xz" \
     -o binutils-2.47.tar.xz
 fi
 if [ ! -f gcc-16.2.0.tar.gz ]; then
-  curl -fL --retry 3 https://ftp.gwdg.de/pub/misc/gcc/releases/gcc-16.2.0/gcc-16.2.0.tar.gz \
+  curl -fL --retry 3 "$gnu_cache/gcc/gcc-16.2.0/gcc-16.2.0.tar.gz" \
     -o gcc-16.2.0.tar.gz
 fi
 sha256sum -c "$patches/SHA256SUMS"
