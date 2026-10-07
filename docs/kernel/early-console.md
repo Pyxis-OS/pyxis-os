@@ -16,8 +16,8 @@ boot progress and early panics. It is for hardware bring-up, not a terminal.
    framebuffer mapping immediately after the CR3 write, before the next log
    line. The direct map no longer exists at that point.
 3. **Mirror and retain.** Every ordinary log line goes live to serial and the
-   early console. Before space 0's initialized TTY attaches, log bytes are also
-   retained in static storage. Attaching the TTY replays that prefix once under
+   early console. The static log ring retains bytes from the first output and
+   continues after space 0's TTY attaches. Attaching the TTY replays retained text once under
    the log lock, then enables live TTY output. The TTY draws into an off-screen
    buffer that is not yet presented; replay does not duplicate serial output.
 4. **Handoff.** Before its first framebuffer write, the presenter takes the log
@@ -26,22 +26,20 @@ boot progress and early panics. It is for hardware bring-up, not a terminal.
 
 ## Retained boot log
 
-The current buffer holds 32 KiB without heap allocation. It keeps the beginning
-when full and counts later discarded bytes, saturating the count at `SIZE_MAX`.
-Replay writes the kept bytes directly to the TTY, followed by
-`[early log truncated: N bytes dropped]` when necessary. The replay and TTY
-selection save/restore caller interrupts and share the ordinary log lock;
-concurrent output cannot interleave at the boundary. Capturing stops permanently
-after the first attachment. Selecting a TTY again does not replay or restart it.
-Emergency panic output bypasses capture and TTY replay.
+The [kernel log ring](../interfaces/kernel-log.md) keeps the most recent lines
+in 256 KiB of static storage, continuing after TTY attachment. Replay writes
+retained text directly into the TTY, followed by
+`[early log truncated: N lines dropped]` when needed. The replay and TTY
+selection preserve caller interrupts and share the ordinary presentation lock;
+concurrent normal output cannot interleave at the boundary. Selecting a TTY
+again does not replay it.
 
-This is byte retention, not terminal scrollback or a userspace-readable log.
-Later output can still scroll the beginning off screen. A full buffer can cut
-a line or escape sequence; the truncation notice starts on a fresh line. Use
-info logging for native bring-up: PCI function/resource/capability details,
-per-space initialization and ordinary task exits require `LOG_LEVEL=trace`.
-Discovery summaries and warnings remain at info. Buffer capacity is an
-implementation choice, not a required architectural minimum.
+Retention is separate from drawing and TTY scrollback. A program can read the
+ring with `log` or follow it with `log -f`; later TTY output may still scroll
+earlier text off screen. Panic capture is best effort and never waits for a
+held ring lock. Info logging retains discovery summaries and warnings; PCI
+function/resource/capability details, per-space initialization and ordinary
+task exits require `LOG_LEVEL=trace`.
 
 ## Rendering
 

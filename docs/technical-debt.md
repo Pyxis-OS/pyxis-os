@@ -448,13 +448,26 @@ serial-only, as before. Showing them would mean taking the screen back from a
 presenter that may still be running on the BSP, so a machine without serial
 shows no panic text once userspace has started. A serial port that stops
 accepting output is latched off for the rest of boot and not retried.
-Early ordinary log bytes are retained in a fixed, prefix-preserving 32 KiB buffer
-and replayed into the Caelum TTY once. This does not provide scrollback: later
-output can still displace the beginning, and a full buffer drops later bytes
-with a notice. Revisit capacity or a separate log-view capability only when
-native bring-up needs more retained history.
 Revisit with real-hardware bring-up, if post-boot panics need to be visible
 without serial.
+
+## Kernel log retention and LAN visibility
+
+The [kernel log](interfaces/kernel-log.md) retains 256 KiB in static storage,
+evicting whole oldest lines. Oversized lines are discarded through their
+newline. It is volatile, and following polls every 100 ms. Revisit capacity,
+event-driven following or durable capture with measured native driver workloads.
+
+Every configured space receives read-only log authority, including remote
+shells. Kernel addresses in log text are therefore readable through the
+unauthenticated remote terminal on the trusted development LAN. The owner
+accepted this exposure for bring-up. Revisit the default grants and disclosure
+policy when Pyxis gains authentication or runs on an untrusted network.
+
+Panic ring capture is best effort: a fatal interruption of a ring lock owner
+skips retention without waiting. Userspace readers also require a functioning
+scheduler. Revisit guaranteed fatal delivery in remote-debugging task 3's
+independent kernel UDP transmit path.
 
 ## PS/2 scan-set query compatibility
 

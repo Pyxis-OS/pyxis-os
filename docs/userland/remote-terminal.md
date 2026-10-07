@@ -39,6 +39,7 @@ The final `session --remote-server PORT` creates the listener and delegates it
 to `remote-terminal.pxe`. Only trusted init carries terminal CREATE and unbound
 launcher CREATE_GROUP. Remote shells receive their bound launcher, named terminal
 input/output, distinct standard streams, memory, clock, system-information READ,
+[kernel-log READ](../interfaces/kernel-log.md),
 pipe creation, the selected
 roots and optional ordinary networking, entropy, endpoint and profiling grants.
 Only the root shell receives the separate `terminal_events` EMIT capability;
