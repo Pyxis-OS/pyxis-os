@@ -26,11 +26,15 @@ const struct rtl_counters *rtl8111_capture_counters(struct rtl8111_controller *c
     return NULL;
   }
 
+  if (!net_panic_gate_enter(&controller->panic_gate, RTL_PANIC_COUNTERS)) {
+    return NULL;
+  }
   phys_addr_t physical = controller->counters.physical;
   rtl_write32(controller, RTL_COUNTER_HIGH, (uint32_t)(physical >> 32));
   (void)rtl_read8(controller, RTL_CHIP_COMMAND);
   rtl_write32(controller, RTL_COUNTER_LOW, (uint32_t)physical);
   rtl_write32(controller, RTL_COUNTER_LOW, (uint32_t)physical | RTL_COUNTER_DUMP);
+  net_panic_gate_leave(&controller->panic_gate);
   uint64_t start = arch_monotonic_ns();
   do {
     if (!(rtl_read32(controller, RTL_COUNTER_LOW) & (RTL_COUNTER_RESET | RTL_COUNTER_DUMP))) {

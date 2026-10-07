@@ -2,9 +2,20 @@
 #define RTL8111_INTERNAL_H
 
 #include <kernel/pci/msix.h>
+#include <kernel/net/panic_tx.h>
 #include "registers.h"
 #include "ring.h"
 #include "counters.h"
+
+enum rtl_panic_operation {
+  RTL_PANIC_START = 1,
+  RTL_PANIC_STOP,
+  RTL_PANIC_IRQ,
+  RTL_PANIC_SERVICE,
+  RTL_PANIC_RX_REPOST,
+  RTL_PANIC_COUNTERS,
+  RTL_PANIC_TX_BASE = RTL_RING_COUNT,
+};
 
 struct rtl8111_controller {
   uint32_t controller_id;
@@ -17,6 +28,9 @@ struct rtl8111_controller {
   uint8_t mac[6];
   bool identity_known, started, active, link_up, stopping;
   struct rtl_ring rx, tx;
+  struct net_panic_gate panic_gate;
+  bool panic_ready, panic_duplicate;
+  unsigned panic_slot, panic_interrupted_slot;
   struct dma_buffer counters;
   uint64_t tx_deadlines[RTL_RING_COUNT];
   uint64_t reset_deadline, reset_recheck;
