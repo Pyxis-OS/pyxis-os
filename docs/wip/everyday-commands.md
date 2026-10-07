@@ -17,10 +17,8 @@ not BusyBox applets.
 
 ## Today
 
-- **`echo` is missing.** `echo hi > note.txt` reports `echo: Not found`; the
-  workaround has been `cat boot://share/hello.txt > FILE`. A shell builtin
-  wouldn't help, because builtins reject redirects and can't be pipeline stages
-  ([shell](../userland/shell.md)).
+- **`echo` is implemented.** The native external program supports redirects
+  and pipelines, with usage in the [shell guide](../userland/shell.md#commands-and-quoting).
 - **`cp` is missing.** Copying a file needs `cat SRC > DST`.
 - **`ls` is minimal** (`userspace/ls/main.c`, about 80 lines). It accepts only
   paths, so `ls -a` reports `-a: Not found`.
@@ -71,10 +69,16 @@ Accepted by the owner on 2026-10-07:
 
 ## Tasks
 
-- [ ] **1. `echo`.** It prints its arguments separated by spaces, then a
+- [x] **1. `echo`.** It prints its arguments separated by spaces, then a
   newline; `-n` drops the newline. No escape processing.
   - **Finish when:** `echo hi > home://note.txt`, `echo a b | cat` and
     `echo -n x` behave as expected.
+  - **Validated 2026-10-07:** image build without warnings; manual four-CPU
+    QEMU/KVM checks (512 MiB, nested VM) passed all three examples, no arguments,
+    empty arguments and literal option-like/backslash text. GDB observed
+    redirected output on a RAM file with WRITE-only authority. Output-error
+    handling was reviewed in code. Implemented in
+    [userland PR #143](https://git.internal/PyxisOS/pyxis-userland/pulls/143).
 
 - [ ] **2. `ls`.** Sorting, terminal columns, colors, `-1` and `-l`
   (decision 2), with usage errors for unknown options.
