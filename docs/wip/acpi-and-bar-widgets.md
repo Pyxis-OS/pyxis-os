@@ -143,6 +143,21 @@ Accepted for task 2 on 2026-10-07:
       delay or a counted limit instead;
     - record the "firmware window" figure before and after periodic battery
       reads; the ThinkPad already uses 2,127 of 16,384 pages after loading.
+  - **Review notes from task 2 (#460), to settle in this task:**
+    - a failed S5 entry leaves runtime GPEs off. Before entering S5, uACPI has
+      run `_PTS(5)`, disabled every GPE and armed only wake GPEs, so once the
+      embedded controller's GPE is enabled a failed power-off would stop
+      battery and EC events until reboot. The failure path can call
+      `uacpi_prepare_for_wake_from_sleep_state` and
+      `uacpi_wake_from_sleep_state` for S5, which re-enable runtime GPEs and
+      run `_WAK`;
+    - on that path uACPI first waits 10 s with interrupts disabled, freezing
+      the BSP; record it in the power-off limits;
+    - `run-qemu.sh` no longer passes `-no-reboot`, so a triple fault during
+      bring-up loops through the firmware and Limine instead of stopping with
+      the last output on screen. QEMU cannot tell the reset register from a
+      triple fault; an opt-in variable such as `QEMU_NO_REBOOT=1` would bring
+      the stop back. The owner's call.
 
 - [ ] **4. Power button.**
   - A short press of the physical power button runs the same clean power-off as
