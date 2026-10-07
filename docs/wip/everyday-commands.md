@@ -1,10 +1,9 @@
 # Everyday commands
 
-Status: **proposed milestone, 2026-10-07; not agreed.** The owner's request is
-small improvements for day-to-day use, picked from the
-[everyday gaps](everyday-gaps.md) list. Codex is to take it after the remote
-debugging milestone closes. Nothing starts until the owner accepts the decisions
-below.
+Status: **milestone, agreed 2026-10-07.** The owner's request is small
+improvements for day-to-day use, picked from the
+[everyday gaps](everyday-gaps.md) list. Codex takes it after the remote debugging
+milestone closes; each task starts when the owner says so.
 
 ## Goal
 
@@ -38,9 +37,9 @@ not BusyBox applets.
 
   There are no modification times in the native filesystem, and none are planned.
 
-## Proposed decisions
+## Decisions
 
-Defaults, for the owner to accept or change:
+Accepted by the owner on 2026-10-07:
 
 1. **Scope:** `echo` and `cp` as small native programs, and a better `ls`.
    - Everything else stays in the gaps list. Text tools such as `grep`, `wc`

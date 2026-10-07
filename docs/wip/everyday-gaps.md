@@ -17,7 +17,7 @@ text tools may be ports.
 | Colored `ls` entries | 2026-10-07, owner request | Native, in the existing `ls` | Color entries by kind: directories, regular files, programs (`.pxe`, since Pyxis has no execute bit) and scripts with a `#!` line, or whatever else fits. Only when output is a terminal, never in pipes. |
 | `cp` | 2026-10-07, while planning everyday commands: no copy command exists | Native, a small core command | `cat SRC > DST` is the workaround. Copies should work across roots. |
 
-A proposed [everyday commands](everyday-commands.md) milestone picks up
+The agreed [everyday commands](everyday-commands.md) milestone picks up
 `echo`, `cp` and a better `ls`.
 
 Related candidates already tracked elsewhere: grep, tail, wc, sort and hexdump in
