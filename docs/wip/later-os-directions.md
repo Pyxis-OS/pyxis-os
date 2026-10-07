@@ -209,6 +209,11 @@ Follow-ups to the completed [ACPI](../kernel/acpi.md) milestone. None is agreed.
   (owner, 2026-10-07).
 - **Later ACPI uses.** Lid and AC-adapter events, thermal zones, sleep, and
   control-method power buttons.
+- **CPU frequency control.** Pyxis leaves P-states to the firmware. On battery
+  the ThinkPad (Ryzen 5 PRO 4650U) drops to about 400 fps in Quake
+  `timedemo demo1`, against 660–690 on AC, and console drawing slows. ACPI
+  `_PSS`/`_PCT` or AMD CPPC could let Pyxis choose a policy. Nobody has
+  measured whether OS control recovers any of it on battery.
 
 ## Persistent storage and installation
 

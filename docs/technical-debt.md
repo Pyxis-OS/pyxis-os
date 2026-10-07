@@ -899,7 +899,7 @@ gameplay and demo playback. Wall-clock time is not a prerequisite.
 
 ## Clang code generation and predefines
 
-Pyxis builds with Clang since the [LLVM toolchain milestone](wip/llvm-toolchain.md).
+Pyxis builds with Clang since the [LLVM toolchain milestone](development/llvm-toolchain.md).
 Matched nested-KVM measurements on 2026-10-07 (four CPUs) left two measured
 regressions against GCC 16:
 - **Heap allocation:** `allocbench heap` takes about 13.1 ns/op, against

@@ -2,7 +2,7 @@
 
 Status: LLVM/Clang is the chosen toolchain direction as of 2026-09-29, including
 Clang as the first large hosted C toolchain. Since the
-[host milestone](llvm-toolchain.md), Pyxis builds with its Clang and LLD on the
+[host milestone](../development/llvm-toolchain.md), Pyxis builds with its Clang and LLD on the
 host and GCC/binutils are retired; no hosted LLVM support is implemented. The boundaries
 below guide a pinned investigation, not an implementation assignment or a fixed
 schedule. Other language runtimes remain future candidates.
@@ -32,14 +32,10 @@ it is not a measured claim that LLVM will be the easiest compiler to host.
 Keep three implementation milestones separate, refining their scope after a
 pinned probe:
 
-1. **Host-running LLVM toolchain.** Agreed as a milestone on 2026-10-07:
-   [LLVM toolchain on the host](llvm-toolchain.md). Establish the Pyxis target/driver contract,
-   SDK discovery, startup and link defaults, predefined macros and compiler
-   runtime helpers. Probe compiler-rt builtins as the replacement for libgcc.
-   Preserve the existing ABI, kernel register restrictions and userspace CPU-state
-   assumptions. Validate kernel, SDK, userspace and ports builds and ordinary boots
-   before replacing the normal GCC/binutils build. Identify the exact owner-built
-   container update; ordinary CI must consume it rather than rebuild LLVM.
+1. **Host-running LLVM toolchain.** Completed 2026-10-07:
+   [LLVM toolchain on the host](../development/llvm-toolchain.md). The `pyxis-llvm`
+   fork carries the Pyxis target and driver contract, compiler-rt builtins replace
+   libgcc, and the owner-built container supplies the toolchain to CI.
 2. **Native C++ and OS prerequisites.** Clang is a C++ application even when it
    compiles C. Determine the runtime/library subset it actually requires and
    investigate libc++, libc++abi and unwinding needs explicitly. Establish useful
@@ -50,14 +46,10 @@ pinned probe:
    entirely inside Pyxis. Rebuilding LLVM itself in the guest is a later result,
    with its own build tools, resource requirements and dependencies.
 
-Retain ELF objects, static archives and the ELF-to-P1F/PXE conversion initially.
-The hosted workflow must include a usable converter or equivalent explicit final
-step. Native P1F linker output can be investigated later; this transition does not
-require inventing a relocatable format or rewriting the loader. The milestone 1
-probe led to [P1F output from LLD](llvm-toolchain.md#p1f-output-from-lld),
-accepted on 2026-10-07. `elf2pxe` was removed with GCC; LLD writes P1F directly. Keep the working
-toolchain available during validation, without committing to maintaining two
-permanent default toolchains.
+Objects and static archives stay ELF. Since milestone 1, LLD writes
+[P1F executables](../development/llvm-toolchain.md#p1f-output) directly and
+`elf2pxe` is gone, so hosted Clang links PXE without a converter, relocatable
+format or loader change. Pyxis keeps one default toolchain.
 
 The [Clang toolchain guide](https://clang.llvm.org/docs/Toolchain.html) separates
 compiler, assembler, linker and runtime pieces. Cross-compilation and LLVM hosting
