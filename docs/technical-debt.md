@@ -897,6 +897,29 @@ its parser/formatting requirements. Floating printf is now available for the
 upstream timedemo report; exercising timedemo remains separate from normal
 gameplay and demo playback. Wall-clock time is not a prerequisite.
 
+## Clang code generation and predefines
+
+Pyxis builds with Clang since the [LLVM toolchain milestone](wip/llvm-toolchain.md).
+Matched nested-KVM measurements on 2026-10-07 (four CPUs) left two measured
+regressions against GCC 16:
+- **Heap allocation:** `allocbench heap` takes about 13.1 ns/op, against
+  12.0 with GCC (about 9%). The TLSF fix for Clang's narrowed flag stores
+  removed most of the original 33% gap; the remainder is uninvestigated. Two
+  early samples after the fix, 20.4 and 21.7 ns/op, did not recur.
+- **Quake:** `timedemo demo1` runs about 3% slower (median 1560 against
+  1604 fps).
+
+Clang also emits more byte-sized read-modify-writes than GCC (164 against 75 in
+the kernel); no other measured path showed a cost. Reconsider when an
+allocation-heavy program, such as Lua, TCC or the JVM experiment, measures the
+heap gap, or when the LLVM pin moves.
+
+Clang predefines `__INT_FAST8_TYPE__` and `__INT_FAST16_TYPE__` as `signed
+char` and `short`, while libc's `stdint.h` defines `int`. Code using the
+compiler macros instead of the header gets a different type. Reconsider if a
+port relies on those macros; the fork's target information could then match
+the header.
+
 ## Quake port limits
 
 The [Quake port](userland/quake.md) renders at quakegeneric's fixed 320x240.

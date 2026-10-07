@@ -1,6 +1,7 @@
 # LLVM toolchain on the host
 
-Status: **milestone, agreed 2026-10-07; tasks 1 to 3 done the same day.**
+Status: **milestone, agreed 2026-10-07; tasks 1 to 4 done the same day.** The
+owner's ThinkPad check and the milestone close remain.
 This is the first of the three LLVM
 milestones in [hosted toolchains](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
 whose direction was chosen on 2026-09-29. Claude implements it; each task starts
@@ -94,6 +95,9 @@ Accepted by the owner on 2026-10-07, after the task 1 probe:
      the LLVM setting.
    - `elf2pxe` becomes a candidate for removal once no build uses GCC. It is
      not removed automatically in task 4.
+   - The owner chose on 2026-10-07 to remove it in task 4, in its own commit,
+     after the Go investigation's use of it was pointed out. That
+     investigation now names the last revision with the converter.
    - The owner chose on 2026-10-07 that userland and port Makefiles switch to
      direct PXE links in task 4, together with GCC's removal. That avoids a
      temporary two-path link in every Makefile. Until then, the SDK's LLVM
@@ -618,6 +622,82 @@ The gap to GCC falls from about 33% to about 10%. Elsewhere, Clang generates
 more byte-sized read-modify-writes than GCC: 164 against 75 in the kernel. No
 other measured path showed a cost, so those stay as they are.
 
+## Task 4 results
+
+LLVM is the only toolchain. Accepted by the owner on 2026-10-07, before
+implementation:
+- `elf2pxe` is removed (see decision 4);
+- the builder image tag is `pyxis-llvm23.1.3-41ab604`, naming the release and
+  fork commit;
+- the milestone closes in a separate documentation PR.
+
+### What changed
+
+- **Pyxis:** the GCC and binutils patches, checksums and build script are gone;
+  `toolchain/build.sh` builds the pinned fork commit. `TOOLCHAIN` is removed.
+  `build/toolchain` records the compiler, so a build directory from before the
+  switch stops with a `make clean` request. The SDK exports compiler-rt and no
+  host executables, and no longer records a toolchain choice. Only the kernel
+  still links ELF, for Limine.
+- **The container:** `ci/Containerfile` builds LLVM with the same script,
+  trusting the internal CA for the fork fetch, and checks the fork commit.
+  CI uses the new tag.
+- **Userland and ports:** every executable links straight to `.pxe` with LLD.
+  Fastfetch's CMake target takes the `.pxe` suffix. TCC's README describes
+  relinking with `-Wl,--oformat=elf` for GDB, since no build keeps an ELF.
+- **Clang's fast types:** Clang predefines `__INT_FAST8_TYPE__` and
+  `__INT_FAST16_TYPE__` as `signed char` and `short`; libc's `stdint.h` keeps
+  `int`. This predates task 4 and the ABI is unchanged; it is recorded in
+  [technical debt](../technical-debt.md#clang-code-generation-and-predefines).
+
+### Checks
+
+Revisions: Pyxis `a01bd0e` (userland `2430567`, ports `7ecb3f7`) against GCC
+main `70a4e20`. Nested KVM, QEMU 10.2.2 with the AHCI fix, q35, four CPUs.
+
+- **Builds:** clean source builds with no GCC or binutils on `PATH` pass with
+  no first-party warnings; upstream port warnings are as in task 3. All 51
+  staged executables are P1F, and no `.elf` is produced.
+- **The container:** a local `podman build` of `ci/Containerfile` passed its
+  commit check. The CI steps inside it built the image and all four bundles
+  from a fresh clone, with no `x86_64-unknown-pyxis-gcc` present. The image is
+  1.64 GB, against 2.68 GB for the GCC builder.
+- **Ports:** Fastfetch, Lua, sbase, tar, less, vi, Kilo, Links over HTTPS and
+  TCC compiling and running a `long double` program passed in a four-CPU boot.
+- **Update:** the GCC live ISO of `70a4e20` installed to a blank 2 GiB virtio
+  disk. Its installed system wrote and synced `home://kept.txt` and powered
+  off. The LLVM live ISO's Update recognized installed `70a4e20d7aaf`, wrote
+  33 programs to `bin://a01bd0e45352` and replaced the boot files. The disk
+  alone then booted revision `a01bd0e45352` with `kept.txt` intact, and Lua,
+  TCC, vi and `ls bin://` worked.
+
+### Matched measurements (GCC main vs LLVM)
+
+Alternating boots on an otherwise idle host. An earlier run during the
+container build was discarded.
+
+| Measurement | GCC | LLVM |
+| --- | --- | --- |
+| QEMU start to `Caelum ready` (s) | 1.929, 1.971, 1.937 | 1.803, 1.872, 1.853 |
+| `iobench read boot://…`, payload median (MiB/s) | 3995, 3889, 3970 | 4389, 4624, 4655 |
+| `iobench write tmp://…`, median (MiB/s) | 121.8, 107.1, 126.1 | 95.8, 136.1, 153.3 |
+| `allocbench heap` (ns/op, 12 samples) | 11.8–12.4, median 12.0 | 12.9–13.3, median 13.1 |
+| `allocbench pages` (ns/op) | 38711, 38050, 38599 | 38066, 38191, 38082 |
+| Quake `timedemo demo1` (fps) | 1617.5, 1518.2, 1610.1, 1604.2, 1581.7 (median 1604.2) | 1579.7, 1531.9, 1560.3, 1479.1, 1566.6 (median 1560.3) |
+
+| Size | GCC | LLVM | Change |
+| --- | ---: | ---: | ---: |
+| 51 staged executables (bytes) | 8,414,768 | 8,495,599 | +1.0% |
+| Kernel text (bytes) | 820,981 | 811,381 | −1.2% |
+| `pyxis.iso` (bytes) | 53,897,216 | 46,356,480 | −14% |
+
+The heap allocator remains about 9% slower than with GCC after the TLSF fix,
+and Quake about 3%. Both are recorded in
+[technical debt](../technical-debt.md#clang-code-generation-and-predefines).
+In the general run, where the heap benchmark followed the I/O benchmarks, the
+LLVM heap figures were 13.8, 14.6 and 13.1 (GCC 11.9, 11.9, 12.2); the
+dedicated heap run above did not repeat that spread.
+
 ## Tasks
 
 - [x] **1. Probe and proposal.** Recorded in [probe results](#probe-results)
@@ -652,7 +732,7 @@ other measured path showed a cost, so those stay as they are.
     Doom, Quake, Lua, TCC compiling a program, Links, BusyBox and Fastfetch.
     Any port that needs a recipe change records it in its README.
 
-- [ ] **4. Switch the default and retire GCC.**
+- [x] **4. Switch the default and retire GCC.** See [task 4 results](#task-4-results).
   - The owner builds and publishes the LLVM builder container.
   - LLVM becomes the default, and the GCC and binutils patches and build script
     are removed. Userland and port Makefiles link PXE directly with LLD.
@@ -660,9 +740,9 @@ other measured path showed a cost, so those stay as they are.
     decides whether to remove it. The toolchain and SDK docs describe the LLVM contract.
   - The switch lands at a quiet point between Codex tasks.
   - **Finish when:**
-    - the owner's ThinkPad boots and behaves as before;
-    - an installed system updates to the LLVM build;
-    - the matched measurements are recorded.
+    - the owner's ThinkPad boots and behaves as before (pending, owner);
+    - an installed system updates to the LLVM build (QEMU, done);
+    - the matched measurements are recorded (done).
 
 ## Working rules
 
