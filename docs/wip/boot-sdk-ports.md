@@ -148,6 +148,10 @@ battery reading and space-bar widget, then the power button.
 Codex alongside ACPI: a proposal first, then the boot framebuffer behind a small
 driver interface, VirtIO GPU 2D, Bochs and live resizing. Physical GPUs follow.
 
+[Remote debugging without serial](remote-debugging.md), agreed 2026-10-07 for a
+second Codex instance: a readable kernel log ring with a `log` command, the
+reverse remote terminal, then the kernel log over UDP.
+
 [Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md) completed
 2026-10-06: read-only FUSE mounts and in-memory journal replay, with the owner
 confirming physical stick mounting and copying on Arch Linux.

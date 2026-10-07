@@ -135,10 +135,12 @@ Accepted by the owner on 2026-10-07:
 
 ## After the milestone
 
-- **Physical GPUs.** A driver for real hardware, investigated against either an
-  Intel integrated GPU passed through from horse, or a GPU passed through VFIO
-  to a VM on a headless Fedora machine. The owner prepares the physical GPUs and
-  the passthrough.
+- **Physical GPUs.** A driver for real hardware, investigated against an Intel
+  integrated GPU passed through from horse, or natively on the ThinkPad over PXE
+  with [remote debugging](remote-debugging.md). The owner prepares the physical
+  GPUs. Loading vendor firmware blobs is acceptable (owner, 2026-10-07).
+  Passing the ThinkPad's GPU through VFIO is ruled out: its IOMMU group also
+  holds the PSP, both USB controllers and the audio devices.
 - Programs that change the resolution, multiple monitors, vblank timing and
   double buffering stay separate work. The
   [desktop and graphics direction](desktop-graphics.md) covers the compositor
