@@ -2100,3 +2100,21 @@ or flag extensions. `%z` loses historical offset seconds by its standard minute
 precision; `tm_gmtoff` retains them. A `tm_zone` designation is borrowed until
 successful timezone-cache replacement or process exit. Locale selection and
 reverse calendar conversion remain deferred.
+
+## Sorted ls memory and live file details
+
+Native [ls](userland/ls.md) collects all names for one directory before sorting.
+Memory grows with the entry count and total name bytes; exhaustion reports
+failure without a truncated listing. Terminal colors may add one file lookup
+and at most two content bytes per non-program file; long format also queries
+sizes. These later observations do not form a snapshot with enumeration and
+can fail after names were collected. Unknown sizes remain explicit; script
+classification falls back to regular-file color when its prefix is unreadable.
+
+Terminal names use one printable ASCII cell per byte, replacing control and
+non-ASCII bytes with `?`; plain file/pipe output preserves the original bytes.
+Revisit memory or lookup costs when real directory workloads exhaust memory or
+show unacceptable listing latency, and Unicode presentation when the terminal
+has an agreed character-width contract. Owner-run ThinkPad and disk-backed
+listing qualification remain unperformed; current evidence is nested QEMU with
+archive, RAM and HOST directories.
