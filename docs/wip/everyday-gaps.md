@@ -11,7 +11,7 @@ text tools may be ports.
 
 | Gap | Noticed | Likely kind | Notes |
 | --- | --- | --- | --- |
-| Reboot at the end of installation | 2026-10-07, owner, after a successful native install | Native, in the [installer](../userland/installer.md) | The installer could finish with "press Enter to restart". The installer space has no `power` grant today, so this needs a small authority decision: restart only, for the install space. |
+| Reboot at the end of installation | 2026-10-07, owner, after a successful native install | Native, in the [installer](../userland/installer.md) | The installer could finish with "press Enter to restart". `init-install` receives the kernel's `power` resource but does not forward it to the installer, so this needs a small authority decision: forward restart only. |
 
 The [everyday commands](../userland/everyday-commands.md) reference covers `echo`,
 `cp`, sorted/colorized `ls` and foreground shell-script launch authority.
