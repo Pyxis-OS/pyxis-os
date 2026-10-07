@@ -11,6 +11,14 @@ process replacement (`exec`) still needs its own resource and failure contract.
 Init supervision and restart policies remain deferred to the first web-server
 milestone; this does not commit to Unix PID 1 semantics.
 
+## Direct framebuffer panic context
+
+Proposal from [PR #468 review](https://git.internal/PyxisOS/pyxis-os/pulls/468),
+awaiting an owner decision: show the last lines of the
+[retained kernel log ring](../interfaces/kernel-log.md) above a panic message
+on a direct framebuffer. Revisit it with
+[direct panic output](../kernel/early-console.md#panic-ownership).
+
 ## Backend interfaces and scoped service dependencies
 
 Agreed direction to revisit later, not an implementation task. The

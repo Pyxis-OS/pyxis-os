@@ -424,6 +424,7 @@ static void end_read(struct terminal_session *session)
     session->reader_active = false;
   }
   unlock_session(session);
+  readiness_notify();
 }
 
 static struct syscall_result application_read(struct terminal_session *session,
@@ -836,14 +837,26 @@ struct syscall_result terminal_attachment_call(struct kernel_object *object,
   return (struct syscall_result){CALL_OK, 0};
 }
 
-uint64_t terminal_input_ready(struct kernel_object *object)
+uint64_t terminal_application_ready(struct kernel_object *object, uint64_t events,
+    uint64_t observed_generation)
 {
-  KASSERT(object->type == OBJECT_TERMINAL_INPUT);
+  KASSERT(object->type == OBJECT_TERMINAL_INPUT || object->type == OBJECT_TERMINAL_OUTPUT);
   uint64_t flags = cpu_save_interrupts();
   struct terminal_session *session = ((struct terminal_end *)object)->session;
   lock_session(session);
   uint64_t ready = session->hung_up ? WAIT_ERROR : 0;
-  ready |= console_interrupt_ready(&session->interrupt);
+  if ((events & WAIT_READABLE) && !session->reader_active && session->input_count) {
+    ready |= WAIT_READABLE;
+  }
+  if ((events & (WAIT_READABLE | WAIT_PEER_FIN)) && session->input_closed) {
+    ready |= WAIT_PEER_FIN;
+  }
+  if (events & WAIT_INTERRUPT) {
+    ready |= console_interrupt_ready(&session->interrupt);
+  }
+  if ((events & WAIT_RESIZED) && observed_generation != 1) {
+    ready |= WAIT_RESIZED;
+  }
   unlock_session(session);
   cpu_restore_interrupts(flags);
   return ready;

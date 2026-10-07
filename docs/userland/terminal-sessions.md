@@ -125,9 +125,12 @@ output producers respectively; ordinary READABLE includes closure. INJECT author
 WRITABLE and WRITE_CLOSED, meaning input capacity and input closure; ordinary
 WRITABLE includes closure. Either direction automatically reports ERROR on
 hangup. Output closure can coexist with queued records, which must be drained
-before zero-byte EOF. Application handles and framebuffer consoles are
-readiness targets only for `WAIT_INTERRUPT` on an
-[armed handle](terminal.md#interrupt-arming-and-passthrough).
+before zero-byte EOF. Application input handles support READABLE/PEER_FIN under
+READ, including END_INPUT after buffered bytes drain. Input and output support
+RESIZED under READ and WRITE respectively; independent sessions keep their
+creation geometry and generation one. Framebuffer console READ/WRITE handles
+observe local resize generations. Both input kinds also support INTERRUPT on
+an [armed handle](terminal.md#interrupt-arming-and-passthrough).
 
 Readiness remains advisory, with the [wait_many contract](../devices/tcp.md#readiness-and-transfer-attempts)
 for deadline/poll precedence and removal of all registrations/references before

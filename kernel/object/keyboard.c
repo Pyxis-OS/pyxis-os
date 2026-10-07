@@ -1,4 +1,5 @@
 #include <arch/smp.h>
+#include <arch/cpu.h>
 #include <kernel/keyboard.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
@@ -8,6 +9,7 @@
 #include <kernel/process.h>
 #include <kernel/space.h>
 #include <kernel/task.h>
+#include <kernel/user/wait.h>
 #include <kernel/user_memory.h>
 
 static void lock_keyboard(struct keyboard_object *keyboard)
@@ -20,6 +22,31 @@ static void lock_keyboard(struct keyboard_object *keyboard)
 static void unlock_keyboard(struct keyboard_object *keyboard)
 {
   atomic_store_explicit(&keyboard->locked, false, memory_order_release);
+}
+
+bool keyboard_owned(struct keyboard_object *keyboard, struct process *process)
+{
+  uint64_t flags = cpu_save_interrupts();
+  lock_keyboard(keyboard);
+  bool owned = keyboard->owner == process;
+  unlock_keyboard(keyboard);
+  cpu_restore_interrupts(flags);
+  return owned;
+}
+
+uint64_t keyboard_ready(struct keyboard_object *keyboard, struct process *process)
+{
+  uint64_t flags = cpu_save_interrupts();
+  lock_keyboard(keyboard);
+  uint64_t ready = 0;
+  if (keyboard->owner != process || !keyboard_available()) {
+    ready = WAIT_ERROR;
+  } else if (keyboard->count) {
+    ready = WAIT_READABLE;
+  }
+  unlock_keyboard(keyboard);
+  cpu_restore_interrupts(flags);
+  return ready;
 }
 
 static void destroy_keyboard(struct kernel_object *object)
@@ -68,6 +95,7 @@ void keyboard_focus(struct keyboard_object *keyboard, bool focused)
 {
   KASSERT(arch_cpu_index() == 0);
   lock_keyboard(keyboard);
+  bool queued = false;
   if (keyboard->focused != focused) {
     keyboard->focused = focused;
     reset_keys(keyboard);
@@ -75,9 +103,13 @@ void keyboard_focus(struct keyboard_object *keyboard, bool focused)
       queue_event(keyboard, (struct keyboard_event){
         .action = focused ? KEY_FOCUS_GAINED : KEY_FOCUS_LOST,
       });
+      queued = true;
     }
   }
   unlock_keyboard(keyboard);
+  if (queued) {
+    readiness_notify();
+  }
 }
 
 void keyboard_reset_input(struct keyboard_object *keyboard)
@@ -85,12 +117,16 @@ void keyboard_reset_input(struct keyboard_object *keyboard)
   KASSERT(arch_cpu_index() == 0);
   lock_keyboard(keyboard);
   reset_keys(keyboard);
+  bool owned = keyboard->owner != NULL;
   if (keyboard->owner) {
     queue_event(keyboard, (struct keyboard_event){.action = KEY_STATE_RESET});
   } else {
     console_input_lost(keyboard->space->console);
   }
   unlock_keyboard(keyboard);
+  if (owned) {
+    readiness_notify();
+  }
 }
 
 static unsigned accepted_modifiers(const struct keyboard_object *keyboard, unsigned physical)
@@ -123,6 +159,7 @@ void keyboard_route_event(struct keyboard_object *keyboard, const struct key_eve
   }
   keyboard->down[event->key] = event->action != KEY_RELEASE;
   unsigned modifiers = accepted_modifiers(keyboard, event->modifiers);
+  bool owned = keyboard->owner != NULL;
   if (keyboard->owner) {
     if (keyboard->count == KEYBOARD_EVENT_CAPACITY) {
       /* Losing a release invalidates every held key. Drop this event too and
@@ -143,6 +180,9 @@ void keyboard_route_event(struct keyboard_object *keyboard, const struct key_eve
     }
   }
   unlock_keyboard(keyboard);
+  if (owned) {
+    readiness_notify();
+  }
 }
 
 static void release_keyboard(struct keyboard_object *keyboard)
@@ -159,10 +199,14 @@ void keyboard_process_exit(struct process *process)
   KASSERT(arch_cpu_index() == 0);
   struct keyboard_object *keyboard = process->space->keyboard;
   lock_keyboard(keyboard);
-  if (keyboard->owner == process) {
+  bool owned = keyboard->owner == process;
+  if (owned) {
     release_keyboard(keyboard);
   }
   unlock_keyboard(keyboard);
+  if (owned) {
+    readiness_notify();
+  }
 }
 
 struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t rights,
@@ -209,6 +253,9 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
       });
     }
     unlock_keyboard(keyboard);
+    if (status == CALL_OK) {
+      readiness_notify();
+    }
     return (struct syscall_result){status, 0};
   }
   if (keyboard->owner != process) {
@@ -218,6 +265,7 @@ struct syscall_result keyboard_call(struct keyboard_object *keyboard, uint64_t r
   if (operation == KEYBOARD_RELEASE) {
     release_keyboard(keyboard);
     unlock_keyboard(keyboard);
+    readiness_notify();
     return (struct syscall_result){CALL_OK, 0};
   }
 

@@ -502,9 +502,13 @@ The [2D display driver](interfaces/graphics.md#live-destination-geometry)
 handles selected-output size changes and uses full-frame transfer/flush.
 Boot and Bochs geometry remains fixed. Acquired application mappings retain
 their original layout; presentation clips them and fills exposed margins.
-There are no geometry wakeups, mapping replacement or application adaptation
-yet; revisit in display task 5b. Idle applications do not learn a resize until
-they query SIZE again. There is no vblank guarantee, hardware cursor, 3D or
+Geometry wakeups and explicit mapping replacement support libterm, Kilo,
+Mandelbrot and Doom. Other applications retain their acquired geometry until
+they query or explicitly adapt. Kilo keeps its two-column, three-row minimum;
+support for smaller terminals is deferred. Adaptive libterm reads require clock
+READ authority; without it line helpers retain ordinary input behavior and
+their initial dimensions. Revisit these limits with concrete additional
+consumers. There is no vblank guarantee, hardware cursor, 3D or
 recovery after driver failure. Graphics acquisition, presentation and size
 queries then return unavailable, while release remains usable; the last screen
 may stay stale or blank. A selected VirtIO GPU's failure does not try a separate
@@ -527,12 +531,14 @@ until reboot and disables further resizing; the newly committed display keeps
 working. The implementation uses one one-second deadline, not an ABI latency
 guarantee. Revisit retention only with a defined recovery protocol; an eventual
 acknowledgement alone does not free that batch. Preparing and copying every
-space's pixels also costs a whole old/new pair during resize and pauses AP output
-under the output lock for the copy; revisit with measured copy durations.
+space's pixels also costs a whole old/new pair during resize. Every CPU's
+console and kernel-log writes wait on the global output lock during the copy;
+four-TTY nested-KVM measurements ranged from 0.45 to 4.39 ms. Revisit with
+measured copy durations and concrete output-latency needs.
 
 ## Bochs boot-mode scope and aperture retention
 
-The [Bochs driver](wip/display-drivers.md#task-4-implementation-and-validation)
+The [Bochs driver](kernel/display.md#bochs)
 supports QEMU's modern register interface with an already enabled firmware DISPI
 mode. It cannot restore legacy VGA state from DISPI registers, so disabled modes,
 GETCAPS state and older register interfaces keep firmware output without mode

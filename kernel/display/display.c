@@ -5,6 +5,7 @@
 #include <kernel/panic.h>
 #include <kernel/pci.h>
 #include <kernel/memory.h>
+#include <kernel/user/wait.h>
 #include <stdatomic.h>
 #include "boot.h"
 #include "bochs.h"
@@ -24,6 +25,20 @@ static atomic_bool direct_disabled;
 /* Sequential consistency pairs writer publication/recheck with panic's
  * claim/load. Either the writer sees the claim or the claimant sees it. */
 static _Atomic uint32_t writer = DISPLAY_NO_WRITER;
+
+/* Runtime availability is BSP-owned. Publish failure after backend waits and
+ * outside rendering locks, then wake observers before restoring interrupts. */
+static void set_availability(bool ready)
+{
+  uint64_t flags = cpu_save_interrupts();
+  bool newly_failed = !ready && !failed;
+  available = ready;
+  failed = !ready;
+  if (newly_failed) {
+    readiness_notify();
+  }
+  cpu_restore_interrupts(flags);
+}
 
 bool display_modeset_begin(void)
 {
@@ -72,17 +87,18 @@ void display_init(const struct boot_info *boot, const char *size)
 
 bool display_start(void)
 {
+  bool ready = false;
   switch (driver) {
     case DISPLAY_BOOT:
     case DISPLAY_BOCHS:
-      available = true;
+      ready = true;
       break;
     case DISPLAY_VIRTIO_GPU:
-      available = virtio_gpu_start();
+      ready = virtio_gpu_start();
       break;
   }
-  failed = !available;
-  return available;
+  set_availability(ready);
+  return ready;
 }
 
 bool display_available(void)
@@ -107,8 +123,7 @@ const struct framebuffer *display_layout(void)
 
 static void update_gpu_availability(void)
 {
-  available = virtio_gpu_available();
-  failed = !available;
+  set_availability(virtio_gpu_available());
 }
 
 const struct framebuffer *display_resize_prepare(void)
@@ -201,12 +216,15 @@ void display_copy(size_t offset, const void *pixels, size_t bytes)
 
 void display_end_frame(void)
 {
+  bool ready = available;
   if (driver == DISPLAY_VIRTIO_GPU && available && !display_is_panicking()) {
-    available = virtio_gpu_present();
-    failed = !available;
+    ready = virtio_gpu_present();
   }
   cpu_store_fence();
   atomic_store(&writer, DISPLAY_NO_WRITER);
+  if (ready != available) {
+    set_availability(ready);
+  }
 }
 
 const struct framebuffer *display_panic_target(void)

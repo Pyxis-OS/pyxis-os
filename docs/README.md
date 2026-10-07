@@ -19,6 +19,9 @@ data and probe artifacts live with the corresponding development or userland
 reference. The filesystem encoding and host-tool contracts, and port-specific
 notes, remain authoritative in their separately versioned repositories.
 
+The [display reference](kernel/display.md) covers driver selection, transactional
+local resizing, panic ownership and application adaptation.
+
 The [RTL8111 driver](devices/rtl8111.md) supports the ThinkPad's built-in port.
 Its [hardware profile](devices/rtl8111-hardware.md) records ownership and register
 contracts; [qualification](development/rtl8111-qualification.md) covers VFIO and

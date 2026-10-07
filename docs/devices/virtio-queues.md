@@ -92,7 +92,7 @@ outstanding requests, each with separate control and up to 64 KiB data storage.
 Numeric generation IDs associate completions with tickets independently of
 submission order. Flush drains earlier I/O and holds later I/O until completion.
 
-[VirtIO GPU](../wip/display-drivers.md#task-3-implementation-and-validation)
+[VirtIO GPU](../kernel/display.md#virtio-gpu)
 selects up to 16 descriptors, one fenced control command at a time, separate
 request/reply storage and page-list backing for its kernel RAM surface. Only its
 initial geometry query uses the bounded boot-only exception below.

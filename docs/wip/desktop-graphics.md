@@ -38,7 +38,7 @@ placeholder APIs, generic rendering layers or kernel desktop policy now.
 Software rendering is a candidate for the first implementation; measure it
 before requiring acceleration. Start with opaque windows, bitmap text and
 changed-region redraw. The first VirtIO GPU work presents the software-rendered
-screen ([display drivers](display-drivers.md)); accelerated drawing remains separate.
+screen ([display drivers](../kernel/display.md)); accelerated drawing remains separate.
 
 [GrafX2](https://gitlab.com/GrafX2/grafX2) would exercise pointer input, image
 editing and file access. Its [compilation instructions](https://sources.debian.org/src/grafx2/2.9%2Bds-2/doc/COMPILING.txt)
@@ -54,6 +54,13 @@ or complete SDL subsystem contract is selected yet.
 
 ## Display drivers and resizing
 
-VirtIO GPU 2D presentation and live display resizing are now part of the
-[display drivers milestone](display-drivers.md), agreed 2026-10-07, together
-with a Bochs driver and a small driver interface.
+VirtIO GPU 2D presentation and live display resizing are implemented in
+[display drivers](../kernel/display.md), together with Bochs and a small
+driver interface. Accelerated rendering remains separate.
+
+The next physical-driver investigation can use an Intel integrated GPU passed
+through from horse, or native ThinkPad PXE bring-up with
+[remote debugging](../development/remote-debugging.md). The owner prepares
+hardware and permits vendor firmware blobs (agreed 2026-10-07). ThinkPad GPU
+VFIO is ruled out because its IOMMU group also contains the PSP, both USB
+controllers and audio devices. This direction does not authorize a driver task.

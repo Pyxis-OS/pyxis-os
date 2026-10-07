@@ -268,6 +268,37 @@ static void unlock_input(struct console_object *console)
   atomic_store_explicit(&console->input_locked, false, memory_order_release);
 }
 
+uint64_t console_ready(struct console_object *console, uint64_t events,
+    uint64_t observed_generation)
+{
+  uint64_t flags = cpu_save_interrupts();
+  uint64_t ready = 0;
+  if (events & WAIT_READABLE) {
+    lock_input(console);
+    if (console->input_lost || !keyboard_available()) {
+      ready |= WAIT_ERROR;
+    }
+    if (!console->reader_active && console->input_count) {
+      ready |= WAIT_READABLE;
+    }
+    unlock_input(console);
+  }
+  if (events & WAIT_INTERRUPT) {
+    ready |= console_interrupt_ready(&console->interrupt);
+  }
+  if (events & WAIT_RESIZED) {
+    bool locked = log_begin();
+    if (!locked) {
+      ready |= WAIT_ERROR;
+    } else if (console->tty->geometry_generation != observed_generation) {
+      ready |= WAIT_RESIZED;
+    }
+    log_end(locked);
+  }
+  cpu_restore_interrupts(flags);
+  return ready;
+}
+
 void console_discard_input(struct console_object *console)
 {
   lock_input(console);
@@ -300,6 +331,7 @@ void console_input_lost(struct console_object *console)
   lock_input(console);
   lose_input(console);
   unlock_input(console);
+  readiness_notify();
   cpu_restore_interrupts(flags);
 }
 
@@ -332,7 +364,7 @@ void console_input(struct console_object *console, const char *bytes, size_t siz
     }
   }
   unlock_input(console);
-  if (consumed) {
+  if (consumed || size) {
     readiness_notify();
   }
   cpu_restore_interrupts(flags);
@@ -417,6 +449,7 @@ static void end_read(struct console_object *console)
     console->reader_active = false;
   }
   unlock_input(console);
+  readiness_notify();
 }
 
 static struct syscall_result read_console(struct console_object *console,

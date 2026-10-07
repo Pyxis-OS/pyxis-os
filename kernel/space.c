@@ -23,6 +23,7 @@
 #include <arch/cpu_local.h>
 #include <kernel/memory.h>
 #include <kernel/task.h>
+#include <kernel/user/wait.h>
 #include <kernel/keyboard.h>
 #include <kernel/mouse.h>
 #include <kernel/object/console.h>
@@ -745,6 +746,7 @@ static void resize_display(void)
   screen = display_layout();
   uint64_t elapsed = arch_monotonic_ns() - started;
   log_end(locked);
+  readiness_notify();
   cpu_restore_interrupts(flags);
 
   /* The previous presentation finished before this transaction. Its old GPU
