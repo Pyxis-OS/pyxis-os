@@ -31,9 +31,9 @@ implements it; each task starts when the owner says so. It runs alongside the
 - **Every buffer has the boot layout.** Space buffers, the cursor row, the space
   bar and program graphics buffers all copy the boot framebuffer's width, pitch
   and pixel format. The graphics ABI promises fixed dimensions.
-- **Panics before handoff write to the boot framebuffer** through the early
-  console (`early_console_panic_begin()`). After handoff they are serial-only
-  until task 2 restores direct screen takeover.
+- **Panics use the direct screen** through the early console before handoff
+  and through display takeover afterwards. Task 2 validates the new takeover in
+  QEMU; ThinkPad validation is pending.
 - **QEMU devices:**
   - `scripts/run-qemu.sh` passes no display device, so q35 provides the
     standard VGA. That device already has the Bochs mode registers.
@@ -108,6 +108,8 @@ carried into the next task at the owner's request on 2026-10-07:
 - [ ] **2. The interface, with the boot framebuffer as its first driver.**
   - The presenter writes through the interface. Ordinary output is unchanged.
   - Restore panic takeover of the boot framebuffer after presenter handoff.
+  - **Status:** implemented and locally validated; the owner-run ThinkPad check
+    is still required before this task is complete. See the task 2 results below.
   - **Finish when:**
     - QEMU and the ThinkPad look and behave as before during normal operation;
     - a post-handoff panic is visible on the boot framebuffer;
@@ -212,10 +214,9 @@ the selected layout; the common layout is not forced onto the boot framebuffer.
 
 ### Handoff and panic
 
-Current inspection corrects the summary above: **panics after presenter handoff
-are serial-only today**, including standard VGA. `early_console_retire()` makes
-RETIRED terminal. Tasks 2 and 4 must extend this rather than assume an existing
-post-handoff panic renderer. The boot mapping remains reserved, even when retired
+Task-1 inspection found that **panics after presenter handoff were serial-only**,
+including standard VGA: `early_console_retire()` made RETIRED terminal. Task 2
+now permits direct boot-framebuffer takeover; task 4 extends this to Bochs. The boot mapping remains reserved, even when retired
 as normal output; it is not a fallback screen after another device owns scanout.
 VirtIO transport preparation resets the device before BAR sizing, destroying
 GOP scanout resources. Even before reset, its firmware framebuffer is RAM that
@@ -491,7 +492,8 @@ Use ordinary builds, interactive boots and debugger inspection: initial/retired
 resource ownership, mapping extents, inactive-space dimensions, resize refusal,
 release/exit during a preempted frame and panic takeover. Do not add boot tests,
 fault-injection features or output automation. Task 1 measures existing output;
-none of the proposed drivers or resize behaviors have been implemented/qualified.
+task 2 implements the boot driver below. VirtIO, Bochs mode setting and resizing
+have not been implemented or qualified.
 
 ### Investigation sources
 
@@ -528,22 +530,91 @@ Hardware/protocol evidence (QEMU pinned to the measured release):
 - **Measurements:** use existing tools, record nested-VM figures as such, and
   give the revisions and QEMU configuration.
 
-## Task 2 handoff
+## Task 2 implementation and validation
 
-- Branch: `display/boot-framebuffer`, based on merged main `8ef4169`.
-- PR #463 is merged and its four review points are folded into this document.
-  This local documentation commit is carried into the task 2 implementation PR;
-  no separate follow-up PR is opened.
-- [ACPI task 3, PR #464](https://git.internal/PyxisOS/pyxis-os/pulls/464) is still
-  open on 2026-10-07. The working rule above requires waiting for its merge
-  before editing the presenter. No implementation has started.
-- Next: rebase onto the battery-widget merge, initialize the pinned submodules,
-  refresh the unchanged presenter baseline, implement the boot-framebuffer
-  interface and direct panic takeover, then build/boot/debug and open the PR.
-  Owner-run ThinkPad confirmation remains part of task 2 completion.
-- Validation of this follow-up: document/link review and `git diff --check` only.
-  No build or boot is needed for these documentation edits. No QEMU/GDB jobs are
-  running for this task.
+Branch `display/boot-framebuffer` is based on main `30e127b`, after merged ACPI
+battery task 3 (#464) and the kernel log-ring/readers change (#465). It carries
+all four review follow-ups from #463. Code is commit `58e0024`; subsequent
+commits update the documentation. No public ABI or submodule pin changes.
+
+The implemented interface is `display_init`, `display_layout`,
+`display_begin_frame`, `display_copy`, `display_end_frame` and
+`display_panic_target`. Only the boot driver exists. Its immutable descriptor
+copies the validated boot metadata before AP startup and retains the existing
+mapping, pitch and format. There is no new frame allocation or mode change.
+Enum dispatch and additional operations wait until another real driver needs
+them; no unimplemented driver value or callback table is introduced.
+
+Every physical presenter write, including bar and cursor row, goes through the
+interface. Copying checks a permanent panic gate between at most 64 KiB chunks;
+end drains WC stores before clearing the writer's CPUID APIC ID. A first panic
+may claim RETIRED, fence its interrupted local writer or boundedly await another
+CPU's writer, then clear/reset the static renderer and publish panic ownership.
+No GS, heap, log lock, VM mutation or scheduler operation is used for takeover.
+Allocation and graphics-session snapshot/release behavior is unchanged.
+
+### Refreshed presenter cost
+
+Configuration and measurement method match task 1: QEMU `983d31c61557`
+(10.2.2 plus the documented AHCI fix), q35, nested KVM, four CPUs, 256 MiB,
+standard VGA, headless display, entropy enabled, no NIC/export/disk, fresh raw
+OVMF variables, 1280×800/pitch 5120 and the idle Caelum TTY with cursor.
+Use the same HPET reads and manual GDB function entry/finish samples after warmup.
+
+| Source | Five whole-call samples, ms | Median, ms |
+| --- | --- | --- |
+| Main `30e127b`, after ACPI task 3 | 1.12753, 1.14340, 1.03834, 1.40985, 1.08155 | 1.12753 |
+| Task 2 code `58e0024` | 1.46491, 1.07368, 1.04355, 1.19968, 1.42558 | 1.19968 |
+
+The median difference is +6.4%, within the initial task-1 run variation (12.6%)
+and with overlapping sample ranges. This small elapsed-time/debugger comparison
+supports no material regression in this profile; it is not a CPU-cycle result,
+GTK cadence measurement or native performance claim. Task-2 timing was collected
+from the matching source before committing it; the committed code was rebuilt
+and used for later runtime checks. The baseline branch head was `52cb6f0`, whose
+only change from main was the carried review documentation.
+
+Source builds used `make -j16 image`. The changed kernel then used verified
+unchanged SDK/userland/ports bundles from that build (`PREBUILT="sdk userspace
+ports"`); newer main's log ABI required rebuilding them rather than using the
+older task-1 SDK. Kernel builds have no warnings; upstream ports emitted their
+existing build warnings. Pinned inputs: userland `bb66de52`, ports `42f83748`,
+fs `b427df29`, lwIP `a1aadb91`.
+
+### Runtime results
+
+- Four-CPU boot: the bar, cursor, space navigation, Development shell and
+  Mandelbrot display correctly. Escape releases graphics and restores the TTY;
+  GDB then observes no owner, frame or user mapping. The app's 1280×768 backing
+  has the original pitch/format and its normal snapshot reference lifetime.
+- BSP panic after handoff: the first claim closes the gate, resets the screen
+  with no published owner, then publishes APIC 0 and displays the panic text.
+- AP panic while the BSP has a real frame lease: stopped in the first physical
+  copy with writer APIC 0, redirected idle APIC 1 to the existing panic function.
+  GDB held the BSP until the panic gate was closed, then released both CPUs.
+  The BSP cancelled its copies, fenced and cleared the record; the AP completed
+  takeover and showed the panic. A later BSP `display_begin_frame()` returned
+  false, retaining the screen. This exercised real recorded-writer handoff,
+  with debugger-controlled timing, not a naturally occurring exception race.
+
+- Single-CPU boot: the same bar, cursor, space navigation and Development
+  shell are visible. Interrupting a real recorded BSP frame reaches panic reset
+  with the gate closed and local writer APIC 0; no remote wait is needed.
+- Fault during panic reset: on that single-CPU boot, GDB changed the renderer
+  address to unmapped zero before clear. One kernel page-fault report and the
+  fatal panic reached serial, no screen owner was published, and the CPU halted
+  without recursively rendering the exception. This was a debugger-simulated
+  bad mapping; no test or injection code was added.
+
+- Bounded-wait expiry: GDB replaced the writer record with a non-clearing APIC
+  1 while redirecting the BSP to panic, holding the other CPUs stopped. The poll
+  limit expired, the gate stayed closed, the owner remained unset and panic text
+  reached serial. This is a simulated stuck-writer record, not a measured native
+  scheduling timeout.
+
+The owner-run ThinkPad normal-boot/visual confirmation remains required, so
+this task's checkbox stays open. No compiler-container rebuild is needed.
+Tasks 3–5 have not started. All task-specific QEMU/GDB jobs were closed.
 
 ## After the milestone
 
