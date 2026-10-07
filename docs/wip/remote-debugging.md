@@ -180,7 +180,7 @@ Accepted reader contract for task 1 on 2026-10-07:
     [PR #471](https://git.internal/PyxisOS/pyxis-os/pulls/471) records the
     owner's native qualification. All task-owned QEMU, debugger and
     host-client jobs are stopped.
-- [ ] **3. The kernel log over UDP.**
+- [x] **3. The kernel log over UDP.**
   - The kernel sends each log line as UDP datagrams to the host, and keeps
     sending during a panic, when locks may be held and userspace is gone.
   - [x] Implement selected VirtIO/RTL8111 fatal TX ownership, asynchronous ring
@@ -188,13 +188,13 @@ Accepted reader contract for task 1 on 2026-10-07:
   - [x] In QEMU, receive the boot log and deliberate panic messages, including
     an interrupted log-lock owner and interrupted TX publication.
   - [x] With the option off, observe no UDP log traffic, including during panic.
-  - [ ] On the ThinkPad, receive the boot log and a deliberate panic's message;
+  - [x] On the ThinkPad, receive the boot log and a deliberate panic's message;
     repeat the disabled check. Owner results, 2026-10-07:
     - [x] **Disabled:** with `log.udp=0` no UDP log traffic arrived.
     - [x] **Panic:** a throwaway build (never merged) panicked on Ctrl+Alt+F12,
       which needs Fn on the ThinkPad. The panic line arrived through the
       RTL8111 fatal transmit path, its first native run.
-    - [ ] **Boot log:** one earlier enabled boot delivered the boot log. On the
+    - [x] **Boot log:** one earlier enabled boot delivered the boot log. On the
       panic build's boot, the receiver was running but packets 0–49 (the
       normal boot stream) never arrived. Each line is sent once, as soon as the
       card reports link. Frames in the first seconds after Pyxis resets the
@@ -209,7 +209,9 @@ Accepted reader contract for task 1 on 2026-10-07:
       history subject to its ordinary capacity limit. Fatal output keeps
       sending at once, with or without an address. Native qualification is now
       a plain enabled boot with `log.udp=1` delivering the whole boot log;
-      no panic build is needed.
+      no panic build is needed. **Passed:** on main `fcf142e`, a plain PXE
+      boot with `log.udp=1` delivered the whole boot log to the receiver,
+      from packet 0 with no gaps (owner, 2026-10-07).
   - Usage, wire format, ownership and limits are in
     [kernel log](../interfaces/kernel-log.md#udp-capture).
 
@@ -311,10 +313,8 @@ RTL descriptors is the accepted capacity tradeoff, not a measured 6.25%
 throughput loss. Idle following adds a 100 ms deadline; caught-up reads honor
 it even when unrelated traffic keeps the worker running.
 
-Remaining: the native plain enabled boot must deliver the whole boot log; no
-panic build is needed. The disabled and panic checks passed on the ThinkPad on
-2026-10-07. Keep task 3 and the milestone open until the boot log arrives
-reliably. All task-owned QEMU, debugger, host-client,
+The native boot-log, disabled and panic checks all passed on the ThinkPad on
+2026-10-07; the boot log arrived complete once the IPv4 gate landed. All task-owned QEMU, debugger, host-client,
 receiver and packet-capture jobs are stopped; the temporary TAP is removed.
 
 ### IPv4 gate follow-up, 2026-10-07
