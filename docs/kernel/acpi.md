@@ -5,7 +5,8 @@ use ACPI devices and AML methods. Static tables that early boot needs (the
 MADT, FADT flags, HPET and MCFG) are still read directly by
 `arch/x86_64/acpi.c` before the CR3 switch. This page describes what the
 [ACPI milestone](../wip/acpi-and-bar-widgets.md) has implemented so far: the
-namespace is loaded, and the kernel powers off and restarts through it.
+namespace is loaded, the kernel powers off and restarts through it, and it reads
+the battery through the embedded controller for the space bar.
 
 ## Ownership
 
@@ -93,9 +94,14 @@ devices, are refused.
 SCI interrupt entry masks the input, records the event and wakes the worker.
 No uACPI code runs in interrupt entry. The worker runs uACPI's handler with
 IF=0, as interrupt entry would, and unmasks the input afterwards. If the
-handler does not claim the SCI, the input stays masked: a level-triggered SCI
-that nothing clears would fire again at once. This is logged, and ACPI events
-stop until reboot.
+handler does not claim the SCI, the input stays masked for one second, because
+a level-triggered SCI that nothing clears would fire again at once. The worker
+then unmasks it from its top level. The first unclaimed SCI is logged and later
+ones go to the trace log, so an SCI that keeps firing costs one worker wake-up
+per second instead of disabling ACPI events until reboot.
+
+Only the embedded controller's GPE is enabled. GPEs with AML handlers (`_Lxx`
+and `_Exx` methods) stay disabled until a later ACPI use needs them.
 
 ## Deferred work
 
@@ -104,6 +110,45 @@ and runs in order at the worker's top level, never inside a wait. Running on
 the BSP also meets uACPI's requirement that GPE work run on CPU 0. A request to
 wait for work completion services a pending SCI, then runs every queued item,
 including items they queue. Work cannot wait for work.
+
+## Embedded controller and battery
+
+The embedded controller (`kernel/acpi/ec.c`) is taken from the ECDT when the
+firmware has one, before `_INI` and `_STA` run, and otherwise from the first
+present `PNP0C09` device after namespace initialization: its `_CRS` gives the
+data port, then the command and status port, and its `_GPE` the GPE number.
+Installing the `EmbeddedControl` handler on that device runs its `_REG`
+methods; on the T14, `_REG` switches the firmware's own methods from an SMI
+path to EC fields.
+
+Each EC access is one byte transaction: a read is the command, the address and
+one result byte; a write is the command, the address and the value. The worker
+polls the status register between bytes, waiting at most 500 ms each time. A
+wider field is moved one byte at a time. A timeout fails that access; the first
+one is logged and later ones go to the trace log.
+
+The EC's GPE is edge-triggered and serves its query events. The SCI handler
+queues one deferred work item and leaves the GPE disabled. That item reads
+query numbers while the status register reports an event, at most 32 per item,
+and runs `_Qxx` for each one on the EC device, then lets the GPE fire again. A
+missing `_Qxx` is normal and goes to the trace log. Notifications sent by
+those methods have no handlers yet.
+
+`kernel/acpi/battery.c` finds up to two `PNP0C0A` batteries and the first
+`ACPI0003` AC adapter. Every five seconds, at its top level, the worker:
+
+- evaluates each battery's `_STA`;
+- when a battery appears, or until its full capacity is known, reads `_BIX`, or
+  `_BIF` without it, for the last full charge capacity, falling back to the
+  design capacity;
+- reads `_BST` for the remaining capacity and the charging bit, and the adapter's
+  `_PSR`.
+
+The percentage is the summed remaining capacity over the summed full capacity,
+rounded down and capped at 100, which is how Linux computes `capacity`. The
+reading is published with IF=0 on the BSP. Without a battery, or when no battery
+gives a valid reading, it is not present. The kernel presenter draws it in the
+[space bar](../userland/init.md#space-bar).
 
 ## Power-off and restart
 
@@ -136,6 +181,10 @@ UNAVAILABLE. The worker runs the operation at its top level, like deferred work:
    (one in PCI configuration space is refused like any PCI write) or has not
    reset the machine after a second, the architecture fallback pulses the 8042
    reset line and then triple-faults the CPU.
+
+When S5 entry returns, uACPI has already disabled the runtime GPEs and armed
+only wake GPEs, so the worker runs uACPI's S5 wake path, which enables the
+runtime GPEs again and runs `_WAK`.
 
 If the flush fails, or the firmware does not power off, the pools are unsealed,
 held tasks are released, `power: power-off failed (status N); the system stays
@@ -241,6 +290,32 @@ medians, with ranges:
 
 The difference is within run-to-run variation.
 
+### Embedded controller and battery
+
+QEMU has neither a battery nor an embedded controller. Nested-VM checks used
+the same QEMU, KVM and OVMF with 256 MiB, comparing `7e4fe0c` with this change,
+three boots each:
+
+| CPUs | Measure | Baseline | Change |
+| --- | --- | ---: | ---: |
+| 1 | Namespace load | 1.57–1.64 ms | 1.57–1.64 ms |
+| 4 | Namespace load | 1.68–8.43 ms | 1.71–1.75 ms |
+| 1 | uACPI heap | 106,135 bytes in 3,447 blocks | unchanged |
+| 4 | uACPI heap | 108,517 bytes in 3,525 blocks | unchanged |
+| both | Firmware window | 14 pages | 14 pages |
+
+The 8.43 ms baseline load was one outlier boot.
+Kernel text grew from 771,789 to 776,333 bytes and bss from 396,288 to 396,464.
+Without a battery the space bar is unchanged.
+
+A local test table, not part of the change, added a `PNP0C0A` battery and an
+`ACPI0003` adapter through `-acpitable`. Its `_BST` drained by 4.5% per read to
+zero, then charged back to full. With one and four CPUs the widget showed
+`100`, two-digit values, `05%`, `01%` and `00%` with the gradient background,
+and the tabs gave up its width. Under GDB, a forced unclaimed SCI logged the
+error line once, and the worker unmasked the SCI 1.009 s later, woken by the
+re-arm deadline rather than the next poll.
+
 ## Limits
 
 These are recorded in [technical debt](../technical-debt.md#acpi-interpreter-host-limits)
@@ -253,3 +328,8 @@ and [power-off limits](../technical-debt.md#power-off-and-restart-limits):
 - The SCI must share the keyboard's I/O APIC.
 - Inline completion of deferred work has not yet been exercised.
 - Power-off skips pools that already failed and cannot stop services in order.
+- EC transactions busy-wait on the BSP and do not take the ACPI global lock.
+- Battery changes are polled; notifications are not handled yet.
+
+The embedded controller and battery limits are in
+[technical debt](../technical-debt.md#embedded-controller-and-battery-limits).

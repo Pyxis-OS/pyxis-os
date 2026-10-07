@@ -453,6 +453,13 @@ is clipped with a three-dot marker. A chevron is light when spaces are hidden
 beyond that edge and muted when that end of the list is visible. Chevrons do not
 navigate.
 
+On a machine with a battery, a fixed box just inside the `>` slot shows the
+charge, and the tabs share the remaining width. It always holds three
+characters: `100` when full, `10%` to `99%`, and `00%` to `09%`. Its background
+follows the charge along a gradient from `#a00` at 0% through `#730` at 25% to
+`#690` at 100%. It refreshes with the [ACPI](../kernel/acpi.md#embedded-controller-and-battery)
+reading every five seconds and is hidden without a battery.
+
 Super+Left/Right moves the selection and stops at both ends. Moving right
 scrolls so that the selected space and the next one are visible. Moving left is
 symmetric. At the end of the list, the selection may sit in the edge slot. The
