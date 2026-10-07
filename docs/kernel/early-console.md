@@ -235,4 +235,4 @@ The AP handoff used debugger-controlled real writer/gate transitions; timeout
 and bad mapping were simulated state changes. The owner confirmed normal
 ThinkPad output in PR #471; native panic and naturally occurring concurrent
 failures remain unmeasured. Presenter timing is
-recorded in the [display milestone](../wip/display-drivers.md#refreshed-presenter-cost).
+recorded in the [display milestone](../kernel/display.md#qualification-and-cost).

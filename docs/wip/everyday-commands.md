@@ -39,8 +39,8 @@ Accepted by the owner on 2026-10-07:
      and `tail` remain [application port](application-ports.md) candidates.
    - **Terminal scrollback is not in this milestone,** even though it is the
      general fix for output scrolling away. It changes how the TTY stores text,
-     which the [display milestone](display-drivers.md)'s resize work (task 5a) is
-     changing now. It is a candidate for right after that.
+     which [display resizing](../kernel/display.md) preserves as raster cells
+     without a text grid. Scrollback remains a separate candidate.
 2. **`ls` behaviour.**
    - **Sorted by name**, by byte order.
    - **On a terminal:** names in columns sized to the terminal width, colored by

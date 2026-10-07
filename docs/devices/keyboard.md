@@ -114,6 +114,13 @@ READ returns one fixed-size event; zero flags block, while `KEYBOARD_READ_POLL`
 returns `CALL_TIMED_OUT` if the queue is empty. Validate reply storage before
 consuming an event or blocking. Display acquisition is independent.
 
+`wait_many` accepts READABLE on the acquiring process's INPUT handle in its
+own space. It reserves no event: use a poll read after waking if another
+observation may have consumed input. Focus and state-reset events also make
+the session readable. A wait can combine this interest with display RESIZED;
+the resize is separate from keyboard events. Loss of ownership or device
+availability while waiting reports ERROR.
+
 Ownership belongs to the process, not an individual handle. Copying a grant
 does not transfer an acquired session; closing its last handle does not release
 it. Another handle to the same object can release the session, and process

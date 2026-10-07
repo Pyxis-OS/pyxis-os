@@ -25,15 +25,16 @@ The display is restricted to processes in its owning space. Acquiring graphics
 requires this capability, not a space index or a global framebuffer address.
 
 One process may acquire graphics in a space at a time. Another acquisition,
-including a repeated call by the owner, returns BUSY. PRESENT and RELEASE are
-permitted only to the acquiring process. Copying a capability delegates the
+including a repeated call by the owner, returns BUSY. PRESENT, RELEASE and
+REPLACE are permitted only to the acquiring process. Copying a capability delegates the
 ability to acquire a future session; it does not transfer the current session
 or map its pixels into the recipient. Closing a handle does not end the session.
 The owner can use another DRAW handle to the same display to release it, or exit.
 
 ## Mapping and presentation
 
-[The ABI](../../include/abi/display.h) has four header-only synchronous requests:
+[The ABI](../../include/abi/display.h) has five synchronous requests. All but
+REPLACE carry only a message header:
 
 - ACQUIRE allocates zeroed RAM and maps it writable and non-executable into the
   caller. Its reply contains the address, mapped size, width, height, pitch and
@@ -47,11 +48,18 @@ The owner can use another DRAW handle to the same display to release it, or exit
   generation atomically in a 48-byte `display_size_reply`. DRAW permits this
   query without acquiring graphics or owning the current session; it grants no
   mode-setting authority. `display_size()` exposes the same native result.
+- REPLACE carries the expected destination generation. It allocates a zeroed
+  current-size buffer at a disjoint user address and returns a new 64-byte
+  descriptor. A generation mismatch returns BUSY; allocation/mapping failure
+  preserves the old mapping and session. Success removes the old user mapping
+  within the call, so its pointer is invalid after return. The acquiring process
+  remains owner, and a visible session selects the blank new buffer until it
+  redraws. Reply storage must not overlap the mapping being retired.
 
 Pixels are 32-bit words with three 8-bit channels at the returned shifts. Pitch
 is bytes between row starts. The layout matches the current display; dimensions
 exclude the kernel-owned navigation bar. An acquired mapping's address, extent,
-pitch and dimensions remain fixed until RELEASE; its generation identifies the
+pitch and dimensions remain fixed until REPLACE or RELEASE; its generation identifies the
 geometry at acquisition. Mapped size includes page padding, which is zeroed
 along with the pixels. Applications draw only
 within width/height and use pitch rather than assuming tightly packed rows.
@@ -64,7 +72,7 @@ contract permits tearing; PRESENT neither freezes pixels nor promises vblank,
 atomic frames or completion notification. The kernel copies pixels into the
 physical driver's target: directly to the boot/Bochs framebuffer, or into kernel RAM
 followed by a fenced VirtIO transfer and flush. Application backing is never
-attached to the GPU. A failed physical driver makes ACQUIRE/PRESENT/SIZE unavailable;
+attached to the GPU. A failed physical driver makes ACQUIRE/PRESENT/SIZE/REPLACE unavailable;
 RELEASE still tears down an existing session. Double buffering and a compositor
 remain separate work.
 
@@ -105,14 +113,25 @@ until reboot and disables further resizing; the committed display continues
 working. Device-owned backing separately requires confirmed fenced cleanup;
 uncertain GPU ownership causes terminal driver failure and retention until reboot.
 
-There is no geometry wakeup, explicit mapping replacement or application
-adaptation yet. Idle programs learn a change on their next SIZE query. These are
-task 5b of the [display milestone](../wip/display-drivers.md).
+`WAIT_RESIZED` on a DRAW handle compares a caller's observed generation with
+the current destination generation. It needs no acquired session and reserves
+nothing. Changes coalesce; query SIZE after waking. A backend failure reports
+`WAIT_ERROR`. Geometry notification cannot be lost between query and sleeping:
+the readiness worker remembers notifications across its scan and park.
+
+Mandelbrot waits for resize together with captured keyboard readability and
+replaces at a render checkpoint, retaining its complex-plane centre and zoom.
+Doom queries at frame boundaries and keeps its 320x200 game frame, recomputing
+integer scale and letterboxing after replacement. Below scale one it keeps
+rendering to the old mapping with clipping until the destination grows. Both
+keep the old mapping usable after replacement failure and wait for a fresh
+geometry generation before automatically retrying. Other graphics consumers
+keep their acquired layout until they explicitly adapt.
 
 ## Mapping and teardown invariants
 
 All display state and backing allocation are BSP-owned, with interrupts disabled
-while mutating them. All four operations, including PRESENT and SIZE, use typed
+while mutating them. All five operations, including PRESENT and SIZE, use typed
 requests on the common BSP FIFO. The service catalog requires the scheduler to park the
 requesting task outside its private root and stack, with entry/current-task state
 cleared, before publication. The BSP executor performs the operation and clears
@@ -123,10 +142,12 @@ acquisition unwinds partial mappings and backing without claiming the display.
 VM owns the kernel allocation; user mappings borrow its physical frames. The
 session holds one buffer reference. Presentation acquires another with interrupts
 disabled, then copies with interrupts enabled. If release or process cleanup runs
-while that copy is preempted, it detaches the session and removes the user aliases
+while that copy is preempted, it detaches the old buffer and removes its user aliases
 but retains backing until presentation drops the last reference. A presenter
 borrows no process pointer. It may finish one old frame before the next tick
-shows the restored TTY or newly selected graphics.
+shows the restored TTY or newly selected graphics. REPLACE applies the same
+retirement rule while retaining the session. Deferred backing reclamation is
+attributed to the owner's execution group, so group completion includes it.
 
 Normal exit and fatal user-fault cleanup both release an owned session before
 VM destruction, including if the process closed every display handle. Child
@@ -137,6 +158,6 @@ may temporarily retain only pixel backing. No application mapping survives exit.
 
 One buffer, one owner and one user mapping per space; fixed acquired layouts and
 native 32-bit pixels. Cross-space presentation, shared application mappings,
-mapping replacement, dirty rectangles, frame completion and graphics-specific
+dirty rectangles, frame completion and graphics-specific
 resource quotas remain separate work. The single-CPU development fallback can use the same
 display protocol, while its TTY still shares kernel logs.

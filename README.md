@@ -86,7 +86,7 @@ and cleanup, and runs preemptible kernel tasks; user syscall paths remain
 non-preemptible. See [SMP ownership](docs/kernel/smp.md), [userspace](docs/kernel/userspace.md)
 and [memory](docs/kernel/memory.md). Low-level allocation contracts live in
 [PMM](include/kernel/mm/pmm.h), [VM](include/kernel/mm/vm.h) and
-[heap](include/kernel/mm/heap.h) headers. Task migration, cross-CPU TLB shootdowns,
+[heap](include/kernel/mm/heap.h) headers. Task migration, concurrent shared mapping mutation,
 AVX and physical-hardware support remain outside the current implementation.
 
 Find subsystem references in the [documentation guide](docs/README.md).

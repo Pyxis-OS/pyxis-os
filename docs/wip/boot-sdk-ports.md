@@ -145,9 +145,10 @@ power-off and reboot, the battery widget in the space bar, the power button and
 battery queries for userspace (Fastfetch's Battery module). Its follow-ups are in
 [later OS directions](later-os-directions.md#power-and-acpi).
 
-[Display drivers and resizing](display-drivers.md), agreed 2026-10-07 and run by
-Codex alongside ACPI: a proposal first, then the boot framebuffer behind a small
-driver interface, VirtIO GPU 2D, Bochs and live resizing. Physical GPUs follow.
+[Display drivers and resizing](../kernel/display.md) completed 2026-10-07:
+the boot framebuffer, VirtIO GPU 2D and Bochs share a small driver interface.
+Live VirtIO resizing updates local terminals, wakes shell/Kilo editors and
+lets Mandelbrot/Doom explicitly replace their mappings. Physical GPUs follow.
 
 [Remote debugging without serial](../development/remote-debugging.md) completed
 2026-10-07: retained kernel logs with `log` and `log -f`, named reverse remote
@@ -226,7 +227,7 @@ implemented: Ctrl+C terminates a running foreground command or pipeline through
 process-level termination, shell-armed interrupt events and a minimal
 application passthrough for programs such as Kilo.
 
-The [display drivers milestone](display-drivers.md), agreed 2026-10-07, adds
+The completed [display drivers work](../kernel/display.md) adds
 VirtIO GPU 2D and Bochs drivers behind a small interface, with live resizing
 that reaches terminal geometry. It requires no 3D acceleration and does not
 block a multiplexer on a fixed-size display.

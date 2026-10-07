@@ -58,6 +58,13 @@ shifts and pitch. Presentation retains the existing single-buffer contract;
 tearing is possible. There is no display refresh synchronization or pixel-aspect
 correction.
 
+At each frame boundary Doom queries destination geometry. A fresh generation
+replaces its mapping and recomputes integer scaling and black borders; the game
+engine keeps its fixed frame size. A destination too small for scale one keeps
+the old mapping and clipped output until growth. Replacement failure also
+keeps the old buffer usable, with no allocation retry on every frame; another
+geometry generation permits a new attempt.
+
 ## Saves
 
 F2 opens the save menu; F3 opens load. F6 selects a quicksave slot on its first

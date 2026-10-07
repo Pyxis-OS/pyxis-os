@@ -57,9 +57,6 @@ static enum call_status interest_authority(const struct kernel_object *object,
     if (events & ~allowed) {
       return CALL_BAD_REQUEST;
     }
-    if (object->type == OBJECT_CONSOLE && object != &caller->space->console->object) {
-      return CALL_DENIED;
-    }
     if (events & (WAIT_READABLE | WAIT_PEER_FIN)) {
       required |= CONSOLE_RIGHT_READ;
     }

@@ -37,7 +37,7 @@ mode is restored and verified; unverifiable restoration stops boot on serial.
 This driver requires QEMU's modern register extension and an enabled firmware
 DISPI mode. It preserves the existing WC mapping only when the boot framebuffer
 starts at BAR0; another offset refuses mode setting. Panic uses the selected
-direct target after successful readback. The [display milestone](../wip/display-drivers.md)
+direct target after successful readback. The [display milestone](../kernel/display.md)
 records interfaces, measured cost and remaining limits.
 
 ## PCI passthrough

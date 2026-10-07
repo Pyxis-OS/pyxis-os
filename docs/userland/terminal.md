@@ -30,7 +30,7 @@ prompt, discarding the unfinished chunk and exiting.
 
 `term_read_line_initial` also borrows a disjoint, NUL-terminated printable ASCII
 initial value. It starts with that value visible and the cursor at its end; the
-caller can edit or submit it. It must fit both the buffer and display limit.
+caller can edit or submit it. It must fit the caller's buffer.
 All non-success results discard the initial text just as they discard typed
 text. The existing line helpers start empty.
 
@@ -41,12 +41,11 @@ older output scrolls upward. The helper redraws the line and uses relative row
 movement to reach the editing position. It does not need the screen's absolute
 cursor position or a kernel-side line buffer.
 
-The maximum line length is the smaller of `capacity - 1` and
-`columns * rows - prompt_length - 1`. One cell holds the end cursor. Delayed
-wrapping allows the last screen cell to be used without scrolling.
-This keeps the whole editable span reachable even after scrolling. A prompt
-that leaves no room for those cells fails with `CALL_LIMIT` before output.
-At either limit, further insertion is rejected, the cursor cell turns red, and the
+The maximum line length is `capacity - 1`. When the prompt, input and cursor
+cell fit, they use the ordinary wrapped view. Otherwise the editor displays a
+bounded window of the prompt/input around the logical cursor; the complete text
+remains editable. Growing the terminal restores text that fits again. At the
+buffer limit, further insertion is rejected, the cursor cell turns red, and the
 result's `limit_reached` flag records that rejection. Editing and submission
 remain available; movement or deletion restores the normal cursor appearance.
 
@@ -67,8 +66,8 @@ Escape returns byte 27; incomplete or unsupported sequences return
 `TERM_KEY_UNKNOWN`. Other bytes retain their values, while navigation uses the
 named `TERM_KEY_*` values. These are logical terminal keys, not physical events.
 The line editor ignores Escape, Up/Down and Page Up/Down.
-Tab and non-ASCII input are ignored; Unicode widths, history and a viewport for
-lines larger than the screen remain later work. `CALL_INPUT_LOST` abandons the
+Tab and non-ASCII input are ignored; Unicode widths and history remain later
+work. `CALL_INPUT_LOST` abandons the
 line and returns a distinct result, so the caller can explain the loss and retry.
 On an output failure, the screen/cursor may be partially updated and must not be
 assumed to match the discarded line.
@@ -79,10 +78,16 @@ arrives, it uses the same Escape decoding rules as the blocking helper, even
 when decoding extends past the caller's timeout. It never discards a partial
 key merely because that initial timeout elapsed.
 
-Kilo uses this helper with a remaining monotonic deadline to expire transient
-status messages while idle. After clearing a message it blocks indefinitely
-again; active search prompts do not expire. No periodic redraw or polling is
-needed.
+The resize-aware event reader retains partial Escape/CSI decoding and its
+monotonic byte deadline across resize events. It reports keys and geometry
+changes as distinct events. It requires an explicitly delegated clock READ
+handle; stock sessions provide one. Line helpers fall back to ordinary key
+reading when that resource is absent, preserving existing grants.
+
+Kilo uses the event reader with a remaining monotonic deadline to expire
+transient status messages while idle. Resize redraws the editor or active
+search prompt without a key; search prompts do not expire. It retains its
+minimum of two columns and three rows. No periodic redraw or polling is needed.
 
 ## TTY output controls
 
@@ -153,8 +158,14 @@ updates every TTY without replacing its console. It crops whole rasterized cells
 without reflow, keeps the cursor visible and fills new cells with the background.
 Colors, tab width and escape-parser state survive; pending wrap is cleared.
 Remote terminal sessions keep their independent dimensions and generation one.
-There is no resize notification yet, so a blocked line editor or application
-does not wake solely because the local display changed size.
+`WAIT_RESIZED` compares the interest's observed generation against this
+snapshot. READ or WRITE authorizes observation; input `WAIT_READABLE` needs
+READ. The blocked line editor wakes, re-queries geometry and redraws its retained
+text without requiring a key. It moves back toward the old rendered origin,
+clamping at the top if resize cropped that origin, and erases from there to
+screen end. Normal TTY scrolling keeps the bounded view reachable without
+clearing surviving rows above the editor. Other programs adapt when they opt
+into readiness or query SIZE again.
 
 The shell uses the helper for command input, then stops reading while a child
 runs. It retries after cancellation or input loss and rejects submitted lines
@@ -222,8 +233,8 @@ The discarded prefix of an injection counts as accepted. Unarmed byte 3 is data,
 as before. Raw keyboard owners receive key events that never become console
 text, so they are unaffected.
 
-`wait_many` accepts `WAIT_INTERRUPT` on an armed handle, and no other event on
-console or terminal application handles. It reports the latch level-triggered
+`wait_many` accepts `WAIT_INTERRUPT` on an armed handle, independently of
+READABLE and RESIZED on ordinary console/terminal grants. It reports the latch level-triggered
 and does not consume it; there is no acknowledgement operation. A terminal
 hangup also reports `WAIT_ERROR`. The latch is set on the BSP under the input
 lock and published through the ordinary readiness notification.

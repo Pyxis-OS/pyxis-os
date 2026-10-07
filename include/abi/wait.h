@@ -51,8 +51,7 @@ struct wait_interest {
  * readiness excludes an active reader and reserves no FIFO admission. Input
  * loss reports ERROR for console READABLE; terminal hangup reports ERROR.
  * INTERRUPT requires ARMED and observes the Ctrl+C latch without consuming it.
- * Local console interests require the caller's own space. Console RESIZED
- * requires READ or WRITE;
+ * Console RESIZED requires READ or WRITE;
  * terminal input/output RESIZED requires READ/WRITE respectively. Remote
  * terminal geometry stays at generation 1. Display RESIZED requires DRAW and
  * the caller's own space, without acquiring graphics. Keyboard accepts only
