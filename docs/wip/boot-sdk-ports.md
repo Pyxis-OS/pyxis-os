@@ -160,10 +160,12 @@ native `echo` and staged `cp`, sorted terminal columns/colors and long listings
 in `ls`, and verified foreground shell-script launch in an opted-in space.
 The remaining [everyday gaps](everyday-gaps.md) list has no unscheduled entries.
 
-[LLVM toolchain on the host](llvm-toolchain.md), agreed 2026-10-07 for Claude
-after the ACPI milestone: Clang and LLD build the kernel, SDK, userland and
-ports, then become the default and GCC is retired. It is the first of the
-three [LLVM milestones](toolchains-and-runtimes.md#llvmclang-transition-and-hosting).
+[LLVM toolchain on the host](../development/llvm-toolchain.md) completed
+2026-10-07: Clang, LLD and compiler-rt from the `pyxis-llvm` fork build the
+kernel, SDK, userland and ports, LLD writes P1F executables directly, and GCC,
+binutils and `elf2pxe` are retired. The owner checked an all-LLVM build on the
+ThinkPad. It is the first of the three
+[LLVM milestones](toolchains-and-runtimes.md#llvmclang-transition-and-hosting).
 
 [Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md) completed
 2026-10-06: read-only FUSE mounts and in-memory journal replay, with the owner
