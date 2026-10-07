@@ -19,7 +19,8 @@ not BusyBox applets.
 
 - **`echo` is implemented.** The native external program supports redirects
   and pipelines, with usage in the [shell guide](../userland/shell.md#commands-and-quoting).
-- **`cp` is missing.** Copying a file needs `cat SRC > DST`.
+- **`cp` is implemented** with staged file replacement and directory
+  destinations. See [usage, authority and cleanup limits](../userland/cp.md).
 - **`ls` is implemented** with sorting, terminal columns/colors, `-1` and `-l`.
   See [usage and limits](../userland/ls.md). Pipes and files keep plain names;
   `ls boot:// | less` pages a listing ([less](../userland/less.md)).
@@ -66,6 +67,15 @@ Accepted by the owner on 2026-10-07:
    - Copies work across roots, for example `cp boot://share/hello.txt home://`.
    - A failed copy leaves no partial destination behind where the filesystem
      makes that possible, and otherwise reports the partial file.
+   - **Staged replacement (accepted 2026-10-07):** copy into an exclusively
+     created sibling temporary file, then rename it into place. Require CREATE,
+     WRITE_FILES and REMOVE on the held destination directory; do not fall back
+     to direct truncation when staging is unavailable.
+   - **Concurrency limit (accepted 2026-10-07):** other writers must leave the
+     temporary name alone during the copy. Rename/removal operate on names, not
+     held file identity. Source contents remain live reads, not a snapshot;
+     retaining the source makes aliases safe from truncation. Unconfirmed
+     publication is reported without retry or deletion of either name.
 
 ## Tasks
 
@@ -94,12 +104,19 @@ Accepted by the owner on 2026-10-07:
     [validation record](../userland/ls.md#validation). Implemented in
     [userland PR #146](https://git.internal/PyxisOS/pyxis-userland/pulls/146).
 
-- [ ] **3. `cp`** (decision 3).
+- [x] **3. `cp`** (decision 3).
   - **Finish when:**
     - copying within a root and across roots gives identical files, checked
       with `sha256sum`;
     - copying several files into a directory works;
     - a read-only destination fails cleanly.
+  - **Validated 2026-10-07:** full source image build; manual four-CPU
+    QEMU/KVM (512 MiB, nested VM) covered within-root/cross-root SHA-256 checks,
+    multiple sources, replacements, aliases, name collisions and permission
+    failure cleanup. GDB confirmed held-parent creation with READ-only source
+    and WRITE-only temporary grants. See the
+    [validation record](../userland/cp.md#validation). Implemented in
+    [userland PR #148](https://git.internal/PyxisOS/pyxis-userland/pulls/148).
 
 - [ ] **4. Tidy the gaps list.**
   - Remove the entries this milestone closes.
