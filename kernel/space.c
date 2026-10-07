@@ -770,10 +770,22 @@ static void resize_display(void)
 static void present_graphics(const struct framebuffer *source, uint32_t background)
 {
   size_t height = screen->height - SPACES_NAV_HEIGHT;
+  if (source->width == screen->width && source->height == height &&
+      source->pitch == screen->pitch) {
+    display_copy(SPACES_NAV_HEIGHT * screen->pitch,
+        (const void *)source->address, source->size);
+    return;
+  }
   size_t columns = MIN(source->width, screen->width);
   size_t row_bytes = columns * sizeof(uint32_t);
   fb_fill_rect(cursor_row_fb, 0, 0, cursor_row_fb->width, 1, background);
   for (size_t y = 0; y < height; ++y) {
+    if (y < source->height && columns == screen->width &&
+        source->pitch >= screen->pitch) {
+      display_copy((SPACES_NAV_HEIGHT + y) * screen->pitch,
+          (const void *)(source->address + y * source->pitch), screen->pitch);
+      continue;
+    }
     if (y < source->height) {
       memcpy((void *)cursor_row_fb->address,
           (const void *)(source->address + y * source->pitch), row_bytes);
