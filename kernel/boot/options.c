@@ -1,4 +1,6 @@
 #include <arch/smp.h>
+#include <arch/cpu.h>
+#include <arch/cpu_local.h>
 #include <kernel/boot.h>
 #include <kernel/boot/options.h>
 #include <kernel/panic.h>
@@ -83,8 +85,8 @@ static bool flag_option(const char *key, const char *value)
 
 const struct boot_options *boot_options_parse(const char *command_line)
 {
-  KASSERT(arch_cpu_index() == 0);
-  KASSERT(!parsed);
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(!arch_cpu_count() && !parsed);
   parsed = true;
 
   size_t length = 0;
