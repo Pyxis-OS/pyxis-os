@@ -168,6 +168,8 @@ Accepted for task 4 on 2026-10-07:
     14), a failed S5 runs uACPI's wake path, the 10 s wait is in the power-off
     limits, and `QEMU_NO_REBOOT=1` exists (decision 15). The ThinkPad's firmware
     window grew from 2,127 to 2,144 pages on the first poll and stayed there.
+    On 2026-10-07, with main after the #467–#470 merges, plugging and
+    unplugging AC printed no `Notify` warnings in the normal log (owner).
   - **Finish when:** the ThinkPad shows a percentage that tracks charging and
     discharging and matches Linux's reading within a few percent, and QEMU,
     which has no battery, shows no widget.
