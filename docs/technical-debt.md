@@ -555,10 +555,10 @@ retransmission or persistence; a receiver started late loses earlier datagrams.
 Enabled logging broadcasts kernel addresses across the trusted LAN and reduces
 ordinary TX capacity to 15/16 VirtIO descriptors or 30/32 RTL8111 descriptors.
 The ThinkPad's panic and disabled checks passed in
-[PR #476](https://git.internal/PyxisOS/pyxis-os/pulls/476). Normal replay now waits
-for an IPv4 address; its native plain enabled boot check remains required.
-Revisit polling budgets, capacity and disclosure with that run and with concrete
-recovery/authentication requirements; checked NIC completion alone cannot
+[PR #476](https://git.internal/PyxisOS/pyxis-os/pulls/476). Normal replay waits
+for an IPv4 address, and a plain enabled boot then delivered the whole boot log
+natively (main `fcf142e`, 2026-10-07). Revisit polling budgets, capacity and
+disclosure with concrete recovery/authentication requirements; checked NIC completion alone cannot
 guarantee host delivery.
 
 ## PS/2 scan-set query compatibility
