@@ -583,10 +583,16 @@ struct syscall_result console_call(struct console_object *console, uint64_t righ
     return (struct syscall_result){initialized ? CALL_OK : CALL_UNAVAILABLE, 0};
   }
 
+  bool locked = log_begin();
+  if (!locked) {
+    return (struct syscall_result){CALL_UNAVAILABLE, 0};
+  }
   struct console_size_reply reply = {
     .columns = console->tty->width,
     .rows = console->tty->height,
+    .generation = console->tty->geometry_generation,
   };
+  log_end(locked);
   if (reply_capacity < sizeof(reply)) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }

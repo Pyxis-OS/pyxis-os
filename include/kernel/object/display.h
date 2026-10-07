@@ -11,12 +11,17 @@ struct process;
 struct space;
 struct display_object;
 
+union display_reply {
+  struct display_buffer buffer;
+  struct display_size_reply size;
+};
+
 struct display_request {
   struct bsp_request request;
   struct process *loan;
   struct display_object *display; /* Kept alive by the caller's capability. */
   uint64_t operation;
-  struct display_buffer reply;
+  union display_reply reply;
   enum call_status result;
 };
 

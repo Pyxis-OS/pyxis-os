@@ -4,6 +4,7 @@
 #include <kernel/mm/vm.h>
 #include <kernel/object/display.h>
 #include <kernel/display.h>
+#include <kernel/log.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -114,6 +115,7 @@ static enum call_status acquire_display(struct display_object *display,
     .width = layout->width,
     .height = layout->height,
     .pitch = layout->pitch,
+    .generation = display->space->tty->geometry_generation,
     .red_shift = layout->red_shift,
     .green_shift = layout->green_shift,
     .blue_shift = layout->blue_shift,
@@ -147,7 +149,7 @@ static void release_display(struct display_object *display)
 }
 
 static enum call_status service_display(struct display_object *display,
-    struct process *process, uint64_t operation, struct display_buffer *reply)
+    struct process *process, uint64_t operation, union display_reply *reply)
 {
   KASSERT(arch_cpu_index() == 0);
   if (display->space != process->space) {
@@ -157,7 +159,25 @@ static enum call_status service_display(struct display_object *display,
     return CALL_UNAVAILABLE;
   }
   if (operation == DISPLAY_ACQUIRE) {
-    return acquire_display(display, process, reply);
+    return acquire_display(display, process, &reply->buffer);
+  }
+  if (operation == DISPLAY_SIZE) {
+    bool locked = log_begin();
+    if (!locked) {
+      return CALL_UNAVAILABLE;
+    }
+    const struct framebuffer *layout = display->space->fb;
+    reply->size = (struct display_size_reply){
+      .width = layout->width,
+      .height = layout->height,
+      .pitch = layout->pitch,
+      .generation = display->space->tty->geometry_generation,
+      .red_shift = layout->red_shift,
+      .green_shift = layout->green_shift,
+      .blue_shift = layout->blue_shift,
+    };
+    log_end(locked);
+    return CALL_OK;
   }
   if (display->owner != process) {
     return CALL_DENIED;
@@ -183,7 +203,7 @@ void display_request_execute(struct display_request *request)
 }
 
 static enum call_status request_display(struct display_object *display,
-    uint64_t operation, struct display_buffer *reply)
+    uint64_t operation, union display_reply *reply)
 {
   struct display_request *request =
       (struct display_request *)bsp_request_prepare(BSP_SERVICE_DISPLAY);
@@ -191,7 +211,7 @@ static enum call_status request_display(struct display_object *display,
   KASSERT(request->loan);
   request->display = display;
   request->operation = operation;
-  request->reply = (struct display_buffer){0};
+  request->reply = (union display_reply){0};
 
   bsp_request_submit_and_wait(&request->request);
   *reply = request->reply;
@@ -213,7 +233,8 @@ struct syscall_result display_call(struct display_object *display, uint64_t righ
     uint64_t operation, size_t request_size, uintptr_t reply_address,
     size_t reply_capacity)
 {
-  if (operation != DISPLAY_ACQUIRE && operation != DISPLAY_PRESENT && operation != DISPLAY_RELEASE) {
+  if (operation != DISPLAY_ACQUIRE && operation != DISPLAY_PRESENT &&
+      operation != DISPLAY_RELEASE && operation != DISPLAY_SIZE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & DISPLAY_RIGHT_DRAW)) {
@@ -222,21 +243,23 @@ struct syscall_result display_call(struct display_object *display, uint64_t righ
   if (request_size) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
-  struct display_buffer reply = {0};
-  if (operation == DISPLAY_ACQUIRE) {
-    if (reply_capacity < sizeof(reply)) {
+  union display_reply reply = {0};
+  size_t reply_size = operation == DISPLAY_ACQUIRE ? sizeof(reply.buffer) :
+    operation == DISPLAY_SIZE ? sizeof(reply.size) : 0;
+  if (reply_size) {
+    if (reply_capacity < reply_size) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
-    if (!user_buffer_check(reply_address, sizeof(reply), USER_BUFFER_WRITE)) {
+    if (!user_buffer_check(reply_address, reply_size, USER_BUFFER_WRITE)) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
   }
 
   enum call_status status = request_display(display, operation, &reply);
-  if (status != CALL_OK || operation != DISPLAY_ACQUIRE) {
+  if (status != CALL_OK || !reply_size) {
     return (struct syscall_result){status, 0};
   }
   /* Acquisition adds a disjoint mapping; the checked reply stays writable. */
-  KASSERT(copy_to_user(reply_address, &reply, sizeof(reply)));
-  return (struct syscall_result){CALL_OK, sizeof(reply)};
+  KASSERT(copy_to_user(reply_address, &reply, reply_size));
+  return (struct syscall_result){CALL_OK, reply_size};
 }
