@@ -149,9 +149,10 @@ battery queries for userspace (Fastfetch's Battery module). Its follow-ups are i
 Codex alongside ACPI: a proposal first, then the boot framebuffer behind a small
 driver interface, VirtIO GPU 2D, Bochs and live resizing. Physical GPUs follow.
 
-[Remote debugging without serial](remote-debugging.md), agreed 2026-10-07 for a
-second Codex instance: a readable kernel log ring with a `log` command, the
-reverse remote terminal, then the kernel log over UDP.
+[Remote debugging without serial](../development/remote-debugging.md) completed
+2026-10-07: retained kernel logs with `log` and `log -f`, named reverse remote
+connections, and opt-in UDP boot/panic capture. The owner qualified all three
+on the ThinkPad over PXE, including complete boot replay after IPv4 assignment.
 
 [LLVM toolchain on the host](llvm-toolchain.md), agreed 2026-10-07 for Claude
 after the ACPI milestone: Clang and LLD build the kernel, SDK, userland and

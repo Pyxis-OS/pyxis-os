@@ -164,5 +164,6 @@ also repeats its doorbell within that budget. A timeout or invalid descriptor
 permanently ends UDP attempts without reusing device-owned storage. All rings
 and mappings remain until reboot. Checked TX completion confirms ownership
 return, not host delivery. Carrier loss, stalled hardware, packet loss and a
-receiver started late can still lose text. Native ThinkPad panic qualification
-is tracked in [remote-debugging task 3](../wip/remote-debugging.md).
+receiver started late can still lose text. The completed
+[remote-debugging reference](../development/remote-debugging.md#qualification)
+records QEMU and owner-run ThinkPad boot, panic and disabled qualification.

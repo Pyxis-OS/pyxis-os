@@ -4,7 +4,8 @@ Status: **milestone, agreed 2026-10-07.** This is the first of the three LLVM
 milestones in [hosted toolchains](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
 whose direction was chosen on 2026-09-29. Claude implements it; each task starts
 when the owner says so. It runs alongside the [display drivers](display-drivers.md)
-and [remote debugging](remote-debugging.md) milestones.
+milestone; completed [remote debugging](../development/remote-debugging.md)
+provides native bring-up support.
 
 ## Goal
 
