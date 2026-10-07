@@ -2,7 +2,7 @@
 
 Pyxis pins [pyxis-ports](https://git.internal/PyxisOS/pyxis-ports) at `ports`.
 Its host Lua runner fetches an exact upstream commit or a checksum-pinned release
-archive or standalone data file, applies ordered patches,
+archive or standalone data file from the internal mirrors, applies ordered patches,
 builds against the exported SDK and stages executables with their licenses.
 Recipes are trusted build code. They do not modify the SDK or resolve/install
 dependencies. Source pins, licenses, host/Pyxis dependencies, patch order and
@@ -57,8 +57,8 @@ make run CPUS=4
 ```
 
 The host needs Lua 5.4 (`LUA=lua5.4` selects its executable), Git, GNU Make 4.3+,
-GNU coreutils, CMake 3.21 or newer, curl, tar, bzip2 and the Pyxis target toolchain, plus network access to fetch
-upstream source on a port rebuild. See [SDK/repository setup](sdk-and-repositories.md).
+GNU coreutils, CMake 3.21 or newer, curl, tar, bzip2 and the Pyxis target toolchain, plus access to the
+internal mirrors (`git.internal/mirrors` and `repo.internal`) to fetch source on a port rebuild. See [SDK/repository setup](sdk-and-repositories.md).
 The build container includes Lua; the owner publishes container updates.
 
 `make ports` exports the SDK before checking recipe and SDK dependencies.

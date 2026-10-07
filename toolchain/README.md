@@ -20,7 +20,9 @@ make -j4 image
 
 Use a fresh work directory. Verified archives can be placed there beforehand
 for an offline build; the script refuses to reuse source/build directories.
-GCC downloads use the GWDG mirror and are checked against the pinned SHA-256.
+Both archives come from the internal cache of ftp.gnu.org
+(`https://repo.internal/repository/raw-gnu/gnu/`) and are checked against the
+pinned SHA-256.
 The install prefix must be dedicated to this toolchain. Keep work/prefix paths
 free of spaces, as required by the upstream builds. The script downloads and
 builds tools only; it does not install host packages or run tests.
@@ -74,7 +76,7 @@ compiler; changing SDK headers/libraries/startup/linker script does not.
 - [GNU binutils 2.47](https://ftp.gnu.org/gnu/binutils/binutils-2.47.tar.xz):
   recognize the Pyxis OS tuple in config.sub, BFD, GAS and ld. Use the existing
   x86-64 ELF backend/emulation, without adding a PXE backend.
-- [GCC 16.2.0](https://gcc.gnu.org/pub/gcc/releases/gcc-16.2.0/gcc-16.2.0.tar.gz):
+- [GCC 16.2.0](https://ftp.gnu.org/gnu/gcc/gcc-16.2.0/gcc-16.2.0.tar.gz):
   recognize the tuple, add Pyxis driver/builtin defaults and GNU-stack metadata,
   and configure static libgcc, including its x86 floating-point helpers,
   without libc headers or fixed-header copies.

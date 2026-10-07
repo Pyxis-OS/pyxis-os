@@ -84,6 +84,10 @@
 - The owner creates repositories and builds/publishes compiler containers. Explain
   exactly when a container rebuild is needed. Ordinary builds use the existing
   compiler and evolving SDK; they should not rebuild GCC/binutils in CI.
+- Builds download only from the owner's mirrors and caches (port recipes'
+  `mirror` URLs, toolchain/build.sh). When a change adds or moves an external
+  source, tell the owner which mirror or cache entry it needs, with the upstream
+  URL and commit or file, before relying on it. Never fall back to upstream.
 - End with PR links, what changed, validation performed, material limits and any
   required owner action. For a task in a milestone, update its checkbox in that
   PR. Do not describe an unrun check as passed or start the next task implicitly.
