@@ -1,15 +1,14 @@
 OUTPUT_FORMAT(elf64-x86-64)
 ENTRY(_start)
-PF_EXECUTE = 1;
-PF_WRITE = 2;
-PF_READ = 4;
 KERNEL_LINK_BASE = 0xffffffff80000000;
 KERNEL_PAGE_SIZE = 4096;
 
+/* ELF segment flags: PF_X = 1, PF_W = 2, PF_R = 4. LLD evaluates FLAGS()
+ * before symbol assignments, so the values are written as numbers. */
 PHDRS {
-  text PT_LOAD FLAGS(PF_READ | PF_EXECUTE);
-  rodata PT_LOAD FLAGS(PF_READ);
-  data PT_LOAD FLAGS(PF_READ | PF_WRITE);
+  text PT_LOAD FLAGS(5);   /* PF_R | PF_X */
+  rodata PT_LOAD FLAGS(4); /* PF_R */
+  data PT_LOAD FLAGS(6);   /* PF_R | PF_W */
 }
 SECTIONS {
   . = KERNEL_LINK_BASE;

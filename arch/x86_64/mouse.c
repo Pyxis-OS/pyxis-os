@@ -44,8 +44,9 @@ static size_t raw_read, raw_write, raw_count;
 static bool input_lost;
 static uint8_t packet[MOUSE_WHEEL_PACKET_BYTES];
 static size_t packet_index;
-/* Diagnostic counts for debugger inspection; they never affect decoding. */
-static uint64_t unsynchronized_bytes, overflowed_packets, lost_inputs;
+/* Diagnostic counts for debugger inspection; they never affect decoding.
+ * Nothing in the kernel reads them, so volatile keeps every update. */
+static volatile uint64_t unsynchronized_bytes, overflowed_packets, lost_inputs;
 
 static bool mouse_command_timeout(struct ps2_setup *setup, uint8_t command, uint64_t timeout_ns)
 {

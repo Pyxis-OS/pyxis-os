@@ -8,7 +8,8 @@ QEMU booted through OVMF/UEFI and Limine, with a native userspace and capability
 Doom in the Development space, alongside a remote shell showing native filesystem
 information and piping an HTTPS response into `sha256sum`.
 
-Requires GNU Make, a host C compiler, the [Pyxis GCC/binutils toolchain](toolchain/README.md),
+Requires GNU Make, a host C compiler, the [Pyxis GCC/binutils toolchain](toolchain/README.md)
+(or its LLVM toolchain with `TOOLCHAIN=llvm`),
 QEMU, GNU cpio, xorriso, host Lua 5.4, Python 3 with
 [Kconfiglib](docs/development/configuration.md), and a matching raw OVMF code/variables pair.
 Userspace, ports, lwIP and the filesystem format library are [pinned submodules](docs/development/sdk-and-repositories.md).
