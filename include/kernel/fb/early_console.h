@@ -6,7 +6,8 @@
 
 /* Plain-text boot console drawn directly on the boot framebuffer until the
  * display presenter takes over. No heap, TTY or framebuffer reads. Ordinary
- * output requires the log lock; see docs/kernel/early-console.md for the panic
+ * output requires the log lock. After retirement, panic may reclaim the
+ * physical display; see docs/kernel/early-console.md for the panic
  * ownership rules. */
 
 /* BSP, once, after the framebuffer is validated. address maps fb->physical. */
@@ -19,7 +20,8 @@ void early_console_rebind(uintptr_t address);
 void early_console_putc(char c);
 
 /* IF=0, without the log lock. The first panicking CPU takes the console;
- * later panics and nested faults stay serial-only. */
+ * including after presenter handoff. Later panics and nested faults stay
+ * serial-only. */
 void early_console_panic_begin(void);
 /* Panic output path: draws only on the owning CPU. */
 void early_console_panic_putc(char c);

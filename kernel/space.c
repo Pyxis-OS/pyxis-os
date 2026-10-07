@@ -10,6 +10,7 @@
 #include <kernel/acpi.h>
 #include <kernel/mm/types.h>
 #include <kernel/space.h>
+#include <kernel/display.h>
 #include <kernel/defs.h>
 #include <arch/smp.h>
 #include <kernel/string.h>
@@ -42,7 +43,7 @@
 #define BATTERY_TEXT_CELLS 3
 #define BATTERY_BOX_PADDING 4
 
-static const struct boot_framebuffer *screen;
+static const struct framebuffer *screen;
 /* Registry order starts at Caelum. space_create appends on the BSP at any time. */
 #define CAELUM_SPACE_NAME "caelum"
 static struct space *caelum_space, *last_space;
@@ -57,22 +58,22 @@ static struct framebuffer *spaces_nav_fb;
  * included, so the screen never shows that row without the cursor. */
 static struct framebuffer *cursor_row_fb;
 
-static struct framebuffer *fb_alloc(const struct boot_framebuffer *boot_fb,
+static struct framebuffer *fb_alloc(const struct framebuffer *layout,
     size_t width, size_t height)
 {
   struct framebuffer *fb;
   fb = (struct framebuffer *)kmalloc(sizeof(struct framebuffer));
 
-  fb->pitch = boot_fb->pitch;
+  fb->pitch = layout->pitch;
 
   fb->width = width;
   fb->height = height;
 
   fb->size = fb->height * fb->pitch;
   
-  fb->red_shift = boot_fb->red_shift;
-  fb->green_shift = boot_fb->green_shift;
-  fb->blue_shift = boot_fb->blue_shift;
+  fb->red_shift = layout->red_shift;
+  fb->green_shift = layout->green_shift;
+  fb->blue_shift = layout->blue_shift;
 
   enum mm_result status = vm_alloc(vm_kernel_space(), 
       fb->size, PAGE_SIZE, PAGE_WRITE, &fb->address);
@@ -197,9 +198,9 @@ static struct space *space_alloc(const char *name, const char *title,
   return space;
 }
 
-void space_init(const struct boot_framebuffer *boot_fb)
+void space_init(void)
 {
-  screen = boot_fb;
+  screen = display_layout();
   static_assert(sizeof(KERNEL_NAME) <= SPACE_TITLE_MAX + 1);
   /* Caelum's only user process is boot init, which runs on the BSP. */
   uint64_t *allowed = kmalloc(space_cpu_words() * sizeof(*allowed));
@@ -213,8 +214,8 @@ void space_init(const struct boot_framebuffer *boot_fb)
   last_space = caelum_space;
   active_space = caelum_space;
   log_set_tty(caelum_space->tty);
-  spaces_nav_fb = fb_alloc(boot_fb, boot_fb->width, SPACES_NAV_HEIGHT);
-  cursor_row_fb = fb_alloc(boot_fb, boot_fb->width, bizcat.height);
+  spaces_nav_fb = fb_alloc(screen, screen->width, SPACES_NAV_HEIGHT);
+  cursor_row_fb = fb_alloc(screen, screen->width, bizcat.height);
 }
 
 bool space_name_valid(const char *name, size_t length)
@@ -580,10 +581,10 @@ void space_present()
 
   draw_spaces_nav();
 
-  // Copy Spaces nav framebuffer
-  memcpy((void *)screen->address,
-      (const void *)spaces_nav_fb->address,
-      spaces_nav_fb->size);
+  if (!display_begin_frame()) {
+    return;
+  }
+  display_copy(0, (const void *)spaces_nav_fb->address, spaces_nav_fb->size);
 
   struct space *space = active_space;
   uint64_t flags = cpu_save_interrupts();
@@ -602,24 +603,24 @@ void space_present()
   log_end(locked);
   cpu_restore_interrupts(flags);
 
-  uint8_t *target = (uint8_t *)(screen->address + dst_offset);
   const uint8_t *pixels = (const uint8_t *)source->address;
   if (!visible) {
-    memcpy(target, pixels, source->size);
+    display_copy(dst_offset, pixels, source->size);
   } else {
     /* Every screen write carries final pixels: rows above and below the
      * cursor go straight across, and the cursor row goes via cursor_row_fb. */
     size_t row_start = y * tty->font->height * source->pitch;
     size_t row_bytes = tty->font->height * source->pitch;
-    memcpy(target, pixels, row_start);
+    display_copy(dst_offset, pixels, row_start);
     memcpy((void *)cursor_row_fb->address, pixels + row_start, row_bytes);
     draw_block_cursor(cursor_row_fb, x * tty->font->width, tty);
-    memcpy(target + row_start, (const void *)cursor_row_fb->address, row_bytes);
-    memcpy(target + row_start + row_bytes, pixels + row_start + row_bytes,
+    display_copy(dst_offset + row_start,
+        (const void *)cursor_row_fb->address, row_bytes);
+    display_copy(dst_offset + row_start + row_bytes, pixels + row_start + row_bytes,
         source->size - row_start - row_bytes);
   }
 
-  cpu_store_fence();
+  display_end_frame();
   if (frame) {
     flags = cpu_save_interrupts();
     display_frame_release(frame);
