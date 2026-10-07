@@ -1,7 +1,7 @@
 # LLVM toolchain on the host
 
-Status: **milestone, agreed 2026-10-07; task 1 probe and decisions 3–5
-recorded the same day.** This is the first of the three LLVM
+Status: **milestone, agreed 2026-10-07; tasks 1 and 2 done the same day.**
+This is the first of the three LLVM
 milestones in [hosted toolchains](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
 whose direction was chosen on 2026-09-29. Claude implements it; each task starts
 when the owner says so. It runs alongside the [display drivers](display-drivers.md)
@@ -56,7 +56,8 @@ Agreed with the direction on 2026-09-29:
   compiler-rt builtins are investigated as libgcc's replacement.
 - The existing ABI, the kernel's register restrictions and the userspace
   CPU-state assumptions stay as they are.
-- ELF objects, static archives and `elf2pxe` stay.
+- ELF objects, static archives and `elf2pxe` stay. (Decision 4 revisits the
+  executable output format.)
 - The owner builds the toolchain container; ordinary CI does not rebuild LLVM.
 - There is no permanent second default toolchain.
 
@@ -184,9 +185,10 @@ LLVM tools 22.1.8.
   - complex arithmetic.
 - **They must be built for Pyxis with `-mno-red-zone`.** Distribution builds
   are Linux builds.
-- **Leave out `cpu_model`.** Its CPU-feature constructor would never run,
-  because Pyxis startup runs no constructors. `__builtin_cpu_supports` stays
-  unsupported.
+- **`cpu_model` stays in the archive.** The builtins build has no option to
+  leave it out. Its CPU-feature constructor never runs, because Pyxis startup
+  runs no constructors. A program that uses `__builtin_cpu_supports` must call
+  `__builtin_cpu_init()` first.
 - **Lua** needs nothing beyond `__udivti3`. The host Lua that runs the
   recipes is unaffected.
 
@@ -228,14 +230,10 @@ The probe compiler and the Linux builtins would make them unrepresentative.
 
 ### Sources
 
-- **Release archives.** The download cache serves LLVM release archives at
-  `https://repo.internal/repository/raw-github/llvm/llvm-project/releases/download/llvmorg-<version>/llvm-project-<version>.src.tar.xz`.
-- **The newest is 23.1.3.** It was the newest the cache served on 2026-10-07;
-  23.1.4 returned 404.
-- **Its SHA-256 as served:**
-  `c44186a7762ed28954be72e5ff6df9808e0779d4f1bf014ecc4e7e211d31ee34`. This is
-  not yet checked against the release signature.
-- **There is no git mirror of `llvm-project` yet.**
+- **The newest release is 23.1.3.** It was the newest release archive the
+  download cache served on 2026-10-07; 23.1.4 returned 404.
+- **Builds use git, not the archive.** The toolchain comes from the
+  `pyxis-llvm` fork by commit, so no release archive is used or recorded.
 
 ## Proposal
 
@@ -301,9 +299,9 @@ owns in the GCC patch.
 - **The SDK.** Its Make settings link straight to `.pxe` under the LLVM
   setting. `elf2pxe` stays in the SDK as a fallback until no build uses GCC
   ([decision 4](#decisions)).
-- **The format's owners.** P1F would be written in three places: the kernel
-  loader, the TCC patch and LLD. `include/pxe/p1f.h` stays the authoritative
-  definition.
+- **The format's owners.** P1F would be written by TCC's patch, LLD and
+  `elf2pxe`, and read by the kernel loader. `include/pxe/p1f.h` stays the
+  authoritative definition.
 - **Hosting.** This makes hosted Clang write PXE directly. It does not need
   a relocatable format or loader changes.
 
@@ -321,7 +319,7 @@ owns in the GCC patch.
   - fetches the pinned fork commit shallowly;
   - builds Clang, LLD and the LLVM tools for the X86 target only;
   - builds compiler-rt builtins for `x86_64-unknown-pyxis` with
-    `-mno-red-zone` and without `cpu_model`;
+    `-mno-red-zone`;
   - installs `x86_64-unknown-pyxis-` names for `clang`, `ar`, `nm`, `ranlib`,
     `objcopy` and `ld.lld`.
 
@@ -338,16 +336,114 @@ owns in the GCC patch.
 
 ### Work found for later tasks
 
-- **Task 2:**
-  - numeric `PHDRS` flags in both linker scripts;
-  - a GCC-only guard for `-Wno-maybe-uninitialized`;
-  - `-dumpversion` in the SDK identity and manifest.
 - **Task 3:**
   - fastfetch's missing `return`;
   - the mbedtls `-MD` duplication;
   - the libtcc1 overlap with compiler-rt;
   - the hosted TCC's library name;
-  - the TCC size growth.
+  - the TCC size growth;
+  - `ports/build.lua` selecting the compiler from the SDK's toolchain record;
+  - port recipes and CMake files taking `ar` and the other tools from the
+    LLVM installation, because both toolchains install `x86_64-unknown-pyxis-ar`;
+  - booting an all-LLVM userland. The ports bundle is tied to its SDK, so a
+    GCC ports bundle cannot complete an LLVM-SDK image.
+
+## Task 2 results
+
+Recorded on 2026-10-07 in Claude's Fedora 44 VM: nested KVM, 8 vCPUs, the
+patched QEMU 10.2.2, `CPUS=4` unless noted. The toolchain was `pyxis-llvm`
+`eb86df1e36c6` (LLVM 23.1.3 plus the Pyxis commits), built by
+`toolchain/build-llvm.sh`.
+
+The measurements were taken on main `2abec40`. After rebasing onto `2f3c31b`
+(#485's Bochs modes), both compilers again built the kernel with no warnings.
+A 4-CPU boot, reboot and poweroff on the standard-VGA (Bochs) path matched
+the earlier results.
+
+### What changed
+
+- **The fork** gives `x86_64-unknown-pyxis` the GCC port's contract in Clang's
+  triple, target information and driver. It also keeps compiler-rt's
+  hand-written `__floatundixf` off the red zone; no builtin accesses memory
+  below `%rsp` any more.
+- **The build setting.** `TOOLCHAIN=llvm` selects `x86_64-unknown-pyxis-clang`.
+  - The SDK export records the toolchain in `share/toolchain.mk`, and the SDK's
+    `pyxis.mk` follows that record.
+  - The SDK exports `libclang_rt.builtins.a`, the LLVM license and the fork
+    revision in place of libgcc and GCC's provenance.
+  - A stamp in `build/` refuses to mix toolchains without `make clean`.
+- **Linker scripts** write `PHDRS` flags as numbers.
+- **One compiler finding:** Clang 23's `-Wunused-but-set-global` flagged the PS/2
+  mouse diagnostic counters. Nothing reads them, so a compiler may drop their
+  updates. Today both compilers keep them; `volatile` now guarantees it.
+
+### Builds
+
+- **The kernel** builds with no warnings under either toolchain.
+- **The SDK and all 36 userland programs** build with no warnings and link
+  with LLD.
+- **No GCC or binutils program runs** in the LLVM kernel, SDK and userland
+  builds.
+- **GCC** still builds the full image from this branch, with the same 402
+  port warnings as before.
+- **Clean builds** (`make -j16`, three alternating samples each):
+
+  | Target | GCC (s) | LLVM (s) |
+  | --- | --- | --- |
+  | Kernel | 3.19, 3.18, 3.15 | 1.65, 1.69, 1.60 |
+  | SDK | 1.45, 1.44, 1.46 | 0.96, 0.97, 0.97 |
+
+- **The toolchain itself** builds in about 8 minutes on 8 vCPUs, using the
+  host's Clang and LLD.
+
+### Sizes
+
+Text plus data, in bytes.
+
+| Output | GCC | LLVM | Change |
+| --- | ---: | ---: | ---: |
+| Kernel text | 800,661 | 790,997 | −1.2% |
+| 36 userland programs | 3,562,207 | 3,518,192 | −1.2% |
+
+Individual userland programs range from −5.8% (`iobench`) to +0.7% (`lspci`).
+
+### Boots and behaviour
+
+The boot image used for these checks was:
+- the LLVM kernel;
+- the GCC SDK, userland and ports bundles. An LLVM userland image waits for
+  task 3.
+
+The checks:
+- **CPUs:** it booted to the shell with 1 and 4 CPUs.
+- **Power:** `reboot` and `poweroff` from the Development shell worked, and
+  QEMU exited 0.
+- **Display:** the VirtIO GPU and standard VGA paths worked. Their screendumps
+  were byte-identical to the GCC kernel's.
+- **Network:** `ping -c 3 10.0.2.2` over VirtIO net worked, as did the remote
+  terminal.
+
+### Matched measurements
+
+Three boots each. The userland binaries are identical, so only the kernel's
+compiler differs.
+
+| Measurement | GCC kernel | LLVM kernel |
+| --- | --- | --- |
+| QEMU start to `Caelum ready` (s, includes firmware) | 2.052, 2.003, 2.019 | 2.013, 1.971, 1.976 |
+| `iobench read boot://share/iobench.bin`, payload median (MiB/s) | 3927, 3931, 3785 | 4393, 4614, 4419 |
+| The same, complete consumption (MiB/s) | 3071, 3043, 2935 | 3296, 3429, 3326 |
+| `iobench write tmp://…`, median (MiB/s) | 108.4, 132.6, 98.7 | 115.2, 125.5, 93.5 |
+| `allocbench heap` (ns/operation) | 12.0, 12.1, 12.3 | 12.0, 12.2, 12.1 |
+| `allocbench pages` (ns/operation) | 39677, 38600, 38502 | 41307, 37564, 38152 |
+
+- **Reads** of the boot archive are about 15% faster with the LLVM kernel.
+- **Writes and allocation** are unchanged within their spread.
+- **Boot** is about 40 ms earlier.
+- **Not run:** `ipcbench` and `iobench pipe`. They need the session launcher's
+  grants, and a remote `session` hands off the connection, so they were left
+  for an interactive run.
+- **Quake `timedemo`** belongs to task 3.
 
 
 ## Tasks
@@ -355,7 +451,7 @@ owns in the GCC patch.
 - [x] **1. Probe and proposal.** Recorded in [probe results](#probe-results)
   and the [proposal](#proposal). The owner accepted decisions 3–5.
 
-- [ ] **2. Kernel and SDK with LLVM.**
+- [x] **2. Kernel and SDK with LLVM.** See [task 2 results](#task-2-results).
   - The kernel and SDK build with the LLVM setting, with no new warnings left
     unexplained, and the image boots in QEMU.
   - Real problems Clang finds in Pyxis code are fixed in their own commits, and
@@ -371,7 +467,12 @@ owns in the GCC patch.
 - [ ] **3. Userland and ports with LLVM.**
   - Every userland program and port builds with the LLVM setting.
   - For decision 4:
-    - LLD gains `--oformat=p1f`;
+    - LLD gains `--oformat=p1f`, with checks that mirror `elf2pxe`'s. P1F then
+      has three writers in three repositories: TCC's patch in ports, LLD in
+      `pyxis-llvm`, and `elf2pxe` in Pyxis. The kernel loader reads it, and
+      `include/pxe/p1f.h` stays authoritative. LLD copies the constants
+      because the fork cannot include the header. A format change must update
+      the loader and all three writers together;
     - the Pyxis driver uses it for executables;
     - the SDK's LLVM setting links straight to PXE.
   - **Finish when:** every port's documented check passes in QEMU, including
