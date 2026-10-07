@@ -3,7 +3,7 @@
 The explicitly delegated `system_info` resource supplies synchronous queries
 through [the system-information ABI](../../include/abi/system_info.h).
 One READ right authorizes system-wide identity, CPU, allocator, PCI and USB inventory
-observations.
+observations, and battery and AC state.
 There is no ambient query or acquisition syscall. Kernel bootstrap creates the
 stateless authority for trusted init; ordinary local and remote launch paths
 forward it explicitly. Restricted launches can omit it, and shell-launched
@@ -11,8 +11,8 @@ service providers do not receive it.
 
 ## Queries and meaning
 
-Requests contain only a `message_header`, except that indexed PCI/USB queries
-add an index. Replies are bounded records with fixed-size NUL-terminated strings
+Requests contain only a `message_header`, except that indexed PCI, USB and
+battery queries add an index. Replies are bounded records with fixed-size NUL-terminated strings
 and zeroed unused bytes.
 
 | Query | Reply | Meaning |
@@ -26,6 +26,8 @@ and zeroed unused bytes.
 | `SYSTEM_INFO_USB_CONTROLLER` | `system_info_usb_controller` | PCI identity, inspection state and advertised root-port count |
 | `SYSTEM_INFO_USB_DEVICE` | `system_info_usb_device` | Root/parent port identity, speed and checked device descriptor fields |
 | `SYSTEM_INFO_USB_INTERFACE` | `system_info_usb_interface` | Checked configuration/alternate interface classes |
+| `SYSTEM_INFO_POWER` | `system_info_power` | AC state, battery count and the time of the latest ACPI poll |
+| `SYSTEM_INFO_BATTERY` | `system_info_battery` | One battery's state, percentage, firmware capacities, rate, voltage, cycle count and identification strings |
 
 Empty build-revision or CPU-brand strings explicitly mean unavailable fields;
 other fields remain usable. CPU count is neither physical cores nor the CPU
@@ -112,6 +114,35 @@ strings, serials, raw descriptors, endpoint addresses, physical
 addresses and kernel pointers are absent. READ grants no USB transfer or reset
 access. Names are resolved in [lsusb](../userland/lsusb.md) from packaged data.
 
+## Power and batteries
+
+The ACPI worker polls the batteries and the AC adapter every five seconds
+([ACPI](../kernel/acpi.md#embedded-controller-and-battery)). Both queries copy
+its latest poll through the [BSP executor](../kernel/bsp-service-requests.md),
+like the memory query; no firmware method runs on the query path. A reading
+can therefore be up to about five seconds old, and `sample_ns` gives the
+monotonic time of that poll. Before the first poll, or without ACPI, the power
+reply is all zero: no batteries and an UNKNOWN AC state.
+
+- **AC:** UNKNOWN without an AC adapter device or a valid `_PSR` reading,
+  otherwise OFFLINE or ONLINE.
+- **Batteries:** indices below `battery_count` select up to two `PNP0C0A`
+  devices in discovery order, whether or not a battery is inserted; later
+  indices return `CALL_NOT_FOUND`. Without PRESENT a record has only UNKNOWN
+  numbers and empty strings.
+- **Status flags:** PRESENT, and DISCHARGING, CHARGING and CRITICAL from `_BST`.
+- **Values:** as the firmware reports them, from `_BIX` (or `_BIF`) and `_BST`,
+  without conversion. Capacities are mWh or mAh and the present rate mW or mA,
+  as `unit` states; voltage is mV. Any number may be UNKNOWN (all ones).
+  `percent` is remaining over last full capacity, or design capacity when last
+  full is unknown, rounded down and capped at 100: the same figure as the
+  space-bar widget. The cycle count is UNKNOWN for `_BIF` batteries.
+- **Strings:** model, serial, type and OEM from the information package, read
+  when the battery appears, truncated to 31, 31, 15 and 31 bytes.
+
+Every holder of `system_info` READ sees this state, including programs the
+shell runs and remote shells.
+
 ## Errors and library interface
 
 Wrong protocol or operation is `CALL_BAD_OPERATION`; missing READ is
@@ -121,16 +152,18 @@ handles follow the ordinary `CALL_BAD_HANDLE` path. No authority failure returns
 synthetic observations.
 
 Libpyxis exports `system_info_get_identity`, `system_info_get_cpu`,
-`system_info_get_memory`, `system_info_get_pci`, `system_info_get_pci_function`
-and the four `system_info_get_usb*` queries
-through `<system_info.h>`. The PCI wrappers reject unknown states, nonzero
+`system_info_get_memory`, `system_info_get_pci`, `system_info_get_pci_function`,
+the four `system_info_get_usb*` queries, `system_info_get_power` and
+`system_info_get_battery` through `<system_info.h>`. The PCI wrappers reject unknown states, nonzero
 counts for an unavailable inventory, out-of-range device or function numbers,
 the multifunction bit, vendor `ffff` and nonzero reserved fields. Pass an explicitly supplied
 handle, typically `startup_resource("system_info")`. The wrappers validate the
 reply and leave the caller's output unchanged on every failure. The SDK exports
 both the ABI and library headers with the ordinary runtime build. USB helpers
 check states, flags, speeds, reserved fields and fixed reply sizes; `lsusb` checks
-controller/device/interface associations before formatting.
+controller/device/interface associations before formatting. The power helpers
+reject unknown AC states, flags and units, percentages above 100 other than
+UNKNOWN, nonzero reserved fields and unterminated strings.
 
 Uptime remains on [clock READ](../../include/abi/clock.h), whose monotonic epoch
 begins at HPET initialization and omits earlier boot time. It makes no wall-time

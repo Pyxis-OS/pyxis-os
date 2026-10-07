@@ -105,6 +105,20 @@ Accepted for task 4 on 2026-10-07:
     device (`Notify(PNP0C0C, 0x80)`) are a recorded limit; neither target could
     test that path.
 
+Accepted for task 5 on 2026-10-07:
+
+18. **Authority: `system_info` READ.** Battery and AC state are two more
+    `system_info` queries, readable by every holder: programs the shell runs
+    and remote shells included.
+19. **Firmware values as reported.** A battery record carries status flags,
+    the widget's percentage, the `_BIX`/`_BIF` and `_BST` capacities, rate and
+    voltage in the firmware's unit (stated, not converted), the cycle count and
+    the identification strings. Queries copy the latest poll with its
+    timestamp; no AML runs on the query path. Userspace computes time remaining.
+20. **No Power Adapter module.** ACPI's `_PSR` reports no wattage, so
+    Fastfetch's Power Adapter stays unbuilt, as on Linux for the T14; AC
+    presence shows in Battery's status.
+
 ## Tasks
 
 - [x] **1. Bring in uACPI.**
@@ -215,10 +229,16 @@ Accepted for task 4 on 2026-10-07:
     not silently disable the power button until reboot.
 
 - [ ] **5. Battery and AC state for userspace.** (Decision 8.)
-  - A read-only query of the battery and AC state, for example on the existing
-    system-information capability, so that Fastfetch can show its Battery and
-    Power Adapter modules and a later status UI has its data.
-  - Its fields, units and authority are settled when the task starts.
+  - A read-only query of the battery and AC state on the existing
+    system-information capability (decisions 18 and 19), so that Fastfetch can
+    show its Battery module (decision 20) and a later status UI has its data.
+  - **Status:** implemented
+    ([system information](../interfaces/system-information.md#power-and-batteries));
+    the ThinkPad check is pending. In QEMU, Fastfetch prints no Battery line
+    without a battery, and local test tables showed every field, the time
+    remaining while discharging and `[AC Connected, Charging]`.
+  - **Finish when:** Fastfetch's Battery line on the ThinkPad matches Fedora's
+    percentage and status.
 
 After task 3, battery and AC changes can be signalled by ACPI notifications
 instead of polling (decision 9). That work also rereads a battery's full
