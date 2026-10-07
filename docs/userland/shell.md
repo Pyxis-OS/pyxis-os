@@ -5,7 +5,7 @@ default [init script](init.md) and [session launcher](session-configuration.md),
 which by default start separate shells in the Development and Read-only spaces,
 with shared `home://` as their working directory. Boot starts on Caelum's tab;
 use Super+Right to select Development before typing. The normal initrd contains init,
-shell, ls, cat, head, mkdir, rm, rmdir, mv, [Kilo and its license](../development/ports.md), and `share/hello.txt`;
+shell, ls, cat, echo, head, mkdir, rm, rmdir, mv, [Kilo and its license](../development/ports.md), and `share/hello.txt`;
 home is initially empty. On live boots it is RAM and its contents disappear on
 reboot; installed systems keep it in the pool's `home` volume.
 
@@ -117,6 +117,19 @@ containing `/` are resolved as written. Builtins are recognized after quote
 removal. An empty command name is an error. Opened programs use the
 [script-launch helper](script-launch.md), which can dispatch a shebang to a native
 interpreter.
+
+`echo [-n] [ARG...]` is a native external program. It prints arguments separated
+by one space, followed by a newline. An exact first argument `-n` suppresses the
+newline; later `-n` arguments and all other option-like text are literal. It
+does no escape processing: shell quoting determines the argument bytes. With no
+arguments it prints a newline; `echo -n` writes nothing. Output errors report
+failure. Redirects and pipelines work as for other external commands:
+
+```text
+echo hi > home://note.txt
+echo a b | cat
+echo -n x
+```
 
 `rm path...` removes files only; `rmdir path...` removes empty directories only.
 Both accept multiple literal paths, continue after an individual failure, and
