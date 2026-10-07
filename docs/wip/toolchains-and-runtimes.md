@@ -52,7 +52,9 @@ pinned probe:
 Retain ELF objects, static archives and the ELF-to-P1F/PXE conversion initially.
 The hosted workflow must include a usable converter or equivalent explicit final
 step. Native P1F linker output can be investigated later; this transition does not
-require inventing a relocatable format or rewriting the loader. Keep the working
+require inventing a relocatable format or rewriting the loader. The milestone 1
+probe led to [P1F output from LLD](llvm-toolchain.md#p1f-output-from-lld),
+accepted on 2026-10-07; `elf2pxe` stays as a fallback while GCC builds remain. Keep the working
 toolchain available during validation, without committing to maintaining two
 permanent default toolchains.
 
