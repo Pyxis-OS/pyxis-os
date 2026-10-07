@@ -524,8 +524,16 @@ policy when Pyxis gains authentication or runs on an untrusted network.
 
 Panic ring capture is best effort: a fatal interruption of a ring lock owner
 skips retention without waiting. Userspace readers also require a functioning
-scheduler. Revisit guaranteed fatal delivery in remote-debugging task 3's
-independent kernel UDP transmit path.
+scheduler. Opt-in kernel UDP capture bypasses those locks, but remains best
+effort: early panics without an active selected NIC, interrupted activation or
+reset, failed bounded CPU handoff, carrier loss and stalled DMA can lose fatal
+text. Failed completion retains buffers permanently until reboot. There is no
+retransmission or persistence; a receiver started late loses earlier datagrams.
+Enabled logging broadcasts kernel addresses across the trusted LAN and reduces
+ordinary TX capacity to 15/16 VirtIO descriptors or 30/32 RTL8111 descriptors.
+Native ThinkPad panic qualification is still required. Revisit polling budgets,
+capacity and disclosure with that run and with concrete recovery/authentication
+requirements; checked NIC completion alone cannot guarantee host delivery.
 
 ## PS/2 scan-set query compatibility
 

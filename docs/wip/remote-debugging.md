@@ -174,24 +174,124 @@ Accepted reader contract for task 1 on 2026-10-07:
   - **Delivery:** branch `debug/reverse-terminal` in
     `/home/chronium/src/pyxis-remote-debugging`; userland
     [PR #141](https://git.internal/PyxisOS/pyxis-userland/pulls/141) at
-    `d81475f799afb0162d7584587d83973bf48691ba` must merge before the parent
-    integration PR. All task-owned QEMU, debugger and host-client jobs are stopped.
-
-
-
+    `d81475f799afb0162d7584587d83973bf48691ba` and parent
+    [PR #469](https://git.internal/PyxisOS/pyxis-os/pulls/469) are merged.
+    [PR #471](https://git.internal/PyxisOS/pyxis-os/pulls/471) records the
+    owner's native qualification. All task-owned QEMU, debugger and
+    host-client jobs are stopped.
 - [ ] **3. The kernel log over UDP.**
   - The kernel sends each log line as UDP datagrams to the host, and keeps
     sending during a panic, when locks may be held and userspace is gone.
-  - Settle with the implementer:
-    - a transmit path in the network drivers that does not depend on lwIP or
-      locks a panic might interrupt;
-    - where the datagrams go (broadcast, the beacon's host or a configured
-      address) and whether sending starts before DHCP;
-    - how it is turned on, and the host-side receiver.
-  - **Finish when:**
-    - in QEMU and on the ThinkPad, a host receives the boot log and a deliberate
-      panic's message;
-    - with the option off, nothing is sent.
+  - [x] Implement selected VirtIO/RTL8111 fatal TX ownership, asynchronous ring
+    following and the host receiver, with `log.udp=1` opt-in.
+  - [x] In QEMU, receive the boot log and deliberate panic messages, including
+    an interrupted log-lock owner and interrupted TX publication.
+  - [x] With the option off, observe no UDP log traffic, including during panic.
+  - [ ] On the ThinkPad, receive the boot log and a deliberate panic's message;
+    repeat the disabled check. This remains owner qualification, not an inferred
+    result from QEMU or the earlier native reverse-terminal run.
+  - Usage, wire format, ownership and limits are in
+    [kernel log](../interfaces/kernel-log.md#udp-capture).
+
+### Task 3 accepted contract, 2026-10-07
+
+Branch `debug/kernel-udp-log` in `/home/chronium/src/pyxis-remote-debugging`
+starts from main `800f979`, after the owner's native reverse-terminal check in
+PR #471. PR #469's non-blocking host-build/firewall/interface notes are carried
+into the remote-terminal guide. The owner accepted these choices on 2026-10-07:
+
+1. Opt in with `log.udp=1`, sending IPv4 limited broadcast to UDP port 2325.
+   A separate host log receiver prints text and packet/fragment sequence gaps.
+   This exposes enabled log traffic across the trusted LAN and avoids ARP,
+   routing and reverse-terminal beacon dependence.
+2. Begin after the already selected net0 driver activates, without changing
+   NIC selection or requiring DHCP. Use source zero before IPv4 assignment;
+   replay retained ring history once ready, then follow new text asynchronously
+   on the BSP network worker. Panics before driver activation cannot use UDP.
+3. Reserve fatal TX capacity only when enabled: ordinary VirtIO capacity is
+   15 of 16 descriptors and RTL8111 capacity is 30 of 32. Panic irreversibly
+   hands the selected TX path to the first panicking CPU, with bounded handoff
+   and completion polling, preallocated storage and no heap, lwIP or held-lock
+   acquisition. Normal networking ends until reboot. Never reuse device-owned
+   storage after a timeout; unavailable hardware or a failed CPU handoff stops
+   the UDP attempt safely. Delivery remains best effort, and the host must
+   tolerate duplicate fatal packets.
+
+Code inspection found that panic currently halts only the faulting CPU, so an
+AP panic can race the BSP driver. Both drivers can be interrupted between their
+software producer update and DMA publication. The driver gates cover that
+window explicitly, exclude reset and normal DMA mutations during takeover,
+and preserve device ownership. A separate RTL priority ring has not been
+qualified; the implementation uses existing rings rather than assuming it works.
+
+### Task 3 implementation and qualification, 2026-10-07
+
+The implementation is on `debug/kernel-udp-log`, based on main `800f979`.
+The final implementation revision is `8a4b944`; no dependency pins changed.
+Ordinary image builds and `make -C tools log remote -j16` passed. Kernel and
+host changes compile without warnings; existing third-party port warnings are
+not counted as a warning-free full build. No compiler-container rebuild is
+needed. The UDP logger object reserves 2369 bytes of static BSS, including
+separate normal/fatal staging; driver metadata grows but DMA allocations do not.
+
+Manual QEMU qualification used Q35, four CPUs, 2 GiB, nested KVM, QEMU 10.2.2,
+VirtIO-net and the matching `/usr/share/OVMF/OVMF_{CODE,VARS}.fd` firmware pair.
+An isolated TAP interface used host `10.77.0.1/24`; the image's local network
+profile selected VirtIO with static `10.77.0.2/24`. The host receiver and packet
+capture were started before boot. Capture showed the first log packet with
+source zero, then packets with the assigned address. The receiver printed the
+retained boot log from its first byte, including boot-init messages.
+
+Fatal-path checks used the `c22bffa` implementation before the subsequent
+normal-polling/disabled-interrupt refinements. GDB redirected a selected CPU to
+the nonreturning `panic()` entry with a manual qualification message:
+
+- BSP and AP messages reached the receiver. The AP check recorded fatal owner
+  APIC 2, a permanently closed gate and no fatal TX failure.
+- A breakpoint inside `log_ring_putc` interrupted the BSP with both ring and
+  presentation locks held. Its panic message arrived while debugger inspection
+  confirmed both locks remained held; fatal capture did not require retention.
+- A breakpoint between the VirtIO software available-index store and DMA
+  available-index store recorded indices 1 and 0. Panic sent its message using
+  the reserved descriptor; checked used/available indices reached 2. The host
+  reported the intentionally lost normal staging sequence 0 as a packet gap.
+
+The disabled capture used final implementation `8a4b944`, an active NIC and a
+successful ordinary remote log read. It captured 26 TCP packets and zero UDP
+2325 packets across boot, that session and a deliberate BSP panic. The receiver
+printed no text; GDB recorded `enabled=false`, sequence zero and no reserved
+VirtIO descriptor. RTL8111 runtime, its ambiguous-slot duplication, stalled-NIC
+abandonment and native ThinkPad panic output remain code-inspected rather than
+hardware-qualified. Delivery remains best effort.
+
+Matched measurements used the default DHCP profile and QEMU user-mode network,
+with `CPUS=4 MEMORY=2G ACCEL=kvm QEMU_DISPLAY=none VIRTIO_NET=1
+TCP_FORWARD=12323:2323` and the same OVMF pair. They ran after boot, without GDB
+or packet capture attached. Each guest `ttcp -t -p 5001 -n 2048 -l 8192
+10.0.2.2` sent 16777216 bytes to a manually started Python TCP sink bound to
+`0.0.0.0:5001`, accepting one connection and reading 64 KiB chunks through EOF.
+The sink checked the byte total for every run. Guest timing includes closure.
+Three one-shot remote `log` commands used `--machine --no-shell-echo` and
+`/usr/bin/time -p`, which reports wall time at 0.01-second resolution.
+
+| Revision and mode | TCP seconds, three samples | TCP MiB/s | Remote log seconds | Log bytes |
+| --- | --- | --- | --- | --- |
+| Main `800f979`, before implementation | 12.378594, 12.321483, 12.367179 | 1.293, 1.299, 1.294 | 0.03, 0.02, 0.02 | 4394 |
+| `8a4b944`, `LOG_UDP=0` | 13.070744, 12.054140, 11.837561 | 1.224, 1.327, 1.352 | 0.03, 0.03, 0.02 | 4394 |
+| `8a4b944`, `LOG_UDP=1` | 12.602450, 12.440037, 12.462936 | 1.270, 1.286, 1.284 | 0.02, 0.03, 0.02 | 4393 |
+
+The enabled mean is 1.280 MiB/s versus baseline 1.295 MiB/s, about 1.2% lower;
+the disabled samples' larger variation does not establish an isolated kernel
+cost. These are nested-VM end-to-end timings, not native driver throughput or
+panic latency. Reserving one of sixteen VirtIO descriptors and two of thirty-two
+RTL descriptors is the accepted capacity tradeoff, not a measured 6.25%
+throughput loss. Idle following adds a 100 ms deadline; caught-up reads honor
+it even when unrelated traffic keeps the worker running.
+
+Remaining owner action: qualify enabled and disabled boot/panic capture on the
+ThinkPad's RTL8111 with a host receiver on its LAN. Keep task 3 and the milestone
+open until that result is recorded. All task-owned QEMU, debugger, host-client,
+receiver and packet-capture jobs are stopped; the temporary TAP is removed.
 
 ## Working rules
 
