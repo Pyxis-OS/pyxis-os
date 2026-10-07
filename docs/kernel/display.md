@@ -145,6 +145,14 @@ user alias within the call while presenter leases retain old backing. There
 is no RELEASE/ACQUIRE gap; a visible session selects the new blank buffer until
 redraw. The old pointer is invalid after successful return.
 
+A local TTY uses approximately `pitch * (height - bar_height)` bytes per
+space; navigation/cursor storage and the VirtIO surface add their own backing.
+Kernel resizing stages old and new sets together. REPLACE also needs both its
+old session backing and candidate, and can overlap one presenter-leased retired
+frame. Page rounding, page lists and VM metadata add to these pixel costs.
+No allocation is guaranteed to succeed; one in-flight presenter bounds retired
+graphics backing instead of accumulating every replaced generation.
+
 Mandelbrot replaces at render checkpoints and recomputes aspect while retaining
 centre and zoom. Doom checks at frame boundaries and recomputes integer scale
 and letterboxing of its fixed 320x200 frame. Below scale one, Doom continues
