@@ -105,11 +105,14 @@ carried into the next task at the owner's request on 2026-10-07:
   - **Open decisions:** at most about three per round, each with a proposed
     default.
 
-- [ ] **2. The interface, with the boot framebuffer as its first driver.**
+- [x] **2. The interface, with the boot framebuffer as its first driver.**
   - The presenter writes through the interface. Ordinary output is unchanged.
   - Restore panic takeover of the boot framebuffer after presenter handoff.
-  - **Status:** implemented and locally validated; the owner-run ThinkPad check
-    is still required before this task is complete. See the task 2 results below.
+  - **Status:** done. See the task 2 results below. On 2026-10-07 the owner ran
+    main after the #467–#470 merges on the ThinkPad over PXE. The screen looked
+    as before. The battery widget rose on AC, later dropped a point, and kept its
+    background colour. Quake's `timedemo demo1` gave 667.1 fps, against 634.2
+    fps on 2026-10-04. Both are single runs. A native panic was not triggered.
   - **Finish when:**
     - QEMU and the ThinkPad look and behave as before during normal operation;
     - a post-handoff panic is visible on the boot framebuffer;
