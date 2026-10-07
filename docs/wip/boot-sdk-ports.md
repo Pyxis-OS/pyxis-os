@@ -153,6 +153,11 @@ driver interface, VirtIO GPU 2D, Bochs and live resizing. Physical GPUs follow.
 second Codex instance: a readable kernel log ring with a `log` command, the
 reverse remote terminal, then the kernel log over UDP.
 
+[LLVM toolchain on the host](llvm-toolchain.md), agreed 2026-10-07 for Claude
+after the ACPI milestone: Clang and LLD build the kernel, SDK, userland and
+ports, then become the default and GCC is retired. It is the first of the
+three [LLVM milestones](toolchains-and-runtimes.md#llvmclang-transition-and-hosting).
+
 [Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md) completed
 2026-10-06: read-only FUSE mounts and in-memory journal replay, with the owner
 confirming physical stick mounting and copying on Arch Linux.

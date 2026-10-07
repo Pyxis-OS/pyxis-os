@@ -31,7 +31,8 @@ it is not a measured claim that LLVM will be the easiest compiler to host.
 Keep three implementation milestones separate, refining their scope after a
 pinned probe:
 
-1. **Host-running LLVM toolchain.** Establish the Pyxis target/driver contract,
+1. **Host-running LLVM toolchain.** Agreed as a milestone on 2026-10-07:
+   [LLVM toolchain on the host](llvm-toolchain.md). Establish the Pyxis target/driver contract,
    SDK discovery, startup and link defaults, predefined macros and compiler
    runtime helpers. Probe compiler-rt builtins as the replacement for libgcc.
    Preserve the existing ABI, kernel register restrictions and userspace CPU-state
