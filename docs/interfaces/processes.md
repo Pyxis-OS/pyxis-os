@@ -8,8 +8,9 @@ and handle close are implemented, including the complete userspace example.
 [Request/reply endpoints](endpoints.md) now connect separate client and server
 processes through the same tagged call ABI. Programs use console capabilities
 for TTY output; the separate kernel-log syscall remains available for diagnostics.
-The [worklist](../wip/process-capability-abi.md) tracks the focused tasks and
-handoffs for this first milestone.
+The first milestone's
+[worklist](https://git.internal/PyxisOS/pyxis-os/src/commit/93851aebce74c71ceea93774c4d97e01bc2a60e7/docs/wip/process-capability-abi.md)
+remains in Git history.
 
 ## Current programs
 
