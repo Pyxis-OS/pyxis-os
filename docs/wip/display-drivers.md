@@ -31,8 +31,9 @@ implements it; each task starts when the owner says so. It runs alongside the
 - **Every buffer has the boot layout.** Space buffers, the cursor row, the space
   bar and program graphics buffers all copy the boot framebuffer's width, pitch
   and pixel format. The graphics ABI promises fixed dimensions.
-- **Panics write to the boot framebuffer** through the early console
-  (`early_console_panic_begin()`).
+- **Panics before handoff write to the boot framebuffer** through the early
+  console (`early_console_panic_begin()`). After handoff they are serial-only
+  until task 2 restores direct screen takeover.
 - **QEMU devices:**
   - `scripts/run-qemu.sh` passes no display device, so q35 provides the
     standard VGA. That device already has the Bochs mode registers.
@@ -66,6 +67,22 @@ Accepted by the owner on 2026-10-07:
    - Bochs has no such signal, so it uses a size from a boot option;
    - a runtime command to change the size can come later.
 
+Follow-up from [PR #463 review](https://git.internal/PyxisOS/pyxis-os/pulls/463),
+carried into the next task at the owner's request on 2026-10-07:
+
+4. **TTY contents:** preserve rasterized whole cells around the cursor, without
+   reflow or scrollback. Cropped text is lost.
+5. **Graphics mapping:** keep it stable until the owner explicitly replaces or
+   releases it. Clip to the current screen until the application adapts.
+6. **Panic output:** boot-framebuffer and Bochs panics use direct screen writes.
+   VirtIO panics are serial-only. Do not add an emergency VirtIO queue, device
+   reset path, 3 MiB reserve or exception to BSP ownership.
+7. **Bochs boot option:** `display.size=WIDTHxHEIGHT`, matching the dotted kernel
+   option names. Task 4 documents it in the boot command-line table in
+   [init](../userland/init.md#boot-command-line).
+8. **Resize delivery:** split task 5 into kernel geometry/cropping (5a) and
+   readiness, mapping replacement and application adaptation (5b).
+
 ## Tasks
 
 - [x] **1. Proposal.** A docs PR that updates this document with:
@@ -89,9 +106,11 @@ Accepted by the owner on 2026-10-07:
     default.
 
 - [ ] **2. The interface, with the boot framebuffer as its first driver.**
-  - The presenter writes through the interface. Nothing visible changes.
+  - The presenter writes through the interface. Ordinary output is unchanged.
+  - Restore panic takeover of the boot framebuffer after presenter handoff.
   - **Finish when:**
-    - QEMU and the ThinkPad look and behave as before;
+    - QEMU and the ThinkPad look and behave as before during normal operation;
+    - a post-handoff panic is visible on the boot framebuffer;
     - the presenter cost matches the task 1 baseline within run-to-run variation.
 
 - [ ] **3. VirtIO GPU 2D at the boot size.**
@@ -100,7 +119,7 @@ Accepted by the owner on 2026-10-07:
   - **Finish when:**
     - with `virtio-gpu-pci` and no VGA device, QEMU shows the space bar, spaces,
       the shell and Mandelbrot after boot;
-    - a panic is visible;
+    - a panic reaches serial without resetting or submitting to VirtIO GPU;
     - the presenter cost is recorded against the task 2 figures;
     - the default standard-VGA run is unchanged.
 
@@ -111,24 +130,41 @@ Accepted by the owner on 2026-10-07:
     - QEMU boots at a size different from the firmware's, with a correct space
       bar, terminal and Mandelbrot;
     - an unsupported or missing size falls back to the boot framebuffer, with a
-      message.
+      message;
+    - a post-handoff panic is visible in the selected Bochs mode.
 
-- [ ] **5. Live resizing.**
-  - VirtIO GPU display-change events, plus resize handling across spaces,
-    terminals and graphics programs, following the contract chosen in task 1.
+- [ ] **5a. Kernel live resizing and size queries.**
+  - VirtIO display-change events, transactional target/space/TTY resizing and
+    raster cropping, with atomic geometry/generation queries.
+  - Update the userland query wrappers for changed reply layouts in the same
+    delivery; adaptive consumer behavior stays in 5b. Publish dependency PRs
+    before updating parent pins.
+  - Preserve existing graphics mappings and clip them to the new destination.
   - **Finish when:**
-    - resizing QEMU's GTK window changes the terminal's columns and rows in
-      every space;
-    - a running graphics program follows the task 1 contract, with no stale
-      mapping;
-    - a refused resize leaves the old size working.
+    - resizing QEMU's GTK window changes terminal rows/columns in every space;
+    - console SIZE and the display query return the new geometry/generation;
+    - a refused resize leaves the old geometry usable;
+    - graphics mappings retain their original address and extent.
+  - Consumers see the new size on their next query. Idle readers and running
+    graphics programs do not yet adapt automatically.
+
+- [ ] **5b. Resize readiness and graphics adaptation.**
+  - RESIZED readiness and input readiness, owner-only display REPLACE, and the
+    libterm/Mandelbrot consumers in userland and Kilo/Doom in ports, with focused
+    dependent PRs.
+  - **Finish when:**
+    - a blocked shell line editor and Kilo redraw at the new size without a key;
+    - Mandelbrot and Doom adapt at render/frame checkpoints without stale maps;
+    - replacement allocation failure leaves the old mapping/session usable;
+    - remote terminals keep their independent geometry.
 
 ## Task 1 investigation and proposal
 
-Delivered against main `7bc196e` on 2026-10-07. Everything in this section is
-**proposed**, except the inspected current behavior and measured baseline.
-Checking task 1 means the investigation is delivered, not that its choices are
-accepted or task 2 is authorized. Review the three decisions at the end.
+Delivered against main `7bc196e` in merged PR #463 on 2026-10-07. The
+owner-directed review follow-up above supersedes the original VirtIO panic
+proposal. This section records the design for the pending implementation tasks;
+current behavior and the baseline are identified separately. No driver or resize
+implementation is claimed by checking task 1.
 
 ### Device interface and ownership
 
@@ -143,13 +179,13 @@ The shared interface has these operations:
 
 | Operation | Contract |
 | --- | --- |
-| Prepare | Before AP startup, inspect supported PCI functions in discovery order, validate/map resources and allocate fixed queue/panic storage. Retain the boot layout/mapping; see the VirtIO fallback limit below. |
+| Prepare | Before AP startup, inspect supported PCI functions in discovery order, validate/map resources and allocate fixed normal queue storage. Retain the boot layout/mapping; see the VirtIO fallback limit below. |
 | Get target | Return a kernel pixel surface and immutable layout: address, width, height, pitch, channel shifts and geometry generation. No boot-protocol pointers. |
 | Activate | On the BSP, finish initialization and present a first complete frame before publishing the selected driver. Restore firmware output on Bochs failure; VirtIO has the limit below. |
 | Present | Finish the composed frame: drain WC stores for direct framebuffers; transfer and flush the VirtIO resource, checking responses and fences. |
 | Check size | Read/coalesce pending VirtIO display information. Boot and Bochs report no runtime changes. |
 | Prepare/commit/cancel size | Stage a replacement target without changing published layout; switch device scanout only after all space allocations are ready. Cancel frees unowned allocations; attached backing needs confirmed fenced detach/unreference or is retained until reboot. |
-| Panic takeover/present | Claim emergency ownership and render/publish without allocation, locks, scheduling or the ordinary queue helper. Bounded failure preserves serial reporting. |
+| Panic takeover | Boot/Bochs claim direct output and render without allocation, locks or scheduling. VirtIO remains serial-only. Bounded takeover failure preserves serial reporting. |
 
 The existing `space_present_task` is the sole normal device worker on the BSP;
 it owns activation, frame submission, completion polling and resize sequencing.
@@ -178,7 +214,7 @@ the selected layout; the common layout is not forced onto the boot framebuffer.
 
 Current inspection corrects the summary above: **panics after presenter handoff
 are serial-only today**, including standard VGA. `early_console_retire()` makes
-RETIRED terminal. Tasks 2–4 must extend this rather than assume an existing
+RETIRED terminal. Tasks 2 and 4 must extend this rather than assume an existing
 post-handoff panic renderer. The boot mapping remains reserved, even when retired
 as normal output; it is not a fallback screen after another device owns scanout.
 VirtIO transport preparation resets the device before BAR sizing, destroying
@@ -191,11 +227,11 @@ This is a device limit, unlike Bochs firmware-mode restoration.
 Keep the early console until the driver's resources and the first screen are
 ready. Retire its ordinary writer under the log lock before any mode/scanout
 change. A separate atomic display ownership gate coordinates normal mutation,
-layout publication and the first panic claim. Publish an immutable emergency
-descriptor only when its backing and mappings are valid; initialization and
-resize must keep an old valid descriptor or exclude takeover during their short
-mutation phase. Do not expose half-programmed modes. If Bochs activation fails, restore
-the old mode and bind emergency rendering to that restored target. If VirtIO
+layout publication and the first panic claim. For boot/Bochs, publish an
+immutable panic descriptor only when its mappings and mode are valid. During
+Bochs activation, retain the old descriptor or exclude takeover during the
+short mode-mutation phase. Do not expose half-programmed modes. If Bochs
+activation fails, restore the old mode and bind panic rendering to that target. If VirtIO
 activation fails after reset, retain serial diagnostics without claiming the
 old RAM framebuffer is visible.
 
@@ -206,22 +242,11 @@ console's static glyph grid, first-owner rule and recursion/fault guard. Its
 renderer needs a layout descriptor independent of Limine. Boot and Bochs render
 directly into their current mapped screen and fence stores.
 
-For VirtIO, reserve a **1024×768×4 = 3,145,728-byte** panic surface plus separate
-rings and command/reply storage before AP startup. After exclusive takeover,
-reset and confirm reset, renegotiate VERSION_1 and program the emergency rings
-as **control queue 0**. Recreate the 2D resource, attach the reserved backing,
-transfer, set scanout and flush through bounded polled commands. Reset destroys
-host resources, so a resource created at boot cannot simply be reused. Render
-the panic text in RAM before the final transfer/flush; exception output that
-precedes `panic()` must also be published. The panic may use its own fixed size.
-
-This is an explicit emergency exception to BSP/IF=1 normal device ownership.
-Do not restart or modify the ordinary `struct virtqueue`: its helper retains
-failed queue storage until reboot. Keep all old DMA backing retained. If takeover,
-reset or device commands fail, retain serial output and halt; visible output on
-a broken device cannot be promised. Task 2 establishes direct panic takeover;
-task 3 adds this VirtIO emergency path, with debugger inspection of the normal
-queue and emergency resource ownership.
+VirtIO panics remain serial-only through the VM's existing serial console.
+There is no emergency surface, queue, reset/renegotiation or AP device operation.
+The normal queue keeps its BSP ownership and failed-storage lifetime rules.
+Physical display engines can use direct scanout memory like boot/Bochs; the
+VirtIO transfer/flush requirement does not shape their panic contract.
 
 ### Hardware constraints
 
@@ -230,7 +255,7 @@ RESOURCE_ATTACH_BACKING, TRANSFER_TO_HOST_2D, SET_SCANOUT and RESOURCE_FLUSH.
 Use checked response types/lengths and fences for completion that changes resource
 or backing ownership. Select the first enabled scanout, retain its index and
 ignore other outputs for this milestone. Task 3 creates it at boot pixel size;
-task 5 follows the selected output's reported size. With no usable output,
+task 5a follows the selected output's reported size. With no usable output,
 activation fails rather than silently selecting a different monitor later.
 
 Resource backing can be a list of physical page extents from BSP-owned VM RAM.
@@ -243,7 +268,7 @@ a direct-map pointer.
 QEMU standard VGA and `bochs-display` share PCI ID `1234:1111`, framebuffer BAR0
 and a 4 KiB register BAR2. DISPI uses 16-bit accesses at `0x500 + 2 * index` in
 BAR2. Validate ID, resource extents and memory decoding before access. Propose
-`display_size=WIDTHxHEIGHT` in the kernel boot command line, supplied by a Make
+`display.size=WIDTHxHEIGHT` in the kernel boot command line, supplied by a Make
 `DISPLAY_SIZE` image setting, empty by default. It applies only to Bochs.
 Accept exact 32-bit modes at least 64×64, width divisible by eight, with zero
 scanout offsets and checked pitch/extent within both BAR0 and reported VRAM.
@@ -342,38 +367,39 @@ is refused while retaining the last valid geometry. No repeated allocation loop
 at 60 Hz for an unchanged refused size; retry on a fresh host event. Preparation
 failure logs once per refused request. A newer request replaces pending work.
 
-Allocate the candidate target/resource, every space's new TTY framebuffer, bar
-and cursor scratch before publishing anything. Serialize space creation and
-geometry changes on the BSP; verify the registry/generation before scanout switch and again before logical
-commit. If a space was appended during the device wait, restore old scanout and
-restart preparation with the new registry; never omit that space from the swap.
-Keep old buffers until all presenter leases and device commands are finished.
-VirtIO panic descriptors refer to the fixed emergency backing, not runtime
-resize surfaces; direct boot/Bochs targets do not resize in this milestone. No AP may retain an old TTY pixel pointer outside the output
-lock. Stage allocations with IF=0 according to VM ownership; do not hold the
-output lock across allocation or device commands.
+The resize transaction has five steps:
 
-Proposed TTY policy: preserve rasterized whole cells **without reflow**. On
-shrinking height, drop enough top rows to keep the cursor's row visible; copy
-remaining rows from that origin. On growth keep their positions. Preserve only
-whole columns that fit, fill newly exposed cells/margins with the TTY background,
-translate/clamp the cursor, and clear pending wrap. Keep colours, tab width and
-escape-parser state. Text cropped horizontally or dropped vertically is lost:
-there is no retained text grid or scrollback today. This avoids adding another
-terminal storage model to the driver milestone.
+1. **Prepare.** Allocate the candidate target/resource, every space's new TTY
+   framebuffer, bar and cursor scratch without changing published state. Stage
+   allocations with IF=0 according to VM ownership. Do not hold the output lock
+   across allocation or device commands. Cancel unowned allocations directly;
+   attached backing needs confirmed fenced detach/unreference before freeing.
+2. **Verify the registry.** Serialize space creation and geometry changes on the
+   BSP. Check that the registry and current geometry still match preparation;
+   otherwise restart preparation with the current spaces. Drain old presentation
+   before changing scanout.
+3. **Switch scanout.** Keep old TTY pointers/geometry live during device waits.
+   After confirmed device success, recheck the registry. If a space appeared
+   during the wait, restore old scanout and restart preparation. On switch
+   failure, restore old scanout before resuming. An unresponsive device is a
+   terminal driver failure; retain device-owned backing until reboot.
+4. **Commit under the output lock.** With IF=0, copy the latest old TTY pixels to
+   candidates, then swap all TTY pointers/dimensions and the geometry generation
+   before unlocking. Copying before the device wait would lose AP output during
+   that wait. No AP retains an old pixel pointer outside this lock. This full
+   copy pauses writers; measure the duration across all spaces. Never wait for
+   hardware under the lock. Release old backing only when all presenter leases
+   and device commands have finished. Boot/Bochs panic targets do not resize.
+5. **Present and wake.** Compose and transfer the candidate frame; a brief
+   stale/blank screen during transition is permitted. Task 5b publishes geometry
+   wakeups after logical commit. In task 5a consumers learn on their next query.
 
-Switch scanout only when old presentation is drained and replacement allocations
-are complete. Keep old TTY pointers/geometry live during device waits. After
-confirmed scanout success, acquire the output lock with IF=0, copy the *latest*
-old pixels into candidates and swap all TTY pointers/dimensions plus the geometry
-generation before unlocking. Copying before the device wait would lose AP output
-written during that wait. This one-time full copy pauses writers; measure its
-duration, including all spaces, rather than claiming a short critical section.
-No device wait under the lock. Then compose and transfer the candidate screen;
-a brief stale/blank screen during the transition is permitted. Publish geometry
-wakeups after logical commit. If switching fails, restore the old
-scanout before resuming; an unresponsive device is a terminal driver failure,
-not an ordinary refused allocation. Existing device-owned memory stays retained.
+The TTY preserves rasterized whole cells **without reflow**. On shrinking
+height, drop enough top rows to keep the cursor's row visible and copy remaining
+rows from that origin. On growth keep their positions. Preserve only whole
+columns that fit; fill new cells/margins with the TTY background. Translate/clamp
+the cursor and clear pending wrap. Keep colours, tab width and escape-parser
+state. Cropped or dropped text is lost: no text grid or scrollback exists today.
 
 Recompute the bar viewport/widget placement and pointer bounds. Keep space
 identity, selection and input capture. Terminal dimensions are
@@ -382,8 +408,9 @@ space, including inactive spaces. Existing remote terminal sessions retain their
 own rows/columns, input/output queues and size policy.
 
 Expose geometry and generation atomically through console SIZE and a display
-size query. Extend native readiness with a coalesced RESIZED condition comparing
-a caller-supplied observed generation, plus input READABLE for local consoles and
+size query in task 5a. In task 5b, extend native readiness with a coalesced
+RESIZED condition comparing a caller-supplied observed generation, plus input
+READABLE for local consoles and
 acquired keyboard sessions. Wait registration must check generation and subscribe
 under the same lock; a change between query and sleep is immediately ready.
 Readiness reserves no input and multiple readers keep existing input arbitration.
@@ -397,7 +424,7 @@ prompt/input with the new width; preserve text and cursor, even when the line
 now exceeds screen capacity. Kilo recomputes viewport/status rows and redraws on
 the same notification without requiring a keypress. Query-only programs see the
 new size on their next query. Publish corresponding userland/ports PRs before
-the parent pins them. These are task 5 consumers, not prerequisites for task 2.
+the parent pins them. These are task 5b consumers, not prerequisites for task 2.
 
 ### Mapped graphics lifetime
 
@@ -407,7 +434,7 @@ space's destination and size generation, not that mapping. Until adaptation,
 copy the top-left intersection and fill uncovered destination pixels; never read
 beyond the old buffer. No kernel scaling and no implicit application termination.
 
-Add an owner-only REPLACE operation with an expected geometry generation. Through
+Task 5b adds an owner-only REPLACE operation with an expected geometry generation. Through
 the existing parked-process BSP loan, allocate/map a zeroed candidate of the
 current size at a disjoint address. If generation changed or allocation/mapping
 fails, return a retry/error and leave the old session/mapping intact. On success,
@@ -427,15 +454,15 @@ the old buffer and waits for another resize or an explicit later retry.
 
 For N spaces, a local TTY costs approximately `pitch * (height - bar_height)`
 bytes per space; navigation/cursor storage adds `pitch * (bar_height + font_height)`.
-VirtIO adds `width * height * 4` bytes and the fixed 3 MiB panic surface.
+VirtIO adds `width * height * 4` bytes for the normal screen surface.
 During a resize both old and candidate surfaces/TTY sets coexist. Each graphics
 owner additionally retains its old mapping, and an explicit replacement briefly
 needs old plus new backing. Budget page rounding, physical-page lists, queues
 and VM records as well; no allocation is assumed to succeed. One in-flight frame
 bounds retired pixel backing rather than accumulating old geometries. For the
-measured four spaces and 8×16 font, 1280×800 VirtIO uses about 22.14 MiB including
-the panic surface; preparing 1920×1080 adds about 38.96 MiB, a 61.10 MiB peak
-before graphics mappings, page lists, rounding, queues and metadata. One graphics
+measured four spaces and 8×16 font, 1280×800 VirtIO uses about 19.14 MiB. Preparing
+1920×1080 adds about 38.96 MiB, a 58.10 MiB peak before graphics mappings, page
+lists, rounding, queues and metadata. One graphics
 owner adds 3.75 MiB at the old size, and 7.68 MiB during explicit replacement.
 These are calculated budgets, not measured allocation totals or fixed limits.
 
@@ -449,7 +476,7 @@ The image's DISPLAY_SIZE and the host's QEMU_VIDEO have separate lifetimes.
 | Selection | Device arguments | Required observation |
 | --- | --- | --- |
 | std | `-vga std` | Default unchanged; task 2 direct-copy baseline, task 4 boot-option size and missing/invalid-size fallback. |
-| virtio | `-vga none -device virtio-gpu-pci,disable-legacy=on` | Sole VirtIO display, boot-size UI/shell/Mandelbrot and post-handoff panic in task 3; task 5 resize while shell/Kilo/graphics are idle or drawing. |
+| virtio | `-vga none -device virtio-gpu-pci,disable-legacy=on` | Sole VirtIO display, boot-size UI/shell/Mandelbrot and serial-only panic in task 3; tasks 5a/5b resize while shell/Kilo/graphics are idle or drawing. |
 | bochs | `-vga none -device bochs-display` | Exact boot-option size, UI/graphics/panic and checked fallback in task 4. |
 
 For live resizing use `QEMU_DISPLAY=gtk,gl=off,zoom-to-fit=on`, four CPUs and
@@ -466,21 +493,6 @@ release/exit during a preempted frame and panic takeover. Do not add boot tests,
 fault-injection features or output automation. Task 1 measures existing output;
 none of the proposed drivers or resize behaviors have been implemented/qualified.
 
-### Three decisions for review
-
-1. **TTY preservation:** use cell-aligned raster cropping, keeping the cursor row,
-   without reflow or scrollback. It loses cropped text but keeps task 5 bounded.
-   Retaining a character grid would enable a richer resize policy and add memory
-   plus changes to every terminal drawing operation.
-2. **Graphics adaptation:** stable old mappings plus explicit owner REPLACE,
-   clipping until adaptation; Mandelbrot/Doom adapt at rendering checkpoints.
-   This costs overlapping allocations but avoids dangling pointers and lets a
-   slow or allocation-limited program keep running.
-3. **Panic:** permit fixed 1024×768 emergency VirtIO output with a 3 MiB reserve,
-   and serial-only fallback on unsafe takeover or hardware failure. Direct
-   framebuffer panic output is restored in task 2. Reserving runtime-sized panic
-   backing would increase resize peak memory and its failure cases.
-
 ### Investigation sources
 
 Current Pyxis evidence: `kernel/space.c`, `kernel/object/display.c`,
@@ -495,7 +507,8 @@ Hardware/protocol evidence (QEMU pinned to the measured release):
   queues, display events, scatter backing, resource commands and fences.
 - [QEMU GPU command/reset implementation](https://github.com/qemu/qemu/blob/v10.2.2/hw/display/virtio-gpu.c)
   and [display events](https://github.com/qemu/qemu/blob/v10.2.2/hw/display/virtio-gpu-base.c):
-  reset destroys resources; host geometry produces DISPLAY events.
+  reset destroys firmware resources and prevents a visible boot-framebuffer
+  fallback; host geometry produces DISPLAY events.
 - [GTK geometry](https://github.com/qemu/qemu/blob/v10.2.2/ui/gtk.c) and
   [console debounce](https://github.com/qemu/qemu/blob/v10.2.2/ui/console.c):
   actual drawing-area size and delayed host notification.
@@ -514,6 +527,23 @@ Hardware/protocol evidence (QEMU pinned to the measured release):
   removed before review. At most one ordinary log line per device.
 - **Measurements:** use existing tools, record nested-VM figures as such, and
   give the revisions and QEMU configuration.
+
+## Task 2 handoff
+
+- Branch: `display/boot-framebuffer`, based on merged main `8ef4169`.
+- PR #463 is merged and its four review points are folded into this document.
+  This local documentation commit is carried into the task 2 implementation PR;
+  no separate follow-up PR is opened.
+- [ACPI task 3, PR #464](https://git.internal/PyxisOS/pyxis-os/pulls/464) is still
+  open on 2026-10-07. The working rule above requires waiting for its merge
+  before editing the presenter. No implementation has started.
+- Next: rebase onto the battery-widget merge, initialize the pinned submodules,
+  refresh the unchanged presenter baseline, implement the boot-framebuffer
+  interface and direct panic takeover, then build/boot/debug and open the PR.
+  Owner-run ThinkPad confirmation remains part of task 2 completion.
+- Validation of this follow-up: document/link review and `git diff --check` only.
+  No build or boot is needed for these documentation edits. No QEMU/GDB jobs are
+  running for this task.
 
 ## After the milestone
 
