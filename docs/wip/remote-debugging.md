@@ -28,9 +28,10 @@ must not mean a blind machine.
   board's second Realtek controller is
   [parked](thinkpad-next-steps.md#4-parked-dash-serial-over-lan-for-boot-logs).
   The owner is exploring a Linux configuration path for it.
-- **The remote terminal only listens.** The [remote terminal](../userland/remote-terminal.md)
-  server listens on port 2323 in the live Remote space. A host must know the
-  ThinkPad's address and connect after boot.
+- **The remote terminal supports reverse discovery.** An opt-in kernel option
+  selects a host beacon by name; the configured Remote space connects out.
+  Without the option, its existing port-2323 listener remains available.
+  See [reverse connections](../userland/remote-terminal.md#reverse-connections).
 - **The network works natively.** The built-in RTL8111 works over PXE with DHCP.
   The privileged wildcard UDP endpoint for broadcast reception exists for DHCP
   ([networking](../devices/networking.md)).
@@ -134,17 +135,48 @@ Accepted reader contract for task 1 on 2026-10-07:
     beacon with the configured name, and connects over TCP. The session then
     works like today's remote terminal, with the same framing, file transfer and
     machine mode.
-  - Settle with the implementer:
-    - the beacon's format and the UDP port;
-    - who holds the broadcast-receive authority (it is privileged today);
-    - what happens when the connection closes, for example waiting for the next
-      beacon and reconnecting;
-    - how `pyxis-remote` runs as the listening server.
-  - **Finish when:**
-    - in QEMU, with the option set, Pyxis connects to a listening
-      `pyxis-remote` without anyone typing its address;
-    - without the option, nothing changes;
-    - on the ThinkPad over PXE, the owner gets a shell and `log` this way.
+  - **Accepted on 2026-10-07:** `remote.beacon=NAME`, case-sensitive names up
+    to 63 bytes, UDP 2324 with a tag/version, TCP port and name. Only the
+    reverse-mode trusted Remote daemon holds broadcast-opening authority;
+    remote shells keep UDP OPEN alone. The discovery endpoint closes before
+    connection and reopens after old-group cleanup. The host accepts one
+    session and exits at its end; restarting it advertises a fresh session.
+  - **Implemented:** the [shared beacon format](../../include/remote/beacon.h),
+    boot-option handoff, separate `udp_beacons` grant, host `--listen` mode and
+    single-session discovery/reconnection. No authentication is added.
+  - **Qualification:**
+    - [x] In QEMU, the option connects Pyxis to `pyxis-remote --listen` without
+      entering its address; mismatched beacon names are ignored, `log` and
+      `log -f` work, and an abrupt host disconnect during a Lua loop permits a
+      fresh session after cleanup. The guest has no TCP listener in reverse
+      mode (read-only GDB `listener_count` is zero).
+    - [x] A literal `t14${ARCH}` name survives Limine configuration expansion
+      and matches the advertised name. Generated entries use a one-pass macro.
+    - [x] Interactive reverse file upload completed with SHA-256 matching the
+      host source; Ctrl+] closed with acknowledged group termination.
+    - [x] Without the option, the ordinary listener remains active (GDB
+      `listener_count` is one), and remote `log` and `ls` exit successfully.
+    - [ ] On the ThinkPad over PXE, the owner gets a shell and `log` this way.
+  - **Measured:** baseline direct `log` connect/read/teardown at `7a5682f`
+    reported 0.02 s in each of three samples. Reverse chained sessions reported
+    1.02, 0.03 and 0.09 s; the first followed an abrupt disconnect with a Lua
+    loop running, including cleanup and a fresh one-second beacon tick. These
+    are nested-KVM end-to-end samples, not isolated kernel timings. Both use
+    4 CPUs, 2 GiB, VirtIO networking, info logging and the same host tool's
+    machine/quiet mode, with `/usr/bin/time -p` at 0.01 s resolution. Reverse
+    output was 4519 bytes versus the 4393-byte baseline after added termination
+    messages; TCP transport and log reads are unchanged. Ordinary-mode samples
+    after the change all remained 0.02 s and 4393 bytes, matching the baseline.
+  - **Remaining:** native ThinkPad/PXE and subnet-broadcast checks are pending;
+    the task stays unchecked until the owner gets a shell and `log` natively.
+    Linux loopback/QEMU beacons were validated; macOS listener mode was not.
+  - **Delivery:** branch `debug/reverse-terminal` in
+    `/home/chronium/src/pyxis-remote-debugging`; userland
+    [PR #141](https://git.internal/PyxisOS/pyxis-userland/pulls/141) at
+    `d81475f799afb0162d7584587d83973bf48691ba` must merge before the parent
+    integration PR. All task-owned QEMU, debugger and host-client jobs are stopped.
+
+
 
 - [ ] **3. The kernel log over UDP.**
   - The kernel sends each log line as UDP datagrams to the host, and keeps

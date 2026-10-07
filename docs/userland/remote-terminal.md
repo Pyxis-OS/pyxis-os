@@ -53,6 +53,75 @@ creates its namespace, and calls
 `session boot://session.pxe --configure-network --start-remote-services`.
 Do not give multiple init scripts network configuration ownership.
 
+## Reverse connections
+
+Add `remote.beacon=NAME` to the PXE entry's kernel command line to make the
+configured `remote` space connect to the host. For example:
+
+```text
+${PYXIS_REMOTE_BEACON}=t14
+cmdline: init=boot://boot-init.pxe remote.beacon=${PYXIS_REMOTE_BEACON}
+```
+
+Place the macro definition at the top level of the Limine configuration, with
+no spaces around `=`. Limine inserts its value once without recursively
+expanding it, preserving names containing literal `${...}`. Generated entries
+use this form automatically. See the
+[pinned parser](https://raw.githubusercontent.com/Limine-Bootloader/Limine/v12.9.0/common/lib/config.c).
+
+On the host:
+
+```sh
+make -C tools remote
+build/tools/pyxis-remote --listen t14 0.0.0.0 2323
+```
+
+`--listen NAME HOST PORT` binds a numeric IPv4 address, broadcasts a beacon
+immediately and every second on UDP 2324, then accepts one TCP session.
+`--beacon-address IPv4` selects the destination instead of the default
+`255.255.255.255`; use the subnet broadcast address when needed. The advertised
+port is the host's TCP port. The guest connects to the beacon sender's address,
+so no guest address needs to be entered. Names are case-sensitive, 1–63
+printable ASCII bytes without spaces; they select a development machine and
+provide no authentication. This mode remains unencrypted and assumes the same
+trusted LAN as the existing server.
+
+The [beacon wire format](../../include/remote/beacon.h) has a 16-byte header:
+`PYXISRT` plus NUL, version 1, name byte count, a big-endian TCP port and four
+zero reserved bytes, followed by the name without a NUL. Wrong tags, versions,
+lengths, reserved bytes, zero ports and different names are ignored.
+
+Only reverse-mode trusted Remote bootstrap/session handoffs receive the
+separate BROADCAST-only `udp_beacons` service grant. The daemon uses it to own
+a wildcard endpoint on port 2324 while discovering. It shuts down and closes
+that endpoint before connecting, dropping queued advertisements. Remote shells
+retain UDP OPEN alone and receive neither the beacon grant nor its bootstrap
+environment variable. Discovery does not grant network configuration authority
+or replace DHCP ownership.
+
+After connecting, HELLO, framing, machine mode, shell completion, file transfer
+and terminal behavior use the existing session path. One reverse session runs
+at a time. After disconnect, the daemon terminates the old execution group and
+waits for its attributed cleanup before reopening discovery. Failed TCP
+attempts wait one second before reopening; successful-session cleanup has no
+added delay. The host tool exits when its session ends. Starting it again
+advertises a fresh session, whose command numbering begins at 1. Waiting on the
+host leaves stdin and terminal settings untouched; raw mode starts after accept.
+
+For QEMU user networking, route the host's beacon into the guest with the
+existing UDP forward and select host loopback as the beacon destination:
+
+```sh
+make run CPUS=4 MEMORY=2G VIRTIO_NET=1 UDP_FORWARD=2324:2324 REMOTE_BEACON=t14
+build/tools/pyxis-remote --listen t14 --beacon-address 127.0.0.1 127.0.0.1 2323
+```
+
+`REMOTE_BEACON` only changes generated Limine command lines and image assembly;
+native PXE entries can set the kernel option without rebuilding the kernel or
+archive. Omit it for the ordinary four-client listener. Installed boot defaults
+have no Remote space; an installed boot configuration must explicitly provide
+one before using reverse mode.
+
 ## Explicit file transfer
 
 Connect with an existing host download directory when downloads are wanted:

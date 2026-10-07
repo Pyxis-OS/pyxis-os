@@ -5,6 +5,7 @@
 #include <kernel/panic.h>
 #include <kernel/string.h>
 #include <kernel/user/launch.h>
+#include <remote/beacon.h>
 
 static bool same_text(const char *left, const char *right)
 {
@@ -84,6 +85,7 @@ void user_launch_initial(const char *command_line)
     panic("cannot allocate kernel options");
   }
   const char *init = NULL, *mount_disk = NULL, *install = NULL, *default_config = NULL;
+  const char *remote_beacon = NULL;
 
   char *cursor = options;
   while (*cursor) {
@@ -116,12 +118,18 @@ void user_launch_initial(const char *command_line)
       take_option(&install, key, value);
     } else if (same_text(key, "boot.default_config")) {
       take_option(&default_config, key, value);
+    } else if (same_text(key, "remote.beacon")) {
+      take_option(&remote_beacon, key, value);
     } else {
       panic("unknown kernel option: %s", key);
     }
   }
   if (!init) {
     panic("kernel command line must name init");
+  }
+  if (remote_beacon && !remote_beacon_name_length(remote_beacon)) {
+    panic("remote.beacon must name 1..%u printable ASCII bytes without spaces",
+        REMOTE_BEACON_NAME_MAX);
   }
   if (strlen(init) <= USER_BOOT_ROOT_PREFIX_LENGTH ||
       memcmp(init, USER_BOOT_ROOT_PREFIX, USER_BOOT_ROOT_PREFIX_LENGTH)) {
@@ -135,6 +143,6 @@ void user_launch_initial(const char *command_line)
   }
   /* Boot init runs in Caelum's space and creates every other space. */
   user_launch_boot_init(init, &mount, install && flag_option("boot.install", install),
-      default_config && flag_option("boot.default_config", default_config));
+      default_config && flag_option("boot.default_config", default_config), remote_beacon);
   kfree(options);
 }
