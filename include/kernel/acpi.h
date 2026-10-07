@@ -1,6 +1,7 @@
 #ifndef KERNEL_ACPI_H
 #define KERNEL_ACPI_H
 #include <abi/syscall.h>
+#include <abi/system_info.h>
 #include <kernel/boot.h>
 #include <kernel/service/request.h>
 #include <stdint.h>
@@ -47,5 +48,11 @@ struct acpi_battery_status {
 
 /* BSP, IF=0. The latest reading. */
 struct acpi_battery_status acpi_battery_status(void);
+
+/* BSP, IF=0. The latest poll for system_info: AC state and battery count, and
+ * battery INDEX's record, false past the count. All zero before the first
+ * poll or without ACPI. */
+struct system_info_power acpi_power_state(void);
+bool acpi_battery_read(uint64_t index, struct system_info_battery *battery);
 
 #endif

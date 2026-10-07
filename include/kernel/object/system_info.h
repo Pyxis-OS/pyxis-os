@@ -11,6 +11,19 @@ struct system_info_memory_request {
   struct system_info_memory reply;
 };
 
+/* SYSTEM_INFO_POWER, or SYSTEM_INFO_BATTERY with INDEX; found is false for an
+ * index past the battery count. */
+struct system_info_power_request {
+  struct bsp_request request;
+  uint64_t operation;
+  uint64_t index;
+  bool found;
+  union {
+    struct system_info_power power;
+    struct system_info_battery battery;
+  } reply;
+};
+
 /* BSP, IF=0, after all CPUs acknowledge boot and before scheduler publication.
  * No allocation; identity and CPU observations are immutable afterward. */
 void system_info_init(void);
@@ -21,5 +34,7 @@ struct syscall_result system_info_call(uint64_t rights, uint64_t operation,
     size_t reply_capacity);
 /* Executor only, BSP, IF=0. Never touches caller mappings or remote counters. */
 void system_info_memory_execute(struct system_info_memory_request *request);
+/* Executor only, BSP, IF=0. Copies the ACPI worker's latest published poll. */
+void system_info_power_execute(struct system_info_power_request *request);
 
 #endif
