@@ -54,4 +54,11 @@ bool virtio_net_available(const struct virtio_net_controller *controller);
 /* Ready means active and stable, independent of carrier; no register reads. */
 bool virtio_net_ready(const struct virtio_net_controller *controller);
 
+/* First fatal CPU, IF=0. Begin revokes normal networking permanently; false
+ * leaves it revoked. Transmit is bounded and reuses storage only after a checked
+ * completion. No allocation, worker/protocol dependency or reset. */
+bool virtio_net_panic_begin(struct virtio_net_controller *controller);
+bool virtio_net_panic_transmit(struct virtio_net_controller *controller,
+    const void *frame, size_t length);
+
 #endif

@@ -3,6 +3,7 @@
 #include <kernel/mm/pmm.h>
 #include <kernel/mm/vm.h>
 #include <kernel/panic.h>
+#include <kernel/net/panic_tx.h>
 #include <kernel/virtio/net_queue.h>
 
 #define NET_DESCRIPTOR_WRITE 2u
@@ -136,6 +137,7 @@ void *virtio_net_queue_buffer(const struct virtio_net_queue *queue, unsigned id)
 void virtio_net_queue_post(struct virtio_net_queue *queue, unsigned id, size_t bytes)
 {
   KASSERT(id < VIRTIO_NET_QUEUE_SIZE && !queue->device_owned[id]);
+  KASSERT(queue->receive || !queue->panic_reserved || id != VIRTIO_NET_PANIC_DESCRIPTOR);
   KASSERT(bytes && bytes <= VIRTIO_NET_BUFFER_BYTES);
   KASSERT(queue->outstanding < VIRTIO_NET_QUEUE_SIZE);
   queue->ring->descriptors[id].length = bytes;
@@ -188,4 +190,74 @@ bool virtio_net_queue_complete(struct virtio_net_queue *queue,
   queue->used = used;
   *count = pending;
   return true;
+}
+
+void *virtio_net_queue_panic_buffer(const struct virtio_net_queue *queue)
+{
+  return (void *)(queue->storage + PAGE_SIZE +
+      VIRTIO_NET_PANIC_DESCRIPTOR * VIRTIO_NET_BUFFER_BYTES);
+}
+
+bool virtio_net_queue_panic_begin(struct virtio_net_queue *queue)
+{
+  if (!queue->panic_reserved || queue->receive || !queue->storage) {
+    return false;
+  }
+  /* Forget normal completion metadata, which may be interrupted mid-update.
+   * Only completions after this snapshot can return the fatal buffer. */
+  queue->panic_used = queue->ring->used.index;
+  dma_read_barrier();
+  queue->panic_seen = 0;
+  queue->panic_ready = true;
+  return true;
+}
+
+bool virtio_net_queue_panic_transmit(struct virtio_net_queue *queue, size_t bytes)
+{
+  if (!queue->panic_ready || queue->panic_failed || !bytes ||
+      bytes > VIRTIO_NET_BUFFER_BYTES) {
+    return false;
+  }
+  unsigned id = VIRTIO_NET_PANIC_DESCRIPTOR;
+  queue->ring->descriptors[id].length = bytes;
+  /* A normal post can be interrupted after incrementing its software index.
+   * Only the actual DMA index establishes the next free publication slot. */
+  uint16_t available = queue->ring->available.index;
+  queue->ring->available.ring[available % VIRTIO_NET_QUEUE_SIZE] = id;
+  dma_write_barrier();
+  queue->ring->available.index = (uint16_t)(available + 1);
+  virtio_net_queue_notify(queue);
+
+  for (unsigned poll = 0; poll < NET_PANIC_COMPLETION_POLLS; ++poll) {
+    uint16_t used = queue->ring->used.index;
+    unsigned pending = (uint16_t)(used - queue->panic_used);
+    if (pending > VIRTIO_NET_QUEUE_SIZE) {
+      break;
+    }
+    dma_read_barrier();
+    uint16_t seen = queue->panic_seen;
+    bool completed = false;
+    for (unsigned i = 0; i < pending; ++i) {
+      unsigned slot = (uint16_t)(queue->panic_used + i) % VIRTIO_NET_QUEUE_SIZE;
+      uint32_t returned = queue->ring->used.ring[slot].id;
+      uint32_t length = queue->ring->used.ring[slot].length;
+      if (returned >= VIRTIO_NET_QUEUE_SIZE || length || (seen & (1u << returned))) {
+        queue->panic_failed = true;
+        return false;
+      }
+      seen |= 1u << returned;
+      completed |= returned == id;
+    }
+    queue->panic_used = used;
+    queue->panic_seen = seen;
+    if (completed) {
+      /* Ordinary descriptors are never reused after takeover. The reserved
+       * descriptor becomes eligible only after this whole batch validates. */
+      queue->panic_seen &= ~(1u << id);
+      return true;
+    }
+    __asm__ volatile("pause");
+  }
+  queue->panic_failed = true;
+  return false;
 }
