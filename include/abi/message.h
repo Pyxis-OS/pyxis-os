@@ -45,6 +45,7 @@
 #define PROTOCOL_POINTER UINT64_C(38)
 #define PROTOCOL_SPACE_FACTORY UINT64_C(39)
 #define PROTOCOL_POWER UINT64_C(40)
+#define PROTOCOL_LOG UINT64_C(41)
 
 /* The handle selects the object; this tag identifies the request protocol,
  * never the caller's authority. Operation numbers are local to that protocol. */

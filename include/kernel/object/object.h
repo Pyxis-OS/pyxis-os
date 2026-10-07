@@ -47,6 +47,7 @@ enum object_type {
   OBJECT_POINTER = 40,
   OBJECT_SPACE_FACTORY = 41,
   OBJECT_POWER = 42,
+  OBJECT_LOG = 43,
 };
 
 struct execution_group;

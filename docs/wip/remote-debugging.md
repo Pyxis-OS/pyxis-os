@@ -21,10 +21,9 @@ must not mean a blind machine.
 
 ## Today
 
-- **The log is not kept.** `kernel/log.c` writes each line to serial, the early
-  console and the Caelum tab. It keeps only the first 32 KiB, and only until
-  the Caelum tab takes over. After that the tab scrolls and earlier lines are
-  gone. No program can read the log.
+- **The kernel log is retained.** The [read-only log interface](../interfaces/kernel-log.md)
+  keeps the most recent lines in a static 256 KiB ring; `log` and `log -f`
+  can read it in local and remote shells. Capture is independent of the screen.
 - **The ThinkPad has no usable serial port.** DASH serial-over-LAN through the
   board's second Realtek controller is
   [parked](thinkpad-next-steps.md#4-parked-dash-serial-over-lan-for-boot-logs).
@@ -71,19 +70,43 @@ Accepted by the owner on 2026-10-07:
 Also from the owner on 2026-10-07: the kernel sending its log over UDP is wanted.
 It is task 3.
 
+Accepted reader contract for task 1 on 2026-10-07:
+
+- Readers own independent sequence/byte-offset cursors. Reads return text, a
+  next cursor and the number of overwritten lines missed by that reader.
+- `log` captures an end and exits after that snapshot; `log -f` prints history,
+  then polls through the existing clock service every 100 ms.
+- Fatal output retains its independent emergency path. Ring capture is best
+  effort when a panic interrupts a lock owner; guaranteed fatal transmission
+  belongs to task 3.
+
 ## Tasks
 
-- [ ] **1. The kernel log ring and the `log` command.**
+- [x] **1. The kernel log ring and the `log` command.**
   - The ring (decision 1), the read-only grant and its forwarding through boot
     init, session and the shell (decision 2), and the native `log` command with
     `-f`.
-  - Settle the read interface with the implementer: how a reader resumes after
-    new lines arrive, and what it sees when lines were dropped.
-  - **Finish when:**
-    - in QEMU, `log` shows the boot log from its first line;
-    - `log -f` shows lines logged after it started;
-    - a remote shell can run both;
-    - the ring's memory cost is recorded.
+  - The accepted reader contract above is implemented by the
+    [native log ABI](../../include/abi/log.h).
+  - **Validation:** complete kernel/SDK/image builds, interactive four-CPU KVM
+    QEMU with 2 GiB RAM and VirtIO networking, at info and trace log levels.
+    Local and remote `log` returned retained boot history; `log -f` displayed
+    post-start scheduler/process-exit lines. A second remote snapshot completed
+    while the first followed. Remote Ctrl+C returned terminated completion.
+    Read-only GDB inspection confirmed boot retention and natural trace-driven
+    overflow (first line 1562, next line 7386, 262101 occupied bytes).
+  - **Memory:** 262144-byte ring including four-byte line headers; 262208 bytes
+    of BSS including bookkeeping/alignment. It replaces the old 32768-byte
+    early-log store. Bounded kernel reply storage is 4128 bytes per read.
+  - **Limits:** oversized-line and clipped partial-snapshot cases were reviewed
+    in code, without fault injection or new tests. No native ThinkPad run or
+    isolated boot-time/presentation-cost measurement is claimed. An attempted
+    GDB allocator call faulted at its NX-stack return trampoline; runtime
+    validation used a fresh boot and read-only debugger inspection afterward.
+  - **Delivery:** userland [PR #140](https://git.internal/PyxisOS/pyxis-userland/pulls/140)
+    at `bb66de52cd7fb11bf1d701548d61c8ef9e95529d` must merge before the
+    companion Pyxis PR which pins it. `fj pr status` cannot parse userland's
+    empty combined state (`unknown variant`); dependency CI is unavailable.
 
 - [ ] **2. The reverse remote terminal.**
   - A host server broadcasts a small UDP beacon about once a second. The

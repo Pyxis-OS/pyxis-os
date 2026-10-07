@@ -22,6 +22,8 @@
 #include <kernel/object/echo.h>
 #include <kernel/object/clock.h>
 #include <kernel/object/system_info.h>
+#include <kernel/object/log.h>
+#include <abi/log.h>
 #include <abi/launcher.h>
 #include <abi/memory.h>
 #include <abi/directory.h>
@@ -95,6 +97,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   struct kernel_object *memory = NULL, *launcher = NULL, *clock = NULL;
   struct kernel_object *namespace_service = NULL, *terminal_service = NULL;
   struct kernel_object *system_info = NULL;
+  struct kernel_object *log = NULL;
   struct kernel_object *disks = NULL;
   struct kernel_object *power = NULL;
   struct file_object *boot_kernel = NULL, *boot_archive = NULL;
@@ -129,6 +132,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   launcher = launcher_create();
   clock = clock_create();
   system_info = system_info_create();
+  log = log_create();
   echo = echo_create();
   net_config = net_config_create();
   udp = udp_service_create();
@@ -140,14 +144,14 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   service = endpoint_service_create();
   namespace_service = namespace_service_create();
   terminal_service = terminal_service_create();
-  if (!memory || !launcher || !clock || !system_info || !echo || !net_config || !udp || !tcp || !random || !power || !profile || !pipe || !service || !namespace_service || !terminal_service) {
+  if (!memory || !launcher || !clock || !system_info || !log || !echo || !net_config || !udp || !tcp || !random || !power || !profile || !pipe || !service || !namespace_service || !terminal_service) {
     goto fail;
   }
 
   handle_t memory_handle, launcher_handle, boot, tmp, ram;
   handle_t clock_handle, echo_handle, net_config_handle, udp_handle, tcp_handle, random_handle;
   handle_t profile_handle, pipe_handle, service_handle, namespace_service_handle, terminal_service_handle;
-  handle_t system_info_handle, power_handle;
+  handle_t system_info_handle, power_handle, log_handle;
   handle_t script_handle = HANDLE_INVALID;
   handle_t standard_output, standard_error;
   struct kernel_object *console = &process->space->console->object;
@@ -168,6 +172,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
       capability_install(&process->capabilities, echo, ECHO_RIGHT_SEND, 0, &echo_handle) != CAP_OK ||
       capability_install(&process->capabilities, clock, CLOCK_RIGHTS, 0, &clock_handle) != CAP_OK ||
       capability_install(&process->capabilities, system_info, SYSTEM_INFO_RIGHT_READ, 0, &system_info_handle) != CAP_OK ||
+      capability_install(&process->capabilities, log, LOG_RIGHT_READ, 0, &log_handle) != CAP_OK ||
       capability_install(&process->capabilities, launcher,
           LAUNCHER_RIGHT_LAUNCH | LAUNCHER_RIGHT_CREATE_GROUP, 0, &launcher_handle) != CAP_OK) {
     goto fail;
@@ -265,6 +270,8 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   echo = NULL;
   object_release(system_info);
   system_info = NULL;
+  object_release(log);
+  log = NULL;
   object_release(clock);
   clock = NULL;
   object_release(memory);
@@ -272,11 +279,12 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   memory = NULL;
   launcher = NULL; /* The process's grants now own the stateless services. */
 
-  struct process_binding resources[23] = {
+  struct process_binding resources[24] = {
     {"memory", memory_handle},
     {"launcher", launcher_handle},
     {"clock", clock_handle},
     {"system_info", system_info_handle},
+    {"log", log_handle},
     {"echo", echo_handle},
     {"udp", udp_handle},
     {"tcp", tcp_handle},
@@ -289,7 +297,7 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
     {"terminal", terminal_service_handle},
     {"power", power_handle},
   };
-  size_t resource_count = 15;
+  size_t resource_count = 16;
   resources[resource_count++] = (struct process_binding){"space_factory", factory_handle};
   resources[resource_count++] = (struct process_binding){"ram", ram};
   if (script_handle != HANDLE_INVALID) {
@@ -347,6 +355,9 @@ void user_launch_boot_init(const char *image_uri, const struct mount_config *mou
   return;
 
 fail:
+  if (log) {
+    object_release(log);
+  }
   if (disks) {
     object_release(disks);
   }
