@@ -68,6 +68,13 @@ that it builds unchanged. TCC retains its existing small native development role
 
 ## C++ in userspace
 
+**Selected 2026-10-07 as Claude's next milestone** (owner). Its scope is C++
+in userspace only: cross-compiled C++ programs with a runtime from the
+`pyxis-llvm` fork. Clang running on Pyxis, and the further OS prerequisites it
+needs, threads first among them, remain a later milestone. The milestone starts
+with a probe and proposal, as the [host toolchain](../development/llvm-toolchain.md)
+milestone did.
+
 Cross-compiled C++ applications can precede a hosted C++ compiler. Start with an
 explicit runtime subset and a small real consumer, then expand toward ports
 such as DevilutionX and other C++ libraries. This does not change the kernel's

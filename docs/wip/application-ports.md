@@ -79,13 +79,16 @@ proposal for media-type aliases such as `json+http://` remains future work.
   as potential shared prerequisites. Probe the selected revision and optional
   dependencies. Editing and saving a picture inside Pyxis would complement the
   existing source-edit/build/run loop; see [graphics direction](desktop-graphics.md).
-- **Quake:** the next proposed large game target. Investigate a software-rendered
-  port with an initial single-player/demo scope rather than requiring a GPU.
-  Select the source port and audit libc, input, timing and rendering requirements
-  before committing; audio and multiplayer can be separate slices.
-- **DevilutionX:** Diablo I, not Diablo II. A later candidate needing a C++
-  userspace runtime, SDL and supporting libraries. Upstream offers a network-off
-  configuration; assess a bounded first port with networking/audio deferred.
+- **Quake:** [implemented](../userland/quake.md); audio and multiplayer remain
+  separate slices.
+- **DevilutionX:** Diablo I, not Diablo II. A later candidate needing both the
+  [C++ userspace runtime](toolchains-and-runtimes.md#c-in-userspace) and SDL2,
+  plus supporting libraries. Upstream offers a network-off configuration; assess
+  a bounded first port with networking/audio deferred.
+- **Chocolate Duke3D:** a candidate once SDL2 exists.
+- **Peanut-GB:** a single-header Game Boy emulator; parked (owner, 2026-10-07).
+  A native display/keyboard backend can come first, converted to SDL2 later; its
+  SDL2 example frontend shows what a backend needs.
 - **AbyssEngine / Diablo II:** a motivating longer-term target. Investigate the
   current C implementation, not the archived Go OpenDiablo2 tree. First build and
   run it on the host to establish actual gameplay completeness separately from
@@ -107,6 +110,9 @@ enjoyable port. This is a suggestion awaiting selection, not permission to start
 parallel tracks or to port every dependency speculatively.
 
 ## Distant candidates
+
+**wasm3,** a WebAssembly interpreter in C, is an investigation candidate: what
+running WebAssembly modules on Pyxis would need from libc and the runtime.
 
 The [toolchain and runtime notes](toolchains-and-runtimes.md) record Go and C++
 prerequisites, [Tailscale SSH for homelab administration](toolchains-and-runtimes.md#homelab-administration-over-tailscale), and
