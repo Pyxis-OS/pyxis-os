@@ -6,6 +6,12 @@ same path. An unfinished line is readable immediately. Retention continues
 after the Caelum tab takes over. The first TTY selection replays retained text
 once, without changing the framebuffer drawing or presenter handoff.
 
+Console output marked for serial mirroring is also retained, including trusted
+boot-init messages about configuration, missing volumes and space startup.
+It uses the existing presentation lock, so its ordering with kernel lines
+matches serial output. Ordinary local and remote terminal output is not
+serial-mirrored and does not feed back into the ring.
+
 Each retained line costs four bytes of length bookkeeping within the ring.
 Overflow evicts whole oldest lines and counts them. A single line longer than
 262140 bytes, including its newline, cannot fit: its retained prefix is evicted
@@ -26,7 +32,7 @@ SNAPSHOT returns the first retained cursor, current end cursor, cumulative
 dropped-line count and ring capacity. A cursor contains a boot-local line
 sequence and byte offset, allowing long or unfinished lines to span reads.
 READ starts at `{0, 0}` or a previously returned cursor. It returns at most
-4096 text bytes, a next cursor and the number of lines missed by this reader.
+1024 text bytes, a next cursor and the number of lines missed by this reader.
 Readers consume nothing globally and maintain their own cursors; there is no
 per-reader kernel allocation or mutable capability position.
 
@@ -65,6 +71,6 @@ to [remote-debugging task 3](../wip/remote-debugging.md).
 
 The ring store is exactly 262144 bytes. Its object file reserves 262208 bytes
 of BSS including synchronization, counters and alignment. It replaces the old
-32768-byte early-log store. Each read uses at most 4128 bytes of reply storage
+32768-byte early-log store. Each read uses at most 1056 bytes of reply storage
 on the calling task's kernel stack. Capabilities use ordinary object storage;
 there is no allocation per retained line.

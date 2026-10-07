@@ -485,6 +485,10 @@ The [kernel log](interfaces/kernel-log.md) retains 256 KiB in static storage,
 evicting whole oldest lines. Oversized lines are discarded through their
 newline. It is volatile, and following polls every 100 ms. Revisit capacity,
 event-driven following or durable capture with measured native driver workloads.
+Reads locate both cursors by walking retained length headers under the ring
+lock with interrupts disabled; logging on other CPUs waits for that walk.
+Revisit a cached line/index position if measured following workloads show
+material writer latency, especially with many short retained lines.
 
 Every configured space receives read-only log authority, including remote
 shells. Kernel addresses in log text are therefore readable through the

@@ -6,7 +6,7 @@
 #define LOG_RIGHT_READ (UINT64_C(1) << 0)
 #define LOG_SNAPSHOT UINT64_C(1)
 #define LOG_READ UINT64_C(2)
-#define LOG_READ_MAX UINT64_C(4096)
+#define LOG_READ_MAX UINT64_C(1024)
 
 /* Boot-local text position. A line is delimited by '\n', independently of
  * formatting calls. Offset permits bounded reads of an unfinished/long line.
