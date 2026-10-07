@@ -5,8 +5,9 @@ use ACPI devices and AML methods. Static tables that early boot needs (the
 MADT, FADT flags, HPET and MCFG) are still read directly by
 `arch/x86_64/acpi.c` before the CR3 switch. This page describes what the
 [ACPI milestone](../wip/acpi-and-bar-widgets.md) has implemented so far: the
-namespace is loaded, the kernel powers off and restarts through it, and it reads
-the battery through the embedded controller for the space bar.
+namespace is loaded, the kernel powers off and restarts through it, also when
+the power button is pressed, and it reads the battery through the embedded
+controller for the space bar.
 
 ## Ownership
 
@@ -160,6 +161,17 @@ The `power` capability ([ABI](../../include/abi/power.h)) carries OFF and RESTAR
 rights. The kernel grants both to boot init, which forwards them to spaces that
 set `power = true` ([boot configuration](../userland/init.md#boot-configuration)).
 The shell's `poweroff` and `reboot` builtins use it.
+
+A short press of the power button runs the same power-off without any
+capability: physical access already allows holding the button, the firmware's
+forced power-off. The worker clears a press latched before boot, such as the
+one that powered the machine on, then enables the power button's fixed event.
+The event handler, in SCI service, only records the press; the worker logs
+`power: power button pressed` and runs the power-off at its top level. A press
+while a power operation runs is dropped, and a request that arrives while a
+press's power-off runs completes with BUSY. If that power-off fails, the system
+stays up and the next press tries again. Only the fixed-feature power button is
+supported; a control-method button (`PNP0C0C` sending `Notify` 0x80) is not.
 
 A call travels as the `BSP_SERVICE_POWER` request: the executor forwards it to
 the ACPI worker, which runs one power operation at a time. A second request
@@ -341,6 +353,28 @@ The first poll mapped 17 more pages of operation regions; the next two mapped
 none. Later polls were not recorded. At up to 8.3 ms every five seconds, the
 busy-waiting worker uses under 0.2% of the BSP.
 
+### Power button
+
+QEMU's `system_powerdown` monitor command presses the fixed-feature power
+button. Nested-VM checks with the same QEMU, KVM and OVMF:
+
+- Live image, 512 MiB, one and four CPUs: `power: power button pressed` and
+  `power: flushing pools; powering off` followed the press within 2 ms, and
+  QEMU exited.
+- Installed mode with a disposable 64 MiB pool on partition 2 of a virtio-blk
+  disk: the `pyxis` space ran `cat boot://config/live.lua > system://X`
+  without `sync`, then the button was pressed, on one CPU and then on four
+  (writing `Y`). Both presses fell between periodic flushes. Afterwards, on the
+  host, `npfs-inspect` showed both files identical to the source with
+  `journal_state empty`, `fsck.npfs` passed, and the four-CPU boot mounted the
+  pool without a journal replay.
+- The shell's `poweroff` still exits QEMU.
+- uACPI heap and the firmware window are unchanged; kernel text grew by 368
+  bytes.
+
+Repeated presses, a press during a running operation and a request during a
+press's power-off were checked by code inspection only.
+
 ## Limits
 
 These are recorded in [technical debt](../technical-debt.md#acpi-interpreter-host-limits)
@@ -355,6 +389,7 @@ and [power-off limits](../technical-debt.md#power-off-and-restart-limits):
 - Power-off skips pools that already failed and cannot stop services in order.
 - EC transactions busy-wait on the BSP and do not take the ACPI global lock.
 - Battery changes are polled; notifications are not handled yet.
+- Only a fixed-feature power button works.
 
 The embedded controller and battery limits are in
 [technical debt](../technical-debt.md#embedded-controller-and-battery-limits).
