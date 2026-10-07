@@ -259,3 +259,5 @@ compositing, scrollback and remote session resizing need their own bounded
 contracts. [Desktop and graphics](../wip/desktop-graphics.md) retains the
 physical-hardware direction. Completing this display work does not authorize
 those directions.
+The [panic-context proposal](../wip/later-os-directions.md#direct-framebuffer-panic-context)
+also remains pending an owner decision.

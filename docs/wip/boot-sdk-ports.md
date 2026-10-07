@@ -415,8 +415,8 @@ The fresh-line prompt and current working-path display are implemented. Their
 behavior and limits are documented in [the shell reference](../userland/shell.md) and
 [terminal reference](../userland/terminal.md).
 
-Terminal scrollback remains a candidate after the
-[display milestone](display-drivers.md)'s resize work (task 5a). It needs retained
+Terminal scrollback remains a separate candidate after
+[display resizing](../kernel/display.md). It needs retained
 text storage and was explicitly deferred from everyday commands.
 
 ## Completing a milestone
