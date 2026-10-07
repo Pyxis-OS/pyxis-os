@@ -27,7 +27,8 @@ must not mean a blind machine.
 - **The ThinkPad has no usable serial port.** DASH serial-over-LAN through the
   board's second Realtek controller is
   [parked](thinkpad-next-steps.md#4-parked-dash-serial-over-lan-for-boot-logs).
-  The owner is exploring a Linux configuration path for it.
+  Telnet text redirection to its UART works, but the owner decided on
+  2026-10-07 not to rely on it because the setup is fragile.
 - **The remote terminal supports reverse discovery.** An opt-in kernel option
   selects a host beacon by name; the configured Remote space connects out.
   Without the option, its existing port-2323 listener remains available.
@@ -208,8 +209,9 @@ Accepted reader contract for task 1 on 2026-10-07:
 
 - Authentication and encryption, which wait for Pyxis authentication.
 - Keeping the ring across a warm reset.
-- DASH serial-over-LAN, unless the owner's exploration makes it a separate
-  task.
+- DASH serial-over-LAN. It works but is fragile, so it is not relied on (owner,
+  2026-10-07); the findings are kept in the
+  [ThinkPad notes](thinkpad-next-steps.md#4-parked-dash-serial-over-lan-for-boot-logs).
 
 ## Related
 
