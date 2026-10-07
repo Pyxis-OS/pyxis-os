@@ -190,7 +190,7 @@ Five idle `space_present` HPET samples through manual GDB were
 They include GPU waits, preemption and host/debugger variation, not just CPU
 composition. Baseline ELF SHA-256:
 `476df5a370243cce153e4f4bface52299ea20647cf30857f035ce0d40989a5f1`.
-The implemented kernel at `674a893` (plus the console header documentation),
+The pre-integration kernel at `674a893` (plus the console header documentation),
 userland `f40468a` and ports `be081b8` passed an ordinary GCC SDK, applications,
 ports and ISO build. Kernel/runtime changes compiled cleanly; existing vendor
 warnings remain. The matched idle run measured 2.346790, 4.174720, 2.623370,
@@ -228,6 +228,17 @@ That headless run used QEMU 10.2.2 with the existing AHCI fix described in
 [QEMU troubleshooting](../development/qemu.md#ahci-cd-rom-crash-before-kernel-entry).
 GTK runs used the installed QEMU 10.2.2. QEMU, GDB and the remote client were
 closed after validation.
+
+After merging main `625fd2a`, including kernel and userland TLSF fixes and native
+cp, the combined `1dadc76` with userland `9bb5523` and ports `be081b8` passed
+the full ordinary GCC image build. Its four-CPU, 192 MiB GTK/NIC boot repeated
+the real 1650x1290 replacement refusal with old address/frame/visibility intact,
+then successfully replaced at 800x541 after pressure withdrawal and a fresh
+resize. The performance samples above precede this main integration; no
+integrated-head performance claim is made. Combined ELF SHA-256:
+`9514567b265dfa87debaca5531c8177e08be07fccb7124106664ef4ae32f0a90`.
+Kilo also redrew while idle at 640x453 on the combined revision, then exited
+normally. All validation processes were closed.
 
 The next ordinary owner-run ThinkPad boot should check terminal sizing and
 Doom or Quake startup after the ABI changes. No such native check is claimed
