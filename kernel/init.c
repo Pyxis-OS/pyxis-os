@@ -27,6 +27,7 @@
 #include <kernel/usb/xhci.h>
 #include <kernel/service/request.h>
 #include <kernel/space.h>
+#include <kernel/display.h>
 #include <kernel-config.h>
 #include "storage/block_registry.h"
 
@@ -73,11 +74,13 @@
   acpi_prepare(boot);
   arch_clock_maintain();
 
+  display_init(&boot->framebuffer);
+
   boot_start_cpus();
   system_info_init();
   arch_clock_maintain();
 
-  space_init(&boot->framebuffer);
+  space_init();
   arch_clock_maintain();
 
   task_init();

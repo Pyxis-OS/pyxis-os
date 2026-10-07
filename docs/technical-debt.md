@@ -474,14 +474,20 @@ render the cursor cell with the scheme's colors.
 
 ## Early console and post-handoff panics
 
-The [early boot console](kernel/early-console.md) shows boot progress and
-panics only until the display presenter's first frame. Panics after that remain
-serial-only, as before. Showing them would mean taking the screen back from a
-presenter that may still be running on the BSP, so a machine without serial
-shows no panic text once userspace has started. A serial port that stops
-accepting output is latched off for the rest of boot and not retried.
-Revisit with real-hardware bring-up, if post-boot panics need to be visible
-without serial.
+The [early console and display panic path](kernel/early-console.md#panic-ownership)
+provides direct boot-framebuffer panic output before and after presenter handoff.
+Taking over another CPU's writer uses a bounded poll count without requiring a
+clock, GS, locks or scheduler progress. A preempted or delayed BSP can exceed that
+budget even though its next copy would notice the panic gate; then reporting is
+serial-only and normal screen writes remain stopped. Framebuffer faults during
+reset or drawing also revoke screen output. Revisit stronger CPU-stop/takeover
+coordination with measured native failures, rather than assuming panic can wait
+for scheduler progress. VirtIO panic output deliberately remains serial-only in
+VMs; no emergency reset/queue or dedicated frame allocation is planned.
+
+A serial port that stops accepting output remains latched off for the boot.
+Revisit retry policy when reliable late recovery is needed; an absent/stuck port
+must not block early boot or panic output.
 
 ## Reverse remote terminal discovery
 

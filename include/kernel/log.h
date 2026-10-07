@@ -32,10 +32,10 @@ bool log_begin(void);
 void log_end(bool locked);
 /* Low-level routing used inside a log_begin()/log_end() section. */
 void log_putc(char c);
-/* Irreversibly select unlocked serial-only output for fatal diagnostics.
+/* Irreversibly select unlocked emergency output for fatal diagnostics.
  * Safe without GS, heap or a functioning lock owner; lines may interleave.
  * Ring capture tries its separate lock once, skipping bytes if it is held.
- * Before the presenter's handoff, the first panicking CPU also owns the
- * early framebuffer console. */
+ * The first panicking CPU may also claim the direct framebuffer console,
+ * before or after the presenter's handoff. */
 void klog_panic_begin(void);
 #endif

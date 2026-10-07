@@ -21,7 +21,8 @@ boot progress and early panics. It is for hardware bring-up, not a terminal.
    the log lock, then enables live TTY output. The TTY draws into an off-screen
    buffer that is not yet presented; replay does not duplicate serial output.
 4. **Handoff.** Before its first framebuffer write, the presenter takes the log
-   lock and retires the console. Afterwards the console never draws again, and
+   lock and retires ordinary console output. Panic may later reclaim the direct
+   screen through the display interface. At handoff,
    the presenter logs `display: presentation started; early console retired`.
 
 ## Retained boot log
@@ -54,13 +55,14 @@ allocation. It does not use the TTY, escape sequences or framebuffer reads.
 
 ## Panic ownership
 
-One atomic state leaves `ACTIVE` exactly once, by compare-exchange:
+One atomic state leaves `ACTIVE` through handoff or panic. The first panic
+claims either `ACTIVE` or `RETIRED` by compare-exchange; `PANIC` is terminal:
 
 | State | Who draws |
 | --- | --- |
 | `ACTIVE` | Ordinary output, under the log lock |
 | `PANIC` | Only the first panicking CPU |
-| `RETIRED` | Nothing; the presenter owns the screen |
+| `RETIRED` | The display presenter; the panic path may take it back |
 
 - **Ordinary output.** Each character's render step records the drawing CPU
   in `drawing_cpu`, then rechecks the state. Both steps are sequentially
@@ -72,7 +74,7 @@ One atomic state leaves `ACTIVE` exactly once, by compare-exchange:
     work once the console has left `ACTIVE`.
   - The renderer drains write-combining stores before clearing the record.
   - After the handoff, the step returns before identifying the CPU.
-- **Panic claim.** `klog_panic_begin` claims the console for the first
+- **Before handoff.** `klog_panic_begin` claims the console for the first
   panicking CPU, then checks for a render step in progress.
   - **On this CPU.** The step was interrupted and never resumes, so the owner
     takes over at once.
@@ -83,6 +85,23 @@ One atomic state leaves `ACTIVE` exactly once, by compare-exchange:
   - Once it owns the console, the owner clamps the cursor and draws without
     the lock, as the only writer. A half-finished update on its own CPU can
     leave stale characters, but never out-of-range writes.
+- **After handoff.** The first claimant closes the physical display's panic
+  gate permanently. The BSP presenter publishes its APIC ID before rechecking
+  that gate, so either it refuses the frame or the claimant sees the writer.
+  Screen copies check the gate between chunks of at most 64 KiB; completion
+  drains WC stores before clearing the writer record. A panic on the writer's
+  CPU fences its abandoned stores and proceeds. Another CPU boundedly waits for
+  the record to clear; timeout stays serial-only and future frames are refused.
+  This bounds unchecked copy size, not scheduler or host delays.
+  - The kernel retained the driver layout before AP startup; no boot-response
+    pointer, heap, GS, lock, VM mutation or scheduler operation is needed.
+  - After takeover, reset the static text grid and clear the current screen.
+    Keep panic ownership unpublished until this finishes, so a fault during
+    reset reports on serial without recursive rendering.
+  - The panic starts at the top-left, independent of the active space/graphics.
+    It uses the driver's pitch and format, including on physical hardware that
+    still uses the boot framebuffer. Task 2 implements only that driver;
+    future VirtIO panic reporting remains serial-only by the agreed contract.
 - **Other panics.** Panics on other CPUs are serial-only. The owner re-enters
   through `panic()` after an exception report and keeps drawing. A fault raised
   while the owner is drawing stops its drawing, because the fault may come from
@@ -92,8 +111,22 @@ One atomic state leaves `ACTIVE` exactly once, by compare-exchange:
   is in progress and the presenter skips the frame without assuming it holds
   the lock. If retirement loses to a panic, the presenter never draws.
 
-Panics after the handoff remain serial-only. See
+A failed remote-writer takeover or framebuffer fault remains serial-only. See
 [technical debt](../technical-debt.md#early-console-and-post-handoff-panics).
+
+## Physical display interface
+
+[`display.h`](../../include/kernel/display.h) separates the physical screen
+from per-space graphics capabilities. `display_init()` copies the validated boot
+layout before AP startup. Spaces obtain dimensions/format through
+`display_layout()`; no space retains a boot framebuffer descriptor. The boot
+driver retains the existing mapping and makes no new allocation or mode change.
+
+The sole BSP presenter pairs `display_begin_frame()` with `display_end_frame()`
+and sends every physical write through `display_copy()`. A failed begin writes
+nothing. End also runs after cancelled copies, fences stores, then releases
+physical ownership before graphics snapshot cleanup. The bar, cursor composition,
+full-frame cadence and userspace mapping/PRESENT lifetime are unchanged.
 
 ## Serial
 
@@ -155,3 +188,29 @@ selected from GDB.
     the same results as above.
 - **Not exercised:** a real concurrent race between CPUs. Only the recorded
   states were simulated.
+
+## Display takeover validation, task 2
+
+On code `58e0024`, QEMU 10.2.2 plus the documented AHCI fix (`983d31c61557`),
+nested KVM, q35, standard VGA, 256 MiB, raw Fedora OVMF and headless display:
+
+- Normal four-CPU boot, navigation, cursor, shell, Mandelbrot and release back to
+  the TTY retain the boot layout. A single-CPU boot also shows the normal UI.
+- A post-handoff BSP panic displays text after clearing the screen. The owner is
+  unset through reset, then APIC 0 owns drawing.
+- A post-handoff AP panic closes the gate while the BSP has a real recorded
+  frame. After GDB releases the BSP, its cancelled frame fences and drops the
+  record; APIC 1 owns the screen. A later BSP frame acquisition returns false.
+- A same-CPU interrupted writer reaches reset without a remote wait. Changing
+  the renderer address to unmapped zero there produces one serial page-fault
+  report and fatal panic, without an owner publication or recursive drawing.
+- A debugger-simulated non-clearing remote writer expires the bounded wait,
+  leaves the gate closed and prints the panic on serial without a screen owner.
+
+Panics were triggered by redirecting an existing kernel context to `panic()`
+with an existing read-only format string, using breakpoints and register writes.
+No debugger-injected function call, test hook or fault-injection code was added.
+The AP handoff used debugger-controlled real writer/gate transitions; timeout
+and bad mapping were simulated state changes. Native ThinkPad confirmation and
+naturally occurring concurrent failures remain unmeasured. Presenter timing is
+recorded in the [display milestone](../wip/display-drivers.md#refreshed-presenter-cost).

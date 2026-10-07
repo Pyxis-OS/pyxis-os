@@ -1,6 +1,7 @@
 #include <arch/cpu.h>
 #include <kernel/fb/early_console.h>
 #include <kernel/fb/font.h>
+#include <kernel/display.h>
 #include <stdatomic.h>
 #include <stddef.h>
 
@@ -21,7 +22,7 @@ enum early_console_state {
   EARLY_CONSOLE_OFF,
   EARLY_CONSOLE_ACTIVE,
   EARLY_CONSOLE_PANIC, /* Terminal: only panic_owner renders. */
-  EARLY_CONSOLE_RETIRED, /* Terminal: the presenter owns the screen. */
+  EARLY_CONSOLE_RETIRED, /* Ordinary output is retired; panic may reclaim it. */
 };
 
 static _Atomic enum early_console_state state = EARLY_CONSOLE_OFF;
@@ -36,15 +37,9 @@ static volatile bool panic_rendering;
 
 /* Rendering state, changed only by the current rendering owner. */
 static uintptr_t address;
-static size_t pitch, scale, columns, rows, column, row;
+static size_t pitch, pixel_width, pixel_height, scale, columns, rows, column, row;
 static uint32_t foreground, background;
 static char cells[EARLY_CONSOLE_ROWS_MAX][EARLY_CONSOLE_COLUMNS_MAX];
-
-static uint32_t pack_color(const struct boot_framebuffer *fb, uint32_t rgb)
-{
-  return ((rgb >> 16 & 0xff) << fb->red_shift) | ((rgb >> 8 & 0xff) << fb->green_shift) |
-      ((rgb & 0xff) << fb->blue_shift);
-}
 
 /* Owners keep rendering; an ordinary renderer stops once a panic or the
  * presenter has taken the screen. */
@@ -144,9 +139,13 @@ static void render(char character, bool owner)
   }
 }
 
-void early_console_start(const struct boot_framebuffer *fb, uintptr_t mapped)
+static void configure_layout(const struct framebuffer *fb)
 {
   const struct font *font = &bizcat;
+  address = fb->address;
+  pitch = fb->pitch;
+  pixel_width = fb->width;
+  pixel_height = fb->height;
   scale = fb->width >= EARLY_CONSOLE_DOUBLE_WIDTH ? 2 : 1;
   columns = fb->width / (font->width * scale);
   rows = fb->height / (font->height * scale);
@@ -156,16 +155,15 @@ void early_console_start(const struct boot_framebuffer *fb, uintptr_t mapped)
   if (rows > EARLY_CONSOLE_ROWS_MAX) {
     rows = EARLY_CONSOLE_ROWS_MAX;
   }
-  if (!columns || !rows) {
-    return;
-  }
-  address = mapped;
-  pitch = fb->pitch;
-  foreground = pack_color(fb, EARLY_CONSOLE_FOREGROUND);
-  background = pack_color(fb, EARLY_CONSOLE_BACKGROUND);
-  for (size_t y = 0; y < fb->height; ++y) {
+  foreground = framebuffer_color(fb, EARLY_CONSOLE_FOREGROUND);
+  background = framebuffer_color(fb, EARLY_CONSOLE_BACKGROUND);
+}
+
+static void clear_screen(void)
+{
+  for (size_t y = 0; y < pixel_height; ++y) {
     volatile uint32_t *line = (volatile uint32_t *)(address + y * pitch);
-    for (size_t x = 0; x < fb->width; ++x) {
+    for (size_t x = 0; x < pixel_width; ++x) {
       line[x] = background;
     }
   }
@@ -174,7 +172,27 @@ void early_console_start(const struct boot_framebuffer *fb, uintptr_t mapped)
       cells[cell_row][cell_column] = ' ';
     }
   }
+  column = 0;
+  row = 0;
   cpu_store_fence();
+}
+
+void early_console_start(const struct boot_framebuffer *fb, uintptr_t mapped)
+{
+  const struct framebuffer layout = {
+    .address = mapped,
+    .pitch = fb->pitch,
+    .width = fb->width,
+    .height = fb->height,
+    .red_shift = fb->red_shift,
+    .green_shift = fb->green_shift,
+    .blue_shift = fb->blue_shift,
+  };
+  configure_layout(&layout);
+  if (!columns || !rows) {
+    return;
+  }
+  clear_screen();
   atomic_store(&state, EARLY_CONSOLE_ACTIVE);
 }
 
@@ -201,13 +219,33 @@ void early_console_panic_begin(void)
 {
   uint32_t self = cpu_initial_apic_id();
   enum early_console_state expected = EARLY_CONSOLE_ACTIVE;
-  if (!atomic_compare_exchange_strong(&state, &expected, EARLY_CONSOLE_PANIC)) {
+  bool claimed = atomic_compare_exchange_strong(&state, &expected, EARLY_CONSOLE_PANIC);
+  bool retired = !claimed && expected == EARLY_CONSOLE_RETIRED;
+  if (retired) {
+    claimed = atomic_compare_exchange_strong(&state, &expected, EARLY_CONSOLE_PANIC);
+  }
+  if (!claimed) {
     /* The owner re-enters through panic() after an exception report. A fault
      * raised while it was drawing may come from the mapping itself, so stop
      * drawing rather than recurse. Other CPUs never owned the console. */
     if (atomic_load(&panic_owner) == self && panic_rendering) {
       atomic_store(&panic_owner, EARLY_CONSOLE_NO_OWNER);
     }
+    return;
+  }
+  if (retired) {
+    const struct framebuffer *target = display_panic_target();
+    if (!target) {
+      return;
+    }
+    /* Keep panic_owner unset until layout/reset finish. A fault here reports
+     * on serial because its nested claim loses and no renderer is published. */
+    configure_layout(target);
+    if (!columns || !rows) {
+      return;
+    }
+    clear_screen();
+    atomic_store(&panic_owner, self);
     return;
   }
   /* A render step interrupted on this CPU never resumes, so take over at once.

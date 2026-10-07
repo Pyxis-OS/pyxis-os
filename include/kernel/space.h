@@ -9,7 +9,6 @@
 #include <stdatomic.h>
 #include <kernel/fb/fb.h>
 #include <kernel/fb/tty.h>
-#include <kernel/boot.h>
 
 struct console_object;
 struct display_object;
@@ -42,7 +41,7 @@ struct space
 };
 
 /* Creates Caelum's space, first in registry order, on CPU 0. BSP only, at boot. */
-void space_init(const struct boot_framebuffer *boot_fb);
+void space_init(void);
 /* Caelum's own space, which hosts boot init. */
 struct space *space_caelum(void);
 /* Words in an allowed-CPU bitmap covering every boot CPU index. */
