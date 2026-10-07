@@ -37,8 +37,8 @@ placeholder APIs, generic rendering layers or kernel desktop policy now.
 
 Software rendering is a candidate for the first implementation; measure it
 before requiring acceleration. Start with opaque windows, bitmap text and
-changed-region redraw. The agreed first VirtIO GPU direction is presentation of
-our software framebuffer, as described below; accelerated drawing remains separate.
+changed-region redraw. The first VirtIO GPU work presents the software-rendered
+screen ([display drivers](display-drivers.md)); accelerated drawing remains separate.
 
 [GrafX2](https://gitlab.com/GrafX2/grafX2) would exercise pointer input, image
 editing and file access. Its [compilation instructions](https://sources.debian.org/src/grafx2/2.9%2Bds-2/doc/COMPILING.txt)
@@ -52,37 +52,8 @@ subset of its API. The [port candidates](application-ports.md) also connect this
 work to DevilutionX and the future C AbyssEngine investigation. No port schedule
 or complete SDL subsystem contract is selected yet.
 
-## VirtIO GPU presentation and display resizing
+## Display drivers and resizing
 
-Agreed future milestone scope, not an implementation task. Schedule it after
-writable filesystem core and runtime SMP/independent spaces, before the
-[navigator and multiplexer progression](storage-and-terminal-agenda.md#4-native-terminal-sessions-multiplexer-and-navigator).
-It adds no prerequisite to the filesystem or SMP milestones. A multiplexer could
-work on a fixed-size display, but the chosen order establishes resizing first.
-
-Software framebuffer presentation and dynamic display resizing belong in the
-same milestone, along with propagating changed terminal dimensions. The boundary
-is 2D presentation without 3D acceleration, not fixed-resolution output.
-
-Start with a basic VirtIO GPU 2D driver that presents a software-rendered framebuffer:
-create a display resource, attach guest backing memory, transfer rendered pixels
-and select/update the scanout. No 3D acceleration, shader stack or desktop server
-is required for this first step. Keep the Limine framebuffer for boot-time output;
-define the ownership handoff before implementing driver takeover.
-
-Include live display resizing in that milestone. QEMU's GTK frontend can pass window/fullscreen
-dimensions to VirtIO GPU, which raises `VIRTIO_GPU_EVENT_DISPLAY`. The guest can
-query `GET_DISPLAY_INFO`, prepare appropriately sized backing/resources and update
-the scanout. This direct route does not require a SPICE guest agent. Host scaling
-alone only enlarges existing pixels; it does not give Pyxis more terminal columns.
-See the [QEMU GPU implementation](https://github.com/qemu/qemu/blob/master/hw/display/virtio-gpu-base.c)
-and [2D backend documentation](https://www.qemu.org/docs/master/system/devices/virtio/virtio-gpu.html).
-
-Keep display pixel dimensions separate from terminal rows/columns and pane sizes.
-A display resize should eventually update space presentation, terminal geometry
-and multiplexer layout, with resize notifications to affected applications.
-Splitting a pane also changes terminal geometry without changing the display mode,
-so terminal resizing is useful independently of the GPU driver. Define buffer
-replacement and mapping lifetimes, resize failure behavior and terminal-content
-preservation when those implementation tasks are selected; do not silently
-invalidate application mappings or assume every resize allocation succeeds.
+VirtIO GPU 2D presentation and live display resizing are now part of the
+[display drivers milestone](display-drivers.md), agreed 2026-10-07, together
+with a Bochs driver and a small driver interface.
