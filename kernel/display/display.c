@@ -40,12 +40,10 @@ void display_init(const struct boot_info *boot, const char *size)
     target = boot_display_init(&boot->framebuffer);
   }
   struct pci_device *selected = NULL;
-  /* Discovery prepends records; walk backwards to select its first device. */
-  for (size_t i = pci_device_count(); i > 0; --i) {
-    struct pci_device *device = (struct pci_device *)pci_device_at(i - 1);
+  /* Discovery prepends records; its first supported device is the last match. */
+  for (const struct pci_device *device = pci_device_at(0); device; device = device->next) {
     if (virtio_gpu_matches(device) || bochs_display_matches(device)) {
-      selected = device;
-      break;
+      selected = (struct pci_device *)device;
     }
   }
   if (selected && virtio_gpu_matches(selected)) {
