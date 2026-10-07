@@ -412,8 +412,9 @@ reader is the smallest that serves the space-bar widget:
 - **EC transactions busy-wait on the BSP.** Each byte waits up to 500 ms by
   polling rather than sleeping. The worker stays preemptible, but a slow EC
   turns its time slices into polling while other BSP tasks wait their turn.
-  Revisit with ThinkPad poll times, or if presentation stutters every five
-  seconds; the EC's GPE could wake the worker instead.
+  ThinkPad polls took 1.8–8.3 ms after a first poll of 13.4 ms. Revisit if
+  presentation stutters every five seconds; the EC's GPE could wake the worker
+  instead.
 - **The ACPI global lock is not taken.** uACPI's global lock is not recursive,
   and AML may already hold it around a field access when the EC handler runs.
   A `_GLK` request is logged. The T14 has none. Revisit on a machine whose EC
@@ -425,7 +426,7 @@ reader is the smallest that serves the space-bar widget:
   percentage.
 - **Polled, not notified.** Charge changes appear within five seconds, and a
   battery's full capacity is only reread when it reappears. Battery and AC
-  notifications from `_Qxx` methods have no handlers. Revisit with the
+  notifications from `_Qxx` methods only reach the trace log. Revisit with the
   notifications that follow task 3.
 
 ## Synchronous launch preparation

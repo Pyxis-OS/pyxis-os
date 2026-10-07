@@ -133,7 +133,7 @@ Accepted for task 3 on 2026-10-07:
     - the pool's journal is empty on the next boot;
     - a space without `power` is refused.
 
-- [ ] **3. Battery reading and the battery widget.**
+- [x] **3. Battery reading and the battery widget.**
   - An embedded controller driver: the `EmbeddedControl` operation region
     handler, from the ECDT or the `PNP0C09` device, plus its query GPE. uACPI
     does not include one, and the battery methods read through it.
@@ -149,15 +149,15 @@ Accepted for task 3 on 2026-10-07:
     `09%` with a leading zero. The background color is taken from the
     three-point gradient `#a00` at 0%, `#730` at 25% and `#690` at 100%,
     interpolated linearly at the current percentage.
-  - **Status:** implemented
-    ([ACPI](../kernel/acpi.md#embedded-controller-and-battery)); the ThinkPad
-    check is pending. In QEMU, which has no battery, the bar is unchanged; a
-    local test table showed the widget's format and gradient through a full
-    drain and charge. The review notes below are handled: an unclaimed SCI is
-    re-armed after 1 s (decision 14), a failed S5 runs uACPI's wake path, the
-    10 s wait is in the power-off limits, and `QEMU_NO_REBOOT=1` exists
-    (decision 15). The firmware window after periodic reads is unchanged in
-    QEMU; the ThinkPad figure is pending.
+  - **Status:** done ([ACPI](../kernel/acpi.md#embedded-controller-and-battery)).
+    On 2026-10-07 the owner's ThinkPad showed the same percentage as Fedora,
+    rising on AC, and Fedora read the same 36% after a Pyxis `poweroff`. In
+    QEMU, which has no battery, the bar is unchanged; a local test table showed
+    the widget's format and gradient through a full drain and charge. The review
+    notes below are handled: an unclaimed SCI is re-armed after 1 s (decision
+    14), a failed S5 runs uACPI's wake path, the 10 s wait is in the power-off
+    limits, and `QEMU_NO_REBOOT=1` exists (decision 15). The ThinkPad's firmware
+    window grew from 2,127 to 2,144 pages on the first poll and stayed there.
   - **Finish when:** the ThinkPad shows a percentage that tracks charging and
     discharging and matches Linux's reading within a few percent, and QEMU,
     which has no battery, shows no widget.

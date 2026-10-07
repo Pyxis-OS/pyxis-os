@@ -131,8 +131,12 @@ The EC's GPE is edge-triggered and serves its query events. The SCI handler
 queues one deferred work item and leaves the GPE disabled. That item reads
 query numbers while the status register reports an event, at most 32 per item,
 and runs `_Qxx` for each one on the EC device, then lets the GPE fire again. A
-missing `_Qxx` is normal and goes to the trace log. Notifications sent by
-those methods have no handlers yet.
+missing `_Qxx` is normal and goes to the trace log.
+
+A notify handler on the namespace root receives every `Notify` and writes it to
+the trace log. Nothing acts on notifications yet; without that handler, uACPI
+would print a warning for each one, such as the T14's AC, USB-C and GPU
+notifications when AC is plugged in or out.
 
 `kernel/acpi/battery.c` finds up to two `PNP0C0A` batteries and the first
 `ACPI0003` AC adapter. Every five seconds, at its top level, the worker:
@@ -314,7 +318,28 @@ zero, then charged back to full. With one and four CPUs the widget showed
 `100`, two-digit values, `05%`, `01%` and `00%` with the gradient background,
 and the tabs gave up its width. Under GDB, a forced unclaimed SCI logged the
 error line once, and the worker unmasked the SCI 1.009 s later, woken by the
-re-arm deadline rather than the next poll.
+re-arm deadline rather than the next poll. A variant of the table that sent
+`Notify` from `_BST` printed nothing in the normal log, and one `ACPI: Notify`
+trace line per poll in a trace build.
+
+On the ThinkPad (owner, 2026-10-07, PXE live boot with an uncommitted patch
+that logged the first polls), the EC was found as
+`\_SB_.PCI0.LPC0.EC0_`, ports 0x62/0x66, GPE 0x03 from `PNP0C09`, with no
+timeouts. The widget matched Fedora's reading and rose on AC; after a
+`poweroff` at 36%, Fedora also reported 36%. Plugging and unplugging AC ran
+the EC's query methods, whose `Notify` calls uACPI then warned about; the root
+notify handler was added afterwards and checked only in QEMU.
+
+| Poll | BSP time | Firmware window | uACPI heap |
+| ---: | ---: | ---: | ---: |
+| Before the first poll | | 2,127 pages | 711,583 bytes |
+| 0 (includes `_BIX`) | 13.4 ms | 2,144 pages | 712,320 bytes |
+| 1 | 1.8 ms | 2,144 pages | 712,328 bytes |
+| 2 | 8.3 ms | 2,144 pages | 712,328 bytes |
+
+The first poll mapped 17 more pages of operation regions; the next two mapped
+none. Later polls were not recorded. At up to 8.3 ms every five seconds, the
+busy-waiting worker uses under 0.2% of the BSP.
 
 ## Limits
 
