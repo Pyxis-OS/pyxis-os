@@ -296,7 +296,8 @@ and ordered patch provenance. No compiler-container rebuild is needed.
 `boot://sdk` contains:
 
 - `usr/include`: shared libc/libpyxis/libterm, ABI/P1F and npfs format headers.
-- `usr/lib`: `crt0.o`, libc, libterm, libpyxis, npfs format and target libgcc archives.
+- `usr/lib`: `crt0.o`, libc, libterm, libpyxis, npfs format and the compiler
+  runtime archive (libgcc, or compiler-rt builtins in an LLVM-built image).
 - `lib/tcc`: libtcc1 and private `stddef.h`, `stdarg.h`, `stdbool.h`, `float.h`.
 - `share`: TLSF/musl/TCC/npfs licenses and notices, TCC source pin and patches, and
   the selected toolchain's hashes, patches and runtime licensing.

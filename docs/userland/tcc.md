@@ -32,11 +32,13 @@ Libc provides floating-point formatting alongside literal conversion and a
 small math subset; a full libm remains deferred. See the [FP contract](../kernel/userspace.md#floating-point).
 
 Default linking places `crt0.o` before application inputs, then rescans libc,
-libterm, libpyxis, libtcc1 and libgcc until no more archive members are extracted.
+libterm, libpyxis, libtcc1 and the SDK's compiler runtime (libgcc, or
+compiler-rt builtins in an LLVM-built image) until no more archive members are
+extracted.
 Explicit archives and `-l` inputs retain command-line order; put them after their
 users. `-nostdlib` omits startup and default libraries. The TCC support archive
-supplies its varargs and selected arithmetic helpers; target libgcc supplies
-the remaining compiler helpers. Their ownership is recorded with the recipe.
+supplies its varargs and selected arithmetic helpers; the compiler runtime
+supplies the remaining compiler helpers. Their ownership is recorded with the recipe.
 
 The linker retains TCC's symbol resolution and relocation machinery. Native
 output uses `_start`, a fixed base of `0x400000`, page-aligned permission changes

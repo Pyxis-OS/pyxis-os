@@ -11,7 +11,8 @@ kernel builds and `HOSTCC` for the converter. Outputs live under `build/`.
 Runtime libraries and startup are built separately by
 [userspace/runtime.mk](https://git.internal/PyxisOS/pyxis-userland/src/branch/main/runtime.mk) into `build/runtime`, then exported
 to `build/sdk/sysroot/usr/lib`. Applications link the SDK's startup object,
-libc, libpyxis and libterm archives, plus compiler-provided libgcc. Only referenced
+libc, libpyxis and libterm archives, plus the compiler-provided runtime (libgcc,
+or compiler-rt builtins with the LLVM toolchain). Only referenced
 archive objects are pulled in. No host runtime is linked. Libpyxis owns native
 operations and startup accessors; libc owns C entry/exit, allocation and the
 initial C support routines.

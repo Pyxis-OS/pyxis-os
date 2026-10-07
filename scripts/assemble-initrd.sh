@@ -18,9 +18,15 @@ if [ -n "${QUAKE_DATA:-}" ]; then
     exit 1
   }
 fi
+# The guest SDK carries the compiler runtime its archives were built with.
+case "$(sed -n 's/^PYXIS_TOOLCHAIN := //p' build/sdk/share/toolchain.mk)" in
+  gcc) sdk_runtime=libgcc.a ;;
+  llvm) sdk_runtime=libclang_rt.builtins.a ;;
+  *) echo 'build/sdk/share/toolchain.mk names no known toolchain' >&2; exit 1 ;;
+esac
 cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifest.txt
 "${LUA:-lua}" scripts/stage-tree.lua boot/initrd.lua build/initrd-root \
-  userspace=build/userspace-root ports=build/ports-root sdk=build/sdk \
+  userspace=build/userspace-root ports=build/ports-root sdk=build/sdk sdk_runtime=$sdk_runtime \
   provenance=build/guest-sdk-manifest.txt "init=${INIT:-}" "network_config=${NETWORK_CONFIG:-}" \
   "wad=${DOOM_WAD:-}" "demos=${DOOM_DEMOS:-}" \
   "quake_pak0=$quake_pak0" "quake_pak1=$quake_pak1"
