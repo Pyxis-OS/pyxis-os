@@ -30,23 +30,44 @@ Implemented behavior lives in the subsystem references listed in the
   the ThinkPad.
 - ThinkPad bring-up: see the [target notes](../targets/t14-gen1-amd/notes.md#native-status).
 
+## Assigned
+
+Chosen by the owner on 2026-10-07, each starting with a proposal:
+
+- **Claude:** [C++ in userspace](toolchains-and-runtimes.md#c-in-userspace),
+  cross-compiled C++ programs with a runtime from the `pyxis-llvm` fork. Clang
+  running on Pyxis is a later milestone.
+- **Codex 1:** [graphics and terminal layers in a space](space-layers.md),
+  switched with Super+Up/Down.
+- **Codex 2:** [screenshots](screenshots.md), a `screenshot` command writing
+  PNG through new zlib and libpng ports, with the file fetched through
+  pyxis-remote.
+- **The owner:** the Java virtual machine of
+  [developing inside Pyxis](in-pyxis-development.md).
+
 ## Open
 
 - [File transfer through the remote terminal](remote-file-transfer.md):
   drag-and-drop upload awaits the owner's GUI-drop check from Linux and macOS.
-- [Developing inside Pyxis](in-pyxis-development.md): the owner's experiment;
-  the extra-spaces check on the installed ThinkPad is open.
+- [Developing inside Pyxis](in-pyxis-development.md): the extra-spaces check on
+  the installed ThinkPad is open.
 - [Everyday gaps](everyday-gaps.md): small things noticed in use.
 
 ## Candidates for the next milestone
 
 None is selected.
 
-- [Terminal applications](terminal-applications.md): the agreed sequence
-  continues with a single-panel file navigator, then a multiplexer (with
-  scrollback), then operations between navigators.
-- [Native C++ and OS prerequisites](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
-  the second LLVM milestone, toward Clang running on Pyxis.
+- [Terminal applications](terminal-applications.md): a multiplexer (with
+  scrollback; its three decisions are accepted), then a single-panel file
+  navigator, then operations between navigators.
+- [PDCurses](application-ports.md#libraries-and-terminal-tools) over libterm,
+  with one terminal application, and [SQLite](application-ports.md#libraries-and-terminal-tools)
+  through a native VFS.
+- [Developer tools](later-os-directions.md#developer-tools): a capability
+  inspector and `top`.
+- [Audio](later-os-directions.md#audio), starting with Intel HD Audio playback.
+- Clang running on Pyxis, the [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
+  after C++ in userspace.
 - System layout follow-ups: network configuration on the pool instead of the
   archive ([technical debt](../technical-debt.md#archive-only-network-configuration))
   and the [boot configuration checker](boot-configuration-checker.md).
@@ -62,17 +83,20 @@ Parked directions and investigations; promote one to a milestone when its
 prerequisites and result are clear.
 
 - [Later OS directions](later-os-directions.md): execution lifecycle, backend
-  interfaces, networking, device ownership, clock source, power, storage.
+  interfaces, networking, device ownership, developer tools, audio, clock
+  source, power, storage.
 - [Application port candidates](application-ports.md), including SDL2/GrafX2,
-  SQLite and PDCurses applications.
+  Peanut-GB, Chocolate Duke3D, DevilutionX and a wasm3 investigation.
 - [Hosted toolchains and language runtimes](toolchains-and-runtimes.md), the
   [Go runtime investigation](go-runtime.md) and the
   [Neovim/libuv investigation](neovim-libuv.md).
-- [Desktop and graphics](desktop-graphics.md).
+- [Desktop and graphics](desktop-graphics.md), including where to start on the
+  owner's compositor.
 - [Users and authority](users-and-authority.md), a cross-cutting design
   checkpoint, and [credentials and biometric unlock](credentials-and-biometrics.md),
   parked after local users.
-- [Spaces](spaces.md) and [filesystems and namespaces](vfs.md), working drafts.
+- [Spaces](spaces.md), including [Asterism](spaces.md#asterism), and
+  [filesystems and namespaces](vfs.md), working drafts.
 - [Userspace scheme providers](userspace-scheme-providers.md).
 - [Selecting existing build artifacts](build-artifact-reuse.md) and the
   postponed [host development overlay](host-development-overlay.md).

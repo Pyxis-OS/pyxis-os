@@ -33,6 +33,32 @@ The global menu will eventually need application-supplied menu descriptions and
 action delivery. Its shape and the wider UI toolkit remain undecided. Do not add
 placeholder APIs, generic rendering layers or kernel desktop policy now.
 
+## Where to start on a compositor
+
+The owner intends to write the compositor personally; this is a suggested
+learning path, not an assignment. Drawing widgets is the easy part. A compositor
+has three jobs: combining each window's buffer onto the screen in stacking order,
+routing keyboard focus and pointer input, and a protocol with client programs.
+Widgets and decorations are a separate fourth job.
+
+1. **One process, no protocol.** A program that acquires the display, as
+   Mandelbrot does, keeps a list of windows with their own pixel buffers in its
+   own memory, draws them back to front with a pointer, and lets the user click
+   to raise and drag to move. This teaches stacking, hit-testing and double
+   buffering with today's display, pointer and keyboard grants.
+2. **Damage.** Recomposite only the rectangles that changed.
+3. **Separate client processes.** Move window contents into their own programs.
+   Wayland's core protocol is a clear model: a surface, an attached buffer,
+   damage and commit, answered by configure (size) and frame-done events.
+   [The Wayland Book](https://wayland-book.com/) explains it, and wlroots'
+   [tinywl](https://gitlab.freedesktop.org/wlroots/wlroots/-/tree/master/tinywl)
+   is a small complete compositor. Pyxis endpoints can carry the messages, but
+   **Pyxis has no shared memory between processes**: window buffers need a
+   kernel facility for it first, a bounded task an agent can take.
+
+A compositor runs as the graphical program on a space's `+`
+[layer](space-layers.md).
+
 ## Rendering and ports
 
 Software rendering is a candidate for the first implementation; measure it

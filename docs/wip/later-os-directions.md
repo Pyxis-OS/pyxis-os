@@ -8,8 +8,9 @@ See the [planning index](boot-sdk-ports.md) for the current sequence.
 
 The implemented [init handoff](../userland/init.md) launches a successor and exits. Real
 process replacement (`exec`) still needs its own resource and failure contract.
-Init supervision and restart policies remain deferred to the first web-server
-milestone; this does not commit to Unix PID 1 semantics.
+Supervision and restart policies belong to [Asterism](spaces.md#asterism);
+whichever comes first, supervision or a web server, sets the first contract.
+This does not commit to Unix PID 1 semantics.
 
 ## Direct framebuffer panic context
 
@@ -187,6 +188,30 @@ leave it as account UI to bolt on after those interfaces are fixed.
 login and a Pyxis-wide credential store. The master key is sealed in the TPM under
 a measured-boot policy, a password or PIN is the root factor, and biometrics only
 gate use after a root-factor unlock. It follows local users, USB and a TPM driver.
+
+## Developer tools
+
+Owner ideas, 2026-10-07; none is scheduled.
+
+- **Capability inspector.** A key combination opens a full-screen view of the
+  focused program's capabilities: kinds, rights and names. Reading another
+  program's capabilities is powerful, so the authority would itself be a grant,
+  enabled for debugging through menuconfig. The kernel cannot start a program on
+  a key press; a trusted helper in each space could receive the combination and
+  show the view, possibly on its own [layer](space-layers.md).
+- **top.** Live CPU use per CPU and per process, which would show the
+  [SMP work](../kernel/smp.md) directly. It needs a new read-only kernel query
+  for per-CPU busy and idle time and per-process CPU time, and a decision on
+  which processes a caller may see.
+
+## Audio
+
+Owner idea, 2026-10-07: start looking into audio. Intel HD Audio is the
+suggested first driver, playback only: QEMU emulates it (`intel-hda` with a
+codec), and the ThinkPad's analog audio is on an HD Audio controller
+(`1022:15e3`, see the [T14 inventory](../targets/t14-gen1-amd/thinkpad-inventory-undocked.txt)).
+Its codec is not yet identified. The userspace interface, mixing and the first
+consumer (Quake's sound, for example) need their own decisions.
 
 ## Clock source
 
