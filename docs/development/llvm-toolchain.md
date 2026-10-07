@@ -93,9 +93,9 @@ build.
 On the owner's ThinkPad, an all-LLVM PXE build ran normally. Quake
 `timedemo demo1` on AC gave about 660–690 fps over several runs, level with the
 last GCC figure of 667.1 fps. On battery it falls to about 400 fps and console
-drawing slows, because the firmware throttles the CPU; Pyxis does no frequency
-control. State AC or battery for native performance figures, and compare on
-AC.
+drawing slows, because the firmware throttles the CPU; Pyxis does no
+[frequency control](../wip/later-os-directions.md#power-and-acpi). State AC or
+battery for native performance figures, and compare on AC.
 
 ## Limits
 

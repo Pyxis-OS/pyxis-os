@@ -391,7 +391,8 @@ implicitly.
   script, fail on script errors and use an explicit session launch; `exec` comes
   later.
 - Userspace owns libc, libpyxis, libterm, startup and applications. Pyxis owns
-  public ABI headers and elf2pxe, and assembles the SDK, kernel and boot image.
+  public ABI headers and toolchain integration, and assembles the SDK, kernel and
+  boot image.
 - Export headers, build runtime libraries, assemble the SDK, then build apps and
   ports. Initially pin the new userspace/ports repositories as submodules.
 - The owner handles repository creation, dispatch integration and compiler
