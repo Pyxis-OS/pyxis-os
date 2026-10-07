@@ -1,7 +1,7 @@
 # LLVM toolchain on the host
 
-Status: **milestone, agreed 2026-10-07; task 1 probe recorded the same day,
-with decisions 3–5 open.** This is the first of the three LLVM
+Status: **milestone, agreed 2026-10-07; task 1 probe and decisions 3–5
+recorded the same day.** This is the first of the three LLVM
 milestones in [hosted toolchains](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
 whose direction was chosen on 2026-09-29. Claude implements it; each task starts
 when the owner says so. It runs alongside the [display drivers](display-drivers.md)
@@ -68,13 +68,13 @@ Accepted by the owner on 2026-10-07:
    - Once LLVM builds and boots everything (task 4), the default flips and GCC
      and binutils are removed in the same task.
 
-Proposed for the owner after the task 1 probe; none of these is agreed yet:
+Accepted by the owner on 2026-10-07, after the task 1 probe:
 
-3. **Target: a `pyxis` OS in LLVM, in a `pyxis-llvm` fork.** This replaces the
+3. **Target: a `pyxis` OS in LLVM, in the `pyxis-llvm` fork.** This settles the
    earlier fork question. The [proposal](#proposal) compares it with a
    configuration file on upstream Clang.
-   - Proposed default: the owner creates `pyxis-llvm` on Forgejo, with one
-     branch per pinned release and Pyxis commits on top of the release tag.
+   - The owner created `pyxis-llvm` on Forgejo. It holds one branch per
+     pinned release, with Pyxis commits on top of the release tag.
    - The first commit adds the Pyxis OS to LLVM's triple and Clang's driver,
      doing what the GCC patch does today.
    - Builds pin a commit, and moving to a new release is a rebase.
@@ -84,19 +84,22 @@ Proposed for the owner after the task 1 probe; none of these is agreed yet:
      - the `pyxis-lwip` repository already works this way.
    - The cost is LLVM's history on the server. Builds fetch shallowly by
      commit, as the port recipes do.
-4. **P1F output from LLD.** This was suggested by the owner on 2026-10-07. It
-   revisits the 2026-09-29 decision to keep `elf2pxe`.
-   - Proposed default: LLD gains `--oformat=p1f`, and the Pyxis driver uses it
-     for executables, as TCC already writes P1F.
-   - The LLD change lands in task 3, and `elf2pxe` is removed with GCC in
-     task 4.
-5. **Pin and sources.** Proposed default:
-   - LLVM 23.1.3;
-   - a pull mirror of `llvm-project`, from which the owner creates the fork;
-   - one build script for the owner's container and local builds.
+4. **P1F output from LLD.** This was suggested by the owner. It revisits the
+   2026-09-29 decision to keep `elf2pxe`.
+   - LLD gains `--oformat=p1f` in task 3, and the Pyxis driver uses it for
+     executables, as TCC already writes P1F.
+   - `elf2pxe` stays in the SDK alongside it as a fallback, including under
+     the LLVM setting.
+   - `elf2pxe` becomes a candidate for removal once no build uses GCC. It is
+     not removed automatically in task 4.
+5. **Pin and sources.**
+   - LLVM 23.1.3.
+   - The owner started the pull mirror `mirrors/llvm-project` and created the
+     empty `pyxis-llvm` repository. Task 2 starts the `pyxis-23.1.3` branch at
+     `llvmorg-23.1.3` once the mirror has the tag.
+   - One build script serves the owner's container and local builds.
 
-   See [pin, sources and container](#pin-sources-and-container) for the
-   entries the owner creates.
+   See [pin, sources and container](#pin-sources-and-container).
 
 ## Probe results
 
@@ -104,7 +107,7 @@ Measured on 2026-10-07 in Claude's Fedora 44 VM (nested KVM inside the owner's
 desktop, 8 vCPUs, `make -j16`), at main `87b9571`, using Fedora's Clang, LLD and
 LLVM tools 22.1.8.
 
-- **The probe compiler is not the proposed pin.** Fedora 22.1.8 is only a
+- **The probe compiler is not the chosen pin.** Fedora 22.1.8 is only a
   stand-in.
 - **A throwaway wrapper stood in for a Pyxis driver.** It was not committed.
   - It compiled with `clang --target=x86_64-unknown-pyxis -D__pyxis__ -mno-red-zone`.
@@ -270,8 +273,8 @@ Both approaches can build milestone 1 from Clang 23 on.
     defaults have one place to live, and compiler-rt and later libc++ can be
     configured for the OS by name.
 
-**Recommendation: the `pyxis` OS** (decision 3). Pyxis then owns the same
-contract it owns in the GCC patch.
+**Chosen: the `pyxis` OS** (decision 3). Pyxis then owns the same contract it
+owns in the GCC patch.
 
 ### P1F output from LLD
 
@@ -295,7 +298,8 @@ contract it owns in the GCC patch.
     wanted. P1F carries no symbols, and today's userland `.elf` files have no
     documented consumer.
 - **The SDK.** Its Make settings link straight to `.pxe` under the LLVM
-  setting. `elf2pxe` stays for GCC builds until task 4 removes both.
+  setting. `elf2pxe` stays in the SDK as a fallback until no build uses GCC
+  ([decision 4](#decisions)).
 - **The format's owners.** P1F would be written in three places: the kernel
   loader, the TCC patch and LLD. `include/pxe/p1f.h` stays the authoritative
   definition.
@@ -305,11 +309,12 @@ contract it owns in the GCC patch.
 ### Pin, sources and container
 
 - **Pin:** LLVM 23.1.3, tag `llvmorg-23.1.3`.
-- **For the owner to create:**
-  1. A pull mirror at `https://git.internal/mirrors/llvm-project` of
-     `https://github.com/llvm/llvm-project`. The history is several gigabytes.
-  2. The `pyxis-llvm` repository, with the branch `pyxis-23.1.3` starting at
-     `llvmorg-23.1.3`.
+- **Repositories (decision 5):**
+  1. The pull mirror `https://git.internal/mirrors/llvm-project` of
+     `https://github.com/llvm/llvm-project`. The owner started it on
+     2026-10-07; the history is several gigabytes.
+  2. The `pyxis-llvm` repository. The owner created it; task 2 adds the branch
+     `pyxis-23.1.3`, starting at `llvmorg-23.1.3`.
 - **The build script.** Pyxis gains a build script for LLVM beside the GCC
   one. It:
   - fetches the pinned fork commit shallowly;
@@ -347,14 +352,14 @@ contract it owns in the GCC patch.
 ## Tasks
 
 - [x] **1. Probe and proposal.** Recorded in [probe results](#probe-results)
-  and the [proposal](#proposal), with decisions 3–5 for the owner.
+  and the [proposal](#proposal). The owner accepted decisions 3–5.
 
 - [ ] **2. Kernel and SDK with LLVM.**
   - The kernel and SDK build with the LLVM setting, with no new warnings left
     unexplained, and the image boots in QEMU.
   - Real problems Clang finds in Pyxis code are fixed in their own commits, and
     they stay correct under GCC too.
-  - If decisions 3 and 5 are accepted, this task also adds:
+  - This task also adds:
     - the fork's triple and driver commit;
     - the LLVM build script, including compiler-rt builtins.
   - **Finish when:**
@@ -364,7 +369,7 @@ contract it owns in the GCC patch.
 
 - [ ] **3. Userland and ports with LLVM.**
   - Every userland program and port builds with the LLVM setting.
-  - If decision 4 is accepted:
+  - For decision 4:
     - LLD gains `--oformat=p1f`;
     - the Pyxis driver uses it for executables;
     - the SDK's LLVM setting links straight to PXE.
@@ -375,7 +380,8 @@ contract it owns in the GCC patch.
 - [ ] **4. Switch the default and retire GCC.**
   - The owner builds and publishes the LLVM builder container.
   - LLVM becomes the default, and the GCC and binutils patches and build script
-    are removed. If decision 4 is accepted, `elf2pxe` is removed with them. The toolchain and SDK docs describe the LLVM contract.
+    are removed. `elf2pxe` then becomes a removal candidate; the owner
+    decides whether to remove it. The toolchain and SDK docs describe the LLVM contract.
   - The switch lands at a quiet point between Codex tasks.
   - **Finish when:**
     - the owner's ThinkPad boots and behaves as before;
