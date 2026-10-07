@@ -189,8 +189,21 @@ Accepted reader contract for task 1 on 2026-10-07:
     an interrupted log-lock owner and interrupted TX publication.
   - [x] With the option off, observe no UDP log traffic, including during panic.
   - [ ] On the ThinkPad, receive the boot log and a deliberate panic's message;
-    repeat the disabled check. This remains owner qualification, not an inferred
-    result from QEMU or the earlier native reverse-terminal run.
+    repeat the disabled check. Owner results, 2026-10-07:
+    - [x] **Disabled:** with `log.udp=0` no UDP log traffic arrived.
+    - [x] **Panic:** a throwaway build (never merged) panicked on Ctrl+Alt+F12,
+      which needs Fn on the ThinkPad. The panic line arrived through the
+      RTL8111 fatal transmit path, its first native run.
+    - [ ] **Boot log:** one earlier enabled boot delivered the boot log. On the
+      panic build's boot, the receiver was running but packets 0–49 (the
+      normal boot stream) never arrived. Each line is sent once, as soon as the
+      card reports link. Frames in the first seconds after Pyxis resets the
+      card can be dropped before reaching the host, for example while the
+      switch port starts forwarding. DHCP survives that by retrying.
+      **Follow-up (owner, 2026-10-07):** start sending the retained history
+      only once the network has an IPv4 address. A completed DHCP shows the
+      path forwards, and the ring keeps everything until then. Fatal output
+      keeps sending at once. Then repeat a plain enabled boot natively.
   - Usage, wire format, ownership and limits are in
     [kernel log](../interfaces/kernel-log.md#udp-capture).
 
@@ -289,9 +302,9 @@ RTL descriptors is the accepted capacity tradeoff, not a measured 6.25%
 throughput loss. Idle following adds a 100 ms deadline; caught-up reads honor
 it even when unrelated traffic keeps the worker running.
 
-Remaining owner action: qualify enabled and disabled boot/panic capture on the
-ThinkPad's RTL8111 with a host receiver on its LAN. Keep task 3 and the milestone
-open until that result is recorded. All task-owned QEMU, debugger, host-client,
+Remaining: the boot-log follow-up above and its native enabled boot. The
+disabled and panic checks passed on the ThinkPad on 2026-10-07. Keep task 3 and
+the milestone open until the boot log arrives reliably. All task-owned QEMU, debugger, host-client,
 receiver and packet-capture jobs are stopped; the temporary TAP is removed.
 
 ## Working rules
