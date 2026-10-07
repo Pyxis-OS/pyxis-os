@@ -397,10 +397,15 @@ The BSP input producer detaches a wait record before waking it. Read ownership
 is independent of the output lock. Foreground ownership is cooperative: a parent
 must stop reading while its child uses the same console.
 
-SIZE requires either READ or WRITE and returns current character columns/rows,
-excluding the session tab bar. Dimensions are fixed by the space's TTY at boot;
-there is no resize event. Libpyxis `console_read()` and `console_size()` preserve
-native call statuses. No ABI/schema version bump is needed.
+SIZE requires either READ or WRITE and returns current character columns/rows
+and geometry generation atomically in a 24-byte `console_size_reply`, excluding
+the session tab bar. Generation starts at one; a committed local screen resize
+updates every space's TTY, including inactive spaces. Independent remote
+terminal dimensions remain fixed with generation one. There is no resize event
+or idle wakeup yet. The fixed-size console request payload is ignored for SIZE.
+Libpyxis `console_size()` returns the whole reply, including generation;
+libterm's `term_size()` uses it as a dimensions-only helper. Both preserve native
+call statuses. See [local resize behavior](graphics.md#live-destination-geometry).
 
 The [shared syscall header](../../include/abi/syscall.h) and
 [console layouts](../../include/abi/console.h) define the active slice. RDX carries

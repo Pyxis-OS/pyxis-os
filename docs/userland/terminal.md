@@ -144,8 +144,17 @@ the scheme's cursor color for the cell's background and its cursor-text color
 for the glyph, taking the cell's top-left pixel as its background. The cursor
 never modifies the space framebuffer, so moving, hiding or switching spaces
 leaves no saved-pixel restoration work. The framebuffer has no page flip or
-vertical sync, so presentation still permits tearing; no frame transaction or
-resize handling is added.
+vertical sync, so presentation still permits tearing.
+
+`console_size()` returns character columns/rows and geometry generation as one
+snapshot; `term_size()` queries the terminal's output handle and returns only
+the dimensions. Local [display resizing](../interfaces/graphics.md#live-destination-geometry)
+updates every TTY without replacing its console. It crops whole rasterized cells
+without reflow, keeps the cursor visible and fills new cells with the background.
+Colors, tab width and escape-parser state survive; pending wrap is cleared.
+Remote terminal sessions keep their independent dimensions and generation one.
+There is no resize notification yet, so a blocked line editor or application
+does not wake solely because the local display changed size.
 
 The shell uses the helper for command input, then stops reading while a child
 runs. It retries after cancellation or input loss and rejects submitted lines
