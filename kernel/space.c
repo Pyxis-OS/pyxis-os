@@ -201,6 +201,11 @@ static struct space *space_alloc(const char *name, const char *title,
 void space_init(void)
 {
   screen = display_layout();
+  size_t navigation_cells = 2 * SPACES_NAV_CHEVRON_CELLS + BATTERY_WIDGET_CELLS + 1;
+  if (screen->width / bizcat.width < navigation_cells ||
+      screen->height < SPACES_NAV_HEIGHT + bizcat.height) {
+    panic("display too small for navigation and a terminal");
+  }
   static_assert(sizeof(KERNEL_NAME) <= SPACE_TITLE_MAX + 1);
   /* Caelum's only user process is boot init, which runs on the BSP. */
   uint64_t *allowed = kmalloc(space_cpu_words() * sizeof(*allowed));
@@ -738,12 +743,15 @@ static void handle_pointer_input(void)
 void space_present_task(void *argument)
 {
   (void)argument;
+  bool available = display_start();
   uint64_t deadline = arch_monotonic_ns();
 
   for (;;) {
     handle_space_input();
     handle_pointer_input();
-    space_present();
+    if (available) {
+      space_present();
+    }
     deadline += PRESENT_INTERVAL_NS;
     uint64_t now = arch_monotonic_ns();
     if (deadline <= now) {

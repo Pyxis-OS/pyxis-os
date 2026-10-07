@@ -3,6 +3,7 @@
 #include <kernel/mm/heap.h>
 #include <kernel/mm/vm.h>
 #include <kernel/object/display.h>
+#include <kernel/display.h>
 #include <kernel/object/execution_group.h>
 #include <kernel/panic.h>
 #include <kernel/process.h>
@@ -151,6 +152,9 @@ static enum call_status service_display(struct display_object *display,
   KASSERT(arch_cpu_index() == 0);
   if (display->space != process->space) {
     return CALL_DENIED;
+  }
+  if (operation != DISPLAY_RELEASE && !display_available()) {
+    return CALL_UNAVAILABLE;
   }
   if (operation == DISPLAY_ACQUIRE) {
     return acquire_display(display, process, reply);

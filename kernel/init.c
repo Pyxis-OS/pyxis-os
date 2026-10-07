@@ -74,7 +74,7 @@
   acpi_prepare(boot);
   arch_clock_maintain();
 
-  display_init(&boot->framebuffer);
+  display_init(boot);
 
   boot_start_cpus();
   system_info_init();

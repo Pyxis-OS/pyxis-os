@@ -68,7 +68,9 @@ phys_addr_t virtqueue_descriptor_address(const struct virtqueue *queue);
 phys_addr_t virtqueue_available_address(const struct virtqueue *queue);
 phys_addr_t virtqueue_used_address(const struct virtqueue *queue);
 
-/* IF=1, sole BSP worker. Copies segment descriptions, not payloads. Device-read
+/* Sole BSP owner: IF=1 worker, or IF=0 boot code before AP startup.
+ * Boot submissions use bounded polling without scheduler/wait records; all
+ * other completion and DMA ownership rules are identical. Copies segments, not payloads. Device-read
  * segments precede device-write segments; total chain bytes fit uint32_t.
  * The driver supplies valid DMA extents
  * without conflicting reuse and an ID unique among outstanding requests.
