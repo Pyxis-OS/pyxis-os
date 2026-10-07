@@ -8,8 +8,9 @@ See the [planning index](boot-sdk-ports.md) for the current sequence.
 
 The implemented [init handoff](../userland/init.md) launches a successor and exits. Real
 process replacement (`exec`) still needs its own resource and failure contract.
-Init supervision and restart policies remain deferred to the first web-server
-milestone; this does not commit to Unix PID 1 semantics.
+Supervision and restart policies belong to [Asterism](spaces.md#asterism);
+whichever comes first, supervision or a web server, sets the first contract.
+This does not commit to Unix PID 1 semantics.
 
 ## Direct framebuffer panic context
 

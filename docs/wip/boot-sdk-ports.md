@@ -95,7 +95,8 @@ prerequisites and result are clear.
 - [Users and authority](users-and-authority.md), a cross-cutting design
   checkpoint, and [credentials and biometric unlock](credentials-and-biometrics.md),
   parked after local users.
-- [Spaces](spaces.md) and [filesystems and namespaces](vfs.md), working drafts.
+- [Spaces](spaces.md), including [Asterism](spaces.md#asterism), and
+  [filesystems and namespaces](vfs.md), working drafts.
 - [Userspace scheme providers](userspace-scheme-providers.md).
 - [Selecting existing build artifacts](build-artifact-reuse.md) and the
   postponed [host development overlay](host-development-overlay.md).

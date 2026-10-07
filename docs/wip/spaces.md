@@ -82,6 +82,61 @@ per-space overlays, shared writable storage and URI-based namespace views.
 The [process and capability ABI draft](../interfaces/processes.md) works through explicit
 resource grants and process lifetime using a console and boot-archive file.
 
+## Asterism
+
+Owner direction, 2026-10-07: **Asterism** names spaces as they are meant to end
+up. It is a conceptual scope, not an implementation checklist, and it is
+delivered as separate focused milestones, each finished before the next starts.
+An illustration, not a fixed layout:
+
+```text
+Pyxis
+│
+├── Development
+│   ├── Supervisor
+│   ├── Terminal layer
+│   │   ├── Multiplexer
+│   │   ├── Shell
+│   │   └── Editors
+│   ├── Graphical layer
+│   │   └── Compositor
+│   └── Background services
+│
+├── Media
+│   ├── Supervisor
+│   ├── Graphical application
+│   └── Audio service
+│
+├── Remote
+│   ├── Supervisor
+│   └── Remote terminal server
+│
+└── Documentation
+    ├── Supervisor
+    └── Links
+```
+
+Asterism is today's spaces plus:
+
+- **A supervisor in every space** that stays alive. Today each space's init
+  hands off and exits, so nothing keeps the space's grants to start a program
+  again.
+- **Configurable startup and recovery policies:** what a space starts, and what
+  happens when something in it fails: restart, give up after repeated failures,
+  or keep the tab for inspection.
+- **Runtime configuration:** creating and destroying spaces while the system
+  runs, through the new-space flow. Destroying a space releases everything it
+  owns: its processes, terminal, display and tab.
+- **Perhaps, later, persistent environment reconstruction:** bringing back a
+  set of spaces and what ran in them after a reboot.
+
+The owner considers supervision, startup and recovery policies and runtime
+configuration needed; they are mostly planned already. Pieces in place or
+assigned: spaces configured in the [boot configuration](../userland/init.md#boot-configuration),
+[execution groups](../interfaces/execution-groups.md) for terminating a group of
+processes, and the [terminal and graphical layers](space-layers.md) with the
+[multiplexer](terminal-applications.md).
+
 ## Named endpoints
 
 Spaces may advertise named endpoints for discovery by other spaces. An
