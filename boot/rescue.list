@@ -6,6 +6,8 @@ session.pxe
 textfs.pxe
 httpfs.pxe
 cat.pxe
+cp.pxe
+echo.pxe
 ls.pxe
 mkdir.pxe
 rm.pxe

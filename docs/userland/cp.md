@@ -38,7 +38,11 @@ are held at a time; path resolution uses temporary heap workspace.
 Temporary names are `.cp-` followed by 16 hexadecimal digits. A copy considers
 at most 64 candidates, retries only known name collisions and skips any
 candidate equal to the destination leaf. It never opens/truncates a colliding
-temporary file, and requires no clock or entropy grant. Transfers use a fixed
+temporary file, and requires no clock or entropy grant. Each process starts at
+`.cp-0000000000000000`; enough colliding names can exhaust the candidate limit.
+The reservation error identifies the `.cp-` prefix. Inspect leftovers before
+removing them, and leave active copies' temporary names untouched.
+Transfers use a fixed
 4,080-byte buffer, the smaller native read/write transfer limit, with short
 read/write handling.
 
