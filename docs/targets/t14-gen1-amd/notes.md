@@ -57,6 +57,21 @@ confirmed these APIC IDs and SMT shift 1, with core keys
 `0, 0, 1, 1, 2, 2, 4, 4, 5, 5, 6, 6`; they retain the APIC gap, unlike the
 dense inferred labels in the historical table.
 
+## ACPI embedded controller and battery
+
+From the owner's `acpidump` under Fedora (2026-10-07), disassembled with ACPICA
+20260408:
+
+- There is no ECDT. The embedded controller is `\_SB.PCI0.LPC0.EC0`
+  (`PNP0C09`), with data port 0x62, command and status port 0x66 and GPE 0x03.
+  It has no `_GLK`.
+- `EC0._REG` sets `H8DR`. Until then the firmware reaches the EC through SMI
+  calls (`RBEC`, `WBEC`, `MBEC`); afterwards through `EmbeddedControl` fields.
+- `BAT0` (`PNP0C0A`) has `_BIX` and `_BIF`. `_BST` takes the power unit from the
+  package that `_BIX` fills, and `_BIX` may sleep up to ten seconds while the
+  battery reports busy. `AC` (`ACPI0003`) has `_PSR`.
+- `EC0` defines about 50 `_Qxx` query methods.
+
 ## USB controllers and observed port routes
 
 | PCI function | Observed controller | Linux USB 2 bus | Linux USB 3 bus |

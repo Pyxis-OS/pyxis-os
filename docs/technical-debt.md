@@ -376,9 +376,9 @@ milestone task:
 - **The SCI must share the keyboard's I/O APIC.** It is installed only on the
   controller mapped for PS/2 routing, and not when no PS/2 route exists. ACPI
   events are then unavailable.
-- **Waiting for deferred work runs it inline.** Nothing in the first task
-  installs or removes the GPE or notify handlers that wait. Revisit when the
-  battery and power-button tasks add them.
+- **Waiting for deferred work runs it inline.** Installing the embedded
+  controller's GPE handler does not wait, and nothing removes handlers. Revisit
+  when the power-button task or notifications add handlers that wait.
 
 ## Power-off and restart limits
 
@@ -400,6 +400,34 @@ version of "clean" agreed for the ACPI milestone:
   reaches them.
 - **Held tasks ignore stop requests until release.** A group stopped during a
   failed power operation stops when its tasks resume.
+- **A failed S5 entry freezes the BSP for 10 s.** uACPI waits that long with
+  interrupts disabled before reporting that the machine did not power off.
+  Revisit if a machine reaches that path.
+
+## Embedded controller and battery limits
+
+The [embedded controller and battery](kernel/acpi.md#embedded-controller-and-battery)
+reader is the smallest that serves the space-bar widget:
+
+- **EC transactions busy-wait on the BSP.** Each byte waits up to 500 ms by
+  polling rather than sleeping. The worker stays preemptible, but a slow EC
+  turns its time slices into polling while other BSP tasks wait their turn.
+  ThinkPad polls took 1.8–8.3 ms after a first poll of 13.4 ms. Revisit if
+  presentation stutters every five seconds; the EC's GPE could wake the worker
+  instead.
+- **The ACPI global lock is not taken.** uACPI's global lock is not recursive,
+  and AML may already hold it around a field access when the EC handler runs.
+  A `_GLK` request is logged. The T14 has none. Revisit on a machine whose EC
+  asks for it.
+- **One controller, one GPE number.** Only the ECDT or the first `PNP0C09`
+  device is used, and a `_GPE` package naming a GPE block device is refused.
+- **Two batteries, one adapter.** More are ignored. Batteries are summed as
+  reported, so two batteries using different power units would give a wrong
+  percentage.
+- **Polled, not notified.** Charge changes appear within five seconds, and a
+  battery's full capacity is only reread when it reappears. Battery and AC
+  notifications from `_Qxx` methods only reach the trace log. Revisit with the
+  notifications that follow task 3.
 
 ## Synchronous launch preparation
 

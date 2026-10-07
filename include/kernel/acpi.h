@@ -3,6 +3,7 @@
 #include <abi/syscall.h>
 #include <kernel/boot.h>
 #include <kernel/service/request.h>
+#include <stdint.h>
 
 /* BSP bootstrap after VM and heap initialization, before AP startup. Copies
  * the RSDP address and firmware memory map and reserves the firmware mapping
@@ -34,5 +35,17 @@ struct acpi_power_request {
  * worker it completes at once with UNAVAILABLE; while another power request
  * runs it completes with BUSY. */
 void acpi_power_forward(struct acpi_power_request *request);
+
+/* The batteries' combined charge, polled every few seconds. Without a battery,
+ * or before the first reading, present is false. */
+struct acpi_battery_status {
+  bool present;
+  uint8_t percent;
+  bool charging;
+  bool ac_online;
+};
+
+/* BSP, IF=0. The latest reading. */
+struct acpi_battery_status acpi_battery_status(void);
 
 #endif

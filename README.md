@@ -39,6 +39,7 @@ and `OVMF_VARS` on the command line as needed. Firmware defaults are
 select matching paths for your distribution. Each run copies firmware variables
 into build. Serial uses the launching terminal; exit QEMU with Ctrl-a x.
 A guest `poweroff` also exits QEMU, and `reboot` restarts the guest.
+`QEMU_NO_REBOOT=1` makes a reset, including a triple fault, stop QEMU instead.
 `QEMU_DISPLAY=none` disables the graphics window.
 `VFIO_PCI=0000:05:00.0` opts into [PCI passthrough](docs/development/qemu.md#pci-passthrough),
 after the [host setup](docs/development/thinkpad-nic-passthrough.md#host-setup).

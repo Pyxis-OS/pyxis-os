@@ -85,6 +85,16 @@ Accepted for task 2 on 2026-10-07:
 12. **Remote shells do not receive `power`,** even in a space that has it; the
     remote terminal server is unauthenticated on the LAN.
 
+Accepted for task 3 on 2026-10-07:
+
+13. **Only the embedded controller's GPE is enabled.** GPEs with AML handlers
+    (lid, thermal, PCIe hotplug, wake) stay disabled until a later ACPI use
+    needs them.
+14. **An unclaimed SCI is re-armed after 1 s** instead of staying masked until
+    reboot. The first one is logged; repeats go to ktrace.
+15. **`QEMU_NO_REBOOT=1`** makes `run-qemu.sh` pass `-no-reboot` again, so a
+    triple fault stops QEMU. Ordinary runs keep rebooting like hardware.
+
 ## Tasks
 
 - [x] **1. Bring in uACPI.**
@@ -123,7 +133,7 @@ Accepted for task 2 on 2026-10-07:
     - the pool's journal is empty on the next boot;
     - a space without `power` is refused.
 
-- [ ] **3. Battery reading and the battery widget.**
+- [x] **3. Battery reading and the battery widget.**
   - An embedded controller driver: the `EmbeddedControl` operation region
     handler, from the ECDT or the `PNP0C09` device, plus its query GPE. uACPI
     does not include one, and the battery methods read through it.
@@ -134,6 +144,20 @@ Accepted for task 2 on 2026-10-07:
   - Draw a fixed-width widget at the right end of the space bar, inside the
     chevron. It shows the percentage, refreshes every few seconds and is hidden
     without a battery. The kernel presenter reads the value directly.
+  - **Widget design (owner, 2026-10-07):** always three characters, so the
+    width never changes: `100` at full charge, `10%` to `99%`, and `00%` to
+    `09%` with a leading zero. The background color is taken from the
+    three-point gradient `#a00` at 0%, `#730` at 25% and `#690` at 100%,
+    interpolated linearly at the current percentage.
+  - **Status:** done ([ACPI](../kernel/acpi.md#embedded-controller-and-battery)).
+    On 2026-10-07 the owner's ThinkPad showed the same percentage as Fedora,
+    rising on AC, and Fedora read the same 36% after a Pyxis `poweroff`. In
+    QEMU, which has no battery, the bar is unchanged; a local test table showed
+    the widget's format and gradient through a full drain and charge. The review
+    notes below are handled: an unclaimed SCI is re-armed after 1 s (decision
+    14), a failed S5 runs uACPI's wake path, the 10 s wait is in the power-off
+    limits, and `QEMU_NO_REBOOT=1` exists (decision 15). The ThinkPad's firmware
+    window grew from 2,127 to 2,144 pages on the first poll and stayed there.
   - **Finish when:** the ThinkPad shows a percentage that tracks charging and
     discharging and matches Linux's reading within a few percent, and QEMU,
     which has no battery, shows no widget.
@@ -143,6 +167,21 @@ Accepted for task 2 on 2026-10-07:
       delay or a counted limit instead;
     - record the "firmware window" figure before and after periodic battery
       reads; the ThinkPad already uses 2,127 of 16,384 pages after loading.
+  - **Review notes from task 2 (#460), to settle in this task:**
+    - a failed S5 entry leaves runtime GPEs off. Before entering S5, uACPI has
+      run `_PTS(5)`, disabled every GPE and armed only wake GPEs, so once the
+      embedded controller's GPE is enabled a failed power-off would stop
+      battery and EC events until reboot. The failure path can call
+      `uacpi_prepare_for_wake_from_sleep_state` and
+      `uacpi_wake_from_sleep_state` for S5, which re-enable runtime GPEs and
+      run `_WAK`;
+    - on that path uACPI first waits 10 s with interrupts disabled, freezing
+      the BSP; record it in the power-off limits;
+    - `run-qemu.sh` no longer passes `-no-reboot`, so a triple fault during
+      bring-up loops through the firmware and Limine instead of stopping with
+      the last output on screen. QEMU cannot tell the reset register from a
+      triple fault; an opt-in variable such as `QEMU_NO_REBOOT=1` would bring
+      the stop back. The owner's call.
 
 - [ ] **4. Power button.**
   - A short press of the physical power button runs the same clean power-off as
