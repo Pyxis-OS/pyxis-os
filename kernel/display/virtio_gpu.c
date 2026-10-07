@@ -401,16 +401,18 @@ static void unwind_preparation(const char *reason)
 
 static const char *query_boot_geometry(struct boot_framebuffer *geometry);
 
-const struct framebuffer *virtio_gpu_prepare(const struct boot_info *boot, bool *selected)
+bool virtio_gpu_matches(const struct pci_device *device)
+{
+  return device->vendor_id == VIRTIO_VENDOR_ID &&
+      device->device_id == VIRTIO_PCI_DEVICE_BASE + GPU_DEVICE_ID;
+}
+
+const struct framebuffer *virtio_gpu_prepare(const struct boot_info *boot,
+    struct pci_device *device)
 {
   KASSERT(cpu_current() == cpu_bsp());
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  struct pci_device *device = pci_find_device(VIRTIO_VENDOR_ID,
-      VIRTIO_PCI_DEVICE_BASE + GPU_DEVICE_ID);
-  *selected = device != NULL;
-  if (!device) {
-    return NULL;
-  }
+  KASSERT(device && virtio_gpu_matches(device));
   gpu.pci.name = "virtio-gpu";
   gpu.pci.trace_details = true;
   if (!virtio_pci_prepare(&gpu.pci, device, boot, GPU_CONFIG_BYTES, 4)) {

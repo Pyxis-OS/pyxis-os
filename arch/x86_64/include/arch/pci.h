@@ -23,7 +23,7 @@ uint8_t pci_read8(struct pci_address address, unsigned offset);
 uint16_t pci_read16(struct pci_address address, unsigned offset);
 uint32_t pci_read32(struct pci_address address, unsigned offset);
 
-/* Excludes the existing ECAM/APIC/HPET register mappings. Extent must not overflow. */
+/* Excludes ECAM/APIC/HPET and a permanent WC display aperture. Extent must not overflow. */
 bool arch_pci_mmio_available(phys_addr_t physical, size_t bytes);
 
 /* Used by PCI ownership code only, BSP/IF=0. Permission changes precede AP

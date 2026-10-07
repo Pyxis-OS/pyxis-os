@@ -7,6 +7,7 @@
 #include <arch/layout.h>
 #include <arch/paging.h>
 #include <arch/pci.h>
+#include <arch/smp.h>
 #include <kernel/fb/early_console.h>
 #include <kernel/log.h>
 #include <kernel/memory.h>
@@ -71,6 +72,8 @@ static struct arch_address_space kernel_space;
 static uint64_t physical_limit;
 static uint64_t bootstrap_offset;
 static bool active;
+static phys_addr_t display_aperture_physical;
+static size_t display_aperture_bytes;
 
 /* Each CPU index owns one pair of slots. Only that CPU reads or changes its row
  * or remaps its pages, so its local invlpg is sufficient. */
@@ -638,8 +641,100 @@ enum mm_result arch_page_map(struct arch_address_space *space,
 
 enum mm_result arch_page_map_mmio(uintptr_t virtual, phys_addr_t physical)
 {
+  if (paging_display_aperture_overlaps(physical, PAGE_SIZE)) {
+    return MM_INVALID;
+  }
   return map_page(&kernel_space, virtual, physical, PAGE_WRITE,
                   PTE_CACHE_DISABLE | PTE_WRITE_THROUGH);
+}
+
+bool paging_display_aperture_overlaps(phys_addr_t physical, size_t bytes)
+{
+  return display_aperture_bytes && physical < display_aperture_physical + display_aperture_bytes &&
+    display_aperture_physical < physical + bytes;
+}
+
+enum mm_result paging_display_aperture(phys_addr_t physical, size_t bytes,
+    const struct boot_framebuffer *boot, uintptr_t *address)
+{
+  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  KASSERT(active && !arch_cpu_count());
+  if (!boot || !address) {
+    return MM_INVALID;
+  }
+  *address = 0;
+  if (!physical_valid(physical) || !bytes || (bytes & (PAGE_SIZE - 1)) ||
+      bytes > physical_limit - physical || bytes > FRAMEBUFFER_END - FRAMEBUFFER_BASE) {
+    return MM_INVALID;
+  }
+  size_t retained = 0;
+  if (boot->size) {
+    if (boot->physical != physical || boot->address != FRAMEBUFFER_BASE ||
+        boot->size > bytes) {
+      return MM_INVALID;
+    }
+    retained = (boot->size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  }
+  uint64_t pat = read_msr(IA32_PAT);
+  if (((pat >> (PAT_FRAMEBUFFER_INDEX * PAT_ENTRY_BITS)) & PAT_TYPE_MASK) !=
+      PAT_WRITE_COMBINING) {
+    return MM_INVALID;
+  }
+  const uint64_t flags = leaf_flags(PAGE_WRITE) | PTE_PAT_4K | PTE_WRITE_THROUGH;
+  const uint64_t checked = PTE_ADDRESS_MASK | PTE_PRESENT | PTE_WRITE | PTE_USER |
+    PTE_NX | PTE_PAT_4K | PTE_WRITE_THROUGH | PTE_CACHE_DISABLE;
+  for (size_t offset = 0; offset < bytes; offset += PAGE_SIZE) {
+    phys_addr_t table;
+    unsigned allowed;
+    uintptr_t virtual = FRAMEBUFFER_BASE + offset;
+    enum mm_result result = walk_to_leaf(&kernel_space, virtual, false, &table, &allowed);
+    uint64_t value = result == MM_OK ? read_table_entry(table, index_at(virtual, LEVEL_PT)) : 0;
+    if (result != MM_OK && result != MM_NOT_MAPPED) {
+      return result;
+    }
+    if (offset < retained) {
+      if (result != MM_OK || !(allowed & PAGE_WRITE) ||
+          (value & checked) != ((physical + offset) | flags)) {
+        return MM_INVALID;
+      }
+    } else if (value & PTE_PRESENT) {
+      return MM_COLLISION;
+    }
+  }
+
+  size_t mapped = retained;
+  enum mm_result result = MM_OK;
+  for (; mapped < bytes; mapped += PAGE_SIZE) {
+    phys_addr_t table;
+    unsigned allowed;
+    uintptr_t virtual = FRAMEBUFFER_BASE + mapped;
+    result = walk_to_leaf(&kernel_space, virtual, true, &table, &allowed);
+    if (result != MM_OK) {
+      break;
+    }
+    if (!(allowed & PAGE_WRITE)) {
+      result = MM_INVALID;
+      break;
+    }
+    write_table_entry(table, index_at(virtual, LEVEL_PT), (physical + mapped) | flags);
+    invlpg(virtual);
+  }
+  if (mapped != bytes) {
+    while (mapped > retained) {
+      mapped -= PAGE_SIZE;
+      phys_addr_t table;
+      unsigned allowed;
+      uintptr_t virtual = FRAMEBUFFER_BASE + mapped;
+      KASSERT(walk_to_leaf(&kernel_space, virtual, false, &table, &allowed) == MM_OK);
+      write_table_entry(table, index_at(virtual, LEVEL_PT), 0);
+      invlpg(virtual);
+    }
+    return result;
+  }
+  display_aperture_physical = physical;
+  display_aperture_bytes = bytes;
+  *address = FRAMEBUFFER_BASE;
+  return MM_OK;
 }
 
 void paging_pci_config_writable(uintptr_t virtual, bool writable)

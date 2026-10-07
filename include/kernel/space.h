@@ -41,6 +41,8 @@ struct space
 };
 
 /* Creates Caelum's space, first in registry order, on CPU 0. BSP only, at boot. */
+/* Enough room for navigation and one terminal row at the current font. */
+bool space_display_size_supported(size_t width, size_t height);
 void space_init(void);
 /* Caelum's own space, which hosts boot init. */
 struct space *space_caelum(void);

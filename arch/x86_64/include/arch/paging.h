@@ -46,6 +46,14 @@ enum mm_result arch_page_map(struct arch_address_space *space,
                              unsigned permissions);
 /* Supervisor RW/NX/UC mapping in the kernel allocation area. */
 enum mm_result arch_page_map_mmio(uintptr_t virtual, phys_addr_t physical);
+/* Display-only fixed WC aperture, BSP/IF=0 before AP startup. A supplied boot
+ * framebuffer must start at physical. Its existing leaves remain unchanged;
+ * new leaves persist until reboot and never belong to a VM reservation. */
+enum mm_result paging_display_aperture(phys_addr_t physical, size_t bytes,
+    const struct boot_framebuffer *boot, uintptr_t *address);
+/* Reject UC aliases of a successful permanent display aperture, including
+ * after its PCI claim is released. Queried extents must not overflow. */
+bool paging_display_aperture_overlaps(phys_addr_t physical, size_t bytes);
 /* PCI ownership changes, BSP/IF=0 before AP startup, for one ECAM page only. */
 void paging_pci_config_writable(uintptr_t virtual, bool writable);
 enum mm_result arch_page_unmap(struct arch_address_space *space,

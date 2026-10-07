@@ -1,0 +1,22 @@
+#ifndef KERNEL_BOOT_OPTIONS_H
+#define KERNEL_BOOT_OPTIONS_H
+
+#include <kernel/object/mount.h>
+
+struct boot_options {
+  const char *init;
+  struct mount_config mount;
+  bool install;
+  bool default_config;
+  const char *remote_beacon;
+  bool log_udp;
+  const char *display_size;
+};
+
+/* BSP, IF=0: call once before display/AP initialization. Copies the command
+ * line into bounded static storage; returned options and strings live for
+ * this boot. Invalid or duplicate options are fatal. The display driver owns
+ * display.size value validation and its nonfatal fallback. */
+const struct boot_options *boot_options_parse(const char *command_line);
+
+#endif
