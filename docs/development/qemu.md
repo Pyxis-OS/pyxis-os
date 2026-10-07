@@ -3,11 +3,13 @@
 ## Display device
 
 `QEMU_VIDEO=std` is the default and retains q35's standard VGA. Select the
-VirtIO GPU 2D device independently of the window backend:
+display device independently of the window backend:
 
 ```sh
 make run CPUS=4 QEMU_VIDEO=virtio
 make debug CPUS=4 QEMU_VIDEO=virtio QEMU_DISPLAY=none
+make run CPUS=4 QEMU_VIDEO=std DISPLAY_SIZE=1024x768
+make run CPUS=4 QEMU_VIDEO=bochs DISPLAY_SIZE=800x600
 ```
 
 The launcher adds `-vga none -device virtio-gpu-pci,disable-legacy=on`; no VGA
@@ -17,7 +19,21 @@ stays serial and the driver queries the initial GPU pixel size before AP startup
 With a framebuffer it retains its initial dimensions. The kernel presents with
 one 2D resource, full-frame transfers and flushes. Resizing, hardware cursors, 3D
 and multiple monitors are later work. VirtIO panic output is serial-only.
-The [display milestone](../wip/display-drivers.md) records interfaces and limits.
+`QEMU_VIDEO=bochs` adds `-vga none -device bochs-display`. Both it and standard
+VGA support the same Bochs register driver. `DISPLAY_SIZE` is baked into the
+image as `display.size=WIDTHxHEIGHT`; it is separate from host device selection.
+An empty setting keeps the firmware framebuffer. Exact 32-bit modes require
+width divisible by eight, hardware dimensions of 64..16000 by 64..12000, enough
+room for the current bar/font, and an extent fitting BAR0 and reported VRAM.
+With the current font the effective minimum is 80×64. Unsupported or malformed
+sizes keep firmware output with a message; no closest mode is selected. A failed
+mode is restored and verified; unverifiable restoration stops boot on serial.
+
+This driver requires QEMU's modern register extension and an enabled firmware
+DISPI mode. It preserves the existing WC mapping only when the boot framebuffer
+starts at BAR0; another offset refuses mode setting. Panic uses the selected
+direct target after successful readback. The [display milestone](../wip/display-drivers.md)
+records interfaces, measured cost and remaining limits.
 
 ## PCI passthrough
 

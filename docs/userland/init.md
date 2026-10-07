@@ -22,8 +22,8 @@ applications.
 
 ## Boot command line
 
-The kernel accepts five options, each at most once, in a command line of at
-most 4095 bytes without quoting or escaping:
+The kernel accepts the following options, each at most once, in a command line
+of at most 4095 bytes without quoting or escaping:
 
 | Option | Meaning |
 | --- | --- |
@@ -32,9 +32,17 @@ most 4095 bytes without quoting or escaping:
 | `boot.install=1` | The install entry: boot init also receives the raw installer resources. |
 | `boot.default_config=1` | The rescue entry: boot init ignores the pool override. |
 | `remote.beacon=NAME` | The configured `remote` space discovers a host beacon and connects out. |
+| `log.udp=1` | Enable the [UDP kernel log](../interfaces/kernel-log.md#udp-capture) after networking initialization. |
+| `display.size=WIDTHxHEIGHT` | Set an exact initial Bochs pixel size; see [QEMU display selection](../development/qemu.md#display-device). |
 
 Anything else, a repeated option or a non-`boot://` init stops the boot.
 Normal live and installed boots use `init=boot://boot-init.pxe`.
+Options are parsed once before display and AP initialization into retained kernel
+storage; boot init consumes the same result later. `display.size` is an exception
+to fatal value validation: malformed/unsupported geometry keeps the firmware
+framebuffer with a message. It applies to the selected Bochs device, not VirtIO
+or an unsupported native GPU. `DISPLAY_SIZE` supplies it during image assembly,
+including rescue and installer entries; an empty setting omits it.
 
 Boot init runs on CPU 0 in Caelum's space. Its messages go to the Caelum tab and
 to serial. It receives console output but no input, the bootstrap services, the

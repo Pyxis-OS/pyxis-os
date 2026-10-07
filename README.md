@@ -26,6 +26,7 @@ make run CPUS=4
 make run CPUS=8 THREADS=2 # four cores with two threads each
 make run CPUS=4 VIRTIO_NET=1
 make run CPUS=4 QEMU_VIDEO=virtio
+make run CPUS=4 QEMU_VIDEO=bochs DISPLAY_SIZE=800x600
 make run ACCEL=tcg        # software emulation when KVM is unavailable
 make image INIT=/tmp/init.sh  # optional native PXE or shebang init
 make run LOG_LEVEL=trace  # include scheduler idle diagnostics
@@ -42,7 +43,9 @@ into build. Serial uses the launching terminal; exit QEMU with Ctrl-a x.
 A guest `poweroff` also exits QEMU, and `reboot` restarts the guest.
 `QEMU_NO_REBOOT=1` makes a reset, including a triple fault, stop QEMU instead.
 `QEMU_DISPLAY=none` disables the graphics window. `QEMU_VIDEO=virtio` selects
-VirtIO GPU 2D; the default uses standard VGA.
+VirtIO GPU 2D; the default uses standard VGA. `QEMU_VIDEO=bochs` selects the
+separate Bochs device; `DISPLAY_SIZE=WIDTHxHEIGHT` sets the image's initial Bochs
+mode for either VGA or Bochs. See [display selection](docs/development/qemu.md#display-device).
 `VFIO_PCI=0000:05:00.0` opts into [PCI passthrough](docs/development/qemu.md#pci-passthrough),
 after the [host setup](docs/development/thinkpad-nic-passthrough.md#host-setup).
 

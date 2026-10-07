@@ -502,7 +502,10 @@ uses one initial-size kernel RAM surface and full-frame transfer/flush. It does
 not handle display-change events or resize buffers yet; revisit in display task
 5a. There is no vblank guarantee, hardware cursor, 3D or recovery after driver
 failure. Graphics acquisition/presentation then returns unavailable, while
-release remains usable; the last screen may stay stale or blank.
+release remains usable; the last screen may stay stale or blank. A selected
+VirtIO GPU's failure does not try a separate VGA firmware framebuffer even in a
+hand-built mixed-device VM. Revisit failover only with an explicit multi-device
+policy. Full-frame idle cost should be remeasured after display resizing.
 
 Runtime failure retains backing, queue/control storage and PCI mappings until
 reboot, even after confirmed reset. No runtime VM mutation or DMA release is
@@ -510,6 +513,23 @@ introduced. An uncertain bootstrap shutdown retains temporary storage too; a
 PCI claim that ever enabled DMA stays retained even after successful bootstrap
 reset. Revisit reclamation only with an explicit runtime allocation/ownership
 contract. VirtIO panic reporting remains serial-only without GPU operations.
+
+## Bochs boot-mode scope and aperture retention
+
+The [Bochs driver](wip/display-drivers.md#task-4-implementation-and-validation)
+supports QEMU's modern register interface with an already enabled firmware DISPI
+mode. It cannot restore legacy VGA state from DISPI registers, so disabled modes,
+GETCAPS state and older register interfaces keep firmware output without mode
+writes. The supplied boot framebuffer must start at BAR0; nonzero placement
+refuses mode setting rather than rebasing a published direct mapping. Revisit
+these limits only with a concrete device/firmware profile that needs them.
+
+A prepared WC aperture and PCI register mapping/claim remain until reboot,
+including after mode refusal. The WC aperture borrows boot leaves and extends
+them before AP startup; it is outside generic PCI/VM release ownership. Retention
+prevents aliasing or invalidating panic/fallback targets. Any reclamation needs
+an explicit shared-mapping lifetime contract. A failed mode with unverified
+firmware restoration stops boot with a serial panic, as agreed for task 4.
 
 ## Reverse remote terminal discovery
 
