@@ -155,5 +155,6 @@ placeholder APIs:
 - A running application that holds the capability will be able to change its
   space's title. Today `SPACE_RIGHT_SET_TITLE` reaches only init, session and the
   interactive shell.
-- The space bar will gain status widgets, starting with the ThinkPad battery;
-  see [ACPI power control and battery](acpi-and-bar-widgets.md).
+- The space bar has its first status widget, the battery
+  ([space bar](../userland/init.md#space-bar)); more widgets are a
+  [later direction](later-os-directions.md#power-and-acpi).

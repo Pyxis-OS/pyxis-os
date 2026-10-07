@@ -140,9 +140,10 @@ pool and the [boot configuration checker](boot-configuration-checker.md).
 Later candidates are dynamic space creation (the new-space flow), a file
 navigator and multiplexing.
 
-[ACPI power control and battery](acpi-and-bar-widgets.md), agreed 2026-10-07 as
-the milestone after the system layout: uACPI, clean power-off and reboot, the
-battery reading and space-bar widget, then the power button.
+The [ACPI](../kernel/acpi.md) milestone completed 2026-10-07: uACPI, clean
+power-off and reboot, the battery widget in the space bar, the power button and
+battery queries for userspace (Fastfetch's Battery module). Its follow-ups are in
+[later OS directions](later-os-directions.md#power-and-acpi).
 
 [Display drivers and resizing](display-drivers.md), agreed 2026-10-07 and run by
 Codex alongside ACPI: a proposal first, then the boot framebuffer behind a small
