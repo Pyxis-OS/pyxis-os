@@ -12,6 +12,7 @@
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/net/driver.h>
+#include <kernel/net/log_udp.h>
 #include <stdatomic.h>
 
 #define NET_WORK_BUDGET 8
@@ -161,6 +162,11 @@ static void wait_for_work(void)
     deadline = transport_deadline;
     timed = true;
   }
+  uint64_t log_deadline;
+  if (net_log_udp_next_deadline(&log_deadline) && (!timed || log_deadline < deadline)) {
+    deadline = log_deadline;
+    timed = true;
+  }
   uint64_t arp_deadline;
   if (net_arp_next_deadline(&arp_deadline) && (!timed || arp_deadline < deadline)) {
     deadline = arp_deadline;
@@ -205,6 +211,7 @@ static void network_worker(void *argument)
   for (;;) {
     bool transport_busy = net_driver_service();
     bool serviced = net_config_service();
+    serviced |= net_log_udp_service();
     serviced |= net_udp_service();
     serviced |= net_echo_service();
     net_lwip_service();

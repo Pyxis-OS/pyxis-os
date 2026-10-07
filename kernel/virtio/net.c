@@ -256,7 +256,6 @@ static const char *prepare_queues(struct virtio_net_controller *controller)
     klog("virtio-net PCI: queue allocation failed (error %u)\n", (unsigned)result);
     return "cannot allocate RX/TX storage";
   }
-  controller->tx.panic_reserved = net_log_udp_enabled();
   if (!configure_queue(controller, &controller->rx) || !configure_queue(controller, &controller->tx)) {
     return "queue configuration rejected";
   }
@@ -460,6 +459,8 @@ void virtio_net_start(struct virtio_net_controller *controller)
   }
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
   controller->started = true;
+  /* Options are parsed after boot preparation, before worker activation. */
+  controller->tx.panic_reserved = net_log_udp_enabled();
   if (!controller->prepared) {
     leave_network(controller, flags);
     return;

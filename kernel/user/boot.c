@@ -1,6 +1,7 @@
 #include <arch/smp.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
+#include <kernel/net/log_udp.h>
 #include <kernel/object/mount.h>
 #include <kernel/panic.h>
 #include <kernel/string.h>
@@ -85,7 +86,7 @@ void user_launch_initial(const char *command_line)
     panic("cannot allocate kernel options");
   }
   const char *init = NULL, *mount_disk = NULL, *install = NULL, *default_config = NULL;
-  const char *remote_beacon = NULL;
+  const char *remote_beacon = NULL, *log_udp = NULL;
 
   char *cursor = options;
   while (*cursor) {
@@ -120,12 +121,17 @@ void user_launch_initial(const char *command_line)
       take_option(&default_config, key, value);
     } else if (same_text(key, "remote.beacon")) {
       take_option(&remote_beacon, key, value);
+    } else if (same_text(key, "log.udp")) {
+      take_option(&log_udp, key, value);
     } else {
       panic("unknown kernel option: %s", key);
     }
   }
   if (!init) {
     panic("kernel command line must name init");
+  }
+  if (log_udp && flag_option("log.udp", log_udp)) {
+    net_log_udp_enable();
   }
   if (remote_beacon && !remote_beacon_name_length(remote_beacon)) {
     panic("remote.beacon must name 1..%u printable ASCII bytes without spaces",

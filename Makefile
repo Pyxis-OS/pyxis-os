@@ -32,7 +32,8 @@ NETWORK_CONFIG ?=
 MOUNT_DISK ?=
 BOOT_MENU_TIMEOUT ?= 0
 REMOTE_BEACON ?=
-export MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON
+LOG_UDP ?= 0
+export MOUNT_DISK BOOT_MENU_TIMEOUT REMOTE_BEACON LOG_UDP
 # Space-separated components already extracted from bundles at the repo root.
 PREBUILT ?=
 ifneq ($(filter-out kernel sdk userspace ports,$(PREBUILT)),)

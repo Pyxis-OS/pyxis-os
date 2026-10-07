@@ -412,7 +412,10 @@ static bool panic_wait_slot(struct rtl8111_controller *controller, unsigned id)
   for (unsigned poll = 0; poll < NET_PANIC_COMPLETION_POLLS; ++poll) {
     if (!(tx->descriptors[id].opts1 & RTL_DESCRIPTOR_OWN)) {
       dma_read_barrier();
-      return true;
+      uint32_t opts = tx->descriptors[id].opts1;
+      return descriptor_address_valid(tx, id) &&
+          (opts & RTL_DESCRIPTOR_EOR) ==
+          (id == RTL_RING_COUNT - 1 ? RTL_DESCRIPTOR_EOR : 0);
     }
     if (poll % RTL_PANIC_KICK_POLLS == 0) {
       /* Closely spaced doorbells can be lost; keep retrying within the budget. */
@@ -426,7 +429,10 @@ static bool panic_wait_slot(struct rtl8111_controller *controller, unsigned id)
 
 static bool panic_publish(struct rtl_ring *tx, unsigned id, const void *frame, size_t length)
 {
-  if ((tx->descriptors[id].opts1 & RTL_DESCRIPTOR_OWN) || !descriptor_address_valid(tx, id)) {
+  uint32_t previous = tx->descriptors[id].opts1;
+  if ((previous & RTL_DESCRIPTOR_OWN) || !descriptor_address_valid(tx, id) ||
+      (previous & RTL_DESCRIPTOR_EOR) !=
+      (id == RTL_RING_COUNT - 1 ? RTL_DESCRIPTOR_EOR : 0)) {
     return false;
   }
   uint8_t *buffer = (uint8_t *)(tx->storage.address + PAGE_SIZE + id * RTL_BUFFER_BYTES);
