@@ -47,7 +47,7 @@ reboot. For opt-in persistence, use the [USB workflow below](#persistent-usb-dev
 or a [writable host export](../devices/virtio-fs.md#persistent-development-walkthrough),
 keeping source and output under the corresponding root. `boot://`, including `boot://sdk`, is
 read-only. Atomic Kilo saves, a package manager and toolchain self-hosting
-remain unsupported. GCC continues to build maintained OS/userland sources.
+remain unsupported. The host Clang continues to build maintained OS/userland sources.
 
 See [TCC's contract and limits](../userland/tcc.md), [Kilo controls](ports.md#editing-in-pyxis)
 and [terminal behavior](../userland/terminal.md) for details.

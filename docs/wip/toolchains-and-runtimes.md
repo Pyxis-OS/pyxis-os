@@ -1,15 +1,16 @@
 # Hosted toolchains and language runtimes
 
 Status: LLVM/Clang is the chosen toolchain direction as of 2026-09-29, including
-Clang as the first large hosted C toolchain. The current build still uses
-GCC/binutils; no migration or hosted LLVM support is implemented. The boundaries
+Clang as the first large hosted C toolchain. Since the
+[host milestone](llvm-toolchain.md), Pyxis builds with its Clang and LLD on the
+host and GCC/binutils are retired; no hosted LLVM support is implemented. The boundaries
 below guide a pinned investigation, not an implementation assignment or a fixed
 schedule. Other language runtimes remain future candidates.
 
 ## Distinct results
 
-The existing [GCC/binutils toolchain](../../toolchain/README.md) runs on the host
-and targets Pyxis. TCC already provides a native [edit/build/run loop](../development/edit-build-run.md).
+The [LLVM toolchain](../../toolchain/README.md) runs on the host and targets
+Pyxis. TCC already provides a native [edit/build/run loop](../development/edit-build-run.md).
 Keep three larger achievements separate:
 
 1. A host-running compiler produces programs that run on Pyxis.
@@ -54,7 +55,7 @@ The hosted workflow must include a usable converter or equivalent explicit final
 step. Native P1F linker output can be investigated later; this transition does not
 require inventing a relocatable format or rewriting the loader. The milestone 1
 probe led to [P1F output from LLD](llvm-toolchain.md#p1f-output-from-lld),
-accepted on 2026-10-07; `elf2pxe` stays as a fallback while GCC builds remain. Keep the working
+accepted on 2026-10-07. `elf2pxe` was removed with GCC; LLD writes P1F directly. Keep the working
 toolchain available during validation, without committing to maintaining two
 permanent default toolchains.
 

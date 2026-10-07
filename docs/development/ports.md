@@ -289,7 +289,7 @@ that Pyxis does not expose. Host archives use `tar --format=ustar`; the
 ## TCC and the guest SDK
 
 The normal image includes `boot://tcc.pxe`; the shell resolves `tcc` to it.
-The [recipe](../../ports/tcc/README.md) builds TCC with the prebuilt Pyxis GCC and
+The [recipe](../../ports/tcc/README.md) builds TCC with the prebuilt Pyxis Clang and
 exports the guest executable, target libtcc1, compiler-private headers, licenses
 and ordered patch provenance. No compiler-container rebuild is needed.
 
@@ -297,10 +297,10 @@ and ordered patch provenance. No compiler-container rebuild is needed.
 
 - `usr/include`: shared libc/libpyxis/libterm, ABI/P1F and npfs format headers.
 - `usr/lib`: `crt0.o`, libc, libterm, libpyxis, npfs format and the compiler
-  runtime archive (libgcc, or compiler-rt builtins in an LLVM-built image).
+  runtime archive (compiler-rt builtins).
 - `lib/tcc`: libtcc1 and private `stddef.h`, `stdarg.h`, `stdbool.h`, `float.h`.
 - `share`: TLSF/musl/TCC/npfs licenses and notices, TCC source pin and patches, and
-  the selected toolchain's hashes, patches and runtime licensing.
+  the toolchain's fork revision and runtime licensing.
 - `manifest.txt`: SDK provenance plus the ports bundle's source and dependency record.
 
 From `tmp://`, compile a saved C source with `tcc hello.c -o hello.pxe`, then
@@ -308,7 +308,7 @@ launch `./hello.pxe`. TCC supports `-E`, ELF object output with `-c`, and static
 P1F linking; the port notes list supported options and limits. The compiler uses
 inherited read-only `boot` and writable `tmp` grants and needs no launch authority.
 The SDK packages target runtime files, not host compilers or a host converter.
-GCC remains the compiler for the OS and maintained applications.
+Clang on the host remains the compiler for the OS and maintained applications.
 
 See the [edit/build/run walkthrough](edit-build-run.md) and
 [TCC contract and limits](../userland/tcc.md).

@@ -83,7 +83,7 @@
   not silently follow upstream main or update unrelated pins.
 - The owner creates repositories and builds/publishes compiler containers. Explain
   exactly when a container rebuild is needed. Ordinary builds use the existing
-  compiler and evolving SDK; they should not rebuild GCC/binutils in CI.
+  compiler and evolving SDK; they should not rebuild the LLVM toolchain in CI.
 - Builds download only from the owner's mirrors and caches (port recipes'
   `mirror` URLs, toolchain/build.sh). When a change adds or moves an external
   source, tell the owner which mirror or cache entry it needs, with the upstream

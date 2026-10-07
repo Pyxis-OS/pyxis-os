@@ -26,15 +26,6 @@ checksums() {
   find "$@" -type f -print0 | sort -z | xargs -0 -r sha256sum
 }
 
-# The top-level Makefile exports TOOLCHAIN; recursive builds do not pass CC.
-target_compiler() {
-  local prefix=${CROSS_COMPILE:-x86_64-unknown-pyxis-}
-  case "${TOOLCHAIN:-gcc}" in
-    llvm) printf '%sclang\n' "$prefix" ;;
-    *) printf '%sgcc\n' "$prefix" ;;
-  esac
-}
-
 sdk_id() {
   checksums build/sdk | sha256sum | cut -d ' ' -f 1
 }
@@ -77,7 +68,7 @@ case "$action" in
           printf 'log_level=%s\n' "${LOG_LEVEL:-info}"
           printf 'config_sha256=%s\n' "$(sha256sum build/kernel.config | cut -d ' ' -f 1)"
           printf 'cppflags=%s\ncflags=%s\nldflags=%s\n' "${CPPFLAGS:-}" "${CFLAGS:-}" "${LDFLAGS:-}"
-          "${CC:-$(target_compiler)}" --version | head -n 1
+          "${CC:-${CROSS_COMPILE:-x86_64-unknown-pyxis-}clang}" --version | head -n 1
           ;;
         sdk)
           source_info userland userspace
@@ -86,7 +77,7 @@ case "$action" in
           ;;
         userspace|ports)
           printf 'sdk_sha256=%s\n' "$(sdk_id)"
-          "${CC:-$(target_compiler)}" --version | head -n 1
+          "${CC:-${CROSS_COMPILE:-x86_64-unknown-pyxis-}clang}" --version | head -n 1
           ;;
       esac
       if [ "$component" = userspace ]; then

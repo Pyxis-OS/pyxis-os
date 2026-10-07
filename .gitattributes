@@ -1,2 +1,0 @@
-# Unified diffs retain upstream tabs and blank context lines.
-toolchain/*.patch -whitespace

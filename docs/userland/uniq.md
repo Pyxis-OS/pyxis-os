@@ -64,8 +64,8 @@ interface or compiler change was needed.
   including remote `END_INPUT`, do deliver EOF; Ctrl+D is an ordinary byte. See
   [console input completion](../technical-debt.md#console-input-completion).
 - There is no locale support; comparison and field splitting use the C locale.
-- GCC reports a may-be-uninitialized warning for `loff` in upstream code. It is a
-  false positive by inspection and is retained.
+- GCC reported a may-be-uninitialized warning for `loff` in upstream code. It
+  was a false positive by inspection; Clang does not report it.
 
 ## Validation evidence
 

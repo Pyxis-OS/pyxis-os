@@ -56,7 +56,7 @@ the checked-out revision or dependency pins.
 
 | Repository | Owned inputs |
 | --- | --- |
-| Pyxis | Kernel, public ABI/format headers, shared shebang parser, elf2pxe, compiler patches/container, SDK export and image assembly |
+| Pyxis | Kernel, public ABI/format headers, shared shebang parser, LLVM toolchain pin/build script/container, SDK export and image assembly |
 | pyxis-userland | libc, libpyxis, libterm, native TLS adapter, startup/link support, applications, initial boot scripts and its TLSF vendor copy |
 | pyxis-ports | Host Lua runner, pinned third-party recipes, ordered patches and staged executables/licenses and development libraries/headers |
 | pyxis-lwip | Pinned lwIP source subset, license/provenance and any local upstream adaptations |
@@ -64,7 +64,7 @@ the checked-out revision or dependency pins.
 
 `make sdk` exports headers, shared parser source and compiler settings, builds
 the pinned userland runtime and target codecs, then installs startup, libraries,
-linker support, the pinned target `libnpfs-format.a`, its public header and license, and elf2pxe
+linker support, the pinned target `libnpfs-format.a`, and its public header and license
 into `build/sdk`. `make userspace` builds applications against that
 SDK and the Lua, HTTP-parser and TLS libraries exported by `make ports`. Ports consumes only the SDK,
 so building it before userland introduces no cycle. `make image`
@@ -132,5 +132,6 @@ identities without introducing an ABI compatibility version.
 
 Userland-specific CI, dispatch orchestration and SDK artifact exchange remain
 separate work. The owner configures dispatch and publishes compiler containers.
-The [ports build](ports.md) consumes the SDK through the same boundary. Native
-PXE binutils support, dynamic linking and custom library formats are not required here.
+The [ports build](ports.md) consumes the SDK through the same boundary. LLD in the
+`pyxis-llvm` fork writes PXE executables; dynamic linking and custom library
+formats are not required here.

@@ -1,13 +1,7 @@
 #!/bin/sh
 set -eu
 sdk=build/sdk
-toolchain=${TOOLCHAIN:-gcc}
-prefix=${CROSS_COMPILE:-x86_64-unknown-pyxis-}
-case "$toolchain" in
-  gcc) compiler=${prefix}gcc ;;
-  llvm) compiler=${prefix}clang ;;
-  *) echo 'TOOLCHAIN must be gcc or llvm' >&2; exit 1 ;;
-esac
+compiler=${CROSS_COMPILE:-x86_64-unknown-pyxis-}clang
 
 case "${1:-}" in
   headers)
@@ -30,46 +24,27 @@ case "${1:-}" in
     fi
     install -C -m 644 lib/shebang.c "$sdk/share/pyxis/shebang.c"
     install -C -m 644 userspace/target.mk "$sdk/share/pyxis.mk"
-    # The runtime archives belong to one toolchain; consumers read this choice.
-    printf 'PYXIS_TOOLCHAIN := %s\n' "$toolchain" > "$sdk/share/toolchain.mk.tmp"
-    cmp -s "$sdk/share/toolchain.mk.tmp" "$sdk/share/toolchain.mk" ||
-      mv "$sdk/share/toolchain.mk.tmp" "$sdk/share/toolchain.mk"
-    rm -f "$sdk/share/toolchain.mk.tmp"
     ;;
   complete)
-    mkdir -p "$sdk/sysroot/usr/lib" "$sdk/bin" "$sdk/share/licenses"
-    # Compiler helpers come from the selected toolchain: libgcc, or compiler-rt
-    # builtins in Clang's resource directory. Each installation records its
-    # provenance and licenses under share/pyxis-toolchain.
+    mkdir -p "$sdk/sysroot/usr/lib" "$sdk/share/licenses"
+    # Compiler helpers are compiler-rt builtins from Clang's resource directory.
+    # The installation records its provenance and license under
+    # share/pyxis-toolchain.
     runtime=$("$compiler" -print-libgcc-file-name)
+    provenance=$(dirname -- "$(command -v "$compiler")")/../share/pyxis-toolchain
     staging=build/sdk-toolchain
     rm -rf "$staging"
     trap 'rm -rf "$staging"' EXIT
     trap 'exit 1' HUP INT TERM
     mkdir -p "$staging"
-    case "$toolchain" in
-      gcc)
-        provenance=$(dirname -- "$runtime")/../../../../share/pyxis-toolchain
-        runtime_name=libgcc.a
-        set -- COPYING3 COPYING.RUNTIME SHA256SUMS README.md
-        ;;
-      llvm)
-        provenance=$(dirname -- "$(command -v "$compiler")")/../share/pyxis-toolchain
-        runtime_name=libclang_rt.builtins.a
-        set -- LICENSE.TXT llvm-revision README.md
-        ;;
-    esac
-    if [ ! -f "$runtime" ] || [ ! -f "$provenance/$1" ]; then
+    if [ ! -f "$runtime" ] || [ ! -f "$provenance/LICENSE.TXT" ]; then
       echo 'Missing compiler runtime or toolchain provenance: use the installed Pyxis toolchain.' >&2
       exit 1
     fi
-    install -C -m 644 "$runtime" "$sdk/sysroot/usr/lib/$runtime_name"
-    for file in "$@"; do
+    install -C -m 644 "$runtime" "$sdk/sysroot/usr/lib/libclang_rt.builtins.a"
+    for file in LICENSE.TXT llvm-revision README.md; do
       cp "$provenance/$file" "$staging/"
     done
-    if [ "$toolchain" = gcc ]; then
-      cp "$provenance/"*.patch "$staging/"
-    fi
     if ! diff -qr "$staging" "$sdk/share/toolchain" >/dev/null 2>&1; then
       rm -rf "$sdk/share/toolchain"
       mv "$staging" "$sdk/share/toolchain"
@@ -80,7 +55,6 @@ case "${1:-}" in
     install -C -m 644 build/runtime/libc/start.o "$sdk/sysroot/usr/lib/crt0.o"
     install -C -m 644 build/npfs-sdk/libnpfs-format.a "$sdk/sysroot/usr/lib/libnpfs-format.a"
     install -C -m 644 userspace/linker.ld "$sdk/sysroot/usr/lib/pyxis.ld"
-    install -C -m 755 build/tools/elf2pxe "$sdk/bin/elf2pxe"
     # tlsf.h carries the complete upstream license; do not export its API.
     install -C -m 644 userspace/third_party/tlsf/tlsf.h "$sdk/share/licenses/tlsf.h"
     install -C -m 644 userspace/third_party/tlsf/UPSTREAM.md "$sdk/share/licenses/tlsf-upstream.md"
@@ -108,17 +82,10 @@ case "${1:-}" in
       else
         printf 'fs_state=clean\n'
       fi
-      printf 'toolchain=%s\n' "$toolchain"
       printf 'compiler_target=%s\n' "$("$compiler" -dumpmachine)"
-      if [ "$toolchain" = gcc ]; then
-        printf 'compiler_version=%s\n' "$("$compiler" -dumpfullversion)"
-        printf 'libgcc_sha256=%s\n' "$(sha256sum "$runtime" | cut -d ' ' -f 1)"
-        "${prefix}ld" --version | sed -n '1p'
-      else
-        printf 'compiler_version=%s\n' "$("$compiler" -dumpversion)"
-        printf 'compiler_rt_sha256=%s\n' "$(sha256sum "$runtime" | cut -d ' ' -f 1)"
-        "$("$compiler" -print-prog-name=ld.lld)" --version | sed -n '1p'
-      fi
+      printf 'compiler_version=%s\n' "$("$compiler" -dumpversion)"
+      printf 'compiler_rt_sha256=%s\n' "$(sha256sum "$runtime" | cut -d ' ' -f 1)"
+      "$("$compiler" -print-prog-name=ld.lld)" --version | sed -n '1p'
       printf 'host=%s %s\n' "$(uname -s)" "$(uname -m)"
       "${HOSTCC:-cc}" --version | sed -n '1p'
     } > "$sdk/manifest.txt.tmp"

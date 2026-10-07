@@ -1,18 +1,10 @@
 CROSS_COMPILE ?= x86_64-unknown-pyxis-
-# GCC remains the default until the LLVM toolchain replaces it.
-TOOLCHAIN ?= gcc
-ifeq ($(TOOLCHAIN),gcc)
-CC := $(CROSS_COMPILE)gcc
-else ifeq ($(TOOLCHAIN),llvm)
 CC := $(CROSS_COMPILE)clang
-else
-$(error TOOLCHAIN must be gcc or llvm)
-endif
 HOSTCC ?= cc
 HOSTAR ?= ar
 LUA ?= lua
 PYTHON ?= python3
-export CROSS_COMPILE TOOLCHAIN HOSTCC LUA
+export CROSS_COMPILE HOSTCC LUA
 QEMU ?= qemu-system-x86_64
 QEMU_DISPLAY ?= gtk
 QEMU_VIDEO ?= std
@@ -74,9 +66,7 @@ CFLAGS := -std=gnu23 -O2 -g3 -ffreestanding -fno-stack-protector \
 LDFLAGS := -nostdlib -static -no-pie -Wl,-T,arch/x86_64/linker.ld \
            -Wl,--build-id=none -Wl,-z,max-page-size=0x1000 -Wl,-Map,build/caelum.map
 # The Pyxis Clang driver links P1F executables; Limine loads the kernel as ELF.
-ifeq ($(TOOLCHAIN),llvm)
 LDFLAGS += -Wl,--oformat=elf
-endif
 
 C_SOURCES := $(wildcard boot/limine/*.c arch/x86_64/*.c kernel/*.c kernel/boot/*.c kernel/user/*.c kernel/object/*.c kernel/service/*.c kernel/fs/*.c kernel/mm/*.c kernel/fb/*.c kernel/display/*.c kernel/pci/*.c kernel/virtio/*.c kernel/usb/*.c kernel/storage/*.c kernel/net/*.c kernel/net/rtl8111/*.c lib/*.c) \
              third_party/tlsf/tlsf.c
@@ -121,7 +111,7 @@ ifneq ($(filter sdk,$(PREBUILT)),)
 sdk:
 	./scripts/bundle.sh verify sdk
 else
-sdk: tools sdk-headers
+sdk: sdk-headers
 	$(MAKE) -C userspace -f runtime.mk SDK=$(abspath build/sdk) BUILD=$(abspath build/runtime)
 	$(MAKE) -f scripts/npfs-sdk.mk SDK=$(abspath build/sdk)
 	./scripts/export-sdk.sh complete
@@ -173,12 +163,12 @@ check-toolchain: build/toolchain
 	  echo "Missing $(CC): add the cross-toolchain to PATH or set CROSS_COMPILE." >&2; \
 	  exit 1; }
 
-# Objects and SDK archives from the two toolchains must not mix in one build.
+# Objects and SDK archives from different compilers must not mix in one build.
 build/toolchain: FORCE
 	@mkdir -p $(@D)
-	@if [ ! -f $@ ]; then echo $(TOOLCHAIN) > $@; \
-	elif [ "$$(cat $@)" != $(TOOLCHAIN) ]; then \
-	  echo "build/ was made with TOOLCHAIN=$$(cat $@); run make clean first." >&2; \
+	@if [ ! -f $@ ]; then echo $(CC) > $@; \
+	elif [ "$$(cat $@)" != $(CC) ]; then \
+	  echo "build/ was made with $$(cat $@); run make clean first." >&2; \
 	  exit 1; fi
 
 ifneq ($(filter kernel,$(PREBUILT)),)

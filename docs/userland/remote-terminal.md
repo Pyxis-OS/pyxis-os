@@ -89,8 +89,7 @@ trusted LAN as the existing server.
 For native LAN use, allow the selected TCP port through the listening host's
 firewall. With `HOST=0.0.0.0`, the default beacon follows the host's default
 route; use `--beacon-address` with the LAN's subnet broadcast address when that
-LAN is on a different interface. `make tools` builds `elf2pxe`; build the
-remote client with `make -C tools remote`, as above.
+LAN is on a different interface.
 
 The [beacon wire format](../../include/remote/beacon.h) has a 16-byte header:
 `PYXISRT` plus NUL, version 1, name byte count, a big-endian TCP port and four
