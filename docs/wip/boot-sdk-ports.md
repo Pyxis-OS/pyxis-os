@@ -144,6 +144,10 @@ navigator and multiplexing.
 the milestone after the system layout: uACPI, clean power-off and reboot, the
 battery reading and space-bar widget, then the power button.
 
+[Display drivers and resizing](display-drivers.md), agreed 2026-10-07 and run by
+Codex alongside ACPI: a proposal first, then the boot framebuffer behind a small
+driver interface, VirtIO GPU 2D, Bochs and live resizing. Physical GPUs follow.
+
 [Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md) completed
 2026-10-06: read-only FUSE mounts and in-memory journal replay, with the owner
 confirming physical stick mounting and copying on Arch Linux.
@@ -211,9 +215,9 @@ implemented: Ctrl+C terminates a running foreground command or pipeline through
 process-level termination, shell-armed interrupt events and a minimal
 application passthrough for programs such as Kilo.
 
-The parked [VirtIO GPU presentation direction](desktop-graphics.md#virtio-gpu-presentation-and-display-resizing)
-groups software framebuffer presentation, live display resizing and terminal
-geometry notifications into one future milestone. It requires no 3D acceleration and does not
+The [display drivers milestone](display-drivers.md), agreed 2026-10-07, adds
+VirtIO GPU 2D and Bochs drivers behind a small interface, with live resizing
+that reaches terminal geometry. It requires no 3D acceleration and does not
 block a multiplexer on a fixed-size display.
 The agreed [visible-work sequence](storage-and-terminal-agenda.md#4-native-terminal-sessions-multiplexer-and-navigator)
 after filesystem core and spaces/SMP is that display milestone, a resize-aware

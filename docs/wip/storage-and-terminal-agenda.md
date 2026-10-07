@@ -98,7 +98,7 @@ The [native filesystem writer](../devices/filesystem-native-adapter.md) is compl
 [Runtime SMP and independent spaces](../kernel/smp.md) completed on 2026-10-06.
 The agreed continuation is these focused milestones:
 
-1. [VirtIO GPU presentation and dynamic display resizing](desktop-graphics.md#virtio-gpu-presentation-and-display-resizing):
+1. [VirtIO GPU presentation and dynamic display resizing](display-drivers.md):
    present the software framebuffer and propagate changed terminal dimensions,
    without 3D acceleration or a compositor.
 2. A single-panel file navigator/browser in an ordinary terminal: browse directory
