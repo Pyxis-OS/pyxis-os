@@ -34,4 +34,11 @@ enum net_result rtl8111_transmit(struct rtl8111_controller *controller,
     const void *frame, size_t length);
 void rtl8111_interrupt(void);
 
+/* Fatal CPU, IF=0. Claim once, irreversibly closing normal hardware mutations.
+ * Uses the existing normal-priority ring and permanently retained DMA storage.
+ * Completion is bounded; a timeout stops fatal transmission without revoking DMA. */
+bool rtl8111_panic_begin(struct rtl8111_controller *controller);
+bool rtl8111_panic_transmit(struct rtl8111_controller *controller,
+    const void *frame, size_t length);
+
 #endif

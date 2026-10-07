@@ -5,6 +5,7 @@
 #include <kernel/memory.h>
 #include <kernel/net/ethernet.h>
 #include <kernel/net/rtl8111.h>
+#include <kernel/net/log_udp.h>
 #include <kernel/task.h>
 #include "internal.h"
 #include "io_registers.h"
@@ -13,11 +14,30 @@
 #define RTL_RESET_RECHECK_MS 1
 #define RTL_FCS_BYTES 4u
 #define RTL_MIN_FRAME_BYTES 60u
+#define RTL_PANIC_TX_RESERVED 2u
+#define RTL_PANIC_KICK_POLLS 64u
+#define RTL_MSIX_IO_ENTRY 0u
 #define RTL_COMMAND_RUNNING (RTL_COMMAND_RX | RTL_COMMAND_TX)
+
+static uint64_t panic_section_enter_interrupts(void)
+{
+  return net_log_udp_enabled() ? cpu_save_interrupts() : 0;
+}
+
+static void panic_section_leave_interrupts(uint64_t flags)
+{
+  if (net_log_udp_enabled()) {
+    cpu_restore_interrupts(flags);
+  }
+}
 
 static void stop_controller(struct rtl8111_controller *controller, const char *reason)
 {
   uint64_t flags = cpu_save_interrupts();
+  if (!net_panic_gate_enter(&controller->panic_gate, RTL_PANIC_STOP)) {
+    cpu_restore_interrupts(flags);
+    return;
+  }
   controller->active = false;
   controller->prepared = false;
   controller->link_up = false;
@@ -30,8 +50,9 @@ static void stop_controller(struct rtl8111_controller *controller, const char *r
   pci_write16(claim, PCI_COMMAND, command & ~PCI_COMMAND_MASTER);
   controller->dma_disabled = !(pci_read16(claim->device->address, PCI_COMMAND) & PCI_COMMAND_MASTER);
   rtl_write8(controller, RTL_CHIP_COMMAND, RTL_COMMAND_RESET);
-  cpu_restore_interrupts(flags);
   controller->stopping = true;
+  net_panic_gate_leave(&controller->panic_gate);
+  cpu_restore_interrupts(flags);
   controller->reset_deadline = task_deadline_after_ms(RTL_RESET_TIMEOUT_NS / UINT64_C(1000000));
   controller->reset_recheck = 0;
 }
@@ -57,14 +78,20 @@ static void finish_stop(struct rtl8111_controller *controller)
 void rtl8111_start(struct rtl8111_controller *controller)
 {
   net_worker_assert_context();
-  if (!controller || controller->started) {
+  if (!controller || controller->started || net_panic_gate_closed(&controller->panic_gate)) {
+    return;
+  }
+  uint64_t flags = cpu_save_interrupts();
+  if (!net_panic_gate_enter(&controller->panic_gate, RTL_PANIC_START)) {
+    cpu_restore_interrupts(flags);
     return;
   }
   controller->started = true;
   if (!controller->prepared) {
+    net_panic_gate_leave(&controller->panic_gate);
+    cpu_restore_interrupts(flags);
     return;
   }
-  uint64_t flags = cpu_save_interrupts();
   struct pci_claim *claim = &controller->claim;
   uint16_t command = pci_read16(claim->device->address, PCI_COMMAND);
   dma_full_barrier();
@@ -93,6 +120,7 @@ void rtl8111_start(struct rtl8111_controller *controller)
       ready = rtl_read16(controller, RTL_INTERRUPT_MASK) == RTL_INTERRUPT_IO;
     }
   }
+  net_panic_gate_leave(&controller->panic_gate);
   cpu_restore_interrupts(flags);
   if (!ready) {
     stop_controller(controller, "activation rejected");
@@ -109,15 +137,20 @@ void rtl8111_interrupt(void)
     if (!controller->active) {
       continue;
     }
-    uint16_t status = rtl_read16(controller, RTL_INTERRUPT_STATUS);
-    if (!status) {
+    if (!net_panic_gate_enter(&controller->panic_gate, RTL_PANIC_IRQ)) {
       continue;
     }
-    rtl_write16(controller, RTL_INTERRUPT_MASK, 0);
-    rtl_write16(controller, RTL_INTERRUPT_STATUS, status);
-    controller->pending_interrupts |= status;
-    ++controller->interrupts;
-    net_worker_notify();
+    uint16_t status = rtl_read16(controller, RTL_INTERRUPT_STATUS);
+    if (status) {
+      rtl_write16(controller, RTL_INTERRUPT_MASK, 0);
+      rtl_write16(controller, RTL_INTERRUPT_STATUS, status);
+      controller->pending_interrupts |= status;
+      ++controller->interrupts;
+    }
+    net_panic_gate_leave(&controller->panic_gate);
+    if (status) {
+      net_worker_notify();
+    }
   }
 }
 
@@ -130,7 +163,7 @@ static bool descriptor_address_valid(const struct rtl_ring *ring, unsigned id)
 bool rtl8111_service(struct rtl8111_controller *controller)
 {
   net_worker_assert_context();
-  if (!controller) {
+  if (!controller || net_panic_gate_closed(&controller->panic_gate)) {
     return false;
   }
   if (controller->stopping) {
@@ -192,8 +225,15 @@ bool rtl8111_service(struct rtl8111_controller *controller)
   }
   if (link && (tx_count || link_returned) && tx->outstanding) {
     /* Closely spaced kicks can be lost on this family. */
+    flags = panic_section_enter_interrupts();
+    if (!net_panic_gate_enter(&controller->panic_gate, RTL_PANIC_SERVICE)) {
+      panic_section_leave_interrupts(flags);
+      return false;
+    }
     dma_full_barrier();
     rtl_write8(controller, RTL_TX_POLL, RTL_TX_POLL_NORMAL);
+    net_panic_gate_leave(&controller->panic_gate);
+    panic_section_leave_interrupts(flags);
   }
 
   unsigned rx_count = 0;
@@ -225,8 +265,15 @@ bool rtl8111_service(struct rtl8111_controller *controller)
         return false;
       }
     }
+    flags = panic_section_enter_interrupts();
+    if (!net_panic_gate_enter(&controller->panic_gate, RTL_PANIC_RX_REPOST)) {
+      panic_section_leave_interrupts(flags);
+      return false;
+    }
     rtl_ring_repost_receive(rx, id);
     rx->consumer = (id + 1) % RTL_RING_COUNT;
+    net_panic_gate_leave(&controller->panic_gate);
+    panic_section_leave_interrupts(flags);
     ++rx_count;
   }
   bool busy = tx_count == RTL_RING_COUNT || rx_count == RTL_RING_COUNT;
@@ -234,7 +281,12 @@ bool rtl8111_service(struct rtl8111_controller *controller)
     /* Pending status stays latched while masked; enabling delivery closes the
      * completion/sleep race without a timer poll. */
     flags = cpu_save_interrupts();
+    if (!net_panic_gate_enter(&controller->panic_gate, RTL_PANIC_SERVICE)) {
+      cpu_restore_interrupts(flags);
+      return false;
+    }
     rtl_write16(controller, RTL_INTERRUPT_MASK, RTL_INTERRUPT_IO);
+    net_panic_gate_leave(&controller->panic_gate);
     cpu_restore_interrupts(flags);
   }
   return busy;
@@ -242,7 +294,7 @@ bool rtl8111_service(struct rtl8111_controller *controller)
 
 bool rtl8111_next_deadline(struct rtl8111_controller *controller, uint64_t *deadline)
 {
-  if (!controller) {
+  if (!controller || net_panic_gate_closed(&controller->panic_gate)) {
     return false;
   }
   if (controller->stopping) {
@@ -268,12 +320,21 @@ enum net_result rtl8111_transmit(struct rtl8111_controller *controller,
     return NET_UNAVAILABLE;
   }
   struct rtl_ring *tx = &controller->tx;
-  if (tx->outstanding == RTL_RING_COUNT) {
+  unsigned capacity = net_log_udp_enabled() ? RTL_RING_COUNT - RTL_PANIC_TX_RESERVED : RTL_RING_COUNT;
+  if (tx->outstanding >= capacity) {
     ++controller->queue_full;
     return NET_QUEUE_FULL;
   }
   unsigned id = tx->producer;
+  uint64_t deadline = task_deadline_after_ms(RTL_TX_TIMEOUT_MS);
+  uint64_t flags = panic_section_enter_interrupts();
+  if (!net_panic_gate_enter(&controller->panic_gate, RTL_PANIC_TX_BASE + id)) {
+    panic_section_leave_interrupts(flags);
+    return NET_UNAVAILABLE;
+  }
   if (tx->descriptors[id].opts1 & RTL_DESCRIPTOR_OWN) {
+    net_panic_gate_leave(&controller->panic_gate);
+    panic_section_leave_interrupts(flags);
     stop_controller(controller, "TX ownership disagrees with ring state");
     return NET_UNAVAILABLE;
   }
@@ -282,7 +343,7 @@ enum net_result rtl8111_transmit(struct rtl8111_controller *controller,
   size_t bytes = length < RTL_MIN_FRAME_BYTES ? RTL_MIN_FRAME_BYTES : length;
   memset(buffer + length, 0, bytes - length);
   tx->descriptors[id].opts2 = 0;
-  controller->tx_deadlines[id] = task_deadline_after_ms(RTL_TX_TIMEOUT_MS);
+  controller->tx_deadlines[id] = deadline;
   ++tx->outstanding;
   tx->producer = (id + 1) % RTL_RING_COUNT;
   uint32_t opts = RTL_DESCRIPTOR_OWN | RTL_DESCRIPTOR_FS | RTL_DESCRIPTOR_LS | bytes;
@@ -294,7 +355,137 @@ enum net_result rtl8111_transmit(struct rtl8111_controller *controller,
   dma_full_barrier();
   rtl_write8(controller, RTL_TX_POLL, RTL_TX_POLL_NORMAL);
   ++controller->transmitted;
+  net_panic_gate_leave(&controller->panic_gate);
+  panic_section_leave_interrupts(flags);
   return NET_OK;
+}
+
+bool rtl8111_panic_begin(struct rtl8111_controller *controller)
+{
+  if (!controller || !net_log_udp_enabled() || !controller->registers.address ||
+      !controller->msix.table.mapping.address) {
+    return false;
+  }
+  unsigned interrupted;
+  if (!net_panic_gate_take(&controller->panic_gate, &interrupted)) {
+    return false;
+  }
+  /* The gate remains fatal even if activation, reset or ownership is uncertain. */
+  rtl_write16(controller, RTL_INTERRUPT_MASK, 0);
+  /* Fatal ownership delegates only this prepared table entry, not the BSP's
+   * PCI configuration mutators. The AP may mask delivery without resetting DMA. */
+  volatile struct pci_msix_entry *table =
+    (volatile struct pci_msix_entry *)controller->msix.table.mapping.address;
+  table[RTL_MSIX_IO_ENTRY].control |= PCI_MSIX_VECTOR_MASK;
+  bool masked = (table[RTL_MSIX_IO_ENTRY].control & PCI_MSIX_VECTOR_MASK) &&
+    !rtl_read16(controller, RTL_INTERRUPT_MASK);
+  if (!masked || interrupted == RTL_PANIC_START || interrupted == RTL_PANIC_STOP ||
+      !controller->active || !controller->prepared || controller->stopping ||
+      !controller->tx.storage.address) {
+    return false;
+  }
+  uint8_t chip = rtl_read8(controller, RTL_CHIP_COMMAND);
+  uint8_t phy = rtl_read8(controller, RTL_PHY_STATUS);
+  uint16_t command = pci_read16(controller->claim.device->address, PCI_COMMAND);
+  if (chip == UINT8_MAX || phy == UINT8_MAX || command == UINT16_MAX ||
+      (chip & (RTL_COMMAND_RUNNING | RTL_COMMAND_RESET)) != RTL_COMMAND_RUNNING ||
+      !(phy & RTL_PHY_LINK) || !(command & PCI_COMMAND_MASTER)) {
+    return false;
+  }
+  controller->panic_slot = controller->tx.producer;
+  if (interrupted >= RTL_PANIC_TX_BASE && interrupted < RTL_PANIC_TX_BASE + RTL_RING_COUNT) {
+    unsigned id = interrupted - RTL_PANIC_TX_BASE;
+    controller->panic_interrupted_slot = id;
+    controller->panic_duplicate = !(controller->tx.descriptors[id].opts1 & RTL_DESCRIPTOR_OWN);
+    controller->panic_slot = (id + 1) % RTL_RING_COUNT;
+  }
+  if (controller->panic_slot >= RTL_RING_COUNT) {
+    return false;
+  }
+  controller->panic_ready = true;
+  return true;
+}
+
+static bool panic_wait_slot(struct rtl8111_controller *controller, unsigned id)
+{
+  struct rtl_ring *tx = &controller->tx;
+  for (unsigned poll = 0; poll < NET_PANIC_COMPLETION_POLLS; ++poll) {
+    if (!(tx->descriptors[id].opts1 & RTL_DESCRIPTOR_OWN)) {
+      dma_read_barrier();
+      uint32_t opts = tx->descriptors[id].opts1;
+      return descriptor_address_valid(tx, id) &&
+          (opts & RTL_DESCRIPTOR_EOR) ==
+          (id == RTL_RING_COUNT - 1 ? RTL_DESCRIPTOR_EOR : 0);
+    }
+    if (poll % RTL_PANIC_KICK_POLLS == 0) {
+      /* Closely spaced doorbells can be lost; keep retrying within the budget. */
+      dma_full_barrier();
+      rtl_write8(controller, RTL_TX_POLL, RTL_TX_POLL_NORMAL);
+    }
+    __asm__ volatile("pause");
+  }
+  return false;
+}
+
+static bool panic_publish(struct rtl_ring *tx, unsigned id, const void *frame, size_t length)
+{
+  uint32_t previous = tx->descriptors[id].opts1;
+  if ((previous & RTL_DESCRIPTOR_OWN) || !descriptor_address_valid(tx, id) ||
+      (previous & RTL_DESCRIPTOR_EOR) !=
+      (id == RTL_RING_COUNT - 1 ? RTL_DESCRIPTOR_EOR : 0)) {
+    return false;
+  }
+  uint8_t *buffer = (uint8_t *)(tx->storage.address + PAGE_SIZE + id * RTL_BUFFER_BYTES);
+  memcpy(buffer, frame, length);
+  size_t bytes = length < RTL_MIN_FRAME_BYTES ? RTL_MIN_FRAME_BYTES : length;
+  memset(buffer + length, 0, bytes - length);
+  tx->descriptors[id].opts2 = 0;
+  uint32_t opts = RTL_DESCRIPTOR_OWN | RTL_DESCRIPTOR_FS | RTL_DESCRIPTOR_LS | bytes;
+  if (id == RTL_RING_COUNT - 1) {
+    opts |= RTL_DESCRIPTOR_EOR;
+  }
+  dma_write_barrier();
+  tx->descriptors[id].opts1 = opts;
+  return true;
+}
+
+bool rtl8111_panic_transmit(struct rtl8111_controller *controller,
+    const void *frame, size_t length)
+{
+  if (!controller || !controller->panic_ready || !frame ||
+      length < ETHERNET_HEADER_BYTES || length > ETHERNET_FRAME_MAX) {
+    return false;
+  }
+  struct rtl_ring *tx = &controller->tx;
+  unsigned id = controller->panic_slot;
+  if (!panic_wait_slot(controller, id)) {
+    controller->panic_ready = false;
+    return false;
+  }
+  if (controller->panic_duplicate) {
+    /* OWN clear cannot distinguish unpublished from already completed TX. The
+     * hardware cursor may still be here or may be at the following free slot.
+     * Publish both before waiting; the host deduplicates this first datagram. */
+    unsigned interrupted = controller->panic_interrupted_slot;
+    if (!panic_publish(tx, interrupted, frame, length)) {
+      controller->panic_ready = false;
+      return false;
+    }
+    controller->panic_duplicate = false;
+  }
+  if (!panic_publish(tx, id, frame, length)) {
+    controller->panic_ready = false;
+    return false;
+  }
+  dma_full_barrier();
+  rtl_write8(controller, RTL_TX_POLL, RTL_TX_POLL_NORMAL);
+  /* Do not wait on the ambiguous duplicate: it may stay owned until wrap. */
+  if (!panic_wait_slot(controller, id)) {
+    controller->panic_ready = false;
+    return false;
+  }
+  controller->panic_slot = (id + 1) % RTL_RING_COUNT;
+  return true;
 }
 
 const uint8_t *rtl8111_mac(const struct rtl8111_controller *controller)
@@ -304,17 +495,19 @@ const uint8_t *rtl8111_mac(const struct rtl8111_controller *controller)
 
 bool rtl8111_available(const struct rtl8111_controller *controller)
 {
-  return controller && controller->active && controller->link_up;
+  return controller && controller->active && controller->link_up &&
+    !net_panic_gate_closed(&controller->panic_gate);
 }
 
 bool rtl8111_ready(const struct rtl8111_controller *controller)
 {
-  return controller && controller->active;
+  return controller && controller->active && !net_panic_gate_closed(&controller->panic_gate);
 }
 
 bool rtl8111_prepared(const struct rtl8111_controller *controller)
 {
-  return controller && controller->prepared && !controller->stopping;
+  return controller && controller->prepared && !controller->stopping &&
+    !net_panic_gate_closed(&controller->panic_gate);
 }
 
 bool rtl8111_carrier(const struct rtl8111_controller *controller, bool *up)

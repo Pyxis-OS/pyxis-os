@@ -29,4 +29,10 @@ const uint8_t *net_driver_mac(void);
 bool net_driver_available(void);
 enum net_result net_driver_transmit(const void *frame, size_t length);
 
+/* First fatal CPU, IF=0. Irreversible selected-driver handoff, bounded and
+ * lock/allocation free. Failure retains DMA ownership and disables normal use.
+ * A successful send means checked TX completion, never guaranteed delivery. */
+bool net_driver_panic_begin(uint8_t mac[6]);
+bool net_driver_panic_transmit(const void *frame, size_t length);
+
 #endif

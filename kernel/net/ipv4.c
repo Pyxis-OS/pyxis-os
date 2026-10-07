@@ -11,6 +11,7 @@
 #include <kernel/task.h>
 #include <kernel/net/driver.h>
 #include "wire.h"
+#include <kernel/net/log_udp.h>
 
 #define IPV4_VERSION 4
 #define IPV4_VERSION_SHIFT 4
@@ -118,6 +119,7 @@ enum net_result net_ipv4_configure(uint32_t address, unsigned prefix, uint32_t g
   configuration = (typeof(configuration)){
     .address = address, .mask = mask, .prefix = prefix, .gateway = gateway,
   };
+  net_log_udp_address(address);
   net_lwip_refresh_address();
   return NET_OK;
 }
@@ -129,6 +131,7 @@ void net_ipv4_clear(void)
   net_echo_invalidate(true);
   net_udp_invalidate_address(configuration.address);
   configuration = (typeof(configuration)){0};
+  net_log_udp_address(0);
   net_lwip_refresh_address();
 }
 

@@ -8,6 +8,8 @@
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/net/ethernet.h>
+#include <kernel/net/log_udp.h>
+#include <kernel/net/panic_tx.h>
 #include <kernel/panic.h>
 #include <kernel/task.h>
 #include <kernel/virtio/net_queue.h>
@@ -50,6 +52,7 @@ _Static_assert(offsetof(struct virtio_net_config, status) == VIRTIO_NET_MAC_BYTE
                "VirtIO network configuration prefix");
 
 struct virtio_net_controller {
+  struct net_panic_gate panic_gate;
   uint32_t controller_id;
   struct virtio_net_controller *next;
   struct virtio_pci_transport pci;
@@ -69,6 +72,36 @@ struct virtio_net_controller {
 
 static struct virtio_net_controller *controllers;
 static bool inventory_complete;
+
+enum virtio_net_operation {
+  NET_OPERATION_TX = 1,
+  NET_OPERATION_COMPLETION,
+  NET_OPERATION_RX,
+  NET_OPERATION_CONFIG,
+  NET_OPERATION_ACTIVATE,
+  NET_OPERATION_RESET,
+  NET_OPERATION_IRQ,
+};
+
+static bool enter_network(struct virtio_net_controller *controller,
+    enum virtio_net_operation operation, uint64_t *flags)
+{
+  bool guard_interrupts = net_log_udp_enabled() ||
+      operation == NET_OPERATION_ACTIVATE || operation == NET_OPERATION_RESET;
+  *flags = guard_interrupts ? cpu_save_interrupts() : 0;
+  if (!net_panic_gate_enter(&controller->panic_gate, operation)) {
+    cpu_restore_interrupts(*flags);
+    return false;
+  }
+  return true;
+}
+
+static void leave_network(struct virtio_net_controller *controller, uint64_t flags)
+{
+  net_panic_gate_leave(&controller->panic_gate);
+  cpu_restore_interrupts(flags);
+}
+
 static bool refresh_network_config(struct virtio_net_controller *controller, bool force);
 
 static bool sample_network_config(const struct virtio_net_controller *controller,
@@ -324,7 +357,8 @@ uint32_t virtio_net_controller_id(const struct virtio_net_controller *controller
 
 bool virtio_net_prepared(const struct virtio_net_controller *controller)
 {
-  return controller && controller->prepared && !controller->stopping;
+  return controller && !net_panic_gate_closed(&controller->panic_gate) &&
+    controller->prepared && !controller->stopping;
 }
 
 bool virtio_net_carrier(const struct virtio_net_controller *controller, bool *up)
@@ -351,10 +385,15 @@ void virtio_net_interrupt(void)
   bool active = false;
   for (struct virtio_net_controller *controller = controllers; controller;
        controller = controller->next) {
+    uint64_t flags;
+    if (!enter_network(controller, NET_OPERATION_IRQ, &flags)) {
+      continue;
+    }
     if (controller->active) {
       ++controller->interrupts;
       active = true;
     }
+    leave_network(controller, flags);
   }
   if (active) {
     net_worker_notify();
@@ -363,7 +402,10 @@ void virtio_net_interrupt(void)
 
 static void stop_network(struct virtio_net_controller *controller, const char *reason)
 {
-  uint64_t flags = cpu_save_interrupts();
+  uint64_t flags;
+  if (!enter_network(controller, NET_OPERATION_RESET, &flags)) {
+    return;
+  }
   controller->active = false;
   controller->prepared = false;
   controller->config_unstable = false;
@@ -375,25 +417,31 @@ static void stop_network(struct virtio_net_controller *controller, const char *r
   controller->dma_disabled = !(pci_read16(claim->device->address, PCI_COMMAND) & PCI_COMMAND_MASTER);
   virtio_pci_common(&controller->pci)->device_status |= VIRTIO_STATUS_FAILED;
   virtio_pci_common(&controller->pci)->device_status = 0;
-  cpu_restore_interrupts(flags);
-
   controller->stopping = true;
   controller->reset_deadline = task_deadline_after_ms(VIRTIO_RESET_TIMEOUT_NS / UINT64_C(1000000));
   controller->reset_recheck = 0;
+  leave_network(controller, flags);
 }
 
 static void finish_stop(struct virtio_net_controller *controller)
 {
+  uint64_t flags;
+  if (!enter_network(controller, NET_OPERATION_RESET, &flags)) {
+    return;
+  }
   if (!task_deadline_expired(controller->reset_recheck) &&
       !task_deadline_expired(controller->reset_deadline)) {
+    leave_network(controller, flags);
     return;
   }
   bool reset = virtio_pci_common(&controller->pci)->device_status == 0;
   if (!reset && !task_deadline_expired(controller->reset_deadline)) {
     controller->reset_recheck = task_deadline_after_ms(VIRTIO_NET_RECHECK_MS);
+    leave_network(controller, flags);
     return;
   }
   controller->stopping = false;
+  leave_network(controller, flags);
   /* Neither completed DMA nor reset permits unmapping shared kernel storage
    * after AP startup. Keep the claim, rings and buffers until reboot. */
   klog("virtio-net: %s; stopped (reset=%u MSI-X disabled=%u DMA disabled=%u), "
@@ -407,12 +455,18 @@ void virtio_net_start(struct virtio_net_controller *controller)
   if (!controller || controller->started) {
     return;
   }
-  controller->started = true;
-  if (!controller->prepared) {
+  uint64_t flags;
+  if (!enter_network(controller, NET_OPERATION_ACTIVATE, &flags)) {
     return;
   }
-  uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
+  controller->started = true;
+  /* Options are parsed after boot preparation, before worker activation. */
+  controller->tx.panic_reserved = net_log_udp_enabled();
+  if (!controller->prepared) {
+    leave_network(controller, flags);
+    return;
+  }
   volatile struct virtio_pci_common *common = virtio_pci_common(&controller->pci);
   struct pci_claim *claim = &controller->pci.claim;
   bool ready = common->device_status == VIRTIO_NET_READY;
@@ -429,30 +483,38 @@ void virtio_net_start(struct virtio_net_controller *controller)
     ready = pci_msix_enable(&controller->pci.msix);
   }
   controller->active = ready;
-  cpu_restore_interrupts(flags);
+  leave_network(controller, flags);
   if (!ready) {
     stop_network(controller, "activation rejected");
     return;
   }
   /* Carrier may change while DRIVER_OK/delivery are off without a generation
    * notification. Activation must publish a fresh configuration sample. */
-  if (!refresh_network_config(controller, true)) {
+  if (!refresh_network_config(controller, true) ||
+      !enter_network(controller, NET_OPERATION_RX, &flags)) {
     return;
   }
   virtio_net_queue_notify(&controller->rx);
+  leave_network(controller, flags);
   klog("virtio-net: RX/TX active, %u buffers per queue, BSP worker owns completions\n",
        VIRTIO_NET_QUEUE_SIZE);
 }
 
 static bool refresh_network_config(struct virtio_net_controller *controller, bool force)
 {
+  uint64_t flags;
+  if (!enter_network(controller, NET_OPERATION_CONFIG, &flags)) {
+    return false;
+  }
   volatile struct virtio_pci_common *common = virtio_pci_common(&controller->pci);
   if (!force && !controller->config_unstable &&
       common->config_generation == controller->config_generation) {
+    leave_network(controller, flags);
     return true;
   }
   if (controller->config_unstable && !task_deadline_expired(controller->config_recheck) &&
       !task_deadline_expired(controller->config_deadline)) {
+    leave_network(controller, flags);
     return true;
   }
   uint8_t mac[VIRTIO_NET_MAC_BYTES], generation;
@@ -462,29 +524,34 @@ static bool refresh_network_config(struct virtio_net_controller *controller, boo
       controller->config_unstable = true;
       controller->config_deadline = task_deadline_after_ms(VIRTIO_CONFIG_TIMEOUT_NS / UINT64_C(1000000));
     }
-    if (task_deadline_expired(controller->config_deadline)) {
+    bool expired = task_deadline_expired(controller->config_deadline);
+    controller->config_recheck = task_deadline_after_ms(VIRTIO_NET_RECHECK_MS);
+    leave_network(controller, flags);
+    if (expired) {
       stop_network(controller, "network configuration did not stabilize");
       return false;
     }
-    controller->config_recheck = task_deadline_after_ms(VIRTIO_NET_RECHECK_MS);
     return true;
   }
   if (memcmp(mac, controller->mac, sizeof(mac))) {
+    leave_network(controller, flags);
     stop_network(controller, "device MAC changed");
     return false;
   }
-  if (link_up != controller->link_up) {
-    klog("virtio-net: link %s\n", link_up ? "up" : "down");
-  }
+  bool changed = link_up != controller->link_up;
   controller->link_up = link_up;
   controller->config_generation = generation;
   controller->config_unstable = false;
+  leave_network(controller, flags);
+  if (changed) {
+    klog("virtio-net: link %s\n", link_up ? "up" : "down");
+  }
   return true;
 }
 
 bool virtio_net_next_deadline(struct virtio_net_controller *controller, uint64_t *deadline)
 {
-  if (!controller) {
+  if (!controller || net_panic_gate_closed(&controller->panic_gate)) {
     return false;
   }
   if (controller->stopping) {
@@ -513,7 +580,7 @@ bool virtio_net_next_deadline(struct virtio_net_controller *controller, uint64_t
 bool virtio_net_service(struct virtio_net_controller *controller)
 {
   KASSERT(cpu_current() == cpu_bsp());
-  if (!controller) {
+  if (!controller || net_panic_gate_closed(&controller->panic_gate)) {
     return false;
   }
   if (controller->stopping) {
@@ -533,23 +600,40 @@ bool virtio_net_service(struct virtio_net_controller *controller)
 
   struct virtio_net_completion completed[VIRTIO_NET_QUEUE_SIZE];
   unsigned tx_count, rx_count;
-  if (!virtio_net_queue_complete(&controller->tx, completed, &tx_count)) {
-    stop_network(controller, "invalid TX completion");
+  uint64_t flags;
+  if (!enter_network(controller, NET_OPERATION_COMPLETION, &flags)) {
     return false;
   }
-  controller->completed += tx_count;
-  for (unsigned id = 0; id < VIRTIO_NET_QUEUE_SIZE; ++id) {
-    if (controller->tx.device_owned[id] && task_deadline_expired(controller->tx_deadlines[id])) {
-      stop_network(controller, "TX completion timed out");
-      return false;
+  bool valid = virtio_net_queue_complete(&controller->tx, completed, &tx_count);
+  bool expired = false;
+  if (valid) {
+    controller->completed += tx_count;
+    for (unsigned id = 0; id < VIRTIO_NET_QUEUE_SIZE; ++id) {
+      if (controller->tx.device_owned[id] && task_deadline_expired(controller->tx_deadlines[id])) {
+        expired = true;
+        break;
+      }
     }
   }
+  leave_network(controller, flags);
+  if (!valid || expired) {
+    stop_network(controller, valid ? "TX completion timed out" : "invalid TX completion");
+    return false;
+  }
 
-  if (!virtio_net_queue_complete(&controller->rx, completed, &rx_count)) {
+  if (!enter_network(controller, NET_OPERATION_RX, &flags)) {
+    return false;
+  }
+  valid = virtio_net_queue_complete(&controller->rx, completed, &rx_count);
+  leave_network(controller, flags);
+  if (!valid) {
     stop_network(controller, "invalid RX completion");
     return false;
   }
   for (unsigned i = 0; i < rx_count; ++i) {
+    if (net_panic_gate_closed(&controller->panic_gate)) {
+      return false;
+    }
     const struct virtio_net_completion *entry = &completed[i];
     const struct virtio_net_header *header = virtio_net_queue_buffer(&controller->rx, entry->id);
     if (entry->length < sizeof(*header) + ETHERNET_HEADER_BYTES ||
@@ -561,10 +645,18 @@ bool virtio_net_service(struct virtio_net_controller *controller)
       /* Protocols borrow this frame only until its RX buffer is reposted. */
       net_ethernet_receive((const uint8_t *)(header + 1), entry->length - sizeof(*header));
     }
+    if (!enter_network(controller, NET_OPERATION_RX, &flags)) {
+      return false;
+    }
     virtio_net_queue_post(&controller->rx, entry->id, VIRTIO_NET_BUFFER_BYTES);
+    leave_network(controller, flags);
   }
   if (rx_count) {
+    if (!enter_network(controller, NET_OPERATION_RX, &flags)) {
+      return false;
+    }
     virtio_net_queue_notify(&controller->rx);
+    leave_network(controller, flags);
   }
   return tx_count == VIRTIO_NET_QUEUE_SIZE || rx_count == VIRTIO_NET_QUEUE_SIZE;
 }
@@ -576,17 +668,28 @@ enum net_result virtio_net_transmit(struct virtio_net_controller *controller,
   if (!frame || length < ETHERNET_HEADER_BYTES || length > ETHERNET_FRAME_MAX) {
     return NET_INVALID;
   }
-  if (!controller || !controller->active || controller->config_unstable || !controller->link_up) {
+  if (!controller) {
     return NET_UNAVAILABLE;
   }
+  uint64_t flags;
+  if (!enter_network(controller, NET_OPERATION_TX, &flags)) {
+    return NET_UNAVAILABLE;
+  }
+  if (!controller->active || controller->config_unstable || !controller->link_up) {
+    leave_network(controller, flags);
+    return NET_UNAVAILABLE;
+  }
+  unsigned capacity = controller->tx.panic_reserved ? VIRTIO_NET_PANIC_DESCRIPTOR :
+    VIRTIO_NET_QUEUE_SIZE;
   unsigned id;
-  for (id = 0; id < VIRTIO_NET_QUEUE_SIZE; ++id) {
+  for (id = 0; id < capacity; ++id) {
     if (!controller->tx.device_owned[id]) {
       break;
     }
   }
-  if (id == VIRTIO_NET_QUEUE_SIZE) {
+  if (id == capacity) {
     ++controller->queue_full;
+    leave_network(controller, flags);
     return NET_QUEUE_FULL;
   }
 
@@ -597,7 +700,46 @@ enum net_result virtio_net_transmit(struct virtio_net_controller *controller,
   virtio_net_queue_post(&controller->tx, id, sizeof(*header) + length);
   virtio_net_queue_notify(&controller->tx);
   ++controller->transmitted;
+  leave_network(controller, flags);
   return NET_OK;
+}
+
+bool virtio_net_panic_begin(struct virtio_net_controller *controller)
+{
+  if (!controller) {
+    return false;
+  }
+  unsigned interrupted;
+  if (!net_panic_gate_take(&controller->panic_gate, &interrupted) ||
+      (interrupted && interrupted != NET_OPERATION_TX)) {
+    return false;
+  }
+  if (!controller->tx.panic_reserved || !controller->active || controller->stopping ||
+      controller->config_unstable || !controller->link_up ||
+      virtio_pci_common(&controller->pci)->device_status != (VIRTIO_NET_READY | VIRTIO_STATUS_DRIVER_OK)) {
+    return false;
+  }
+  uint8_t mac[VIRTIO_NET_MAC_BYTES], generation;
+  bool link_up;
+  if (!sample_network_config(controller, mac, &link_up, &generation) || !link_up ||
+      memcmp(mac, controller->mac, sizeof(mac))) {
+    return false;
+  }
+  return virtio_net_queue_panic_begin(&controller->tx);
+}
+
+bool virtio_net_panic_transmit(struct virtio_net_controller *controller,
+    const void *frame, size_t length)
+{
+  if (!controller || !frame || length < ETHERNET_HEADER_BYTES ||
+      length > ETHERNET_FRAME_MAX || !controller->tx.panic_ready ||
+      controller->tx.panic_failed) {
+    return false;
+  }
+  struct virtio_net_header *header = virtio_net_queue_panic_buffer(&controller->tx);
+  *header = (struct virtio_net_header){0};
+  memcpy(header + 1, frame, length);
+  return virtio_net_queue_panic_transmit(&controller->tx, sizeof(*header) + length);
 }
 
 const uint8_t *virtio_net_mac(const struct virtio_net_controller *controller)
@@ -607,10 +749,12 @@ const uint8_t *virtio_net_mac(const struct virtio_net_controller *controller)
 
 bool virtio_net_available(const struct virtio_net_controller *controller)
 {
-  return controller && controller->active && !controller->config_unstable && controller->link_up;
+  return controller && !net_panic_gate_closed(&controller->panic_gate) &&
+    controller->active && !controller->config_unstable && controller->link_up;
 }
 
 bool virtio_net_ready(const struct virtio_net_controller *controller)
 {
-  return controller && controller->active && !controller->config_unstable;
+  return controller && !net_panic_gate_closed(&controller->panic_gate) &&
+    controller->active && !controller->config_unstable;
 }

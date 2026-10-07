@@ -1,5 +1,6 @@
 #include <kernel/log.h>
 #include <kernel/log_ring.h>
+#include <kernel/net/log_udp.h>
 #include <arch/console.h>
 #include <arch/cpu.h>
 #include <stdatomic.h>
@@ -52,6 +53,7 @@ void klog_panic_begin(void)
   /* A fatal exception may interrupt the lock owner before GS is usable. */
   log_ring_panic_begin();
   atomic_store_explicit(&panic_output, true, memory_order_relaxed);
+  net_log_udp_panic_begin();
   early_console_panic_begin();
 }
 
@@ -85,6 +87,7 @@ void klog(const char *format, ...)
 
 void log_putc(char c)
 {
+  net_log_udp_panic_putc(c);
   log_ring_putc(c);
   console_putc(c);
   if (atomic_load_explicit(&panic_output, memory_order_relaxed)) {

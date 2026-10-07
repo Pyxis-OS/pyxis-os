@@ -7,6 +7,11 @@ case "$BOOT_MENU_TIMEOUT" in
   ''|*[!0-9]*) echo 'BOOT_MENU_TIMEOUT must be a nonnegative decimal seconds count.' >&2; exit 1 ;;
 esac
 command_line="init=$boot_init"
+case "${LOG_UDP:-0}" in
+  0) ;;
+  1) command_line="$command_line log.udp=1" ;;
+  *) echo 'LOG_UDP must be 0 or 1.' >&2; exit 1 ;;
+esac
 remote_beacon=${REMOTE_BEACON:-}
 if [ -n "$remote_beacon" ]; then
   # Match the public beacon name's unquoted ASCII command-line representation.

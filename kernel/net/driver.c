@@ -3,6 +3,8 @@
 #include <kernel/net/ethernet.h>
 #include <kernel/virtio/net.h>
 #include <kernel/net/rtl8111.h>
+#include <kernel/net/log_udp.h>
+#include <stdatomic.h>
 
 /* The worker owns this binding; controller state stays with its driver. */
 enum driver_kind { DRIVER_NONE, DRIVER_VIRTIO, DRIVER_RTL8111 };
@@ -14,6 +16,9 @@ struct controller {
   };
 };
 static struct controller bound;
+/* Publish the immutable selection before activation. Fatal entry can close
+ * its driver gate even when activation is interrupted. */
+static atomic_int panic_kind;
 
 static bool same_controller(struct controller a, struct controller b)
 {
@@ -133,6 +138,9 @@ static void snapshot(struct controller controller,
 enum call_status net_driver_bind(const struct net_selector *selector)
 {
   net_worker_assert_context();
+  if (net_log_udp_panicking()) {
+    return CALL_UNAVAILABLE;
+  }
   struct controller controller;
   enum call_status status = find_controller(selector, &controller);
   if (status != CALL_OK) {
@@ -151,12 +159,37 @@ enum call_status net_driver_bind(const struct net_selector *selector)
     }
   }
   bound = controller;
+  atomic_store_explicit(&panic_kind, bound.kind, memory_order_release);
   if (bound.kind == DRIVER_VIRTIO) {
     virtio_net_start(bound.virtio);
   } else {
     rtl8111_start(bound.rtl);
   }
   return CALL_OK;
+}
+
+bool net_driver_panic_begin(uint8_t mac[6])
+{
+  enum driver_kind kind = atomic_load_explicit(&panic_kind, memory_order_acquire);
+  if (kind == DRIVER_NONE) {
+    return false;
+  }
+  const uint8_t *identity = kind == DRIVER_VIRTIO ?
+      virtio_net_identity_mac(bound.virtio) : rtl8111_identity_mac(bound.rtl);
+  bool ready = kind == DRIVER_VIRTIO ? virtio_net_panic_begin(bound.virtio) :
+      rtl8111_panic_begin(bound.rtl);
+  if (!ready || !identity) {
+    return false;
+  }
+  memcpy(mac, identity, 6);
+  return true;
+}
+
+bool net_driver_panic_transmit(const void *frame, size_t length)
+{
+  enum driver_kind kind = atomic_load_explicit(&panic_kind, memory_order_acquire);
+  return kind == DRIVER_VIRTIO ? virtio_net_panic_transmit(bound.virtio, frame, length) :
+      kind == DRIVER_RTL8111 && rtl8111_panic_transmit(bound.rtl, frame, length);
 }
 
 void net_driver_next_controller(uint32_t after_id,
