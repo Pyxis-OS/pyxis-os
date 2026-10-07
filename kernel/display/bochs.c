@@ -47,7 +47,8 @@ const struct framebuffer *bochs_display_prepare(const struct boot_info *boot,
     return NULL;
   }
   if (!size) {
-    return refuse("display.size is missing");
+    ktrace("Bochs display: no mode requested; using firmware framebuffer\n");
+    return NULL;
   }
   uint32_t width, height;
   const char *cursor = size;

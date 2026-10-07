@@ -30,6 +30,10 @@ not a terminal.
    VirtIO stays serial-only. On its first frame the presenter logs
    `display: presentation started; early console retired`.
 
+After a Bochs refusal that follows early-console retirement, serial stays live
+but the screen may remain stale or blank until the first presenter frame shows
+the Caelum TTY, including intervening retained logs.
+
 ## Retained boot log
 
 The [kernel log ring](../interfaces/kernel-log.md) keeps the most recent lines

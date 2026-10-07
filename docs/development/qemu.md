@@ -22,7 +22,8 @@ and multiple monitors are later work. VirtIO panic output is serial-only.
 `QEMU_VIDEO=bochs` adds `-vga none -device bochs-display`. Both it and standard
 VGA support the same Bochs register driver. `DISPLAY_SIZE` is baked into the
 image as `display.size=WIDTHxHEIGHT`; it is separate from host device selection.
-An empty setting keeps the firmware framebuffer. Exact 32-bit modes require
+An empty setting quietly keeps the firmware framebuffer (details at trace
+level). Exact 32-bit modes require
 width divisible by eight, hardware dimensions of 64..16000 by 64..12000, enough
 room for the current bar/font, and an extent fitting BAR0 and reported VRAM.
 With the current font the effective minimum is 80×64. Unsupported or malformed

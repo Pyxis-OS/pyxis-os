@@ -151,8 +151,8 @@ remeasured after resizing; changed-region work remains a separate follow-up.
   - **Finish when:**
     - QEMU boots at a size different from the firmware's, with a correct space
       bar, terminal and Mandelbrot;
-    - an unsupported or missing size falls back to the boot framebuffer, with a
-      message;
+    - an unsupported requested size falls back with a message; a missing size
+      keeps the boot framebuffer without an ordinary log line;
     - a post-handoff panic is visible in the selected Bochs mode.
 
 - [ ] **5a. Kernel live resizing and size queries.**
@@ -843,9 +843,10 @@ and fresh raw OVMF variables. The firmware mode is 1280×800.
   displayed correctly, Escape restored the TTY, and post-handoff BSP panic
   reached serial and the selected 800×600 direct target.
 
-- Default standard VGA with missing `DISPLAY_SIZE`, four CPUs: the message
-  identifies the missing size, BOOT remains selected at 1280×800/pitch 5120,
-  no Bochs claim/aperture is created, and the first frame is visible.
+- Default standard VGA with missing `DISPLAY_SIZE`, four CPUs: BOOT remains
+  selected at 1280×800/pitch 5120, no Bochs claim/aperture is created, and the first
+  frame is visible. The initial missing-size info message moved to trace in #485
+  review; explicit malformed, too-small and unsupported requests still warn.
 - Standard VGA with `DISPLAY_SIZE=garbage`, four CPUs: malformed-value refusal
   keeps the same BOOT target without a Bochs claim; boot continues and presents.
 - `bochs-display` with `DISPLAY_SIZE=16000x12000`, one CPU: capacity refusal
