@@ -21,8 +21,8 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | --- | --- |
 | POSIX regex | Implemented in [libc](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion), with BRE/ERE, UTF-8 decoding and ASCII-only classes/folding. vi and less use it; grep, sed and awk remain later candidates. |
 | fastfetch | [Implemented native port](../userland/fastfetch.md), packaged in the normal image with native system information, the Pyxis ASCII logo, text/JSON and explicit JSONC configuration. |
-| zlib | Reusable compression/decompression, followed by a concrete consumer such as PNG loading or jar files. Not needed for [in-Pyxis development](in-pyxis-development.md) until it handles jars; BusyBox `gzip`/`unzip` would then cover the commands. |
-| libpng | PNG decoding/encoding for viewers, drawing tools and screenshots; depends on zlib. |
+| zlib | Reusable compression/decompression. Assigned with [screenshots](screenshots.md) (owner, 2026-10-07), whose PNG output is its first consumer; jar files and BusyBox `gzip`/`unzip` can follow. |
+| libpng | PNG encoding and decoding; depends on zlib. Assigned with [screenshots](screenshots.md); later useful for viewers, drawing tools and graphical ports. |
 | SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. |
 | vi | [Implemented BusyBox vi port](../userland/vi.md), packaged in the normal image as the first modal editor before Neovim, with libc `ftruncate` and BRE search/substitution. |
 | Links | [Implemented Links 2.30 port](../userland/links.md), packaged in the normal image as a text web browser. Every page loads through libc, so local files, directory listings and the HTTP(S) providers work alike, with libc directory reading and a narrow `stat`. |

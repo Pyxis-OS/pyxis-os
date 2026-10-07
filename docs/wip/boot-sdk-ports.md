@@ -39,8 +39,9 @@ Chosen by the owner on 2026-10-07, each starting with a proposal:
   running on Pyxis is a later milestone.
 - **Codex 1:** [graphics and terminal layers in a space](space-layers.md),
   switched with Super+Up/Down.
-- **Codex 2:** [screenshots](screenshots.md), a `screenshot` command with the
-  file fetched through pyxis-remote.
+- **Codex 2:** [screenshots](screenshots.md), a `screenshot` command writing
+  PNG through new zlib and libpng ports, with the file fetched through
+  pyxis-remote.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
