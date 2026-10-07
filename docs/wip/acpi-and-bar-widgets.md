@@ -228,15 +228,16 @@ Accepted for task 5 on 2026-10-07:
   - The unclaimed-SCI note under task 3 applies here too: a spurious SCI must
     not silently disable the power button until reboot.
 
-- [ ] **5. Battery and AC state for userspace.** (Decision 8.)
+- [x] **5. Battery and AC state for userspace.** (Decision 8.)
   - A read-only query of the battery and AC state on the existing
     system-information capability (decisions 18 and 19), so that Fastfetch can
     show its Battery module (decision 20) and a later status UI has its data.
   - **Status:** implemented
-    ([system information](../interfaces/system-information.md#power-and-batteries));
-    the ThinkPad check is pending. In QEMU, Fastfetch prints no Battery line
-    without a battery, and local test tables showed every field, the time
-    remaining while discharging and `[AC Connected, Charging]`.
+    ([system information](../interfaces/system-information.md#power-and-batteries)).
+    In QEMU, Fastfetch prints no Battery line without a battery, and local test
+    tables showed every field, the time remaining while discharging and
+    `[AC Connected, Charging]`. On 2026-10-07 the owner's ThinkPad showed a
+    Fastfetch Battery line matching Fedora.
   - **Finish when:** Fastfetch's Battery line on the ThinkPad matches Fedora's
     percentage and status.
 
