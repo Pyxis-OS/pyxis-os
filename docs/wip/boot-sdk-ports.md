@@ -1,387 +1,81 @@
 # Development milestone index
 
-Status: working discussion after the first-shell milestone. These documents
-separate the next concrete results from parked ideas; they do not authorize
-implementation. The initial scope decisions are recorded; resolve each
-milestone's remaining interface details before starting its code work.
+Status: the current state of planned work, updated 2026-10-07. Nothing here
+authorizes implementation: each milestone settles its decisions in its own
+document before code work starts. Milestone order is flexible; the owner's
+current choice wins. Everyday use for simple tasks guides the order; website
+hosting is one future application, not the completion target. Fixes for major
+problems found on the ThinkPad remain allowed in any track.
 
-## Suggested focus order
+Implemented behavior lives in the subsystem references listed in the
+[documentation index](../README.md). Completed milestones keep no WIP document.
 
-1. [Init and primitive scripts](../userland/init.md) — complete: selected native or
-   shebang init and explicit handoff to an interactive shell.
-2. [SDK and repository separation](../development/sdk-and-repositories.md) — complete:
-   exported SDK, prebuilt Pyxis compiler and pinned userspace submodule with
-   the integrated build preserved.
-3. [Port recipes and Kilo](../development/ports.md) — complete: pinned host Lua recipes,
-   SDK-based Kilo build and ordinary boot-archive integration. The
-   [edit/build/run workflow](../development/edit-build-run.md) with TCC is also complete.
-4. [Filesystem mutations and Doom saves](../interfaces/filesystem-mutations.md) — complete.
-5. TTY horizontal tabs — complete: eight-column stops, clamped at the right edge,
-   without erasing cells or wrapping. See [terminal controls](../userland/terminal.md#tty-output-controls).
-6. [UTC wall-clock and calendar conversion](../kernel/wall-clock.md) — complete:
-   ISO date display, independent monotonic deadlines and TCC time features.
-7. [Boot archive assembly](../development/boot-archive.md) — complete: install trees, Lua
-   manifest and [independent build bundles](../development/build-bundles.md).
-   [Automatic artifact selection](build-artifact-reuse.md) remains follow-up work.
-8. Complete: [zoneinfo-backed local time](../userland/timezones.md), including the full
-   pinned database, UTC for absent/empty `TZ`, named zones and `date -u`.
-   Locale and reverse conversion remain deferred.
-9. Complete: [guest Lua](../userland/lua.md), including scripts, REPL and default
-   [session configuration](../userland/session-configuration.md) for timezone and tab width.
-10. Complete: [PCI and VirtIO host filesystem access](../devices/virtio-fs.md).
-    Init opens the opt-in export and delegates `host://` through the
-    session launcher to the shell and children. Existing `ls`/`cat` use native
-    directory/file capabilities; archive-only boot remains the default without
-    a device/socket.
-11. Complete: [initial networking](../devices/networking.md), with loopback and virtio-net,
-    manual IPv4 configuration and native ping. DHCP follows later through the
-    same configuration interface; TCP and website hosting remain separate.
-12. Complete: [userspace UDP datagrams](../devices/networking.md#udp-tools), with explicit
-    address binding, endpoint capabilities, bounded queues and loopback/host
-    client-server use.
-    DHCP and TCP follow as separate milestones.
+## Recently completed
 
-13. Complete: [hardware-backed randomness](../devices/randomness.md), using VirtIO entropy
-    and a bounded native READ capability.
-14. Complete: [DNS queries and hostname ping](../userland/dns.md), using a shared
-    userspace client, route-aware UDP opening and a configured default resolver
-    at `1.1.1.1`. Numeric ping remains independent of DNS and randomness.
+- [Runtime SMP](../kernel/smp.md), 2026-10-06, with
+  [topology-aware placement](../kernel/smp.md#placement-and-migration).
+- [Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md), 2026-10-06.
+- [System layout](../userland/system-layout.md), 2026-10-07: `boot://`,
+  `bin://`, boot init with a Lua configuration, and a persistent home.
+- [ACPI](../kernel/acpi.md), 2026-10-07: power-off, restart, the power button
+  and battery.
+- [Display drivers and resizing](../kernel/display.md), 2026-10-07.
+- [Remote debugging without serial](../development/remote-debugging.md), 2026-10-07.
+- [Everyday commands](../userland/everyday-commands.md), 2026-10-07.
+- [LLVM toolchain on the host](../development/llvm-toolchain.md), 2026-10-07.
+- [npfs](../devices/filesystem-readonly.md) and its
+  [kernel writer](../devices/filesystem-native-adapter.md), with the
+  [native installer](../userland/installer.md), [system updates](../userland/system-updates.md)
+  and [USB installation](../devices/usb-installation.md); qualified natively on
+  the ThinkPad.
+- ThinkPad bring-up: see the [target notes](../targets/t14-gen1-amd/notes.md#native-status).
 
-15. Complete: [outbound TCP streams](../devices/tcp.md), native connection capabilities,
-    a request/response client and a transmit-only ttcp tool. Listening and application protocols follow separately.
-16. Complete: [per-CPU trusted init scripts](../userland/init.md), with development,
-    read-only and idle selections driven by Make/Limine configuration.
-17. Complete: [writable virtio-fs](../devices/virtio-fs.md), with persistent host-backed
-    source and executables, and different grants in two spaces.
-18. Complete: [space titles](../userland/init.md#space-titles), with a caller-space
-    capability and `title` shell builtin. Labels survive init exit; fixed tab
-    widths and navigation are unchanged.
+## Open
 
-19. Complete: [allocation benchmarks and memory profiling](../development/allocation-profiling.md),
-    with native heap/growth/page workloads and opt-in caller-scoped BSP timing.
-    The measured follow-up now notifies the BSP promptly after private-memory
-    publication, reducing queue delay without changing allocation policy.
+- [File transfer through the remote terminal](remote-file-transfer.md):
+  drag-and-drop upload awaits the owner's GUI-drop check from Linux and macOS.
+- [Developing inside Pyxis](in-pyxis-development.md): the owner's experiment;
+  the extra-spaces check on the installed ThinkPad is open.
+- [Everyday gaps](everyday-gaps.md): small things noticed in use.
 
-20. Complete: [standard streams, redirection and pipelines](../userland/shell-streams.md),
-    with dedicated capability grants, bounded native pipes, all-or-none batch
-    preparation, foreground shell pipelines and exact bounded `head` consumption.
-21. Complete: [libc portability](../userland/libc-portability.md), with descriptor ownership
-    shared with stdio, public open/read/write/close, and packaged sbase cksum and
-    restricted tee. The documentation handoff is complete; accepted compatibility
-    limits and their revisit points are recorded in technical debt.
-    [POSIX regex](../userland/libc-portability.md#regular-expressions-and-utf-8-conversion)
-    is also complete, with UTF-8 conversion and ASCII-only classes/folding;
-    vi BRE search/substitution and less BRE search/highlighting are complete.
+## Candidates for the next milestone
 
-22. Complete: [userspace services and HTTP snapshots](../interfaces/userspace-services.md),
-    with bounded call/send/receive, deadlines, exported objects, scoped namespaces
-    and ordinary file consumers using immutable text and HTTP snapshots. The
-    documentation handoff is complete; accepted limits remain in technical debt.
+None is selected.
 
-23. Complete: [I/O and IPC performance baselines](../development/io-ipc-baselines.md),
-    with verified file, pipe, endpoint and HTTP workloads, separate completion
-    boundaries, and a recorded nested-KVM baseline. Owner-host results remain
-    unavailable; capacity and attribution follow-ups are documented.
+- [Terminal applications](terminal-applications.md): the agreed sequence
+  continues with a single-panel file navigator, then a multiplexer (with
+  scrollback), then operations between navigators.
+- [Native C++ and OS prerequisites](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
+  the second LLVM milestone, toward Clang running on Pyxis.
+- System layout follow-ups: network configuration on the pool instead of the
+  archive ([technical debt](../technical-debt.md#archive-only-network-configuration))
+  and the [boot configuration checker](boot-configuration-checker.md).
+- [Threads and SMP follow-ups](scheduling-and-threads.md), including serial
+  services off the BSP.
+- Physical GPU drivers, after the [display milestone](../kernel/display.md);
+  the owner prepares the hardware.
+- [Power and ACPI follow-ups](later-os-directions.md#power-and-acpi).
 
-24. Complete: [I/O reliability and attribution](../development/io-reliability-attribution.md),
-    with prompt receipt reuse, RAM/HOST attribution, and initial HOST publication
-    notification. Remaining resolution and combined-matrix work is deferred.
+## Directions
 
-Everyday use for simple tasks guides this order. Website hosting remains one
-future application, not the primary completion target for the OS.
+Parked directions and investigations; promote one to a milestone when its
+prerequisites and result are clear.
 
-This focus order does not commit to working on the milestones together.
-Ports depend on the SDK; init does not need the repository split. PCI/VirtIO
-infrastructure can be developed independently, while its final mount setup uses
-init. Each milestone should become several focused PRs where needed.
-
-[Later directions](later-os-directions.md) park the remaining ports, later networking,
-website hosting, block storage, filesystem-format choices and an installer.
-The [edit/build/run workflow](../development/edit-build-run.md) now supports writing C in
-Pyxis, compiling it there and running the native P1F result. Guest Lua now has a
-concrete configuration consumer in the [session launcher](../userland/session-configuration.md).
-Clock/calendar functions and host Lua build tools
-remain independent of that port.
-
-The [Doom port](../userland/doom.md) uses the mapped display, keyboard sessions and
-monotonic clock for single-player gameplay and demo playback. Images include
-shareware data; local retail WADs and demos are optional overrides. PCI/VirtIO
-is not a prerequisite. The [Quake port](../userland/quake.md) adds pointer
-sessions for mouse look, shareware data and a `QUAKE_DATA` override.
-
-VirtIO driver order is agreed: virtio-fs, then virtio-net, then virtio-blk.
-An opt-in [host-backed development overlay](host-development-overlay.md)
-remains postponed: programs can already run from `host://`, so it is not needed
-for the persistent development loop or as a replacement for the boot archive.
-
-## Current focus and later candidates
-
-### Kernel focus: runtime SMP (complete)
-
-The [runtime SMP milestone](../kernel/smp.md) completed on 2026-10-06. Spaces are
-independent of CPUs, and existing single-task processes run in parallel on every
-CPU, including the BSP. Private memory operations run on the caller's CPU. Each
-step's measurements are listed under [SMP measurements](../kernel/smp.md#measurements);
-the final record includes a native ThinkPad check.
-[Follow-ups](scheduling-and-threads.md) cover threads and moving workers off the
-BSP. [Topology-aware placement](../kernel/smp.md#placement-and-migration) is
-implemented and
-[validated on the native ThinkPad](../development/experiments/core-placement/README.md#native-thinkpad-check-owner-run).
-
-The filesystem, USB and networking tracks paused for SMP; which resumes next is
-the owner's choice. Fixes for major problems found by ThinkPad validation remain
-allowed in any track.
-
-The [system layout](../userland/system-layout.md) milestone completed
-2026-10-07: `boot://` and `tmp://` renames, a userspace boot init with a Lua
-boot configuration, programs on a `bin://` volume with a two-stage Update, and
-a persistent home. Its follow-ups are moving network configuration onto the
-pool and the [boot configuration checker](boot-configuration-checker.md).
-Later candidates are dynamic space creation (the new-space flow), a file
-navigator and multiplexing.
-
-The [ACPI](../kernel/acpi.md) milestone completed 2026-10-07: uACPI, clean
-power-off and reboot, the battery widget in the space bar, the power button and
-battery queries for userspace (Fastfetch's Battery module). Its follow-ups are in
-[later OS directions](later-os-directions.md#power-and-acpi).
-
-[Display drivers and resizing](../kernel/display.md) completed 2026-10-07:
-the boot framebuffer, VirtIO GPU 2D and Bochs share a small driver interface.
-Live VirtIO resizing updates local terminals, wakes shell/Kilo editors and
-lets Mandelbrot/Doom explicitly replace their mappings. Physical GPUs follow.
-
-[Remote debugging without serial](../development/remote-debugging.md) completed
-2026-10-07: retained kernel logs with `log` and `log -f`, named reverse remote
-connections, and opt-in UDP boot/panic capture. The owner qualified all three
-on the ThinkPad over PXE, including complete boot replay after IPv4 assignment.
-
-[Everyday commands](../userland/everyday-commands.md) completed 2026-10-07:
-native `echo` and staged `cp`, sorted terminal columns/colors and long listings
-in `ls`, and verified foreground shell-script launch in an opted-in space.
-The remaining [everyday gaps](everyday-gaps.md) list has no unscheduled entries.
-
-[LLVM toolchain on the host](../development/llvm-toolchain.md) completed
-2026-10-07: Clang, LLD and compiler-rt from the `pyxis-llvm` fork build the
-kernel, SDK, userland and ports, LLD writes P1F executables directly, and GCC,
-binutils and `elf2pxe` are retired. The owner checked an all-LLVM build on the
-ThinkPad. It is the first of the three
-[LLVM milestones](toolchains-and-runtimes.md#llvmclang-transition-and-hosting).
-
-[Mounting Pyxis volumes on Linux](../development/npfs-linux-mount.md) completed
-2026-10-06: read-only FUSE mounts and in-memory journal replay, with the owner
-confirming physical stick mounting and copying on Arch Linux.
-
-The [native filesystem milestone](native-filesystem.md) has completed format-only
-codecs, host tools and the Caelum-owned cache/writer. Trusted init selects explicit
-read-only or writable roots; native file, directory and configured-disk sync
-commit required data and metadata. Close releases a handle without promising
-durability. The [kernel adapter](../devices/filesystem-native-adapter.md) records
-current authority, lifetime, recovery and resource contracts; the
-[task-3 measurements](../development/experiments/native-filesystem-task3/README.md)
-record ordinary nested-KVM performance, persistence and consumer validation.
-
-The portable COW implementation, tools, tests and six superseded planning documents
-and obsolete filesystem docs are removed. Git retains its historical
-[RAM baseline](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/ram-baseline.md),
-[sustained map record](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/sustained-map-measurements.md) and
-[overflow-split record](https://git.internal/PyxisOS/pyxis-fs/src/commit/810d2af66d0281e2d8a3e8a396a041f4232f2ce9/docs/overflow-split-measurements.md).
-Those records do not assign further portable-writer work. Crash recovery,
-allocation pressure and physical-media qualification remain unexercised paths,
-not unfinished portable-core tasks. FUSE and installation remain separate.
-
-The [libc input read-ahead milestone](../userland/stdio.md#input-read-ahead) is
-complete: buffered stdio fetches file and pipe input in BUFSIZ blocks while
-consoles stay exact, fgets no longer mistakes an earlier error for a failed
-final line, and the recorded uniq workload fell from 20.4 s to 0.04 s. Output
-buffering, `setvbuf` and `ungetc` remain outside it.
-
-The [I/O reliability and attribution report](../development/io-reliability-attribution.md)
-closes the performance milestone. The former IPC/HTTP failures are resolved,
-and HOST publication now notifies the BSP. Profiling perturbation and remaining
-measurement coverage are recorded in [technical debt](../technical-debt.md).
-
-The [verified HTTPS snapshots milestone](../userland/https.md) is complete. Mbed TLS
-4.1.1 / TF-PSA-Crypto 1.1.1 supplies client TLS through native userland hooks;
-separate providers publish verified snapshots using packaged public roots and
-optional instance-specific augmentation. Implemented behavior, configuration and
-limits live in the subsystem docs, with the
-[fetch/inspect/compile/run workflow](../development/edit-build-run.md#fetch-source-over-https)
-beside the local development loop. SSH/libssh remains deferred. The
-[block-storage foundation](../devices/block-storage.md) is also complete. The
-[native filesystem format and tools](../devices/filesystem-readonly.md) and
-[kernel writer](../devices/filesystem-native-adapter.md) are complete; FUSE
-remains a later proposal.
-
-The [task state and BSP service requests milestone](../kernel/bsp-service-requests.md)
-is complete. Subsystem requests are separate from scheduling while retaining
-BSP allocation and VM ownership, with FIFO service, prompt notification and
-scheduling opportunities between operations. Request completion is separate from waiting;
-user tasks have reusable request storage and separate persistent profiling.
-Public asynchronous I/O and process threads remain outside the implementation.
-
-The [native remote terminal implementation](../userland/remote-terminal.md) provides
-TCP listeners, readiness waits, independent terminals and contained execution
-lifetime for text-based agent/developer work. Its host client supports interactive
-Kilo and machine-readable command completion; framebuffer screenshots remain for
-graphical work. See [terminal sessions](../userland/terminal-sessions.md) and
-[execution groups](../interfaces/execution-groups.md) for the underlying contracts.
-Authentication, a multiplexer and process threads remain separate work.
-[File transfer through the remote terminal](remote-file-transfer.md) has explicit-command
-single-file upload/download with the negotiated SHA-256 OSC 5113 subset.
-Drag-and-drop upload remains a separate unstarted task.
-[Foreground interruption](../userland/foreground-interruption.md) is
-implemented: Ctrl+C terminates a running foreground command or pipeline through
-process-level termination, shell-armed interrupt events and a minimal
-application passthrough for programs such as Kilo.
-
-The completed [display drivers work](../kernel/display.md) adds
-VirtIO GPU 2D and Bochs drivers behind a small interface, with live resizing
-that reaches terminal geometry. It requires no 3D acceleration and does not
-block a multiplexer on a fixed-size display.
-The agreed [visible-work sequence](storage-and-terminal-agenda.md#4-native-terminal-sessions-multiplexer-and-navigator)
-after filesystem core and spaces/SMP is that display milestone, a resize-aware
-single-panel file navigator, a terminal multiplexer, then cross-navigator operations.
-These are separate bounded milestones; the navigator first runs in an ordinary
-terminal and later becomes a multiplexer consumer.
-
-The broader [discussion agenda](storage-and-terminal-agenda.md) covers persistent
-disk storage, bounded Neovim/libuv and LLVM requirements investigations, and
-native terminal sessions leading to a BSP multiplexer and independent navigators.
-The initial [Neovim/libuv investigation](neovim-libuv.md) is complete, with pinned source
-evidence and header probes; its proposed native event, threading, metadata and
-terminal milestones remain deferred. No Neovim build or runtime compatibility
-is claimed. The LLVM investigation remains separate future work.
-The [BusyBox vi port](../userland/vi.md) is complete: the first modal editor
-before Neovim, packaged in the normal image with a native libbb adapter and
-libc `ftruncate`. The [Links port](../userland/links.md) is complete: a text
-browser that loads every page through libc, packaged in the normal image with
-libc directory reading and a narrow `stat`. BusyBox less is queued next in
-[application ports](application-ports.md).
-[Developing inside Pyxis](in-pyxis-development.md) records the owner's
-experiment of writing a program on the installed system, and the tooling it
-needs: BusyBox `tar` and archive inits for extra hand-configured spaces.
-
-After the native filesystem writer, the
-[runtime SMP milestone](../kernel/smp.md) separated spaces and boot sessions from
-CPU topology. It schedules existing single-task processes across eligible CPUs,
-including the BSP, and runs private-memory operations on the caller's CPU.
-Trusted init requests affinity within a launcher-supplied ceiling. Selected
-services remain serial on the BSP. User threads and off-BSP service-worker
-placement [follow separately](scheduling-and-threads.md). The
-[backend interfaces and scoped dependency direction](later-os-directions.md#backend-interfaces-and-scoped-service-dependencies)
-is parked for later.
-
-The [block-storage foundation](../devices/block-storage.md) is complete:
-[configurable split queues](../devices/virtio-queues.md) serve filesystem, entropy
-and virtio-blk; bounded ticketed reads/writes and ordered flushes support
-[GPT discovery](../devices/gpt.md). Device/transport failure remains terminal
-until reboot. PyxisOS/pyxis-fs owns the pinned native format-only library and Linux
-host tools built by `make fs-tools`; Caelum owns mounted state and the writer.
-The [native format contract](../../fs/docs/npfs-format.md),
-[host-tool guide](../../fs/docs/npfs-host-tools.md) and
-[kernel adapter](../devices/filesystem-native-adapter.md) describe implemented
-behavior. BSP request separation is complete. FUSE is not a prerequisite.
-
-[System updates](../userland/system-updates.md) are implemented and QEMU-qualified.
-The installer's **Update** choice replaces the ESP from newer live media while
-preserving GPT identities and the npfs pool. Healthy GPT and compatible
-empty-journal pool metadata anchor interrupted ESP recovery. One physical
-install and Update passed on a USB stick; power loss and other devices remain
-[unqualified](../technical-debt.md#installer-inspection-and-recovery-limits).
-
-Complete: [USB installation](../devices/usb-installation.md). Pyxis boots from a
-raw USB image, reads and, on qualified disks, writes npfs pools through native
-xHCI and Bulk-Only storage, and gives the trusted installer raw USB authority.
-The first native installation onto a ThinkPad USB stick was tagged `0.0.1`;
-its Update round trip also passed. Its [limits](../devices/usb-installation.md#limits)
-link to the remaining technical debt.
-
-The [ThinkPad KVM and invariant-TSC investigation](thinkpad-kvm-tsc.md) records
-a successful four-vCPU KVM boot, an owner-observed native HPET panic, the
-native/guest timer differences and the **2026-10-03 owner decision: implement
-software-extended 32-bit HPET first** to continue native bring-up. Its
-[implementation handoff](thinkpad-kvm-tsc.md#accepted-direction-and-implementation-handoff)
-records the sampling/concurrency constraints and validation scope. TSC with
-extended-HPET fallback is the accepted future direction, deferred from this
-first task. The clock now supports software extension and a menuconfig-editable
-BSP maintenance interval, default 120 timer ticks. Its accepted support limit
-requires less than one advancing-counter wrap between incorporated samples;
-the owner subsequently reached native userspace on all 12 ThinkPad CPUs.
-The [native continuation](thinkpad-kvm-tsc.md#native-bring-up-continuation)
-records the native 32-bit/software-extended clock-path log and next keyboard
-blocker; the native multi-wrap check remains pending.
-
-The assigned [ThinkPad keyboard diagnostics](thinkpad-keyboard-diagnostics.md)
-follow separately: name PS/2 setup failures, reduce PCI inventory log noise and
-replay early logs into the Caelum tab. The native result identified an absent
-scan-set query ID; the owner approved a short optional-ID wait after ACKed set-2
-selection, with native input qualification still pending.
-
-The separate [hardware inspection](../devices/hardware-inspection.md) provides native
-`lspci`/`lsusb` consumers of read-only inventory and pinned plain-text PCI/USB name
-databases. USB inventory covers root devices and USB 2 hub descendants; unsupported hub
-branches report partial inventory; these tools do not expand boot-image
-Phase A. The [everyday pipeline performance target](../development/io-reliability-attribution.md#everyday-pipeline-performance-target)
-records their use as text-tool input without assigning a port or benchmark campaign.
-
-The ThinkPad's [next bring-up steps](thinkpad-next-steps.md) record the owner's
-order after the native shell: the assigned CPU entropy task first (virtio-rng
-when present, RDSEED with RDRAND fallback otherwise, ChaCha20 later), then
-Ethernet through VFIO passthrough to QEMU and a driver. The
-[NIC passthrough reference](../development/thinkpad-nic-passthrough.md) records
-the implemented launcher, host setup and successful owner/agent hardware boots.
-The [RTL8111 driver](../devices/rtl8111.md) milestone is complete: configuration
-selects the interface, and the built-in port serves the remote terminal through
-VFIO and natively with the dock attached. The
-[qualification report](../development/rtl8111-qualification.md) records sustained
-traffic, link checks and the owner-run native PXE/HTTPS results. The dock-facing
-XID `502` remains unsupported.
-[DHCP](../devices/dhcp.md) provides acquisition and lease maintenance;
-[qualification](../development/dhcp-qualification.md) records its coverage.
-[Initial net0 selection](../devices/net0-selection.md) chooses reported linked
-controllers and continues trusted setup after an offline startup timeout;
-[qualification](../development/link-selection-qualification.md) records its coverage.
-
-| Path | First concrete completion point | Decisions and supporting work |
-| --- | --- | --- |
-| SDL2 and graphical applications | A native software-rendered SDL2 backend supports a selected GrafX2 edit/save workflow. | Probe the pinned application first; settle input/presentation and image-library needs. zlib/libpng are useful shared candidates. Compositor and GPU support stay separate. |
-| SQLite | A native SQLite library/CLI creates, queries and reopens a database with an explicitly supported persistence/access contract. | File identity, locking, journaling and sync need discussion; an in-memory slice can come first. Scheme views follow the port and provider infrastructure. |
-| Terminal applications | PDCurses over native terminal facilities supports one selected application. | Probe its actual terminal/input/libc requirements; NetHack, Frotz and retawq remain candidates with different frontends. |
-| Quake | Done: the [Quake port](../userland/quake.md) plays the shareware episode with [mouse look](../devices/mouse.md), in QEMU and natively. | Audio, multiplayer and a resolution switcher can follow; see [technical debt](../technical-debt.md#quake-port-limits). No GPU prerequisite. |
-| Native disk storage | The [block-storage foundation](../devices/block-storage.md), [native format/tools](../devices/filesystem-readonly.md) and [kernel cache/writer](../devices/filesystem-native-adapter.md) are complete. | Installation and crash/physical-media qualification remain separate; FUSE remains later. |
-
-The [application port candidates](application-ports.md) include longer-term
-DevilutionX and C AbyssEngine/Diablo II investigations. The
-[scheme-provider notes](userspace-scheme-providers.md) record SQLite views,
-database sessions and the editor worksheet idea. Their URI examples are future
-interactions, not supported shell syntax or a settled ABI.
-
-[Hosted toolchains and language runtimes](toolchains-and-runtimes.md) record
-LLVM/Clang as the chosen direction: host-side toolchain migration, native C++
-prerequisites and then Clang running inside Pyxis are separate milestones to
-scope. Go cross compilation, hosted Go, Rust, Tailscale and Ladybird remain
-future directions with their own decisions.
-
-The [initial Go runtime investigation](go-runtime.md) records a pinned source
-audit and host hello-world probes. ELF-to-P1F conversion already works for the
-two Linux probe images; native startup, runtime threading/TLS, synchronization
-and VM semantics remain unresolved. No Go target or guest execution is claimed.
-
-[Fastfetch](../userland/fastfetch.md) is packaged in the normal image. Its native
-information adapters, existing libc prerequisites and local/remote integration
-acceptance are complete. The port preserves upstream formatting and error
-behavior; its implemented reference records observation and display limits.
-
-[Uniq](../userland/uniq.md) is packaged from the existing sbase pin, adding only
-libc `getline` and `isblank`, and was validated through the remote shell against
-the host build of the same upstream revision. It does not authorize a full
-utility suite. Its large-input cost was removed by libc input read-ahead;
-[console line input](../technical-debt.md#console-line-input) remains per byte.
-
-SDL2/GrafX2 remains a later graphical alternative. A desktop/compositor remains
-a separate [graphics direction](desktop-graphics.md), and users/authority is a cross-cutting
-[design checkpoint](users-and-authority.md), not something a port should define
-implicitly.
+- [Later OS directions](later-os-directions.md): execution lifecycle, backend
+  interfaces, networking, device ownership, clock source, power, storage.
+- [Application port candidates](application-ports.md), including SDL2/GrafX2,
+  SQLite and PDCurses applications.
+- [Hosted toolchains and language runtimes](toolchains-and-runtimes.md), the
+  [Go runtime investigation](go-runtime.md) and the
+  [Neovim/libuv investigation](neovim-libuv.md).
+- [Desktop and graphics](desktop-graphics.md).
+- [Users and authority](users-and-authority.md), a cross-cutting design
+  checkpoint, and [credentials and biometric unlock](credentials-and-biometrics.md),
+  parked after local users.
+- [Spaces](spaces.md) and [filesystems and namespaces](vfs.md), working drafts.
+- [Userspace scheme providers](userspace-scheme-providers.md).
+- [Selecting existing build artifacts](build-artifact-reuse.md) and the
+  postponed [host development overlay](host-development-overlay.md).
 
 ## Agreed boundaries
 
@@ -391,16 +85,15 @@ implicitly.
   script, fail on script errors and use an explicit session launch; `exec` comes
   later.
 - Userspace owns libc, libpyxis, libterm, startup and applications. Pyxis owns
-  public ABI headers and toolchain integration, and assembles the SDK, kernel and
-  boot image.
+  the public ABI headers and toolchain integration, and assembles the SDK,
+  kernel and boot image.
 - Export headers, build runtime libraries, assemble the SDK, then build apps and
   ports. Initially pin the new userspace/ports repositories as submodules.
 - The owner handles repository creation, dispatch integration and compiler
   container publication. Ordinary builds consume the prebuilt compiler and
-  evolving SDK; they do not rebuild GCC/binutils.
+  evolving SDK; they do not rebuild the toolchain.
 - Init mounts optional `host://` before launching the shell and passes the
   selected directory grant to the session.
-- No container, workflow, repository or submodule changes are part of this draft.
 
 ## User and permission design checkpoint
 
@@ -412,16 +105,6 @@ ownership is implemented. External login and account UI are separate work.
 The [credentials and biometric unlock direction](credentials-and-biometrics.md)
 is parked after local users; it adds no tasks to current milestones.
 
-## Shell follow-ups
-
-The fresh-line prompt and current working-path display are implemented. Their
-behavior and limits are documented in [the shell reference](../userland/shell.md) and
-[terminal reference](../userland/terminal.md).
-
-Terminal scrollback remains a separate candidate after
-[display resizing](../kernel/display.md). It needs retained
-text storage and was explicitly deferred from everyday commands.
-
 ## Completing a milestone
 
 Rewrite the completed milestone document around the implemented behavior and
@@ -429,9 +112,3 @@ useful interface/usage guidance, then move it from `docs/wip` to `docs` and upda
 links. Remove the planning history and completed checklist; the original remains
 in Git history. Carry forward relevant deferred work into another WIP or
 technical-debt document. Do not retain a duplicate archive of the old plan.
-
-## Existing context
-
-- [Shell, filesystem and application runtime](../userland/first-shell.md).
-- [Earlier development candidates](development-paths.md).
-- [Filesystem direction](vfs.md) and [space direction](spaces.md).
