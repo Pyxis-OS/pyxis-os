@@ -180,8 +180,11 @@ method below, used standard VGA at 1280x800 with the cursor visible. The other
 settings were four CPUs, 2 GiB, nested KVM and GCC builds. The median fell
 from 1.007 ms (main `70a4e20`, range 0.938–1.967 ms) to 0.640 ms (range
 0.473–1.055 ms). Native framebuffers are write-combining device memory, and
-there the eightfold fewer stores may matter more. No native figure is
-recorded yet.
+there the eightfold fewer stores may matter more. On the owner's ThinkPad
+(2026-10-07, 1920x1080, the LLVM build of #494 with and without this change),
+`fastfetch` output became instant. Quake `timedemo demo1` gained about 20 fps
+on AC, from about 660–690, and about 2 fps on battery, where the firmware
+throttles the CPU.
 
 Task 5b's baseline used main `3b84214`, userland `c4bcf16`, ports `eb648d5`, an
 ordinary GCC image, q35, GTK VirtIO 640x480, four CPUs, 256 MiB, nested KVM and
