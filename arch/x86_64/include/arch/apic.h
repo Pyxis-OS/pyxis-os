@@ -15,6 +15,7 @@
 #define APIC_MOUSE_VECTOR 41
 #define APIC_ACPI_VECTOR 42
 #define APIC_VIRTIO_GPU_VECTOR 43
+#define APIC_TLB_FLUSH_VECTOR 44
 #define APIC_SPURIOUS_VECTOR 255
 
 /* xAPIC IDs are 8 bits and every CPU's is distinct, which bounds the CPU count. */
@@ -40,5 +41,7 @@ void apic_end_interrupt(void);
 /* IF=0 serializes this CPU's ICR writes. Destination must be an online CPU.
  * Requests scheduling; does not wait for the destination to run its handler. */
 void apic_send_reschedule(uint32_t destination);
+/* IF=0. Does not wait: false leaves the command unsent if ICR is busy. */
+bool apic_try_send_tlb_flush(uint32_t destination);
 
 #endif
