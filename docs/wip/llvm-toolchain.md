@@ -347,7 +347,6 @@ owns in the GCC patch.
   - the SDK drops `-Wl,--oformat=elf` and its GCC branches;
   - `elf2pxe` becomes a removal candidate for the owner.
 - **For the owner, from task 3:**
-  - the allocator regression;
   - the Quake difference;
   - a stale TCC README example.
 
@@ -563,14 +562,61 @@ archives.
   | Clang 22 | 14.1–14.2 |
   | GCC 16 | 11.5–12.2 |
 
-  So this is code generation, not the Pyxis integration. It has not been
-  optimized.
+  So this is code generation, not the Pyxis integration. The follow-up
+  investigation is under [the allocator regression](#the-allocator-regression).
 - **Quake `timedemo` is about 3% slower.** The software renderer's
   executable is 3.5% larger.
 
 TCC's guest compiler is 31% larger, because Clang inlines more in its
 single-translation-unit build. Its largest stack frame is 2,824 bytes,
 against GCC's 2,720.
+
+### The allocator regression
+
+Investigated on 2026-10-07, after task 3. The owner chose the source fix
+(option 1 of the investigation).
+
+**Cause.** TLSF keeps two flag bits in each block's 8-byte `size` word.
+- GCC updates them with whole-word read-modify-writes (`orq`, `andq`).
+- Clang's DAG combiner narrows `size |= bit` to a one-byte `orb`/`andb`.
+  LLVM's x86 backend permits this except for 32-to-16-bit narrowing, and
+  upstream `main` was unchanged on 2026-10-07.
+
+TLSF then reads the whole word again almost at once. A one-byte store cannot
+be forwarded to that wider load, so the load stalls.
+
+**The evidence:**
+- Clang executed about 3% fewer instructions than GCC (callgrind).
+- Simulated branch mispredictions were negligible.
+- In a sampling profile, the narrowed `orb` and the load after it were
+  Clang's hottest instructions.
+- Disabling narrowing (`-mllvm -combiner-reduce-load-op-store-width=false`)
+  matched GCC on the host.
+
+**The fix.** Both TLSF copies, the kernel's and libc's, write the size word
+through `block_store_size`. It is a relaxed `__atomic_store_n` of the whole
+word: an ordinary store that compilers do not narrow, with no
+synchronization. `UPSTREAM.md` records it beside each copy.
+
+**Host** (pinned core; best of 11 passes, three interleaved rounds):
+
+| Build | ns/operation |
+| --- | --- |
+| GCC 16 | 11.4–12.1 |
+| Clang 23 before | 14.4–15.2 |
+| Clang 23 after | 11.9 |
+
+**Guest**, `allocbench heap` (4 CPUs, nested KVM):
+- **GCC with the fix:** 22 samples, 11.6–13.4 ns/op, median about 12.0.
+  This is unchanged from before (12.0–12.5).
+- **LLVM:** 15.8–16.6 ns/op before the fix.
+- **LLVM with the fix:** 20 of 22 samples were 13.0–14.4, median about 13.3.
+  Two early samples, 20.4 and 21.7, did not recur in 16 later runs and are
+  unexplained.
+
+The gap to GCC falls from about 33% to about 10%. Elsewhere, Clang generates
+more byte-sized read-modify-writes than GCC: 164 against 75 in the kernel. No
+other measured path showed a cost, so those stay as they are.
 
 ## Tasks
 
