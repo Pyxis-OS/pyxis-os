@@ -33,20 +33,27 @@ The owner can use another DRAW handle to the same display to release it, or exit
 
 ## Mapping and presentation
 
-[The ABI](../../include/abi/display.h) has three header-only synchronous requests:
+[The ABI](../../include/abi/display.h) has four header-only synchronous requests:
 
 - ACQUIRE allocates zeroed RAM and maps it writable and non-executable into the
   caller. Its reply contains the address, mapped size, width, height, pitch and
-  red/green/blue shifts. Acquisition leaves the TTY selected until PRESENT.
+  red/green/blue shifts and geometry generation in a 64-byte `display_buffer`.
+  Acquisition leaves the TTY selected until PRESENT.
 - PRESENT selects that buffer for the existing periodic presentation task.
   It returns after selection, not after scanout or a complete frame copy.
 - RELEASE removes the user mapping and selects the TTY again. It returns no
   reply payload; the old pointer must no longer be used.
+- SIZE returns the current destination width, height, pitch, channel shifts and
+  generation atomically in a 48-byte `display_size_reply`. DRAW permits this
+  query without acquiring graphics or owning the current session; it grants no
+  mode-setting authority. `display_size()` exposes the same native result.
 
 Pixels are 32-bit words with three 8-bit channels at the returned shifts. Pitch
 is bytes between row starts. The layout matches the current display; dimensions
-exclude the kernel-owned navigation bar and remain fixed. Mapped size includes
-page padding, which is zeroed along with the pixels. Applications draw only
+exclude the kernel-owned navigation bar. An acquired mapping's address, extent,
+pitch and dimensions remain fixed until RELEASE; its generation identifies the
+geometry at acquisition. Mapped size includes page padding, which is zeroed
+along with the pixels. Applications draw only
 within width/height and use pitch rather than assuming tightly packed rows.
 The mapping is distinct from private-memory allocations and cannot be released
 through the memory service.
@@ -55,11 +62,11 @@ After PRESENT, the kernel reads the same backing pages that the application
 writes. Further changes may appear without another request. This single-buffer
 contract permits tearing; PRESENT neither freezes pixels nor promises vblank,
 atomic frames or completion notification. The kernel copies pixels into the
-physical driver's target: directly to the boot framebuffer, or into kernel RAM
+physical driver's target: directly to the boot/Bochs framebuffer, or into kernel RAM
 followed by a fenced VirtIO transfer and flush. Application backing is never
-attached to the GPU. A failed physical driver makes ACQUIRE/PRESENT unavailable;
-RELEASE still tears down an existing session. Double buffering, a compositor and
-live resizing remain separate work in the [display milestone](../wip/display-drivers.md).
+attached to the GPU. A failed physical driver makes ACQUIRE/PRESENT/SIZE unavailable;
+RELEASE still tears down an existing session. Double buffering and a compositor
+remain separate work.
 
 The TTY keeps its own framebuffer and continues accepting output while graphics
 is selected. Its cursor is not composited over graphics. Releasing graphics or
@@ -67,11 +74,46 @@ exiting restores the TTY on the next presentation. Graphics ownership is
 independent of [keyboard capture](../devices/keyboard.md): Mandelbrot acquires both sessions,
 and captured input is withheld from the console stream.
 
+## Live destination geometry
+
+VirtIO follows enabled size changes on its selected output. Boot and Bochs
+geometry stays fixed. At a frame boundary the BSP prepares replacement screen,
+navigation, cursor and TTY buffers for every local space, including inactive
+ones. It verifies the space registry before switching scanout and again after
+the device wait; a newly created space causes rollback and fresh preparation.
+Refused dimensions or failed allocation leave the last valid geometry usable.
+
+After confirmed scanout success, the output lock protects copying the latest
+TTY raster and committing every local geometry and generation together. TTY
+objects retain their identity. Whole cells survive without reflow: shrinking
+height drops enough top rows to keep the cursor visible; growing keeps existing
+positions. Only whole columns that fit are copied, and new cells and margins
+use the TTY background. The cursor is translated/clamped and pending wrap is
+cleared; colors, parser state and tab width survive. No allocation or device wait
+occurs under the output lock.
+
+SIZE observes the new destination, while an existing application mapping keeps
+its original layout. Presentation copies the top-left intersection using each
+source row's pitch and fills exposed destination margins with the TTY background.
+Generation starts at one and advances on each committed local resize. Physical
+resizing does not change space focus or keyboard/pointer capture.
+
+Old TTY pixel mappings remain intact until writers and the presenter have
+relinquished them and the [shared-range retirement protocol](../kernel/smp.md#memory-and-output-boundaries)
+has flushed every online CPU. A missing acknowledgement retains one old batch
+until reboot and disables further resizing; the committed display continues
+working. Device-owned backing separately requires confirmed fenced cleanup;
+uncertain GPU ownership causes terminal driver failure and retention until reboot.
+
+There is no geometry wakeup, explicit mapping replacement or application
+adaptation yet. Idle programs learn a change on their next SIZE query. These are
+task 5b of the [display milestone](../wip/display-drivers.md).
+
 ## Mapping and teardown invariants
 
 All display state and backing allocation are BSP-owned, with interrupts disabled
-while mutating them. All three operations, including PRESENT, use typed requests
-on the common BSP FIFO. The service catalog requires the scheduler to park the
+while mutating them. All four operations, including PRESENT and SIZE, use typed
+requests on the common BSP FIFO. The service catalog requires the scheduler to park the
 requesting task outside its private root and stack, with entry/current-task state
 cleared, before publication. The BSP executor performs the operation and clears
 its process/display loans before completion and wakeup; resumption reloads CR3.
@@ -93,8 +135,8 @@ may temporarily retain only pixel backing. No application mapping survives exit.
 
 ## Current boundaries
 
-One buffer, one owner and one user mapping per space; fixed dimensions and native
-32-bit pixel layout. Cross-space presentation, shared application mappings,
-resize, dirty rectangles, frame completion and graphics-specific resource quotas
-remain separate work. The single-CPU development fallback can use the same
+One buffer, one owner and one user mapping per space; fixed acquired layouts and
+native 32-bit pixels. Cross-space presentation, shared application mappings,
+mapping replacement, dirty rectangles, frame completion and graphics-specific
+resource quotas remain separate work. The single-CPU development fallback can use the same
 display protocol, while its TTY still shares kernel logs.

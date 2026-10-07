@@ -16,9 +16,13 @@ The launcher adds `-vga none -device virtio-gpu-pci,disable-legacy=on`; no VGA
 can mask a missing GPU driver. The same setting applies to USB run/debug.
 Unknown selections fail before launch. With no Limine framebuffer, early output
 stays serial and the driver queries the initial GPU pixel size before AP startup.
-With a framebuffer it retains its initial dimensions. The kernel presents with
-one 2D resource, full-frame transfers and flushes. Resizing, hardware cursors, 3D
-and multiple monitors are later work. VirtIO panic output is serial-only.
+With a framebuffer it starts at that framebuffer's dimensions. The kernel presents with
+one current 2D resource, full-frame transfers and flushes. GTK window changes
+resize every local TTY with whole-cell raster cropping and update size queries.
+Existing graphics mappings keep their layout and are clipped to the destination;
+idle applications do not wake or adapt yet. Failed preparation keeps the previous
+geometry. Hardware cursors, 3D and multiple monitors remain later work.
+VirtIO panic output is serial-only.
 `QEMU_VIDEO=bochs` adds `-vga none -device bochs-display`. Both it and standard
 VGA support the same Bochs register driver. `DISPLAY_SIZE` is baked into the
 image as `display.size=WIDTHxHEIGHT`; it is separate from host device selection.

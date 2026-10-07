@@ -424,8 +424,9 @@ disabled, with one exception: a process's private memory operations change its
 own active address space in its syscall, on any CPU
 ([memory](memory.md#execution)). The general kernel VM area asserts BSP
 ownership: its ranges are reused, and changing a mapping another CPU may hold
-would need a remote TLB shootdown. A kernel task must save/disable interrupts
-around these calls and restore them afterward; being pinned to the BSP alone does
+requires explicit quiescence and acknowledged TLB invalidation. Ordinary VM
+mutation invalidates only the caller's translations. A kernel task must
+save/disable interrupts around these calls and restore them afterward; being pinned to the BSP alone does
 not prevent same-CPU reentry. Other heap allocation by syscalls, such as
 capability growth or RAM-file backing, still goes through BSP requests.
 
@@ -491,8 +492,9 @@ stack and reloading the kernel root and clearing entry/current state. The BSP ex
 changes private mappings before waking the owner; normal resumption reloads CR3 before any task access. No other CPU uses
 that private root during the loan, and the borrowing task keeps its CPU because it
 is inside its syscall.
-Kernel code, CPU records, scheduler stacks, heap pools and framebuffer mappings
-remain mapped throughout AP execution. A shared kernel range must not be
+Kernel code, CPU records, scheduler stacks, heap pools and direct boot/Bochs
+framebuffer mappings remain mapped throughout AP execution. Resizable TTY backing follows
+the retirement protocol below. A shared kernel range must not be
 unmapped, remapped or protected while another CPU can use it.
 
 Task activation reloads CR3 before accessing a newly published task stack. Task
@@ -503,9 +505,34 @@ one CPU at a time; after a move, the previous CPU has already left the task's
 stack and dropped its private root, and the destination reloads CR3 before using
 them. Endpoint messages and wait records
 use heap storage, whose mappings remain backed even after freeing the object.
-This is a restricted ownership protocol, not general cross-CPU TLB invalidation;
-mutable shared mappings and concurrent allocator calls still require additional
-synchronization.
+This task-stack protocol does not permit arbitrary shared mapping changes.
+
+`vm_kernel_flush_remote()` permits a separate quiescent retirement. The caller
+must first end every remote access and prevent refills, including through cached
+pointers, until unmapping finishes. It runs in a BSP kernel task with IF=1,
+the kernel root active, and no output, queue or allocator locks held. The helper
+keeps page tables, frames and VM ownership unchanged while requesting a new
+flush generation from every online CPU. Each CPU reloads its current CR3,
+including when running a private root, before acknowledging that generation.
+With PCID and global pages disabled, this removes shared kernel translations.
+The IPI handler takes no locks, allocates nothing, logs nothing and performs no
+device waits. CPU membership stays fixed after boot.
+
+The implementation uses one one-second deadline for IPI dispatch and all
+acknowledgements; this timeout is not a public ABI promise. Success permits
+ordinary BSP `vm_free()` with IF=0 while refills remain prohibited. Failure
+requires keeping the original mappings and backing until reboot; a late
+acknowledgement does not authorize reclamation. This is not concurrent shared
+unmapping or permission mutation: the flush itself changes no mappings.
+
+Live display resize uses the output lock to finish old AP TTY writes and replace
+all pixel pointers and dimensions. No AP may keep an old pixel pointer beyond
+that lock. The sole presenter starts resize between frame leases, so it also
+relinquishes old TTY backing before flushing. Old buffers remain mapped through
+the acknowledgement wait. A timeout retains one old TTY/navigation/cursor batch
+and disables further resize while leaving the committed geometry usable. GPU
+targets and control buffers remain BSP-only and additionally need confirmed
+device ownership release before reclamation.
 
 Normal log calls save/disable interrupts while serializing serial and framebuffer
 output per format invocation, then restore the caller's interrupt state.

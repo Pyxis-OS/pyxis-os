@@ -8,7 +8,8 @@ struct pci_device;
 bool virtio_gpu_matches(const struct pci_device *device);
 /* BSP/IF=0 before AP startup, selected device and early console retired.
  * Without a boot framebuffer, a bounded temporary queue queries geometry.
- * The RAM layout remains until reboot; reset prevents firmware fallback. */
+ * Reset prevents firmware fallback. The descriptor stays at a stable address;
+ * successful resize commits replace its geometry and backing. */
 const struct framebuffer *virtio_gpu_prepare(const struct boot_info *boot,
     struct pci_device *device);
 /* Sole BSP presenter, IF=1. Start creates and attaches the prepared resource;
@@ -20,5 +21,16 @@ bool virtio_gpu_present(void);
 void virtio_gpu_copy(size_t offset, const void *pixels, size_t bytes);
 /* BSP interrupt entry, IF=0: records activity and detaches/wakes the waiter. */
 void virtio_gpu_interrupt(void);
+
+/* Same owner and context as presentation; commit alone runs with IF=0.
+ * No frame lease may overlap a resize transaction. */
+bool virtio_gpu_available(void);
+const struct framebuffer *virtio_gpu_resize_prepare(void);
+bool virtio_gpu_resize_switch(void);
+bool virtio_gpu_resize_cancel(void);
+bool virtio_gpu_resize_defer(void);
+void virtio_gpu_resize_commit(void);
+void virtio_gpu_resize_finish(void);
+void virtio_gpu_resize_disable(void);
 
 #endif

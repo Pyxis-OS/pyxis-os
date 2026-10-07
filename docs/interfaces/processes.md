@@ -184,14 +184,14 @@ rejected. Operation numbers are local to each protocol and may overlap.
 | --- | --- | --- | --- |
 | Console write | `CONSOLE_RIGHT_WRITE` | Source user address, byte length | Bytes written |
 | Console read | `CONSOLE_RIGHT_READ` | Destination user address, capacity | Bytes read |
-| Console size | Console READ or WRITE | Unused | Columns, rows |
+| Console size | Console READ or WRITE | Unused | Columns, rows, generation |
 | File read at offset | `FILE_RIGHT_READ` | Byte offset, capacity | Byte count, copied bytes |
 | File size | File READ or WRITE | None | File byte size |
 | File write at offset | `FILE_RIGHT_WRITE` | Byte offset, length, copied bytes | Bytes written |
 | File resize | `FILE_RIGHT_WRITE` | New byte size | None |
 | File sync | `FILE_RIGHT_WRITE` | None | None |
 
-Send the complete 32-byte `console_message`, including unused union storage;
+Send the complete 40-byte `console_message`, including unused union storage;
 the wrappers initialize it to zero. FILE uses exact operation extents after the
 16-byte tag: READ has 16 payload bytes, WRITE has 16 plus its inline byte count,
 RESIZE has eight, and SIZE/SYNC have none. FILE request and reply payloads are
@@ -200,7 +200,7 @@ WRITE length at most 4,080; larger native payloads are rejected. Libpyxis caps
 larger application requests to one transfer and returns its actual short count.
 READ requires reply capacity for its eight-byte count plus the requested bytes,
 but copies only the returned bytes. Its successful reply is exactly eight bytes
-plus that count. Console SIZE needs a 16-byte reply; the other count/size replies
+plus that count. Console SIZE needs a 24-byte reply; the other count/size replies
 contain one eight-byte field. `RDX` reports reply bytes, including FILE READ data;
 the transferred data count is a field in the reply, not `RDX`. RESIZE and SYNC
 return zero reply bytes and ignore the reply buffer. Errors return no reply bytes.
@@ -397,10 +397,15 @@ The BSP input producer detaches a wait record before waking it. Read ownership
 is independent of the output lock. Foreground ownership is cooperative: a parent
 must stop reading while its child uses the same console.
 
-SIZE requires either READ or WRITE and returns current character columns/rows,
-excluding the session tab bar. Dimensions are fixed by the space's TTY at boot;
-there is no resize event. Libpyxis `console_read()` and `console_size()` preserve
-native call statuses. No ABI/schema version bump is needed.
+SIZE requires either READ or WRITE and returns current character columns/rows
+and geometry generation atomically in a 24-byte `console_size_reply`, excluding
+the session tab bar. Generation starts at one; a committed local screen resize
+updates every space's TTY, including inactive spaces. Independent remote
+terminal dimensions remain fixed with generation one. There is no resize event
+or idle wakeup yet. The fixed-size console request payload is ignored for SIZE.
+Libpyxis `console_size()` returns the whole reply, including generation;
+libterm's `term_size()` uses it as a dimensions-only helper. Both preserve native
+call statuses. See [local resize behavior](graphics.md#live-destination-geometry).
 
 The [shared syscall header](../../include/abi/syscall.h) and
 [console layouts](../../include/abi/console.h) define the active slice. RDX carries

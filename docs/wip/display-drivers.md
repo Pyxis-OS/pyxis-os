@@ -22,11 +22,12 @@ implements it; each task starts when the owner says so. It runs alongside the
 ## Today
 
 - Boot-framebuffer, VirtIO GPU 2D and Bochs drivers present through the physical
-  display interface. Live resizing remains tasks 5a–5b.
+  display interface. Task 5a adds live VirtIO resizing and atomic size queries;
+  readiness and application adaptation remain task 5b.
 - The sole BSP presenter composes the bar and active TTY/graphics space about
   60 times a second. Boot output copies directly; VirtIO copies into kernel RAM,
   transfers the full frame to the host and flushes. Buffers use the selected
-  immutable layout; application graphics mappings remain fixed for this boot.
+  layout; application graphics mappings remain fixed until released.
 - With a directly writable Limine framebuffer, the early console mirrors serial
   until retirement. Without one, early output is serial-only. Boot/Bochs panics
   can reclaim the direct screen; VirtIO panics stay serial-only.
@@ -90,6 +91,16 @@ Task-4 failure policy accepted by the owner on 2026-10-07:
 10. **Unverified Bochs restoration:** missing or unsupported sizes keep firmware
     output. If an attempted mode fails and firmware restoration cannot be verified,
     stop boot with a serial panic; do not publish an uncertain direct target.
+
+Task-5a lifetime policy accepted by the owner on 2026-10-07:
+
+11. **TTY backing retirement:** after the output lock has replaced every old
+    pixel pointer and the presenter has drained its old leases, require an
+    acknowledged TLB flush on every online CPU before returning old pages or
+    reusing their virtual addresses. Keep mappings intact through the wait.
+12. **Missing acknowledgement:** retain one old buffer set until reboot and
+    disable further resizing. Keep the newly committed display working. Never
+    free or reuse that storage merely because a late acknowledgement arrives.
 
 Review follow-up from merged [PR #473](https://git.internal/PyxisOS/pyxis-os/pulls/473):
 when VirtIO is selected, failure does not try a separate VGA firmware screen in a
@@ -155,13 +166,15 @@ remeasured after resizing; changed-region work remains a separate follow-up.
       keeps the boot framebuffer without an ordinary log line;
     - a post-handoff panic is visible in the selected Bochs mode.
 
-- [ ] **5a. Kernel live resizing and size queries.**
+- [x] **5a. Kernel live resizing and size queries.**
   - VirtIO display-change events, transactional target/space/TTY resizing and
     raster cropping, with atomic geometry/generation queries.
   - Update the userland query wrappers for changed reply layouts in the same
     delivery; adaptive consumer behavior stays in 5b. Publish dependency PRs
     before updating parent pins.
   - Preserve existing graphics mappings and clip them to the new destination.
+  - **Status:** implemented and qualified below. Userland and Fastfetch query
+    consumers are published in dependent PRs; automatic adaptation remains 5b.
   - **Finish when:**
     - resizing QEMU's GTK window changes terminal rows/columns in every space;
     - console SIZE and the display query return the new geometry/generation;
@@ -202,7 +215,7 @@ The shared interface has these operations:
 | Operation | Contract |
 | --- | --- |
 | Prepare | Before AP startup, inspect supported PCI functions in discovery order, validate/map resources and allocate fixed normal queue storage. Retain the boot layout/mapping; see the VirtIO fallback limit below. |
-| Get target | Return a kernel pixel surface and immutable layout: address, width, height, pitch, channel shifts and geometry generation. No boot-protocol pointers. |
+| Get target | Return a kernel pixel surface through a stable descriptor. Read its address, width, height, pitch and channel shifts under the output lock; resize changes them only at logical commit. Native SIZE queries add the matching generation. No boot-protocol pointers. |
 | Activate | On the BSP, finish initialization and present a first complete frame before publishing the selected driver. Restore firmware output on Bochs failure; VirtIO has the limit below. |
 | Present | Finish the composed frame: drain WC stores for direct framebuffers; transfer and flush the VirtIO resource, checking responses and fences. |
 | Check size | Read/coalesce pending VirtIO display information. Boot and Bochs report no runtime changes. |
@@ -411,7 +424,10 @@ The resize transaction has five steps:
    that wait. No AP retains an old pixel pointer outside this lock. This full
    copy pauses writers; measure the duration across all spaces. Never wait for
    hardware under the lock. Release old backing only when all presenter leases
-   and device commands have finished. Boot/Bochs panic targets do not resize.
+   and device commands have finished. Old AP-visible TTY mappings also require
+   acknowledged quiescent TLB retirement before release. A failed acknowledgement
+   retains that batch and disables further resize. Boot/Bochs panic targets do
+   not resize.
 5. **Present and wake.** Compose and transfer the candidate frame; a brief
    stale/blank screen during transition is permitted. Task 5b publishes geometry
    wakeups after logical commit. In task 5a consumers learn on their next query.
@@ -423,8 +439,10 @@ columns that fit; fill new cells/margins with the TTY background. Translate/clam
 the cursor and clear pending wrap. Keep colours, tab width and escape-parser
 state. Cropped or dropped text is lost: no text grid or scrollback exists today.
 
-Recompute the bar viewport/widget placement and pointer bounds. Keep space
-identity, selection and input capture. Terminal dimensions are
+Recompute the bar viewport and widget placement. Kernel pointer input reports
+relative motion and has no coordinate bounds to resize; application coordinate
+bounds follow their fixed mapping until adaptation. Keep space identity,
+selection, input focus and capture. Terminal dimensions are
 `width / font_width` and `(height - bar_height) / font_height` in every local
 space, including inactive spaces. Existing remote terminal sessions retain their
 own rows/columns, input/output queues and size policy.
@@ -896,6 +914,107 @@ added. All task-specific QEMU/GDB jobs were closed.
   double buffering stay separate work. The
   [desktop and graphics direction](desktop-graphics.md) covers the compositor
   and SDL2.
+
+## Task 5a implementation and validation
+
+Implemented against main `2f3c31b` on 2026-10-07, with focused MM/arch,
+GPU, space/TTY and ABI commits. The userland query wrappers are published as
+[`6aff4ad`, PR #145](https://git.internal/PyxisOS/pyxis-userland/pulls/145);
+Fastfetch's direct console caller is updated in
+[`5985092`, ports PR #49](https://git.internal/PyxisOS/pyxis-ports/pulls/49).
+The userland branch also merges current main `24068aa` to preserve the accepted
+LLVM SDK selection changes; the parent pins its published combined revision
+`21502e7540d80689f4cfad4a3abaff8db21a34c3`. Parent main `29a1777` is integrated
+after the initial qualification. Ordinary validation uses the default GCC
+toolchain; no new LLVM performance result is claimed here.
+Merge both dependencies before the parent PR. No compiler-container rebuild or
+new source mirror is needed; the SDK exports the changed ABI and runtime.
+
+The selected VirtIO output now acknowledges DISPLAY before querying, rechecks
+new events, and stages at most one replacement resource. Registry changes during
+device waits restore the old scanout and defer fresh preparation. Unsupported
+geometry, allocation failure or a checked command rejection preserves the last
+valid geometry. An uncertain command, failed restoration or uncertain GPU
+retirement stops the driver and retains device storage until reboot. Resource IDs
+do not wrap. Runtime attachment storage uses BSP VM pages and checked direct
+queue segments; the normal queue uses up to 256 descriptors, bounded by the
+advertised capacity. An attachment exceeding that capacity is refused.
+
+Logical commit copies the latest whole-cell TTY raster under the output lock,
+preserves TTY identities and advances every local geometry generation. A space
+created later inherits the current generation. Old mappings remain intact until
+every online CPU acknowledges a current-root CR3 flush, then the BSP releases
+their backing with IF=0. A missing acknowledgement retains one old mapped batch
+and disables further resize. This follows decisions 11–12; it does not add
+concurrent mapping mutation. GPU retirement separately requires fenced detach
+and unreference. No device wait or allocation occurs under the output lock.
+
+Console SIZE now returns columns, rows and generation in 24 bytes. Display SIZE
+returns current content pixels, pitch, shifts and generation in 48 bytes;
+ACQUIRE returns a 64-byte fixed mapping descriptor with its acquisition
+generation. READ or WRITE permits the console query; DRAW permits the display
+query without owning graphics or gaining mode-setting authority. Remote sessions
+retain their independent geometry and generation 1. Existing graphics mappings
+keep address, extent and pitch; presentation clips their top-left intersection
+and fills exposed margins. Matching layouts retain the original bulk-copy path.
+No readiness, mapping replacement or adaptive consumers are added before 5b.
+
+Ordinary current-main image build passed before integration. The changed SDK,
+runtime, applications and ports rebuilt successfully; the final kernel/image
+build verified matching SDK/userland/ports bundles and passed without kernel or
+runtime warnings. Existing vendor warnings were unchanged. Source review covered
+registry rechecks, device rejection/uncertainty, quiescence, generation exhaustion
+and whole-cell limits. No new tests, hooks, fault injection or boot automation.
+
+Interactive QEMU used q35, nested KVM, `-cpu max`, four CPUs, entropy, no NIC,
+export or block disk, and the raw OVMF pair recorded in task 4. The installed
+QEMU 10.2.2 GTK backend ran successful framebufferless boots at 256 and 192 MiB.
+Window resize was exercised through ordinary X11 window resize requests:
+
+| Check | Observation |
+| --- | --- |
+| Grow all spaces | 640×480 to 1024×741, 128×44 cells in all four spaces, generation 2. All four CPU flush acknowledgements matched; candidate and retired GPU resources were empty afterward. |
+| Fixed graphics | Mandelbrot acquired at 1024×709 content pixels, pitch 4096, mapping address `0x3000`. Shrink to 800×573 and grow to 1280×873 preserved its address and extent; screenshots showed clipping and background margins. Escape released graphics and returned to the shell. |
+| Console query | The shell's real SIZE call returned CALL_OK, 24 bytes, 160 columns, 52 rows, generation 4 after growth. Display SIZE construction/authority and the userland wrapper were source-reviewed; no existing consumer invokes it before 5b. |
+| Refusal | At 192 MiB, 1683×1311 was valid. Requesting 1682×1311 could not prepare every space buffer; old geometry/generation 2 and ordinary presentation stayed usable, and candidate/retired GPU storage was reclaimed. A subsequent 800×573 request succeeded at generation 3, 100×33 cells. |
+| Fastfetch | The updated native adapter ran successfully; it queried 210×79 cells before the later smaller resize committed. |
+
+The all-space copy pause at 256 MiB measured 2.25352 ms for 1024×741,
+1.91978 ms for 800×573, 4.39221 ms for 1280×873, 0.45120 ms for
+320×218 and 3.78240 ms for 1683×1311. At 192 MiB, 1683×1311 took
+4.32646 ms and the later 800×573 commit took 2.04209 ms. These are single
+in-kernel monotonic measurements of the copy/swap section across four TTYs,
+not complete resize latency or host measurements. The helper logs the section
+duration once per successful resize. Timeout and uncertain-device paths were
+inspected, not induced. Attempts at 128 and 160 MiB stopped in Limine before
+kernel entry and did not qualify resize behavior.
+
+The idle Caelum comparison used the fixed headless QEMU from task 4, 256 MiB,
+four CPUs and 1280×800, with the same manual HPET/GDB `space_present` entry,
+`finish` and counter-difference commands recorded above. Two startup samples
+were excluded; five later samples include composition and GPU transfer/flush:
+
+| Kernel source | Whole presentation milliseconds | Median |
+| --- | --- | --- |
+| Main `2f3c31b`, before integration | 7.36987, 3.87919, 5.19761, 3.35409, 6.13595 | 5.19761 ms |
+| Task 5a `0663673` | 1.80234, 3.62058, 2.17187, 3.61666, 1.74100 | 2.17187 ms |
+
+Ranges overlap and the initial reference run overlapped host source-build work,
+which can affect emulation/IRQ waits. No controlled speedup or physical-host
+qualification is established; no regression was observed in this workload.
+Graphics frame cost and large-space copy-pause scaling need separate measurement
+when adaptive consumers land. Reference ELF SHA-256 is
+`b2415484559ecd2344012c085277a60b2905bd09998e2bfefc80d8dad855569f`;
+task ELF is
+`f95448d3762d85cd3b67057bf20d7093ec8a011ca7198effd2e895d80ff70ca0`.
+
+After integrating main `29a1777` and published userland `21502e7`, the ordinary
+default-GCC image build passed again. A four-CPU, 256 MiB GTK boot resized
+640×480 to 800×573, committed generation 2 in every space, acknowledged the
+flush and reclaimed the retired GPU resource. The four-TTY copy/swap section
+took 1.48204 ms in that run. Standard VGA also kept its boot driver and
+generation 1. The final refusal message covers both the minimum and maximum
+representable TTY geometry; its wording does not change acceptance policy.
 
 ## Related
 

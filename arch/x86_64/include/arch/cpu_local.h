@@ -22,6 +22,7 @@ struct cpu_local {
   uint32_t lapic_id;
   uint32_t timer_count;
   _Atomic uint64_t timer_interrupts;
+  _Atomic uint64_t tlb_flush_ack;
   _Atomic bool online;
   uintptr_t stack_top, double_fault_stack_top;
   struct cpu_descriptors descriptors;

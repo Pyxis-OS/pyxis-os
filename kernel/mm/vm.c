@@ -435,6 +435,12 @@ struct vm_space *vm_kernel_space(void)
   return &kernel_space;
 }
 
+bool vm_kernel_flush_remote(void)
+{
+  require_kernel_owner(&kernel_space);
+  return arch_kernel_flush_remote();
+}
+
 enum mm_result vm_space_create(struct vm_space **result)
 {
   if (!result) {
