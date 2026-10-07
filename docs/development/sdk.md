@@ -121,8 +121,20 @@ x86_64-unknown-pyxis-gcc --sysroot=/path/to/sdk/sysroot \
 /path/to/sdk/bin/elf2pxe --format p1f -o program.pxe program.elf
 ```
 
-With an LLVM-built SDK, use `x86_64-unknown-pyxis-clang` the same way. Its
-driver supplies compiler-rt builtins instead of libgcc and links with LLD.
+With an LLVM-built SDK, use `x86_64-unknown-pyxis-clang` with the same header
+options. Its driver supplies compiler-rt builtins instead of libgcc and links
+with LLD, which writes the P1F executable directly; `elf2pxe` is not needed:
+
+```sh
+x86_64-unknown-pyxis-clang --sysroot=/path/to/sdk/sysroot \
+  -nostdinc -isystem "$(x86_64-unknown-pyxis-clang -print-file-name=include)" \
+  -I/path/to/sdk/sysroot/usr/include program.c -o program.pxe
+```
+
+Without `-o` the executable is `a.pxe`. Add `-Wl,--oformat=elf` for an ELF
+executable, for example to keep symbols for a debugger. Until GCC is retired,
+the SDK Make fragment links ELF this way and converts it with `elf2pxe`, so
+both toolchains build the same way.
 
 Add `-lterm` when using terminal helpers. Format-library consumers explicitly
 link `libnpfs-format.a` and supply `npfs_memory_copy` and `npfs_memory_zero`;
