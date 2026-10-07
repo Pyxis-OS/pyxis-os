@@ -63,12 +63,10 @@ static void unmap_pixels(struct process *process, uintptr_t address, size_t size
   }
 }
 
-static enum call_status acquire_display(struct display_object *display,
-    struct process *process, struct display_buffer *reply)
+static enum call_status prepare_frame(struct display_object *display,
+    struct process *process, struct display_frame **prepared,
+    struct display_buffer *reply)
 {
-  if (display->owner) {
-    return CALL_BUSY;
-  }
   const struct framebuffer *layout = display->space->fb;
   if (!layout->size || layout->size > SIZE_MAX - (PAGE_SIZE - 1)) {
     return CALL_LIMIT;
@@ -106,9 +104,7 @@ static enum call_status acquire_display(struct display_object *display,
     }
   }
 
-  display->frame = frame;
-  display->owner = process;
-  display->user_address = address;
+  *prepared = frame;
   *reply = (struct display_buffer){
     .address = address,
     .size = mapping_size,
@@ -123,11 +119,28 @@ static enum call_status acquire_display(struct display_object *display,
   return CALL_OK;
 }
 
-static void release_display(struct display_object *display)
+static enum call_status acquire_display(struct display_object *display,
+    struct process *process, struct display_buffer *reply)
 {
-  struct display_frame *frame = display->frame;
+  if (display->owner) {
+    return CALL_BUSY;
+  }
+  struct display_frame *frame;
+  enum call_status status = prepare_frame(display, process, &frame, reply);
+  if (status != CALL_OK) {
+    return status;
+  }
+  display->frame = frame;
+  display->owner = process;
+  display->user_address = reply->address;
+  return CALL_OK;
+}
+
+static void retire_frame(struct process *process, struct display_frame *frame,
+    uintptr_t address)
+{
   if (frame->references > 1) {
-    struct execution_group *group = display->owner->execution_group;
+    struct execution_group *group = process->execution_group;
     if (group) {
       execution_group_cleanup_begin(group);
       frame->cleanup_group = group;
@@ -136,20 +149,50 @@ static void release_display(struct display_object *display)
     }
   }
   size_t size = (frame->fb.size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-  unmap_pixels(display->owner, display->user_address, size);
-  KASSERT(vm_release(display->owner->address_space, display->user_address, size) == MM_OK);
+  unmap_pixels(process, address, size);
+  KASSERT(vm_release(process->address_space, address, size) == MM_OK);
 
-  display->visible = false;
-  display->owner = NULL;
-  display->frame = NULL;
-  display->user_address = 0;
   /* A preempted presenter may still read this frame. It owns its own reference
    * and will release the backing and pending cleanup after finishing. */
   display_frame_release(frame);
 }
 
+static void release_display(struct display_object *display)
+{
+  retire_frame(display->owner, display->frame, display->user_address);
+  display->visible = false;
+  display->owner = NULL;
+  display->frame = NULL;
+  display->user_address = 0;
+}
+
+static enum call_status replace_display(struct display_object *display,
+    struct process *process, uint64_t generation, uintptr_t reply_address,
+    struct display_buffer *reply)
+{
+  if (generation != display->space->tty->geometry_generation) {
+    return CALL_BUSY;
+  }
+  size_t size = (display->frame->fb.size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+  if (reply_address < display->user_address + size &&
+      display->user_address < reply_address + sizeof(*reply)) {
+    return CALL_BAD_BUFFER;
+  }
+
+  struct display_frame *frame;
+  enum call_status status = prepare_frame(display, process, &frame, reply);
+  if (status != CALL_OK) {
+    return status;
+  }
+  retire_frame(process, display->frame, display->user_address);
+  display->frame = frame;
+  display->user_address = reply->address;
+  return CALL_OK;
+}
+
 static enum call_status service_display(struct display_object *display,
-    struct process *process, uint64_t operation, union display_reply *reply)
+    struct process *process, uint64_t operation, uint64_t generation,
+    uintptr_t reply_address, union display_reply *reply)
 {
   KASSERT(arch_cpu_index() == 0);
   if (display->space != process->space) {
@@ -182,6 +225,9 @@ static enum call_status service_display(struct display_object *display,
   if (display->owner != process) {
     return CALL_DENIED;
   }
+  if (operation == DISPLAY_REPLACE) {
+    return replace_display(display, process, generation, reply_address, &reply->buffer);
+  }
   if (operation == DISPLAY_PRESENT) {
     display->visible = true;
   } else {
@@ -197,13 +243,14 @@ void display_request_execute(struct display_request *request)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->request.state == BSP_REQUEST_SERVICING);
   request->result = service_display(request->display, request->loan,
-      request->operation, &request->reply);
+      request->operation, request->generation, request->reply_address, &request->reply);
   request->loan = NULL;
   request->display = NULL;
 }
 
 static enum call_status request_display(struct display_object *display,
-    uint64_t operation, union display_reply *reply)
+    uint64_t operation, uint64_t generation, uintptr_t reply_address,
+    union display_reply *reply)
 {
   struct display_request *request =
       (struct display_request *)bsp_request_prepare(BSP_SERVICE_DISPLAY);
@@ -211,6 +258,8 @@ static enum call_status request_display(struct display_object *display,
   KASSERT(request->loan);
   request->display = display;
   request->operation = operation;
+  request->generation = generation;
+  request->reply_address = reply_address;
   request->reply = (union display_reply){0};
 
   bsp_request_submit_and_wait(&request->request);
@@ -230,21 +279,31 @@ void display_process_exit(struct process *process)
 }
 
 struct syscall_result display_call(struct display_object *display, uint64_t rights,
-    uint64_t operation, size_t request_size, uintptr_t reply_address,
-    size_t reply_capacity)
+    uint64_t operation, uintptr_t request_address, size_t request_size,
+    uintptr_t reply_address, size_t reply_capacity)
 {
   if (operation != DISPLAY_ACQUIRE && operation != DISPLAY_PRESENT &&
-      operation != DISPLAY_RELEASE && operation != DISPLAY_SIZE) {
+      operation != DISPLAY_RELEASE && operation != DISPLAY_SIZE &&
+      operation != DISPLAY_REPLACE) {
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & DISPLAY_RIGHT_DRAW)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
-  if (request_size) {
+  uint64_t generation = 0;
+  if (operation == DISPLAY_REPLACE) {
+    if (request_size != sizeof(generation)) {
+      return (struct syscall_result){CALL_BAD_REQUEST, 0};
+    }
+    if (!copy_from_user(&generation, request_address, sizeof(generation))) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+  } else if (request_size) {
     return (struct syscall_result){CALL_BAD_REQUEST, 0};
   }
   union display_reply reply = {0};
-  size_t reply_size = operation == DISPLAY_ACQUIRE ? sizeof(reply.buffer) :
+  size_t reply_size = operation == DISPLAY_ACQUIRE || operation == DISPLAY_REPLACE ?
+    sizeof(reply.buffer) :
     operation == DISPLAY_SIZE ? sizeof(reply.size) : 0;
   if (reply_size) {
     if (reply_capacity < reply_size) {
@@ -255,11 +314,12 @@ struct syscall_result display_call(struct display_object *display, uint64_t righ
     }
   }
 
-  enum call_status status = request_display(display, operation, &reply);
+  enum call_status status = request_display(display, operation, generation,
+      reply_address, &reply);
   if (status != CALL_OK || !reply_size) {
     return (struct syscall_result){status, 0};
   }
-  /* Acquisition adds a disjoint mapping; the checked reply stays writable. */
+  /* New mappings are disjoint; REPLACE refuses to retire the checked reply. */
   KASSERT(copy_to_user(reply_address, &reply, reply_size));
   return (struct syscall_result){CALL_OK, reply_size};
 }

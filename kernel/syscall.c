@@ -351,7 +351,7 @@ static struct syscall_result call_object(handle_t handle,
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
     }
     return display_call((struct display_object *)object, rights, header.operation,
-        request_size, reply_address, reply_capacity);
+        request_address, request_size, reply_address, reply_capacity);
   case OBJECT_MEMORY:
     if (header.protocol != PROTOCOL_MEMORY) {
       return (struct syscall_result){CALL_BAD_OPERATION, 0};
