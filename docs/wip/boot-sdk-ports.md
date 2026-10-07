@@ -154,6 +154,11 @@ driver interface, VirtIO GPU 2D, Bochs and live resizing. Physical GPUs follow.
 connections, and opt-in UDP boot/panic capture. The owner qualified all three
 on the ThinkPad over PXE, including complete boot replay after IPv4 assignment.
 
+[Everyday commands](../userland/everyday-commands.md) completed 2026-10-07:
+native `echo` and staged `cp`, sorted terminal columns/colors and long listings
+in `ls`, and verified foreground shell-script launch in an opted-in space.
+The remaining [everyday gaps](everyday-gaps.md) list has no unscheduled entries.
+
 [LLVM toolchain on the host](llvm-toolchain.md), agreed 2026-10-07 for Claude
 after the ACPI milestone: Clang and LLD build the kernel, SDK, userland and
 ports, then become the default and GCC is retired. It is the first of the
@@ -408,6 +413,10 @@ is parked after local users; it adds no tasks to current milestones.
 The fresh-line prompt and current working-path display are implemented. Their
 behavior and limits are documented in [the shell reference](../userland/shell.md) and
 [terminal reference](../userland/terminal.md).
+
+Terminal scrollback remains a candidate after the
+[display milestone](display-drivers.md)'s resize work (task 5a). It needs retained
+text storage and was explicitly deferred from everyday commands.
 
 ## Completing a milestone
 
