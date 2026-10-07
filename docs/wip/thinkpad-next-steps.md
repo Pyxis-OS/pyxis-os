@@ -330,11 +330,41 @@ driver. Caelum already only reads this controller's XID and leaves it untouched
   scans. Wake-on-LAN on this NIC is a plausible cause, but this was not
   confirmed.
 
-**Next step, when it's worth the effort:** first-time DASH setup (credentials
-and network mode). This likely needs a vendor tool running on the laptop's own
-OS, possibly Windows-only. Then run the UART echo test from Fedora during a
-text-redirection session, to see which of `ttyS4` and `ttyS5` is forwarded. Not
-needed for the NIC driver work.
+**Reached on 2026-10-07 (owner):**
+
+- **Web interface:** the controller answers on its own LAN address, over HTTPS
+  on port 664, while Fedora is asleep or awake. The menus show system
+  information, an event log, network and service settings, and Remote Control.
+  - Remote Control offers only power on, power off and reset.
+  - The Battery page shows presence and health, not the charge level.
+- **AMD DASH CLI:** discovery works on HTTP port 623. Enumeration and text
+  redirection need HTTPS on port 664 with digest authentication, plus the
+  CLI's option to accept the self-signed certificate.
+- **Serial over LAN:** the controller has two text-redirection services, both
+  disabled by default:
+  - Telnet on port 87;
+  - SSH on port 57.
+
+  `textredirection connect`, with no `-t` target, prompts for an instance and
+  activates it. The client must then connect within about 20 seconds, or the
+  service switches itself off again.
+  - **Telnet works:** log in with the DASH account.
+  - **SSH does not work:** the server offers only `diffie-hellman-group1-sha1`,
+    and connections were refused after a first failed attempt. The vendor's
+    tool fails too.
+- **The forwarded UART is `ttyS4`:** `02:00.1`, `10ec:816a`, I/O `0x3200`, at
+  115200 baud. Text written to it under Fedora appeared in the Telnet session.
+- **Without a session the UART barely drains:** writing 200 bytes took 2.5 s,
+  about 80 bytes per second. A kernel log writer must therefore never wait on it.
+- **Windows console:** the Windows DASH management console needed version 7.0 to
+  connect, and showed nothing beyond the CLI.
+
+**Owner decision, 2026-10-07: not relied on.** The setup is fragile: the
+20-second enable window, SSH not working, and old tools. Remote boot logs go
+through the [kernel log over UDP](remote-debugging.md) instead. Caelum still
+writes serial output only to COM1 (`0x3f8`). If DASH is revisited, the findings
+above say what a writer for `0x3200` would need: find the UART by PCI ID, never
+wait for a session, and replay the log ring once found.
 
 ## Not covered here
 
