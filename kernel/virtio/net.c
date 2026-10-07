@@ -86,7 +86,9 @@ enum virtio_net_operation {
 static bool enter_network(struct virtio_net_controller *controller,
     enum virtio_net_operation operation, uint64_t *flags)
 {
-  *flags = cpu_save_interrupts();
+  bool guard_interrupts = net_log_udp_enabled() ||
+      operation == NET_OPERATION_ACTIVATE || operation == NET_OPERATION_RESET;
+  *flags = guard_interrupts ? cpu_save_interrupts() : 0;
   if (!net_panic_gate_enter(&controller->panic_gate, operation)) {
     cpu_restore_interrupts(*flags);
     return false;
