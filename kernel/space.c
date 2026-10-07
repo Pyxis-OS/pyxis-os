@@ -7,6 +7,7 @@
 #include "kernel/fb/font.h"
 #include "kernel/fb/tty.h"
 #include <kernel/fb/early_console.h>
+#include <kernel/acpi.h>
 #include <kernel/mm/types.h>
 #include <kernel/space.h>
 #include <kernel/defs.h>
@@ -34,6 +35,12 @@
 /* Character cells: a chevron slot at each end, and blank margin each side of a title. */
 #define SPACES_NAV_CHEVRON_CELLS 2
 #define SPACES_NAV_TITLE_PADDING_CELLS 1
+/* The battery widget's slot, inside the right chevron: a box around three
+ * characters, so its width never changes between 0% and 100%. */
+#define BATTERY_WIDGET_CELLS 5
+#define BATTERY_BOX_CELLS 4
+#define BATTERY_TEXT_CELLS 3
+#define BATTERY_BOX_PADDING 4
 
 static const struct boot_framebuffer *screen;
 /* Registry order starts at Caelum. space_create appends on the BSP at any time. */
@@ -42,6 +49,8 @@ static struct space *caelum_space, *last_space;
 static struct space *active_space;
 /* Registry index of the leftmost visible tab. Presenter-owned. */
 static size_t viewport_first;
+/* Whether the battery widget takes its slot. Presenter-owned, set per frame. */
+static bool battery_shown;
 
 static struct framebuffer *spaces_nav_fb;
 /* One text row of the space area. The cursor's row is composed here, cursor
@@ -333,6 +342,9 @@ static struct nav_layout nav_layout(void)
   }
 
   size_t chevrons = 2 * SPACES_NAV_CHEVRON_CELLS * bizcat.width;
+  if (battery_shown) {
+    chevrons += BATTERY_WIDGET_CELLS * bizcat.width;
+  }
   size_t available = spaces_nav_fb->width > chevrons ? spaces_nav_fb->width - chevrons : 0;
   size_t minimum = (widest + 2 * SPACES_NAV_TITLE_PADDING_CELLS) * bizcat.width;
   layout.visible = MIN(layout.count, MAX(available / minimum, 1));
@@ -425,8 +437,79 @@ static void draw_tab(struct space *space, size_t x, size_t width)
   }
 }
 
+struct gradient_stop {
+  uint8_t percent;
+  uint32_t color;
+};
+
+/* The widget's background follows the charge, from red when empty through
+ * brown at 25% to green when full. */
+static const struct gradient_stop battery_gradient[] = {
+  {0, 0xaa0000},
+  {25, 0x773300},
+  {100, 0x669900},
+};
+
+static uint32_t blend_channel(uint32_t from, uint32_t to, unsigned shift, int step, int span)
+{
+  int a = (int)((from >> shift) & 0xff);
+  int b = (int)((to >> shift) & 0xff);
+  return (uint32_t)(a + (b - a) * step / span) << shift;
+}
+
+static uint32_t battery_color(uint8_t percent)
+{
+  size_t last = sizeof(battery_gradient) / sizeof(battery_gradient[0]) - 1;
+  size_t i = 0;
+  while (i + 1 < last && percent > battery_gradient[i + 1].percent) {
+    ++i;
+  }
+  const struct gradient_stop *from = &battery_gradient[i], *to = &battery_gradient[i + 1];
+  int step = percent - from->percent;
+  int span = to->percent - from->percent;
+  return blend_channel(from->color, to->color, 16, step, span) |
+         blend_channel(from->color, to->color, 8, step, span) |
+         blend_channel(from->color, to->color, 0, step, span);
+}
+
+/* "100" when full, otherwise two digits and a percent sign: "07%". */
+static void battery_text(uint8_t percent, char text[BATTERY_TEXT_CELLS])
+{
+  if (percent >= 100) {
+    text[0] = '1';
+    text[1] = '0';
+    text[2] = '0';
+    return;
+  }
+  text[0] = (char)('0' + percent / 10);
+  text[1] = (char)('0' + percent % 10);
+  text[2] = '%';
+}
+
+static void draw_battery(size_t x, uint8_t percent)
+{
+  size_t padding = (SPACES_NAV_HEIGHT - bizcat.height) / 2;
+  size_t box_x = x + (BATTERY_WIDGET_CELLS - BATTERY_BOX_CELLS) * bizcat.width / 2;
+  uint32_t color = battery_color(percent);
+  fb_fill_rect(spaces_nav_fb, box_x, padding - BATTERY_BOX_PADDING,
+      BATTERY_BOX_CELLS * bizcat.width, bizcat.height + 2 * BATTERY_BOX_PADDING, color);
+
+  char text[BATTERY_TEXT_CELLS];
+  battery_text(percent, text);
+  size_t text_x = box_x + (BATTERY_BOX_CELLS - BATTERY_TEXT_CELLS) * bizcat.width / 2;
+  for (size_t i = 0; i < BATTERY_TEXT_CELLS; ++i) {
+    tty_plot_char_raw(spaces_nav_fb, &bizcat, text[i], text_x + i * bizcat.width, padding,
+        aardvark_scheme.foreground, color);
+  }
+}
+
 static void draw_spaces_nav()
 {
+  uint64_t flags = cpu_save_interrupts();
+  struct acpi_battery_status battery = acpi_battery_status();
+  cpu_restore_interrupts(flags);
+  battery_shown = battery.present;
+
   struct nav_layout layout = nav_layout();
   /* A title change can shrink the visible count; keep the selection in view. */
   keep_selection_visible(&layout, space_index(active_space));
@@ -437,6 +520,10 @@ static void draw_spaces_nav()
   draw_chevron(0, '<', viewport_first > 0);
   draw_chevron(spaces_nav_fb->width - chevron_width, '>',
       viewport_first + layout.visible < layout.count);
+  if (battery_shown) {
+    draw_battery(spaces_nav_fb->width - chevron_width - BATTERY_WIDGET_CELLS * bizcat.width,
+        battery.percent);
+  }
 
   struct space *space = caelum_space;
   for (size_t i = 0; i < viewport_first; ++i) {
