@@ -2134,3 +2134,23 @@ show unacceptable listing latency, and Unicode presentation when the terminal
 has an agreed character-width contract. Owner-run ThinkPad and disk-backed
 listing qualification remain unperformed; current evidence is nested QEMU with
 archive, RAM and HOST directories.
+
+## Native cp staging and recovery limits
+
+[cp](userland/cp.md) uses exclusive sibling temporary files and held-directory
+rename/removal. Accepted 2026-10-07: other writers must leave the temporary
+file/name untouched until completion; native mutation APIs do not bind a name
+to the held file identity. Source data remains live, copying its initial size;
+concurrent overwrites can mix contents, and same-file aliases replace the object.
+Staging requires destination CREATE/WRITE_FILES/REMOVE rather than permission to
+write an existing file alone. It has no direct-truncation fallback.
+
+Interruption can leave a named temporary file. Unconfirmed creation/publication
+is reported without retry or name removal; failed cleanup can leave partial
+storage. No stale-file sweeper or crash-durability guarantee is provided, and
+operator cleanup must establish which names currently exist before removing
+anything. Revisit reservation/publication primitives if cp must tolerate another
+writer changing its temporary file/name, and cleanup policy when persistent
+operational use needs recovery from interrupted copies. Provider sources,
+native disk copies, durability and owner-run ThinkPad usage remain unqualified;
+current measured evidence covers archive/RAM/HOST copying in nested QEMU.

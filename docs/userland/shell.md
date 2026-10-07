@@ -150,6 +150,15 @@ and does not append a basename when the destination is a directory. Directory
 moves and cross-filesystem copying are unsupported. It uses libc rename and
 reports failure without deleting the source or destination itself.
 
+[`cp [--] source-file... destination`](cp.md) copies files within or across roots.
+A directory destination receives each source's basename; several sources require
+an existing directory. Existing files are replaced through a completed sibling
+temporary file, so the destination directory needs create, file-write and remove
+rights. There is no recursive copy or direct-truncation fallback. Read failures
+preserve the old destination; unconfirmed publication reports possible names
+without retrying or deleting them. See the reference for concurrency and cleanup
+limits.
+
 `sync path...` requests synchronization for each explicit file or directory
 path, in argument order. It continues after an individual error and exits with
 failure if any target failed; with no arguments it prints usage and fails.
