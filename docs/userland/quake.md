@@ -86,6 +86,7 @@ seconds and frames per second to the console and the shell's terminal.
 | --- | --- | --- |
 | QEMU 10.2.2/KVM, 4 CPUs, nested VM, development host, 2026-10-04 | 1617.0, 1653.0, 1622.7, 1351.3, 1588.1, 1592.1, 1598.2 | 1598.2 |
 | Native ThinkPad T14 Gen 1 AMD, PXE, owner, 2026-10-04 | 634.2 (969 frames, 1.5 s) | — |
+| Native ThinkPad, PXE, owner, 2026-10-07, after the boot display driver (#468) | 667.1 | — |
 
 That run booted the ISO as a read-only virtio disk, because this host's stock
 QEMU crashed reading it through AHCI. A review run through the CD-ROM path with

@@ -124,7 +124,7 @@ Accepted reader contract for task 1 on 2026-10-07:
     `fj pr status` cannot parse userland's
     empty combined state (`unknown variant`); dependency CI is unavailable.
 
-- [ ] **2. The reverse remote terminal.**
+- [x] **2. The reverse remote terminal.**
   - A host server broadcasts a small UDP beacon about once a second. The
     beacon is sent to `255.255.255.255` or the subnet broadcast address. It
     carries:
@@ -156,7 +156,10 @@ Accepted reader contract for task 1 on 2026-10-07:
       host source; Ctrl+] closed with acknowledged group termination.
     - [x] Without the option, the ordinary listener remains active (GDB
       `listener_count` is one), and remote `log` and `ls` exit successfully.
-    - [ ] On the ThinkPad over PXE, the owner gets a shell and `log` this way.
+    - [x] On the ThinkPad over PXE (main after the #467–#470 merges,
+      2026-10-07), the owner's listener received the connection from the
+      beacon, and `log -f` showed the boot from its first line, including boot
+      init's lines, until Ctrl+C.
   - **Measured:** baseline direct `log` connect/read/teardown at `7a5682f`
     reported 0.02 s in each of three samples. Reverse chained sessions reported
     1.02, 0.03 and 0.09 s; the first followed an abrupt disconnect with a Lua
@@ -167,9 +170,7 @@ Accepted reader contract for task 1 on 2026-10-07:
     output was 4519 bytes versus the 4393-byte baseline after added termination
     messages; TCP transport and log reads are unchanged. Ordinary-mode samples
     after the change all remained 0.02 s and 4393 bytes, matching the baseline.
-  - **Remaining:** native ThinkPad/PXE and subnet-broadcast checks are pending;
-    the task stays unchecked until the owner gets a shell and `log` natively.
-    Linux loopback/QEMU beacons were validated; macOS listener mode was not.
+  - **Remaining:** macOS listener mode was not checked.
   - **Delivery:** branch `debug/reverse-terminal` in
     `/home/chronium/src/pyxis-remote-debugging`; userland
     [PR #141](https://git.internal/PyxisOS/pyxis-userland/pulls/141) at

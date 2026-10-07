@@ -193,14 +193,20 @@ Accepted for task 4 on 2026-10-07:
       triple fault; an opt-in variable such as `QEMU_NO_REBOOT=1` would bring
       the stop back. The owner's call.
 
-- [ ] **4. Power button.**
+- [x] **4. Power button.**
   - A short press of the physical power button runs the same clean power-off as
     `poweroff`. Holding it remains the firmware's emergency path.
   - Enable the power button's fixed event (decisions 6 and 17).
-  - **Status:** implemented ([ACPI](../kernel/acpi.md#power-off-and-restart));
-    the ThinkPad check is pending. In QEMU, `system_powerdown` powers off
-    cleanly with one and four CPUs, and unsynced files survive with an empty
-    journal. The unclaimed-SCI note is handled by decision 14.
+  - **Status:** done ([ACPI](../kernel/acpi.md#power-off-and-restart)). In
+    QEMU, `system_powerdown` powers off cleanly with one and four CPUs, and
+    unsynced files survive with an empty journal. On 2026-10-07 the owner updated
+    the installed ThinkPad to main after the #467–#470 merges:
+    - a short press, not a hold, switched it off;
+    - after booting, a file was created and written, then the button was
+      pressed;
+    - on the next boot the file was present, with no journal replay.
+
+    The unclaimed-SCI note is handled by decision 14.
   - **Finish when:** a short press on the ThinkPad powers off cleanly, with an
     empty journal on the next boot.
   - The unclaimed-SCI note under task 3 applies here too: a spurious SCI must
