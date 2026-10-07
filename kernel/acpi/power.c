@@ -13,7 +13,8 @@
 
 /* Returns only if the firmware did not power off. The pools are already
  * flushed, so a failing _PTS does not stop power-off, as on Linux; entry
- * itself refuses when _S5 gave no valid sleep type. */
+ * itself refuses when _S5 gave no valid sleep type. Entry has disabled the
+ * runtime GPEs, so a failure runs the wake path to enable them again. */
 static enum call_status power_off(void)
 {
   uacpi_status status = uacpi_prepare_for_sleep_state(UACPI_SLEEP_STATE_S5);
@@ -23,6 +24,14 @@ static enum call_status power_off(void)
   }
   status = uacpi_enter_sleep_state(UACPI_SLEEP_STATE_S5);
   klog("power: firmware did not power off: %s\n", uacpi_status_to_string(status));
+
+  status = uacpi_prepare_for_wake_from_sleep_state(UACPI_SLEEP_STATE_S5);
+  if (status == UACPI_STATUS_OK) {
+    status = uacpi_wake_from_sleep_state(UACPI_SLEEP_STATE_S5);
+  }
+  if (status != UACPI_STATUS_OK) {
+    klog("power: ACPI events not restored: %s\n", uacpi_status_to_string(status));
+  }
   return CALL_UNAVAILABLE;
 }
 
