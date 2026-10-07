@@ -404,6 +404,12 @@ version of "clean" agreed for the ACPI milestone:
   `Notify(PNP0C0C, 0x80)` instead of the fixed event get no clean power-off
   from the button. The T14 and QEMU use the fixed event. Revisit on such a
   machine, with the notifications work.
+- **A button press interrupts an Update.** A press powers off at once
+  (decision 16), even while the installer rewrites a stick's ESP through raw
+  disk writes, which are not flushed, so the stick could be left unbootable.
+  Typing `poweroff` had the same effect, but a button is easier to press by
+  accident. Revisit with installer work: it could hold off power operations
+  while it writes.
 - **A failed S5 entry freezes the BSP for 10 s.** uACPI waits that long with
   interrupts disabled before reporting that the machine did not power off.
   Revisit if a machine reaches that path.
@@ -1731,7 +1737,7 @@ No dirty suffix or clean-tree attestation is currently implemented.
 ## Fastfetch first-port boundary
 
 The [implemented port](userland/fastfetch.md) uses explicit
-native-URI JSON/JSONC configs, one-shot text/JSON output and ten selected modules.
+native-URI JSON/JSONC configs, one-shot text/JSON output and eleven selected modules.
 Automatic config discovery, config/cache writes, dynamic refresh, image logos,
 Lua execution and executable/network helpers are excluded. Existing upstream
 configs may encounter unsupported diagnostics or upstream fallback behavior.
@@ -1751,6 +1757,12 @@ Disk values with a concrete verified core accounting interface, not inferred
 used/free arithmetic. Folder/glob filters remain unsupported on Pyxis; their
 Unix path grammar is not a capability-binding selector. Add selection only with
 a concrete caller need and an explicit native binding contract.
+
+Battery has no temperature or manufacture date, which ACPI does not report.
+Power Adapter is not built: ACPI's `_PSR` gives only online or offline, and the
+module prints watts, so it would show an invented value; AC presence appears in
+Battery's status instead. Linux shows no power adapter on the T14 either.
+Revisit with a source of adapter wattage, such as USB-C power delivery.
 
 Uptime exposes duration since HPET initialization. JSON bootTime is null;
 calendar boot-time/age placeholders are unset and render empty, so configurations

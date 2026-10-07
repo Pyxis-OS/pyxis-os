@@ -13,8 +13,8 @@ fastfetch --logo none | cat
 fastfetch --json > home://system.json
 ```
 
-The default text display uses the owner's Pyxis compass-rose ASCII logo and seven
-information modules. Colors, Break and Separator are also available through
+The default text display uses the owner's Pyxis compass-rose ASCII logo and eight
+information modules; Battery prints nothing on a machine without a battery. Colors, Break and Separator are also available through
 upstream module selection. Explicit JSON/JSONC files use ordinary libc reads
 through the caller's namespace; no configuration is discovered automatically.
 JSONC accepts comments and trailing commas. CLI presentation overrides and
@@ -33,12 +33,22 @@ instructions.
 | Uptime | Monotonic duration since HPET initialization through clock READ |
 | TerminalSize | Columns/rows from the named output console |
 | Disk | Observable native root bindings and labeled shared-pool capacity |
+| Battery | Percentage, AC and charge status, time remaining, cycle count and identification from `system_info` READ |
 
 [System information](../interfaces/system-information.md) defines the CPU,
 identity and coherent memory replies. These queries do not form one atomic
 snapshot. Allocator total excludes permanent reservations and is not installed
 RAM; online CPU count is not physical cores or process allowance. Uptime omits
 time before HPET initialization and does not establish a calendar boot time.
+
+Battery reads the kernel's latest ACPI poll, at most about five seconds old,
+through the [power queries](../interfaces/system-information.md#power-and-batteries).
+It shows each inserted battery with a known percentage; manufacturer, model,
+technology and serial are the firmware's OEM, model, type and serial strings.
+While discharging, time remaining is remaining capacity over the present rate,
+as Linux computes it. Temperature and manufacture date are unavailable. Power
+Adapter is not built, since ACPI reports no adapter wattage; `[AC Connected]` in
+Battery's status shows AC presence.
 
 Unavailable optional fields retain upstream empty/unset formatting and JSON null
 values. For example, `{name}{?freq-max} @ {freq-max}{?}` omits unknown frequency;

@@ -155,6 +155,12 @@ reading is published with IF=0 on the BSP. Without a battery, or when no battery
 gives a valid reading, it is not present. The kernel presenter draws it in the
 [space bar](../userland/init.md#space-bar).
 
+Each poll also publishes one record per battery and the AC state for the
+`system_info` [power queries](../interfaces/system-information.md#power-and-batteries):
+the `_BST` values, the information package's capacities, cycle count and
+strings, and that battery's own percentage. The BSP executor copies them with
+IF=0; no AML runs for a query. Polling evaluates the same methods as before.
+
 ## Power-off and restart
 
 The `power` capability ([ABI](../../include/abi/power.h)) carries OFF and RESTART

@@ -111,7 +111,7 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 
 | Service | Submission and retained contract |
 | --- | --- |
-| System information | Ordinary; coherent allocator-counter snapshot, no caller state loan or mutation |
+| System information | Ordinary; coherent allocator-counter snapshot, or a copy of the ACPI worker's latest battery and AC poll; no caller state loan or mutation |
 | Pipe creation | Ordinary; exclusive table loan and atomic endpoint installation/rollback |
 | Terminal creation | Ordinary; exclusive table loan, fixed queue allocation and atomic three-handle installation/rollback |
 | Capability growth | Ordinary; exclusive caller table loan |

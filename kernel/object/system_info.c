@@ -2,6 +2,7 @@
 #include <arch/cpu_info.h>
 #include <arch/smp.h>
 #include <kernel-build-revision.h>
+#include <kernel/acpi.h>
 #include <kernel/memory.h>
 #include <kernel/mm/heap.h>
 #include <kernel/mm/pmm.h>
@@ -63,6 +64,19 @@ system_info_memory_execute(struct system_info_memory_request *request)
   };
 }
 
+void
+system_info_power_execute(struct system_info_power_request *request)
+{
+  KASSERT(arch_cpu_index() == 0);
+  KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (request->operation == SYSTEM_INFO_POWER) {
+    request->reply.power = acpi_power_state();
+    request->found = true;
+  } else {
+    request->found = acpi_battery_read(request->index, &request->reply.battery);
+  }
+}
+
 static uint64_t
 pci_state(void)
 {
@@ -92,6 +106,7 @@ system_info_call(uint64_t rights, uint64_t operation, uintptr_t request_address,
   struct system_info_pci pci;
   struct system_info_pci_function function;
   struct system_info_pci_function_request function_request = {0};
+  uint64_t battery_index = 0;
   switch (operation) {
   case SYSTEM_INFO_IDENTITY:
     size = sizeof(identity);
@@ -132,6 +147,15 @@ system_info_call(uint64_t rights, uint64_t operation, uintptr_t request_address,
     size = sizeof(usb_interface);
     payload_size = sizeof(usb_request.index);
     reply = &usb_interface;
+    break;
+  case SYSTEM_INFO_POWER:
+    size = sizeof(struct system_info_power);
+    reply = NULL;
+    break;
+  case SYSTEM_INFO_BATTERY:
+    size = sizeof(struct system_info_battery);
+    payload_size = sizeof(battery_index);
+    reply = NULL;
     break;
   default:
     return (struct syscall_result){CALL_BAD_OPERATION, 0};
@@ -203,6 +227,30 @@ system_info_call(uint64_t rights, uint64_t operation, uintptr_t request_address,
     memory = request->reply;
     bsp_request_release(&request->request);
     reply = &memory;
+  }
+  struct system_info_power power;
+  struct system_info_battery battery;
+  if (operation == SYSTEM_INFO_POWER || operation == SYSTEM_INFO_BATTERY) {
+    if (operation == SYSTEM_INFO_BATTERY &&
+        !copy_from_user(&battery_index, request_address, payload_size)) {
+      return (struct syscall_result){CALL_BAD_BUFFER, 0};
+    }
+    struct system_info_power_request *request =
+        (struct system_info_power_request *)bsp_request_prepare(BSP_SERVICE_SYSTEM_INFO_POWER);
+    request->operation = operation;
+    request->index = battery_index;
+    bsp_request_submit_and_wait(&request->request);
+    bool found = request->found;
+    if (operation == SYSTEM_INFO_POWER) {
+      power = request->reply.power;
+    } else {
+      battery = request->reply.battery;
+    }
+    bsp_request_release(&request->request);
+    if (!found) {
+      return (struct syscall_result){CALL_NOT_FOUND, 0};
+    }
+    reply = operation == SYSTEM_INFO_POWER ? (const void *)&power : (const void *)&battery;
   }
   if (!copy_to_user(reply_address, reply, size)) {
     return (struct syscall_result){CALL_BAD_BUFFER, 0};

@@ -13,6 +13,8 @@
 #define SYSTEM_INFO_USB_CONTROLLER UINT64_C(7)
 #define SYSTEM_INFO_USB_DEVICE UINT64_C(8)
 #define SYSTEM_INFO_USB_INTERFACE UINT64_C(9)
+#define SYSTEM_INFO_POWER UINT64_C(10)
+#define SYSTEM_INFO_BATTERY UINT64_C(11)
 
 #define SYSTEM_INFO_USB_UNAVAILABLE UINT64_C(1)
 #define SYSTEM_INFO_USB_INITIALIZING UINT64_C(2)
@@ -158,6 +160,64 @@ struct system_info_usb_interface {
   uint8_t endpoint_count;
   uint8_t reserved;
 };
+
+/* Power-source state from the ACPI worker's latest poll, every few seconds;
+ * no firmware runs on the query. sample_ns is that poll's monotonic time, zero
+ * before the first poll or without ACPI. battery_count counts battery devices,
+ * present or not; their records are indexed 0..battery_count-1. */
+#define SYSTEM_INFO_AC_UNKNOWN 0u /* No adapter device, or no valid reading. */
+#define SYSTEM_INFO_AC_OFFLINE 1u
+#define SYSTEM_INFO_AC_ONLINE 2u
+
+struct system_info_power {
+  uint64_t sample_ns;
+  uint32_t ac;
+  uint32_t battery_count;
+};
+
+struct system_info_battery_request {
+  struct message_header header;
+  uint64_t index;
+};
+
+#define SYSTEM_INFO_BATTERY_PRESENT (1u << 0)
+#define SYSTEM_INFO_BATTERY_DISCHARGING (1u << 1)
+#define SYSTEM_INFO_BATTERY_CHARGING (1u << 2)
+#define SYSTEM_INFO_BATTERY_CRITICAL (1u << 3)
+
+/* Capacities in mWh and rates in mW, or mAh and mA, as the firmware reports. */
+#define SYSTEM_INFO_BATTERY_UNIT_MWH 0u
+#define SYSTEM_INFO_BATTERY_UNIT_MAH 1u
+#define SYSTEM_INFO_BATTERY_UNKNOWN UINT32_MAX
+
+/* Firmware values as reported (_BIX or _BIF, and _BST), not converted. Any
+ * numeric field may be UNKNOWN; without PRESENT all of them are, and strings
+ * are empty. percent is remaining over last full capacity, or design capacity
+ * when last full is unknown, rounded down and capped at 100: the space bar's
+ * figure. present_rate is the charge or discharge rate, voltage is in mV.
+ * Strings come from the battery information package, truncated, NUL-terminated
+ * and zero-filled. */
+struct system_info_battery {
+  uint64_t sample_ns;
+  uint32_t flags;
+  uint32_t percent;
+  uint32_t unit;
+  uint32_t remaining_capacity;
+  uint32_t last_full_capacity;
+  uint32_t design_capacity;
+  uint32_t present_rate;
+  uint32_t voltage;
+  uint32_t cycle_count;
+  uint32_t reserved;
+  char model[32];
+  char serial[32];
+  char type[16];
+  char oem[32];
+};
+
+_Static_assert(sizeof(struct system_info_power) == 16, "power state layout");
+_Static_assert(sizeof(struct system_info_battery_request) == 24, "battery request layout");
+_Static_assert(sizeof(struct system_info_battery) == 160, "battery layout");
 
 _Static_assert(sizeof(struct system_info_usb) == 32, "USB inventory layout");
 _Static_assert(sizeof(struct system_info_usb_request) == 24, "USB index request layout");

@@ -32,6 +32,8 @@ static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
       offsetof(struct acpi_power_request, request)},
   [BSP_SERVICE_SYSTEM_INFO_MEMORY] = {sizeof(struct system_info_memory_request), alignof(struct system_info_memory_request),
       offsetof(struct system_info_memory_request, request)},
+  [BSP_SERVICE_SYSTEM_INFO_POWER] = {sizeof(struct system_info_power_request), alignof(struct system_info_power_request),
+      offsetof(struct system_info_power_request, request)},
   [BSP_SERVICE_TERMINAL_CREATE] = {sizeof(struct terminal_create_service_request), alignof(struct terminal_create_service_request),
       offsetof(struct terminal_create_service_request, request)},
   [BSP_SERVICE_PIPE_CREATE] = {sizeof(struct pipe_create_request), alignof(struct pipe_create_request),
@@ -136,6 +138,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_NPFS:
   case BSP_SERVICE_READINESS:
   case BSP_SERVICE_SYSTEM_INFO_MEMORY:
+  case BSP_SERVICE_SYSTEM_INFO_POWER:
   case BSP_SERVICE_POWER:
     return false;
   case BSP_SERVICE_DISPLAY:
@@ -280,6 +283,9 @@ static void service_request(struct bsp_request *request)
     break;
   case BSP_SERVICE_SYSTEM_INFO_MEMORY:
     system_info_memory_execute((struct system_info_memory_request *)request);
+    break;
+  case BSP_SERVICE_SYSTEM_INFO_POWER:
+    system_info_power_execute((struct system_info_power_request *)request);
     break;
   case BSP_SERVICE_DISPLAY:
     display_request_execute((struct display_request *)request);
