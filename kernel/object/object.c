@@ -27,6 +27,7 @@
 #include <abi/endpoint.h>
 #include <arch/smp.h>
 #include <kernel/object/console.h>
+#include <abi/power.h>
 #include <kernel/object/object.h>
 #include <kernel/object/endpoint.h>
 #include <kernel/panic.h>
@@ -99,6 +100,8 @@ uint64_t object_protocol(const struct kernel_object *object)
     return PROTOCOL_SPACE;
   case OBJECT_SPACE_FACTORY:
     return PROTOCOL_SPACE_FACTORY;
+  case OBJECT_POWER:
+    return PROTOCOL_POWER;
   case OBJECT_PROFILE:
     return PROTOCOL_PROFILE;
   case OBJECT_PIPE_SERVICE:
@@ -180,6 +183,8 @@ bool object_authority_valid(const struct kernel_object *object, uint64_t rights,
     return !(rights & ~SPACE_RIGHTS);
   case OBJECT_SPACE_FACTORY:
     return !(rights & ~SPACE_FACTORY_RIGHTS);
+  case OBJECT_POWER:
+    return !(rights & ~POWER_RIGHTS);
   case OBJECT_TERMINAL_SERVICE:
     return !(rights & ~TERMINAL_SERVICE_RIGHT_CREATE);
   case OBJECT_TERMINAL_ATTACHMENT:

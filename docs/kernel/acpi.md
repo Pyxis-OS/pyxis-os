@@ -5,13 +5,13 @@ use ACPI devices and AML methods. Static tables that early boot needs (the
 MADT, FADT flags, HPET and MCFG) are still read directly by
 `arch/x86_64/acpi.c` before the CR3 switch. This page describes what the
 [ACPI milestone](../wip/acpi-and-bar-widgets.md) has implemented so far: the
-namespace is loaded, and no ACPI device is used yet.
+namespace is loaded, and the kernel powers off and restarts through it.
 
 ## Ownership
 
 One BSP kernel worker owns uACPI. It makes every uACPI call, runs all AML and
-deferred ACPI work, and handles the SCI. Other kernel code will reach ACPI by
-asking this worker. The host interface (`kernel/acpi/host.c`) asserts that
+deferred ACPI work, and handles the SCI. Other kernel code reaches ACPI through
+BSP requests forwarded to this worker. The host interface (`kernel/acpi/host.c`) asserts that
 its waiting, mapping, PCI, port and work callbacks run on that worker.
 
 Because nothing else calls uACPI, its locks never contend with another
@@ -105,6 +105,46 @@ the BSP also meets uACPI's requirement that GPE work run on CPU 0. A request to
 wait for work completion services a pending SCI, then runs every queued item,
 including items they queue. Work cannot wait for work.
 
+## Power-off and restart
+
+The `power` capability ([ABI](../../include/abi/power.h)) carries OFF and RESTART
+rights. The kernel grants both to boot init, which forwards them to spaces that
+set `power = true` ([boot configuration](../userland/init.md#boot-configuration)).
+The shell's `poweroff` and `reboot` builtins use it.
+
+A call travels as the `BSP_SERVICE_POWER` request: the executor forwards it to
+the ACPI worker, which runs one power operation at a time. A second request
+while one runs completes with BUSY; without a running ACPI worker, because
+the namespace failed to load or there is no RSDP, it completes with
+UNAVAILABLE. The worker runs the operation at its top level, like deferred work:
+
+1. It logs `power: flushing pools; powering off` (or `restarting`).
+2. It holds user execution. Each user task parks at its next return to user
+   mode, from a syscall, a timer preemption or the ready queue. A task already
+   inside a syscall finishes that syscall first. Programs are not asked to exit;
+   kernel workers keep running.
+3. It asks the native filesystem worker to flush. After the requests already
+   queued, that worker writes every writable pool's dirty data and checkpoints
+   it until its journal is EMPTY. Pools that failed earlier or are read-only
+   take no writes and are skipped. On success the pools are sealed: requests
+   that could change a pool or a device fail with UNAVAILABLE, and background
+   writeback stops.
+4. Power-off evaluates the S5 preparation methods and enters S5 through uACPI.
+   A failing `_PTS` is logged but does not stop power-off, since the pools are
+   already flushed; entry itself needs a valid `_S5` sleep type.
+   Restart writes the FADT reset register. If that register is absent, unusable
+   (one in PCI configuration space is refused like any PCI write) or has not
+   reset the machine after a second, the architecture fallback pulses the 8042
+   reset line and then triple-faults the CPU.
+
+If the flush fails, or the firmware does not power off, the pools are unsealed,
+held tasks are released, `power: power-off failed (status N); the system stays
+up` is logged and the call returns that status. A successful operation never
+returns.
+
+Host file systems (`host://`) and RAM volumes need no flush. Raw disk handles
+used by the installer are not flushed; the installer flushes them itself.
+
 ## Measurements
 
 On the ThinkPad T14 Gen 1 AMD (owner's PXE boots, 2026-10-07), the SCI is IRQ 9
@@ -166,9 +206,45 @@ GDB confirmed the following:
   override) and unmasked;
 - after boot, the worker is parked, with no pending SCI or queued work.
 
+### Power-off and restart
+
+Nested-VM checks on QEMU 10.2.2 with the local AHCI fix, KVM, Fedora OVMF and a
+disposable 64 MiB pool on partition 2 of a virtio-blk disk, booted in installed
+mode (`MOUNT_DISK`) with one and four CPUs:
+
+- `cat boot://config/live.lua > system://…` without `sync`, then `poweroff`:
+  QEMU exited, and on the host `npfs-inspect` showed the file with identical
+  contents and `journal_state empty`; `fsck.npfs` passed.
+- The same with `reboot`: the firmware and Limine ran again through the FADT reset
+  register, the next boot mounted the pool without a replay, and the file and
+  empty journal checked out the same way.
+- In the live image, `poweroff` from the Development shell exited QEMU, while
+  `poweroff` and `reboot` from a Remote shell printed `this space has no power
+  authority` and the kernel logged nothing.
+
+On the ThinkPad T14 Gen 1 AMD (owner, 2026-10-07, installed system updated to
+this build), `poweroff` turned the machine off and `reboot` restarted it. A file
+edited immediately before each survived without `sync`. The journal state and
+which reset path the restart took were not inspected there.
+
+The flush-failure, firmware-failure and fallback-reset paths were not exercised.
+
+The scheduler hold adds a check at every syscall return and user-mode timer
+preemption. `iobench read bin://share/iobench.bin` (one warmup, five 1 MiB
+samples, 257 reads each) compared `58ed3b9` with this change. Payload-read
+medians, with ranges:
+
+| CPUs | Before | After |
+| --- | ---: | ---: |
+| 1 | 0.275 ms (0.255–0.972) | 0.255 ms (0.253–0.264) |
+| 4 | 0.259 ms (0.258–0.273) | 0.255 ms (0.253–0.261) |
+
+The difference is within run-to-run variation.
+
 ## Limits
 
-These are recorded in [technical debt](../technical-debt.md#acpi-interpreter-host-limits):
+These are recorded in [technical debt](../technical-debt.md#acpi-interpreter-host-limits)
+and [power-off limits](../technical-debt.md#power-off-and-restart-limits):
 
 - PCI configuration writes are refused.
 - The mapping window is never reused.
@@ -176,3 +252,4 @@ These are recorded in [technical debt](../technical-debt.md#acpi-interpreter-hos
   registers.
 - The SCI must share the keyboard's I/O APIC.
 - Inline completion of deferred work has not yet been exercised.
+- Power-off skips pools that already failed and cannot stop services in order.

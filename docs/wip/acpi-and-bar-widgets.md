@@ -65,6 +65,26 @@ Accepted for task 1 on 2026-10-07:
    button's fixed event to task 4. If uACPI fails to initialize, boot continues
    without ACPI and logs why.
 
+Accepted on 2026-10-07, after task 1:
+
+7. **AC adapter.** Task 3 reads AC presence from the AC adapter device's `_PSR`
+   method. The battery's charging bits do not say whether AC is connected.
+8. **Userspace exposure** is a separate task 5, after the widget, so that task 3
+   stays bounded. Task 5 settles the query's fields and authority.
+9. **Notifications instead of polling** wait until after task 3. They depend on
+   events being re-armed after an unclaimed SCI, which belongs with that work.
+
+Accepted for task 2 on 2026-10-07:
+
+10. **Stopping user tasks** is a reversible hold. Each user task stops at its next
+    return to user mode and is parked; a failed flush releases them. After the
+    final flush, the native filesystem refuses further pool changes until the hold
+    is released, so a task inside a syscall cannot change a pool afterwards.
+11. **`poweroff` and `reboot` are shell builtins.** The shell keeps the `power`
+    handle and never forwards it to the programs it runs.
+12. **Remote shells do not receive `power`,** even in a space that has it; the
+    remote terminal server is unauthenticated on the LAN.
+
 ## Tasks
 
 - [x] **1. Bring in uACPI.**
@@ -83,12 +103,18 @@ Accepted for task 1 on 2026-10-07:
     2026-10-07) load the namespace without AML errors, refused mappings or
     refused PCI writes. Costs are recorded in [ACPI](../kernel/acpi.md#measurements).
 
-- [ ] **2. Clean power-off and reboot.**
+- [x] **2. Clean power-off and reboot.**
   - The `power` capability and its boot-init forwarding (decision 2), plus the
     native `poweroff` and `reboot` commands.
   - The shutdown sequence from decision 3. Power-off enters S5 through uACPI.
     Reboot uses the FADT reset register, with a documented fallback if a machine
     lacks one.
+  - **Status:** done ([ACPI](../kernel/acpi.md#power-off-and-restart)). QEMU
+    meets every check below with one and four CPUs. On 2026-10-07 the owner
+    updated the installed ThinkPad to this build: `poweroff` turned it off,
+    `reboot` restarted it, and a file edited just before either survived without
+    `sync`. The run script no longer passes `-no-reboot -no-shutdown`, so a
+    guest power-off exits QEMU and a reset reboots it.
   - **Finish when:**
     - `poweroff` makes QEMU exit;
     - the ThinkPad turns off;
@@ -103,13 +129,20 @@ Accepted for task 1 on 2026-10-07:
     does not include one, and the battery methods read through it.
   - Enable GPEs once the embedded controller is ready (decision 6).
   - Read the battery through the AML methods `_BST`, and `_BIF` or `_BIX`: the
-    remaining and full capacity, the charging state and whether AC is present.
+    remaining and full capacity and the charging state. Read AC presence from
+    the AC adapter's `_PSR` (decision 7).
   - Draw a fixed-width widget at the right end of the space bar, inside the
     chevron. It shows the percentage, refreshes every few seconds and is hidden
     without a battery. The kernel presenter reads the value directly.
   - **Finish when:** the ThinkPad shows a percentage that tracks charging and
     discharging and matches Linux's reading within a few percent, and QEMU,
     which has no battery, shows no widget.
+  - **Review notes from task 1, to settle in this task:**
+    - an unclaimed SCI currently masks ACPI events until reboot; once the
+      embedded controller's GPE is enabled, consider re-arming after a short
+      delay or a counted limit instead;
+    - record the "firmware window" figure before and after periodic battery
+      reads; the ThinkPad already uses 2,127 of 16,384 pages after loading.
 
 - [ ] **4. Power button.**
   - A short press of the physical power button runs the same clean power-off as
@@ -118,6 +151,17 @@ Accepted for task 1 on 2026-10-07:
     machines that use one (decision 6).
   - **Finish when:** a short press on the ThinkPad powers off cleanly, with an
     empty journal on the next boot.
+  - The unclaimed-SCI note under task 3 applies here too: a spurious SCI must
+    not silently disable the power button until reboot.
+
+- [ ] **5. Battery and AC state for userspace.** (Decision 8.)
+  - A read-only query of the battery and AC state, for example on the existing
+    system-information capability, so that Fastfetch can show its Battery and
+    Power Adapter modules and a later status UI has its data.
+  - Its fields, units and authority are settled when the task starts.
+
+After task 3, battery and AC changes can be signalled by ACPI notifications
+instead of polling (decision 9).
 
 ## Proposals, not agreed
 

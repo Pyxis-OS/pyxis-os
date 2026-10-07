@@ -2913,6 +2913,12 @@ bool npfs_store_pending(const struct npfs_store_pool *pool)
   return false;
 }
 
+bool npfs_store_journal_empty(const struct npfs_store_pool *pool)
+{
+  require_owner();
+  return pool->control.state == NPFS_JOURNAL_EMPTY;
+}
+
 enum call_status npfs_store_maintain(struct npfs_store_context *context, struct npfs_store_pool *pool,
   bool flush_dirty, bool pressure)
 {

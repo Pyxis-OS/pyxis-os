@@ -5,6 +5,7 @@
 #include <kernel/fs/ramfs.h>
 #include <kernel/fs/hostfs.h>
 #include <kernel/fs/npfs.h>
+#include <kernel/acpi.h>
 #include <kernel/object/file.h>
 #include <kernel/object/launcher.h>
 #include <kernel/object/capability.h>
@@ -27,6 +28,8 @@ struct request_layout {
 };
 
 static const struct request_layout request_layouts[BSP_SERVICE_COUNT] = {
+  [BSP_SERVICE_POWER] = {sizeof(struct acpi_power_request), alignof(struct acpi_power_request),
+      offsetof(struct acpi_power_request, request)},
   [BSP_SERVICE_SYSTEM_INFO_MEMORY] = {sizeof(struct system_info_memory_request), alignof(struct system_info_memory_request),
       offsetof(struct system_info_memory_request, request)},
   [BSP_SERVICE_TERMINAL_CREATE] = {sizeof(struct terminal_create_service_request), alignof(struct terminal_create_service_request),
@@ -133,6 +136,7 @@ static bool requires_handoff(enum bsp_service service)
   case BSP_SERVICE_NPFS:
   case BSP_SERVICE_READINESS:
   case BSP_SERVICE_SYSTEM_INFO_MEMORY:
+  case BSP_SERVICE_POWER:
     return false;
   case BSP_SERVICE_DISPLAY:
     return true;
@@ -209,7 +213,7 @@ void bsp_request_complete(struct bsp_request *request)
   KASSERT(!(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
   KASSERT(request->state == BSP_REQUEST_SERVICING ||
       ((request->service == BSP_SERVICE_HOSTFS || request->service == BSP_SERVICE_NPFS ||
-        request->service == BSP_SERVICE_READINESS) &&
+        request->service == BSP_SERVICE_READINESS || request->service == BSP_SERVICE_POWER) &&
        request->state == BSP_REQUEST_FORWARDED));
   KASSERT(!request->next && request->wait);
   struct task_wait *wait = request->wait;
@@ -241,6 +245,11 @@ static void service_request(struct bsp_request *request)
     object_cleanup_leave(previous);
     request->state = BSP_REQUEST_FORWARDED;
     npfs_forward((struct npfs_request *)request);
+    return;
+  case BSP_SERVICE_POWER:
+    object_cleanup_leave(previous);
+    request->state = BSP_REQUEST_FORWARDED;
+    acpi_power_forward((struct acpi_power_request *)request);
     return;
   case BSP_SERVICE_TERMINAL_CREATE:
     terminal_create_execute((struct terminal_create_service_request *)request);

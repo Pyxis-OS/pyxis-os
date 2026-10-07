@@ -19,10 +19,14 @@ struct acpi_work {
   uacpi_handle context;
 };
 
-/* Shared with SCI interrupt entry. The SCI is routed to the BSP and the worker
- * is pinned there, so IF=0 on the BSP serializes both without a lock. */
+/* Shared with SCI interrupt entry and the BSP request executor. The SCI is
+ * routed to the BSP and both workers are pinned there, so IF=0 on the BSP
+ * serializes them without a lock. The power request stays here while it runs. */
 static struct task_wait *worker_wait;
 static bool sci_pending;
+static bool ready;
+static struct acpi_power_request *power_request;
+static bool power_started;
 
 /* Worker only. The registration's address is uACPI's opaque SCI handle. */
 static struct sci_registration {
@@ -77,6 +81,19 @@ static void wake_worker(void)
   }
 }
 
+void acpi_power_forward(struct acpi_power_request *request)
+{
+  KASSERT(arch_cpu_index() == 0 && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
+  if (!ready || power_request) {
+    request->status = ready ? CALL_BUSY : CALL_UNAVAILABLE;
+    bsp_request_complete(&request->request);
+    return;
+  }
+  power_request = request;
+  power_started = false;
+  wake_worker();
+}
+
 void acpi_interrupt(void)
 {
   KASSERT(arch_cpu_index() == 0);
@@ -109,7 +126,8 @@ static void sleep_for_events(uint64_t deadline, bool work_wakes)
 {
   uint64_t flags = cpu_save_interrupts();
   KASSERT(flags & RFLAGS_INTERRUPT_ENABLE);
-  if (!sci_pending && !(work_wakes && work_head)) {
+  bool power = power_request && !power_started;
+  if (!sci_pending && !(work_wakes && (work_head || power))) {
     struct task_wait *wait = task_wait_prepare();
     worker_wait = wait;
     if (deadline == UINT64_MAX) {
@@ -260,15 +278,39 @@ static bool load_namespace(void)
   return true;
 }
 
+/* Top level only, like deferred work. Returns only when the operation failed,
+ * after completing the request. */
+static void run_power_request(void)
+{
+  uint64_t flags = cpu_save_interrupts();
+  struct acpi_power_request *request = power_started ? NULL : power_request;
+  power_started = true;
+  cpu_restore_interrupts(flags);
+  if (!request) {
+    return;
+  }
+
+  enum call_status status = acpi_power_run(request->action);
+  flags = cpu_save_interrupts();
+  power_request = NULL;
+  request->status = status;
+  bsp_request_complete(&request->request);
+  cpu_restore_interrupts(flags);
+}
+
 static void acpi_worker(void *argument)
 {
   (void)argument;
   if (!load_namespace()) {
     return;
   }
+  uint64_t flags = cpu_save_interrupts();
+  ready = true;
+  cpu_restore_interrupts(flags);
   for (;;) {
     service_sci();
     run_work();
+    run_power_request();
     sleep_for_events(UINT64_MAX, true);
   }
 }

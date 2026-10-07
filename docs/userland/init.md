@@ -97,6 +97,12 @@ return {
   including every foreground pipeline stage. Background commands and services
   do not receive it. This does not delegate the trusted launcher's CREATE_GROUP
   authority or add terminal input rights.
+- **Power.** A space that sets `power = true` receives the kernel's `power`
+  resource, with power-off and restart rights, for the shell's
+  [`poweroff` and `reboot`](shell.md#power-off-and-restart). Any number of spaces
+  may set it. The live Development space and the installed `pyxis` space do, and
+  boot init's built-in rescue space always has it. Other spaces, such as Remote
+  and Read-only, cannot power off or restart.
 
 The scheduler places each task on the least-loaded CPU its space allows and
 balances tasks between CPUs; see [placement and migration](../kernel/smp.md#placement-and-migration).
@@ -465,7 +471,7 @@ interpret scripts. LF/CRLF and bounds follow the [script-launch contract](script
 Each space init receives its space's title, terminal, display, keyboard and
 pointer grants from the kernel, and from boot init private memory, launch,
 clock, randomness, networking services, network configuration (WRITE only for
-the network owner), caller-scoped [memory profiling](../development/allocation-profiling.md), explicit
+the network owner), power authority when the space sets `power`, caller-scoped [memory profiling](../development/allocation-profiling.md), explicit
 [endpoint creation](../interfaces/endpoints.md) through the `service` resource,
 read-only boot and writable tmp roots, its configured roots, the working
 directory its start selects and the initial environment. Space configuration

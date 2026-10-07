@@ -119,4 +119,14 @@ bool npfs_partition_mounted(block_device_id device, uint32_t partition);
 /* BSP/IF=0: notify the worker of allocation-free deferred raw cleanup. */
 void npfs_notify(void);
 
+/* Power-off, from another BSP kernel task with IF=1. After already queued
+ * requests, the worker writes each writable pool's dirty data and checkpoints
+ * it to an EMPTY journal. On success the pools are sealed: requests that could
+ * change a pool or device fail with UNAVAILABLE and background writeback stops.
+ * On failure nothing is sealed and the first error is returned. Without a
+ * worker there is nothing mounted and the call succeeds. */
+enum call_status npfs_shutdown_flush(void);
+/* BSP/IF=0, after a successful flush whose power-off then failed: unseal. */
+void npfs_shutdown_cancel(void);
+
 #endif

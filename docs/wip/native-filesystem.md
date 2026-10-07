@@ -81,8 +81,9 @@ Accepted 2026-10-02; durability revised by the owner on 2026-10-03.
    - **periodically,** by a kernel background task that flushes sufficiently old
      dirty data at an interval set by a constant (30 s or 60 s);
    - **under memory pressure,** by writing dirty cached data early to reclaim RAM;
-   - **on clean shutdown, restart and sleep,** by flushing everything dirty, once
-     those exist (Pyxis has none of them yet).
+   - **on clean shutdown, restart and sleep,** by flushing everything dirty.
+     Power-off and restart do this since the ACPI milestone's task 2; there is
+     no sleep.
 
    Journal commits happen as needed to keep metadata recoverable. After a crash,
    journal recovery restores metadata consistency; data not yet written back may
@@ -138,8 +139,8 @@ Accepted by the owner for task 3 on 2026-10-03:
 
 Memory-pressure writeback arrives with the cache and its memory-management hook.
 The installer must call `sync` before reporting success; Kilo's save should later
-call `fsync`. The kernel writer implements these policies; clean shutdown,
-restart and sleep flushing remain deferred until those operations exist.
+call `fsync`. The kernel writer implements these policies, including the
+power-off and restart flush; sleep does not exist.
 
 Accepted mount authority and lifetime policies, 2026-10-03:
 

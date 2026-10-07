@@ -114,7 +114,8 @@ Cleanup reclaims at most 64 mappings and ten metadata images per transaction.
 Delayed allocation happens at writeback. Periodic full flushing defaults to 30
 seconds through menuconfig; pressure notifications wake the worker for asynchronous
 reclamation without changing an allocator's result. Close has no durability
-promise. There are no shutdown/restart/sleep flush hooks.
+promise. Power-off and restart flush every writable pool and checkpoint it to an
+EMPTY journal, then seal the pools ([ACPI power-off](../kernel/acpi.md#power-off-and-restart)).
 
 Read-only opening requires EMPTY. Writable opening validates the complete committed
 payload before replay writes. Successful replay logs the committed sequence and

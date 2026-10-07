@@ -517,6 +517,12 @@ the first panicking CPU also draws on the
 kernel panic still halts only the faulting CPU. Shared TTY mutation still needs
 serialization; the low-level log lock interface requires interrupts disabled.
 
+Power-off and restart hold all user execution ([ACPI](acpi.md#power-off-and-restart)).
+The hold is set and released under the queue lock. A user task parks instead of
+running user code at its next syscall return, user-mode timer preemption or
+dispatch from a ready queue; parked tasks sit on a held list outside every queue.
+Release requeues them through the normal placement path.
+
 Kernel tasks stay on the BSP. Shared user address spaces and kernel-task fault
 recovery are not supported; a kernel-task fault is fatal.
 

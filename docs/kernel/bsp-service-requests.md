@@ -17,6 +17,7 @@ kernel; each service defines its own public operation contract.
 | Native filesystem worker | Policy/view operations, block waits and final completion of forwarded requests |
 | Network worker | TCP/mixed readiness observation and final completion of forwarded waits |
 | Readiness worker | Terminal-only waits, independent of network-device availability |
+| ACPI worker | Power-off and restart, completing forwarded requests only on failure |
 
 The catalog and dispatch are explicit. Adding a service changes its subsystem
 and the catalog rather than adding scheduler payloads, service sweeps or pending
@@ -123,6 +124,7 @@ condition. See [TCP readiness](../devices/tcp.md#readiness-and-transfer-attempts
 | HOST forwarding | Ordinary admission; existing HOST worker owns transport and final completion |
 | Native filesystem forwarding | Ordinary admission; bounded native worker owns core views/I/O and final completion |
 | Readiness wait | Ordinary admission; selected worker owns observations, transient object references and final completion |
+| Power-off and restart | Ordinary admission; the ACPI worker owns the user hold, pool flush and S5 or reset, and completes the request only on failure ([ACPI](acpi.md#power-off-and-restart)) |
 
 Authority checks remain in their owning subsystems; callers validate user buffers
 and copy replies. Services clear loans before completion. Capability growth or

@@ -67,7 +67,9 @@ after dirty data is durable. An ongoing failure still fails each attempt. Uncert
 disk I/O stops mutation for the boot and remains an error on every sync.
 Periodic full flushing defaults to 30 seconds through menuconfig, and pressure
 writeback runs asynchronously. Delayed allocation can encounter ENOSPC at writeback
-or sync. No shutdown/restart/sleep flushing hooks exist yet.
+or sync. Power-off and restart write all dirty data and empty each writable
+pool's journal first ([ACPI power-off](../kernel/acpi.md#power-off-and-restart));
+there is no sleep.
 
 Read-only mounting requires an EMPTY journal. Writable opening replays a validated
 committed log; unknown read-only-compatible features forbid recovery writes.
