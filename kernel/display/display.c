@@ -105,6 +105,67 @@ const struct framebuffer *display_layout(void)
   return target;
 }
 
+static void update_gpu_availability(void)
+{
+  available = virtio_gpu_available();
+  failed = !available;
+}
+
+const struct framebuffer *display_resize_prepare(void)
+{
+  if (driver != DISPLAY_VIRTIO_GPU || !display_available()) {
+    return NULL;
+  }
+  KASSERT(atomic_load(&writer) == DISPLAY_NO_WRITER);
+  const struct framebuffer *candidate = virtio_gpu_resize_prepare();
+  update_gpu_availability();
+  return candidate;
+}
+
+bool display_resize_switch(void)
+{
+  KASSERT(driver == DISPLAY_VIRTIO_GPU && atomic_load(&writer) == DISPLAY_NO_WRITER);
+  bool switched = virtio_gpu_resize_switch();
+  update_gpu_availability();
+  return switched;
+}
+
+bool display_resize_cancel(void)
+{
+  KASSERT(driver == DISPLAY_VIRTIO_GPU && atomic_load(&writer) == DISPLAY_NO_WRITER);
+  bool cancelled = virtio_gpu_resize_cancel();
+  update_gpu_availability();
+  return cancelled;
+}
+
+bool display_resize_defer(void)
+{
+  KASSERT(driver == DISPLAY_VIRTIO_GPU && atomic_load(&writer) == DISPLAY_NO_WRITER);
+  bool cancelled = virtio_gpu_resize_defer();
+  update_gpu_availability();
+  return cancelled;
+}
+
+void display_resize_commit(void)
+{
+  KASSERT(driver == DISPLAY_VIRTIO_GPU && atomic_load(&writer) == DISPLAY_NO_WRITER);
+  virtio_gpu_resize_commit();
+}
+
+void display_resize_finish(void)
+{
+  KASSERT(driver == DISPLAY_VIRTIO_GPU && atomic_load(&writer) == DISPLAY_NO_WRITER);
+  virtio_gpu_resize_finish();
+  update_gpu_availability();
+}
+
+void display_resize_disable(void)
+{
+  if (driver == DISPLAY_VIRTIO_GPU) {
+    virtio_gpu_resize_disable();
+  }
+}
+
 bool display_begin_frame(void)
 {
   atomic_store(&writer, cpu_initial_apic_id());
