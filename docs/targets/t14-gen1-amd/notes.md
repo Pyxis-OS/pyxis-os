@@ -158,11 +158,81 @@ through the remaining laptop USB-C socket, USB-C orientation behavior, firmware
 ownership handoff or pre-OS controller state. Linux MSI-X settings describe the
 running Linux driver, not firmware settings presented to Caelum.
 
-## Next bring-up steps
+## Native status
 
-The first owner-reported Caelum [native USB inventory](usb-bringup.md) records
-three xHCI controllers, the USB 2 dock subtree and a directly attached second
-stick. It includes partial-branch causes and the remaining qualification limits.
+Booted over PXE or from an installed USB stick, Caelum runs the normal system on
+all 12 CPUs with the full 32 GB. The first owner-reported
+[native USB inventory](usb-bringup.md) records the three xHCI controllers, the
+USB 2 dock subtree and the first native installation.
 
-The owner's order after reaching a native shell (2026-10-03) is recorded in
-[ThinkPad next steps](../../wip/thinkpad-next-steps.md): entropy, then Ethernet.
+- **Clock:** the 32-bit HPET runs [software-extended](../../kernel/timekeeping.md#software-extension-sampling-and-support-limit)
+  (`clock: HPET 32-bit counter, software-extended, period=69841278 fs`). The
+  owner's `date` check on 2026-10-03 spanned two of the counter's ~300 s wraps,
+  and on 2026-10-07 the owner kept a native session running for more than
+  15 minutes with the clock holding.
+- **Keyboard:** works through PS/2. The scan-set query ID is optional, because
+  this controller returns none after selecting set 2; see the
+  [keyboard contract](../../devices/keyboard.md).
+- **Entropy:** RDSEED with RDRAND as fallback, since there is no virtio-rng; see
+  [randomness](../../devices/randomness.md).
+- **Ethernet:** the built-in port through the [RTL8111 driver](../../devices/rtl8111.md),
+  with [DHCP](../../devices/dhcp.md). The
+  [NIC passthrough reference](../../development/thinkpad-nic-passthrough.md)
+  covers developing it in QEMU first.
+- **Remote work:** the [reverse terminal and UDP kernel log](../../development/remote-debugging.md)
+  replace serial, which this machine lacks.
+- **Power:** [ACPI](../../kernel/acpi.md) power-off, restart, power button and
+  battery. On battery the firmware throttles the CPU hard: Quake `timedemo demo1`
+  drops from about 660–690 fps on AC to about 400. State AC or battery for
+  native performance figures, and compare on AC.
+- **Display:** the boot framebuffer. Occasional tearing in Doom is accepted,
+  because firmware framebuffers have no vsync and nothing is page-flipped.
+
+Not supported: NVMe (the internal disk), Wi-Fi, the dock-facing Ethernet,
+suspend and resume, and TSC as a clock source.
+
+## Network controllers
+
+The machine has two Realtek RTL8111-family controllers (`10ec:8168`):
+
+| Port | Function | Revision | IOMMU group | Notes |
+| --- | --- | --- | --- | --- |
+| Built-in RJ45 | `05:00.0` | 0x15 | 15, alone | PXE port; TxConfig XID `541`, supported. |
+| Dock Ethernet | `02:00.0` | 0x0e | 12, shared | RTL8168ep, XID `502`, unsupported. The group also holds two UARTs (`02:00.1`, `02:00.2`), an IPMI interface (`02:00.3`) and an EHCI controller (`02:00.4`). |
+
+The second controller is on the motherboard; the dock only provides its jack.
+AX200 Wi-Fi is `03:00.0`. The router reserves a fixed address for the built-in
+port; its static profile is in the
+[driver reference](../../devices/rtl8111.md#selection-and-machine-configuration).
+
+## DASH management controller (parked)
+
+The dock-facing controller is an AMD DASH management controller. On 2026-10-07
+the owner reached it, and then decided not to rely on it for boot logs: the
+setup is fragile, and the [UDP kernel log](../../development/remote-debugging.md)
+covers the need. The findings, if it is revisited:
+
+- **Web interface:** HTTPS on port 664 at the controller's own LAN address,
+  whether Fedora is asleep or awake. Remote Control offers only power on, power
+  off and reset; the Battery page shows presence and health, not charge.
+- **AMD DASH CLI:** discovery on HTTP port 623; enumeration and text redirection
+  need HTTPS on 664 with digest authentication and the CLI's option to accept
+  the self-signed certificate.
+- **Serial over LAN:** two text-redirection services, both disabled by default:
+  Telnet on port 87 and SSH on port 57. `textredirection connect` without `-t`
+  prompts for an instance and activates it; the client must connect within
+  about 20 seconds or the service switches off again. Telnet works with the
+  DASH account. SSH does not: the server offers only
+  `diffie-hellman-group1-sha1` and refused connections after a first failed
+  attempt.
+- **The forwarded UART is `ttyS4`:** `02:00.1`, `10ec:816a`, I/O `0x3200`, at
+  115200 baud. Without a session it drains at about 80 bytes per second, so a
+  kernel log writer must never wait on it.
+- **Earlier attempts** (2026-10-03) found no DASH settings in the BIOS and no
+  reply while powered off; Linux's r8169 signals "OS driver active" to the
+  firmware for this variant. The powered-off laptop once woke during scans,
+  plausibly through Wake-on-LAN, unconfirmed.
+
+Caelum reads only this controller's XID and leaves it untouched. A writer for
+`0x3200` would find the UART by PCI ID, never wait for a session, and replay the
+log ring once found. Caelum's serial output goes only to COM1 (`0x3f8`).
