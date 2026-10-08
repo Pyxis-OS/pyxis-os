@@ -180,7 +180,10 @@ static bool observe_progress(const struct hda_stream_position *position,
     return false;
   }
   uint32_t step = (position->bytes + HDA_BUFFER_BYTES - observed_position) % HDA_BUFFER_BYTES;
-  if (step % HDA_FRAME_BYTES || UINT64_MAX - observed_bytes < step) {
+  uint32_t to_boundary = HDA_PERIOD_BYTES - observed_position % HDA_PERIOD_BYTES;
+  if (step % HDA_FRAME_BYTES ||
+      (event->completed && step < to_boundary) ||
+      UINT64_MAX - observed_bytes < step + 2 * HDA_BUFFER_BYTES) {
     return false;
   }
   observed_bytes += step;
@@ -190,6 +193,10 @@ static bool observe_progress(const struct hda_stream_position *position,
   if (step) {
     progress_time = now;
   }
+  controller.irq.completed = false;
+  if (!controller.irq.errors) {
+    controller.irq.first_time = 0;
+  }
   return now - progress_time < AUDIO_SERVICE_LIMIT_NS;
 }
 
@@ -197,11 +204,9 @@ static bool refill_output(void)
 {
   struct hda_stream_position position;
   struct hda_irq_event event;
-  if (!hda_stream_observe(&controller, &position, &event)) {
-    return false;
-  }
   uint64_t flags = cpu_save_interrupts();
-  bool safe = observe_progress(&position, &event, arch_monotonic_ns());
+  bool safe = hda_stream_position_locked(&controller, &position, &event) &&
+      observe_progress(&position, &event, arch_monotonic_ns());
   cpu_restore_interrupts(flags);
   if (!safe) {
     return false;

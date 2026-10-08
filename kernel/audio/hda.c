@@ -581,42 +581,22 @@ bool hda_stream_position_locked(struct hda_controller *controller,
   if (!controller->stream_running || controller->failed || controller->shutdown) {
     return false;
   }
-  collect_status(controller);
-  uint32_t wallclock = read32(controller, HDA_WALCLK);
-  uint32_t bytes = read32(controller, controller->stream + HDA_SD_LPIB);
-  *event = controller->irq;
-  *position = (struct hda_stream_position){
-    .bytes = bytes, .wallclock = wallclock, .completed = event->completed,
-  };
-  return bytes < HDA_BUFFER_BYTES &&
-      (read8(controller, controller->stream + HDA_SD_CTL) & HDA_SD_RUN);
-}
-
-bool hda_stream_observe(struct hda_controller *controller, struct hda_stream_position *position,
-    struct hda_irq_event *event)
-{
-  audio_require_worker();
-  uint64_t flags = cpu_save_interrupts();
-  bool observed = hda_stream_position_locked(controller, position, event);
-  controller->irq.completed = false;
-  if (!controller->irq.errors) {
-    controller->irq.first_time = 0;
+  for (unsigned attempt = 0; attempt < 3; ++attempt) {
+    uint32_t before = read32(controller, controller->stream + HDA_SD_LPIB);
+    collect_status(controller);
+    uint32_t wallclock = read32(controller, HDA_WALCLK);
+    uint32_t bytes = read32(controller, controller->stream + HDA_SD_LPIB);
+    if (before != bytes) {
+      continue;
+    }
+    *event = controller->irq;
+    *position = (struct hda_stream_position){
+      .bytes = bytes, .wallclock = wallclock, .completed = event->completed,
+    };
+    return bytes < HDA_BUFFER_BYTES &&
+        (read8(controller, controller->stream + HDA_SD_CTL) & HDA_SD_RUN);
   }
-  cpu_restore_interrupts(flags);
-  return observed;
-}
-
-bool hda_stream_write_period_locked(struct hda_controller *controller, unsigned period,
-    const void *pcm)
-{
-  KASSERT(cpu_current() == cpu_bsp() && !(cpu_save_interrupts() & RFLAGS_INTERRUPT_ENABLE));
-  if (!controller->stream_running || controller->failed || controller->shutdown ||
-      controller->irq.errors || period >= HDA_PERIOD_COUNT || !pcm) {
-    return false;
-  }
-  memcpy((void *)(controller->pcm.address + period * HDA_PERIOD_BYTES), pcm, HDA_PERIOD_BYTES);
-  dma_write_barrier();
-  return true;
+  return false;
 }
 
 bool hda_stream_stop(struct hda_controller *controller)

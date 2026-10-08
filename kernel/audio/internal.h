@@ -64,15 +64,12 @@ bool hda_stream_prepare(struct hda_controller *controller);
  * then publishes it and RUN without cancellation between consumption and RUN.
  * A false return requires worker-context quarantine before any further use. */
 bool hda_stream_run_locked(struct hda_controller *controller);
-bool hda_stream_observe(struct hda_controller *controller, struct hda_stream_position *position,
-    struct hda_irq_event *event);
 /* BSP/IF=0, no sleeps or allocation. Locked observation keeps the oldest pending
- * notification and sticky errors; only worker observe consumes completion/time.
+ * notification and sticky errors; the engine consumes completion/time with each
+ * accepted position under the same IF=0 boundary.
  * The engine owns progress/epoch checks before committing a reclaimed period. */
 bool hda_stream_position_locked(struct hda_controller *controller,
     struct hda_stream_position *position, struct hda_irq_event *event);
-bool hda_stream_write_period_locked(struct hda_controller *controller, unsigned period,
-    const void *pcm);
 bool hda_interrupt(struct hda_controller *controller);
 bool hda_stream_stop(struct hda_controller *controller);
 void hda_shutdown(struct hda_controller *controller);
