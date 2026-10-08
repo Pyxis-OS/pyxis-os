@@ -83,6 +83,8 @@ Other candidates; current assignments are listed above.
 - USB HID mice after [USB interrupt IN](../devices/usb-interrupt-in.md): HID
   boot protocol and input integration, separate from the PS/2 system pointer.
 - [Audio](later-os-directions.md#audio), starting with Intel HD Audio playback.
+- [Remote desktop](remote-desktop.md): a view-only RFB server over screen capture
+  first, then remote input after the system pointer.
 - Clang running on Pyxis, the [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
   now that [C++ in userspace](../development/cxx-userspace.md) is complete.
 - System layout follow-ups: network configuration on the pool instead of the
