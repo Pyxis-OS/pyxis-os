@@ -164,12 +164,18 @@ data. Five samples of the in-game counter, two seconds apart:
 | Limit FPS, the Pyxis default | 58.3, 60.8, 56.4, 59.8, 60.8 |
 | Vertical Sync, which renders uncapped here | 419, 419, 427, 420, 423 |
 
+Natively, on 2026-10-08, the owner played the shareware on the ThinkPad (PXE
+boot of main `4332801`, 1920x1080 internal display with a 1920x1040 content
+area, on AC). With "Limit FPS" the counter showed 59–65 FPS, mostly 60–62.
+Keyboard, touchpad and TrackPoint worked, including key repeat in name entry.
+
 ## Limits
 
 - **Not supported:** sound, multiplayer, game controllers, translations (the
   build host has no gettext) and Hellfire's music and voice.
 - **Text input** uses the US layout.
-- **Not yet checked:** the native ThinkPad.
+- **Not yet checked natively:** a standalone bundle with retail data on an
+  installed system.
 
 [Technical debt](../technical-debt.md#devilutionx-port-limits) records these
-limits and the [deferred native check](../technical-debt.md#sdl2-and-devilutionx-native-qualification).
+limits and the [native check](../technical-debt.md#sdl2-and-devilutionx-native-qualification).

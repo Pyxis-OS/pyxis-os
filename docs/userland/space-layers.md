@@ -86,9 +86,10 @@ live geometry and narrow tabs. These were nested-VM checks:
   press. Escape returned `mousetest` and Mandelbrot to their shells. Layer
   shortcuts without a session left the console queue empty.
 
-The remaining native check and source-only coverage limits are recorded in
+The owner checked native behaviour on the ThinkPad on 2026-10-08; the result
+and the remaining source-only coverage limits are in
 [technical debt](../technical-debt.md#space-layer-qualification). The owner
-closed the milestone on 2026-10-08 with native validation deferred. Build and
+closed the milestone on 2026-10-08, before that native check. Build and
 filesystem CI passed on submitted kernel revision `f838b21`
 ([PR #512](https://git.internal/PyxisOS/pyxis-os/pulls/512), workflow #1182).
 
