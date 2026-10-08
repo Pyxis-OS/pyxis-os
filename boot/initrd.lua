@@ -2,7 +2,8 @@ return function(inputs)
   local entries = {
     { tree = inputs.userspace, at = "" },
     { tree = inputs.ports, at = "" },
-    { tree = inputs.sdk .. "/sysroot/usr/include", at = "sdk/usr/include" },
+    -- TCC compiles C only; the C++ headers stay out of the guest SDK.
+    { tree = inputs.sdk .. "/sysroot/usr/include", at = "sdk/usr/include", exclude = { "c++" } },
     { tree = inputs.sdk .. "/share/licenses", at = "sdk/share/licenses" },
     { tree = inputs.sdk .. "/share/toolchain", at = "sdk/share/toolchain" },
     { file = inputs.provenance, at = "sdk/manifest.txt" },

@@ -79,8 +79,19 @@ local function main()
       run({ "test", "!", "-L", entry.tree })
       directory(at)
       local listing = capture({ "find", entry.tree, "-mindepth", "1", "-printf", "%y%P\\0" })
+      -- entry.exclude lists subtrees, relative to the tree, left out of the archive.
+      local function excluded(name)
+        for _, prefix in ipairs(entry.exclude or {}) do
+          if name == prefix or name:sub(1, #prefix + 1) == prefix .. "/" then
+            return true
+          end
+        end
+        return false
+      end
       local members = {}
-      for item in listing:gmatch("([^\0]+)\0") do members[#members + 1] = item end
+      for item in listing:gmatch("([^\0]+)\0") do
+        if not excluded(item:sub(2)) then members[#members + 1] = item end
+      end
       table.sort(members)
       for _, item in ipairs(members) do
         local kind, name = item:sub(1, 1), relative(item:sub(2))

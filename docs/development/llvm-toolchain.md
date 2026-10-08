@@ -23,9 +23,15 @@ how applications use it.
     `crt0.o`, `pyxis.ld`, libc and libpyxis from the sysroot;
   - compiler-rt's hand-written `__floatundixf` kept off the red zone;
   - `--oformat=p1f` in LLD, which the driver passes for every executable link.
-    An executable without `-o` is `a.pxe`.
+    An executable without `-o` is `a.pxe`;
+  - for C++, the sysroot's libc++ headers ahead of libc's, libc++, libc++abi
+    and libunwind in the link, and `--eh-frame-hdr` for every executable;
+  - thread-local storage rejected when compiling;
+  - libc++ using `timespec_get` for its clocks, no terminal check in `print`,
+    and no `ELAST` limit.
 - **The pin:** `toolchain/build.sh` fetches one commit shallowly, currently
-  `41ab6043cc4f`. Moving to a new LLVM release is a rebase onto its tag in a new
+  `49e2c1a1518b`. The SDK builds its [C++ runtime](sdk.md#c) from the same
+  commit. Moving to a new LLVM release is a rebase onto its tag in a new
   `pyxis-VERSION` branch.
 
 ## Changing the pin

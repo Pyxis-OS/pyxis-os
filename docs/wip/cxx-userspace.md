@@ -1,7 +1,7 @@
 # C++ in userspace
 
-Status: **probe done, decisions accepted 2026-10-08.** The owner selected this
-milestone for Claude on 2026-10-07 and accepted the three
+Status: **decisions accepted; tasks 1–2 done, task 3 in review, 2026-10-08.**
+The owner selected this milestone for Claude on 2026-10-07 and accepted the three
 [decisions](#decisions) on 2026-10-08. The rest of the [proposal](#proposal)
 guides the tasks; each task starts when the owner says so. It is the second of
 the three
@@ -233,9 +233,9 @@ C++ library parts are absent.
   - `std::print` does not ask whether the output is a terminal. Pyxis libc has
     no `isatty`, and stdout is unbuffered anyway.
 - **The toolchain** installs `x86_64-unknown-pyxis-clang++`.
-- **The SDK fragment.** `share/pyxis.mk` gains `PYXIS_CXX`, `PYXIS_CXXFLAGS` and
-  `PYXIS_CXXLIBS`, with the libc++ header directory ahead of libc's. libc++'s
-  `<stdlib.h>` must be found before libc's.
+- **The SDK fragment.** `share/pyxis.mk` gains `CXX`, `PYXIS_CXX_CPPFLAGS`,
+  `PYXIS_CXXFLAGS` and `PYXIS_CXX_LDLIBS`, with the libc++ header directory
+  ahead of libc's. libc++'s `<stdlib.h>` must be found before libc's.
 
 ## Decisions
 
@@ -280,8 +280,7 @@ Accepted by the owner on 2026-10-08, as proposed after the probe:
 Each task starts when the owner says so.
 
 1. **Probe and proposal** (this document).
-2. **libc and SDK layout** (userland #153 and its Pyxis gitlink PR). In review,
-   2026-10-08:
+2. **libc and SDK layout** (userland #153, Pyxis #505). Done 2026-10-08:
    - C++-safe headers;
    - constructors, exit handlers and `aligned_alloc`;
    - the other [libc additions](#libc-additions-userland) the runtime build
@@ -289,12 +288,13 @@ Each task starts when the owner says so.
    - the linker-script sections.
 
    See [task 2 results](#task-2-results).
-3. **Fork, toolchain and runtime build:**
+3. **Fork, toolchain and runtime build.** In review, 2026-10-08:
    - the driver and libc++ commits in `pyxis-llvm`;
    - the toolchain pin, the `clang++` name and the new image tag;
    - the SDK runtime build and `pyxis.mk`'s C++ settings.
 
-   The owner builds the image before CI can pass.
+   The owner builds the image before CI can pass. See
+   [task 3 results](#task-3-results).
 4. **The {fmt} port**, from `mirrors/fmt`, with its libc additions.
 5. **Close.** Turn this document into a reference under `docs/development`,
    listing the supported subset and its gaps.
@@ -338,6 +338,37 @@ and userland `38886c7`.
 
 For task 3: libc++'s `system_error` warns that `ELAST` is not defined for
 Pyxis.
+
+## Task 3 results
+
+Measured on 2026-10-08 in the same VM, against main `c81b9a7`, with the
+toolchain built from fork commit `49e2c1a1518b` (19 minutes on 8 vCPUs).
+
+- **The runtime build.** A clean `make sdk` fetches and builds the runtime in
+  about 16 s in all; an unchanged rerun takes about 1 s, and a touched libc
+  header rebuilds nothing. The archives record no dependent libraries.
+- **C executables and the kernel.** Main built in the same directory with the
+  old and new toolchains gives byte-identical output, apart from:
+  - the build timestamps in Quake and fastfetch;
+  - the compiler identification in the kernel's debug information.
+
+  The kernel's loaded sections are identical, so `--eh-frame-hdr` adds nothing
+  to C links. The image builds with the same 399 warnings.
+- **Fixed during the task:**
+  - libc++abi's bare-metal mode silenced the uncaught-exception message, so
+    the SDK builds libc++abi hosted;
+  - CMake kept that setting cached after it was removed, so the script now
+    configures from scratch whenever it changes.
+- **In QEMU** (4 CPUs, KVM), programs built with plain `clang++
+  --sysroot=… -o app.pxe`, and one built through `pyxis.mk`, ran correctly:
+  - the probe program, with `steady_clock`;
+  - `std::println`;
+  - `unordered_map`;
+  - `error_code` messages, including an unknown value;
+  - the uncaught-exception and `qsort` messages.
+
+  `thread_local` and `_Thread_local` fail when compiling. The guest SDK has no
+  `c++` headers, and TCC in the guest still compiles and runs C programs.
 
 ## Not in this milestone
 

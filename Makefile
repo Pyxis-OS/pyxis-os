@@ -114,6 +114,7 @@ else
 sdk: sdk-headers
 	$(MAKE) -C userspace -f runtime.mk SDK=$(abspath build/sdk) BUILD=$(abspath build/runtime)
 	$(MAKE) -f scripts/npfs-sdk.mk SDK=$(abspath build/sdk)
+	+./scripts/cxx-runtime.sh
 	./scripts/export-sdk.sh complete
 	./scripts/bundle.sh record sdk
 endif
