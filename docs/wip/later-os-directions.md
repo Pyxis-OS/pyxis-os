@@ -215,13 +215,15 @@ consumer (Quake's sound, for example) need their own decisions.
 
 ## Bluetooth
 
-Investigation candidate (owner, 2026-10-08): pair the owner's Logitech MX Master
-3S, a Bluetooth-only mouse, and use it on Pyxis. The ThinkPad's Bluetooth is the
-AX200's USB function (`8087:0029`), so it builds on the planned USB HID work in
-the [system pointer](pointer.md#devices). The stack is deep: Intel firmware
-loading, HCI, L2CAP, LE pairing with Secure Connections and persistent bond keys,
-then HID over GATT. The [investigation brief](bluetooth.md) covers the path to a
-first LE scan, starting from QEMU passthrough on the ThinkPad.
+Accepted direction (owner, 2026-10-08): use the MX Master 3S on Pyxis through the
+ThinkPad AX200 USB function (`8087:0029`). The
+[completed investigation](../devices/ax200-bluetooth.md) reached a first
+LE scan on warm-host passthrough. The [mouse proposal](bluetooth-mouse.md) records
+kernel USB/Intel/HCI ownership and a trusted userspace upper stack, Secure
+Connections enrollment, and cold initialization/durable bonds/native pointer
+use required for closure. HID over GATT feeds the accepted [system pointer](pointer.md)
+with kernel-owned positions. Later policy rounds remain open; no implementation
+task or USB HID work is authorized by this direction.
 
 ## Clock source
 

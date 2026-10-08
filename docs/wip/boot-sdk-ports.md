@@ -12,6 +12,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [AX200 Bluetooth investigation](../devices/ax200-bluetooth.md),
+  2026-10-08: warm-host QEMU passthrough through identification of the MX Master
+  3S; [final report](../development/bluetooth-investigation.md). Native Pyxis
+  evidence is inventory only; production mouse work remains proposed below.
 - [SDL2 with a native backend](../development/sdl2.md), 2026-10-08: upstream
   SDL 2.32.10 for graphical ports, the SDK's CMake toolchain file, and
   [DevilutionX](../userland/devilutionx.md) as an opt-in, personal-use first
@@ -47,13 +51,16 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex** (2026-10-08): [A system pointer](pointer.md), starting with a
-  documentation-only proposal for program cursor images, surface routing,
-  tab clicks, terminal/mux selection and pointer lock with Super+Esc.
-  The original directions and both decision rounds are accepted on 2026-10-08;
-  selection/export, presentation/capture and delivery/closure await round three.
-  Task 1 requires explicit owner authorization, including after plan merge.
-  SDL2 adapter changes land after its milestone closes. Devices stay PS/2;
+- **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
+  documentation only. Two owner rounds accepted stack/security/closure and initial
+  firmware/bond policies; later decisions are queued without another round now. The
+  documentation handoff is complete and investigation is referenced above.
+  No production task is assigned; the owner requested a stop before native checks.
+- **Codex alpha** (owner update, 2026-10-08): accepted
+  [system-pointer milestone](pointer.md), with task 1 in progress and kernel-owned
+  positions, cursor and surface routing. The owner's latest assignment supersedes
+  the older awaiting-authorization status in the proposal. SDL2 adapter changes
+  land after its milestone closes. This milestone's devices stay PS/2;
   clipboard implementation and USB HID mice are separate milestones.
 - **Codex** (2026-10-08): [sleep wake granularity](sleep-wake-granularity.md),
   deadline-driven wakeups with the existing 120 Hz preemption schedule;
@@ -130,8 +137,9 @@ prerequisites and result are clear.
 - [Control, events and faults](control-events-faults.md), Pyxis's answer to
   signals, tied to Continuum.
 - [Userspace scheme providers](userspace-scheme-providers.md).
-- [Bluetooth investigation](bluetooth.md): QEMU passthrough of the AX200's
-  Bluetooth, firmware load and a first LE scan, toward the MX Master 3S.
+- [Bluetooth mouse](bluetooth-mouse.md): accepted kernel HCI/userspace stack
+  direction, explicit Secure Connections enrollment and cold/native closure;
+  remaining policy decisions are open.
 - [Selecting existing build artifacts](build-artifact-reuse.md) and the
   postponed [host development overlay](host-development-overlay.md).
 

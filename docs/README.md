@@ -36,6 +36,12 @@ the owner-run native cold/PXE boot with the dock attached.
 
 ## Work in progress
 
+The [Bluetooth investigation report](development/bluetooth-investigation.md)
+summarizes the AX200 passthrough evidence through identification of the MX Master
+3S. The completed investigation is the [AX200 reference](devices/ax200-bluetooth.md).
+Its [mouse milestone proposal](wip/bluetooth-mouse.md) records two accepted rounds
+and queues later policy decisions; no implementation is assigned.
+
 Use the [milestone index](wip/boot-sdk-ports.md) to find active work and parked
 proposals. Files in [wip](wip/) describe unfinished work or design directions;
 they do not establish implemented behavior. Existing costs and revisit conditions
