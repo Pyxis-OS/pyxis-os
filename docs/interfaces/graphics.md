@@ -4,17 +4,24 @@ Run `mandelbrot` from the shell in an application space. It draws a
 pixel-resolution Mandelbrot set progressively. Hold the arrow keys to pan,
 `=`/`+` to zoom in around the centre, and `-` to zoom out. Escape releases the
 keyboard and display sessions and returns to the shell. Super+Left/Right still
-switches spaces. Losing focus clears held controls and pauses rendering until
-that space is selected again; held keys need a fresh press after switching back.
+switches spaces. Losing focus clears held controls without pausing rendering;
+held keys need a fresh press after switching back.
 
 The application needs named `display` (DRAW), `keyboard` (INPUT), and `clock`
 (READ and SLEEP) grants. Movement uses monotonic elapsed time, with at most
 250 ms of catch-up per update. While moving, frames are paced to at most 30 per
-second; expensive views may render more slowly. Idle and unfocused states block
-on input. The renderer checks events every eight rows so Escape and focus changes do not
+second; expensive views may render more slowly. Once rendering is complete and
+no controls are held, it waits for input or resize, including while unfocused.
+The renderer checks events every eight rows so Escape and focus changes do not
 need to wait for a complete frame. Zoom is bounded to widths of 1e-12 through 16
 in the complex plane. The normal image and SDK contain the application and the
 native display, keyboard and clock helpers.
+
+Quake, Doom and `mousetest` also keep updating in an unselected space. Quake
+and Doom game time advances without input focus; their explicit game pause
+still works. The presenter copies only the selected space, but an unattended
+game continues using CPU and memory bandwidth. Focus loss removes input, not
+execution or rendering permission.
 
 ## Authority and ownership
 

@@ -143,6 +143,7 @@ button held sets one black pixel at the position, so fast strokes are dotted
 rather than lost. A red marker shows the position without drawing into the pad. Escape releases the sessions and returns
 to the shell.
 
-It polls both input sessions every 10 ms while focused and blocks on the
-keyboard session while unfocused. Its text uses a built-in 5x7 font with only
+It polls both input sessions every 10 ms, including while unfocused. Keyboard
+and pointer focus independently gate their controls, and focus/reset events
+release held buttons. Its text uses a built-in 5x7 font with only
 the digits and letters it displays.

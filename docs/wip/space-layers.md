@@ -1,8 +1,9 @@
 # Graphics and terminal layers in a space
 
-Status: **proposal for review, 2026-10-08; assigned to Codex 1.**
-The owner decisions below are accepted. The remaining contract and task sequence
-are proposed; nothing here authorizes code before the proposal is accepted.
+Status: **proposal accepted, 2026-10-08; consumer task implemented.**
+The owner accepted the contract and task sequence after review of PR #502 and
+selected the consumer update as the first implementation task. Kernel layer
+switching remains the next separate task.
 
 ## Today
 
@@ -73,7 +74,7 @@ These are source findings, not runtime qualification:
 - The bar has one character cell of padding on each side of the title. Its font
   has no Unicode minus glyph; the marker can be drawn directly in its cell.
 
-## Proposed contract
+## Agreed contract
 
 ### Session and layer state
 
@@ -172,33 +173,54 @@ existing presenter-reference and execution-group cleanup contracts.
 
 1. [x] Investigate current code and write this proposal, recording accepted
    decisions separately from the remaining proposed contract.
-2. [ ] Owner review and acceptance of the session/input edge rules, bar placement
-   and task sequence. Acceptance authorizes only the selected implementation task.
-3. [ ] Update Quake/Doom in ports and Mandelbrot/`mousetest` in userland so focus
+2. [x] Proposal accepted 2026-10-08. Update Quake/Doom in ports and
+   Mandelbrot/`mousetest` in userland so focus
    loss resets input without pausing execution or game time. Publish focused
    dependency PRs before a Pyxis integration PR updates their pins; merge the
    dependencies first. Build against the existing SDK and check focus loss,
    fresh presses and inactive startup interactively in QEMU.
-4. [ ] Implement session layer state, Super+Up/Down, capture/text routing,
+3. [ ] Implement session layer state, Super+Up/Down, capture/text routing,
    queue/loss handling, marker drawing and chosen-surface presentation in Pyxis.
    Include the published consumer pins. Update the
    [graphics](../interfaces/graphics.md), [keyboard](../devices/keyboard.md),
    [mouse](../devices/mouse.md), [shell](../userland/shell.md) and
-   [space bar](../userland/init.md#space-bar) references in this PR.
-5. [ ] Qualify interactively in QEMU: repeated PRESENT after hiding; held
+   [space bar](../userland/init.md#space-bar) references in this PR. Explain
+   hidden-layer Ctrl+C as the shell's existing foreground-interrupt escape hatch.
+4. [ ] Qualify interactively in QEMU: repeated PRESENT after hiding; held
    keys/buttons and shortcut releases; queued terminal text and Ctrl+C;
    acquisition without presentation; hidden RELEASE/exit and fresh acquisition;
    switching away/back in either layer; continuing game time; live resize and
-   hidden REPLACE; narrow tabs. Use debugger inspection for hidden-frame leases
+   hidden REPLACE; narrow tabs with titles touching the marker. Use debugger
+   inspection for hidden-frame leases
    and backing lifetime. Check the exact submitted revisions' existing CI.
    Ask the owner for a native ThinkPad check with Quake and record its result.
-6. [ ] After implementation and qualification, move the implemented contract to
+5. [ ] After implementation and qualification, move the implemented contract to
    the interface references, remove this completed worklist and update inbound
    links. Record any accepted remaining limits in technical debt.
 
-## Proposal handoff
+## Consumer task handoff
 
-Branch: `docs/space-layers-proposal`, based on Pyxis `50e18a5`.
-No implementation, dependency edits, builds or boots were performed for task 1.
-The two 2026-10-08 decisions above were confirmed by the owner during this
-investigation. Task 2 is the next step; the rest of the contract remains proposed.
+Branch: `space/consumer-focus`, based on Pyxis `cec21e4` after proposal PR #502
+merged. Proposal acceptance is folded into task 2. Dependencies, both on
+`graphics/continuous-focus`:
+
+- [Ports PR #56](https://git.internal/PyxisOS/pyxis-ports/pulls/56),
+  `64e0067c6de7e1557e6669b381d96563563ca5ea`.
+- [Userland PR #154](https://git.internal/PyxisOS/pyxis-userland/pulls/154),
+  `30bfe0df2c0f1d32edacc8d297b07f097b13c723`.
+
+Merge both dependencies before the Pyxis pin update. The ordinary combined image
+build passed with the existing LLVM builder. Interactive QEMU 10.2.2 used KVM,
+four CPUs, 512 MiB, standard VGA/Bochs and no network; this was a nested VM check.
+Quake and Doom started unselected and advanced frame/game counters without
+focus. Doom cleared held movement, withheld an inherited press after returning
+and accepted a fresh press. Mandelbrot completed its unselected render and
+released its sessions through Escape after returning. Debugger inspection
+confirmed repeated `mousetest` sleep/update calls without focus and cleared
+pointer acceptance. Source review covered explicit game pause and unchanged
+resize paths; no new resize or native qualification is claimed. QEMU and GDB
+processes from this task are closed.
+
+Task 3's kernel layer switching has not started. PR #502's review follow-ups are
+recorded above: the continuing CPU cost, hidden-layer Ctrl+C documentation and
+narrow-tab marker readability.
