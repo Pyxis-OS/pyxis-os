@@ -10,11 +10,14 @@
 #define TERMINAL_RIGHT_INJECT (UINT64_C(1) << 0)
 #define TERMINAL_RIGHT_DRAIN (UINT64_C(1) << 1)
 #define TERMINAL_RIGHT_HANGUP (UINT64_C(1) << 2)
-#define TERMINAL_RIGHTS (TERMINAL_RIGHT_INJECT | TERMINAL_RIGHT_DRAIN | TERMINAL_RIGHT_HANGUP)
+#define TERMINAL_RIGHT_RESIZE (UINT64_C(1) << 3)
+#define TERMINAL_RIGHTS (TERMINAL_RIGHT_INJECT | TERMINAL_RIGHT_DRAIN | \
+    TERMINAL_RIGHT_HANGUP | TERMINAL_RIGHT_RESIZE)
 #define TERMINAL_TRY_INJECT UINT64_C(1)
 #define TERMINAL_TRY_DRAIN UINT64_C(2)
 #define TERMINAL_END_INPUT UINT64_C(3)
 #define TERMINAL_HANGUP UINT64_C(4)
+#define TERMINAL_RESIZE UINT64_C(5)
 #define TERMINAL_EVENTS_RIGHT_EMIT (UINT64_C(1) << 0)
 #define TERMINAL_COMMAND_COMPLETE UINT64_C(1)
 #define TERMINAL_COMPLETION_EXITED UINT64_C(1)
@@ -45,12 +48,25 @@ struct terminal_create_request {
  * respectively. Attachment authority is never implied by application handles.
  * Events implement TERMINAL_EVENTS with EMIT; delegate separately to the root
  * shell, without forwarding to commands. Events are not a standard stream.
- * Dimensions are immutable, nonzero and bounded by the constants above. */
+ * Dimensions are nonzero and bounded by the constants above. Attachment
+ * RESIZE authority changes them independently of application stream rights. */
 struct terminal_create_reply {
   handle_t input;
   handle_t output;
   handle_t attachment;
   handle_t events;
+};
+
+/* RESIZE authority; no reply. Dimensions have the same bounds as CREATE.
+ * A changed size atomically publishes geometry and advances the generation
+ * returned by CONSOLE_SIZE, waking application WAIT_RESIZED interests. The
+ * initial generation is 1. An identical size is a no-op. Generation exhaustion
+ * returns LIMIT before changing geometry; hangup returns ENDPOINT_CLOSED.
+ * Queued input/output and terminal records remain intact. */
+struct terminal_resize_request {
+  struct message_header header;
+  uint64_t columns;
+  uint64_t rows;
 };
 
 /* EMIT authority. Kind is one TERMINAL_COMPLETION value; status is the exact
@@ -119,6 +135,8 @@ struct terminal_record {
 
 _Static_assert(sizeof(struct terminal_create_request) == 32, "terminal create layout");
 _Static_assert(sizeof(struct terminal_create_reply) == 32, "terminal create reply layout");
+_Static_assert(sizeof(struct terminal_resize_request) == 32, "terminal resize layout");
+_Static_assert(offsetof(struct terminal_resize_request, columns) == 16, "terminal resize columns offset");
 _Static_assert(sizeof(struct terminal_command_complete_request) == 32, "terminal event request layout");
 _Static_assert(offsetof(struct terminal_command_complete_request, kind) == 16, "terminal event kind offset");
 _Static_assert(sizeof(struct terminal_command_complete) == 24, "terminal completion layout");

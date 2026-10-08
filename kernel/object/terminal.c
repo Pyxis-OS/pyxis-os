@@ -27,7 +27,7 @@ struct terminal_session {
   size_t live_objects, input_authorities, controllers;
   /* Each output-producing object may retire while the other remains open. */
   size_t output_authorities, event_authorities;
-  uint64_t columns, rows, completed_commands;
+  uint64_t columns, rows, geometry_generation, completed_commands;
   struct console_interrupt interrupt;
   bool input_closed, output_closed, hung_up, reader_active;
   struct task_wait_link *first_reader, *last_reader, *writers;
@@ -210,6 +210,7 @@ static struct terminal_session *session_create(uint64_t columns, uint64_t rows)
   atomic_init(&session->interrupt.locked, false);
   session->columns = columns;
   session->rows = rows;
+  session->geometry_generation = 1;
   session->live_objects = 4;
   session->input.session = session->output.session = session->attachment.session = session;
   session->events.session = session;
@@ -622,12 +623,15 @@ struct syscall_result terminal_application_call(struct kernel_object *object,
     return application_write(session, &request.write, reply_address, reply_capacity);
   }
   if (operation == CONSOLE_SIZE) {
-    struct console_size_reply reply = {
-      .columns = session->columns, .rows = session->rows, .generation = 1,
-    };
-    if (reply_capacity < sizeof(reply)) {
+    if (reply_capacity < sizeof(struct console_size_reply)) {
       return (struct syscall_result){CALL_BAD_REQUEST, 0};
     }
+    lock_session(session);
+    struct console_size_reply reply = {
+      .columns = session->columns, .rows = session->rows,
+      .generation = session->geometry_generation,
+    };
+    unlock_session(session);
     if (!copy_to_user(reply_address, &reply, sizeof(reply))) {
       return (struct syscall_result){CALL_BAD_BUFFER, 0};
     }
@@ -802,6 +806,43 @@ static struct syscall_result attachment_transfer(struct terminal_session *sessio
   return (struct syscall_result){CALL_OK, sizeof(reply)};
 }
 
+static struct syscall_result attachment_resize(struct terminal_session *session,
+    uintptr_t request_address, size_t request_size)
+{
+  struct terminal_resize_request request = {0};
+  size_t payload_size = sizeof(request) - sizeof(request.header);
+  if (request_size != payload_size) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  if (!copy_from_user(&request.columns, request_address, payload_size)) {
+    return (struct syscall_result){CALL_BAD_BUFFER, 0};
+  }
+  if (!request.columns || request.columns > TERMINAL_COLUMNS_MAX ||
+      !request.rows || request.rows > TERMINAL_ROWS_MAX) {
+    return (struct syscall_result){CALL_BAD_REQUEST, 0};
+  }
+  enum call_status status = CALL_OK;
+  bool changed = false;
+  lock_session(session);
+  if (session->hung_up) {
+    status = CALL_ENDPOINT_CLOSED;
+  } else if (request.columns != session->columns || request.rows != session->rows) {
+    if (session->geometry_generation == UINT64_MAX) {
+      status = CALL_LIMIT;
+    } else {
+      session->columns = request.columns;
+      session->rows = request.rows;
+      ++session->geometry_generation;
+      changed = true;
+    }
+  }
+  unlock_session(session);
+  if (changed) {
+    readiness_notify();
+  }
+  return (struct syscall_result){status, 0};
+}
+
 struct syscall_result terminal_attachment_call(struct kernel_object *object,
     uint64_t rights, uint64_t operation, uintptr_t request_address,
     size_t request_size, uintptr_t reply_address, size_t reply_capacity)
@@ -812,12 +853,16 @@ struct syscall_result terminal_attachment_call(struct kernel_object *object,
   case TERMINAL_END_INPUT: required = TERMINAL_RIGHT_INJECT; break;
   case TERMINAL_TRY_DRAIN: required = TERMINAL_RIGHT_DRAIN; break;
   case TERMINAL_HANGUP: required = TERMINAL_RIGHT_HANGUP; break;
+  case TERMINAL_RESIZE: required = TERMINAL_RIGHT_RESIZE; break;
   default: return (struct syscall_result){CALL_BAD_OPERATION, 0};
   }
   if (!(rights & required)) {
     return (struct syscall_result){CALL_DENIED, 0};
   }
   struct terminal_session *session = ((struct terminal_end *)object)->session;
+  if (operation == TERMINAL_RESIZE) {
+    return attachment_resize(session, request_address, request_size);
+  }
   if (operation == TERMINAL_TRY_INJECT || operation == TERMINAL_TRY_DRAIN) {
     return attachment_transfer(session, operation, request_address,
         request_size, reply_address, reply_capacity);
@@ -854,7 +899,7 @@ uint64_t terminal_application_ready(struct kernel_object *object, uint64_t event
   if (events & WAIT_INTERRUPT) {
     ready |= console_interrupt_ready(&session->interrupt);
   }
-  if ((events & WAIT_RESIZED) && observed_generation != 1) {
+  if ((events & WAIT_RESIZED) && observed_generation != session->geometry_generation) {
     ready |= WAIT_RESIZED;
   }
   unlock_session(session);
