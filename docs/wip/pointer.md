@@ -1,10 +1,10 @@
 # A system pointer
 
-Status: **task 1 delivered for review; assigned to Codex, 2026-10-08.**
+Status: **tasks 1 and 2 authorized; assigned to Codex, 2026-10-08.**
 Task 1 is [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545) on
 `pointer/ordinary-surface`, with published
 [userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164), revision
-`6b45dd1`. Both remain draft for joint task 2 integration. The proposal
+`6b45dd1`. Both remain draft while authorized task 2 completes joint integration. The proposal
 merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530);
 round three is recorded in the first commit of task 1's PR.
 The proposal was based on Pyxis `9acf597`, after the multiplexer merged in
@@ -13,7 +13,10 @@ The proposal was based on Pyxis `9acf597`, after the multiplexer merged in
 The original directions and all three decision rounds are
 [accepted](#owner-decisions), all on 2026-10-08. No queued owner decisions remain.
 The owner explicitly authorized task 1 on 2026-10-08, after proposal merge.
-Later tasks remain unstarted until separately authorized. The first task 1 commit
+The owner authorized task 2 on 2026-10-08: lock, Super+Esc and migration of
+Quake, mousetest and the closed SDL2 backend. It is stacked on task 1 and its
+userland dependency. Default-image build and exact-head CI must pass before
+anything leaves draft. Tasks 3–5 remain unstarted until separately authorized. The first task 1 commit
 records decisions only; the [baseline](../development/system-pointer-qualification.md)
 was captured before code changes. Task 1 remains draft until task 2 migrates
 Quake/SDL2 and permits the ABI and all consumers to integrate together.
@@ -112,7 +115,7 @@ routing. An unlocked pointer does not release keyboard capture or pause a game.
 
 Include a VirtIO cursor backend after a common software path works; boot and
 Bochs keep software composition. Coordinate changes with the separately assigned
-[SDL2 backend](sdl2.md), replacing its private integration of relative counts.
+[SDL2 backend](../development/sdl2.md), replacing its private integration of relative counts.
 Its pointer adapter change lands **after the SDL2 milestone closes**, including
 its DevilutionX consumer and that milestone's accepted qualification. Do not
 change that milestone's tasks 4–5 or build a second SDL2 port.
@@ -133,7 +136,7 @@ This milestone uses the existing [PS/2 mouse](../devices/mouse.md), including
 the ThinkPad's relative-mode touchpad and TrackPoint. Their firmware stream has
 no wheel or multi-finger scrolling. USB HID mice remain a separate track after
 the [interrupt-IN foundation](../devices/usb-interrupt-in.md); neither USB HID
-nor the [Bluetooth investigation](bluetooth.md) is part of task 1.
+nor the [Bluetooth investigation](../development/bluetooth-investigation.md) is part of task 1.
 
 ## Cursor images and authority
 
@@ -485,7 +488,7 @@ of at most three, with defaults, rather than silently becoming a requirement.
 
 ## Task breakdown
 
-Only task 1 is authorized by the owner's explicit go-ahead on 2026-10-08.
+Tasks 1 and 2 have explicit owner authorization on 2026-10-08.
 Proposal review/merge does not authorize later tasks.
 
 - [x] **Documentation proposal.** Inspect current main and describe contracts,

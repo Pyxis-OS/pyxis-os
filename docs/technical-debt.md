@@ -523,7 +523,7 @@ source inspection into measured coverage.
 
 For the [system pointer milestone](wip/pointer.md), the owner accepted native
 PS/2 validation deferral on 2026-10-08 because the ThinkPad is occupied by the
-[Bluetooth investigation](wip/bluetooth.md). Matched QEMU checks on boot,
+[Bluetooth investigation](development/bluetooth-investigation.md). Matched QEMU checks on boot,
 Bochs and VirtIO displays may close the milestone without a native run. This
 records an accepted qualification limit, not a completed native check.
 
@@ -854,7 +854,7 @@ open/read/write/close for cksum and restricted tee, and `lseek` for files.
 Public O_RDWR, fdopen and duplication remain absent even though fopen
 supports update modes internally. Consumers requiring those interfaces need
 a separately agreed extension. `fileno` was agreed on 2026-10-08 for the
-[SDL2 port](wip/sdl2.md); it exposes the stream's existing descriptor and adds
+[SDL2 port](development/sdl2.md); it exposes the stream's existing descriptor and adds
 no new aliasing. Revisit them against a pinned consumer's actual
 needs; duplication must settle shared open-state/cursor ownership before adding
 new descriptor aliases. Descriptor inheritance and cross-process shared offsets
@@ -1012,24 +1012,58 @@ scope, lifetime and behavior across mounts and file replacement before exposing
 it; do not substitute normalized path strings or add `realpath` just for TCC.
 See [the TCC contract](userland/tcc.md#remaining-limits).
 
+## Program location
+
+A process cannot find where its own executable came from. `argv[0]` is whatever
+the launcher passes, and the shell passes the command word as typed, so a
+program started as `devilutionx` sees only that name. Even a full URI would be
+descriptive: a path is not authority, and the process holds no lookup right to
+the directory its executable came from. The [startup record](interfaces/processes.md#startup-record)
+carries no program location, and libpyxis has no equivalent of `/proc/self/exe`
+or `GetModuleFileName`. The [SDL2 port](development/ports.md#sdl2-development-library)
+therefore reports `SDL_GetBasePath` as unsupported.
+
+Ports that keep files beside their executable need a fixed location instead.
+DevilutionX's recipe hard-codes its assets to `boot://share/devilutionx/`, so
+running it as a self-contained bundle from another directory needs its own
+fallback patch. Every such port carries a similar per-port path patch, and a
+program cannot simply be copied with its files into another directory and run.
+
+Revisit when another port needs files beside its executable, or when
+self-contained bundles become a supported way to add programs. Options to weigh
+then, none decided: a read-only directory grant for the program's own directory
+at launch, given like the other startup resources; or a descriptive location in
+the startup record, which confers no access and has `argv[0]`'s weaknesses. Do
+not infer the location from `argv[0]` or add path normalization for one port.
+
 ## Sleep wake granularity
 
-Deadline sleeps wake on the 120 Hz local APIC preemption tick, so a sleep can
-end up to 8.33 ms after its deadline; see [timekeeping](kernel/timekeeping.md).
-The [SDL2 probe](wip/sdl2.md#a-test-program) measured a `SDL_Delay(16)` loop at
-24.8 ms per frame instead of about 17. DevilutionX's own limiter tracks
-deadlines and held 57.8–62.3 FPS. Quake's 72 Hz cap and other fixed-rate
-sleepers can be delayed the same way; that is not measured.
+Per-CPU one-shot LAPIC timers now target local deadlines while retaining nominal
+120 Hz preemption and HPET timekeeping. The owner accepted this scope on
+2026-10-08. The [matched qualification](development/experiments/sleep-wake-granularity/timer.md)
+records SDL mean-frame medians of 25.565 ms before, 24.243 ms with expiry IPIs
+alone and 17.415 ms with local deadlines; Quake capped-loop medians were
+49.223, 59.595 and 70.291 FPS. These are nested-KVM observations, not native
+or maximum-latency guarantees. See [timekeeping](kernel/timekeeping.md).
 
-Nanosecond units remain a representation, not a precision promise. Revisit
-with a one-shot deadline timer or tickless sleeping, as a kernel task, when a
-consumer needs finer pacing than its own deadline tracking provides.
+ThinkPad LAPIC calibration/power-state behavior, actual sleep/cap latency and
+sustained 32-bit HPET extension with this timer remain unqualified. Revisit when
+owner hardware is available: repeat the recorded SDL and normal Quake workloads,
+record image revision/configuration, and confirm clock continuity and interrupt
+delivery. The [task](wip/sleep-wake-granularity.md) remains open for native evidence
+or an explicitly owner-accepted qualification limit.
+
+Nanosecond units remain a representation, not a precision promise. Interrupt-
+disabled intervals, runnable load, firmware/host stalls and large due batches
+still delay execution. Sorted-list insertion/cancellation remains linear, with
+no separate timer quota. Revisit stronger bounds or another data structure only
+with a measured consumer need; tickless scheduling is outside this task.
 
 ## Wall-clock time and clock-source performance
 
 [Monotonic time and deadline sleep](kernel/timekeeping.md) now use the shared HPET
-counter. Console timeouts no longer count delivered BSP interrupts. APIC timer
-interrupts still bound wakeup latency; nanosecond units do not promise precise
+counter. Console timeouts no longer count delivered BSP interrupts. Local timer
+dispatch and scheduling still delay execution; nanosecond units do not promise precise
 wakeup, and time spent with the VM paused need not count.
 
 [UTC wall time](kernel/wall-clock.md) uses a whole-second Limine RTC seed plus elapsed
@@ -1144,6 +1178,65 @@ Revisit threads and TLS with the Clang hosting milestone. Revisit
 localization, wide characters and `<cmath>` when a selected port, such as
 DevilutionX, needs them. Each addition belongs in libc or the runtime
 configuration, never in a port-local stub.
+
+## SDL2 port limits
+
+The [SDL2 port](development/sdl2.md) covers video, keyboard, pointer, timing
+and preference paths. Missing pieces:
+
+- **Audio:** absent until there is an audio driver.
+- **Threads:** without them, `SDL_INIT_TIMER` callback timers and
+  `SDL_CreateThread` fail. Revisit with userspace threads.
+- **Waiting:** `SDL_WaitEvent` keeps upstream's polling loop with a 1 ms delay.
+  Deadline sleeps now make that about 1 ms rather than the old 8.33 ms tick,
+  so an idle waiting program wakes about 1000 times a second instead of about
+  120, increasing its CPU wake cost. This is the expected polling rate, not a
+  measured `SDL_WaitEvent` run; see the
+  [timer limits](development/experiments/sleep-wake-granularity/timer.md#limits).
+  Revisit a blocking wait on the input and display handles when a consumer
+  waits for events.
+- **Windows and cursor:** one fullscreen window; no system cursor,
+  `SDL_ShowCursor` or hardware cursor. The pointer position is SDL's, built
+  from relative counts. The [system pointer](wip/pointer.md) milestone replaces
+  that translation after the SDL2 milestone.
+- **Text:** US layout only, from the shared kernel table.
+- **Not covered by validation:** key repeat, because QEMU's injected PS/2 input
+  has no typematic repeat.
+
+## DevilutionX port limits
+
+[DevilutionX](userland/devilutionx.md) is personal-use only, because its
+non-commercial licence and libmpq's GPL cannot both be met by someone who
+distributes it. It is therefore an opt-in build that ordinary images, CI and
+bundles never contain.
+
+It has no sound, multiplayer, game controllers or translations; the build
+host has no gettext. Saves are in `home://devilution/`, which is RAM on live
+boots.
+
+Retail data cannot be staged in images: `DIABDAT.MPQ` is about 500 MB, which
+would stay in RAM and does not fit the ESP. On installed systems it has to
+arrive through [remote transfers](#remote-transfer-memory-and-staging-limits),
+which today means splitting it into 15 MiB pieces. Revisit with streaming
+transfers.
+
+## SDL2 and DevilutionX native qualification
+
+The owner closed the SDL2 milestone on 2026-10-08 with its native ThinkPad
+check deferred, because the machine is busy with the Bluetooth investigation.
+QEMU runs do not establish native display, PS/2 pointer and keyboard
+behaviour, touchpad and TrackPoint feel, or frame rates on that hardware.
+
+Revisit in the owner's batch of native ThinkPad checks after the Bluetooth
+investigation:
+
+- Boot a `DIABLO_DATA` image and play the shareware with keyboard and mouse,
+  including key repeat in name entry.
+- Note the frame rate with the default "Limit FPS" setting.
+- Run a [standalone bundle](userland/devilutionx.md#standalone-bundle) with
+  the retail data on the installed stick.
+
+Record the result in the [DevilutionX reference](userland/devilutionx.md).
 
 ## Quake port limits
 
@@ -2149,7 +2242,7 @@ with the VM/device lifetime work, not a local allocator-lock workaround.
 
 ### Bluetooth cold firmware upload and running-version policy
 
-For the [Bluetooth investigation](wip/bluetooth.md), the owner accepted using
+For the [Bluetooth investigation](devices/ax200-bluetooth.md), the owner accepted using
 already operational AX200 firmware and deferred cold bootloader upload on
 2026-10-08. Warm boot or passthrough may retain another OS's chosen build; the
 probe verifies that build stays unchanged, without comparing it to a Pyxis pin.
@@ -2174,7 +2267,7 @@ policy decision; the investigation's warm acceptance does not settle it.
 
 The implemented private [interrupt-IN path](devices/usb-interrupt-in.md) follows
 the owner's narrower initial profile for
-[Bluetooth task 3a](wip/bluetooth.md#accepted-interrupt-in-decisions): boot-present,
+[Bluetooth task 3a](devices/ax200-bluetooth.md#accepted-interrupt-in-decisions): boot-present,
 root-connected full-speed endpoints, with other profiles explicitly unsupported.
 This leaves behind-hub periodic endpoints and other speeds unavailable to the
 initial shared receive path, including HID consumers on those paths. Revisit

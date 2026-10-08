@@ -12,6 +12,14 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Recently completed
 
+- [AX200 Bluetooth investigation](../devices/ax200-bluetooth.md),
+  2026-10-08: warm-host QEMU passthrough through identification of the MX Master
+  3S; [final report](../development/bluetooth-investigation.md). Native Pyxis
+  evidence is inventory only; production mouse work remains proposed below.
+- [SDL2 with a native backend](../development/sdl2.md), 2026-10-08: upstream
+  SDL 2.32.10 for graphical ports, the SDK's CMake toolchain file, and
+  [DevilutionX](../userland/devilutionx.md) as an opt-in, personal-use first
+  consumer; [native ThinkPad qualification is deferred](../technical-debt.md#sdl2-and-devilutionx-native-qualification).
 - [Screenshots](../userland/screenshot.md), 2026-10-08: reusable zlib/libpng
   ports, native CAPTURE and staged PNG output with explicit remote download;
   [native ThinkPad qualification is deferred](../technical-debt.md#native-screenshot-qualification).
@@ -43,26 +51,30 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
-- **Codex** (2026-10-08): [A system pointer](pointer.md), starting with a
-  documentation-only proposal for program cursor images, surface routing,
-  tab clicks, terminal/mux selection and pointer lock with Super+Esc.
-  The original directions and all three decision rounds are accepted on
-  2026-10-08; the proposal merged in #530 and task 1 is explicitly authorized.
-  Matched QEMU checks
-  suffice for closure; [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
-  to the owner's ThinkPad batch after the Bluetooth investigation finishes.
-  Task 1's baseline was captured before code changes; ordinary input and the
-  software cursor are delivered for review, with
-  [qualification and draft integration limits](../development/system-pointer-qualification.md#task-1-results).
-  Task 2 requires separate authorization before Quake/SDL2 migration and joint
-  ABI/consumer integration; later tasks remain unstarted.
-  SDL2 adapter changes land after its milestone closes. Devices stay PS/2;
+- **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
+  documentation only. Two owner rounds accepted stack/security/closure and initial
+  firmware/bond policies; later decisions are queued without another round now. The
+  documentation handoff is complete and investigation is referenced above.
+  No production task is assigned; the owner requested a stop before native checks.
+- **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
+  All three decision rounds are accepted; proposal #530 is merged. Task 1 is
+  delivered in draft #545 with [qualification](../development/system-pointer-qualification.md).
+  The owner authorized task 2 on 2026-10-08: lock, Super+Esc and Quake/mousetest/SDL2
+  migration, stacked with task 1 for joint ABI/consumer integration. Default-image
+  build and exact-head CI must pass before the drafts become ready. SDL2's milestone
+  is closed. Matched QEMU checks suffice for pointer milestone closure;
+  [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
+  to the owner's ThinkPad batch after the Bluetooth investigation. Devices stay PS/2;
   clipboard implementation and USB HID mice are separate milestones.
-- **Claude** (2026-10-08): [SDL2 with a native Pyxis backend](sdl2.md),
-  upstream SDL2 with video, input and timer support over the display,
-  keyboard, pointer and clock sessions; audio waits for an audio driver.
-  DevilutionX on local shareware data is the first consumer; the owner
-  accepted the three task 1 decisions on 2026-10-08.
+- **Codex** (2026-10-08): [sleep wake granularity](sleep-wake-granularity.md),
+  deadline-driven wakeups with the existing 120 Hz preemption schedule;
+  the owner accepted the three proposal defaults and authorized implementation
+  on 2026-10-08. Implementation is delivered for review; native qualification
+  remains open.
+- **Claude** (2026-10-08): streaming [remote file transfers](remote-file-transfer.md),
+  replacing the 16 MiB buffered `xfer` limit so large files such as retail
+  game data can be sent. It starts with a baseline measurement and a
+  documentation-only proposal for the publication contract.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
@@ -90,6 +102,8 @@ Other candidates; current assignments are listed above.
 - USB HID mice after [USB interrupt IN](../devices/usb-interrupt-in.md): HID
   boot protocol and input integration, separate from the PS/2 system pointer.
 - [Audio](later-os-directions.md#audio), starting with Intel HD Audio playback.
+- [Remote desktop](remote-desktop.md): a view-only RFB server over screen capture
+  first, then remote input after the system pointer.
 - Clang running on Pyxis, the [third LLVM milestone](toolchains-and-runtimes.md#llvmclang-transition-and-hosting),
   now that [C++ in userspace](../development/cxx-userspace.md) is complete.
 - System layout follow-ups: network configuration on the pool instead of the
@@ -114,6 +128,9 @@ prerequisites and result are clear.
 - [Hosted toolchains and language runtimes](toolchains-and-runtimes.md), the
   [Go runtime investigation](go-runtime.md) and the
   [Neovim/libuv investigation](neovim-libuv.md).
+- [Building software on Pyxis](source-builds.md): after hosted Clang, ports and
+  non-rescue userland build from source on the installed system, Gentoo style,
+  until a package manager exists.
 - [Desktop and graphics](desktop-graphics.md), including where to start on the
   owner's compositor.
 - [Users and authority](users-and-authority.md), a cross-cutting design
@@ -124,8 +141,9 @@ prerequisites and result are clear.
 - [Control, events and faults](control-events-faults.md), Pyxis's answer to
   signals, tied to Continuum.
 - [Userspace scheme providers](userspace-scheme-providers.md).
-- [Bluetooth investigation](bluetooth.md): QEMU passthrough of the AX200's
-  Bluetooth, firmware load and a first LE scan, toward the MX Master 3S.
+- [Bluetooth mouse](bluetooth-mouse.md): accepted kernel HCI/userspace stack
+  direction, explicit Secure Connections enrollment and cold/native closure;
+  remaining policy decisions are open.
 - [Selecting existing build artifacts](build-artifact-reuse.md) and the
   postponed [host development overlay](host-development-overlay.md).
 

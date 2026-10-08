@@ -1,0 +1,91 @@
+Remote debugging using 127.0.0.1:1239
+0xffffffff80012016 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:144
+144	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+Hardware assisted breakpoint 1 at 0x413ab8: file <worktree>/build/ports/quake/source/source/host.c, line 681.
+Continuing.
+[Switching to Thread 1.3]
+
+Thread 3 hit Breakpoint 1, Host_Frame (time=0) at <worktree>/build/ports/quake/source/source/host.c:681
+681		if (!serverprofile.value)
+$1 = 169
+$2 = false
+$3 = 4.217658371780999
+$4 = {address = 18446742426589593600, size = 4096000, pitch = 5120, width = 1280, height = 800, red_shift = 16 '\020', green_shift = 8 '\b', blue_shift = 0 '\000'}
+$5 = 10000000
+$6 = 25390516353
+$7 = (struct process *) 0xffff8010001bd250
+$8 = 2
+Continuing.
+
+Thread 4 received signal SIGINT, Interrupt.
+[Switching to Thread 1.4]
+0xffffffff80012016 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:144
+144	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+Continuing.
+[Switching to Thread 1.3]
+
+Thread 3 hit Breakpoint 1, Host_Frame (time=0) at <worktree>/build/ports/quake/source/source/host.c:681
+681		if (!serverprofile.value)
+$9 = 564
+$10 = 1147222217
+$11 = 49.162227826694888
+Continuing.
+
+Thread 4 received signal SIGINT, Interrupt.
+[Switching to Thread 1.4]
+0xffffffff80012016 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:144
+144	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+Continuing.
+[Switching to Thread 1.2]
+
+Thread 2 hit Breakpoint 1, Host_Frame (time=0) at <worktree>/build/ports/quake/source/source/host.c:681
+681		if (!serverprofile.value)
+$12 = 837
+$13 = 1625814470
+$14 = 51.481888951326653
+Continuing.
+
+Thread 4 received signal SIGINT, Interrupt.
+[Switching to Thread 1.4]
+0xffffffff80012016 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:144
+144	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+Continuing.
+[Switching to Thread 1.2]
+
+Thread 2 hit Breakpoint 1, Host_Frame (time=0) at <worktree>/build/ports/quake/source/source/host.c:681
+681		if (!serverprofile.value)
+$15 = 4425
+$16 = 9182532530
+$17 = 48.189320163508313
+$18 = 0.025065930560231209
+Continuing.
+
+Thread 4 received signal SIGINT, Interrupt.
+[Switching to Thread 1.4]
+0xffffffff80012016 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:144
+144	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+Continuing.
+[Switching to Thread 1.2]
+
+Thread 2 hit Breakpoint 1, Host_Frame (time=0) at <worktree>/build/ports/quake/source/source/host.c:681
+681		if (!serverprofile.value)
+$19 = 525
+$20 = 1066580771
+$21 = 49.22271376670075
+Continuing.
+
+Thread 4 received signal SIGINT, Interrupt.
+[Switching to Thread 1.4]
+0xffffffff80012016 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:144
+144	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+Continuing.
+[Switching to Thread 1.2]
+
+Thread 2 hit Breakpoint 1, Host_Frame (time=0) at <worktree>/build/ports/quake/source/source/host.c:681
+681		if (!serverprofile.value)
+$22 = 1680
+$23 = 3405634209
+$24 = 49.330018930403575
+Detaching from program: <worktree>/build/caelum.elf, process 1
+Ending remote debugging.
+[Inferior 1 (process 1) detached]

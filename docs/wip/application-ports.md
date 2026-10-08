@@ -23,7 +23,7 @@ TF-PSA-Crypto libraries with native userland integration; SSH remains deferred.
 | fastfetch | [Implemented native port](../userland/fastfetch.md), packaged in the normal image with native system information, the Pyxis ASCII logo, text/JSON and explicit JSONC configuration. |
 | zlib | [Implemented development library](../development/ports.md#zlib-development-library), first consumed by [screenshot PNG output](../userland/screenshot.md). Jar files and BusyBox `gzip`/`unzip` remain later consumers. |
 | libpng | [Implemented development library](../development/ports.md#libpng-development-library), with explicit zlib input and screenshot RGB8 write qualification; target decoding, viewers and drawing tools remain later work. |
-| SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. Assigned to Claude on 2026-10-08; see the [SDL2 proposal](sdl2.md). |
+| SDL2 | A native Pyxis backend shared by graphical ports. Start with software rendering, presentation, keyboard/mouse input and timing; scope optional subsystems against a real consumer. [Implemented](../development/sdl2.md) on 2026-10-08, with DevilutionX as its first consumer. |
 | vi | [Implemented BusyBox vi port](../userland/vi.md), packaged in the normal image as the first modal editor before Neovim, with libc `ftruncate` and BRE search/substitution. |
 | Links | [Implemented Links 2.30 port](../userland/links.md), packaged in the normal image as a text web browser. Every page loads through libc, so local files, directory listings and the HTTP(S) providers work alike, with libc directory reading and a narrow `stat`. |
 | less | [Implemented BusyBox pager](../userland/less.md) for files and pipelines, with BRE search/highlighting and libterm console input independent of stdin. |
@@ -81,10 +81,8 @@ proposal for media-type aliases such as `json+http://` remains future work.
   existing source-edit/build/run loop; see [graphics direction](desktop-graphics.md).
 - **Quake:** [implemented](../userland/quake.md); audio and multiplayer remain
   separate slices.
-- **DevilutionX:** Diablo I, not Diablo II. A later candidate needing both the
-  [C++ userspace runtime](../development/cxx-userspace.md) and SDL2,
-  plus supporting libraries. Upstream offers a network-off configuration; assess
-  a bounded first port with networking/audio deferred.
+- **DevilutionX:** [implemented](../userland/devilutionx.md) as an opt-in,
+  personal-use build: single player without sound or networking.
 - **Chocolate Duke3D:** a candidate once SDL2 exists.
 - **Peanut-GB:** a single-header Game Boy emulator; parked (owner, 2026-10-07).
   A native display/keyboard backend can come first, converted to SDL2 later; its

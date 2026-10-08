@@ -11,8 +11,8 @@ For everyday guest use, read the [shell guide](userland/shell.md) or follow the
 | [Kernel](kernel/) | Execution, memory ownership, scheduling and clocks | [SMP ownership](kernel/smp.md), [ACPI interpreter](kernel/acpi.md) |
 | [Interfaces](interfaces/) | Processes, capabilities, IPC and resource protocols | [Kernel log](interfaces/kernel-log.md), [System information](interfaces/system-information.md), [processes and capabilities](interfaces/processes.md), [execution groups](interfaces/execution-groups.md) and their [termination ownership](interfaces/execution-group-termination.md) |
 | [Devices](devices/) | Hardware discovery, drivers, networking and storage backends | [hardware inspection](devices/hardware-inspection.md), [xHCI](devices/usb-xhci.md), [USB enumeration](devices/usb-enumeration.md), [interrupt IN](devices/usb-interrupt-in.md), [USB storage](devices/usb-storage.md), [USB installation](devices/usb-installation.md), [Networking](devices/networking.md), [DHCP](devices/dhcp.md), [net0 selection](devices/net0-selection.md), [host filesystem](devices/virtio-fs.md), [native filesystem mounts](devices/native-readonly-filesystem.md), [kernel writer](devices/filesystem-native-adapter.md) and [installer authority](devices/installer-authority.md) |
-| [Userland](userland/) | Shell, libraries, configuration, services and port usage | [System layout](userland/system-layout.md), [Everyday commands](userland/everyday-commands.md), [native installer](userland/installer.md), [system updates](userland/system-updates.md), [Terminal behavior](userland/terminal.md), [space layers](userland/space-layers.md), [terminal sessions](userland/terminal-sessions.md), [multiplexer](userland/multiplexer.md), [remote terminals](userland/remote-terminal.md), [foreground interruption](userland/foreground-interruption.md), [libc I/O](userland/stdio.md), [Fastfetch](userland/fastfetch.md), [uniq](userland/uniq.md), [vi](userland/vi.md), [Links](userland/links.md), [lspci](userland/lspci.md), [lsusb](userland/lsusb.md) |
-| [Development](development/) | Build/SDK integration, debugging and performance reports | [SDK and repositories](development/sdk-and-repositories.md), [configuration](development/configuration.md), [LLVM toolchain](development/llvm-toolchain.md), [C++ in userspace](development/cxx-userspace.md), [remote debugging](development/remote-debugging.md), [GDB](development/gdb.md), [Linux npfs mounts](development/npfs-linux-mount.md) |
+| [Userland](userland/) | Shell, libraries, configuration, services and port usage | [System layout](userland/system-layout.md), [Everyday commands](userland/everyday-commands.md), [native installer](userland/installer.md), [system updates](userland/system-updates.md), [Terminal behavior](userland/terminal.md), [space layers](userland/space-layers.md), [terminal sessions](userland/terminal-sessions.md), [multiplexer](userland/multiplexer.md), [remote terminals](userland/remote-terminal.md), [foreground interruption](userland/foreground-interruption.md), [libc I/O](userland/stdio.md), [Fastfetch](userland/fastfetch.md), [uniq](userland/uniq.md), [vi](userland/vi.md), [Links](userland/links.md), [DevilutionX](userland/devilutionx.md) (opt-in), [lspci](userland/lspci.md), [lsusb](userland/lsusb.md) |
+| [Development](development/) | Build/SDK integration, debugging and performance reports | [SDK and repositories](development/sdk-and-repositories.md), [configuration](development/configuration.md), [LLVM toolchain](development/llvm-toolchain.md), [C++ in userspace](development/cxx-userspace.md), [SDL2](development/sdl2.md), [remote debugging](development/remote-debugging.md), [GDB](development/gdb.md), [Linux npfs mounts](development/npfs-linux-mount.md) |
 
 Keep implementation contracts beside their subsystem. Supporting measurement
 data and probe artifacts live with the corresponding development or userland
@@ -35,6 +35,12 @@ contracts; [qualification](development/rtl8111-qualification.md) covers VFIO and
 the owner-run native cold/PXE boot with the dock attached.
 
 ## Work in progress
+
+The [Bluetooth investigation report](development/bluetooth-investigation.md)
+summarizes the AX200 passthrough evidence through identification of the MX Master
+3S. The completed investigation is the [AX200 reference](devices/ax200-bluetooth.md).
+Its [mouse milestone proposal](wip/bluetooth-mouse.md) records two accepted rounds
+and queues later policy decisions; no implementation is assigned.
 
 Use the [milestone index](wip/boot-sdk-ports.md) to find active work and parked
 proposals. Files in [wip](wip/) describe unfinished work or design directions;

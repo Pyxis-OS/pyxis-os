@@ -18,12 +18,28 @@ if [ -n "${QUAKE_DATA:-}" ]; then
     exit 1
   }
 fi
+# DIABLO_DATA is a private directory holding the Diablo shareware spawn.mpq.
+diablo_spawn=
+if [ -n "${DIABLO_DATA:-}" ]; then
+  for name in spawn.mpq SPAWN.MPQ; do
+    [ -f "$DIABLO_DATA/$name" ] && diablo_spawn=$DIABLO_DATA/$name && break
+  done
+  [ -n "$diablo_spawn" ] || {
+    echo "DIABLO_DATA=$DIABLO_DATA has no spawn.mpq" >&2
+    exit 1
+  }
+  [ -f build/ports/devilutionx/stage/bin/devilutionx.pxe ] || {
+    echo "DIABLO_DATA is set but DevilutionX is not built: run make ports with it." >&2
+    exit 1
+  }
+fi
 cat build/sdk/manifest.txt build/bundle-info/ports.txt > build/guest-sdk-manifest.txt
 "${LUA:-lua}" scripts/stage-tree.lua boot/initrd.lua build/initrd-root \
   userspace=build/userspace-root ports=build/ports-root sdk=build/sdk \
   provenance=build/guest-sdk-manifest.txt "init=${INIT:-}" "network_config=${NETWORK_CONFIG:-}" \
   "wad=${DOOM_WAD:-}" "demos=${DOOM_DEMOS:-}" \
-  "quake_pak0=$quake_pak0" "quake_pak1=$quake_pak1"
+  "quake_pak0=$quake_pak0" "quake_pak1=$quake_pak1" \
+  "diablo_spawn=$diablo_spawn" devilutionx=build/ports/devilutionx/stage
 # Installed systems keep only these executables in boot://; the rest go to bin://.
 while IFS= read -r program; do
   [ -f "build/initrd-root/$program" ] || {
