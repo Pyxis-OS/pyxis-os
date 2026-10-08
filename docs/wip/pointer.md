@@ -1,6 +1,9 @@
 # A system pointer
 
-Status: **task 1 delivered for review; assigned to Codex, 2026-10-08.** The proposal
+Status: **task 1 delivered for review; assigned to Codex, 2026-10-08.** Task 1 is [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545) on
+`pointer/ordinary-surface`, with published
+[userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164), revision
+`6b45dd1`. Both remain draft for joint task 2 integration. The proposal
 merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530);
 round three is recorded in the first commit of task 1's PR.
 The proposal was based on Pyxis `9acf597`, after the multiplexer merged in
