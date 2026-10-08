@@ -384,6 +384,14 @@ Validation in QEMU 10.2.2 with nested KVM, 4 CPUs and standard VGA at 1280x800:
 
   Nothing from that data was copied.
 
+A follow-up ([ports #64](https://git.internal/PyxisOS/pyxis-ports/pulls/64)),
+approved by the owner, lets an ordinary image run a
+[standalone bundle](../userland/devilutionx.md#standalone-bundle). When the
+boot archive has no DevilutionX assets, the game finds them in `assets/` inside
+`--data-dir`. MPQ files exceed the 16 MiB limit of remote transfers and HTTP
+bodies, so they reach an installed system only as split pieces joined with
+`cat`.
+
 ## Accepted decisions
 
 Accepted by the owner on 2026-10-08, as proposed in task 1.
