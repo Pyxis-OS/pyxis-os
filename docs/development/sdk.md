@@ -222,6 +222,8 @@ complete SDK, so a check for a missing function fails. Some things to know:
   `-ffreestanding` in your `CMAKE_C_FLAGS`.
 - Stripping after the link does not work, because `llvm-strip` cannot read
   P1F executables.
+- Object files are named `.obj`, because CMake picks `.o` only for `UNIX`
+  platforms. Builds are unaffected unless a project names `.o` files itself.
 
 The fastfetch, fmt and mbedtls recipes use this file.
 [The C++ runtime build](#runtime-build-phase) configures CMake itself, because

@@ -55,5 +55,13 @@ return function(inputs)
       entries[#entries + 1] = { file = pak, at = "share/quake/id1/pak" .. (index - 1) .. ".pak" }
     end
   end
+
+  -- DIABLO_DATA opts in to DevilutionX with local shareware data. Its license
+  -- allows personal use only, so ordinary and CI images never contain it.
+  if inputs.diablo_spawn ~= "" then
+    entries[#entries + 1] = { tree = inputs.devilutionx .. "/bin", at = "" }
+    entries[#entries + 1] = { tree = inputs.devilutionx .. "/share", at = "share" }
+    entries[#entries + 1] = { file = inputs.diablo_spawn, at = "share/diablo/spawn.mpq" }
+  end
   return entries
 end
