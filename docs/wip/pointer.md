@@ -1,34 +1,33 @@
 # A system pointer
 
-Status: **tasks 1 and 2 delivered for joint review; assigned to Codex, 2026-10-08.**
-Task 1 is [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545) on
-`pointer/ordinary-surface`, with published
-[userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164). Merge order is userland #164, [Quake ports #65](https://git.internal/PyxisOS/pyxis-ports/pulls/65),
-[SDL2 ports #66](https://git.internal/PyxisOS/pyxis-ports/pulls/66), then #545.
-Published pins are userland `b83ff67` and ports `a642f07`. The proposal
-merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530);
-round three is recorded in the first commit of task 1's PR.
-The proposal was based on Pyxis `9acf597`, after the multiplexer merged in
-[Pyxis #523](https://git.internal/PyxisOS/pyxis-os/pulls/523) and
-[userland #160](https://git.internal/PyxisOS/pyxis-userland/pulls/160).
-The original directions and all three decision rounds are
-[accepted](#owner-decisions), all on 2026-10-08. No queued owner decisions remain.
-The owner explicitly authorized task 1 on 2026-10-08, after proposal merge.
-The owner authorized task 2 on 2026-10-08: lock, Super+Esc and migration of
-Quake, mousetest and the closed SDL2 backend. It is stacked on task 1 and its
-userland dependency. Default-image build and exact-head CI must pass before
-anything leaves draft; the exact submitted checks are tracked on #545.
-Tasks 3–5 remain unstarted until separately authorized. The first task 1 commit
-records decisions only; the [baseline](../development/system-pointer-qualification.md)
-was captured before code changes. Tasks 1 and 2 now integrate the ABI and all
-consumers; the default and local shareware images build.
-[Joint qualification](../development/system-pointer-qualification.md#task-2-and-joint-integration)
-records interactive results and source-only limits.
+Status: **tasks 1 and 2 merged; task 3 authorized to Codex alpha, 2026-10-08.**
+[Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545),
+[userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164) and
+[ports #65](https://git.internal/PyxisOS/pyxis-ports/pulls/65)/
+[#66](https://git.internal/PyxisOS/pyxis-ports/pulls/66) are merged.
+The parent merge is `abbeded`; published pins are userland `b83ff67` and ports
+`a642f07`. Task 3 starts from that fresh main on `pointer/terminal-selection`.
+It includes local TTY retention/selection, trusted mux terminal control,
+terminal spatial readiness, mux hit-testing/selection/wheel history and the
+owner's addition of graphics pointer subscription readiness through `wait_many`.
+The SDL blocking-event adapter fix remains separately assigned to beta.
+Tasks 4 and 5 still require separate authorization.
+
+The proposal merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530).
+All three original decision rounds are accepted on 2026-10-08; round three was
+recorded in the first task 1 commit. Task 3's first decision round is
+[pending](#task-3-planning). No implementation choice in that round counts as
+accepted until the owner answers.
+
+[Qualification](../development/system-pointer-qualification.md) records the
+pre-code task 1 baseline, joint task 1/2 validation and the fresh-main task 3
+baseline. Default-image integration and exact submitted-head checks passed for
+tasks 1 and 2. Task 3's baseline was captured before any task 3 code change.
 
 ## Pre-milestone baseline
 
 This describes main before task 1; implemented ordinary behavior is now in the
-[mouse reference](../devices/mouse.md), with the draft integration limits above.
+[mouse reference](../devices/mouse.md), with the qualification limits recorded above.
 
 The [PS/2 mouse driver](../devices/mouse.md) supplies relative counts, button
 state and wheel counts. A per-space pointer session is exclusively acquired
@@ -364,28 +363,30 @@ its program-supplied cursor. Do not preserve the old protocol merely for ports.
 
 ## Input-source coordination
 
-Coordination on 2026-10-08 inspected the **proposed**, unaccepted input-source
-contract in [Bluetooth draft #548](https://git.internal/PyxisOS/pyxis-os/pulls/548).
-It is compatible with the accepted global lock/loss rules, without recording
-agreement on its producer authority, epochs, sequences, aggregation or reconnect
-policy. This pointer milestone still implements only PS/2.
+Coordination on 2026-10-08 first inspected a proposed contract in
+[Bluetooth #548](https://git.internal/PyxisOS/pyxis-os/pulls/548); the owner has
+since accepted its source-loss adjustment. Per-source physical button snapshots
+are aggregated by OR. Loss resets accepted input/cancels drag if the lost source
+held buttons, and revokes lock if it held buttons or no live source remains.
+A buttonless loss with a live surviving source leaves visible input/lock state
+unchanged. These are the accepted future integration rules, not a second source
+implemented by this pointer task.
 
-The PS/2 adapter now owns continuity quarantine and supplies a concrete internal
-normalized report to the common router. The common loss handler accepts the
-physical mask remaining after the adapter's loss, preserves position, resets
-accepted input/drag/activation and revokes the global lock. PS/2 currently supplies
-zero because it is the only source. Physical state and unconfirmed held-button
-suppression are distinct; current pre-report lock/warp refusal is preserved.
-Availability and quarantine queries remain at the source-adapter boundary.
+The existing PS/2 adapter owns continuity quarantine separately from its physical
+snapshot. The common reset/loss hook accepts the remaining physical mask,
+preserves position and resets accepted input/drag/activation while revoking the
+lock. PS/2 is the sole implemented source and currently supplies zero on stream
+loss. Current stream-discontinuity quarantine and pre-report lock/warp refusal
+remain intact. Availability and quarantine queries stay at the adapter boundary.
 
-A later, separately approved producer must aggregate complete physical snapshots
-and continuity suppression before routing; submitting independent source masks
-to this common entry would incorrectly release another source's hold. Loss of one
-source must supply the surviving physical mask and update source availability,
-while retaining the existing conservative consumer reset and lock revocation.
-The future adapter replaces the PS/2-only availability view with its live-source
-view. These are integration constraints, not an implemented producer API or a
-second-source registration system; the consumer ABI is unchanged.
+A later producer aggregates complete physical snapshots and continuity
+suppression before routing; submitting independent source masks here would
+incorrectly release another source's hold. Its adapter decides whether source
+loss meets the accepted reset/revocation condition before invoking the common
+hook and supplies the surviving mask. It replaces the PS/2-only availability
+view with its live-source view. Producer authority, epochs, sequences and
+reconnect implementation belong to that separately assigned Bluetooth track;
+this task adds none of them and changes no consumer ABI for a second source.
 
 ## Selection and clipboard boundary
 
@@ -517,14 +518,14 @@ of at most three, with defaults, rather than silently becoming a requirement.
 
 ## Task breakdown
 
-Tasks 1 and 2 have explicit owner authorization on 2026-10-08.
-Proposal review/merge does not authorize later tasks.
+Tasks 1–3 have explicit owner authorization on 2026-10-08.
+Proposal review/merge does not authorize tasks 4 or 5.
 
 - [x] **Documentation proposal.** Inspect current main and describe contracts,
   recommendations, boundaries and a task sequence without code or placeholder APIs.
 - [x] **Owner review.** All three rounds are accepted, including the native
   validation deferral and five-task order. Task 1 was authorized afterward.
-- [x] **1. Ordinary surface input and software cursor (delivered for review).** Kernel owns position,
+- [x] **1. Ordinary surface input and software cursor (merged).** Kernel owns position,
   routing, tab hit testing and ordinary subscription/geometry lifetimes. Include
   program cursor images from the start, explicit hidden state, the accepted warp
   policy, and bounded software composition on all current backends
@@ -533,8 +534,8 @@ Proposal review/merge does not authorize later tasks.
   were checked interactively; source-only cases and presentation measurements
   are listed in the [qualification report](../development/system-pointer-qualification.md).
   Default-image integration now includes task 2; this checkbox records the
-  delivered task, not a merge or milestone closure.
-- [x] **2. Lock, escape and consumer migration (delivered for review).** Add relative lock, Super+Esc,
+  merged task, not milestone closure.
+- [x] **2. Lock, escape and consumer migration (merged).** Add relative lock, Super+Esc,
   durable activation gating and authoritative lock/reset notifications. Migrate
   Quake and the current SDL2 backend; complete `mousetest` migration and replace
   the old relative-only protocol with its in-tree consumers. Qualify lock/escape,
@@ -549,8 +550,9 @@ Proposal review/merge does not authorize later tasks.
   records QEMU input/cursor/warp/capture checks and source-only limits.
 - [ ] **3. Terminal selection and mux wheel.** Add local TTY text retention and
   selection overlay. Give trusted mux startup the accepted
-  terminal-controller grant and implement its typed spatial queue and wait
-  readiness here, where mux consumes them; these are not tasks 1 or 2.
+  terminal-controller grant and implement its typed spatial queue and native wait
+  readiness here, where mux consumes them; make the graphics pointer subscription
+  waitable through `wait_many` alongside it; these are not tasks 1 or 2.
   Mux maps events to panes, selects visible live/history text and handles wheel
   browsing without interfering with pane games. Qualify equal/BSP, focused-only
   clipping, changing output, history eviction, hidden graphics and controller exit.
@@ -572,3 +574,59 @@ to userland; Quake/SDL2 adapters to ports. Publish dependency commits and focuse
 PRs before parent gitlink updates, linking merge order. No compiler-container
 rebuild or upstream-source addition is expected for these adapters. SDL2 timing
 and ownership coordination does not authorize changes to its separate plan.
+
+## Task 3 planning
+
+The owner authorized task 3, including graphics pointer `wait_many` readiness,
+on 2026-10-08. Graphics readiness fits the terminal readiness work: both use the
+existing native BSP readiness worker, without another worker, polling loop,
+wait flag or interest-bound increase. `WAIT_READABLE` observes queued records,
+including geometry/focus/reset records while unfocused. It requires the correct
+grant, caller's own space and acquired ownership. Ownership loss reports
+`WAIT_ERROR`; hiding or source reset is a queued notification, not a persistent
+error that would spin a mixed wait. Waiting retains object storage, never session
+ownership, and uses the existing cancellation and scan-to-sleep notification
+contract. Direct blocking reads remain available. This task supplies readiness;
+it does not change SDL or Quake event-loop ordering.
+
+Implementation breakdown after owner decisions:
+
+1. Retain checked, geometry-sized local TTY glyph storage with transactional
+   resize and the existing cropping/no-reflow rules. Track visible-cell selection
+   under the output lock; stage highlighted rows before the caret and system
+   cursor, leaving retained raster/text and the capture tee intact.
+2. Add the separate process-owned terminal-controller object and bounded spatial
+   queue, image/visibility preference and geometry/view identity with cell metrics.
+   Acquire/release
+   and process exit restore kernel terminal handling. Carry the grant through
+   boot-init, trusted shell/session successors and mux; exclude pane children and
+   remote startup. An acquisition failure diagnoses and stops mux, consistent
+   with its existing required-grant startup behavior.
+3. Add owner-validated native readiness for graphics subscriptions and terminal
+   queues, publishing notification after queue locks are released. Mux adds one
+   spatial interest to its existing maximum of 17, remaining below 32.
+4. Mux hit-tests only its current visible pane rectangles. Focus on content or
+   heading click; select only content, with anchored drag clamping. Invalidate
+   stale queued events and held drag state across layout/view changes. Overlay
+   selection in rendered frame copies; wheel browsing does not focus another
+   pane. Keep history and keyboard controls working.
+5. Qualify boot/Bochs/VirtIO overlays and capture, local output/erase/scroll/resize,
+   mux equal/BSP and focused-only clipping, history mutation/eviction, hidden
+   graphics, controller cleanup and native mixed waits. Publish the userland
+   dependency before the parent pin, then inspect exact-head CI. Clipboard
+   publication/paste, USB HID and the second input source stay out of this task.
+
+**Pending owner round, proposed 2026-10-08 — none accepted yet:**
+
+12. **Selection lifetime. Recommended:** clear selection on local TTY scroll,
+    committed resize, mux layout change or explicit history-view movement.
+    Preserve it through unrelated output and color changes while selected
+    characters and the visible view remain unchanged; mutation or eviction
+    clears it. Alternative: translate surviving selections through scroll/resize.
+13. **Wheel step and live return. Recommended:** three rows per detent over pane
+    content, without changing keyboard focus, and return to ordinary live input
+    at the newest endpoint. Keep existing keyboard history controls. Alternative:
+    one row per detent with the same endpoint behavior.
+14. **Kernel-log selection. Recommended:** allow visible-cell selection in Caelum's
+    kernel log through the kernel handler, without a program stream or clipboard
+    publication. Alternative: leave that terminal unselectable.

@@ -309,3 +309,66 @@ locked motion leaving that position parked, Super+Esc revocation, fresh-left-cli
 relock and global lock cleanup on exit. Source-loss behavior remains reviewed
 without fault injection. Earlier consumer-specific captures retain the revisions
 above.
+
+## Task 3 baseline
+
+Captured on 2026-10-08 before task 3 code, at fresh main
+`abbededa6aae7b112bc178a9788e775059bd79ae`, the tasks 1+2 merge. Pins:
+userland `b83ff679e91911e9483e24901afca9b3b26d0071`, ports
+`a642f07382e14bd233ac1be2b6a814e95c32d835`, fs `b427df2`, lwIP `a1aadb9`.
+The full ordinary `make -j16 image` passed with the existing LLVM builder
+`pyxis-llvm23.1.3-49e2c1a`; no compiler rebuild or code modification was needed.
+
+Manual QEMU 10.2.2 boots used Q35, nested KVM, CPU max, four CPUs (one socket,
+four cores, one thread), 512 MiB, UTC RTC, matching Fedora OVMF code/variables
+with fresh variables each boot, modern VirtIO RNG, and VirtIO SCSI CD-ROM.
+There was no NIC, HOST export or disk. The matching ELF was inspected through
+read-only GDB. Default standard VGA without `display.size` confirmed
+`DISPLAY_BOOT`; `bochs-display` with `DISPLAY_SIZE=1280x800` confirmed
+`DISPLAY_BOCHS`; modern `virtio-gpu-pci` confirmed `DISPLAY_VIRTIO_GPU`.
+All measured backends had 1280x800 scanout, pitch 5120, RGB shifts 16/8/0 and
+160x48 TTY content cells below navigation.
+
+The original default image booted Development's ordinary local shell. Manual
+PS/2 motion and left drag moved the system pointer with no selection overlay,
+as expected before task 3. For the matched mux samples, only the staged archive's
+`config/live.lua` gained the existing `multiplexer = true` option for Development.
+The existing cpio assembly command and `make-image.sh` rebuilt that archive/image;
+tracked source files stayed unchanged. The Bochs configuration additionally
+regenerated `build/limine.conf` with the existing DISPLAY_SIZE setting. The saved
+baseline images are local build artifacts, not a new build profile or workflow.
+
+A single-pane mux appeared with its shell and BSP footer. Manual pointer motion,
+drag and wheel did not select text or browse history. Ctrl+B then `[` entered
+its existing keyboard history mode. GDB observed a sleeping three-interest
+readiness request for one pane; the existing source bounds its eight-pane case
+at 17, within the native 32-interest limit. Graphics pointer sessions have no
+wait readiness in this baseline. These observations do not qualify task 3's
+future selection or source-loss behavior.
+
+Four manually taken `space_present()` samples per backend used a hardware entry
+breakpoint, a direct 64-bit HPET counter read, `finish`, and a second counter
+read, as in task 1. QEMU's 10 ns HPET ticks were converted to milliseconds.
+Development's idle single-pane mux, caret and terminal system pointer were shown;
+all spaces had started. No trace option, guest write, synthetic syscall, test,
+fault injection, benchmark harness or CI change was added.
+
+| Backend | Samples (ms) | Median (ms) | Range (ms) |
+| --- | --- | --- | --- |
+| Boot framebuffer | 0.772930, 0.889330, 0.817070, 1.129710 | 0.853200 | 0.772930–1.129710 |
+| Bochs | 0.829880, 0.764840, 0.945830, 0.947870 | 0.887855 | 0.764840–0.947870 |
+| VirtIO GPU | 2.191670, 1.642960, 2.132510, 1.562170 | 1.887735 | 1.562170–2.191670 |
+
+These are shared-host nested-QEMU presentation samples, not native ThinkPad
+performance or selection overhead. Repeat matched configuration/workload after
+task 3. Baseline captures and raw GDB logs remain local. All task-owned QEMU and
+GDB processes were stopped before the baseline was recorded.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Kernel ELF | `250f82a57f22738d23859c923f8143ddf9f0e49c0521918e836ebf4d6f986e4f` |
+| Default initrd | `2aea52fa7c7c6496e8a2c39de5f4d0001051ddac526975720ef24ee1caec48d8` |
+| Default ISO | `bd647ef2f7f3fbd612ee0fecb2889301c4d981fe3473745ae094d7c5fdedbed0` |
+| Mux opt-in initrd | `635d60070eeeb29fbc9a5f8eef9e1db8fa50f32c4fe4a005dea547a932227e95` |
+| Mux opt-in ISO, boot framebuffer | `12eed52a9438779b77c7a6283a1a782d564530f04d9bab43cfd6c238c415674a` |
+| Mux opt-in ISO, 1280x800 modeset | `b2a8784bb7c1a4d66539524f1cb111e1052159f7ab8ba0fed75650ac0e741622` |
