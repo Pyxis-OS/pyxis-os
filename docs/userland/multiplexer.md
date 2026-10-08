@@ -107,8 +107,8 @@ work can delay it. See [execution groups](../interfaces/execution-groups.md).
 
 Every turn drains a bounded number of records from each pane. Rendering sends
 changed colored cells through the outer CONSOLE; it does not pass pane escape
-sequences through to the outer terminal. Seventeen readiness interests cover
-outer input and eight output/lifecycle pairs, without an idle polling loop.
+sequences through to the outer terminal. Eighteen readiness interests cover
+outer input, the terminal spatial queue and eight output/lifecycle pairs, without an idle polling loop.
 The native wait bound is independently 32 interests; a compile-time check
 ensures the eight-pane budget fits it. Per-interest copies use about 40 bytes
 of kernel stack. The readiness request fits the existing 4,928-byte reserved
@@ -117,6 +117,36 @@ task area, sized by HOST; increasing this bound from 17 to 32 does not grow it.
 Multiple windows, ratio adjustment, detach/reattach, Unicode widths and a broader
 VT escape set remain deferred. Full-screen programs share the same retained
 screen as their shell; no alternate-screen protocol is introduced.
+
+## Local pointer input
+
+Configured local startup gives mux a separate `terminal_pointer` CONTROL grant
+through its trusted init/shell/session chain. Acquisition is exclusive and
+process-owned. Pane shells retain graphics/pointer grants for their games but
+receive no outer terminal control. Mux adds the spatial queue to its native
+`wait_many` interests, with no idle polling loop. Remote mux remains keyboard-only.
+
+A content or heading click focuses that visible pane; only content participates
+in linear cell selection. Left drag stays anchored to the starting pane and
+clamps to its visible content, excluding headings, dividers, footer, other panes
+and clipped cells. Highlighting changes rendered frame copies, not retained
+live/history cells. Selected glyph mutation or row eviction clears selection;
+colours and unrelated output preserve it. Unchanged selected rows moving with
+output remain selected only while visible. Explicit history movement, layout
+change, closure and outer resize clear selection and synchronize a new terminal
+view identity before more spatial input is consumed. Hidden graphics/focus
+loss suspends input and cancels an active drag; unchanged completed selection
+may remain.
+
+Wheel over content moves that pane's history three rows per detent without
+changing keyboard focus. Away moves older, toward moves toward live, with
+bounded endpoints. Reaching the newest endpoint returns to ordinary pane input.
+The existing prefix/keyboard history controls still work. Drag autoscroll,
+selection across off-view history and clipboard publication/paste are deferred.
+Controller release/exit restores kernel local-TTY selection and cursor handling.
+
+The [pointer task 3 qualification](../development/system-pointer-qualification.md#task-3-qualification)
+records implementation validation separately from the original mux results below.
 
 ## Qualification (2026-10-08)
 

@@ -44,6 +44,7 @@ _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity requ
 #define SPACE_FACTORY_RIGHT_CREATE (UINT64_C(1) << 0)
 #define SPACE_FACTORY_RIGHTS SPACE_FACTORY_RIGHT_CREATE
 #define SPACE_FACTORY_CREATE UINT64_C(1)
+#define SPACE_CREATE_TERMINAL_CONTROL (UINT64_C(1) << 0)
 #define SPACE_NAME_MAX 31
 #define SPACE_REASON_MAX 96
 
@@ -59,11 +60,14 @@ _Static_assert(sizeof(struct space_affinity_request) == 32, "space affinity requ
  * With LAUNCH, the address of a launch_request, CPUS uses SET_AFFINITY's
  * encoding and becomes the space's ceiling: nonempty, every index a boot CPU.
  * The request's streams must be NONE, and its resources must not use the names
- * the kernel adds: input, output, keyboard, pointer, display and space. The
+ * the kernel adds: input, output, keyboard, pointer, display, space and terminal_pointer. The
  * kernel gives the child the new space's console as input (READ|INTERRUPT),
  * output (WRITE) and all three streams, its keyboard and pointer (INPUT), its
  * display (DRAW) and the space itself (SET_TITLE|SET_AFFINITY). Everything else
  * comes from the request's grants, as for LAUNCHER_LAUNCH; no execution group.
+ * TERMINAL_CONTROL additionally gives the first process a separate control grant
+ * for its outer terminal, named terminal_pointer. It grants no graphics input
+ * or terminal creation and must be withheld from ordinary children.
  * Success replies with one WAIT process-control handle.
  *
  * A malformed request, a duplicate name or a launch request rejected before
@@ -76,8 +80,9 @@ struct space_create_request {
   uint64_t cpus, cpu_count;
   uint64_t reason, reason_length;
   uint64_t launch;
+  uint64_t flags; /* TERMINAL_CONTROL only with LAUNCH; trusted local mux startup. */
 };
 
-_Static_assert(sizeof(struct space_create_request) == 88, "space create request layout");
+_Static_assert(sizeof(struct space_create_request) == 96, "space create request layout");
 
 #endif

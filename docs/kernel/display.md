@@ -25,7 +25,9 @@ the surface's image and saved show preference. Unlock restores that preference;
 hidden and locked pointers add no software overlay to scanout or capture.
 
 [The compositor](../../kernel/display/pointer.c) overlays the pointer after
-navigation, the chosen surface and the TTY block caret. It subtracts the hotspot
+navigation, the chosen surface, local selection highlighting and the TTY block
+caret. Selected glyphs use the existing row scratch buffer; text/pixel backing
+stays unmodified by that kernel overlay. Mux highlights its own rendered cells. It subtracts the hotspot
 using signed coordinates and clips against physical geometry. Only intersecting
 native spans are staged, at most 64 pixels in 256 bytes of scratch. Straight
 BGRA alpha is blended into native RGB channel shifts, preserving transparent
