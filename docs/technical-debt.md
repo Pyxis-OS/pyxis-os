@@ -1015,16 +1015,21 @@ not infer the location from `argv[0]` or add path normalization for one port.
 
 ## Sleep wake granularity
 
-Deadline sleeps wake on the 120 Hz local APIC preemption tick, so a sleep can
-end up to 8.33 ms after its deadline; see [timekeeping](kernel/timekeeping.md).
-The [SDL2 milestone](development/sdl2.md#measurements) measured a `SDL_Delay(16)` loop at
+Deadline sleeps are checked by BSP scheduling and the 120 Hz local APIC tick.
+Expiry can wait another tick, about 8.33 ms; an expired AP waiter is enqueued
+without a reschedule IPI and can wait for its assigned CPU's next tick as well.
+Interrupt delays and runnable load can delay execution further; see
+[timekeeping](kernel/timekeeping.md).
+The [SDL2 probe](development/sdl2.md#measurements) measured a `SDL_Delay(16)` loop at
 24.8 ms per frame instead of about 17. DevilutionX's own limiter tracks
 deadlines and held 57.8–62.3 FPS. Quake's 72 Hz cap and other fixed-rate
 sleepers can be delayed the same way; that is not measured.
 
 Nanosecond units remain a representation, not a precision promise. Revisit
 with a one-shot deadline timer or tickless sleeping, as a kernel task, when a
-consumer needs finer pacing than its own deadline tracking provides.
+consumer needs finer pacing than its own deadline tracking provides. The owner
+assigned this work on 2026-10-08; the [bounded proposal](wip/sleep-wake-granularity.md)
+and its current-main baseline await decisions before kernel implementation.
 
 ## Wall-clock time and clock-source performance
 
