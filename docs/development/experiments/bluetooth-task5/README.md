@@ -19,16 +19,24 @@ The task branched from freshly fetched main
 Matching SDK/userland/ports bundles from successful
 [CI run 1232](https://git.internal/PyxisOS/pyxis-os/actions/runs/1232) passed the
 existing verifiers. The separately published
-[probe revision](https://git.internal/PyxisOS/pyxis-os/commit/6c4329e4429b9a43f266dd57f44d544420313996)
+[probe revision](https://git.internal/PyxisOS/pyxis-os/commit/3d0bc3c8aa79e1ede4ff8d366e759d8064eb3cf8)
 is retained on `probe/bluetooth-le-scan`; that branch must not be merged.
 After measurement, a name-redaction-only
-[follow-up revision](https://git.internal/PyxisOS/pyxis-os/commit/3d413de579086f2a6f3634a3d4615f8737211b7e)
+[follow-up revision](https://git.internal/PyxisOS/pyxis-os/commit/9f12592e0098224d3cf2149d308d72393dbedb0e)
 added variable-width address formats. It received source review and an ordinary
 build, without another radio run; the observed ASCII mouse names follow the
 same rendering path by inspection. The captures below use the measured revision
 and its matching ELF, not that later image.
 
-The probe image was built from that clean revision:
+The probe history was re-authored and signed as Codex on 2026-10-08. The rewritten
+radio-tested commit `3d0bc3c8aa79e1ede4ff8d366e759d8064eb3cf8` has exactly the same tree
+as the measured commit `6c4329e` (tree `46b500e411d24ab0b4d9b95d086ed0fb7093279e`).
+All rewritten probe trees and commit messages were verified unchanged. The
+recorded ELF and GDB capture still correspond to that identical measured source;
+the ELF retains its original build-revision metadata. This identity/signature
+repair did not rebuild the binary or repeat the radio run.
+
+The probe image was originally built from the clean measured revision:
 
 ```sh
 PATH="$HOME/opt/pyxis-llvm/bin:$PATH" make -j16 image PREBUILT="sdk userspace ports"
