@@ -1,0 +1,64 @@
+hda-probe: PCI=0:5.0 BAR0-bytes=16384 GCAP=4401 ISS=4 OSS=4 BSS=0 version=1.0
+hda-probe: prepared output descriptor=4 PCM=262144; link reset, BME off
+hda-probe: link ready STATESTS=1 first-output-offset=100
+hda-probe: CORB=256 RIRB=256 pointers reset; INTCTL=0 polling only
+hda-probe: controller/commands ready elapsed-ns=28615050
+hda-codec: enumeration mask=1
+hda-codec: cad=0 nid=0 verb=f0000 response=1af40022
+hda-codec: cad=0 nid=0 verb=f0002 response=100101
+hda-codec: cad=0 nid=0 verb=f0004 response=10001
+hda-codec: cad=0 nid=1 verb=f0005 response=1
+hda-codec: cad=0 nid=1 verb=f0008 response=808
+hda-codec: cad=0 nid=1 verb=f000a response=201fc
+hda-codec: cad=0 nid=1 verb=f000b response=1
+hda-codec: cad=0 nid=1 verb=f000d response=0
+hda-codec: cad=0 nid=1 verb=f0012 response=0
+hda-codec: cad=0 nid=1 verb=f000f response=0
+hda-codec: cad=0 nid=1 verb=f0500 response=0
+hda-codec: cad=0 nid=1 verb=f0004 response=20004
+hda-codec: cad=0 nid=2 verb=f0009 response=1d
+hda-codec: cad=0 afg=1 nid=2 type=0 stereo=1 format-override=1
+hda-codec: cad=0 nid=2 verb=f000a response=201fc
+hda-codec: cad=0 nid=2 verb=f000b response=1
+hda-codec: cad=0 nid=2 verb=f0012 response=80034a4a
+hda-codec: cad=0 nid=3 verb=f0009 response=400101
+hda-codec: cad=0 afg=1 nid=3 type=4 stereo=1 format-override=0
+hda-codec: cad=0 nid=3 verb=f000e response=1
+hda-codec: cad=0 nid=3 verb=f0200 response=2
+hda-codec: cad=0 nid=3 input=0 source=2
+hda-codec: cad=0 nid=3 verb=f000c response=10
+hda-codec: cad=0 nid=3 verb=f1c00 response=4010
+hda-codec: cad=0 nid=3 verb=f0700 response=40
+hda-codec: cad=0 nid=4 verb=f0009 response=10011b
+hda-codec: cad=0 afg=1 nid=4 type=1 stereo=1 format-override=1
+hda-codec: cad=0 nid=4 verb=f000a response=201fc
+hda-codec: cad=0 nid=4 verb=f000b response=1
+hda-codec: cad=0 nid=4 verb=f000d response=80034a4a
+hda-codec: cad=0 nid=4 verb=f000e response=1
+hda-codec: cad=0 nid=4 verb=f0200 response=5
+hda-codec: cad=0 nid=4 input=0 source=5
+hda-codec: cad=0 nid=5 verb=f0009 response=400001
+hda-codec: cad=0 afg=1 nid=5 type=4 stereo=1 format-override=0
+hda-codec: cad=0 nid=5 verb=f000c response=20
+hda-codec: cad=0 nid=5 verb=f1c00 response=805020
+hda-codec: cad=0 nid=5 verb=f0700 response=20
+hda-codec: route cad=0 afg=1 step=0 nid=3 type=4 input=0
+hda-codec: route cad=0 afg=1 step=1 nid=2 type=0 input=0
+hda-codec: cad=0 nid=1 no advertised D0 control; unchanged
+hda-codec: cad=0 nid=1 verb=f0500 response=0
+hda-codec: cad=0 nid=2 amp-output=1 index=0 gain=74 mute=0
+hda-codec: cad=0 nid=2 verb=3b04a response=0
+hda-codec: cad=0 nid=2 verb=ba000 response=4a
+hda-codec: cad=0 nid=2 verb=b8000 response=4a
+hda-codec: cad=0 nid=3 verb=70740 response=0
+hda-codec: cad=0 nid=3 verb=f0700 response=40
+hda-codec: cad=0 nid=2 verb=20011 response=0
+hda-codec: cad=0 nid=2 verb=a0000 response=11
+hda-codec: cad=0 nid=2 verb=70610 response=0
+hda-codec: cad=0 nid=2 verb=f0600 response=10
+hda-codec: known PCM rate=48000 bits=16 channels=2 frames=48000 bytes=192000 format=11 pattern=integer-triangle hz=1000 amplitude=8192 first=-8192
+hda-probe: playback payload=192000 CBL=262144 periods=8 period=32768 format=11 rate=48000 frame=4
+hda-probe: playback elapsed-ns=974967240 WALCLK-ticks=23399232 progress=192596 LPIB=192596 stop-LPIB=192596 reset-LPIB=192596 completions=5 polls=171 status=20 RUN-clear=1 reset=1
+hda-codec: finite known PCM playback completed=1
+hda-probe: commands=42 responses=42 unsolicited=0 CORBRP=42 CORBWP=42 RIRBWP=42
+hda-probe: shutdown stream-reset=1 CORB-stop=1 RIRB-stop=1 link-reset=1 BME-off=1; backing retained

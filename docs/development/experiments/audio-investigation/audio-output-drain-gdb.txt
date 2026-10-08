@@ -1,0 +1,7 @@
+0xffffffff80012836 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:156
+156	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+$1 = false
+$2 = true
+$3 = 32
+$4 = 2
+[Inferior 1 (process 1) detached]
