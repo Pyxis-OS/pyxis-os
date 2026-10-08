@@ -170,3 +170,126 @@ Physical PS/2 behavior remains deferred under the accepted
 [native ThinkPad qualification debt](../technical-debt.md#native-system-pointer-qualification).
 This task does not qualify lock/escape, terminal selection/controller queues,
 Quake/SDL2 migration or the VirtIO hardware cursor.
+
+## Task 2 and joint integration
+
+Task 2 was explicitly authorized on 2026-10-08 and stacked on task 1. It adds
+lock/state helpers, Super+Esc, durable activation gating and migration of Quake,
+`mousetest` and the closed SDL2 backend. Final published dependencies are userland
+`b83ff67` ([#164](https://git.internal/PyxisOS/pyxis-userland/pulls/164)), Quake
+`be91da7` ([ports #65](https://git.internal/PyxisOS/pyxis-ports/pulls/65)) and SDL2
+`a642f07` ([ports #66](https://git.internal/PyxisOS/pyxis-ports/pulls/66)), stacked
+on Quake and including DevilutionX's native cursor option. Publish/merge order is
+userland, Quake, SDL2, then [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545)
+with the integrated pins. The SDL2 PR must target main after Quake merges.
+
+Fresh ordinary `make -j16 kernel sdk` and `make -j16 image` passed with the
+existing LLVM builder; the default image now includes working Quake and SDL2
+instead of the task 1 qualification subset. `make -j16 image
+DIABLO_DATA=/shared/diablo-shareware` also passed using the local shareware input.
+No game data, cursor pixels or game screenshots were committed or uploaded.
+The separately published consumer revisions preceded parent gitlink commits.
+The compiler container and upstream source pins were unchanged.
+
+The main merge in task 2 includes SDL2 closure and deadline timers through
+`4332801`. The task 1 presentation samples above remain the matched observations
+for their original runtime base; they do not isolate pointer cost on this newer
+scheduler. Task 2 functional checks below are unprofiled interactive checks, not
+new throughput or native-latency measurements. Final matched software/hardware
+cost comparison remains tasks 4–5.
+
+### Interactive configuration and evidence
+
+Resize/modifier checks first used parent `f32ff13`; Quake used `304d1d7`;
+activation-refusal checks used `62182af`; DevilutionX and locked capture used
+`f017d45`. Later documentation changes do not change those paths.
+
+The ordinary image initially ran with the same q35/four-CPU/nested-KVM configuration
+as task 1, with GTK on Xwayland, modern VirtIO GPU and NIC, 512 MiB, and only a
+loopback remote-terminal forward. Later Quake/DevilutionX checks used 2 GiB and
+the local shareware ISO. They retained `-cpu max`, fresh matching OVMF variables,
+modern VirtIO RNG, firmware VirtIO SCSI CD boot and no HOST export or disk.
+QMP was exposed only by a local Unix socket for manual keyboard input.
+
+GTK initially advertised 640x480. `mousetest` locked at physical (320,240);
+relative motion left that parked hotspot unchanged. A real window resize yielded
+800x573; mapping identity advanced to 2 while lock and a held left button stayed
+set. Super+Esc with Shift/Control/Alt unlocked without terminating the program,
+cleared accepted buttons and retained the image/preference. A fresh left click
+relocked with accepted buttons zero and its press consumed. Super+Down/Up
+revoked lock and restored graphics without automatic relock.
+
+A second boot with the final activation rules exercised a simultaneous fresh
+left/right press after escape. It granted activation but the unaccepted right
+button refused lock; the attempt consumed permission. Releasing both and explicitly
+requesting again stayed denied until another fresh left click. Exiting while
+locked cleared the global lock, subscription and image; the space's activation
+requirement survived. These are real monitor mouse/key inputs and read-only GDB
+observations, without synthetic syscalls, debugger writes or fault injection.
+
+Quake locked after first PRESENT and ran a `map start` level with `+mlook`.
+Device motion changed the view while its hotspot stayed parked. Manual QMP input
+pressed Super+Esc, released Super first, then repeated/released Escape: lock was
+revoked, the pointer appeared, and no game menu opened. Ordinary motion moved
+the pointer while unlocked. A fresh click relocked with the activation press
+consumed and accepted buttons zero. Hidden-layer return did not relock. Keyboard
+console commands and rendering remained available; exit cleared both owners.
+
+DevilutionX's former Pyxis-only forced-software override was removed because it
+prevented the required `SDL_CreateColorCursor` path. Its existing Hardware Cursor
+option now selects a supplied native SDL image; composition remains software
+until task 4. GDB observed a 33x28 BGRA image with hotspot (0,0), visible on the
+menu. Its 3,696 copied bytes contained 88 alpha levels, 86 strictly between zero
+and 255. Menu/town input used native positions; no second default cursor was
+drawn over the supplied hand.
+
+For the inventory warp, the window was resized to a 640x512 physical destination
+and the game restarted, yielding 640x480 content beneath navigation. Restart
+made the game's existing logical layout match the classic aspect ratio; its
+wider logical layout does not need the inventory warp. A breakpoint on the actual
+native request observed x=215, y=228, generation=2, mapping identity=3. It returned
+`CALL_OK` and changed physical x from 375 to 215 while physical y stayed 260.
+The test used the game's I key and normal `SetCursorPos`/SDL path.
+
+A guest-only preference file with `Hardware Cursor=0` was written through native
+Lua file I/O and the game restarted. Its native hidden state was true with no
+supplied image; the software hand followed ordinary motion at physical (275,245),
+and a click selected the hero menu. After a locked `mousetest` exit in that same
+space, the next game's first left click was consumed as activation; permission
+remained ready, and the second ordinary click still selected the menu. A pending
+lock permission therefore does not swallow every click from an ordinary client.
+
+While `mousetest` was locked, its saved image and show preference remained set.
+A native `screenshot` PNG and an independent monitor dump matched all RGB pixels
+at 640x512, with the effective cursor omitted. This complements task 1's visible
+and hidden capture comparisons. Screenshot download used the existing explicit
+confirmation path into the local build directory. All task-owned QEMU, debugger
+and remote-client processes were stopped.
+
+The interactive images used userland `b83ff67` and ports through `e2482df`; the
+last ports follow-up `a642f07` only converts wheel counts to float before reversing
+their sign, avoiding signed integer negation overflow. The final ordinary and
+shareware builds include that follow-up. The final parent checks are tracked on
+#545 for its exact submitted revision; dependency repositories report zero
+action tasks, and their empty status response must not be called a CI pass.
+
+### Remaining qualification limits
+
+SDL relative-mode refusal/revocation and its Pyxis-only upstream ordering patch
+were reviewed in source; DevilutionX uses ordinary input, so its game checks do
+not exercise SDL relative mode. Kernel lock/refusal/revocation were exercised
+through Quake and `mousetest`. Device/keyboard stream-loss paths, oversized cursor
+fallback, same-size-only REPLACE and allocation failures remain source-reviewed
+without fault injection. Native PS/2 behavior remains in the accepted ThinkPad
+batch debt. Terminal controller/selection and actual VirtIO hardware cursor
+implementation remain separately authorized later tasks.
+
+The saved functional image with ports `e2482df` has these hashes:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Kernel ELF | `503ee9602f383c7caec078fea1659a694eee4ac4c713d4b1294ffa277728013b` |
+| Default initrd | `6f93c7756eb08928d3dc9f4fcd43cd65bbd1385906cbdd155d2982c8ea39f067` |
+| Default ISO | `5fc140a575fb9e616fac16797c780b2e7784abec9ecf25c3e7898df95c46a42c` |
+| Local shareware initrd | `f6da0dd8449681f8fc808dcc1f5edd2d7ef3ca06f4416da292e9af4c1ac8931c` |
+| Local shareware ISO | `6e25a2ac5837f614eaef38c17f652df425ec6a8d4b0a6d7c73673ec240d38e65` |

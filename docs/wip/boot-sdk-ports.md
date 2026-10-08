@@ -58,10 +58,12 @@ Chosen by the owner, each starting with a proposal:
   No production task is assigned; the owner requested a stop before native checks.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
   All three decision rounds are accepted; proposal #530 is merged. Task 1 is
-  delivered in draft #545 with [qualification](../development/system-pointer-qualification.md).
+  delivered in #545 with [qualification](../development/system-pointer-qualification.md).
   The owner authorized task 2 on 2026-10-08: lock, Super+Esc and Quake/mousetest/SDL2
-  migration, stacked with task 1 for joint ABI/consumer integration. Default-image
-  build and exact-head CI must pass before the drafts become ready. SDL2's milestone
+  migration. Both tasks are delivered together in #545 with userland #164 and
+  ports #65/#66; default and local shareware images build, with
+  [joint qualification](../development/system-pointer-qualification.md#task-2-and-joint-integration).
+  Exact-head CI is tracked on the integration PR before draft removal. SDL2's milestone
   is closed. Matched QEMU checks suffice for pointer milestone closure;
   [native PS/2 validation is deferred](../technical-debt.md#native-system-pointer-qualification)
   to the owner's ThinkPad batch after the Bluetooth investigation. Devices stay PS/2;

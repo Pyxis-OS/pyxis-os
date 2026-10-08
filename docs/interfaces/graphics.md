@@ -166,9 +166,9 @@ cursor-free. Quake acquires pointer input after graphics and requests lock after
 PRESENT. SDL likewise acquires after graphics backing and exposes relative mode
 after PRESENT, alongside native position/cursor/warp support. Both release
 pointer input before graphics teardown and react to revocation instead of
-polling for lock. Tasks 1 and 2 are joint draft integration; runtime and CI
-qualification are pending in
-[system pointer qualification](../development/system-pointer-qualification.md).
+polling for lock. Their joint integration and QEMU evidence are recorded in
+[system pointer qualification](../development/system-pointer-qualification.md#task-2-and-joint-integration),
+along with source-only limits and the submitted-revision CI location.
 
 ## Live destination geometry
 

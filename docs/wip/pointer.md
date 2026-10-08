@@ -1,10 +1,11 @@
 # A system pointer
 
-Status: **tasks 1 and 2 authorized; assigned to Codex, 2026-10-08.**
+Status: **tasks 1 and 2 delivered for joint review; assigned to Codex, 2026-10-08.**
 Task 1 is [Pyxis #545](https://git.internal/PyxisOS/pyxis-os/pulls/545) on
 `pointer/ordinary-surface`, with published
-[userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164), revision
-`6b45dd1`. Both remain draft while authorized task 2 completes joint integration. The proposal
+[userland #164](https://git.internal/PyxisOS/pyxis-userland/pulls/164). Merge order is userland #164, [Quake ports #65](https://git.internal/PyxisOS/pyxis-ports/pulls/65),
+[SDL2 ports #66](https://git.internal/PyxisOS/pyxis-ports/pulls/66), then #545.
+Published pins are userland `b83ff67` and ports `a642f07`. The proposal
 merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530);
 round three is recorded in the first commit of task 1's PR.
 The proposal was based on Pyxis `9acf597`, after the multiplexer merged in
@@ -16,10 +17,13 @@ The owner explicitly authorized task 1 on 2026-10-08, after proposal merge.
 The owner authorized task 2 on 2026-10-08: lock, Super+Esc and migration of
 Quake, mousetest and the closed SDL2 backend. It is stacked on task 1 and its
 userland dependency. Default-image build and exact-head CI must pass before
-anything leaves draft. Tasks 3–5 remain unstarted until separately authorized. The first task 1 commit
+anything leaves draft; the exact submitted checks are tracked on #545.
+Tasks 3–5 remain unstarted until separately authorized. The first task 1 commit
 records decisions only; the [baseline](../development/system-pointer-qualification.md)
-was captured before code changes. Tasks 1 and 2 remain draft until task 2 migrates
-Quake/SDL2 and permits the ABI and all consumers to integrate together.
+was captured before code changes. Tasks 1 and 2 now integrate the ABI and all
+consumers; the default and local shareware images build.
+[Joint qualification](../development/system-pointer-qualification.md#task-2-and-joint-integration)
+records interactive results and source-only limits.
 
 ## Pre-milestone baseline
 
@@ -503,9 +507,9 @@ Proposal review/merge does not authorize later tasks.
   Motion, tab clicks, image/hotspot/show/hide, live resize/REPLACE and capture
   were checked interactively; source-only cases and presentation measurements
   are listed in the [qualification report](../development/system-pointer-qualification.md).
-  Full default-image integration waits for task 2; this checkbox records the
+  Default-image integration now includes task 2; this checkbox records the
   delivered task, not a merge or milestone closure.
-- [ ] **2. Lock, escape and consumer migration.** Add relative lock, Super+Esc,
+- [x] **2. Lock, escape and consumer migration (delivered for review).** Add relative lock, Super+Esc,
   durable activation gating and authoritative lock/reset notifications. Migrate
   Quake and the current SDL2 backend; complete `mousetest` migration and replace
   the old relative-only protocol with its in-tree consumers. Qualify lock/escape,
@@ -514,7 +518,10 @@ Proposal review/merge does not authorize later tasks.
   explicit hiding for its software cursor and its program-supplied color cursor.
   Review tasks 1 and 2 as focused dependent changes and integrate the ABI and
   consumer pins together, without publishing a broken intermediate consumer or
-  retaining a legacy compatibility interface.
+  retaining a legacy compatibility interface. The default image builds with
+  published userland and Quake/SDL2 changes; the
+  [qualification report](../development/system-pointer-qualification.md#task-2-and-joint-integration)
+  records QEMU input/cursor/warp/capture checks and source-only limits.
 - [ ] **3. Terminal selection and mux wheel.** Add local TTY text retention and
   selection overlay. Give trusted mux startup the accepted
   terminal-controller grant and implement its typed spatial queue and wait

@@ -19,10 +19,10 @@ deltas zero, for example when a wheel step ends.
 The presentation task drains these events into one kernel-owned physical pointer
 position and routes ordinary input to the shown surface. Graphics owners use
 [the pointer session](#userspace-pointer-sessions); navigation and local terminals
-retain kernel cursor defaults. Tasks 1 and 2 are a joint draft with ordinary
-input, relative lock and migrated Quake/SDL consumers. QEMU qualification and
-exact-revision CI remain pending in the
-[qualification report](../development/system-pointer-qualification.md).
+retain kernel cursor defaults. Tasks 1 and 2 integrate ordinary input, relative
+lock and migrated Quake/SDL consumers. Interactive QEMU evidence, source-only
+limits and the exact-revision CI location are in the
+[qualification report](../development/system-pointer-qualification.md#task-2-and-joint-integration).
 
 ## Controller and setup
 
