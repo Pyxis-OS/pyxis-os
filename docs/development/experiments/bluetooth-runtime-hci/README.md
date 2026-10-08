@@ -1,7 +1,7 @@
 # Bluetooth mouse task 2: runtime HCI transport
 
-Status: **assigned 2026-10-08; attached-controller baseline captured before code
-changes; implementation built, warm qualification pending.** This is task 2 of the [mouse milestone](../../../wip/bluetooth-mouse.md),
+Status: **task 2 implemented and warm passthrough validated 2026-10-08.**
+This is task 2 of the [mouse milestone](../../../wip/bluetooth-mouse.md),
 separate from the completed investigation's identically numbered source-assessment
 task. The owner authorized production AX200 binding, an exclusive process-owned
 controller grant, event/asynchronous ACL reception, kernel-owned command/data
@@ -48,8 +48,8 @@ That is a Linux observation, not a new Pyxis readiness measurement.
 Kernel, SDK, userspace and ports bundles were downloaded together from successful
 [CI run 1297](https://git.internal/PyxisOS/pyxis-os/actions/runs/1297), revision
 `01edf6d49814b6450105eb1d2878363542540d97`, and passed the existing bundle
-verifier during image assembly. Code inputs are unchanged from fresh main
-`3bda2c3`; the branch differences are documentation. The CI compiler is Clang
+verifier during image assembly. At baseline capture, code inputs were unchanged from fresh main
+`3bda2c3`; its then-current branch differences were documentation. The CI compiler is Clang
 23.1.3, fork `49e2c1a1518b3e4687b52ceb6001069c1b6d261e`.
 
 Dependency pins are userspace `b83ff679e91911e9483e24901afca9b3b26d0071`,
@@ -152,6 +152,133 @@ Repeat the same workload after implementation, with no compiler/build workload
 during measurement. Real ACL traffic remains task 4's qualification gate. No
 new benchmark or test infrastructure was added.
 
+## Runtime implementation and initial warm check
+
+The [runtime reference](../../../devices/bluetooth-hci.md) describes the native
+process-owned grant, bounded framing, kernel credits and retained USB transport.
+No userspace service or connection procedure is added by task 2. The public ABI
+change required new matching SDK, userspace and ports bundles; dependency pins
+remain unchanged.
+
+An initial interactive warm boot used matching bundles from successful CI run
+1322 at `b896bc4`, with the baseline configuration and fresh disk/OVMF copies.
+Scalar GDB inspection found initialization ready (stage 11), complete sealed
+inventory, one attachment, no owner/terminal failure, HCI version 11/revision
+8641, LE features `80059ff`, validated mandatory LE commands, one command credit,
+ACL payload length 251 and three available/total ACL packet credits. Ten event
+USB completions supplied the initialization replies; neither stream had a partial
+frame. Both interrupt and bulk receive slots remained posted, with empty copied
+queues. The guest exited. This is framing/readiness and idle ownership evidence,
+not actual ACL payload traffic or a timed post-change comparison.
+
+Integration review corrected late retired-link ACL handling, post-callback USB
+failure reporting, HCI request progress during storage waits, singleton candidate
+counting before transport admission, and bounded first-link ACL deferral across
+independent event/ACL drains. The latter retains eight whole frames in order for
+at most five seconds from their first byte, with captured epoch/generation and
+explicit overflow/expiry loss. Current cleanup is deliberately conservative: radio-changing command publication,
+connection admission or ACL publication permanently taints the session, so
+release/exit requires reboot even after credits/links settle. Read-only sessions
+can be re-granted only after fully confirmed accounting. Current HCI BSS storage
+is 214344 bytes; the new
+private async bulk pool reserves five DMA pages per controller plus copied
+metadata, independently of the storage budget. These are current implementation
+settings, not public capacity guarantees.
+
+The owner accepted fail-closed handle reuse on 2026-10-08. The
+[reuse boundary debt](../../../technical-debt.md#bluetooth-hci-connection-handle-reuse-boundary)
+remains a prerequisite to bonded reconnect. Real connection/ACL traffic,
+command/data credit recycling, source loss under traffic and process acquisition/
+release/exit through a userspace consumer have not been measured by this idle
+check. Framing/credits/lifetime error paths are source-reviewed; task 4 adds the
+actual service/connection consumer and its qualification. No fault injection,
+new tests or benchmark infrastructure were added.
+
+## Matched final-code validation
+
+Three fresh interactive guests used matching bundles from successful
+[CI run 1326](https://git.internal/PyxisOS/pyxis-os/actions/runs/1326), signed code
+revision `8e67c3c9b1c4b359131ad13515bdf6c2e1111b95`. QEMU configuration,
+compiler fork, disk fixture, workload and idle sampling matched the baseline;
+only the kernel/public ABI and corresponding SDK content changed. The existing
+bundle verifier accepted all components. No compiler work ran during measurements.
+
+All three guests reached development readiness with the same checked firmware,
+features and credits as the initial warm check. Both receive slots on each
+endpoint remained posted, with no partial HCI frame, copied queue backlog or
+terminal failure. The [parsed firmware/size snapshot](runtime-firmware-scalars.txt)
+records the operational tuple, zero deferred frames and the clean idle state;
+no packet or peer identity was dumped.
+
+All commands, warmups and nine storage samples verified successfully. The three
+private disk copies retained the original hash after each guest exited.
+
+| Boot | Payload read samples (ms) | Complete consumption samples (ms) |
+| --- | --- | --- |
+| [1](runtime-1-storage.txt) | 116.207, 125.406, 125.356 | 118.074, 126.787, 126.836 |
+| [2](runtime-2-storage.txt) | 114.352, 121.789, 122.615 | 116.089, 123.336, 125.407 |
+| [3](runtime-3-storage.txt) | 113.906, 119.625, 122.716 | 115.348, 122.508, 123.667 |
+
+| Boot | Actual interval (s) | QEMU user/system CPU (s) | One-CPU cost | xHCI IRQ/command/event deltas | Timer deltas, BSP/AP1/AP2/AP3 |
+| --- | ---: | --- | ---: | --- | --- |
+| [1](runtime-1-idle.txt) | 30.000446 | 3.90 / 4.07 | 26.57% | 0 / 0 / 0 | 7988 / 3618 / 3618 / 3618 |
+| [2](runtime-2-idle.txt) | 30.000800 | 3.58 / 4.09 | 25.57% | 0 / 0 / 0 | 7800 / 3618 / 3619 / 3619 |
+| [3](runtime-3-idle.txt) | 30.000249 | 3.44 / 3.86 | 24.33% | 0 / 0 / 0 | 6129 / 3618 / 3618 / 3618 |
+
+| Measure | Baseline median / range | Runtime median / range |
+| --- | --- | --- |
+| Payload (ms) | 118.857 / 112.298–123.701 | 121.789 / 113.906–125.406 |
+| Complete consumption (ms) | 120.753 / 114.210–126.093 | 123.336 / 115.348–126.836 |
+| Whole-QEMU CPU (% of one CPU) | 24.90 / 23.23–25.60 | 25.57 / 24.33–26.57 |
+
+Payload median increased 2.5%, complete-consumption median 2.1%, and whole-QEMU
+CPU median 0.67 percentage points (2.7% relative). Ranges overlap. Three boots
+and cached reads with ambient host scheduling cannot attribute those differences
+to Bluetooth or establish cost equivalence. Source inspection shows additional
+bounded bookkeeping in existing worker ticks; no new polling interval was added.
+Measured idle IRQ/event cost was zero despite posted receive DMA. Memory cost
+is explicit: HCI BSS 214344 bytes, async bulk metadata 33152 bytes and five DMA
+pages per controller, separate from existing storage/interrupt resources. Active
+radio and concurrent storage remain later measurement gates.
+
+One preliminary boot-1 idle capture reported 26.30% CPU, but manual tool-call
+gaps extended its debugger counter interval beyond its CPU window. It was
+excluded from the matched table and repeated in the same guest. Final captures
+invoke GDB-before, the existing 30-second `/proc` sample, and GDB-after directly
+in one shell invocation, keeping debugger pauses outside the CPU window. Timer
+snapshots include the small boundary overhead; they are not an exact timer rate.
+No sample was selected based on its performance value.
+
+The final [kernel](runtime-kernel-provenance.txt), [SDK](runtime-sdk-provenance.txt),
+[userspace](runtime-userspace-provenance.txt) and
+[ports](runtime-ports-provenance.txt) manifests retain revision/configuration and
+unchanged dependency pins. Image assembly used:
+
+```sh
+make -j16 image PREBUILT="kernel sdk userspace ports" \
+  INIT=/tmp/pyxis-bluetooth-runtime-baseline/init.sh \
+  MOUNT_DISK="$(cat /tmp/pyxis-bluetooth-runtime-baseline/disk-guid.txt)"
+```
+
+The QEMU command follows the baseline configuration: Q35/KVM, `-cpu max`,
+`-smp 4 -m 2G`, fresh Fedora OVMF variables, the assembled ISO, no display,
+VirtIO RNG/network, `qemu-xhci`, verified `usb-host` AX200 at port 1 and a fresh
+private `usb-storage` copy at port 2. Remote workload commands above are unchanged.
+Scalar inspection uses the matching ELF, the baseline counter expressions and
+named HCI stage/features/credit/stream fields, with no inferior calls.
+
+| Final artifact | SHA-256 |
+| --- | --- |
+| ELF | `82c78d64c7c256a17363a947acf33312a1f9af229c965a3b26ce81909bfeeb6c` |
+| ISO | `e822994efed741f32bc42ea39972beeef0501681bb8dd582114fdea457c354c8` |
+
+Task 2's event framing, warm readiness, retained idle event/ACL reception and
+storage coexistence are measured. Acquisition/release/process-exit syscall paths,
+real ACL payload/credit recycling, first-link deferral and handle reuse/error
+paths remain source-reviewed; task 4 supplies the actual service and connection
+qualification. No native Pyxis Bluetooth readiness is claimed. Cold upload,
+SMP, durable bonds, HID and pointer are still unassigned tasks.
+
 ## Recoverable handoff
 
 Preparation artifacts live outside the repository in
@@ -169,8 +296,10 @@ later source builds overwrite the build directory:
 The owner granted `chronium` read/write access to USB node
 `/dev/bus/usb/004/003`, resolving the earlier password/access blocker. Verify its
 identity before attachment; a changed node returns to the owner for access,
-rather than blind retries. The attached baseline is complete. Runtime code,
-warm transport validation and matched post-change measurements remain.
+rather than blind retries. The attached baseline, runtime implementation,
+final-code warm validation and matched measurements are complete.
+PR [#552](https://git.internal/PyxisOS/pyxis-os/pulls/552) delivers task 2; later
+tasks still require explicit assignment.
 
 The pinned local compiler completed successfully at
 `/home/chronium/opt/pyxis-llvm-49e2c1a`, preserving the older prefix. Its recorded
@@ -179,6 +308,9 @@ fork is `49e2c1a1518b3e4687b52ceb6001069c1b6d261e`; a clean ordinary
 Matching CI SDK/userspace/ports bundles are required for the changed public ABI;
 baseline artifacts cannot stand in for those inputs.
 
-Preparation and all three baseline guests exited; no QEMU, GDB, passthrough or probe process
-remains. Fedora Bluetooth stays inactive/disabled. No address, private packet
-or key was recorded. Task 2 remains unchecked and implementation is unfinished.
+Preparation, the initial runtime check and all baseline/final guests exited;
+no QEMU, GDB, passthrough or probe process remains. Final files are retained in
+`/tmp/pyxis-bluetooth-runtime-validation/8e67c3c`, separate from the baseline.
+Fedora Bluetooth stays inactive/disabled. No address, private packet or key was
+recorded. Task 2 is complete within its recorded measurement limits. Later tasks
+remain unassigned. The ThinkPad is free in Fedora with Bluetooth disabled.

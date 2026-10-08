@@ -1,9 +1,9 @@
 # MX Master 3S on Pyxis
 
-Status: **task 1 complete; task 2 implementation, baseline captured 2026-10-08.**
+Status: **tasks 1–2 complete; runtime warm validation recorded 2026-10-08.**
 All [task 1 decisions and alpha's agreement](bluetooth-task1-contracts.md) are
 recorded as accepted. Pointer tasks 1+2 merged in #545. No task 1 policy questions
-remain. Task 2 is assigned; tasks 3–8 still need explicit owner assignment.
+remain. Task 2 is complete; tasks 3–8 still need explicit owner assignment.
 Prepared from main `85e1b749550194d167019e62c7718907ca4db6b1`, after
 [merged #536](https://git.internal/PyxisOS/pyxis-os/pulls/536). The owner has seen
 the [investigation results](../development/bluetooth-investigation.md) and
@@ -13,7 +13,8 @@ The native batch is complete in [merged #547](https://git.internal/PyxisOS/pyxis
 Task 1 started from fresh main `8c4368e` and is now rebased onto main `abbeded`.
 Its contracts/dependencies are complete. The owner explicitly assigned task 2
 after approving #548. The [runtime transport record](../development/experiments/bluetooth-runtime-hci/README.md)
-tracks its baseline and implementation handoff; no implementation is complete.
+records the baseline, runtime implementation, warm passthrough and matched
+measurements. Cold support and service/connection qualification remain later tasks.
 
 The goal is one bonded MX Master 3S providing ordinary relative motion, primary
 buttons and vertical wheel to the system pointer on the ThinkPad's AX200. The
@@ -324,10 +325,10 @@ first and state merge order. Probe branches remain historical evidence.
   against `a2ff720` (now merged in #545). No policy questions remain. Firmware
   assets/compatibility data and report/runtime qualification are later gates;
   no implementation task is assigned by this completion.
-- [ ] **2. Runtime HCI transport.** Production AX200 binder, exclusive controller
+- [x] **2. Runtime HCI transport.** Complete 2026-10-08: checked AX200 binder, exclusive controller
   grant, event and asynchronous ACL reception, command/data credits, bounded
-  progress and process-exit/loss behavior. Validate warm passthrough framing and
-  idle reception; qualify real ACL traffic and storage coexistence with task 4's
+  progress and process-exit/loss behavior. Warm passthrough framing, posted idle
+  reception and matched storage/CPU checks are recorded; qualify real ACL traffic and storage coexistence with task 4's
   connection consumer. Do not block the xHCI worker for a 30-second userspace
   scan as the investigation probe did.
 - [ ] **3. Firmware readiness.** Choose/mirror/license the exact assets, implement
@@ -383,7 +384,7 @@ lifetime. None is reopened here. Exact firmware metadata/mirror remains a build
 prerequisite under the accepted policy, not a blind choice before cold evidence.
 
 New evidence that requires a policy change returns to the owner. Every
-implementation task needs an explicit assignment. Task 2 is assigned; tasks 3–8
+implementation task needs an explicit assignment. Task 2 is complete; tasks 3–8
 remain unassigned.
 
 With the direction decided, the completed investigation is now the

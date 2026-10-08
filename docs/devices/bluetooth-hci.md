@@ -47,7 +47,12 @@ logged. Applications are not supplied this privileged packet interface.
 
 ## Progress and failure
 
-Independent endpoint sequences and bounded framing detect discontinuity. Current
+Independent endpoint sequences and bounded framing detect discontinuity. A first
+ACL frame can precede its connection event across drains. Up to eight whole
+frames are retained in endpoint order for at most five seconds from their first
+byte, then replayed only after connection admission in the captured session.
+Overflow, stale epoch/generation or unresolved expiry reports input loss; it does
+not invent a link or permit handle reuse. Current
 settings provide eight commands, eight outgoing ACL packets, 32 received records,
 eight live links and 16 queued native requests. Each progress pass has a finite
 budget; it allocates nothing and enters no synchronous recovery or wait. Private
@@ -55,8 +60,12 @@ bulk reception has two retained DMA receives and eight copied completions,
 separate from storage's synchronous bulk ownership and resource budget.
 
 Service exit immediately clears the weak owner reference and session epoch.
-Re-grant requires confirmed clean bookkeeping: no live link, radio-changing work,
-unaccounted command/data, or partial frame. Unconfirmed cleanup or stream loss
+Re-grant requires confirmed clean bookkeeping: no live link, unaccounted
+command/data, partial frame or deferred ACL. Current cleanup is conservative:
+any published non-read-only command, admitted connection or published ACL sets
+a sticky dirty flag. It never clears, even after disconnection and settled
+credits. Release/exit after that radio work requires reboot; only fully accounted
+read-only sessions can be re-granted. Unconfirmed cleanup or stream loss
 leaves Bluetooth unavailable until reboot. A Bluetooth protocol failure alone
 does not quarantine USB storage; true USB ownership failures still do.
 
