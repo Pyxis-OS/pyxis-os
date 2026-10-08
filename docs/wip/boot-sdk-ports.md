@@ -73,10 +73,10 @@ Chosen by the owner, each starting with a proposal:
   from its main loop; SDL2/DevilutionX audio waits on real userspace
   [threads](scheduling-and-threads.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
-  documentation only. Two owner rounds accepted stack/security/closure and initial
-  firmware/bond policies; later decisions are queued without another round now. The
-  documentation handoff is complete and investigation is referenced above.
-  No production task is assigned; the owner requested a stop before native checks.
+  task 1 complete for documentation/contracts after native batch #547. All owner
+  [decision rounds and alpha coordination](bluetooth-task1-contracts.md) are
+  accepted 2026-10-08; pointer tasks 1+2 are merged in #545. Later measurements
+  remain prerequisites. Task 2 runtime HCI transport is not assigned or started.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
   All three decision rounds are accepted; proposal #530 is merged. Task 1 is
   delivered in #545 with [qualification](../development/system-pointer-qualification.md).
