@@ -15,8 +15,15 @@ and the built-in rescue space do not. Init, session, remote-daemon and shell
 handoffs preserve the optional grant through explicit resource lists. Ordinary
 commands launched by a granted shell inherit it, including background commands
 and every pipeline stage. Remote access, DRAW and path-write rights imply no
-capture authority. There is no packaged PNG command yet; see the
-[screenshots milestone](../wip/screenshots.md).
+capture authority. Every program holding this grant can observe whatever any
+space currently shows, independently of that space's grants. The packaged Remote
+grant also exposes the whole shown local screen to anyone reaching the
+unauthenticated terminal on the development LAN. This authority breadth is
+accepted for bring-up; its revisit point is recorded under
+[LAN visibility](../technical-debt.md#kernel-log-retention-and-lan-visibility).
+The packaged [screenshot command](../userland/screenshot.md) saves a PNG and
+uses the existing explicit file-download workflow. See the
+[screenshots milestone](../wip/screenshots.md) for remaining qualification.
 
 ## Request and owned result
 
@@ -56,6 +63,11 @@ staged bytes to the display driver. Copies split at physical row boundaries so
 device offsets cannot index compact storage. Success requires the driver's
 normal frame submission to succeed; incomplete or unpresented backing is never
 published. See [display ownership](../kernel/display.md#screen-capture).
+
+Capture backing is initially uninitialized. The current full repaint fills every
+visible pixel before publication. Future damage tracking must force a full
+composition for a pending capture; copying damaged regions alone would expose
+unwritten or stale bytes from the snapshot allocation.
 
 The typed BSP request uses DEFERRED publication after the scheduler parks the
 caller, leaves its stack, activates the kernel root and clears entry/current-task
@@ -108,8 +120,8 @@ checkpoint; these task-4 checks did not establish the subsequent boot policy.
 
 Allocation/backend failure and stop cleanup are source-reviewed, without injected
 failures. Bochs, native hardware, PNG encoding and host download remain unqualified.
-The separately versioned helper compiled and is included in the image's SDK;
-runtime helper use awaits the command consumer.
+The separately versioned helper is included in the image's SDK and is consumed
+by the [PNG command](../userland/screenshot.md).
 
 Task-5 manual inspection used the ordinary image built with the current LLVM
 23.1.3 / 49e2c1a builder, q35 standard VGA, 1280x800 boot framebuffer, four CPUs,

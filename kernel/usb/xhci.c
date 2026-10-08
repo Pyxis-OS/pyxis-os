@@ -23,6 +23,8 @@
 #define USB_ENDPOINT_DIRECTION_IN 0x80
 #define USB_ENDPOINT_NUMBER 0x0f
 #define USB_ENDPOINT_RESERVED 0x70
+#define USB_FULL_SPEED_INTERRUPT_PACKET_MAX 64
+#define USB_MICROFRAMES_PER_FRAME 8
 #define USB_REQUEST_ENDPOINT_OUT 0x02
 #define USB_REQUEST_CLEAR_FEATURE 1
 #define USB_FEATURE_ENDPOINT_HALT 0
@@ -65,10 +67,32 @@ struct xhci_bulk {
   enum control_state state;
   enum usb_result result;
 };
+enum interrupt_receive_state { INTERRUPT_FREE, INTERRUPT_POSTED, INTERRUPT_HELD };
+struct xhci_interrupt_receive {
+  uintptr_t data_address;
+  phys_addr_t data_physical, trb;
+  enum interrupt_receive_state state;
+};
+struct xhci_interrupt_record {
+  struct usb_interrupt_completion completion;
+  uint8_t bytes[USB_INTERRUPT_BYTES];
+};
+struct xhci_interrupt {
+  struct usb_host_device *device;
+  struct dma_buffer ring;
+  struct xhci_interrupt_receive receive[USB_INTERRUPT_RECEIVES];
+  struct xhci_interrupt_record queue[USB_INTERRUPT_COMPLETIONS];
+  size_t receive_bytes;
+  uint64_t sequence;
+  unsigned enqueue, dci, queue_head, queue_count;
+  enum usb_result result;
+  bool cycle, configured, started;
+};
 struct usb_host_device {
   struct usb_host_controller *controller;
   struct usb_host_device *parent;
   struct xhci_bulk *bulk;
+  struct xhci_interrupt *interrupt;
   struct dma_buffer input, output, control_ring, data;
   uintptr_t data_address;
   phys_addr_t data_physical;
@@ -103,6 +127,7 @@ struct xhci_port {
 static void controller_worker(void *argument);
 static void stop_controller(struct usb_host_controller *controller);
 static enum usb_result recover_control_stall(struct usb_host_device *device, uint64_t deadline);
+static bool device_present(const struct usb_host_device *device);
 
 /* Each controller owns its records and BSP worker. IF=0 protects notification
  * and wait publication against the shared BSP-routed interrupt. The retained
@@ -116,8 +141,9 @@ struct usb_host_controller {
   struct pci_msix msix;
   struct pci_mapping bootstrap, registers;
   struct dma_buffer dcbaa, command_ring, event_ring, erst, scratchpad_array, scratchpads;
-  struct dma_buffer descendant_dma, bulk_dma;
+  struct dma_buffer descendant_dma, bulk_dma, interrupt_dma;
   struct xhci_bulk bulk[USB_STORAGE_DEVICE_BUDGET];
+  struct xhci_interrupt *interrupt_streams;
   struct xhci_port *ports;
   struct usb_host_device *descendants;
   uint32_t operational, runtime, doorbells;
@@ -666,6 +692,44 @@ static bool allocate_bulk(struct usb_host_controller *controller)
   return true;
 }
 
+static bool allocate_interrupts(struct usb_host_controller *controller)
+{
+  _Static_assert(USB_INTERRUPT_BYTES && USB_INTERRUPT_BYTES <= PAGE_SIZE,
+                 "a prepared interrupt buffer fits one page and one Normal TRB boundary");
+  _Static_assert(USB_INTERRUPT_RECEIVES && USB_INTERRUPT_RECEIVES < XHCI_RING_TRBS,
+                 "posted interrupt receives fit the usable transfer ring");
+  _Static_assert(USB_INTERRUPT_COMPLETIONS, "interrupt completion queue is nonempty");
+  size_t stride = (1 + USB_INTERRUPT_RECEIVES) * PAGE_SIZE;
+  size_t ports = controller->port_count;
+  if (ports > SIZE_MAX / stride || ports > SIZE_MAX / sizeof(*controller->interrupt_streams)) {
+    return false;
+  }
+  controller->interrupt_streams = kmalloc(controller->port_count * sizeof(*controller->interrupt_streams));
+  if (!controller->interrupt_streams) {
+    return false;
+  }
+  memset(controller->interrupt_streams, 0, controller->port_count * sizeof(*controller->interrupt_streams));
+  if (dma_buffer_allocate(&controller->interrupt_dma, controller->port_count * stride) != MM_OK) {
+    return false;
+  }
+  for (unsigned i = 0; i < controller->port_count; ++i) {
+    struct xhci_interrupt *interrupt = &controller->interrupt_streams[i];
+    size_t offset = i * stride;
+    interrupt->ring = descendant_dma_slice(&controller->interrupt_dma, offset, PAGE_SIZE);
+    if (!ring_layout(&interrupt->ring)) {
+      return false;
+    }
+    initialize_transfer_ring(&interrupt->ring);
+    interrupt->cycle = true;
+    for (unsigned j = 0; j < USB_INTERRUPT_RECEIVES; ++j) {
+      size_t data_offset = offset + (j + 1) * PAGE_SIZE;
+      interrupt->receive[j].data_address = controller->interrupt_dma.address + data_offset;
+      interrupt->receive[j].data_physical = controller->interrupt_dma.physical + data_offset;
+    }
+  }
+  return true;
+}
+
 static bool allocate_dma(struct usb_host_controller *controller)
 {
   if (dma_buffer_allocate(&controller->dcbaa, (controller->slot_count + 1) * sizeof(uint64_t)) != MM_OK ||
@@ -699,7 +763,7 @@ static bool allocate_dma(struct usb_host_controller *controller)
   volatile struct xhci_erst_entry *erst = (volatile struct xhci_erst_entry *)controller->erst.address;
   *erst = (struct xhci_erst_entry){.base = controller->event_ring.physical, .size = XHCI_RING_TRBS};
   controller->command_cycle = controller->event_cycle = true;
-  return allocate_devices(controller) && allocate_bulk(controller);
+  return allocate_devices(controller) && allocate_bulk(controller) && allocate_interrupts(controller);
 }
 
 static void release_boot_resources(struct usb_host_controller *controller)
@@ -716,6 +780,9 @@ static void release_boot_resources(struct usb_host_controller *controller)
     }
   }
   dma_buffer_release(&controller->bulk_dma);
+  dma_buffer_release(&controller->interrupt_dma);
+  kfree(controller->interrupt_streams);
+  controller->interrupt_streams = NULL;
   dma_buffer_release(&controller->descendant_dma);
   dma_buffer_release(&controller->scratchpads);
   dma_buffer_release(&controller->scratchpad_array);
@@ -926,6 +993,130 @@ static bool consume_command(struct usb_host_controller *controller, const struct
   return true;
 }
 
+static bool publish_interrupt_receive(struct xhci_interrupt *interrupt,
+                                      struct xhci_interrupt_receive *receive)
+{
+  struct usb_host_device *device = interrupt->device;
+  struct usb_host_controller *controller = device->controller;
+  unsigned index = interrupt->enqueue;
+  phys_addr_t physical = interrupt->ring.physical + index * XHCI_TRB_BYTES;
+  for (unsigned i = 0; i < USB_INTERRUPT_RECEIVES; ++i) {
+    if (interrupt->receive[i].state != INTERRUPT_FREE && interrupt->receive[i].trb == physical) {
+      controller->failure = "interrupt producer frontier is still owned";
+      return false;
+    }
+  }
+  uint64_t flags = cpu_save_interrupts();
+  bool cycle = interrupt->cycle;
+  volatile struct xhci_trb *ring = (volatile struct xhci_trb *)interrupt->ring.address;
+  receive->trb = physical;
+  receive->state = INTERRUPT_POSTED;
+  ring[index].parameter = receive->data_physical;
+  ring[index].status = interrupt->receive_bytes;
+  if (++interrupt->enqueue == XHCI_RING_TRBS - 1) {
+    ring[XHCI_RING_TRBS - 1].control = (XHCI_TRB_LINK << XHCI_TRB_TYPE_SHIFT) |
+      XHCI_TRB_TOGGLE_CYCLE | (cycle ? XHCI_TRB_CYCLE : 0);
+    interrupt->enqueue = 0;
+    interrupt->cycle = !cycle;
+  }
+  dma_write_barrier();
+  ring[index].control = (XHCI_TRB_NORMAL << XHCI_TRB_TYPE_SHIFT) |
+    XHCI_TRB_COMPLETION_INTERRUPT | XHCI_TRB_SHORT_INTERRUPT | (cycle ? XHCI_TRB_CYCLE : 0);
+  dma_write_barrier();
+  write32(controller->registers.address, controller->doorbells + device->slot * XHCI_DOORBELL_BYTES,
+          interrupt->dci);
+  cpu_restore_interrupts(flags);
+  return true;
+}
+
+static bool interrupt_pending(const struct xhci_interrupt *interrupt)
+{
+  for (unsigned i = 0; i < USB_INTERRUPT_RECEIVES; ++i) {
+    if (interrupt->receive[i].state != INTERRUPT_FREE) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool rearm_interrupts(struct usb_host_controller *controller)
+{
+  for (unsigned i = 0; i < controller->port_count; ++i) {
+    struct xhci_interrupt *interrupt = &controller->interrupt_streams[i];
+    if (!interrupt->started) {
+      continue;
+    }
+    if (!device_present(interrupt->device)) {
+      if (interrupt_pending(interrupt)) {
+        controller->failure = "device disappeared during interrupt transfer";
+        return false;
+      }
+      if (interrupt->result == USB_OK) {
+        interrupt->result = USB_IO;
+      }
+      continue;
+    }
+    if (interrupt->result != USB_OK) {
+      continue;
+    }
+    for (unsigned j = 0; j < USB_INTERRUPT_RECEIVES; ++j) {
+      if (interrupt->receive[j].state == INTERRUPT_FREE &&
+          !publish_interrupt_receive(interrupt, &interrupt->receive[j])) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+static bool consume_interrupt(struct usb_host_controller *controller, struct xhci_interrupt *interrupt,
+                              const struct xhci_trb *event)
+{
+  struct xhci_interrupt_receive *receive = NULL;
+  for (unsigned i = 0; i < USB_INTERRUPT_RECEIVES; ++i) {
+    if (interrupt->receive[i].state == INTERRUPT_POSTED && interrupt->receive[i].trb == event->parameter) {
+      receive = &interrupt->receive[i];
+      break;
+    }
+  }
+  if (!receive) {
+    controller->failure = "unowned interrupt transfer event";
+    return false;
+  }
+  unsigned completion = event->status >> XHCI_EVENT_COMPLETION_SHIFT;
+  size_t residue = event->status & XHCI_EVENT_RESIDUE_MASK;
+  if ((completion == XHCI_EVENT_SUCCESS && !residue) ||
+      (completion == XHCI_EVENT_SHORT_PACKET && residue <= interrupt->receive_bytes)) {
+    size_t actual = interrupt->receive_bytes - residue;
+    receive->state = INTERRUPT_FREE;
+    /* Terminal failure stops rearm, but other posted TDs still have owners. */
+    if (interrupt->result != USB_OK) {
+      return true;
+    }
+    if (interrupt->queue_count == USB_INTERRUPT_COMPLETIONS || interrupt->sequence == UINT64_MAX) {
+      interrupt->result = USB_DISCONTINUITY;
+      return true;
+    }
+    unsigned tail = (interrupt->queue_head + interrupt->queue_count) % USB_INTERRUPT_COMPLETIONS;
+    struct xhci_interrupt_record *record = &interrupt->queue[tail];
+    dma_read_barrier();
+    memcpy(record->bytes, (const void *)receive->data_address, actual);
+    record->completion = (struct usb_interrupt_completion){.sequence = ++interrupt->sequence, .bytes = actual};
+    ++interrupt->queue_count;
+    return true;
+  }
+  receive->state = INTERRUPT_HELD;
+  if (completion == XHCI_EVENT_STALL && residue <= interrupt->receive_bytes) {
+    if (interrupt->result == USB_OK) {
+      interrupt->result = USB_STALL;
+    }
+    return true;
+  }
+  interrupt->result = USB_IO;
+  controller->failure = "failed or invalid interrupt transfer completion";
+  return false;
+}
+
 static bool consume_bulk(struct usb_host_controller *controller, struct usb_host_device *device,
                          unsigned endpoint, const struct xhci_trb *event)
 {
@@ -974,6 +1165,9 @@ static bool consume_transfer(struct usb_host_controller *controller, const struc
     return false;
   }
   if (endpoint != XHCI_ENDPOINT_ZERO) {
+    if (device->interrupt && endpoint == device->interrupt->dci) {
+      return consume_interrupt(controller, device->interrupt, event);
+    }
     return consume_bulk(controller, device, endpoint, event);
   }
   if (device->request.state != CONTROL_ACTIVE ||
@@ -1055,7 +1249,9 @@ static bool drain_events(struct usb_host_controller *controller)
     write64(interrupter(controller), XHCI_INTR_DEQUEUE,
             (controller->event_ring.physical + controller->event_dequeue * XHCI_TRB_BYTES) | XHCI_DEQUEUE_BUSY);
   }
-  return true;
+  /* Rearm only after the consumed events and ERDP are published. Every command,
+   * control and bulk wait drains here; this progress issues no new commands. */
+  return rearm_interrupts(controller);
 }
 
 static bool controller_healthy(struct usb_host_controller *controller)
@@ -1257,7 +1453,8 @@ static bool retire_root_devices(struct usb_host_controller *controller, unsigned
     struct usb_host_device *device = device_at(controller, i);
     if (device->slot && !device->removed && device->port == port &&
         (device->request.state == CONTROL_ACTIVE ||
-         (device->bulk && device->bulk->state == CONTROL_ACTIVE))) {
+         (device->bulk && device->bulk->state == CONTROL_ACTIVE) ||
+         (device->interrupt && interrupt_pending(device->interrupt)))) {
       controller->failure = "root subtree disappeared during transfer";
       return false;
     }
@@ -1341,6 +1538,16 @@ static void stop_controller(struct usb_host_controller *controller)
     if (device->bulk && device->bulk->state != CONTROL_IDLE) {
       device->bulk->state = CONTROL_HELD;
       device->bulk->result = USB_IO;
+    }
+    if (device->interrupt) {
+      if (device->interrupt->result == USB_OK) {
+        device->interrupt->result = USB_IO;
+      }
+      for (unsigned j = 0; j < USB_INTERRUPT_RECEIVES; ++j) {
+        if (device->interrupt->receive[j].state == INTERRUPT_POSTED) {
+          device->interrupt->receive[j].state = INTERRUPT_HELD;
+        }
+      }
     }
     if (device->request.state == CONTROL_ACTIVE || device->request.state == CONTROL_HALTED) {
       device->request.state = CONTROL_HELD;
@@ -1968,6 +2175,167 @@ static enum usb_result recover_control_stall(struct usb_host_device *device, uin
   return USB_OK;
 }
 
+size_t usb_host_interrupt_capacity(void)
+{
+  return USB_INTERRUPT_BYTES;
+}
+
+enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
+                                                const struct usb_interrupt_endpoint *endpoint,
+                                                size_t receive_bytes, uint64_t deadline)
+{
+  assert_device_owner(device);
+  struct usb_host_controller *controller = device->controller;
+  if (!device_ready(device) || !device->addressed) {
+    return USB_IO;
+  }
+  if (device->parent || device->link.speed != USB_SPEED_FULL) {
+    return USB_UNSUPPORTED;
+  }
+  if (!endpoint || !(endpoint->address & USB_ENDPOINT_DIRECTION_IN) ||
+      !(endpoint->address & USB_ENDPOINT_NUMBER) || (endpoint->address & USB_ENDPOINT_RESERVED) ||
+      !endpoint->interval || !endpoint->packet || endpoint->packet > USB_FULL_SPEED_INTERRUPT_PACKET_MAX ||
+      !receive_bytes || receive_bytes > USB_INTERRUPT_BYTES) {
+    return USB_INVALID;
+  }
+  if (!controller->enumerating || device->interrupt ||
+      device->request.state != CONTROL_IDLE || device->request.client) {
+    return USB_BUSY;
+  }
+  unsigned dci = ((endpoint->address & USB_ENDPOINT_NUMBER) << 1) | 1;
+  if (device->bulk && (device->bulk->in.dci == dci || device->bulk->out.dci == dci)) {
+    return USB_BUSY;
+  }
+  struct xhci_interrupt *interrupt = &controller->interrupt_streams[device->port];
+  if (interrupt->device) {
+    return USB_BUSY;
+  }
+  device->interrupt = interrupt;
+  interrupt->device = device;
+  interrupt->receive_bytes = receive_bytes;
+  interrupt->dci = dci;
+  memset((void *)device->input.address, 0, device->input.bytes);
+  uint32_t *input = (uint32_t *)device->input.address;
+  input[1] = 1u | (1u << dci);
+  dma_read_barrier();
+  memcpy(input_slot(device), (const void *)device->output.address, controller->context_bytes);
+  unsigned entries = (input_slot(device)[0] & XHCI_SLOT_ENTRIES_MASK) >> XHCI_SLOT_ENTRIES_SHIFT;
+  if (entries < dci) {
+    input_slot(device)[0] = (input_slot(device)[0] & ~XHCI_SLOT_ENTRIES_MASK) |
+      (dci << XHCI_SLOT_ENTRIES_SHIFT);
+  }
+  /* Full-speed bInterval is frames; xHCI uses a base-two microframe exponent. */
+  unsigned microframes = endpoint->interval * USB_MICROFRAMES_PER_FRAME, interval = 0;
+  while (microframes > 1) {
+    microframes >>= 1;
+    ++interval;
+  }
+  uint32_t *context = input_endpoint(device, dci);
+  context[0] = interval << XHCI_ENDPOINT_INTERVAL_SHIFT;
+  context[1] = ((unsigned)endpoint->packet << XHCI_ENDPOINT_PACKET_SHIFT) |
+    (XHCI_ENDPOINT_INTERRUPT_IN << XHCI_ENDPOINT_TYPE_SHIFT) | XHCI_ENDPOINT_ERRORS;
+  context[2] = (uint32_t)interrupt->ring.physical | XHCI_TRB_CYCLE;
+  context[3] = interrupt->ring.physical >> 32;
+  context[4] = receive_bytes | ((unsigned)endpoint->packet << XHCI_ENDPOINT_ESIT_SHIFT);
+  enum usb_result result = context_command(device, XHCI_TRB_CONFIGURE_ENDPOINT, deadline);
+  if (result == USB_OK) {
+    interrupt->configured = true;
+  }
+  return result;
+}
+
+static enum usb_result interrupt_result(struct usb_host_device *device)
+{
+  struct xhci_interrupt *interrupt = device->interrupt;
+  struct usb_host_controller *controller = device->controller;
+  bool ready = device_ready(device);
+  if (!ready && controller->running && !controller->failed && interrupt_pending(interrupt)) {
+    controller->failure = "device disappeared during interrupt transfer";
+    stop_controller(controller);
+  }
+  return interrupt->result != USB_OK ? interrupt->result : ready ? USB_OK : USB_IO;
+}
+
+enum usb_result usb_host_interrupt_start(struct usb_host_device *device)
+{
+  assert_device_owner(device);
+  struct xhci_interrupt *interrupt = device->interrupt;
+  if (!interrupt || !interrupt->configured) {
+    return USB_INVALID;
+  }
+  enum usb_result result = interrupt_result(device);
+  if (result != USB_OK) {
+    return result;
+  }
+  if (interrupt->started) {
+    return USB_BUSY;
+  }
+  interrupt->started = true;
+  if (!rearm_interrupts(device->controller)) {
+    stop_controller(device->controller);
+    return USB_IO;
+  }
+  return USB_OK;
+}
+
+enum usb_result usb_host_interrupt_wait(struct usb_host_device *device, uint64_t deadline)
+{
+  assert_device_owner(device);
+  struct xhci_interrupt *interrupt = device->interrupt;
+  struct usb_host_controller *controller = device->controller;
+  if (!interrupt || !interrupt->started) {
+    return USB_INVALID;
+  }
+  for (;;) {
+    enum usb_result result = interrupt_result(device);
+    if (result != USB_OK) {
+      return result;
+    }
+    if (!controller_healthy(controller) || !drain_events(controller) || !control_deadlines(controller)) {
+      stop_controller(controller);
+    }
+    if (interrupt->result != USB_OK) {
+      return interrupt->result;
+    }
+    if (interrupt->queue_count) {
+      return USB_OK;
+    }
+    if (task_deadline_expired(deadline)) {
+      return USB_TIMEOUT;
+    }
+    uint64_t poll = task_deadline_after_ms(USB_WORKER_POLL_MS);
+    wait_activity(controller, poll < deadline ? poll : deadline);
+  }
+}
+
+enum usb_result usb_host_interrupt_take(struct usb_host_device *device, void *destination,
+                                        size_t capacity, struct usb_interrupt_completion *completion)
+{
+  assert_device_owner(device);
+  struct xhci_interrupt *interrupt = device->interrupt;
+  if (!interrupt || !interrupt->started) {
+    return USB_INVALID;
+  }
+  enum usb_result result = interrupt_result(device);
+  if (result != USB_OK) {
+    return result;
+  }
+  if (!interrupt->queue_count) {
+    return USB_BUSY;
+  }
+  struct xhci_interrupt_record *record = &interrupt->queue[interrupt->queue_head];
+  if (!completion || capacity < record->completion.bytes || (record->completion.bytes && !destination)) {
+    return USB_INVALID;
+  }
+  if (record->completion.bytes) {
+    memcpy(destination, record->bytes, record->completion.bytes);
+  }
+  *completion = record->completion;
+  interrupt->queue_head = (interrupt->queue_head + 1) % USB_INTERRUPT_COMPLETIONS;
+  --interrupt->queue_count;
+  return USB_OK;
+}
+
 static void set_bulk_endpoint(struct usb_host_device *device, struct xhci_bulk_endpoint *endpoint)
 {
   uint32_t *context = input_endpoint(device, endpoint->dci);
@@ -2016,6 +2384,11 @@ enum usb_result usb_host_configure_bulk(struct usb_host_device *device,
   if (!valid_bulk_endpoint(device, in, true) || !valid_bulk_endpoint(device, out, false)) {
     return USB_UNSUPPORTED;
   }
+  unsigned in_dci = ((in->address & USB_ENDPOINT_NUMBER) << 1) | 1;
+  unsigned out_dci = (out->address & USB_ENDPOINT_NUMBER) << 1;
+  if (device->interrupt && (device->interrupt->dci == in_dci || device->interrupt->dci == out_dci)) {
+    return USB_BUSY;
+  }
   struct xhci_bulk *bulk = NULL;
   for (unsigned i = 0; i < USB_STORAGE_DEVICE_BUDGET; ++i) {
     if (!controller->bulk[i].device) {
@@ -2031,14 +2404,18 @@ enum usb_result usb_host_configure_bulk(struct usb_host_device *device,
   bulk->device = device;
   bulk->in.descriptor = *in;
   bulk->out.descriptor = *out;
-  bulk->in.dci = ((in->address & USB_ENDPOINT_NUMBER) << 1) | 1;
-  bulk->out.dci = (out->address & USB_ENDPOINT_NUMBER) << 1;
+  bulk->in.dci = in_dci;
+  bulk->out.dci = out_dci;
   memset((void *)device->input.address, 0, device->input.bytes);
   uint32_t *input = (uint32_t *)device->input.address;
   input[1] = 1u | (1u << bulk->in.dci) | (1u << bulk->out.dci);
   dma_read_barrier();
   memcpy(input_slot(device), (const void *)device->output.address, controller->context_bytes);
   unsigned entries = bulk->in.dci > bulk->out.dci ? bulk->in.dci : bulk->out.dci;
+  unsigned previous = (input_slot(device)[0] & XHCI_SLOT_ENTRIES_MASK) >> XHCI_SLOT_ENTRIES_SHIFT;
+  if (entries < previous) {
+    entries = previous;
+  }
   input_slot(device)[0] = (input_slot(device)[0] & ~XHCI_SLOT_ENTRIES_MASK) |
     (entries << XHCI_SLOT_ENTRIES_SHIFT);
   set_bulk_endpoint(device, &bulk->in);

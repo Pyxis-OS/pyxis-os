@@ -5,8 +5,9 @@ This is the 2026-10-08 assessment requested by
 [task 1](../bluetooth-task1/README.md) and its
 [merged PR #511](https://git.internal/PyxisOS/pyxis-os/pulls/511).
 It records source inspection and specification requirements, not measured
-interrupt traffic or an implemented interface. The probe proposal below is
-unapproved. No probe code, public ABI or driver changes are included.
+interrupt traffic or an implemented interface. The proposal below was unapproved
+at assessment time; the later decisions are recorded in the addendum below. No
+probe code, public ABI or driver changes were included in the assessment PR.
 
 The inspected kernel revision is `41e772bc0bbad663f3c0cb8093867865d3c59237`.
 Task 1's measured configuration 1, interface 0, alternate 0 has interrupt IN
@@ -127,7 +128,8 @@ Removal during active EP0/bulk work currently quarantines the whole controller
 and retains backing until reboot. A persistent receive makes active removal
 the usual case: retaining that policy would also stop unrelated storage on the
 same controller. Accepting this limitation or designing safe endpoint/device
-retirement is an owner decision. Interrupt work must also be marked failed/held
+retirement was an owner decision at assessment time; the later acceptance is
+recorded in the addendum below. Interrupt work must also be marked failed/held
 by controller shutdown; halt or disabled bus mastering alone cannot authorize
 buffer reuse under the current USB lifetime contract.
 
@@ -139,10 +141,10 @@ transactions. The
 [HCI event format](https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Core-54/out/en/host-controller-interface/host-controller-interface-functional-specification.html),
 section 5.4.4, permits 255 parameter bytes plus a two-byte header. Thus a
 64-byte packet limit is not a 64-byte event limit; a receive must accommodate
-257 bytes. HCI framing and validation belong to the class transport in task 3,
+257 bytes. HCI framing and validation belong to the HCI class transport probe,
 not the xHCI event parser. No UART packet-type byte is part of that USB event.
 
-For discussion, propose two posted 257-byte receive buffers on one retained
+The assessment proposed two posted 257-byte receive buffers on one retained
 ring and eight copied completion entries for the first event-only probe.
 Average TRB Length would initially be 257 for these one-TRB receive requests.
 These counts are provisional resource choices, not interface guarantees or
@@ -151,9 +153,10 @@ by the same owning worker before rearm. The consumer receives actual length
 and completion identity, not a borrowed live DMA pointer. A capacity rejection
 must preserve the queued bytes for a later valid collection.
 
-Propose latching an explicit stream discontinuity if the completion queue fills,
-and ending the investigation command rather than silently dropping an HCI
-response and continuing with apparently valid controller state. Cease rearming;
+The assessment proposed latching an explicit stream discontinuity if the
+completion queue fills, and ending the investigation command rather than
+silently dropping an HCI response and continuing with apparently valid controller
+state. Cease rearming;
 already posted receives remain owned until their terminal events are accounted
 for, or retained if retirement cannot be proved. Command responses and scan
 reports share the endpoint; loss can destroy command-credit/state knowledge.
@@ -175,14 +178,14 @@ are separate work; coalescing HID reports is not permission to discard HCI event
 High-speed/USB 3 companion fields and behind-hub periodic support need separate
 profiles, not assumptions derived from this full-speed root device.
 
-The proposed first probe stays on an unmerged branch: one boot-present,
+The assessment proposed an unmerged first probe: one boot-present,
 root-connected full-speed Bluetooth function, event endpoint selected from its
-checked descriptor, and existing EP0 for task 3's commands. It would not configure
+checked descriptor, and existing EP0 for HCI commands. It would not configure
 ACL or SCO, add application raw-USB authority, implement hotplug, or decide the
 future userspace Bluetooth stack. Its descriptor match must not use a ThinkPad
 port or Linux bus/address as driver policy.
 
-Before implementing that probe, agree on:
+At assessment time, the following choices required agreement:
 
 - The narrow root/full-speed admission and how it reports unsupported profiles.
 - Receive/queue budgets and progress during other controller waits; the proposal
@@ -190,10 +193,30 @@ Before implementing that probe, agree on:
 - Idle wait/abandonment behavior, STALL handling, and whether controller-wide
   quarantine on active removal is an accepted investigation limit.
 
-These are proposals and unresolved policy choices, not accepted contracts.
-Task 3 must resolve them before code begins; task 2 completes their assessment.
+These were proposals and unresolved policy choices when task 2 completed their
+assessment. The following addendum records the later decisions and task split.
 
-## Validation and handoff
+## Decision addendum, 2026-10-08
+
+After this assessment, owner comments on
+[merged PR #517](https://git.internal/PyxisOS/pyxis-os/pulls/517) accepted
+root-connected full-speed admission with explicit unsupported-profile results,
+two posted 257-byte receives, eight copied completions and explicit overflow
+failure/discontinuity. Controller-wide quarantine on active removal was accepted
+as an investigation limit for the internal AX200, including its effect on other
+storage on the same controller. The owner subsequently accepted STALL as a
+terminal stream failure with DMA backing/ring identity retained until reboot and
+no automatic recovery.
+
+The [current milestone decisions](../../../wip/bluetooth.md#accepted-interrupt-in-decisions)
+replace the unresolved status of those choices. Task 3a is now authorized to
+implement shared kernel interrupt-IN support for merge through private interfaces,
+without a public ABI; task 3b remains the unmerged HCI/controller-state probe,
+followed by firmware and scan probes. This addendum records authorization and policy, not completed
+implementation or new validation. The accepted limitations and revisit points
+are in [technical debt](../../../technical-debt.md#xhci-hardware-profile-and-runtime-retention).
+
+## Assessment validation and handoff
 
 Reviewed the existing USB source, relevant ownership docs, task 1 descriptor
 captures and primary xHCI/Bluetooth references. Checked local document links

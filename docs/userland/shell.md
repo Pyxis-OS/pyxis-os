@@ -33,7 +33,7 @@ service launches, foreground and background commands, and every pipeline stage.
 It carries CAPTURE alone, with no transport rights, independently of DRAW and
 filesystem grants. A shell without it grants none. The
 [`screenshot` boot policy](init.md#boot-configuration) controls which spaces
-receive it; the PNG command remains a later milestone task.
+receive it; [screenshot PATH](screenshot.md) saves a PNG through that authority.
 
 ## Commands and quoting
 

@@ -3,8 +3,11 @@
 
 #include <abi/handle.h>
 
-/* Eight supervised panes plus their outer console input. */
-#define WAIT_MAX_INTERESTS UINT64_C(17)
+/* General per-call bound. Input, object and result arrays use about 40 bytes
+ * of kernel stack per interest. The current 4928-byte task request area is
+ * sized by HOST; 32 readiness interests fit without increasing that area.
+ * The readiness worker rescans interests when notified. */
+#define WAIT_MAX_INTERESTS UINT64_C(32)
 #define WAIT_MAX_WAIT_NS UINT64_C(30000000000)
 #define WAIT_READABLE (UINT64_C(1) << 0)
 #define WAIT_WRITABLE (UINT64_C(1) << 1)
@@ -24,7 +27,7 @@ struct wait_interest {
 };
 
 /* WAIT_MANY takes interests/count/deadline/output in RDI/RSI/RDX/R10.
- * Count is 1..17; output is count uint64_t event masks in input order, including
+ * Count is 1..32; output is count uint64_t event masks in input order, including
  * zeros for unready entries. Success returns count*8 reply bytes, failure zero
  * and leaves output untouched. Inputs are copied before any output is written.
  *

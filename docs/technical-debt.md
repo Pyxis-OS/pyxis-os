@@ -581,14 +581,21 @@ callers can exhaust available memory by retaining several. Revisit admission and
 retained-image policy with concrete pressure workloads and an explicit authority
 and lifetime contract; the one in-flight slot does not bound retained storage.
 
+Capture backing starts uninitialized and relies on the presenter's full repaint
+to fill every visible pixel before publication. Revisit this invariant before
+adding damage tracking: a pending capture must force full composition to avoid
+exposing unwritten or stale allocation bytes. See the authoritative
+[frame contract](interfaces/screen-capture.md#frame-boundary-and-lifetime).
+
 The captured bytes freeze one presenter composition and preserve tearing from
 concurrent single-buffer application or TTY writes. No atomic application frame,
 vblank or physical scanout timing is promised. A stuck presenter/scheduler or
 panic cannot complete a capture. Revisit stronger consistency or bounded recovery
 only with a separate presenter/backing ownership contract. Current runtime
 evidence covers QEMU boot-framebuffer and VirtIO captures, including BUSY admission.
-Failure cleanup remains source-reviewed; Bochs, native hardware and PNG/download qualification are pending
-in the [screenshots milestone](wip/screenshots.md).
+Failure cleanup remains source-reviewed. The command's boot-framebuffer PNG
+encode/download path is qualified; Bochs, native hardware and broader layer/resize
+qualification remain in the [screenshots milestone](wip/screenshots.md).
 
 ## Bochs boot-mode scope and aperture retention
 
@@ -641,6 +648,15 @@ shells. Kernel addresses in log text are therefore readable through the
 unauthenticated remote terminal on the trusted development LAN. The owner
 accepted this exposure for bring-up. Revisit the default grants and disclosure
 policy when Pyxis gains authentication or runs on an untrusted network.
+
+The packaged [capture policy](userland/init.md#boot-configuration) opts live
+Development, installed `pyxis` and Remote into whole-screen CAPTURE. Any program
+in a granted space can observe whatever any space currently shows; anyone
+reaching the unauthenticated remote terminal on the development LAN can read the
+whole local screen, including all spaces as they are shown. The owner accepted
+this authority breadth for bring-up. Revisit it with user isolation,
+authentication and capture delegation policy when Pyxis gains users or runs on
+an untrusted network. See [screen capture](interfaces/screen-capture.md).
 
 Panic ring capture is best effort: a fatal interruption of a ring lock owner
 skips retention without waiting. Userspace readers also require a functioning
@@ -722,12 +738,27 @@ interactive EOF-driven tools are explicitly in scope. The cksum port preserves
 upstream behavior; neither cksum nor restricted tee adds terminal controls or
 signal handling.
 
+## Readiness scaling
+
+`wait_many` has a general 32-interest bound, with per-call copies and reference
+retention, about 40 bytes of kernel-stack arrays per interest and interests in
+the task's existing reserved request area. The readiness worker rescans the
+interests on notification. Large connection sets can make these costs material.
+
+A persistent wait-set object is a proposed later direction: register interests
+once, allocate/fail at registration, and return ready entries without a new
+per-call input array, in the style of epoll/kqueue. A haven web server with many
+connections is one possible consumer. Authority, lifetime, capacity and failure
+rules remain open; this is neither agreed nor scheduled, and no API is added.
+
 ## Initial terminal multiplexer limits
 
 The [multiplexer](userland/multiplexer.md) has one window and up to eight panes.
 Its native terminal subset has no alternate screen, Unicode widths or detach;
 full-screen applications reuse the shell's screen. History retains 1,024
-scrolled-off rows, with no reflow or erased-screen archive. Presentation crops
+scrolled-off rows, with no reflow or erased-screen archive. Rows cropped by
+resize are not inserted into history, so growing the view cannot recover them;
+retaining those rows is a proposed follow-up, not part of this slice. Presentation crops
 at the terminal-session maximum; history storage retains the largest width seen.
 Maximum steady text storage is about 2.5 MiB per pane; resize can temporarily
 double this for one pane. There is no per-group CPU/memory quota.
@@ -867,8 +898,9 @@ consumer that needs them, auditing its actual libc and file-authority needs.
 In-memory gzip framing remains available through the core stream APIs.
 
 Archive builds, symbol inspection and staging checks do not establish runtime
-compression correctness on Pyxis. The screenshot PNG consumer provides the
-planned runtime qualification; until then the port has build evidence only.
+compression correctness on Pyxis. The [screenshot consumer](userland/screenshot.md)
+now supplies observed deflate-to-PNG output that decoded on the host. Other
+compression/decompression profiles remain unqualified.
 
 ## libpng profile and runtime qualification
 
@@ -879,8 +911,9 @@ Those omissions are accepted for the screenshot milestone. Revisit them with a
 concrete consumer or measured cost that needs the omitted API or acceleration.
 
 Archive/configuration/symbol inspection and image staging provide build
-evidence only. The screenshot consumer supplies the planned PNG runtime
-qualification; no target PNG decode/encode result is qualified yet.
+evidence only. The [screenshot consumer](userland/screenshot.md) now qualifies
+the conventional RGB8 non-interlaced write path through host-decoded captures.
+Target PNG decoding and other write profiles remain unqualified.
 
 ## Unexpected native close failures
 
@@ -2056,6 +2089,28 @@ Runtime stop retains claims, mappings, slot/command records and DMA backing unti
 reboot, even after confirmed halt. This follows current shared-VM ownership and
 prevents reuse while device ownership is uncertain. Runtime reclamation belongs
 with the VM/device lifetime work, not a local allocator-lock workaround.
+
+### USB interrupt-IN initial profile and failure retention
+
+The implemented private [interrupt-IN path](devices/usb-interrupt-in.md) follows
+the owner's narrower initial profile for
+[Bluetooth task 3a](wip/bluetooth.md#accepted-interrupt-in-decisions): boot-present,
+root-connected full-speed endpoints, with other profiles explicitly unsupported.
+This leaves behind-hub periodic endpoints and other speeds unavailable to the
+initial shared receive path, including HID consumers on those paths. Revisit
+admission and periodic/TT handling when a selected device needs another profile,
+with its descriptors and hardware evidence. Qualification currently covers
+AX200 passthrough behind emulated xHCI, not native periodic transfers.
+
+For the internal AX200 investigation, active removal may quarantine the whole
+controller and stop unrelated storage, retaining backing until reboot. A STALL
+is accepted as terminal interrupt-stream failure, with DMA backing and ring
+identity retained until reboot and no automatic recovery. Thus a stalled stream
+cannot resume during that boot, and a persistent receive makes controller-wide
+active-removal handling the usual case. Revisit these accepted limits with
+separately scoped endpoint/device retirement and periodic recovery before
+expanding hotplug or recovery guarantees for HID consumers; confirmed halt alone
+does not change the current retention contract.
 
 ## USB descriptor bounds and per-port preparation
 

@@ -153,7 +153,7 @@ for deadline/poll precedence and removal of all registrations/references before
 return. Queue mutations notify waiters; terminal state is observed under its own lock. A BSP readiness worker handles
 terminal-only waits without a NIC. TCP and mixed waits remain in the network
 worker, which exclusively observes lwIP state. Shared per-task request storage
-bounds each wait at seventeen interests without a new global waiter cap.
+bounds each wait at 32 interests without a new global waiter cap.
 
 The [remote server and host client](remote-terminal.md) combine these attachments
 with execution-group supervision. Resize, reconnection and new framebuffer

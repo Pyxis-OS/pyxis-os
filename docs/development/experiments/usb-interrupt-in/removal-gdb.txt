@@ -1,0 +1,12 @@
+0xffffffff80012026 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:144
+144	  __asm__ volatile("sti; hlt; cli" : : : "memory");
+$1 = false
+$2 = true
+$3 = false
+$4 = USB_IO
+$5 = {data_address = 18446603336265019392, data_physical = 3268608, trb = 3264784, state = INTERRUPT_HELD}
+$6 = {data_address = 18446603336265023488, data_physical = 3272704, trb = 3264800, state = INTERRUPT_HELD}
+$7 = 0x31d000
+$8 = 0x311000
+$9 = 1
+[Inferior 1 (process 1) detached]
