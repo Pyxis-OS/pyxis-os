@@ -4,9 +4,9 @@ Status: **accepted, 2026-10-04.** The owner chose the frame format, the
 confirmation policy and the scope [below](#owner-decisions). Any decision can be
 revised later by the owner. Each task starts only when the owner says so.
 
-**Streaming transfers: proposal, 2026-10-08,** assigned to Claude. See
-[streaming transfers](#streaming-transfers-proposal). Its three decisions await
-the owner; nothing there is accepted yet.
+**Streaming transfers: accepted, 2026-10-08,** assigned to Claude. See
+[streaming transfers](#streaming-transfers). The owner accepted its three
+defaults; implementation follows.
 
 ## Goal
 
@@ -281,10 +281,10 @@ image, `rebased.class` again uploaded with one confirmation and the matching
 closure still worked. Those client/QEMU jobs were stopped as well. The final
 published userland dependency is `352cf14`; the base's other pins are unchanged.
 
-## Streaming transfers (proposal)
+## Streaming transfers
 
-Proposed 2026-10-08. Documentation only; the decisions below have defaults but
-are not accepted.
+Proposed and accepted 2026-10-08. The owner accepted the three defaults
+[below](#streaming-decisions).
 
 ### Need
 
@@ -321,8 +321,11 @@ The rate comes from the framing, not from buffering:
 - Uploads also pass the remote terminal's 4 KiB typeahead limit, so at most
   about two frames can be outstanding however the protocol changes.
 
-At the upload rate, the owner's 692 MB would take about 25 minutes. Streaming
-lifts the size limit but does not, by itself, make transfers faster.
+At the upload rate, the owner's 692 MB would take about 25 minutes. That is a
+QEMU estimate: the per-chunk cost was measured in nested KVM through a
+forwarded port, and the round trip over the ThinkPad's wired network may be
+much shorter, so the native rate is unknown. Streaming lifts the size limit
+but does not, by itself, make transfers faster.
 
 ### Proposed shape
 
@@ -341,10 +344,18 @@ lifts the size limit but does not, by itself, make transfers faster.
   only that transfer's staging file. Abrupt death leaves it behind, as today,
   except that it can now hold a partial file of any size. It is still never
   removed automatically.
+- **Finding orphans.** A leftover staging file sits beside its intended target
+  as `.NAME.xfer-partial-ID`: in the Pyxis directory for uploads, in the
+  download directory on the host for downloads. Pyxis `ls` lists dot names;
+  on the host, `ls` needs `-a` to show them. No transfer reuses or resumes a
+  staging file, so one is safe to delete by hand once no transfer into that
+  directory is running.
 - **Confirmation, overwrite rules, name limits and deadlines** stay as they are.
 - **No resume and no progress display.** Both remain out of scope.
 
-### Decisions for the owner
+### Streaming decisions
+
+Accepted by the owner 2026-10-08, all as the defaults.
 
 1. **Publication contract.**
    - **Default:** the shape above. Unverified bytes go to disk, but only into
@@ -375,8 +386,6 @@ lifts the size limit but does not, by itself, make transfers faster.
      changes the framing and needs a larger guest input allowance for uploads.
 
 ### Validation plan
-
-Once the decisions are accepted:
 
 - in QEMU, transfer a file larger than 1 GiB both ways and confirm the
   SHA-256;

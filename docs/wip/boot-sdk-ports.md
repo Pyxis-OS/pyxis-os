@@ -91,8 +91,8 @@ Chosen by the owner, each starting with a proposal:
   clipboard implementation and USB HID mice are separate milestones.
 - **Claude** (2026-10-08): streaming [remote file transfers](remote-file-transfer.md),
   replacing the 16 MiB buffered `xfer` limit so large files such as retail
-  game data can be sent. It starts with a baseline measurement and a
-  documentation-only proposal for the publication contract.
+  game data can be sent. Its baseline and publication contract were accepted
+  2026-10-08; implementation is in progress.
 - **The owner:** the Java virtual machine of
   [developing inside Pyxis](in-pyxis-development.md).
 
