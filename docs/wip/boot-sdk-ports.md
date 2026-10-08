@@ -36,8 +36,15 @@ Implemented behavior lives in the subsystem references listed in the
 
 ## Assigned
 
-Chosen by the owner on 2026-10-07, each starting with a proposal:
+Chosen by the owner, each starting with a proposal:
 
+- **Claude** (2026-10-08): **SDL2 with a native Pyxis backend**, upstream SDL2
+  with video, input and timer support over the display, keyboard, pointer and
+  clock sessions; audio waits for an audio driver. Task 1 is a probe and
+  proposal that also selects the first consumer, with DevilutionX on its
+  shareware data as the leading candidate (it also needs the completed
+  [C++ runtime](../development/cxx-userspace.md)). See the SDL2 entries in
+  [application ports](application-ports.md#libraries-and-terminal-tools).
 - **Codex 2:** [screenshots](screenshots.md), a `screenshot` command writing
   PNG through new zlib and libpng ports, with the file fetched through
   pyxis-remote.
