@@ -603,3 +603,67 @@ motion, unlocked Quake, capture and resize workloads with this baseline artifact
 repeat the matching workloads after hardware implementation. The task's capture
 completion and host frontend defaults are accepted 2026-10-08 in
 [task 4 planning](../wip/pointer.md#task-4-planning).
+
+
+### Completed software baseline before task 4 code
+
+The accepted frontend run used the same saved software ELF/ordinary ISO,
+`GDK_BACKEND=x11`, relative PS/2 and `-display gtk,gl=off,zoom-to-fit=off`.
+X11 inspection confirmed a 1280x827 window with its 27-pixel menubar and
+1280x800 guest surface, unscaled 1:1. No build was running during the following
+samples. An earlier overlapping-build pass and events sent while GDB had the
+VM paused are excluded. For motion, a conditional entry breakpoint waited for
+an actual hotspot change; HMP sent each report while the VM was running.
+Positions alternated between (640,400) and (680,400), before measuring that
+changed frame. These are four movement-frame samples, not a packet latency or
+sustained-motion throughput measurement.
+
+| GTK/X11 software workload | Samples (ms) | Median (ms) | Range (ms) |
+| --- | --- | --- | --- |
+| Idle Caelum, visible I-beam | 3.72931, 3.89582, 4.79457, 4.39106 | 4.14344 | 3.72931–4.79457 |
+| Confirmed interior motion frames | 4.38806, 4.31614, 3.65905, 4.07930 | 4.19772 | 3.65905–4.38806 |
+| Completed Caelum selection, visible I-beam | 3.08912, 3.39852, 3.92462, 5.31993 | 3.66157 | 3.08912–5.31993 |
+| Development TTY, capture frame | 8.16039, 4.85687, 4.42500, 4.29788 | 4.640935 | 4.29788–8.16039 |
+
+Selection was confirmed valid over indices 506–514 before its samples. Fresh
+press/motion/release were sent separately after focus settled; earlier combined
+focus/press and short button pulses did not create a selection and are excluded.
+Capture used the native `screenshot` command. Its timing spans presenter entry
+through capture finish, including backing allocation and FILE publication; the
+first is a cold allocation. All four reached `screen_capture_finish(true)`.
+A read-only dump of the 1280x800 capture backing matched RGB pixels of the
+same stopped frame's HMP framebuffer dump exactly, including the I-beam. The
+following shell prompt is a later frame and is not used for that comparison.
+
+Quake's warm console `timedemo demo1` runs completed 969 frames each, with no
+breakpoint/stop during these measured runs. GDB read lock state and retained
+TTY output after each completed result. A fresh left click allowed relock;
+Super+Esc removed it without affecting keyboard input. Console commands were
+typed explicitly while the console remained open; menu/history attempts without
+new timing output are not samples. Initial launch runs are separate from these
+warm samples.
+
+| GTK/X11 software Quake state | Samples (fps) | Median (fps) | Range (fps) |
+| --- | --- | --- | --- |
+| Unlocked, visible system pointer | 1589.4, 1562.4, 1585.9, 1584.5 | 1585.2 | 1562.4–1589.4 |
+| Locked, hidden system pointer | 1591.5, 1587.7, 1587.4, 1594.6 | 1589.6 | 1587.4–1594.6 |
+
+The first three warm unlocked samples preceded the locked group; the final
+unlocked sample followed Super+Esc. Each reported rounded elapsed time was
+0.6 seconds. These short nested-VM runs establish a matched workload and
+variation, not native or isolated cursor performance.
+
+Resizing the same GTK window to 1400x927 produced a 1400x900, pitch-5600 guest
+surface, generation two, and cleared the confirmed selection. The native
+transaction copied four TTYs under the output lock in 3,114,460 ns (one observed
+resize, not a repeated benchmark). Waiting for QEMU's coalesced geometry event
+and committed guest dimensions avoids treating a transient scaled/centered
+window as the qualified 1:1 configuration.
+
+The local-only shareware image also built after explicitly mounting its local
+data directory into the existing builder. Its ISO hash is
+`06dc89033fd0bf7af6728c36a87761d0b6692b0b127ac3bc190af35b3bb4fb86`.
+An initial assembly attempt omitted that mount and correctly refused missing
+`spawn.mpq`; no fallback download or data publication occurred. All baseline
+QEMU/GDB jobs are stopped. No task 4 pointer code changed before these checks;
+raw logs/artifacts remain local for the hardware comparison.
