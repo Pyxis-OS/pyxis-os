@@ -1,0 +1,21 @@
+hda: PCI=0:5.0 GCAP=4401 ISS=4 OSS=4 version=1.0
+hda: prepared output descriptor=4 PCM=7680 backing=8192; link reset, BME off
+hda: link ready codec-mask=1 first-output-offset=100
+hda: CORB=256 RIRB=256, one command in flight; polling with delivery masked
+hda-codec: cad=0 vendor=1af40012 revision=100101
+hda-codec: selected cad=0 afg=1 pin=3 dac=2 nodes=2 PCM=48000/S16/stereo
+audio: ready codec=1af40012 cad=0 pin=3 DAC=2 rate=48000 format=11; output idle
+hda: CORB=256 RIRB=256, one command in flight; polling with delivery masked
+audio-qualify: 310 vendor reads, commands=332 responses=332 CORBWP=54 RIRBWP=54
+hda: CORB=256 RIRB=256, one command in flight; polling with delivery masked
+hda: output RUN CBL=7680 periods=4 period-bytes=1920 format=11
+hda: CORB=256 RIRB=256, one command in flight; polling with delivery masked
+hda-codec: QEMU pin=3 retains control=40 after disable request
+audio-qualify: tone=1 elapsed-ns=1009880710 polls=173 BCIS-observations=101 observed-wraps=25 last-LPIB=5512 stop=1 detach=1
+hda: CORB=256 RIRB=256, one command in flight; polling with delivery masked
+hda: output RUN CBL=7680 periods=4 period-bytes=1920 format=11
+hda: CORB=256 RIRB=256, one command in flight; polling with delivery masked
+hda-codec: QEMU pin=3 retains control=40 after disable request
+audio-qualify: tone=0 elapsed-ns=110514660 polls=19 BCIS-observations=11 observed-wraps=2 last-LPIB=7088 stop=1 detach=1
+hda: shutdown stream-reset=1 CORB-stop=1 RIRB-stop=1 link-reset=1 BME-off=1; backing retained until reboot
+audio-qualify: completed=1 commands=366 responses=366

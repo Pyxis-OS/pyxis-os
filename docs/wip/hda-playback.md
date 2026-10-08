@@ -1,11 +1,18 @@
 # HD Audio playback milestone proposal
 
-Status: **three defaults accepted 2026-10-08; no implementation assigned**. Prepared from main `67e14be` and the completed
+Status: **three defaults accepted 2026-10-08; first controller/codec bring-up
+stage delivered for review; task-specific defaults accepted**. Prepared from
+main `67e14be` and the completed
 [QEMU investigation](../development/audio-investigation.md). Publishing or
 merging this document does not start implementation; public call details
 still need task-specific review.
 The investigation probes stay unmerged. The owner has accepted the defaults
-below; the first implementation task still requires an explicit assignment.
+below. The owner assigned the first controller/codec bring-up task on
+2026-10-08. Its [baseline and decision handoff](../development/experiments/audio-task1/README.md)
+records the accepted call-layout/write/admission choices, private engine
+qualification and matched no-audio/engine-idle observations. Task 1 branches
+from main after #549 merged. Later tasks still
+require their own assignments.
 
 The proposed goal is one analog playback engine, bounded per-space PCM sessions
 and native ThinkPad speaker/headphone qualification. QEMU comes first. Recording,
@@ -58,6 +65,41 @@ the QEMU evidence and remaining native checks; the owner confirms QEMU closure
 with retained debt or requires native qualification before closure. QEMU closure
 must not claim native sound, and the supplied Fedora codec dump is inventory
 and state evidence, not native Pyxis playback qualification.
+
+## Accepted session call contract
+
+Accepted task 1 defaults, **2026-10-08**. This is documentation for the later
+session task, not an implemented protocol or exported SDK header. Follow native
+message headers; allocate the protocol tag and rights/operation constants when
+that task implements the ABI, rather than reserving placeholder APIs now.
+
+| Call | Request after the standard message header | Result / behavior |
+| --- | --- | --- |
+| ACQUIRE | No additional fields | Exclusive process-owned session in the grant's space; return fixed format, queue capacity and session generation. |
+| WRITE | `uint64_t buffer`, `uint64_t length` (caller address, bytes) | Copy and commit all requested frames or none; success returns the accepted byte count. |
+| STATUS | No additional fields | Return queue capacity/free frames, session generation, starvation and hardware-discontinuity counters and terminal state. |
+| RELEASE | No additional fields | Discard queued PCM, cancel uncommitted writes and release ownership; no reply payload. |
+
+The named audio grant authorizes calls only within its own space. WRITE, STATUS
+and RELEASE require the acquiring process; copying/closing a handle does not
+transfer/release its session. Process exit releases ownership. ACQUIRE fails
+with CALL_BUSY for an already acquired session, including repeat acquisition
+by its owner; CALL_LIMIT for admission beyond eight active sessions;
+CALL_NO_MEMORY for allocation failure; CALL_UNAVAILABLE for absent, unsupported
+or failed audio. Missing authority, a wrong space or a wrong session owner is
+CALL_DENIED. Exact validation precedence is documented with the implementation.
+
+WRITE is nonblocking, at most **4096 bytes**, with four-byte stereo-frame
+alignment. Oversize is CALL_LIMIT; malformed alignment/request is CALL_BAD_REQUEST
+and inaccessible memory is CALL_BAD_BUFFER. A full queue is CALL_WOULD_BLOCK,
+accepting no data and preserving reply storage. No caller buffer survives return.
+Zero length is a no-op after request, authority, ownership and buffer validation.
+WAIT_WRITABLE is level-triggered and guarantees room for a maximum-size write;
+it reserves nothing, and terminal failure reports WAIT_ERROR. STATUS allows a
+producer to choose a smaller write from the available complete-frame capacity.
+The accepted calls have no separate write deadline; WAIT_MANY supplies existing
+wait deadlines. No audio drain guarantee, DMA mapping or audible frame position
+is exported. Already mixed hardware frames may outlive release until consumed.
 
 ## Proposed ownership and lifetime
 
@@ -141,14 +183,13 @@ controller or all other sessions.
 
 ## Proposed task sequence and review gates
 
-1. [ ] **Session contract and native evidence.** Use the accepted defaults.
-   Specify rights, exclusive acquisition, close/exit, wait/readiness,
-   queue accounting, byte/frame bounds, deadlines/cancellation and generations.
-   Use the supplied [ALC257 dump](../development/audio-investigation.md#native-handoff)
-   to propose speaker/headphone route/jack policy; do not request it again.
-   Review these concrete contracts before writing a public ABI; unsupported
-   hardware reports unavailable without exposing DMA.
-2. [ ] **QEMU controller and codec engine.** Implement production PCI claim,
+1. [x] **Accepted session contract and native inventory.** Document
+   ACQUIRE/WRITE/STATUS/RELEASE, process ownership/exit, copied atomic writes,
+   writable readiness and distinct admission errors. Retain the supplied
+   [ALC257 dump](../development/audio-investigation.md#native-handoff) as inventory.
+   Public ABI encoding/session implementation belongs to task 4; native
+   speaker/headphone route/jack policy belongs to task 5.
+2. [x] **QEMU controller and codec engine.** Implement production PCI claim,
    CORB/RIRB, checked graph traversal and one discovered analog output route.
    Keep arch/device and BSP boundaries explicit. Qualify known PCM through WAV,
    independent left/right signals, command wrap and stop ownership with normal
@@ -159,13 +200,17 @@ controller or all other sessions.
    thresholds; exercise sustained playback, ordinary producer pauses, close/reopen
    and normal concurrent guest activity. Measure position/clock agreement and
    queue-to-output behavior. Revisit the proposed period before freezing policy.
-4. [ ] **Per-space sessions and bounded mixing.** Implement only the reviewed
+4. [ ] **Per-space sessions and bounded mixing.** Review exact reply packing,
+   protocol/right constants, validation precedence, priming and hidden-space
+   policy before implementing the public calls. Implement only the reviewed
    grant/calls and BSP request bridge, with copied queues and generation-aware
    cancellation/exit. Qualify two distinct simultaneous signals, silent/active
    spaces, denied authority, exclusive acquisition and capacity admission.
    Measure BSP cost and refill margin with one and multiple CPUs. Add only the
    concrete native PCM producer needed to exercise the accepted interface.
-5. [ ] **Native AMD analog qualification.** Bind `1022:15e3` after verifying
+5. [ ] **Native AMD analog qualification.** Propose speaker/headphone route
+   and jack policy from the supplied ALC257 graph before native binding.
+   Bind `1022:15e3` after verifying
    capabilities and the actual codec route. Inspect licensed/pinned fixups where
    needed; require owner speaker/headphone evidence, sustained output under load,
    underrun/recovery, stop/reset and usable latency. No physical-host access
@@ -180,6 +225,11 @@ controller or all other sessions.
    native debt for the later ThinkPad batch, or native qualification before
    closure. Carry only owner-confirmed deferred work into technical debt. Publish
    no success claim for SDL2, Quake, recording or other devices.
+
+The owner's first implementation assignment combined the contract review and
+private controller/codec engine steps above. The [engine reference](../devices/hda.md)
+records the implemented boundary; the unmerged consumer qualifies it without
+shipping a tone, ABI or sessions. No later task starts from this completion.
 
 Tasks are focused PRs, each assigned by the owner after its predecessor is
 reviewed. No probe cherry-pick is implied by accepting this proposal. Production

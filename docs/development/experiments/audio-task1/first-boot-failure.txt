@@ -1,0 +1,4 @@
+hda: PCI=0:5.0 GCAP=4401 ISS=4 OSS=4 version=1.0
+hda: prepared output descriptor=4 PCM=7680 backing=8192; link reset, BME off
+hda: no codec reported after link reset; engine unavailable until reboot
+hda: shutdown stream-reset=1 CORB-stop=1 RIRB-stop=1 link-reset=1 BME-off=1; backing retained until reboot

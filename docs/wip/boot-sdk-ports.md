@@ -67,7 +67,10 @@ Chosen by the owner, each starting with a proposal:
   following the completed [QEMU investigation](../development/audio-investigation.md).
   Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
   exclusive per-space sessions, 48 kHz S16LE stereo, and 4 × 10 ms DMA/80 ms
-  queues as starting tuning. No implementation task assigned. QEMU closure with
+  queues as starting tuning. First controller/codec bring-up task assigned
+  2026-10-08; [private engine and matched qualification delivered for review](../development/experiments/audio-task1/README.md).
+  Public sessions/mixing and IRQ/refill remain later tasks.
+  QEMU closure with
   a later ThinkPad native batch is carried forward for confirmation at closure;
   native playback remains unqualified. Quake can produce sound
   from its main loop; SDL2/DevilutionX audio waits on real userspace
