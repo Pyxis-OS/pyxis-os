@@ -1,0 +1,34 @@
+Controller 0000:00:04.0 [1b36:000d]: complete, root ports 8
+  Port 2 speed super: 46f4:0001
+    Config 1 interface 0 alt 0 class 08 subclass 06 protocol 50 endpoints 2
+  Port 5 speed full: 8087:0029
+    Config 1 interface 0 alt 0 class e0 subclass 01 protocol 01 endpoints 3
+    Config 1 interface 1 alt 0 class e0 subclass 01 protocol 01 endpoints 2
+    Config 1 interface 1 alt 1 class e0 subclass 01 protocol 01 endpoints 2
+    Config 1 interface 1 alt 2 class e0 subclass 01 protocol 01 endpoints 2
+    Config 1 interface 1 alt 3 class e0 subclass 01 protocol 01 endpoints 2
+    Config 1 interface 1 alt 4 class e0 subclass 01 protocol 01 endpoints 2
+    Config 1 interface 1 alt 5 class e0 subclass 01 protocol 01 endpoints 2
+    Config 1 interface 1 alt 6 class e0 subclass 01 protocol 01 endpoints 2
+Disposable Bluetooth runtime storage-coexistence sample.
+iobench read: source=system://iobench.bin output=none buffer=65536 rounds=3 warmup=1 fixture=1048576 bytes
+Clock-call loop: 20196 ns/read (1000 reads); not subtracted
+Host FILE profiling: off (measured payload reads only)
+warmup 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=256 eof_calls=1 failed_pass=0
+sample 1: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=256 eof_calls=1 failed_pass=0
+  open=1272250 ns
+  payload=115951630 ns (115.952 ms); 8.624 MiB/s
+  complete=117696490 ns (117.696 ms); 8.496 MiB/s
+sample 2: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=256 eof_calls=1 failed_pass=0
+  open=1052520 ns
+  payload=123140090 ns (123.140 ms); 8.121 MiB/s
+  complete=124749680 ns (124.750 ms); 8.016 MiB/s
+sample 3: OK; requested=1048576 completed=1048576 bytes; read_calls=257 short_reads=256 eof_calls=1 failed_pass=0
+  open=1921100 ns
+  payload=123701470 ns (123.701 ms); 8.084 MiB/s
+  complete=126093090 ns (126.093 ms); 7.931 MiB/s
+OPEN summary: 3 verified samples; elapsed median=1.272 ms range=1.053..1.921 ms
+Payload read summary: 3 verified samples; elapsed median=123.140 ms range=115.952..123.701 ms; throughput at median elapsed=8.121 MiB/s
+Complete consumption summary: 3 verified samples; elapsed median=124.750 ms range=117.696..126.093 ms; throughput at median elapsed=8.016 MiB/s
+
+[{"type": "command_complete", "command": 1, "kind": "exited", "exit_status": 0}, {"type": "command_complete", "command": 2, "kind": "exited", "exit_status": 0}, {"type": "command_complete", "command": 3, "kind": "exited", "exit_status": 0}, {"type": "command_complete", "command": 4, "kind": "builtin", "status": 0}]

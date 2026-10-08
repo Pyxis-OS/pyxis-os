@@ -107,6 +107,25 @@ enum usb_result usb_host_interrupt_wait(struct usb_host_device *device, uint64_t
 enum usb_result usb_host_interrupt_take(struct usb_host_device *device, void *destination,
                                         size_t capacity, struct usb_interrupt_completion *completion);
 
+/* Private root/full-speed bulk stream, prepared separately from storage. Host
+ * configuration precedes class configuration; start follows it. Receive/take
+ * ownership and terminal failures match interrupt IN. Idle receives never time
+ * out. OUT captures bytes and owns an independent ticket until take; no wait or
+ * cancellation is supplied. Active OUT expiry quarantines uncertain DMA. STALL
+ * retains the OUT span and prevents later submission, without recovery. */
+size_t usb_host_async_bulk_capacity(void);
+enum usb_result usb_host_configure_async_bulk(struct usb_host_device *device,
+                                             const struct usb_bulk_endpoint *in,
+                                             const struct usb_bulk_endpoint *out,
+                                             size_t receive_bytes, uint64_t deadline);
+enum usb_result usb_host_async_bulk_start(struct usb_host_device *device);
+enum usb_result usb_host_async_bulk_take(struct usb_host_device *device, void *destination,
+                                        size_t capacity, struct usb_interrupt_completion *completion);
+enum usb_result usb_host_async_bulk_out_submit(struct usb_host_device *device, const void *bytes,
+                                              size_t length, uint64_t deadline, struct usb_ticket *ticket);
+enum usb_result usb_host_async_bulk_out_take(struct usb_host_device *device, struct usb_ticket ticket,
+                                            struct usb_completion *completion);
+
 /* Class binding during boot, with retained runtime I/O. A bounded pool reserves
  * two bulk rings and one captured transfer buffer per admitted device before AP
  * startup. Transfers are serialized on the owning worker; failure never copies

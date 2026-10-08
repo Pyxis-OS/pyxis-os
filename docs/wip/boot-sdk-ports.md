@@ -79,7 +79,10 @@ Chosen by the owner, each starting with a proposal:
   task 1 complete for documentation/contracts after native batch #547. All owner
   [decision rounds and alpha coordination](bluetooth-task1-contracts.md) are
   accepted 2026-10-08; pointer tasks 1+2 are merged in #545. Later measurements
-  remain prerequisites. Task 2 runtime HCI transport is not assigned or started.
+  remain prerequisites. Task 2 runtime HCI transport is complete in #552, with
+  [baseline and warm qualification](../development/experiments/bluetooth-runtime-hci/README.md).
+  Actual service/connection traffic remains task 4's qualification gate; later
+  tasks need explicit assignment.
 - **Codex alpha** (owner update, 2026-10-08): [A system pointer](pointer.md).
   Proposal #530 and tasks 1+2 are merged: Pyxis #545, userland #164, ports #65/#66.
   The owner authorizes task 3: local TTY selection, trusted mux terminal control,
@@ -172,7 +175,7 @@ prerequisites and result are clear.
 - [Userspace scheme providers](userspace-scheme-providers.md).
 - [Bluetooth mouse](bluetooth-mouse.md): accepted kernel HCI/userspace stack
   direction, explicit Secure Connections enrollment and cold/native closure;
-  remaining policy decisions are open.
+  tasks 1–2 are complete, with warm-only transport qualification.
 - [Selecting existing build artifacts](build-artifact-reuse.md) and the
   postponed [host development overlay](host-development-overlay.md).
 
