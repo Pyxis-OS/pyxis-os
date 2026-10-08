@@ -29,6 +29,7 @@ static uint64_t observed_bytes, refilled_periods, data_end_bytes;
 static uint64_t observed_time, progress_time;
 static uint32_t observed_position, observed_wallclock;
 static uint64_t starts, stops, interrupts, refills, max_commit_ns;
+static const char *refill_fault;
 
 static void audio_worker(void *argument);
 
@@ -174,16 +175,31 @@ static bool observe_progress(const struct hda_stream_position *position,
     const struct hda_irq_event *event, uint64_t now)
 {
   uint32_t wall_ticks = position->wallclock - observed_wallclock;
-  if (event->errors || now - observed_time >= AUDIO_SERVICE_LIMIT_NS ||
-      wall_ticks >= HDA_WALLCLOCK_TICKS_PER_MS * (AUDIO_SERVICE_LIMIT_NS / 1000000) ||
-      (event->first_time && now - event->first_time >= AUDIO_SERVICE_LIMIT_NS)) {
+  if (event->errors) {
+    refill_fault = "output FIFO/descriptor error";
+    return false;
+  }
+  if (now - observed_time >= AUDIO_SERVICE_LIMIT_NS ||
+      wall_ticks >= HDA_WALLCLOCK_TICKS_PER_MS * (AUDIO_SERVICE_LIMIT_NS / 1000000)) {
+    refill_fault = "output observation exceeded service horizon";
+    return false;
+  }
+  if (event->first_time && now - event->first_time >= AUDIO_SERVICE_LIMIT_NS) {
+    refill_fault = "output completion notification expired";
     return false;
   }
   uint32_t step = (position->bytes + HDA_BUFFER_BYTES - observed_position) % HDA_BUFFER_BYTES;
   uint32_t to_boundary = HDA_PERIOD_BYTES - observed_position % HDA_PERIOD_BYTES;
-  if (step % HDA_FRAME_BYTES ||
-      (event->completed && step < to_boundary) ||
-      UINT64_MAX - observed_bytes < step + 2 * HDA_BUFFER_BYTES) {
+  if (step % HDA_FRAME_BYTES) {
+    refill_fault = "output position is not frame aligned";
+    return false;
+  }
+  if (event->completed && step < to_boundary) {
+    refill_fault = "completion without expected boundary advance";
+    return false;
+  }
+  if (UINT64_MAX - observed_bytes < step + 2 * HDA_BUFFER_BYTES) {
+    refill_fault = "output epoch exhausted";
     return false;
   }
   observed_bytes += step;
@@ -197,13 +213,18 @@ static bool observe_progress(const struct hda_stream_position *position,
   if (!controller.irq.errors) {
     controller.irq.first_time = 0;
   }
-  return now - progress_time < AUDIO_SERVICE_LIMIT_NS;
+  if (now - progress_time >= AUDIO_SERVICE_LIMIT_NS) {
+    refill_fault = "output progress stalled";
+    return false;
+  }
+  return true;
 }
 
 static bool refill_output(void)
 {
   struct hda_stream_position position;
   struct hda_irq_event event;
+  refill_fault = "output position observation unstable";
   uint64_t flags = cpu_save_interrupts();
   bool safe = hda_stream_position_locked(&controller, &position, &event) &&
       observe_progress(&position, &event, arch_monotonic_ns());
@@ -219,8 +240,11 @@ static bool refill_output(void)
     uint64_t target = (refilled_periods + HDA_PERIOD_COUNT) * HDA_PERIOD_BYTES;
     /* Keep a whole codec burst ahead of the reclaimed period. The postcheck
      * rejects a commit window spanning more than one codec timer interval. */
-    safe = safe && target > observed_bytes &&
-        target - observed_bytes > QEMU_CODEC_BURST_BYTES + HDA_FRAME_BYTES;
+    if (safe && (target <= observed_bytes ||
+        target - observed_bytes <= QEMU_CODEC_BURST_BYTES + HDA_FRAME_BYTES)) {
+      refill_fault = "output refill safety margin exhausted";
+      safe = false;
+    }
     if (!safe) {
       cpu_restore_interrupts(flags);
       return false;
@@ -234,10 +258,17 @@ static bool refill_output(void)
       max_commit_ns = after - before;
     }
     uint32_t before_wallclock = position.wallclock;
-    safe = hda_stream_position_locked(&controller, &position, &event) &&
-        after - before < AUDIO_COMMIT_LIMIT_NS &&
-        (uint32_t)(position.wallclock - before_wallclock) < HDA_WALLCLOCK_TICKS_PER_MS &&
-        observe_progress(&position, &event, after) && observed_bytes < target;
+    safe = hda_stream_position_locked(&controller, &position, &event);
+    if (safe && (after - before >= AUDIO_COMMIT_LIMIT_NS ||
+        (uint32_t)(position.wallclock - before_wallclock) >= HDA_WALLCLOCK_TICKS_PER_MS)) {
+      refill_fault = "output DMA commit exceeded clock limit";
+      safe = false;
+    }
+    safe = safe && observe_progress(&position, &event, after);
+    if (safe && observed_bytes >= target) {
+      refill_fault = "output reached period during DMA commit";
+      safe = false;
+    }
     if (frames) {
       data_end_bytes = target + frames * HDA_FRAME_BYTES;
     }
@@ -252,6 +283,7 @@ static bool refill_output(void)
    * tail for the QEMU backend; it is deliberately not an audible drain API. */
   if (!audio_sessions_pending() && observed_bytes >= data_end_bytes &&
       observed_bytes - data_end_bytes >= HDA_BUFFER_BYTES) {
+    refill_fault = "output stop failed";
     return stop_output();
   }
   return true;
@@ -278,7 +310,7 @@ static void audio_worker(void *argument)
     cpu_restore_interrupts(flags);
     audio_sessions_cleanup();
     if (available && controller.stream_running && !refill_output()) {
-      fail_engine("unsafe output progress or refill");
+      fail_engine(refill_fault);
     }
     struct audio_request *request = take_request();
     if (request) {
