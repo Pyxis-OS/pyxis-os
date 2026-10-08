@@ -15,6 +15,8 @@ cannot supply bytes. VirtIO preparation or runtime failure never switches to the
 CPU. Libc `rand()` and the generic UDP ephemeral-port allocator are unchanged.
 The accepted later direction is a kernel ChaCha20 generator seeded from hardware;
 see [technical debt](../technical-debt.md#cpu-entropy-without-a-kernel-generator).
+The owner assigned the [generator proposal](../wip/kernel-random-generator.md)
+on 2026-10-08; it does not change the implemented hardware contract below.
 
 ## Native interface
 

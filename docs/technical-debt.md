@@ -2438,6 +2438,10 @@ both. The source is unavailable once no healthy instruction remains. See
 The accepted follow-up is a kernel ChaCha20 generator seeded from these sources.
 Revisit source mixing, reseeding and generator ownership in that task; do not add
 predictable fallback bytes or treat the current checks as entropy certification.
+The owner assigned it on 2026-10-08. The
+[generator proposal](wip/kernel-random-generator.md) records the raw-source
+baseline and three recommended defaults; generator policy and implementation
+remain pending owner decisions.
 
 ## PS/2 mouse synchronization and routing
 

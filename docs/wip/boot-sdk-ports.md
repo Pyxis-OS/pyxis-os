@@ -47,6 +47,10 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex** (2026-10-08): [kernel random generator](kernel-random-generator.md),
+  the accepted ChaCha20 follow-up for the existing hardware-backed random grant;
+  baseline and a documentation-only proposal first. The three defaults remain
+  pending owner decisions; no implementation authorized.
 - **Codex** (2026-10-08): [A system pointer](pointer.md), starting with a
   documentation-only proposal for program cursor images, surface routing,
   tab clicks, terminal/mux selection and pointer lock with Super+Esc.
