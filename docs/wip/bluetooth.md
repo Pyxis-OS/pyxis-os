@@ -1,10 +1,10 @@
 # Bluetooth investigation
 
-Status: **tasks 1, 2 and 3a complete, 2026-10-08; task 3b authorized and in progress.**
+Status: **tasks 1, 2, 3a and 3b complete, 2026-10-08; firmware and scan probes unassigned.**
 The owner wants to pair a Logitech MX Master 3S, a Bluetooth-only LE mouse, and use it on Pyxis.
 This investigation establishes the path as far as a first LE scan and ends in a
-report and a milestone proposal. Shared kernel interrupt-IN support is now an
-authorized task to merge before the HCI probe. HCI, firmware and scan probe code
+report and a milestone proposal. Shared kernel interrupt-IN support is implemented
+and merged. HCI, firmware and scan probe code
 stays on unmerged branches. The owner authorized task 3b after merging
 [PR #524](https://git.internal/PyxisOS/pyxis-os/pulls/524); firmware and scan probes
 remain unassigned.
@@ -76,11 +76,14 @@ works, recorded beside the NIC reference.
    unmerged consumer. The [implemented interface](../devices/usb-interrupt-in.md)
    and [qualification report](../development/experiments/usb-interrupt-in/README.md)
    record the build, passthrough traffic, idle wait, wrap, progress and removal checks.
-- [ ] **3b. HCI transport and controller state probe.** On an unmerged probe branch,
+- [x] **3b. HCI transport and controller state probe.** On an unmerged probe branch,
    send HCI commands as class requests to interface 0 and read events from the
    interrupt endpoint. Issue HCI Reset and Intel's Read Version, and record whether
    the controller is in its
-   bootloader or operational firmware.
+   bootloader or operational firmware. The
+   [task 3b report](../development/experiments/bluetooth-task3b/README.md) records
+   checked Reset/Read Version replies, command credits and operational firmware
+   after Reset on prepared-host QEMU passthrough. Cold native state remains unknown.
 - [ ] **4. Firmware load.** Detect controller state from a checked version reply
    first. Task 3a observed legacy firmware variant `0x23` after prepared-host QEMU
    attachment and HCI Reset: operational firmware may already be present. Skip an

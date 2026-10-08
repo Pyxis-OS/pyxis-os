@@ -1,0 +1,19 @@
++target remote 127.0.0.1:1234
+0xffffffff80012026 in cpu_wait_interrupt () at arch/x86_64/include/arch/cpu.h:144
+144	  __asm__ volatile("sti; hlt; cli" : : : "memory");
++p hci_probe
+$1 = {device = 0xffff801000001778, sequence = 2, interface = 0 '\000', credits = 1 '\001', version = "\0007\024\001#\003\301!\030", firmware = PROBE_STATE_FIRMWARE, result = USB_OK, finished = true}
++p hci_probe.device->interrupt->sequence
+$2 = 2
++p hci_probe.device->interrupt->queue_count
+$3 = 0
++p hci_probe.device->interrupt->receive[0].state
+$4 = INTERRUPT_POSTED
++p hci_probe.device->interrupt->receive[1].state
+$5 = INTERRUPT_POSTED
++p hci_probe.device->interrupt->result
+$6 = USB_OK
++p hci_probe.device->controller->running
+$7 = true
++detach
+[Inferior 1 (process 1) detached]
