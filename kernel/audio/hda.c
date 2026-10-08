@@ -224,9 +224,15 @@ void hda_shutdown(struct hda_controller *controller)
   if (!quiescent) {
     controller->failed = true;
   }
-  klog("hda: shutdown stream-reset=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u; backing %s until reboot\n",
-      (unsigned)stream_reset, (unsigned)corb_stopped, (unsigned)rirb_stopped,
-      (unsigned)link_reset, (unsigned)dma_disabled, quiescent ? "retained" : "quarantined");
+  if (controller->failed) {
+    klog("hda: shutdown stream-reset=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u; backing %s until reboot\n",
+        (unsigned)stream_reset, (unsigned)corb_stopped, (unsigned)rirb_stopped,
+        (unsigned)link_reset, (unsigned)dma_disabled, quiescent ? "retained" : "quarantined");
+  } else {
+    ktrace("hda: shutdown stream-reset=%u CORB-stop=%u RIRB-stop=%u link-reset=%u BME-off=%u; backing retained until reboot\n",
+        (unsigned)stream_reset, (unsigned)corb_stopped, (unsigned)rirb_stopped,
+        (unsigned)link_reset, (unsigned)dma_disabled);
+  }
 }
 
 void hda_fail(struct hda_controller *controller, const char *reason)
@@ -292,7 +298,7 @@ bool hda_link_start(struct hda_controller *controller)
     return fail_controller(controller, "no codec reported after link reset");
   }
   controller->link_ready = true;
-  klog("hda: link ready codec-mask=%x first-output-offset=%x\n",
+  ktrace("hda: link ready codec-mask=%x first-output-offset=%x\n",
       (unsigned)controller->codec_mask, controller->stream);
   return true;
 }
@@ -351,7 +357,7 @@ bool hda_commands_start(struct hda_controller *controller)
     return fail_controller(controller, "command ring DMA did not start");
   }
   controller->command_ready = true;
-  klog("hda: CORB=%u RIRB=%u, one command in flight; polling with delivery masked\n",
+  ktrace("hda: CORB=%u RIRB=%u, one command in flight; polling with delivery masked\n",
       controller->corb_entries, controller->rirb_entries);
   return true;
 }
@@ -483,7 +489,7 @@ bool hda_stream_start(struct hda_controller *controller, const void *pcm, size_t
     return fail_controller(controller, "output RUN did not set");
   }
   controller->stream_running = true;
-  klog("hda: output RUN CBL=%u periods=%u period-bytes=%u format=%x\n",
+  ktrace("hda: output RUN CBL=%u periods=%u period-bytes=%u format=%x\n",
       HDA_BUFFER_BYTES, HDA_PERIOD_COUNT, HDA_PERIOD_BYTES, HDA_STREAM_FORMAT);
   return true;
 }
@@ -595,7 +601,11 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
   struct pci_device *device;
   enum pci_selection selection = pci_select_device(HDA_QEMU_VENDOR, HDA_QEMU_DEVICE, &device);
   if (selection != PCI_SELECTION_UNIQUE) {
-    klog("hda: QEMU 8086:2668 selection=%u; inactive\n", (unsigned)selection);
+    if (selection == PCI_SELECTION_ABSENT) {
+      ktrace("hda: QEMU 8086:2668 absent; inactive\n");
+    } else {
+      klog("hda: QEMU 8086:2668 selection=%u; inactive\n", (unsigned)selection);
+    }
     return;
   }
   if (!pci_reserve_device(device, &controller->claim)) {
@@ -643,7 +653,7 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
   unsigned input = (capabilities >> HDA_GCAP_ISS_SHIFT) & HDA_GCAP_STREAM_COUNT_MASK;
   unsigned output = (capabilities >> HDA_GCAP_OSS_SHIFT) & HDA_GCAP_STREAM_COUNT_MASK;
   controller->stream = HDA_STREAM_BASE + input * HDA_STREAM_BYTES;
-  klog("hda: PCI=%u:%u.%u GCAP=%x ISS=%u OSS=%u version=%u.%u\n",
+  ktrace("hda: PCI=%u:%u.%u GCAP=%x ISS=%u OSS=%u version=%u.%u\n",
       (unsigned)device->address.bus, (unsigned)device->address.device,
       (unsigned)device->address.function, (unsigned)capabilities, input, output,
       (unsigned)read8(controller, HDA_VMAJ), (unsigned)read8(controller, HDA_VMIN));
@@ -664,6 +674,6 @@ void hda_prepare(struct hda_controller *controller, const struct boot_info *boot
     return;
   }
   controller->prepared = true;
-  klog("hda: prepared output descriptor=%u PCM=%u backing=%zu; link reset, BME off\n",
+  ktrace("hda: prepared output descriptor=%u PCM=%u backing=%zu; link reset, BME off\n",
       input, HDA_BUFFER_BYTES, controller->pcm.bytes);
 }

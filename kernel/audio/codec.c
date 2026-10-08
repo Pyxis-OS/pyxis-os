@@ -410,7 +410,7 @@ hda_codec_discover(struct hda_controller *controller, struct hda_route *route)
         !parameter(controller, codec, 0, PARAM_REVISION, &revision) ||
         !parameter(controller, codec, 0, PARAM_SUBNODES, &subnodes))
       goto failed;
-    klog("hda-codec: cad=%u vendor=%x revision=%x\n", codec, vendor, revision);
+    ktrace("hda-codec: cad=%u vendor=%x revision=%x\n", codec, vendor, revision);
     if (!vendor || vendor == UINT32_MAX)
       continue;
     unsigned first, end;
@@ -454,7 +454,7 @@ hda_codec_discover(struct hda_controller *controller, struct hda_route *route)
       };
       route_controller = controller;
       *route = selected_route;
-      klog("hda-codec: selected cad=%u afg=%u pin=%u dac=%u nodes=%u PCM=%u/S16/stereo\n",
+      ktrace("hda-codec: selected cad=%u afg=%u pin=%u dac=%u nodes=%u PCM=%u/S16/stereo\n",
            codec, group, route->pin, route->converter, length, HDA_RATE);
       for (unsigned i = 0; i < length; ++i)
         ktrace("hda-codec: route step=%u nid=%u type=%u input=%u\n", i, route_nodes[i],
@@ -561,7 +561,7 @@ hda_codec_disable(struct hda_controller *controller, const struct hda_route *rou
     if ((route->vendor != QEMU_CODEC_OUTPUT && route->vendor != QEMU_CODEC_DUPLEX) ||
         response != PIN_CONTROL_OUTPUT)
       goto failed;
-    klog("hda-codec: QEMU pin=%u retains control=%x after disable request\n", route->pin, response);
+    ktrace("hda-codec: QEMU pin=%u retains control=%x after disable request\n", route->pin, response);
   }
   const struct hda_widget *pin = &widgets[route->pin];
   if (pin->pin_caps & PIN_EAPD) {

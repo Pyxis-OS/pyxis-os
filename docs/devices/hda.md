@@ -4,6 +4,9 @@ Caelum has a private playback engine for QEMU's `8086:2668` Intel HDA controller
 with `hda-output` or `hda-duplex`. It discovers a checked 48 kHz S16LE stereo
 analog route. Ordinary initialization never plays audio: command DMA stops,
 PCI bus mastering is disabled, and the sole BSP worker parks without polling.
+Normal boot prints only the `audio: ready ...` summary; an absent controller is
+quiet. Controller/codec details use `LOG_LEVEL=trace`; failure explanations
+remain visible at the normal log level.
 This is the first implementation stage of the [playback milestone](../wip/hda-playback.md),
 not a userspace sound interface. Public sessions, software mixing and runtime
 IRQ/refill remain later tasks. SDL2 and Quake sound are unchanged.

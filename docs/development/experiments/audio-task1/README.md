@@ -213,3 +213,14 @@ QEMU evidence does not qualify it. Confirm the owner's QEMU-closure/native-batch
 choice at milestone closure. All task-owned guests, debuggers, clients and builds
 are stopped. Existing exact submitted-head CI is inspected separately from
 these measured code/consumer revisions.
+
+
+## Review follow-up: boot log volume
+
+The review of [#553](https://git.internal/PyxisOS/pyxis-os/pulls/553) requested
+one success summary and quiet absence. Controller/codec success details, normal
+shutdown and the QEMU pin-control detail now use ktrace. Ambiguous/incomplete
+PCI selection and failure explanations remain klog, including failed shutdown
+readbacks. The raw measurements above retain the original log output; this
+follow-up changes logging severity only, not the qualified transport/stream
+sequence. The unmerged qualifier remains at its recorded revision.
