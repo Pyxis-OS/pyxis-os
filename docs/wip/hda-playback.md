@@ -1,11 +1,11 @@
 # HD Audio playback milestone proposal
 
-Status: **proposal, 2026-10-08; owner decisions pending; no implementation
-assigned**. Prepared from main `67e14be` and the completed
+Status: **three defaults accepted 2026-10-08; no implementation assigned**. Prepared from main `67e14be` and the completed
 [QEMU investigation](../development/audio-investigation.md). Publishing or
-merging this proposal does not authorize a production interface or driver.
-The investigation probes stay unmerged. The owner chooses the defaults below
-and explicitly assigns the first production task.
+merging this document does not start implementation; public call details
+still need task-specific review.
+The investigation probes stay unmerged. The owner has accepted the defaults
+below; the first implementation task still requires an explicit assignment.
 
 The proposed goal is one analog playback engine, bounded per-space PCM sessions
 and native ThinkPad speaker/headphone qualification. QEMU comes first. Recording,
@@ -15,51 +15,49 @@ framework are outside this milestone. SDL2 and Quake adapters are later,
 separately assigned consumer work; they are not prerequisites for establishing
 an honest native PCM interface. No SDL2 or pointer changes are included here.
 
-## First owner decision round
+## Accepted decisions
 
-Each recommendation is a proposed default, not an accepted contract.
+Accepted by the owner through the orchestrator on **2026-10-08**, after the
+[review of #549](https://git.internal/PyxisOS/pyxis-os/pulls/549):
 
-1. **Ownership, authority and mixing — recommended:** one BSP HDA worker in
-   `kernel/audio/`, owning controller verbs, DMA, stream state and a bounded
-   integer mixer. One exclusive, process-owned playback session per space,
-   admitted through a named, delegatable `audio` grant from trusted startup;
-   at most **eight active sessions** across the system. Hidden spaces continue
-   playing. A grant carries PCM/session authority, not pin, PCI, DMA, master
-   volume or another space's controls. Kernel mixing avoids a new service and
-   keeps completion ownership in one place, at the cost of mixer CPU time on
-   the BSP. Alternative: a trusted userspace mixer with an exclusive device
-   grant, client IPC and a separately reviewed service lifetime/recovery policy.
-2. **Formats — recommended:** the engine/session format starts at **48 kHz,
-   signed little-endian 16-bit stereo PCM**. Reject unsupported routes/formats
-   explicitly. Userspace performs source-format conversion, sample-rate
-   conversion and application/game mixing; the kernel only combines session
-   PCM with a wide accumulator and saturates once per output sample. No kernel
-   resampler. This fits the measured QEMU route and the owner-supplied ALC257
-   analog DAC capabilities; native playback still needs qualification. Alternative:
-   negotiate device formats and add a
-   native resampler/multi-format mixer after concrete consumers need it.
-3. **Buffering and qualification — recommended:** begin with **four 10 ms DMA
-   periods (40 ms)** and an **80 ms copied queue per session**, starting a new
-   session after 20 ms is queued or the producer explicitly finishes a shorter
-   buffer. A timely refill substitutes zeros for producer starvation and reports
-   underrun/discontinuity. A missed hardware refill can replay old cyclic DMA
-   frames before detection; expose that limit and measure stop/restart recovery.
-   Progress/space availability supports a blocking wait.
-   Treat these as tuning defaults, with no hard real-time or audible-latency
-   guarantee. Measure QEMU first and require native speaker/headphone playback,
-   stop/underrun behavior and usable latency before closing the milestone.
-   **QEMU-closure plus native-batch alternative:** close after the production
-   tasks pass QEMU qualification, explicitly retain native AMD/ALC257 playback,
-   speaker/headphone switching, stop/underrun behavior and usable latency as
-   technical debt, then run them in the owner's later native batch when the
-   ThinkPad is available after Bluetooth work. QEMU closure would not claim
-   native sound. The owner chooses this closure policy; it is not accepted by
-   review approval. Larger periods/queues are a separate tuning alternative.
+1. **Ownership, authority and mixing:** one BSP-owned kernel HDA worker and
+   mixer in `kernel/audio/`, with exclusive, process-owned per-space sessions
+   through a named `audio` grant; at most **eight active sessions** system-wide.
+   Hardware/DMA ownership stays with the worker. The grant provides session
+   authority, not PCI, DMA or another space's controls. Mixing runs on the BSP,
+   so its cost and refill margin still need measurement.
+2. **Format:** **48 kHz S16LE stereo PCM**, with conversion and resampling in
+   userspace. The kernel combines session PCM; it adds no resampler. Both the
+   measured QEMU route and the supplied ALC257 analog DAC capabilities support
+   this format. Advertised native support does not qualify native playback.
+3. **Starting buffer tuning:** **four 10 ms DMA periods (40 ms)** and an
+   **80 ms copied queue per session**. These are starting tuning values, not
+   hard real-time or audible-latency guarantees. A timely refill can substitute
+   zeros for producer starvation; a missed hardware refill can replay old cyclic
+   DMA frames before detection. Measure and report underrun, discontinuity and
+   recovery limits before freezing tuning.
 
-These three decisions are the only current questions. Exact call layouts,
+Acceptance settles these defaults, not a public call layout or an implementation
+assignment. Session priming (previously proposed at 20 ms), hidden-space playback,
 rights bits, copy extent/deadline horizon, admission errors, route preference,
-jack switching and watchdog thresholds need task-specific review. Recommendations
-below explain the intended design; they do not accept those queued choices.
+jack switching and watchdog/recovery thresholds remain task-specific review
+items. Proposed details below are distinct from the accepted decisions.
+
+## Closure alternative and owner confirmation
+
+The owner's established practice, conveyed on **2026-10-08**, is **QEMU closure
+with native checks in a later ThinkPad batch**. Carry this forward as the closure
+alternative: after the production tasks pass QEMU qualification, retain native
+AMD/ALC257 playback, speaker/headphone switching, stop/underrun behavior and
+usable latency as explicit technical debt for the later owner batch. The
+ThinkPad remains reserved for Bluetooth work until available.
+
+**Confirm this choice with the owner at milestone closure.** It is not a current
+request for another decision or permission to close early. At that gate, present
+the QEMU evidence and remaining native checks; the owner confirms QEMU closure
+with retained debt or requires native qualification before closure. QEMU closure
+must not claim native sound, and the supplied Fedora codec dump is inventory
+and state evidence, not native Pyxis playback qualification.
 
 ## Proposed ownership and lifetime
 
@@ -143,8 +141,8 @@ controller or all other sessions.
 
 ## Proposed task sequence and review gates
 
-1. [ ] **Session contract and native evidence.** Record accepted first-round
-   decisions. Specify rights, exclusive acquisition, close/exit, wait/readiness,
+1. [ ] **Session contract and native evidence.** Use the accepted defaults.
+   Specify rights, exclusive acquisition, close/exit, wait/readiness,
    queue accounting, byte/frame bounds, deadlines/cancellation and generations.
    Use the supplied [ALC257 dump](../development/audio-investigation.md#native-handoff)
    to propose speaker/headphone route/jack policy; do not request it again.
@@ -171,16 +169,17 @@ controller or all other sessions.
    capabilities and the actual codec route. Inspect licensed/pinned fixups where
    needed; require owner speaker/headphone evidence, sustained output under load,
    underrun/recovery, stop/reset and usable latency. No physical-host access
-   while another agent owns it. Under the native-batch alternative, explicitly
-   defer this task at QEMU closure, record the outstanding checks in technical
-   debt and leave native qualification open for the later owner batch. If blocked
-   by hardware-specific behavior, report it and return scope decisions to the owner.
+   while another agent owns it. If the owner confirms the native-batch alternative
+   at closure, explicitly defer this task, record the outstanding checks in
+   technical debt and leave native qualification open for the later owner batch.
+   If blocked by hardware-specific behavior, report it and return scope decisions
+   to the owner.
 6. [ ] **Documentation closure.** Record implemented contracts and measured
    limits, move this milestone to the appropriate subsystem reference and update
-   links. Apply the accepted closure policy: native results, or explicit retained
-   native checks for the later batch. Carry only owner-accepted deferred work
-   into technical debt. Publish no success claim for SDL2, Quake, recording
-   or other devices.
+   links. Confirm the closure choice with the owner: QEMU closure with explicit
+   native debt for the later ThinkPad batch, or native qualification before
+   closure. Carry only owner-confirmed deferred work into technical debt. Publish
+   no success claim for SDL2, Quake, recording or other devices.
 
 Tasks are focused PRs, each assigned by the owner after its predecessor is
 reviewed. No probe cherry-pick is implied by accepting this proposal. Production
@@ -211,8 +210,8 @@ The supplied Fedora dump identifies Realtek ALC257 `0x10ec0257`, subsystem
 `0x21`, both advertising EAPD and analog DACs supporting 48 kHz S16 stereo.
 It records advertised topology and Fedora state, not a qualified Pyxis cold-init
 sequence, amplifier/power quirks, interrupt/position reliability or physical
-latency. Native closure remains required under the recommended default; the
-QEMU-closure/native-batch alternative requires an explicit owner decision and
-retained native checks. Recording/HDMI/USB/ACP/suspend remain separate directions.
+latency. QEMU closure with a later native batch follows the owner's established
+practice and is carried forward for owner confirmation at closure; native
+checks remain open until measured. Recording/HDMI/USB/ACP/suspend remain separate directions.
 See the [full report and evidence](../development/audio-investigation.md) for
 exact measured revisions and source references.

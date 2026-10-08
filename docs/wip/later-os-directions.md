@@ -212,15 +212,17 @@ QEMU controller/codec probes on unmerged branches played a known PCM buffer,
 with complete matching WAV samples after a bounded silence tail. This is
 emulated evidence, not native audio or a production interface.
 
-The [playback milestone proposal](hda-playback.md) puts three ownership/session,
-format/mixing and buffering/qualification defaults to the owner. They remain
-pending; no production task or SDL2/Quake adapter is assigned. The ThinkPad's
+The owner accepted the [playback milestone](hda-playback.md)'s three defaults
+on 2026-10-08: BSP-owned kernel worker/mixer with at most eight exclusive
+per-space sessions through an audio grant; 48 kHz S16LE stereo with userspace
+conversion/resampling; and 4 × 10 ms DMA periods/80 ms session queues as starting
+tuning. No implementation task or SDL2/Quake adapter is assigned. The ThinkPad's
 analog controller is AMD `1022:15e3`, distinct from its GPU HDMI/DP and dock USB
 audio. The supplied Fedora dump identifies Realtek ALC257 (`0x10ec0257`,
-subsystem `0x17aa5081`); native Pyxis playback remains unqualified. Decision 3
-offers native qualification before closure or explicit QEMU closure followed
-by the owner's native batch; neither is accepted yet. SDL2 also needs real audio
-callback execution; today its port omits both audio devices and threads.
+subsystem `0x17aa5081`); native Pyxis playback remains unqualified. The owner's
+established QEMU-closure/later-native-batch practice is carried forward as the
+closure alternative, to be confirmed with the owner at closure. SDL2 also needs
+real audio callback execution; today its port omits both audio devices and threads.
 
 ## Bluetooth
 

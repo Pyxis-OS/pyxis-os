@@ -1,7 +1,7 @@
 # QEMU HD Audio playback evidence
 
 Captured 2026-10-08. See the [result report](../../audio-investigation.md) and
-[pending milestone](../../../wip/hda-playback.md). All HDA code is private probe
+[milestone with accepted defaults](../../../wip/hda-playback.md). All HDA code is private probe
 code on unmerged branches; this record accompanies a documentation-only PR.
 
 ## Revisions and matching inputs

@@ -65,9 +65,11 @@ Chosen by the owner, each starting with a proposal:
 
 - **Codex** (2026-10-08): [HD Audio playback proposal](hda-playback.md),
   following the completed [QEMU investigation](../development/audio-investigation.md).
-  Documentation handoff complete; three owner defaults pending and no production
-  task assigned. Native analog qualification remains open, with QEMU closure
-  plus a later native batch offered for owner choice. Quake can produce sound
+  Three defaults accepted 2026-10-08: BSP kernel worker/mixer, at most eight
+  exclusive per-space sessions, 48 kHz S16LE stereo, and 4 × 10 ms DMA/80 ms
+  queues as starting tuning. No implementation task assigned. QEMU closure with
+  a later ThinkPad native batch is carried forward for confirmation at closure;
+  native playback remains unqualified. Quake can produce sound
   from its main loop; SDL2/DevilutionX audio waits on real userspace
   [threads](scheduling-and-threads.md).
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
