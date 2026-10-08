@@ -1,6 +1,6 @@
 # Bluetooth investigation
 
-Status: **tasks 1–4 complete for the accepted warm-host scope, 2026-10-08; task 5 assigned, scan-profile decision pending.**
+Status: **tasks 1–4 complete for the accepted warm-host scope, 2026-10-08; task 5 scan probe in progress.**
 The owner wants to pair a Logitech MX Master 3S, a Bluetooth-only LE mouse, and use it on Pyxis.
 This investigation establishes the path as far as a first LE scan and ends in a
 report and a milestone proposal. Shared kernel interrupt-IN support is implemented
@@ -167,11 +167,11 @@ are recorded in [technical debt](../technical-debt.md#xhci-hardware-profile-and-
 
 The [Bluetooth direction](later-os-directions.md#bluetooth) records the goal.
 
-## Task 5 preparation handoff
+## Accepted task 5 scan profile and handoff
 
 Task branch: `docs/bluetooth-task5`, based on freshly fetched main
-`9acf597fec897119256a0c0044785771b19f9132`. No scan code or scan run exists yet.
-The following profile is proposed, awaiting the owner's response:
+`9acf597fec897119256a0c0044785771b19f9132`. On 2026-10-08 the owner accepted the
+following profile through the orchestrator and authorized its implementation:
 
 - Legacy 1M active scanning for 30 seconds after confirmed enable, with a 100 ms
   interval/window, controller duplicate filtering enabled and no accept-list filter.
@@ -196,10 +196,10 @@ passthrough. `lsusb -n` exited 0 with complete inventory and remote final drain;
 one baseline shell workload measured 0.05 seconds. Artifacts and captures are in
 `/tmp/pyxis-bluetooth-task5`; QEMU exited. No performance comparison is established.
 
-SSH fetch failed with `Permission denied (publickey)`. Public HTTPS fetched main
-and exact pinned submodule commits; remotes were preserved. The available SSH
-agent has no identities, so publication will need restored authentication.
-After the profile decision, implement/review the unmerged probe, coordinate mouse
+Initial SSH fetch failed with `Permission denied (publickey)`; public HTTPS
+fetched main and exact pinned submodules without changing remotes. The owner
+reloaded the keys; SSH fetch through `/run/user/1000/ssh-agent.socket` now succeeds.
+Implement/review the unmerged probe, coordinate mouse
 pairing mode for the actual run, collect only redacted evidence, restore the
 ordinary image and deliver the scan-result PR. Do not begin the final investigation
 report or milestone proposal before the owner has seen those results.
