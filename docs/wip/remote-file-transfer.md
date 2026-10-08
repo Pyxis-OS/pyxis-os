@@ -4,6 +4,10 @@ Status: **accepted, 2026-10-04.** The owner chose the frame format, the
 confirmation policy and the scope [below](#owner-decisions). Any decision can be
 revised later by the owner. Each task starts only when the owner says so.
 
+**Streaming transfers: accepted, 2026-10-08,** assigned to Claude. See
+[streaming transfers](#streaming-transfers). The owner accepted its three
+defaults; implementation follows.
+
 ## Goal
 
 Move single files between the host running `pyxis-remote` and Pyxis through the
@@ -276,6 +280,132 @@ image, `rebased.class` again uploaded with one confirmation and the matching
 `.class` digest above. Quiet machine completion, FINAL and acknowledged client
 closure still worked. Those client/QEMU jobs were stopped as well. The final
 published userland dependency is `352cf14`; the base's other pins are unchanged.
+
+## Streaming transfers
+
+Proposed and accepted 2026-10-08. The owner accepted the three defaults
+[below](#streaming-decisions).
+
+### Need
+
+Today each side buffers the whole file and the limit is 16 MiB; see
+[technical debt](../technical-debt.md#remote-transfer-memory-and-staging-limits).
+The owner wants to put retail Diablo data on the installed ThinkPad stick:
+`DIABDAT.MPQ` is 517 MB, and Hellfire's MPQs add about 175 MB. Within the
+limit that means splitting the files into about 45 pieces and joining them
+with `cat`, which the
+[DevilutionX reference](../userland/devilutionx.md#standalone-bundle) describes.
+
+### Baseline
+
+Measured on 2026-10-08 in QEMU 10.2.2 with nested KVM, 4 CPUs, `VIRTIO_NET=1`
+and a forwarded TCP port. The guest image was #539's head (main `abb251f`,
+ports `5000ae6`, userland `df78002`); the host's `pyxis-remote` was built from
+main `769535a`. Each time runs from pressing `y` at the host's confirmation
+until the shell prompt returned. The files were random data in `tmp://`.
+
+| Direction | Size | Times | Rate |
+| --- | --- | --- | --- |
+| Upload (`xfer receive`) | 1 MiB | 2.12 s | 0.49 MiB/s |
+| Upload | 15 MiB | 33.3, 34.1, 33.5 s | about 0.46 MiB/s |
+| Download (`xfer send`) | 15 MiB | 81.2, 80.6, 81.1 s | about 0.19 MiB/s |
+
+All downloads matched the source's SHA-256 on the host.
+
+The rate comes from the framing, not from buffering:
+
+- Uploads send 2048-byte chunks, and the host waits for a PROGRESS reply to
+  each one, as the [`xfer` notes](../../userspace/xfer/README.md) describe.
+  That is about 4.3 ms per chunk.
+- Downloads take about 10.5 ms per chunk. Their cost has not been profiled.
+- Uploads also pass the remote terminal's 4 KiB typeahead limit, so at most
+  about two frames can be outstanding however the protocol changes.
+
+At the QEMU upload rate, the owner's 692 MB would take about 25 minutes. The
+per-chunk cost there was measured in nested KVM through a forwarded port.
+
+The owner timed the same 15 MiB transfers natively on 2026-10-08: the ThinkPad
+booted by PXE from main `4332801`, with `pyxis-remote` from the same revision
+on the desktop host over the wired LAN. These are stopwatch times from
+confirmation to the prompt.
+
+| Direction | Size | Time | Rate |
+| --- | --- | --- | --- |
+| Upload (`xfer receive`) | 15 MiB | about 6 s | about 2.5 MiB/s |
+| Download (`xfer send`) | 15 MiB | about 45 s | about 0.33 MiB/s |
+
+Natively, uploads run about five times faster than in QEMU, so the 692 MB
+would take about 4½ minutes, which the owner accepts. Downloads stay slow, so
+the throughput follow-up after streaming concentrates on them. Streaming lifts
+the size limit but does not, by itself, make transfers faster.
+
+### Proposed shape
+
+- **Pyxis side.** `xfer` reads and writes the file in chunks and keeps memory
+  constant: one frame, the chunk being encoded or decoded, and the SHA-256
+  state, independent of file size.
+- **Host side.** `pyxis-remote` does the same.
+- **Receiving.** A receiver exclusively creates the existing
+  `.NAME.xfer-partial-ID` staging file when data starts, writes each verified
+  frame to it, and hashes the bytes as they arrive.
+- **Publishing.** Only after the declared size and SHA-256 both match does it
+  synchronize the staging file, rename it atomically with today's NO_REPLACE
+  or explicit-replacement rules, and synchronize the directory. A mismatch
+  publishes nothing.
+- **Cancellation and handled errors**, including running out of space, remove
+  only that transfer's staging file. Abrupt death leaves it behind, as today,
+  except that it can now hold a partial file of any size. It is still never
+  removed automatically.
+- **Finding orphans.** A leftover staging file sits beside its intended target
+  as `.NAME.xfer-partial-ID`: in the Pyxis directory for uploads, in the
+  download directory on the host for downloads. Pyxis `ls` lists dot names;
+  on the host, `ls` needs `-a` to show them. No transfer reuses or resumes a
+  staging file, so one is safe to delete by hand once no transfer into that
+  directory is running.
+- **Confirmation, overwrite rules, name limits and deadlines** stay as they are.
+- **No resume and no progress display.** Both remain out of scope.
+
+### Streaming decisions
+
+Accepted by the owner 2026-10-08, all as the defaults.
+
+1. **Publication contract.**
+   - **Default:** the shape above. Unverified bytes go to disk, but only into
+     the private staging name, and are published only after verification.
+   - **What replaces the 16 MiB cap:** no fixed size limit. A transfer is bound
+     by its declared 64-bit size, the destination's free space, and the
+     existing per-reply deadlines.
+   - **Alternative:** keep verifying in memory, but raise the cap to a bound
+     the owner names. Memory would grow with the cap.
+2. **Where the SHA-256 is sent.**
+   - **Default:** keep today's protocol. The sender hashes the file in one pass
+     before announcing it, then reads it again to send. If the file changes in
+     between, the sender's second hash or the receiver's check fails, and
+     nothing is published. The cost is reading the source twice; for 692 MB on
+     the host that is seconds.
+   - **Alternative:** move `sha256` to the final frame, so the sender reads
+     once. That changes the Pyxis-only OSC 5113 extension on both sides, and a
+     mismatched peer then fails negotiation.
+3. **Scope.**
+   - **Default:** this work only removes the size limit for `xfer`, in both
+     directions. It keeps the current framing, accepting about 25 minutes in
+     QEMU (about 4½ natively) for the owner's data. Throughput is a separate
+     follow-up after profiling the per-chunk cost; for uploads it would also
+     involve the 4 KiB typeahead limit.
+   - **HTTP(S) fetch bodies stay out.** Provider FILE snapshots are in memory by
+     their own contract and keep their 16 MiB limit.
+   - **Alternative:** include a window of several chunks in flight now. That
+     changes the framing and needs a larger guest input allowance for uploads.
+
+### Validation plan
+
+- in QEMU, transfer a file larger than 1 GiB both ways and confirm the
+  SHA-256;
+- confirm that Pyxis and host memory stay flat during the transfer;
+- show that cancellation and a forced hash mismatch leave no destination and
+  no staging file, and that a full destination fails cleanly;
+- repeat the baseline to show the rate is unchanged;
+- the owner then sends the Diablo data to the stick.
 
 ## Out of scope
 
