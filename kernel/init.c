@@ -24,6 +24,7 @@
 #include <kernel/virtio/pci.h>
 #include <kernel/virtio/net.h>
 #include <kernel/random.h>
+#include <kernel/audio.h>
 #include <kernel/task.h>
 #include <kernel/usb/xhci.h>
 #include <kernel/service/request.h>
@@ -69,6 +70,7 @@
   virtio_net_prepare(boot);
   rtl8111_prepare(boot);
   random_prepare(boot);
+  audio_prepare(boot);
   virtio_blk_prepare(boot);
   block_prepare();
   gpt_prepare();
@@ -97,6 +99,7 @@
   klog("devices: starting virtio, block and native filesystem workers\n");
   virtio_fs_pci_start();
   random_start();
+  audio_start();
   virtio_blk_start();
   gpt_start();
   npfs_start();
