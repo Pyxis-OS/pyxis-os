@@ -1,6 +1,6 @@
 # Kernel random generator
 
-Status: **proposal, 2026-10-08; implementation not authorized**. The owner
+Status: **accepted, 2026-10-08; implementation authorized**. The owner
 assigned the [accepted ChaCha20 follow-up](../technical-debt.md#cpu-entropy-without-a-kernel-generator).
 Base: `92762b107e813be5b6c5f4600e205049630dd3c6`. The
 [baseline](../development/experiments/random-generator/README.md) measures the
@@ -9,7 +9,12 @@ unchanged grant on VirtIO and CPU entropy. TLS already uses it; the accepted
 material from it.
 P-256/SMP implementation stays with that consumer.
 
-## Three owner decisions
+## Accepted decisions
+
+The owner accepted all three defaults through the orchestrator on 2026-10-08
+and explicitly authorized implementation. The [review of #546](https://git.internal/PyxisOS/pyxis-os/pulls/546)
+also requests source licence notices, an explicit availability consequence in
+the randomness reference, and a recorded debugger observation of the RFC vector.
 
 1. **Ownership and construction — recommend one global generator, owned by
    the existing BSP random worker, using OpenBSD's ChaCha rekey design.**
@@ -21,7 +26,7 @@ P-256/SMP implementation stays with that consumer.
    a complete 40-byte seed, and refusing output whenever a required reseed fails.**
    VirtIO when present; otherwise healthy RDSEED with RDRAND fallback. Reseed
    on demand after OpenBSD's randomized 1–2 MiB output budget or 60 seconds,
-   whichever comes first. The time threshold is proposed Pyxis policy, not an
+   whichever comes first. The time threshold is accepted Pyxis policy, not an
    OpenBSD claim or entropy estimate. No idle harvesting, persistent seed or
    additional source mixing in this slice. Continuing from an old seed after
    source loss would improve availability but extend the compromise-recovery
@@ -38,7 +43,8 @@ Use the 20-round ChaCha core from [RFC 8439 sections 2.1–2.3](https://www.rfc-
 The generator reference is OpenBSD's
 [arc4random.c revision 1.58](https://github.com/openbsd/src/blob/be1d1982dd83d04eb51a63726cd066959e1d1907/lib/libc/crypt/arc4random.c)
 and its [ChaCha core](https://github.com/openbsd/src/blob/be1d1982dd83d04eb51a63726cd066959e1d1907/lib/libc/crypt/chacha_private.h),
-not RC4 despite the API name. Preserve its notices for adapted source.
+not RC4 despite the API name. Preserve arc4random's ISC notices and the core's
+public-domain provenance beside the adapted kernel source and in LICENSING.md.
 
 Follow that construction: initialize from a 32-byte key and eight-byte nonce;
 each refill generates 1024 bytes, reserves the first 40 for the next key/nonce,
@@ -121,7 +127,7 @@ delay service; no fixed reseed-completion or wake-latency guarantee is implied.
 
 - [x] Inspect contracts, choose a referenced construction and capture raw-source
   latency/throughput without changing kernel/runtime code.
-- [ ] Owner settles the three defaults and explicitly authorizes implementation.
+- [x] Owner settles the three defaults and explicitly authorizes implementation.
 - [ ] Integrate the core/generator and seed lifecycle together; update randomness
   and debt contracts while preserving grant/slot/cancellation behavior.
 - [ ] Manually compare RFC vectors and reference state transitions, inspect
@@ -135,4 +141,4 @@ needed. Source adaptation will be committed with provenance/notices; any externa
 build download requires an owner mirror first. No Bluetooth, libc or random ABI
 implementation is included. Baseline guests/clients/builds stopped. Native
 ThinkPad latency, CPU supply under load and generator qualification are not
-inferred from nested KVM. Implementation remains pending the three decisions.
+inferred from nested KVM. Implementation and qualification are now authorized.

@@ -53,8 +53,8 @@ Chosen by the owner, each starting with a proposal:
 
 - **Codex** (2026-10-08): [kernel random generator](kernel-random-generator.md),
   the accepted ChaCha20 follow-up for the existing hardware-backed random grant;
-  baseline and a documentation-only proposal first. The three defaults remain
-  pending owner decisions; no implementation authorized.
+  baseline and a documentation-only proposal first. The owner accepted all three
+  defaults and authorized implementation on 2026-10-08.
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   documentation only. Two owner rounds accepted stack/security/closure and initial
   firmware/bond policies; later decisions are queued without another round now. The

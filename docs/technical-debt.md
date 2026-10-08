@@ -2440,8 +2440,8 @@ Revisit source mixing, reseeding and generator ownership in that task; do not ad
 predictable fallback bytes or treat the current checks as entropy certification.
 The owner assigned it on 2026-10-08. The
 [generator proposal](wip/kernel-random-generator.md) records the raw-source
-baseline and three recommended defaults; generator policy and implementation
-remain pending owner decisions.
+baseline and three defaults accepted by the owner on 2026-10-08. Implementation
+is authorized; generator qualification remains pending.
 
 ## PS/2 mouse synchronization and routing
 
