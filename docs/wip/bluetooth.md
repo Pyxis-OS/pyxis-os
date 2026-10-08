@@ -1,10 +1,12 @@
 # Bluetooth investigation
 
-Status: **task 1 qualified and task 2 assessed, 2026-10-08; tasks 3–5 not yet assigned.**
+Status: **task 1 qualified and task 2 assessed, 2026-10-08; task 3a authorized,
+implementation and validation pending.**
 The owner wants to pair a Logitech MX Master 3S, a Bluetooth-only LE mouse, and use it on Pyxis.
 This investigation establishes the path as far as a first LE scan and ends in a
-report and a milestone proposal. Probe code stays on a branch and is not merged;
-nothing here authorizes committed implementation.
+report and a milestone proposal. Shared kernel interrupt-IN support is now an
+authorized task to merge before the HCI probe. HCI, firmware and scan probe code
+stays on unmerged branches; those probes remain unassigned.
 
 ## Hardware
 
@@ -61,11 +63,17 @@ option can follow once the setup works, recorded beside the NIC reference.
    implementation needs: endpoint context, ring ownership, buffering and loss.
    The [task 2 assessment](../development/experiments/bluetooth-task2/README.md)
    records the code gaps, required hardware fields and proposed ownership/loss
-   policies. Interrupt transfers remain unimplemented; the probe choices need
-   agreement before task 3.
-- [ ] **3. HCI transport and controller state.** Send HCI commands as class requests
-   to interface 0 and read events from the interrupt endpoint. Issue HCI Reset
-   and Intel's Read Version, and record whether the controller is in its
+   policies, with an addendum linking the later accepted decisions below.
+- [ ] **3a. Shared kernel interrupt-IN support.** Implement and merge the accepted
+   narrow profile below through private kernel USB interfaces, with no public ABI.
+   Configure the interrupt endpoint, retain receive/ring ownership, dispatch and
+   copy completions, and report terminal stream failures. Complete ordinary build,
+   interactive boot and debugger validation before marking this task done. No HCI
+   class binding or commands belong in this task.
+- [ ] **3b. HCI transport and controller state probe.** On an unmerged probe branch,
+   send HCI commands as class requests to interface 0 and read events from the
+   interrupt endpoint. Issue HCI Reset and Intel's Read Version, and record whether
+   the controller is in its
    bootloader or operational firmware.
 - [ ] **4. Firmware load.** Derive the firmware name from the version reply, load the
    `.sfi` and `.ddc` through Intel's vendor commands, reset into operational
@@ -78,6 +86,45 @@ option can follow once the setup works, recorded beside the NIC reference.
 
 Stop there. Connections, pairing, bond-key storage, GATT and HID over GATT need
 their own decisions.
+
+## Accepted interrupt-IN decisions
+
+The owner accepted the narrow admission, buffering/loss policy and active-removal
+limit in comments on [merged PR #517](https://git.internal/PyxisOS/pyxis-os/pulls/517),
+and subsequently authorized shared kernel support as task 3a before the HCI
+probe. On 2026-10-08 the owner also accepted terminal failure on STALL. These are
+accepted choices for that task, not claims of implementation or measured traffic:
+
+- Admit boot-present, root-connected full-speed interrupt-IN endpoints only;
+  report other speed/topology profiles explicitly as unsupported. Selection uses
+  checked descriptors, not the ThinkPad port or Linux bus/address.
+- Reserve two receive buffers with 257-byte DMA capacity each and eight copied
+  completion entries; the Bluetooth event profile posts 257-byte receives. These
+  are accepted resource choices, not measured burst requirements or a losslessness
+  guarantee. Overflow latches an explicit stream
+  discontinuity/failure and ceases rearming; pending DMA remains owned until
+  terminal completion is accounted for, or retained if retirement is uncertain.
+- A STALL is a terminal stream failure. Retain its DMA backing and ring identity
+  until reboot, with no automatic endpoint recovery.
+- Keep the existing controller-wide quarantine on active removal, retaining DMA
+  until reboot. The owner accepted its effect on unrelated storage on that
+  controller as an investigation limit for the internal AX200.
+- Share kernel endpoint configuration, receive ownership and copied completion
+  collection through private interfaces, with no public ABI. HCI framing and
+  commands, firmware loading, LE scan and HID interpretation remain separate
+  consumers/probes.
+
+The initial private interface admits one stream per root device and lets the
+consumer select a receive length up to the reserved 257-byte capacity. Terminal
+stream failure takes precedence over delivery of already queued bytes.
+
+The existing BSP worker remains the ring/state owner. Receive capture and rearm
+must also progress while other controller operations drain events; command and
+EP0 ownership must not recurse from completion consumption. Idle absence of an
+event is not a transfer failure or permission to reuse a posted buffer. The
+[task 2 assessment](../development/experiments/bluetooth-task2/README.md) describes
+these source/specification requirements. The accepted limits and revisit points
+are recorded in [technical debt](../technical-debt.md#xhci-hardware-profile-and-runtime-retention).
 
 ## Deliverables
 
