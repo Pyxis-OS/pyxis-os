@@ -24,7 +24,10 @@ struct usb_link {
 #define USB_SUPER_LANE_BPS 5000000000ULL
 #define USB_GEN2_LANE_BPS 10000000000ULL
 
-enum usb_result { USB_OK, USB_BUSY, USB_INVALID, USB_IO, USB_TIMEOUT, USB_UNSUPPORTED, USB_STALE, USB_STALL };
+enum usb_result {
+  USB_OK, USB_BUSY, USB_INVALID, USB_IO, USB_TIMEOUT, USB_UNSUPPORTED, USB_STALE,
+  USB_STALL, USB_DISCONTINUITY
+};
 
 struct usb_host_controller;
 struct usb_host_device;
@@ -37,6 +40,14 @@ struct usb_completion { enum usb_result result; size_t bytes; };
 struct usb_bulk_endpoint {
   uint8_t address, burst;
   uint16_t packet;
+};
+struct usb_interrupt_endpoint {
+  uint8_t address, interval;
+  uint16_t packet;
+};
+struct usb_interrupt_completion {
+  uint64_t sequence;
+  size_t bytes;
 };
 
 /* Private BSP controller-worker interfaces. Records and buffers are prepared
@@ -79,6 +90,22 @@ void usb_host_control_abandon(struct usb_host_device *device, struct usb_ticket 
 
 /* BSP/IF=0. Notify the owning controller worker without allocating. */
 void usb_host_notify(struct usb_host_controller *controller);
+
+/* One retained root/full-speed stream per device, owned by its BSP worker.
+ * Configure host contexts before the class selects its USB configuration; start
+ * afterwards. Receive length is bounded by the prepared capacity, independently
+ * of the endpoint's packet size. No caller destination survives a call.
+ * Wait expiry leaves receives posted. Rejected take preserves the queue head.
+ * Terminal stream failure takes precedence over queued data and stops rearm;
+ * posted/stalled DMA remains retained. There is no cancellation or recovery. */
+size_t usb_host_interrupt_capacity(void);
+enum usb_result usb_host_configure_interrupt_in(struct usb_host_device *device,
+                                                const struct usb_interrupt_endpoint *endpoint,
+                                                size_t receive_bytes, uint64_t deadline);
+enum usb_result usb_host_interrupt_start(struct usb_host_device *device);
+enum usb_result usb_host_interrupt_wait(struct usb_host_device *device, uint64_t deadline);
+enum usb_result usb_host_interrupt_take(struct usb_host_device *device, void *destination,
+                                        size_t capacity, struct usb_interrupt_completion *completion);
 
 /* Class binding during boot, with retained runtime I/O. A bounded pool reserves
  * two bulk rings and one captured transfer buffer per admitted device before AP
