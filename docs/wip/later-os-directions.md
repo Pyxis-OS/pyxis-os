@@ -212,6 +212,9 @@ codec), and the ThinkPad's analog audio is on an HD Audio controller
 (`1022:15e3`, see the [T14 inventory](../targets/t14-gen1-amd/thinkpad-inventory-undocked.txt)).
 Its codec is not yet identified. The userspace interface, mixing and the first
 consumer (Quake's sound, for example) need their own decisions.
+The owner assigned the [playback investigation](audio-investigation.md) on
+2026-10-08: QEMU probes first, then a report and production milestone proposal;
+no audio interface or production implementation is decided yet.
 
 ## Bluetooth
 

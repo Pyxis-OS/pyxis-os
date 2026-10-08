@@ -59,6 +59,9 @@ Implemented behavior lives in the subsystem references listed in the
 
 Chosen by the owner, each starting with a proposal:
 
+- **Codex** (2026-10-08): [HD Audio playback investigation](audio-investigation.md),
+  QEMU controller/codec/PCM probes on unmerged branches, ending in a report and
+  milestone proposal. Production ownership/interface policy awaits the owner.
 - **Codex** (2026-10-08): [MX Master 3S milestone proposal](bluetooth-mouse.md),
   documentation only. Two owner rounds accepted stack/security/closure and initial
   firmware/bond policies; later decisions are queued without another round now. The
