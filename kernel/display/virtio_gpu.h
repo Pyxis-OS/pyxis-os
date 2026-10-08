@@ -19,10 +19,11 @@ const struct framebuffer *virtio_gpu_prepare(const struct boot_info *boot,
 bool virtio_gpu_start(void);
 bool virtio_gpu_present(void);
 /* After successful normal presentation, within the same immutable frame lease.
- * Cursor completion confirms consumption, not independently acknowledged display.
+ * Ordinary commands may remain posted in driver-owned storage. Capture drains
+ * matching completion, confirming consumption rather than acknowledged display.
  * Failure stops both queues and prevents matching capture publication. */
-bool virtio_gpu_pointer_present(const struct pointer_frame *frame);
-/* The display owner bounds and gates copies, with no command in flight. */
+bool virtio_gpu_pointer_present(const struct pointer_frame *frame, bool capture);
+/* Frame copies require the control queue drained; cursor storage is disjoint. */
 void virtio_gpu_copy(size_t offset, const void *pixels, size_t bytes);
 /* BSP interrupt entry, IF=0: records activity and detaches/wakes the waiter. */
 void virtio_gpu_interrupt(void);

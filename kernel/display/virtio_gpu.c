@@ -173,13 +173,14 @@ static struct {
   struct task_wait *wait;
   size_t backing_bytes, attach_bytes, command_offset, reply_offset;
   uint64_t fence_id;
-  uint64_t cursor_request_id;
+  uint64_t cursor_request_id, cursor_deadline;
   uint32_t scanout_id, resource_id, next_resource_id;
   const char *failure;
   bool prepared, active, started, bound, stopped;
   bool interrupt_ready, notified;
   bool boot_poll, geometry_queried;
   bool resize_disabled, resize_retry, switched, command_rejected;
+  /* Last posted state; an outstanding cursor descriptor is not yet confirmed. */
   struct {
     struct gpu_rectangle clip;
     uint8_t pixels[GPU_CURSOR_BYTES];
@@ -583,7 +584,7 @@ const struct framebuffer *virtio_gpu_prepare(const struct boot_info *boot,
 
 static union gpu_command *prepare_command(uint32_t type)
 {
-  KASSERT(!gpu.queue.outstanding && !gpu.cursor_queue.outstanding);
+  KASSERT(!gpu.queue.outstanding);
   union gpu_command *command = (void *)(gpu.control.address + gpu.command_offset);
   memset(command, 0, sizeof(*command));
   command->header.type = type;
@@ -619,8 +620,7 @@ static bool control_segments(struct gpu_header *request,
     const struct virtqueue_segment *segments, size_t segment_count,
     uint32_t response_type, size_t response_bytes)
 {
-  KASSERT(gpu.active && !gpu.stopped && !gpu.queue.outstanding &&
-      !gpu.cursor_queue.outstanding);
+  KASSERT(gpu.active && !gpu.stopped && !gpu.queue.outstanding);
   gpu.command_rejected = false;
   if (display_is_panicking()) {
     abandon_transport();
@@ -907,15 +907,21 @@ bool virtio_gpu_start(void)
 
 void virtio_gpu_copy(size_t offset, const void *pixels, size_t bytes)
 {
-  KASSERT(gpu.prepared && !gpu.queue.outstanding && !gpu.cursor_queue.outstanding);
+  KASSERT(gpu.prepared && !gpu.queue.outstanding);
   KASSERT(offset <= gpu.target.size && bytes <= gpu.target.size - offset);
   memcpy((void *)(gpu.target.address + offset), pixels, bytes);
 }
+
+static bool complete_cursor(bool wait);
 
 bool virtio_gpu_present(void)
 {
   assert_presenter_context();
   if (!gpu.started || gpu.stopped) {
+    return false;
+  }
+  if (!complete_cursor(false)) {
+    stop_transport(gpu.failure);
     return false;
   }
   struct gpu_rectangle rectangle = {
@@ -980,7 +986,7 @@ static bool cursor_request(uint32_t type, uint32_t resource_id,
     .physical = gpu.cursor_control.physical, .bytes = sizeof(*command),
     .access = VIRTQUEUE_DEVICE_READ,
   };
-  uint64_t deadline = task_deadline_after_ms(GPU_COMMAND_TIMEOUT_MS);
+  gpu.cursor_deadline = task_deadline_after_ms(GPU_COMMAND_TIMEOUT_MS);
   uint64_t flags = cpu_save_interrupts();
   gpu.notified = false;
   cpu_restore_interrupts(flags);
@@ -997,6 +1003,14 @@ static bool cursor_request(uint32_t type, uint32_t resource_id,
     return false;
   }
   virtqueue_notify(&gpu.cursor_queue);
+  return true;
+}
+
+static bool complete_cursor(bool wait)
+{
+  if (!gpu.cursor_queue.outstanding) {
+    return true;
+  }
 
   for (;;) {
     if (display_is_panicking()) {
@@ -1013,7 +1027,7 @@ static bool cursor_request(uint32_t type, uint32_t resource_id,
     if (result == VIRTQUEUE_COMPLETE) {
       /* QEMU consumes cursor commands without writing the specified response.
        * This proves buffer return, not independently acknowledged application. */
-      if (count != 1 || completion.request_id != request_id || completion.written) {
+      if (count != 1 || completion.request_id != gpu.cursor_request_id || completion.written) {
         gpu.failure = "invalid cursor completion";
         return false;
       }
@@ -1023,11 +1037,14 @@ static bool cursor_request(uint32_t type, uint32_t resource_id,
       gpu.failure = "cursor queue completion failed";
       return false;
     }
-    if (task_deadline_expired(deadline)) {
+    if (task_deadline_expired(gpu.cursor_deadline)) {
       gpu.failure = "cursor request timed out";
       return false;
     }
-    if (!wait_for_interrupt(deadline)) {
+    if (!wait) {
+      return true;
+    }
+    if (!wait_for_interrupt(gpu.cursor_deadline)) {
       return false;
     }
   }
@@ -1093,7 +1110,7 @@ static bool upload_cursor(unsigned index, const struct pointer_frame *frame,
       GPU_RESP_OK_NODATA, sizeof(struct gpu_header));
 }
 
-bool virtio_gpu_pointer_present(const struct pointer_frame *frame)
+bool virtio_gpu_pointer_present(const struct pointer_frame *frame, bool capture)
 {
   assert_presenter_context();
   if (!gpu.started || gpu.stopped) {
@@ -1103,7 +1120,7 @@ bool virtio_gpu_pointer_present(const struct pointer_frame *frame)
     abandon_transport();
     return false;
   }
-  KASSERT(!gpu.queue.outstanding && !gpu.cursor_queue.outstanding);
+  KASSERT(!gpu.queue.outstanding);
   if (!gpu.bound || gpu.scanout_id >= GPU_SCANOUT_COUNT || !frame || !frame->pixels ||
       !frame->width || frame->width > GPU_CURSOR_SIZE ||
       !frame->height || frame->height > GPU_CURSOR_SIZE ||
@@ -1117,7 +1134,17 @@ bool virtio_gpu_pointer_present(const struct pointer_frame *frame)
   bool shape_changed = cursor_shape_changed(frame, &clip);
   if (!shape_changed && (!frame->visible ||
       (gpu.cursor.x == frame->x && gpu.cursor.y == frame->y))) {
+    if (!complete_cursor(capture)) {
+      stop_transport(gpu.failure);
+      return false;
+    }
     return true;
+  }
+  /* The command and resources are driver-owned. Drain before slot or backing
+   * reuse; ordinary frame copies and control commands use disjoint storage. */
+  if (!complete_cursor(true)) {
+    stop_transport(gpu.failure);
+    return false;
   }
   unsigned index = gpu.cursor.active;
   if (shape_changed) {
@@ -1148,6 +1175,10 @@ bool virtio_gpu_pointer_present(const struct pointer_frame *frame)
     /* Do not cache an image address: its frame lease can end after this call. */
     memcpy(gpu.cursor.pixels, frame->pixels,
         (size_t)frame->width * frame->height * sizeof(uint32_t));
+  }
+  if (capture && !complete_cursor(true)) {
+    stop_transport(gpu.failure);
+    return false;
   }
   return true;
 }
@@ -1317,6 +1348,10 @@ const struct framebuffer *virtio_gpu_resize_prepare(void)
   }
   KASSERT(!gpu.candidate.target.address && !gpu.retired.target.address && !gpu.switched);
   if (!gpu.resize_retry && !display_event()) {
+    return NULL;
+  }
+  if (!complete_cursor(true)) {
+    stop_transport(gpu.failure);
     return NULL;
   }
   gpu.resize_retry = false;

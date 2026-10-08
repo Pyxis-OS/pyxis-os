@@ -849,3 +849,74 @@ All task-owned QEMU and GDB processes are stopped.
 | Kernel ELF | `b1d001d1e9b7bdd7a5e3c32c8c7e39e0345e6f03ba8daf7e6db109c9d9a96419` |
 | Default initrd | `6f403d68cdf92ccceb9b69c5ab2b5d3506b0b740c47f9b1360af5b4ad2e343b6` |
 | Default ISO | `4628b38c4e87f9c887dfb94ab44cb569d7a766dd36d57eff27e0f9a49cd0994c` |
+
+
+### Review follow-up: deferred ordinary cursor completion
+
+Claude's #560 review requested removing the serial cursor-completion wait from
+ordinary frames before merge. This is a bounded task 4 fix: no authority,
+public interface, resource budget, fallback or input policy change. Ordinary
+MOVE and UPDATE commands now remain posted in the driver's single cursor slot.
+The next frame polls completion without sleeping. Control/frame copies can
+overlap that cursor work because their storage is disjoint. Slot/backing reuse
+and resize drain the earlier command before mutation. Capture drains matching
+completion even when it reuses a state posted by an ordinary frame. Fenced
+image preparation and uncertain-ownership retention remain unchanged.
+
+The cache describes last posted state, distinguished from confirmed state by
+an outstanding descriptor. Async command and resource bytes belong to the
+driver; no source-image pointer or lease survives the frame. Status, cookie,
+zero-length completion and original one-second deadline checks apply when
+polling or draining. Independent read-only review found no blocker in buffer
+reuse, shared interrupt wakeups, capture, panic/failure or resize ownership.
+
+The ordinary `make -j16 image` passed with the existing builder. The first
+compile attempt exposed a missing include for `screen_capture_active`; adding
+its existing internal header resolved it. Runtime artifacts use the fix on
+`eae72387` with unchanged pins and include no game data:
+
+| Async review artifact | SHA-256 |
+| --- | --- |
+| Kernel ELF | `36329148b12f707b7cf9f47bf6421e612574ccac3f634c749dcc50dafa119667` |
+| Ordinary ISO | `ba0829bb391efcca2cfc8e8addec586d955dfaef5b6513d8e24efcae276bf835` |
+
+GTK/X11, relative PS/2, unscaled 1280x800, 1280x827 host window, QEMU/firmware,
+CPU/devices and HPET/GDB method repeat the earlier motion workload. No task build
+was running. Two initial hardware motion observations (4.98025 and 6.85309 ms)
+preceded the following four warm measurements. The position alternated between
+(640,400) and (680,400); every measured frame returned with one cursor descriptor
+still posted rather than waiting for its completion. A direct MOVE posting
+observation was 0.96015 ms and returned success with one outstanding descriptor;
+this includes notify/MMIO and debugger/host variation, not a completion wait.
+
+The warm hardware median remained above the earlier 4.19772 ms software median.
+To check that difference, the unchanged saved pre-code software ELF/ISO was
+booted again under the same current host conditions, after stopping the hardware
+VM, with two initial moves before its four measured warm frames.
+
+| Motion workload | Four warm samples (ms) | Median (ms) | Range (ms) |
+| --- | --- | --- | --- |
+| Deferred hardware MOVE | 7.11648, 4.00517, 4.99356, 5.62520 | 5.30938 | 4.00517–7.11648 |
+| Saved software baseline, current-host repeat | 5.91137, 5.49673, 5.00733, 4.10500 | 5.25203 | 4.10500–5.91137 |
+
+The contemporaneous medians differ by 0.05735 ms, about 1.1%, with overlapping
+ranges. This does not meet or establish a stable improvement over the historical
+4.20 ms target, nor identify a native performance effect. The descriptor still
+being posted at frame return proves that QEMU completion no longer serializes
+that frame's tail; the remaining difference is not evidence of a forced cursor
+completion wait. Full-frame transfer/cadence is unchanged. Keep both the
+historical and repeated software observations rather than replacing the baseline
+or attributing shared-host/nested-VM variation to the cursor alone.
+
+A native screenshot reached `screen_capture_finish(true)` with both queues
+drained. Its pixels matched scanout plus exactly one uploaded I-beam, with
+all differences in x=636–644, y=390–409. `mousetest` installed its custom image,
+lock hid it and Super+Esc restored visibility. GTK growth committed 1400x900,
+framebuffer ID 4, queues drained and driver available. Exit cleared graphics,
+pointer and image owners. Queued slot reuse/status/deadline failures remain
+source-reviewed without fault injection. These checks do not repeat the earlier
+DevilutionX data/image or boot/Bochs matrix because those paths are unchanged.
+Raw logs are `/tmp/pyxis-pointer-task4-async-gtk.log` and
+`/tmp/pyxis-pointer-task4-async-software-control.log`; artifacts remain local.
+All task-owned QEMU/GDB processes are stopped. Task 4 is parked in #560 for
+morning review; task 5 is not started and still requires owner authorization.

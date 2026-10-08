@@ -1,5 +1,6 @@
 #include <arch/cpu.h>
 #include <kernel/display.h>
+#include <kernel/display_capture.h>
 #include <kernel/fb/early_console.h>
 #include <kernel/log.h>
 #include <kernel/panic.h>
@@ -225,7 +226,7 @@ bool display_end_frame(const struct pointer_frame *frame)
   if (driver == DISPLAY_VIRTIO_GPU && available && !display_is_panicking()) {
     ready = virtio_gpu_present();
     if (ready && frame && !display_is_panicking()) {
-      ready = virtio_gpu_pointer_present(frame);
+      ready = virtio_gpu_pointer_present(frame, screen_capture_active());
     }
   }
   cpu_store_fence();

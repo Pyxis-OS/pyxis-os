@@ -90,7 +90,8 @@ Chosen by the owner, each starting with a proposal:
   The [pre-code software baseline](../development/system-pointer-qualification.md#task-4-software-baseline)
   and [hardware qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
   record matched cost samples, cursor-inclusive capture, DevilutionX, resize
-  and boot/Bochs regression checks, including the extra cursor wait on motion.
+  and boot/Bochs regression checks, including the deferred ordinary-completion
+  review fix. Task 4 is parked in #560 for morning review.
   Both [task-specific defaults](pointer.md#task-4-planning) are accepted
   2026-10-08. No dependency pins or public ABI change. The later SDL
   blocking-event adapter fix remains beta's work. Task 5 needs separate authorization. Matched QEMU checks suffice

@@ -23,7 +23,7 @@ The [initial software baseline](../development/system-pointer-qualification.md#t
 and [accepted task-specific decisions](#task-4-planning) preceded implementation.
 [Task 4 qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
 records hardware/capture/consumer checks, software regressions and measured
-costs, including the extra cursor wait on motion. Task 5 still requires separate
+costs and the deferred ordinary-completion review fix. Task 5 still requires separate
 authorization.
 
 The proposal merged as [Pyxis #530](https://git.internal/PyxisOS/pyxis-os/pulls/530).
@@ -581,7 +581,7 @@ Task delivery/review does not authorize task 5.
   hardware cost samples. Boot/Bochs retain the common software path.
   Delivered in #560; [qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
   records host/upload matching, cursor-inclusive capture, lock/focus/teardown,
-  clipping/resize and the higher measured moving-frame cost. This checkbox
+  clipping/resize, moving-frame costs and the deferred-completion review fix. This checkbox
   records task delivery, not merge or milestone closure.
 - [ ] **5. Close the milestone.** Review matched QEMU behavior/cost checks on
   boot, Bochs and VirtIO; these suffice for closure. Keep the accepted native
@@ -665,10 +665,14 @@ Implemented breakdown (task 4 delivered for review in #560):
    VirtIO driver. Runtime control and cursor queues remain sole BSP presenter
    work, with one outstanding cursor request, bounded waits and IRQ wakeups.
    Bootstrap geometry querying remains control-only; panic adds no device work.
+   Review follow-up: ordinary cursor commands may stay posted in driver-owned
+   storage, reaped next frame or drained for slot reuse/resize. Capture still
+   drains matching completion before publication; no failure retention changes.
 2. Keep two fixed 64x64 cursor resources, upload an inactive transparently padded
-   image through fenced control commands, then switch shape/hotspot after cursor
+   image through fenced control commands, then post the shape/hotspot change; capture drains its matching
    completion. Repack accepted BGRA bytes to the resource format; retain the
-   frame's immutable image lease through both cursor and capture completion.
+   frame's immutable image lease through copied upload/posting and, for capture,
+   through matching completion.
    Use a transparent backend shape for hidden/locked state so GTK cannot leave
    the previous shape visible. Preserve physical hotspot/clipping semantics.
 3. Keep normal VirtIO scanout cursor-free and blend the same snapshot into

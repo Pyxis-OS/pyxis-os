@@ -126,7 +126,7 @@ The driver prepares a separate cursor queue and command DMA storage before AP
 startup, alongside two fixed 64x64 RGBA8 resources with 16 KiB backing each.
 A 16 KiB CPU cache retains source image bytes rather than an image address that
 could expire with the pointer lease. Runtime use of both queues remains sole
-BSP presenter work with IF=1, one command outstanding at a time; interrupt entry
+BSP presenter work with IF=1, at most one outstanding command per queue; interrupt entry
 only records activity and wakes that presenter. No runtime allocation is added
 for cursor moves or image changes.
 
@@ -134,9 +134,17 @@ After successful ordinary frame submission, image, hotspot, visibility or
 edge-clipping changes repack accepted straight BGRA bytes into the inactive RGBA
 resource, transparently pad unused pixels and transfer it with a fenced control
 command. UPDATE_CURSOR then selects that resource and hotspot. Position-only
-changes use MOVE_CURSOR without another upload; unchanged confirmed state adds
-no cursor request. Both wait for the matching used descriptor with a bounded
-deadline before the cache advances or capture can succeed. The wire position
+changes use MOVE_CURSOR without another upload; unchanged posted state adds
+no cursor request. Ordinary frames post the command and release their image
+lease: command bytes and uploaded image storage are owned by the driver. The
+cache describes the last posted state; its outstanding descriptor distinguishes
+unconfirmed state. The next frame polls completion without sleeping, allowing
+cursor work to overlap disjoint framebuffer copies and control commands. Slot or
+cursor-backing reuse and resize drain any previous command before mutation.
+Capture additionally drains the command matching its leased snapshot before
+publication, including unchanged state whose earlier command is still pending.
+All reap/wait paths check status, request identity, zero length and the original
+one-second deadline. Uncertain failure retains device storage. The wire position
 is the physical hotspot; signed clipping masks image pixels outside committed
 guest geometry without subtracting the hotspot from that position. Cursor IDs
 2 and 3 remain fixed while resize scanout IDs start at 4.
@@ -159,9 +167,13 @@ work.
 Normal VirtIO scanout remains cursor-free. Full-frame copies, transfers and
 approximately 60 Hz cadence remain unchanged; mouse reports add no independent
 frame submission. This does not reduce the full-frame pixel budget. Matched
-nested-KVM warm MOVE frames measured 5.263–6.614 ms against the software
-baseline's 3.659–4.388 ms; one cursor wait measured 1.69 ms. Warm moves added no
-allocation or control upload. These elapsed presenter measurements include
+nested-KVM synchronous MOVE frames originally measured 5.263–6.614 ms against
+the software baseline's 3.659–4.388 ms; one cursor wait measured 1.69 ms. The
+review fix removes that post-command wait from ordinary frames. Warm moves add
+no allocation or control upload. The review follow-up measured 5.31 ms warm
+motion versus a contemporaneous repeat of the saved software image at 5.25 ms,
+with overlapping ranges; both exceed the historical 4.20 ms software median.
+These elapsed presenter measurements include
 device waits and debugger/host variation, not native performance. See
 [task 4 hardware qualification](../development/system-pointer-qualification.md#task-4-hardware-qualification)
 for configuration, samples, program cursors, clipping, capture and resize checks,

@@ -84,7 +84,10 @@ device offsets cannot index compact storage. Success requires the driver's
 normal frame submission to succeed; VirtIO also requires cursor state matching
 the leased snapshot. Changed state requires successful fenced image preparation
 when needed and the matching bounded cursor used completion; unchanged state
-reuses its last confirmed completion. Incomplete or failed backing is never
+reuses its last confirmed completion, or drains a still-posted ordinary command
+for that state. Ordinary frames can release the image lease after copying and
+posting because command and uploaded image buffers belong to the driver.
+Incomplete or failed backing is never
 published. The public reply and FILE lifetime remain the same for all backends.
 See [display ownership](../kernel/display.md#screen-capture).
 
