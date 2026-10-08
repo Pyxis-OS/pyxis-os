@@ -109,6 +109,9 @@ prerequisites and result are clear.
 - [Hosted toolchains and language runtimes](toolchains-and-runtimes.md), the
   [Go runtime investigation](go-runtime.md) and the
   [Neovim/libuv investigation](neovim-libuv.md).
+- [Building software on Pyxis](source-builds.md): after hosted Clang, ports and
+  non-rescue userland build from source on the installed system, Gentoo style,
+  until a package manager exists.
 - [Desktop and graphics](desktop-graphics.md), including where to start on the
   owner's compositor.
 - [Users and authority](users-and-authority.md), a cross-cutting design
